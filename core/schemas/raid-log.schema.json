@@ -1,0 +1,274 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/[OPERATOR_GITHUB]/pmo-platform/blob/main/core/schemas/raid-log.schema.json",
+  "title": "RAID Log Artifact Row Schema",
+  "description": "Machine-schema for one row of a [Project]_RAID_Log.csv artifact, DERIVED (not hand-authored) from the RAID Item entity field schema via the EAD mechanism. Entity source: core/schemas/entity-field-schemas.md RAID Item (frozen surface Tables A-F, re-frozen Option-A 2026-05-16). Crosswalk: Crosswalk F. One object = one CSV row (validator bridges CSV->list[dict] via stdlib csv.DictReader). Enforcement mode: dialect-enforce (pilot validates the live legacy artifact; x-pmo-canonical-enum/x-pmo-legacy-crosswalk carry the entity-canonical contract for canonical-enforce mode).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "RAID_ID",
+    "RAID Category",
+    "Description",
+    "Impact",
+    "Owner",
+    "Priority",
+    "Status",
+    "Date Opened",
+    "Section"
+  ],
+  "properties": {
+    "RAID_ID": {
+      "type": "string",
+      "pattern": "^[RAID]-[A-Z]+-[0-9]{3,}$",
+      "x-pmo-class": "dialect-projection",
+      "x-pmo-derived-from": "id",
+      "description": "[TYPE]-[SKILL]-[COUNTER] view of core id (e.g. R-PPM-001)"
+    },
+    "RAID Category": {
+      "type": "string",
+      "enum": [
+        "Risk",
+        "Assumption",
+        "Issue",
+        "Dependency"
+      ],
+      "x-pmo-class": "exact-map",
+      "x-pmo-entity-field": "raid_type"
+    },
+    "Description": {
+      "type": "string",
+      "minLength": 1,
+      "x-pmo-class": "rename-map",
+      "x-pmo-entity-field": "summary"
+    },
+    "Impact": {
+      "type": "string",
+      "minLength": 1,
+      "x-pmo-class": "exact-map",
+      "x-pmo-entity-field": "impact",
+      "x-pmo-note": "re-frozen first-class entity field per Option-A; exact map (no longer ASSUMPTION-CONFIRM)"
+    },
+    "Owner": {
+      "type": "string",
+      "minLength": 1,
+      "x-pmo-class": "type-lift",
+      "x-pmo-entity-field": "owner_person_id",
+      "x-pmo-referential": {
+        "target": "Person.person_id",
+        "level": "L2",
+        "on-unresolved": "BLOCK-WRITE"
+      }
+    },
+    "Priority": {
+      "type": "string",
+      "enum": [
+        "Critical",
+        "High",
+        "Medium",
+        "Low"
+      ],
+      "x-pmo-class": "rename-map",
+      "x-pmo-entity-field": "severity",
+      "x-pmo-entity-requiredness": "entity optional; V-RAID-06 conditional-required when lifecycle_state != open; dialect-enforce requires unconditionally per legacy Tracker 5"
+    },
+    "Status": {
+      "type": "string",
+      "enum": [
+        "Open",
+        "Monitoring",
+        "Mitigating",
+        "Escalated",
+        "Closed"
+      ],
+      "x-pmo-class": "dialect-projection",
+      "x-pmo-entity-field": "lifecycle_state",
+      "x-pmo-canonical-enum": [
+        "open",
+        "in-progress",
+        "mitigating",
+        "resolved",
+        "closed"
+      ],
+      "x-pmo-legacy-crosswalk": {
+        "Open": "open",
+        "Monitoring": "in-progress",
+        "Mitigating": "mitigating",
+        "Escalated": "in-progress (+ orthogonal escalation flag \u2014 NOT a state, per ADR OOS-3)",
+        "Closed": "closed"
+      },
+      "x-pmo-note": "resolved is a new pre-closed terminal-success canonical state legacy lacks"
+    },
+    "Action Plan": {
+      "type": "string",
+      "x-pmo-class": "exact-map",
+      "x-pmo-entity-field": "action_plan",
+      "x-pmo-note": "re-frozen entity field per Option-A; legacy conditionally-required (see allOf)"
+    },
+    "Due Date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "x-pmo-class": "exact-map",
+      "x-pmo-entity-field": "target_date"
+    },
+    "Date Opened": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "x-pmo-class": "exact-map",
+      "x-pmo-derived-from": "created_date",
+      "x-pmo-temporal": "not-future (<= today; validator-enforced L1, not native draft-07)"
+    },
+    "Date Closed": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "x-pmo-class": "transition-metadata",
+      "x-pmo-derived-from": "lifecycle transition ->closed (entity-level timestamp DEFER-G8 / V-RAID-11)"
+    },
+    "Closure Comments": {
+      "type": "string",
+      "x-pmo-class": "transition-metadata",
+      "x-pmo-derived-from": "->closed transition rationale (DEFER-G8 / V-RAID-11)"
+    },
+    "Tags": {
+      "type": "string",
+      "x-pmo-class": "dialect",
+      "x-pmo-dialect-only": true
+    },
+    "Section": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "ARCHIVE"
+      ],
+      "x-pmo-class": "computed",
+      "x-pmo-computed": "ARCHIVE iff Status==Closed else ACTIVE (validator consistency-checks against Status)"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "const": "Closed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "Date Closed",
+          "Closure Comments"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "Status": {
+            "enum": [
+              "Open",
+              "Monitoring",
+              "Mitigating",
+              "Escalated"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "Action Plan"
+        ]
+      }
+    }
+  ],
+  "x-pmo-context-implicit": [
+    {
+      "entity_field": "project_id",
+      "source": "artifact filename token [Project] in [Project]_RAID_Log.csv",
+      "referential": {
+        "target": "Project.id",
+        "level": "L2",
+        "on-unresolved": "BLOCK-WRITE"
+      },
+      "x-pmo-note": "Frozen Artifact 1 \u2014 entity-required field serialized out-of-band, not a row column; file-level harness assertion, NOT a property"
+    }
+  ],
+  "x-pmo-derivation": {
+    "mechanism": "EAD (Entity->Artifact-Schema Derivation) \u2014 see tracker-schemas.md derivation note + Stage 5",
+    "entity_source": "entity-field-schemas.md#raid-item",
+    "freeze_refs": [
+      "Tables A-F",
+      "Option-A re-freeze 2026-05-16"
+    ],
+    "crosswalk": "Crosswalk F",
+    "mode": "dialect-enforce",
+    "ac_trace": {
+      "AC-1": "this file",
+      "AC-2": "x-pmo-entity-field / x-pmo-derived-from per property",
+      "AC-3": "tracker-schemas.md pointer+note",
+      "AC-4": "EAD documented WHAT-level; the mechanism generalizes",
+      "AC-5": "Daily Status / Transcript Register harness-driven downstream"
+    }
+  },
+  "x-pmo-referential": [
+    {
+      "id": "R-RAID-01",
+      "source": "Owner",
+      "target": "Person.person_id",
+      "card": "many:1",
+      "level": "L2",
+      "on-unresolved": "BLOCK-WRITE",
+      "ac": "AC-4"
+    },
+    {
+      "id": "R-RAID-02",
+      "source": "project_id (context-implicit)",
+      "target": "Project.id",
+      "card": "many:1",
+      "level": "L2",
+      "on-unresolved": "BLOCK-WRITE",
+      "ac": "AC-4"
+    }
+  ],
+  "x-pmo-judgment": [
+    {
+      "id": "J-RAID-01",
+      "rule": "RAID Category semantically consistent with Description (Risk=future-conditional; Issue=realized; Assumption=unverified premise; Dependency=external precondition)",
+      "level": "L3",
+      "disposition": "agent-recommend -> operator-confirm",
+      "traces": "V-RAID-10"
+    }
+  ],
+  "x-pmo-negative-tests": [
+    {
+      "id": "NT-RAID-1",
+      "input": {
+        "RAID Category": "Blocker"
+      },
+      "expect_fail": "RAID Category enum (V-RAID-01)",
+      "demonstrates": "L1 enum enforcement"
+    },
+    {
+      "id": "NT-RAID-2",
+      "input": {
+        "Owner": "person-ghost (no Person entity)"
+      },
+      "expect_fail": "R-RAID-01 L2 unresolved -> BLOCK-WRITE (V-RAID-08)",
+      "demonstrates": "L2 referential \u2014 canonical cross-entity check (harness-resolved; declared, not native)"
+    },
+    {
+      "id": "NT-RAID-3",
+      "input": {
+        "Status": "Escalated"
+      },
+      "expect": "dialect-enforce: PASS (Escalated is legacy-valid) + x-pmo-legacy-crosswalk maps -> in-progress+escalation; canonical-enforce: FAIL (not in x-pmo-canonical-enum)",
+      "demonstrates": "the dialect-vs-canonical switch \u2014 SAME rule V-RAID-03, mode-dependent verdict"
+    },
+    {
+      "id": "NT-RAID-4",
+      "input": {
+        "Impact": ""
+      },
+      "expect_fail": "Impact minLength 1 (V-RAID-12, Option-A added)",
+      "demonstrates": "re-frozen impact is required non-empty"
+    }
+  ]
+}

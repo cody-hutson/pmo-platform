@@ -1,0 +1,28 @@
+# Per-stage model overrides for hub-spawned spokes (Stage 5 ADR Dimension 5).
+#
+# Default for all agents in .claude/agents/pmo-*.md is `opus`. This file
+# declares per-stage overrides.
+#
+# Format: one `<agent-name> <model>` entry per line; `#` introduces comments.
+# Agent name matches the filename stem at .claude/agents/<agent-name>.md
+# (e.g., `pmo-release-planner`, `pmo-solutioning`, `pmo-engineering`,
+# `pmo-dev-testing`, `pmo-qa-testing`, `pmo-execute`, `pmo-close`).
+# Model enum: sonnet | opus | haiku.
+#
+# Example (commented out — uncomment to override):
+#   pmo-dev-testing haiku   # cost-sensitive: Stage 7 token volume dominates
+#
+# This file is consulted by:
+#   - deploy.sh Check 27 (designated-model config)
+#   - pmo-qa-auditor Stage 8 LLM-graded review (when added)
+#
+# Per-invocation overrides are operator-only and ephemeral (per § Operator
+# Override in hub-spoke-bridge.md); they do NOT live in this file.
+# Per-stage overrides DO live here AND are mirrored to the corresponding
+# .claude/agents/<agent-name>.md frontmatter `model:` field (the per-file
+# surface IS the override surface; this allowlist is the deploy-time check's
+# canonical reference).
+#
+# Adding an override: standard "No ungoverned changes" governance ceremony
+# (GitHub Issue + implementation plan + PR review) per CLAUDE.md.
+

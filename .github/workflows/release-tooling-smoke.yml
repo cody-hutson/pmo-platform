@@ -1,0 +1,94 @@
+name: Release tooling smoke
+
+# Smoke-tests the Stage 13 close-out automation on any PR that touches release
+# tooling (or the RELEASE_LOG schema), so the script cannot rot unexercised — the
+# exact failure mode where stale paths / a stale column index / de-identification
+# escapes hid for several releases until the close-out was finally run.
+#
+# Two gates, BOTH offline (no git remote / gh / network call), so the job is
+# deterministic and credential-free on a fresh runner:
+#   1. --self-test  — the script's in-process unit checks (version / row-state /
+#      milestone-slug / parser-clean parsing, JSON render, and a HARD assertion
+#      that all four corpus paths resolve). Gates on exit code.
+#   2. --check-paths — an offline corpus-path resolution probe that HARD-FAILS
+#      (exit 1) if any of RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / notes-dir
+#      does not resolve in THIS repo. Catches re-pathing drift before a release.
+#
+# A third step is a precision probe: it proves the path gate actually FAILS on a
+# deliberately-broken corpus path (in a throwaway temp tree, never the checkout).
+# A warn-only gate is blind to false negatives — this keeps the gate honest, the
+# same discipline reference-durability.yml applies to its fragile-ref detector.
+#
+# Platform: macos-latest. automated-closeout.sh pins PATH to /usr/bin:/bin and
+# resolves `gh` at the Homebrew (/opt/homebrew/bin) or Intel (/usr/local/bin)
+# locations at load time — the macOS image is where those paths exist. This
+# mirrors install-tests.yml, which runs the shell harness on macos-latest.
+#
+# Security: this workflow consumes NO untrusted github.event.* input (no issue
+# titles, PR bodies, comment bodies, head refs). Every run: block is a static
+# shell invocation against workspace files only.
+
+on:
+  pull_request:
+    paths:
+      - 'release/tools/**'
+      - 'release/releases/RELEASE_LOG.md'
+      - '.github/workflows/release-tooling-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'release/tools/**'
+      - 'release/releases/RELEASE_LOG.md'
+
+permissions:
+  contents: read
+
+jobs:
+  closeout-smoke:
+    name: Close-out automation smoke (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          uname -s
+          command -v bash
+          command -v python3
+          command -v git
+
+      - name: Self-test (offline unit checks + parser-clean)
+        # Pure helpers only — must NOT reach gh auth / network. Gate on exit code.
+        run: bash release/tools/automated-closeout.sh --self-test
+
+      - name: Corpus path-resolution check (offline; hard-fail)
+        # HARD-FAILS (exit 1) if any of the four corpus paths do not resolve in
+        # THIS repo. Runs the offline --check-paths probe, before any gh/network
+        # call, so the job is deterministic.
+        run: bash release/tools/automated-closeout.sh --check-paths
+
+      - name: Precision probe — broken path MUST fail the gate
+        # Defends against a silently-rotting gate: copy the script into a throwaway
+        # tree that is MISSING one corpus path and assert --check-paths exits
+        # non-zero. The real checkout is never mutated. If a broken corpus stops
+        # failing the gate, this step fails the PR.
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/release/tools" "$tmp/release/releases/notes"
+          cp release/tools/automated-closeout.sh "$tmp/release/tools/"
+          # Provide three of four corpus paths; deliberately OMIT RELEASE_LOG.md.
+          : > "$tmp/release/releases/RELEASE_INDEX.md"
+          : > "$tmp/release/releases/RELEASE_DIGEST.md"
+          # RELEASE_LOG.md intentionally absent -> --check-paths must exit non-zero.
+          set +e
+          ( cd "$tmp/release/tools" && bash "$tmp/release/tools/automated-closeout.sh" --check-paths )
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::--check-paths returned 0 with a missing corpus path; the smoke gate is not detecting re-pathing drift."
+            exit 1
+          fi
+          echo "Precision probe OK — broken corpus path correctly failed --check-paths (exit $rc)."

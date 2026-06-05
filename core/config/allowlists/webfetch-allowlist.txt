@@ -1,0 +1,36 @@
+# WebFetch Allowlist — block-egress.sh BLOCK-EGRESS-013
+#
+# Domains permitted for the WebFetch tool. Uses bash glob patterns (shell case matching).
+#
+# Format:
+#   - One domain pattern per line (matched against the URL host)
+#   - Comments start with # (first non-whitespace char)
+#   - Wildcards via * (e.g., *.github.com matches api.github.com, docs.github.com)
+#
+# Add entries with: ./.claude/hooks/allowlist-add.sh .claude/webfetch-allowlist.txt '<pattern>'
+#
+# ---
+
+# GitHub ecosystem
+github.com
+*.github.com
+docs.github.com
+gist.github.com
+raw.githubusercontent.com
+
+# Anthropic (docs, API, blog)
+anthropic.com
+*.anthropic.com
+code.claude.com
+claude.com
+docs.claude.com
+support.anthropic.com
+
+# Microsoft Docs (Claude Code integration references)
+docs.microsoft.com
+learn.microsoft.com
+
+# Obsidian (knowledge-mgmt docs, used for pmo-platform research)
+obsidian.md
+help.obsidian.md
+forum.obsidian.md

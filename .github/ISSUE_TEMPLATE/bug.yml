@@ -1,0 +1,108 @@
+name: Bug Report
+description: Report a bug or broken behavior. Use this instead of improvement.yml when the finding is "X is broken" rather than "we should add/change X".
+title: "[Bug]: "
+labels: ["bug", "status: proposed"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: "P1 = blocks work; P2 = material friction; P3 = annoyance; P4 = cosmetic"
+      options:
+        - P1 - Blocker
+        - P2 - Material
+        - P3 - Annoyance
+        - P4 - Cosmetic
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Reproduction Steps
+      description: Numbered steps a fresh Claude Code agent can follow to reproduce. Include exact commands, files, or inputs.
+      placeholder: |
+        1. Run `./deploy.sh --deploy`
+        2. Observe that it fails when no packages changed
+        3. Error: `CHANGED_PACKAGES: unbound variable`
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What happens instead. Include error messages verbatim where applicable.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Where this was observed (branch, commit SHA, OS, relevant tool versions).
+      placeholder: "main @ abc1234, macOS 14.1, bash 5.2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        Label every factual claim. Use [SOURCE] for citations, [INFERRED] for deductions,
+        [ASSUMPTION – CONFIRM] for unverified claims, [CONTEXT] for background.
+      placeholder: "[SOURCE: ./deploy.sh L42] — the CHANGED_PACKAGES var is assigned only inside the if-block."
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-files
+    attributes:
+      label: Affected Files
+      description: Files where the fix will land (directional OK).
+    validations:
+      required: true
+
+  - type: textarea
+    id: documentation-impact
+    attributes:
+      label: Documentation Impact
+      description: |
+        REQUIRED. Declare the K1 codified documentation this fix touches.
+        Two acceptable forms:
+
+        (a) **Pointer list** — one bullet per affected doc: `file path | action (link / create / update) | brief reason`.
+
+        (b) **Explicit "None"** — write exactly: `None — no documentation impact (rationale: <one phrase>)`.
+        The rationale phrase is mandatory; bare `None` fails the Stage 13 Close gate (G-CL8).
+
+        **Scope:** K1 codified corpus only — `.claude/rules/`, `pmo-platform/reference/`, `pmo-platform/governance/`,
+        `pmo-platform/skills/*/SKILL.md` + `references/`, `CLAUDE.md`. A bug fix in a documented behavior IS a doc-impact.
+      placeholder: |
+        pmo-platform/skills/<skill>/SKILL.md | update | fix changes output schema documented in §Output Format
+
+        — OR —
+
+        None — no documentation impact (rationale: internal bash regex correction; behavior unchanged)
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: 'How to verify the fix worked. Typically: "reproduction steps no longer trigger actual behavior; expected behavior observed."'
+      placeholder: |
+        - [ ] Running reproduction steps produces expected behavior, not actual behavior
+        - [ ] Regression test exists that fails against the buggy code and passes after fix
+    validations:
+      required: true

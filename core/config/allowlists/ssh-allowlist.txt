@@ -1,0 +1,19 @@
+# SSH Allowlist — block-egress.sh BLOCK-EGRESS-011
+#
+# Hosts / host patterns to which ssh connections are permitted.
+# Uses bash glob patterns (shell case matching).
+#
+# Format:
+#   - One host pattern per line
+#   - Comments start with #
+#   - Match form: the token that appears after `ssh` in the Bash command
+#   - Common forms: user@host, host.domain.com, short-alias-from-ssh-config
+#
+# Add entries with: ./.claude/hooks/allowlist-add.sh .claude/ssh-allowlist.txt '<pattern>'
+#
+# ---
+# No entries by default — SSH is blocked until explicitly allowlisted.
+# Example format (uncomment and customize as needed):
+#   user@work-server.example.com
+#   production-jumphost
+#   *.internal.example.com

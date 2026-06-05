@@ -1,0 +1,80 @@
+name: Architecture Decision Record
+description: Record an architecture or design decision
+title: "[ADR]: "
+labels: ["adr", "status: proposed"]
+body:
+  - type: dropdown
+    id: status
+    attributes:
+      label: Status
+      description: "ADR lifecycle status. Proposed = under discussion, Accepted = binding, Deprecated = no longer relevant, Superseded = replaced by a newer ADR."
+      options:
+        - Proposed
+        - Accepted
+        - Deprecated
+        - Superseded
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What is the issue that motivates this decision?
+      placeholder: Describe the problem, question, or forcing function that requires a decision.
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision-drivers
+    attributes:
+      label: Decision Drivers
+      description: What constraints or goals shape the choice?
+      placeholder: "List the forces at play — technical constraints, business goals, timeline pressure, dependencies."
+    validations:
+      required: true
+
+  - type: textarea
+    id: considered-options
+    attributes:
+      label: Considered Options
+      description: List each option evaluated with pros and cons.
+      placeholder: |
+        **Option 1: [Name]**
+        - Pro: ...
+        - Con: ...
+
+        **Option 2: [Name]**
+        - Pro: ...
+        - Con: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision
+      description: Which option was chosen and why?
+      placeholder: "We chose Option N because..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences
+      description: What follows from this decision — both positive and negative?
+      placeholder: |
+        **Easier:** ...
+        **Harder:** ...
+    validations:
+      required: true
+
+  - type: input
+    id: related-issues
+    attributes:
+      label: Related Issues
+      description: "Release issues, improvement issues, or prior ADRs this decision serves. Use #N references."
+      placeholder: "#N, #M"
+    validations:
+      required: true

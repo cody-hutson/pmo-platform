@@ -1,0 +1,38 @@
+# FS-Boundary Allowlist — core/hooks/block-fs-boundary.sh
+#
+# Filesystem roots permitted for Bash file commands beyond the recognized
+# settings.deny coverage (cat/head/tail/sed). Read/Edit/Write are governed
+# additionally by settings.deny rules in .claude/settings.json — the two
+# surfaces MUST be kept coherent.
+#
+# Format:
+#   - One absolute path per line (NOT bash glob — exact prefix-match after realpath)
+#   - Tilde-prefixed paths (~/...) expand to $HOME
+#   - Token-substituted at install time: [CLAUDE_WORKSPACE_ROOT], [OPERATOR_HOMEDIR_PATH]
+#   - Comments start with # (first non-whitespace char)
+#   - Blank lines ignored
+#   - Trailing slashes normalized (entry and target both trimmed)
+#   - Subpaths of an allowed root are implicitly allowed
+#
+# Add entries to the OPERATOR ADDITIONS section at runtime, or run:
+#   ./.claude/hooks/allowlist-add.sh .claude/fs-boundary-allowlist.txt '<absolute-path>'
+#
+# Mode gating: shared .claude/hooks/.mode (warn / enforce / off)
+
+# Primary workspace (covered transitively by other hooks too)
+[CLAUDE_WORKSPACE_ROOT]/
+
+# Operator-confirmed allowed roots
+[OPERATOR_HOMEDIR_PATH]/Downloads/
+[OPERATOR_HOMEDIR_PATH]/.claude/
+
+# Cowork install path
+[OPERATOR_HOMEDIR_PATH]/Library/Application Support/Claude/local-agent-mode-sessions/
+
+# Build / test artifact staging
+/tmp/
+/private/tmp/
+
+# macOS per-user scratch (review during warn-mode shakedown — remove if no legitimate use)
+/var/folders/
+/private/var/folders/

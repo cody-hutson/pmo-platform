@@ -1,0 +1,67 @@
+# cutover-fixtures.txt — labeled expected-match set for block-fragile-refs.sh detectors
+#
+# Per the reference-durability adversarial-review amendment (FMF-2 + CDF-2): the
+# version-cutover detector is the single precision-sensitive class, and a warn-log
+# is structurally blind to false NEGATIVES (a missed clause produces no log line).
+# A checked-in fixture with a labeled expected-match set is the only mechanism that
+# converts "tuned during shakedown" into a measurable gate. Flip-to-enforce is gated
+# on this fixture passing.
+#
+# This file lives under core/hooks/testdata/ which is OUTSIDE the durable-corpus
+# scope gate, so the hook does not fire on the fixture's own raw example content.
+#
+# FORMAT (one test case per non-comment line):
+#   <EXPECT>\t<CLASS>\t<content to scan>
+# where
+#   <EXPECT>  = FLAG  (the detector MUST match this line)
+#             | CLEAN (the detector MUST NOT match this line)
+#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN
+#   <content> = the literal line content presented to the detector
+#
+# The harness self-test (run-fixtures embedded in the hook's companion check) asserts
+# every FLAG line matches its class detector and every CLEAN line does not.
+
+# ─── Class L (markdown link) ────────────────────────────────────────────────
+FLAG	LINK	See the spec at [the standard](core/standards/reference-durability-standard.md) for details.
+FLAG	LINK	Pointer: [doc-link maintenance protocol](../standards/doc-link-maintenance-protocol.md).
+CLEAN	LINK	State the rule unconditionally and summarize the referenced content inline.
+CLEAN	LINK	The durability ladder rung 2 names a file by its content, not by a path link.
+
+# ─── Class V (version-cutover apparatus) — the FMF-2 precision cases ─────────
+# Real cutover apparatus (MUST flag). Includes the self-verification "v1.03 merge SHA"
+# case and corpus-shape variants the broken spec regex missed (mid-line Cutover, EOL
+# "merge SHA", slug-suffixed versions).
+FLAG	VERSION	Cutover: applies to releases entering Stage 4 strictly AFTER v1.03 merge SHA
+FLAG	VERSION	v1.03 merge SHA recorded in the release log
+FLAG	VERSION	Append-pattern detection applies to releases entering Stage 4 strictly AFTER the v11.07b merge SHA.
+FLAG	VERSION	the v11.07b release itself is exempt (reflexive-pipeline-loop discipline)
+FLAG	VERSION	v1.01-intake itself is exempt — the rule cannot fire on its own bundling
+FLAG	VERSION	**Cutover:** Applies to releases entering Stage 13 strictly AFTER v11.19 merge SHA
+FLAG	VERSION	Events occurring on or after the first release strictly AFTER v11.07a merge SHA; v11.07a itself exempt
+# Benign prose that names a version but is NOT cutover apparatus (MUST stay clean).
+# These are the FMF-2 false-positive cases the fixed regex must not trip on.
+CLEAN	VERSION	The release v2.0 shipped and v2.1 is now the current line.
+CLEAN	VERSION	v2.1 is now current
+CLEAN	VERSION	We support macOS v12.3 in production and the feature is exempt for admins someday.
+CLEAN	VERSION	Our policy v3.0 covers everyone and nobody is exempt here at all.
+CLEAN	VERSION	Acceptable in release notes as a narrative identifier; banned in governance rule text.
+CLEAN	VERSION	A release-plan filename template names the version segment as a placeholder shape.
+
+# ─── Positional issue-reference: OUTSIDE a reference block (MUST flag) ───────
+# A bare issue reference in body prose, with no designated reference block present.
+# Synthetic placeholder numbers (high range, no real tracked issue) — these are test
+# data for the #N-shape detector, NOT references to any real issue.
+FLAG	ISSUEREF-OUT	The dedupe rule was introduced to handle the migration edge case (provenance: #90001).
+FLAG	ISSUEREF-OUT	This behavior traces back to the original triage decision in #90002.
+
+# ─── Positional issue-reference: INSIDE a reference block, self-describing ───
+# A bare issue reference inside a reference block, accompanied by a summary noun
+# phrase (>= 3 non-reference words). MUST stay clean — this is the sanctioned form.
+CLEAN	ISSUEREF-IN	Parent reference-durability issue establishes the standard and enforcement spine — #90001.
+CLEAN	ISSUEREF-IN	Sister repository-integrity gate composes by position with this workflow — #90002.
+
+# ─── Positional issue-reference: INSIDE a block but CONTENT-FREE (MUST flag) ─
+# A bare issue reference with no accompanying summary — the rung-5 "summarize inline"
+# violation that no other primitive enforces.
+FLAG	ISSUEREF-IN	#90001
+FLAG	ISSUEREF-IN	- #90002

@@ -1,0 +1,5 @@
+This package is licensed under the Business Source License 1.1 (see LICENSE).
+
+The eval-viewer/ directory contains an eval/optimization harness derived from
+Anthropic's skill-creator skill, licensed under the Apache License 2.0
+(see eval-viewer/LICENSE.txt).

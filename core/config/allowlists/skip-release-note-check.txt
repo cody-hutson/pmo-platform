@@ -1,0 +1,9 @@
+# Release-note presence allowlist (deploy.sh Check 26).
+#
+# One version per line. # introduces comments. Operator adds entries for:
+#   - In-progress backport campaigns
+#   - Documented-deferred exceptions (inline # comment required)
+#
+# Warn-mode posture means zero behavioral impact during the cutover release.
+#
+# Empty-initial — operator adds entries during shakedown.

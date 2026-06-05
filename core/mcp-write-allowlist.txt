@@ -1,0 +1,4 @@
+# Test allowlist
+mcp__atlassian__addCommentToJiraIssue
+mcp__atlassian__editJiraIssue
+mcp__testsrv__createFoo

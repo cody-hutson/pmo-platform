@@ -1,0 +1,161 @@
+#!/bin/bash
+# block-credential-reads.sh — PreToolUse hook blocking Claude Read-tool access to credential-like files.
+#
+# Defense-in-depth companion to block-egress.sh BLOCK-EGRESS-001/002/003 (which handles Bash
+# subprocess reads). Together they ensure credentials can't leak via either the Read tool or
+# `cat` / `base64` / etc. in Bash.
+#
+# Matcher scope: Read
+# Rule IDs: BLOCK-CREDENTIAL-READ-001..010
+
+set -euo pipefail
+
+export PATH="/usr/bin:/bin"
+
+readonly GREP="/usr/bin/grep"
+readonly JQ="/usr/bin/jq"
+readonly PRINTF="/usr/bin/printf"
+readonly DATE="/bin/date"
+readonly SHASUM="/usr/bin/shasum"
+
+readonly HOOK_NAME="block-credential-reads"
+readonly HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+readonly ERROR_LOG="${HOOK_DIR}/hook-errors.log"
+readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
+readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
+
+# --- ERROR HANDLERS ---
+log_error() {
+  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  "$PRINTF" '%s [%s] %s\n' "$ts" "$HOOK_NAME" "$1" >> "$ERROR_LOG" 2>/dev/null || true
+}
+
+trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
+
+# --- DEPENDENCY CHECK ---
+if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
+  log_error "DEPENDENCY-MISSING: jq not found"
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (fail-open).\n' "$HOOK_NAME" >&2
+  exit 0
+fi
+
+# --- READ & VALIDATE INPUT ---
+INPUT="$(cat)"
+if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
+  log_error "INVALID-INPUT: malformed JSON"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+
+TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
+CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" --arg cwd "$CWD" \
+    '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' \
+    >> "$BYPASS_LOG" 2>/dev/null || true
+  exit 0
+fi
+
+# --- EARLY EXIT: non-Read tool calls ---
+if [ "$TOOL_NAME" != "Read" ]; then
+  exit 0
+fi
+
+FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
+[ -z "$FILE_PATH" ] && exit 0
+
+# --- HELPERS ---
+log_block() {
+  local rule_id="$1"
+  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  local input_digest; input_digest="$("$PRINTF" '%s' "$FILE_PATH" | "$SHASUM" -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
+  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+    --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
+    >> "$BLOCK_LOG" 2>/dev/null || true
+}
+
+block() {
+  local rule_id="$1"; local reason="$2"; local override="$3"
+  log_block "$rule_id"
+  "$PRINTF" '[CLAUDE-HOOK:%s:%s] BLOCKED: %s\nOverride: %s\n' "$HOOK_NAME" "$rule_id" "$reason" "$override" >&2
+  exit 2
+}
+
+# --- EXPLICIT ALLOWS (checked before denies) ---
+# .env.example and *.pub are legitimate non-sensitive files
+case "$FILE_PATH" in
+  *.env.example|*.env.sample|*.env.template|*/.env.example|*/.env.sample|*/.env.template)
+    exit 0
+    ;;
+  */id_rsa.pub|*/id_ed25519.pub|*/id_ecdsa.pub|*.pub)
+    exit 0
+    ;;
+esac
+
+# --- DENY RULES ---
+
+# BLOCK-CREDENTIAL-READ-001 — SSH private keys and ~/.ssh contents
+case "$FILE_PATH" in
+  */.ssh/id_rsa|*/.ssh/id_ed25519|*/.ssh/id_ecdsa|*/.ssh/id_dsa)
+    block "BLOCK-CREDENTIAL-READ-001" \
+      "Read of SSH private key denied: $FILE_PATH" \
+      "SSH private keys are never required for development; set CLAUDE_HOOK_BYPASS=1 only if intentional"
+    ;;
+  */.ssh/*)
+    block "BLOCK-CREDENTIAL-READ-001" \
+      "Read of ~/.ssh/ contents denied: $FILE_PATH" \
+      "specify why you need it and set CLAUDE_HOOK_BYPASS=1, or use .pub (public key) variants"
+    ;;
+esac
+
+# BLOCK-CREDENTIAL-READ-002 — AWS credentials
+case "$FILE_PATH" in
+  */.aws/credentials|*/.aws/config|*/.aws/*)
+    block "BLOCK-CREDENTIAL-READ-002" \
+      "Read of ~/.aws/ credentials denied: $FILE_PATH" \
+      "set CLAUDE_HOOK_BYPASS=1 only if the read is truly required"
+    ;;
+esac
+
+# BLOCK-CREDENTIAL-READ-003 — gh auth tokens
+case "$FILE_PATH" in
+  */.config/gh/hosts.yml|*/.config/gh/*)
+    block "BLOCK-CREDENTIAL-READ-003" \
+      "Read of gh auth config denied: $FILE_PATH" \
+      "use 'gh auth status' (no file read) or set CLAUDE_HOOK_BYPASS=1"
+    ;;
+esac
+
+# BLOCK-CREDENTIAL-READ-004 — .env variants (excluding .env.example handled above)
+case "$FILE_PATH" in
+  *.env|*/.env|*.env.local|*/.env.local|*.env.production|*/.env.production|*.env.dev|*/.env.dev|*.env.development|*/.env.development|*.env.staging|*/.env.staging|*.env.test|*/.env.test|*.env.testing|*/.env.testing|*.env.prod|*/.env.prod|*.env.secrets|*/.env.secrets|*.env.secret|*/.env.secret)
+    block "BLOCK-CREDENTIAL-READ-004" \
+      "Read of .env file denied: $FILE_PATH" \
+      ".env.example / .env.sample / .env.template are allowed; for actual .env values set CLAUDE_HOOK_BYPASS=1"
+    ;;
+esac
+
+# BLOCK-CREDENTIAL-READ-005 — SSH keys outside ~/.ssh (bare id_rsa-style filenames)
+case "$FILE_PATH" in
+  */id_rsa|*/id_ed25519|*/id_ecdsa|*/id_dsa)
+    block "BLOCK-CREDENTIAL-READ-005" \
+      "Read of SSH private key (any location) denied: $FILE_PATH" \
+      "set CLAUDE_HOOK_BYPASS=1 only if intentional"
+    ;;
+esac
+
+# BLOCK-CREDENTIAL-READ-006 — *.pem / *.key files
+case "$FILE_PATH" in
+  *.pem|*.key|*.p12|*.pfx|*.keystore)
+    block "BLOCK-CREDENTIAL-READ-006" \
+      "Read of cryptographic key file denied: $FILE_PATH" \
+      "set CLAUDE_HOOK_BYPASS=1 if this is a non-sensitive cert/key"
+    ;;
+esac
+
+# No match — allow
+exit 0

@@ -1,0 +1,15 @@
+# Status-Label Invariant Exemption List
+#
+# Issues listed here are exempt from deploy.sh --check Check 16 invariants.
+#
+# Format: <issue-number> <invariant-id> # <rationale>
+# invariant-id values: I1 (mutex), I2 (presence), I3 (proposed+milestone),
+#                      I4 (bundled+nomilestone)
+#
+# Blank lines and #-prefixed comments ignored.
+# Governance: additions follow the "No ungoverned changes" protocol
+# (CLAUDE.md Guardrails) — GitHub Issue + plan + PR required.
+#
+# See: pmo-platform/reference/ticket-information-architecture.md §State Anchor Sync
+
+# (No current exemptions — file ships empty after header comments)

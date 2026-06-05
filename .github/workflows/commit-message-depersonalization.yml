@@ -1,0 +1,76 @@
+# Commit-message depersonalization gate.
+#
+# Closes the gap the content gates miss: repo-integrity / reference-durability scan
+# FILE CONTENT on added lines, never the COMMIT MESSAGE. A local prepare-commit-msg
+# co-author injector can rewrite the trailer into a personal email — an identity leak
+# that is permanent once merged. This scans every commit message in the PR range
+# (body, trailers, and author/committer identity) for the generic leak library and
+# fails loud + redacted.
+#
+# DISCIPLINE: generic patterns ONLY. Never hardcode an operator literal — a detector
+# that names the operator is itself a leak. Generic personal-email domains, generic
+# macOS home paths, and any SUFFIXED variant of the public repo slug cover every
+# operator-specific case without naming one. (This replaces the retired public-flip
+# leak ratchet, preserving its one unique surface: commit-message scope.)
+#
+# Security: the only external inputs are base/head commit SHAs, passed via env: and
+# referenced as quoted shell vars (never interpolated into run:) per the Actions
+# injection-hardening guidance.
+name: Commit-message depersonalization
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  commit-message-scan:
+    name: Commit-message depersonalization gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - name: Scan PR commit messages for personal data + private-upstream (lineage = notice)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # NO \b (grep -E treats it literally). HARD = personal-email domains, macOS home
+          # paths, or a suffixed variant of the public repo slug (bare 'pmo-platform' is the
+          # public repo itself; 'pmo-platform-<suffix>' is a private upstream). SOFT = internal
+          # version lineage (public line is v1.0x/v2.x; internal families are v3 + v8-v18) —
+          # a NOTICE only: process-intel, redacted in the history rewrite, not a credential.
+          HARD='[A-Za-z0-9._%+-]+@(gmail|ymail|yahoo|hotmail|outlook|proton(mail)?|icloud)\.[A-Za-z]|/Users/[a-z][a-z0-9._-]+|pmo-platform-[A-Za-z0-9]'
+          SOFT='v(3|8|9|1[0-7]|18)\.[0-9]'
+          FOUND=0; REPORT=""
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            MSG="$(git log -1 --format='%an%n%ae%n%cn%n%ce%n%B%n%(trailers:only,unfold)' "$sha")"
+            if printf '%s' "$MSG" | grep -qE "$HARD"; then
+              FOUND=1
+              REPORT="${REPORT}${sha}: <redacted — personal email / home path / private-upstream in message or identity>"$'\n'
+            fi
+            if printf '%s' "$MSG" | grep -qE "$SOFT"; then
+              echo "::notice::commit ${sha} message carries internal version lineage (v3 / v8-v18) — mild, redact during the history rewrite"
+            fi
+          done
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: Commit-message depersonalization — no personal data / private-upstream in PR commit messages" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: Commit-message depersonalization gate FAILED"
+            echo ""
+            echo "A PR commit message (body, trailer, or author/committer identity) carries a personal"
+            echo "email, an operator home path, or a private-upstream slug. The most common cause is a"
+            echo "local prepare-commit-msg co-author injector rewriting the trailer into a personal"
+            echo "address. Re-commit with that injector neutralized (clear the relevant git config),"
+            echo "then amend and re-push (--force-with-lease). History trailers are purged separately by"
+            echo "the rewrite runbook."
+            echo ""
+            echo "### Commits (redacted):"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1

@@ -1,0 +1,98 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Workflow SAST (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install actionlint
+        run: |
+          # actionlint binary installer (upstream-recommended path)
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.1
+          ./actionlint -version
+      - name: Run actionlint
+        # The -ignore flag suppresses shellcheck SC2016 propagation from
+        # pr-body-parser-clean.yml. Single-quoted regex anchors (`'^...$'`) are
+        # intentional — the trailing `$` is an end-of-line regex anchor, not an
+        # unexpanded variable. actionlint v1.7.1 does NOT support the `paths`
+        # config schema, so .github/actionlint.yaml is forward-compatible
+        # documentation only; the runtime -ignore flag is the load-bearing
+        # suppression on the current v1.7.1 pin.
+        run: |
+          ./actionlint -color -ignore 'shellcheck reported issue in this script: SC2016:.+'
+
+  bandit:
+    name: Python SAST (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install bandit==1.7.10
+      - name: Run bandit
+        run: |
+          # v2 layout: Python files live in core/deploy/tools/, release/tools/, release/skills/pmo-skill-refiner/scripts/
+          # Scan all directories containing Python files; bandit -r walks recursively.
+          bandit -r core/ release/ --severity-level high --confidence-level medium
+
+  pip-audit:
+    name: Python deps (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pip-audit==2.7.3
+      - name: Run pip-audit
+        run: |
+          # v2 layout adaptation: no requirements.txt at any standard path (verified at Stage 6
+          # via gh api recursive tree query — no pyproject.toml / setup.py / setup.cfg / Pipfile /
+          # requirements*.txt at root or any subdir).
+          # Discover any requirements*.txt / pyproject.toml that may land in future commits.
+          # When none exists (v2 ships stdlib-only Python tooling) the repo DECLARES nothing to
+          # audit, so skip — do NOT audit the runner's ambient env (it only flags the CI toolchain's
+          # own pip/setuptools, unrelated to what pmo-platform ships, making this required gate a
+          # perpetual false-red that blocks every PR merge).
+          REQS=$(find . -type f \( -name "requirements*.txt" -o -name "pyproject.toml" \) -not -path "./.git/*" 2>/dev/null || true)
+          if [ -n "$REQS" ]; then
+            echo "Discovered manifests:"
+            echo "$REQS"
+            for req in $REQS; do
+              if echo "$req" | grep -q "requirements"; then
+                echo "Auditing $req"
+                pip-audit --requirement "$req" --strict
+              fi
+            done
+          else
+            echo "::notice::No Python dependency manifest in the repo (no requirements*.txt / pyproject.toml) — nothing to audit; skipping."
+            exit 0
+          fi
+
+  gitleaks:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+      - name: Run gitleaks (full history)
+        run: gitleaks detect --source . --no-banner --redact --verbose

@@ -1,0 +1,111 @@
+---
+title: Depersonalization Spec
+purpose: Defines the operator-identity token vocabulary and the parameterization seam through which operator-instance values resolve at workspace-setup time. Composes with (does NOT restate) universal-vs-localized-context.md.
+type: standards
+composes_with: [universal-vs-localized-context.md, knowledge-architecture.md]
+reversibility: CHEAP / Confidence HIGH
+---
+
+# Depersonalization Spec
+
+## Purpose
+
+This standard defines the operator-identity token vocabulary and the parameterization seam through which operator-instance values resolve at workspace-setup time. It exists so platform code, hooks, skills, and documentation can be authored against tokens (`[OPERATOR_NAME]`, `[CLAUDE_WORKSPACE_ROOT]`, …) rather than literal operator values.
+
+This spec is the **inheritance document** for the depersonalization stack. It enumerates:
+
+1. The operator-identity token set.
+2. The parameterization seam location.
+3. The workspace-setup mechanism dependency.
+
+The standard does **not** define the universality axis, the parameterization seam principle, or the leakage rubric — those are owned by [`universal-vs-localized-context.md`](universal-vs-localized-context.md) and [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md).
+
+---
+
+## §1 Token set
+
+The token vocabulary is:
+
+| Token | Resolves to | Source-of-truth | Used in |
+|---|---|---|---|
+| `[OPERATOR_NAME]` | Workspace owner's full name | `/CLAUDE.md § Workspace Owner` | Doc prose, frontmatter `owner:`, signature blocks |
+| `[OPERATOR_ROLE_TITLE]` | Workspace owner's role title | `/CLAUDE.md § Workspace Owner` | Signature blocks, person-role-tied prose |
+| `[OPERATOR_ORGANIZATION]` | Workspace owner's organization | `/CLAUDE.md § Workspace Owner` | Doc prose where org name appears |
+| `[OPERATOR_EMAIL]` | Workspace owner's email | `/CLAUDE.md § Workspace Owner` | Signature blocks, contact-line prose |
+| `[OPERATOR_PHONE]` | Workspace owner's phone | `/CLAUDE.md § Workspace Owner` | Signature blocks (PII-adjacent — strongest depersonalization candidate) |
+| `[OPERATOR_GITHUB]` | Workspace owner's GitHub handle | `/CLAUDE.md § Workspace Owner` OR `git config user.name` | Doc prose where GitHub handle appears |
+| `[OPERATOR_GIT_EMAIL]` | Git config email (may differ from above) | `git config user.email` | Doc prose where commit-attribution email appears |
+| `[OPERATOR_HOMEDIR_PATH]` | Operator's POSIX home directory path | `$HOME` at workspace-setup time | `~/Library/Application Support/...` references, doc prose paths |
+| `[CLAUDE_WORKSPACE_ROOT]` | Claude workspace root path | Operator config at setup | Workspace-root references in load-bearing hooks/config |
+| `[COWORK_INSTALL_PATH_BASE]` | Cowork install path base | Operator config at setup | `~/Library/Application Support/Claude/local-agent-mode-sessions/...` references |
+| `[OPERATOR_PROJECT_NAME]` | First active K4 project name (informational only) | `projects/<Project>/PROJECT.md` discovery | K4-leak references in K1 docs |
+
+**Token rendering convention:** square-bracket bare tokens (no `${}`, no `{{}}`) — disambiguates from existing `{{PLACEHOLDER}}` template syntax used by project-initiator and from `$ENV_VAR` shell substitution. Tokens render as text in markdown; they are NOT auto-substituted at read-time. Resolution is the workspace-setup spoke's job.
+
+---
+
+## §2 Parameterization seam location
+
+The parameterization seam lives at:
+
+- **Read-source for `[OPERATOR_*]` tokens:** `~/.config/pmo-platform/operator.toml` (canonical, XDG-spec) with optional per-workspace override at `<workspace>/operator.local.toml`. Resolution order: operator.local.toml > operator.toml > template defaults. Documented surface form: `/CLAUDE.md § Workspace Owner` (the K3 parameter home per `universal-vs-localized-context.md § 4(b)`) is the human-readable view of the same values.
+- **Read-source for `[CLAUDE_WORKSPACE_ROOT]` token:** `~/.config/pmo-platform/operator.toml` `[paths].claude_workspace_root` field, created at workspace-setup time. Default fallback: `$HOME/Claude`.
+- **Read-source for `[OPERATOR_HOMEDIR_PATH]` token:** `$HOME` at read-time (no separate config needed).
+- **Read-source for `[COWORK_INSTALL_PATH_BASE]` token (Cowork-specific):** discovered at workspace-setup time by scanning `~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/` for the active session UUID; persisted to `~/.config/pmo-platform/operator.toml` `[paths].cowork_install_path` field.
+- **Read-source for `[OPERATOR_PROJECT_NAME]` token:** lazily resolved per K4 surface — read `projects/<Project>/PROJECT.md` at the point the K1 doc is consumed; informational only.
+
+**Resolution mechanism:** the workspace-setup spoke populates `~/.config/pmo-platform/operator.toml` at install time. Consumer skills + hooks + scripts read this canonical config to resolve tokens. The `update.sh` script regenerates resolved files against the current operator.toml on package updates, preserving operator additions per [`composition-surface-spec.md § 3.2`](composition-surface-spec.md). Markdown documentation does NOT auto-resolve tokens — readers see the bracketed token form as-is (acceptable per `universal-vs-localized-context.md § 4(b)` pointer pattern).
+
+---
+
+## §3 Workspace-setup mechanism
+
+The depersonalization stack depends on a workspace-setup mechanism that creates and populates the per-operator config file:
+
+1. Create `~/.config/pmo-platform/operator.toml` (schema: `[meta]`, `[identity]`, `[paths]`, `[platform]` per `core/config/operator.toml.template`). Permissions: `chmod 600` (operator-only read/write).
+2. Optionally create `<workspace>/operator.local.toml` for per-workspace overrides; resolution order is operator.local.toml > operator.toml > template defaults.
+3. `setup-workspace.sh` script populates the config at install time, prompting for missing values.
+4. `update.sh` script regenerates resolved files on package updates per [`composition-surface-spec.md § 3.2`](composition-surface-spec.md).
+5. `deploy.sh` reads `[CLAUDE_WORKSPACE_ROOT]` from operator.toml.
+6. `.claude/hooks/*.sh` read `[CLAUDE_WORKSPACE_ROOT]` at startup.
+7. `.claude/settings.json` is regenerated from `core/settings.json.template` + operator.toml on install and update.
+8. `comms-writer` skill reads `[OPERATOR_*]` from `/CLAUDE.md § Workspace Owner` at signature-emission time.
+9. `project-initiator` skill resolves `{{OPERATOR_NAME}}` / `{{OPERATOR_ROLE_TITLE}}` placeholders from `/CLAUDE.md § Workspace Owner` at scaffold-time.
+10. `core/rules/skill-deployment.md` uses `[COWORK_INSTALL_PATH_BASE]` token.
+
+The implementation lives at `docs/scripts/setup-workspace.sh` per [`docs/workspace-setup.md`](../../docs/workspace-setup.md). Update-time regeneration lives at `update.sh` (repo root) per [`docs/UPDATE.md`](../../docs/UPDATE.md).
+
+---
+
+## §4 Operator-instance path tokens
+
+A parallel-but-distinct angle-bracket convention exists for paths to operator-instance content (per [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) OPERATOR-INSTANCE class). These tokens render as `<OPERATOR_INSTANCE_*_PATH>` (angle brackets, distinct from §1's square-bracket `[OPERATOR_*]` identity tokens) and reference paths that resolve to operator-local locations outside the public-repo source tree.
+
+**Why a separate vocabulary:** Identity tokens (`[OPERATOR_*]`) substitute *values* (operator name, GitHub handle, email). Operator-instance path tokens substitute *paths to artifacts* (release log, hub-state runtime, projects directory). They share the parameterization-seam principle but have different read-sources, different resolution rules, and different consumers — keeping them in separate vocabularies prevents collision and surfaces the semantic distinction at authoring time.
+
+**Resolution rule:** Each `<OPERATOR_INSTANCE_X_PATH>` resolves to either (a) the explicit operator.toml `[paths]` override if set, or (b) the canonical default below. The angle-bracket form renders as-is in markdown documentation; resolution happens in code (deploy.sh, hooks, hub) that reads the operator config.
+
+**Canonical defaults:** All operator-instance paths default to subpaths under `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/`, which is `.gitignored` per the public-repo discipline. The default suffix follows the token stem — `<OPERATOR_INSTANCE_X_PATH>` defaults to `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/<x>/`. Exceptions to this rule (e.g., `<OPERATOR_INSTANCE_CLAUDE_DIR>` → `${CLAUDE_WORKSPACE_ROOT}/.claude`) are documented in the vocabulary table.
+
+**Vocabulary table (incremental — codified as consumers land):**
+
+| Token | Canonical default | operator.toml override field | Codified by |
+|---|---|---|---|
+| `<OPERATOR_INSTANCE_HUB_STATE_PATH>` | `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/hub-state` | `[paths].operator_instance_hub_state_path` | [`hub-session-continuity.md`](hub-session-continuity.md) §2 + [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3 |
+| `<OPERATOR_INSTANCE_ROADMAPS_PATH>` | `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/roadmaps` | `[paths].operator_instance_roadmaps_path` | [`initiative-roadmap-framework.md`](initiative-roadmap-framework.md) (operator-local instances; de-scoped per [`../ADRs/ADR-012-roadmap-instance-descope.md`](../ADRs/ADR-012-roadmap-instance-descope.md)) |
+
+**Convention scope:** Other angle-bracket tokens currently in use across the corpus (`<OPERATOR_INSTANCE_LOG_PATH>`, `<OPERATOR_INSTANCE_RELEASES_PLANS_PATH>`, etc. — see `grep -rohE "<OPERATOR_INSTANCE_[A-Z_]+>" --include="*.md" .` for the current set) inherit the same resolution-rule convention even when not yet codified in the table above. Codification is incremental — when a token's consumer (skill, hook, script) lands or changes, the token's row is added to the vocabulary table. Authoring NEW angle-bracket tokens MUST add a row to this table in the same PR.
+
+**Read-source contract:** The `[paths].operator_instance_*` override fields in `~/.config/pmo-platform/operator.toml` are read at workspace-setup time and at runtime by consumer code. Empty string (the template default) → resolve via the canonical default. Non-empty string → use the override verbatim.
+
+---
+
+## §5 Boundaries
+
+Compose, do not restate. Each row names a doc this standard touches and the action taken.
+
+| Boundary | Relationship | Action |
+|---|---|---|
+| [`universal-vs-localized-context.md`](universal-vs-localized-context.md) | Owns the DC1-DC4 audit dimensions + § 6 disposition rubric. | **Cite only.** This spec consumes DC1-DC4 + the 4-class rubric verbatim. |
+| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | Owns the K1-K5 tier classifier + parameterization seam principle. | **Cite only.** § 1 token set is keyed to the K1↔K2/K3 seam. |
+| [`duplicate-source-discipline.md`](duplicate-source-discipline.md) | Register-or-remove. The reason this spec cites the upstream standards instead of restating them. | Comply. |

@@ -1,0 +1,108 @@
+# Operations domain — all operational data, session state, project files
+# (mirrored from v1; v2 will host its own modules but operator-instance content stays separate)
+projects/
+portfolio/
+steering-committee/
+
+# Operator-instance content — never commit
+# (v2-specific: operator's working notes live at ~/Claude/personal/pmo-instance/ per repo-cleanup-modular-monolith.md § 2.4)
+personal/
+pmo-instance/
+
+# Initiative-roadmap instances — operator-local planning artifacts, never tracked
+# (the roadmap *framework* at core/standards/initiative-roadmap-framework.md stays
+#  tracked; the *instances* are authored operator-local per core/ADRs/ADR-012)
+core/governance/roadmaps/
+release/governance/roadmaps/
+operations/governance/roadmaps/
+
+# Deployment targets — installed skills and local CC overrides
+.claude/skills/
+.claude/settings.local.json
+
+# Public-flip leak-scan oracle (scan.sh) + its needles — operator-LOCAL, never tracked.
+# scan.sh is the detector; it loads operator-specific literals at runtime from the
+# gitignored needles (hardcoding them would make the detector itself a leak). Canonical
+# home for the script + needles is ~/Claude/personal/pmo-instance/ (already ignored);
+# these lines also block a stray repo-local copy from being committed.
+/scan.sh
+flip-scan-needles.txt
+.flip-scan-needles.txt
+
+# Secret files (per core/standards/secrets-handling-policy.md §3)
+# Categories C3 (MCP tokens) and C5 (project-specific) may land in .env;
+# .example / .template / .sample variants ARE tracked (public-facing schemas).
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+
+# Resolved operator config — the .template ships; the real file (identity, paths,
+# audit_repo) resolves at ~/.config/pmo-platform/ and must never be tracked. Guards
+# against a stray copy created next to core/config/operator.toml.template.
+operator.toml
+operator.local.toml
+
+# Plugin data
+memory/
+
+# OS artifacts
+**/.DS_Store
+**/Thumbs.db
+
+# Local IDE / Claude Code worktree state
+.vscode/
+.idea/
+.claude/launch.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+
+# Hook runtime artifacts — append-only logs and state, never committed
+.claude/hooks/*.log
+.claude/hooks/*.jsonl
+.claude/hooks/.mode
+# Source-tree hook runtime artifacts (produced when hooks run from the worktree
+# during engineering/testing). The committed source is the .sh + .mode.template;
+# the live .mode and the per-hook logs are runtime-only.
+core/hooks/*.log
+core/hooks/*.jsonl
+core/hooks/.mode
+
+# pmo-skill-editor runtime sentinels — session markers, never committed
+# (v2 modular-monolith path; v1 was pmo-platform/skills/*/.editor-session)
+operations/skills/*/.editor-session
+release/skills/*/.editor-session
+core/skills/*/.editor-session
+
+# Obsidian vault metadata (user-specific UI state)
+**/.obsidian/
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# Node build artifacts (reserved for future docs tooling)
+node_modules/
+
+# Skill-creator iteration workspaces (sibling to skill; test evidence, not product)
+# (paths follow new modular structure per P2-T3/T4/T5 migration)
+operations/skills/*-workspace/
+release/skills/*-workspace/
+core/skills/*-workspace/
+
+# Cross-module audit reports — point-in-time evidence regenerable by the tool, never committed
+# (cross-module-audit.sh default output path)
+audit-output/
+
+# Legacy _validation/ folder — historical evidence removed; ignored to prevent accidental regeneration
+_validation/
+
+# hooks runtime logs/state (machine-specific; accumulate cwd PII — never track)
+core/hooks/*.jsonl
+core/hooks/*.log
+core/hooks/.mode

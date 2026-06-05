@@ -1,0 +1,104 @@
+# Reference Durability Standard
+
+## Purpose
+
+Durable-corpus files — governance rules, standards, specs, disciplines, schemas, skill SKILL.md files, and committed release-plan files — must survive the events the platform actually performs: repository migration, milestone re-bundling and renumbering, and history rewrites. A reference that resolves today but breaks on a renumber is a latent defect baked into the corpus. This standard codifies how to author a reference so it survives those events, and defines the enforcement primitives that catch fragile references at authoring time.
+
+The governing rule, stated unconditionally: a durable-corpus entry must read completely on its own, carry no markdown link sequence, and carry no release-version or version-cutover apparatus as a load-bearing reference. When a banned reference is needed for meaning, rewrite it as an inline summary — remove it, do not relegate it to a footnote.
+
+## The durability ladder
+
+When an author needs to reference other information, prefer the highest rung that still carries the meaning. Higher rungs survive more of the events the platform performs.
+
+| Rung | Form | Why it is durable | Guidance |
+|---|---|---|---|
+| 1 (most durable) | Prose rule — state the rule unconditionally, inline | survives every rename, renumber, and migration; reads on its own | Preferred everywhere. Example: "All changes go through PRs — no direct commits to the main branch." |
+| 2 | Self-describing boundary — name the concept or file by its content | a renamed file is re-findable by its described role | Example: name "the spoke-commit-discipline rulebook" rather than a path. |
+| 3 | Registry entry — point to a catalog row keyed by a stable name | the catalog is the indirection that absorbs churn | Example: "the token's row in the operator-instance vocabulary table." |
+| 4 | Version label — a release identifier as a narrative marker | survives a renumber only if the git log corroborates; rots in rule text | Acceptable in release notes and release plans as a narrative identifier; banned as a load-bearing reference in governance rule text. |
+| 5 | Issue number — a bare issue reference | breaks on renumber and migration; resolving-today is a separate property | Confine to a designated reference block, and summarize the referenced content inline so the meaning survives even if the number does not. |
+| 6 (least durable) | Commit hash or repository URL | breaks on any history rewrite or repository move | Provenance footnote at most; never load-bearing. |
+
+The ladder is a preference order, not a permission list. Rungs 4 through 6 are progressively fragile; use them only when no higher rung carries the meaning, and always pair a low-rung reference with an inline summary so the prose still reads if the reference rots.
+
+## The self-containment test
+
+A durable-corpus entry passes the self-containment test when all of the following hold:
+
+- It contains zero markdown link sequences.
+- It contains zero release-version or version-cutover apparatus used as a load-bearing reference.
+- It reads completely on its own — an operator who cannot resolve any external reference still understands the rule.
+
+Generic, version-agnostic placeholders inside code spans (for example a release-plan filename template written with a bracketed placeholder for the version segment) are version-agnostic and acceptable — they name a shape, not a specific release. State every rule unconditionally: a durable rule does not carry a version-cutover clause in its own text, because the clause itself is a fragile reference that rots on renumber.
+
+Removal, not demotion: when a reference fails the test, rewrite it as an inline summary at rung 1 or 2. Do not move a fragile reference into a footnote and call it resolved — the footnote is still fragile.
+
+## The flagged classes
+
+The detector flags two classes wholesale plus one positional rule. It deliberately does NOT attempt to classify an issue reference as inline-grammar versus provenance-footnote — that classification cannot be separated lexically with acceptable precision, so the detector never makes it.
+
+### Class L — markdown links
+
+Any markdown link sequence on a net-new or modified line in a durable-corpus file is flagged, except inside a fenced code block (the detector strips fenced blocks before scanning). The remediation is to summarize the linked content inline (rung 1–2) or, when an external reference is genuinely required, to declare a per-file override marker.
+
+### Class V — version-cutover apparatus
+
+The version-cutover idiom — the prose that says a rule applies to releases after a given version, or that a given version is itself exempt — is flagged. This is the apparatus the platform is removing from durable rule text, because it rots on renumber. The Class V detector keys on the cutover idiom by its semantic phrasing, not on a fixed column position, and bounds its proximity window so that a benign sentence mentioning a version number does not match. A line that merely names a current version in passing is not cutover apparatus and is not flagged.
+
+### Positional issue-reference rule
+
+A bare issue reference is permitted in a durable-corpus file ONLY inside a designated reference block. The recognized block headers are an "Issue References" heading, a "References" heading, a "Provenance" heading, or a "Source" / "Sources" heading, at any heading level. An issue reference appearing OUTSIDE such a block is flagged as misplaced.
+
+Inside a reference block, an issue-reference line must additionally be self-describing: it must carry a summary noun phrase alongside the bare number, so the referenced content survives even when the number rots on renumber. A reference-block line that contains a bare number with no accompanying summary is flagged — this operationalizes the ladder's rung-5 "summarize content inline" requirement, which no other primitive enforces. The self-describing check is a line-shape heuristic (is there enough non-number content on the line), not a semantic classifier — it stays out of the inline-versus-footnote distinction the detector refuses to make.
+
+This positional rule gives the durability discipline intrinsic coverage of the issue-reference class. It composes by position with any separate issue-reference-validity gate: the validity gate asks whether a reference resolves today; this rule asks whether a reference is placed and summarized so it survives a renumber. The two are disjoint properties and both run.
+
+## The override-marker and allowlist mechanism
+
+Because the flagged classes are flagged wholesale, the escape valves are path-based and marker-based, NOT grammar-based.
+
+### Per-file override marker
+
+A durable-corpus file that legitimately needs a flagged construct — for example an external upstream-catalog link that genuinely cannot be summarized inline — declares a per-file override marker once, as an HTML comment anywhere in the file. The markers are:
+
+```
+<!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
+```
+
+A present marker suppresses the corresponding class for that file: matches are still reported for visibility, but they do not fail the gate. This mirrors the parser-clean override pattern. A marker is a deliberate, auditable declaration that a specific file needs a specific class — it documents why the file carries the construct, not a wish to silence warnings.
+
+### Path allowlist
+
+The path allowlist lives at `core/hooks/reference-durability-allowlist.txt`: one glob per line, a leading `#` introduces a comment, and a trailing slash matches a directory. Seed entries cover historical-by-design corpus (the release archive) and files that are link-resolution maps by design. Allowlist additions document why the path is exempt — the rationale records the structural reason the path carries flagged constructs, not a desire to silence the gate.
+
+## Enforcement primitives
+
+Three primitives enforce this standard, all warn-mode-initial per the harness shakedown-to-enforce ladder.
+
+| Primitive | Surface | Posture |
+|---|---|---|
+| Agent-harness hook | PreToolUse on Write and Edit to durable-corpus paths | warn-mode-initial via the shared harness mode file; logs to a per-hook warn-log; in enforce-mode blocks with a teaching message |
+| Deploy-check check | the deploy-check run | warn-mode-initial via the deploy-check mode file; reports the saturation snapshot via the standard warn-or-issue helper |
+| CI workflow | pull request touching durable-corpus paths | scans added lines only (the net-new delta), so pre-existing corpus does not fail an unrelated PR; fails on net-new violations |
+
+The hook and deploy-check report the current saturation; the CI workflow is the gatekeeper that enforces the delta — no NEW fragile references versus the base. The hook honors a per-hook mode file and a per-hook warn-log so hook-time and deploy-time logs stay separate, matching every existing harness hook.
+
+### The flagged-class patterns
+
+The patterns are tuned during the warn-mode shakedown and validated against a checked-in corpus fixture with a labeled expected-match set, so precision is measurable rather than asserted. The fixture pairs true cutover clauses drawn from the real corpus with benign-prose negatives, and the hook plus check self-test asserts the match-set. Flip-to-enforce is gated on the fixture passing — a clean warn-log alone is insufficient, because a warn-log records only matches and is therefore blind to false negatives.
+
+## Reference durability versus link resolution
+
+Reference durability is a distinct discipline from link resolution. The two are orthogonal and both run; neither subsumes the other.
+
+| Discipline | Owns | Question it answers |
+|---|---|---|
+| Link resolution (the doc-link maintenance protocol plus its deploy-check check) | does a markdown link resolve to a file that exists? | Is this link alive today? |
+| Reference durability (this standard plus its hook, deploy-check check, and CI workflow) | should this reference exist at all in durable corpus, given it will break on renumber or migration? | Will this survive a rename, renumber, or migration? |
+
+A link can be perfectly resolvable today (it passes the link-resolution check) yet be a durability violation (it fails this standard, because the rule is to summarize inline rather than link). Conversely a durable inline summary has no link to resolve. The link-resolution discipline polices link liveness; this standard polices whether a fragile construct belongs in durable corpus at all.
+
+## Reflexive applicability
+
+This standard governs the durable corpus, which includes the files that ship this standard itself. Every file that introduces or edits durable-corpus content is authored self-contained from the start — the standard must not be violated at the moment it is born. Authors of durable-corpus content read this standard before authoring, summarize inline rather than link, and confine any unavoidable low-rung reference to a designated reference block with an inline summary.

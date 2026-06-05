@@ -1,0 +1,19 @@
+# Allowlist for doc-link maintenance protocol (deploy.sh Check 14 + Check 15).
+#
+# Format: one pattern per line. Trailing slash matches directories.
+# '#' introduces comments. Empty lines ignored.
+#
+# Rationale per entry must document WHY the path is allowlisted —
+# not WHY the operator wants to silence warnings (anti-pattern).
+
+# Archived release plans contain intentional historical references
+# (e.g., to deleted files like IMPROVEMENTS.md from earlier bridge-era releases).
+pmo-platform/releases/archive/
+
+# Audit artifacts cite broken refs as evidence (the broken-ref TSV
+# literally enumerates broken refs as data).
+pmo-platform/analysis/legacy-imp-audit-*/
+
+# Same evidentiary purpose — cross-domain drift audit deliberately
+# documents broken refs across the corpus.
+pmo-platform/analysis/cross-domain-drift-audit-*/

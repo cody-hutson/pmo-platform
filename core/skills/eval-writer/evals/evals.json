@@ -1,0 +1,83 @@
+{
+  "skill_name": "eval-writer",
+  "evals": [
+    {
+      "id": 1,
+      "name": "per-skill-author-daily-status",
+      "prompt": "Write evals for the `daily-status` skill — it generates AM and PM Teams-ready status messages from carry-forward trackers and recent transcripts. I want to catch two specific failure modes I've seen: (1) generalized dates (e.g., 'week of April 6' instead of 'April 2', when a specific date is knowable from the transcript) and (2) fabricated action items (items that don't trace back to any transcript or carry-forward tracker entry). The skill lives at pmo-platform/skills/daily-status/. Put the eval suite at pmo-platform/skills/daily-status/evals/.",
+      "expected_output": "Full eval directory with evals.json, judge_prompts/, rubrics.md, failure-taxonomy.md, characterization.md, calibration-protocol.md. Binary judges. Cross-family models. Rules cited. F-XX citations spec-consistent.",
+      "files": [],
+      "assertions": [
+        {"text": "evals.json exists with at least 2 test prompts covering both named failure modes", "type": "structural"},
+        {"text": "failure-taxonomy.md exists and names both generalized-dates and fabricated-action-items as distinct failure modes", "type": "structural"},
+        {"text": "At least one LLM judge prompt file exists in judge_prompts/", "type": "structural"},
+        {"text": "No 1-5 Likert scale appears anywhere (A-04 compliance — binary or 1-4 only)", "type": "structural"},
+        {"text": "characterization.md contains all 5 axes of the Stage 0 5-tuple", "type": "structural"},
+        {"text": "calibration-protocol.md specifies >=30 labeled items and alpha/kappa threshold", "type": "structural"},
+        {"text": "Judge model is explicitly cross-family (e.g., Sonnet judging Opus-produced output)", "type": "judgment"},
+        {"text": "Output cites at least one decision-tree rule (F-A1, B-A1, etc.) with explicit reasoning", "type": "judgment"},
+        {"text": "Judge prompts include a CoT-blinding decision — either applying F-15 blinding or explicitly marking CoT absent/non-shapeable", "type": "judgment"},
+        {"text": "F-XX citations match Module 6 definitions (e.g., F-05 is criteria drift, F-42 is Moffatt-class hallucination) — no fabricated F-XX IDs", "type": "judgment"},
+        {"text": "Judge prompts include substitution variable declarations (e.g., {{INPUT}}, {{OUTPUT}}) with named semantics", "type": "structural"}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "per-skill-review-prompt-builder",
+      "prompt": "Review the evals for the `prompt-builder` skill at pmo-platform/skills/prompt-builder/evals/evals.json. Are they catching undertriggering, or just structural compliance? Audit against the 2026 eval-writing consensus: binary over Likert, judge validation with α/κ, cross-family judges, pinned snapshots, anti-pattern hits. Give me a prioritized remediation list.",
+      "expected_output": "Structured markdown review with Characterization, Rule coverage, Anti-pattern hits, Prioritized remediation, Recommended diff, Tensions surfaced. Evidence-grounded. Remediation includes concrete replacement content, not just high-level descriptions.",
+      "files": [],
+      "assertions": [
+        {"text": "Review output exists as a single markdown file", "type": "structural"},
+        {"text": "Report contains a Characterization section (Stage 0 5-tuple for prompt-builder)", "type": "structural"},
+        {"text": "Report contains a Rule coverage section with at least 3 decision-tree rules assessed", "type": "structural"},
+        {"text": "Report contains an Anti-pattern hits section citing at least 3 specific A-XX IDs", "type": "structural"},
+        {"text": "Report contains a Prioritized remediation section with at least 3 ranked items", "type": "structural"},
+        {"text": "Report identifies that evals.json lacks a populated assertions field (or notes it's still at anthropic-skills:skill-creator minimal schema)", "type": "judgment"},
+        {"text": "Report identifies the absence of judge_prompts/, rubrics.md, or calibration-protocol.md as a structural gap", "type": "judgment"},
+        {"text": "Report addresses undertriggering — either tests for it or recommends description optimization (anthropic-skills:skill-creator run_loop.py)", "type": "judgment"},
+        {"text": "Report provides file:line evidence on at least 2 findings", "type": "judgment"},
+        {"text": "Recommended diff includes concrete replacement content (code fragments, JSON schema, or judge prompt text) — not just 'add section X' descriptions", "type": "judgment"},
+        {"text": "Each A-XX citation includes remediation text (what to do instead), not just the ID and name", "type": "judgment"}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "stage-gate-author-gate3-judgment",
+      "prompt": "Author the judgment-layer content for Gate 3 (Release Readiness) in the PMO pipeline. See pmo-platform/reference/schemas/gate-evaluation-spec.md (three-layer protocol: Metrics / Judgment / Calibration) and gate-criteria-spec.md (G3-01 through G3-06 criteria definitions — filter to the ones with Check=judgment). Write judge prompts + rubric + calibration protocol for the judgment-layer criteria. Output should slot into the existing three-layer assessment protocol.",
+      "expected_output": "gate-prompts/G3/ with one judge per judgment criterion (G3-04 Scope implementation-ready, G3-05 AC measurable), rubrics.md, calibration-protocol.md. 1-5 scale (gate convention). Pinned cross-family judge. Criterion wording matches spec. Tensions surfaced.",
+      "files": [],
+      "assertions": [
+        {"text": "At least one judge prompt file exists for each Gate 3 judgment criterion (G3-04 Scope and G3-05 AC measurability)", "type": "structural"},
+        {"text": "rubrics.md exists with criterion map + decision matrix", "type": "structural"},
+        {"text": "calibration-protocol.md exists and references calibration-data.md", "type": "structural"},
+        {"text": "Judge prompts use 1-5 scale per gate convention (not binary)", "type": "structural"},
+        {"text": "Judge model specifies pinned snapshot (not -latest alias)", "type": "structural"},
+        {"text": "Judge model is cross-family (Sonnet or equivalent when agent output is Opus)", "type": "judgment"},
+        {"text": "Output surfaces at least one Module 6 §10 tension (e.g., T-2 single vs ensemble for Gate 3 stakes level) with the skill's resolution stated — not just named", "type": "judgment"},
+        {"text": "Decision matrix present aligned with gate-evaluation-spec.md (three-layer: Metrics PASS + judgment score thresholds + calibration comparison)", "type": "structural"},
+        {"text": "Judge prompts use spec-exact criterion wording (G3-04 'Scope is implementation-ready', G3-05 'AC are measurable') — not paraphrased or invented names", "type": "judgment"},
+        {"text": "Calibration protocol specifies bias tests beyond alpha/kappa (at minimum: position swap for pairwise, or verbosity score-vs-length correlation)", "type": "judgment"}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "generic-fallback-slack-support-bot",
+      "prompt": "I'm building a Slack bot that auto-summarizes customer support tickets into 3-sentence resumes. It uses Claude via the Anthropic API and has an RAG tool that looks up related tickets from our Zendesk. The bot is internal — used by our support team manager to triage overnight tickets each morning. I need evals for this. What should I write?",
+      "expected_output": "Eval suite covering the 5-tuple characterization, failure taxonomy (RAG hallucinations, summary faithfulness, tool-call correctness), judges, rubrics, calibration protocol. Does NOT dispatch to per-skill or stage-gate playbook (neither applies — this is a generic external system). Generic fallback uses Module 6 §3 decision tree and §4 templates directly. At minimum F-A1 and B-A1 fire.",
+      "files": [],
+      "assertions": [
+        {"text": "Output produces an eval suite (at minimum: evals.json or equivalent, judge prompts, rubrics, characterization, calibration protocol)", "type": "structural"},
+        {"text": "Output contains Stage 0 5-tuple characterization for this system (single-agent, tool-use=yes, HITL=yes, dev or prod, routine)", "type": "structural"},
+        {"text": "Output explicitly cites Module 6 §3 decision-tree rules that fire — minimum F-A1 (all systems) and B-A1 (tool use)", "type": "judgment"},
+        {"text": "Output does NOT reference per-skill playbook conventions (pmo-platform/skills/<name>/evals/ path, anthropic-skills:skill-creator schema) — this is a generic system not a pmo-platform skill", "type": "judgment"},
+        {"text": "Output does NOT reference stage-gate playbook conventions (Gate N, gate-evaluation-spec.md, three-layer assessment) — this is not a pipeline gate", "type": "judgment"},
+        {"text": "Judge prompts use binary pass/fail (A-04) or 1-4 scale — not 1-5 Likert", "type": "structural"},
+        {"text": "Includes a tool-call correctness eval (Template 3 BFCL-style) — the RAG tool needs function_selection, schema_conformance, argument_semantics, sequencing, relevance_gate", "type": "judgment"},
+        {"text": "Includes a state-based outcome check (Template 7) for summary faithfulness — not trajectory-matching (A-02)", "type": "judgment"},
+        {"text": "Output addresses what does NOT apply (e.g., MAS rules C-A1..C-A9 don't fire because single-agent; operational rules D-A3..D-A7 partially apply or don't apply depending on whether this is prod)", "type": "judgment"},
+        {"text": "Calibration protocol includes >=30 labeled items and alpha/kappa threshold (F-A1 exit)", "type": "structural"}
+      ]
+    }
+  ]
+}

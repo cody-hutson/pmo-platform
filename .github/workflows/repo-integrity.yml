@@ -1,0 +1,539 @@
+name: Repository integrity
+
+# Three PR-time integrity gates as three named jobs on one workflow, on the
+# proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
+# files -> teach-block -> exit 1). PER-GATE SCOPE: there is NO single shared
+# allowlist. The depersonalization gate runs ONLY over the C6 governance domains
+# (core/ release/ operations/ packages/) — the surface where personal data is
+# forbidden — so legally/structurally-mandatory identity in LICENSE, SECURITY.md,
+# README.md, and .github/* (CODEOWNERS, dependabot, the PR template) is exempt by
+# the cited policy authority, not by enumeration. The dead-file-ref gate STILL
+# covers README/docs/.github (user-facing link integrity matters everywhere).
+# Each job scans only the files changed in the PR (the base..head delta), so
+# pre-existing corpus rot in unchanged files is never re-flagged.
+#
+# `edited` is intentionally absent: every gate scans file content, which is
+# invariant under PR body/title edits — including `edited` would only add
+# redundant runs (the shared-release-PR double-run the parser-clean workflow
+# incurs).
+#
+# Injection-safety: every github-context value (actor, sender type, base/head
+# SHA, secrets) is bound through env: and referenced as "$VAR" in run blocks;
+# no github-context expression is ever inlined into a run command.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read            # issue-ref resolves #N via gh api
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # GATE 1 — Depersonalization (C6-domain scope; github.actor + input identity;
+  #          bot-skip; fail-loud-on-canonical for BOTH required inputs).
+  # ---------------------------------------------------------------------------
+  depersonalization:
+    name: Depersonalization gate
+    runs-on: ubuntu-latest
+    env:
+      CANONICAL_REPO: cody-hutson/pmo-platform
+      # github.actor is the login that initiated the run — ALWAYS present, no
+      # checkout/config dependency, and yields the canonical handle. NOT git
+      # config user.name (unset on actions/checkout -> exit 1 under set -e) and
+      # NOT commit %an (may be a bot or a divergent literal).
+      ACTOR: ${{ github.actor }}
+      SENDER_TYPE: ${{ github.event.sender.type }}            # 'Bot' for dependabot/Claude
+      OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}     # operator full name + email (one per line); canonical FAILS LOUD if unset
+      COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
+      FORK_OPTOUT: ${{ vars.REPO_INTEGRITY_FORK_OPTOUT }}     # fork-only: explicit opt-out of a dimension
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # need the base commit for the changed-files delta
+
+      - name: Scan C6-domain changed files for operator and collaborator personal data
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-depersonalization[[:space:]]*-->'
+
+          # --- 0. FAIL-LOUD-ON-CANONICAL (OPERATOR_IDENTITY required; ----------
+          #        COLLABORATOR_NAMES optional — solo-operator). -----------------
+          # A PII control that silently scans nothing is indistinguishable from a
+          # passing one. On the canonical repo, an unset OPERATOR_IDENTITY is the
+          # DESIGNED loud failure (the same posture the gitleaks secret-scan uses)
+          # — not a set -e abort. COLLABORATOR_NAMES is optional: unset is the
+          # solo-operator state (collaborator scanning dormant, surfaced as a notice).
+          IS_CANONICAL=0
+          [ "${GITHUB_REPOSITORY:-}" = "$CANONICAL_REPO" ] && IS_CANONICAL=1
+
+          # Fork opt-out: a repo variable OR a committed sentinel disables a
+          # dimension on a fork (announced in the summary). Absent the marker, a
+          # fork with unset inputs ALSO fails loud.
+          FORK_OPTED_OUT=0
+          if [ "$IS_CANONICAL" -eq 0 ]; then
+            if [ -n "${FORK_OPTOUT:-}" ] || [ -f .repo-integrity-fork ]; then
+              FORK_OPTED_OUT=1
+              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); a dimension with an unset input is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${OPERATOR_IDENTITY:-}" ]; then
+            {
+              echo "## :x: Depersonalization gate misconfigured"
+              echo ""
+              echo "Required secret unset on the canonical repository: \`OPERATOR_IDENTITY\`."
+              echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
+              echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
+              echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
+            exit 1
+          fi
+
+          # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
+          # the operator dimension still runs and collaborator scanning is dormant
+          # (the scan below is guarded on a non-empty COLLABORATOR_NAMES). Surfaced
+          # as a notice so the dormant state is observable.
+          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${COLLABORATOR_NAMES:-}" ]; then
+            echo "::notice::repo-integrity depersonalization: COLLABORATOR_NAMES unset — solo-operator mode (collaborator scanning dormant; set the secret if collaborators are added)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # --- 1. SCOPE (per-gate): changed files INTERSECTED with C6 domains --
+          #     core/ release/ operations/ packages/ ONLY. Everything else
+          #     (LICENSE, SECURITY.md, README.md, .github/*) is out of scope by
+          #     secrets-handling-policy.md C6 — no per-file allowlist needed.
+          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          CHANGED=()
+          for f in "${ALL_CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              release/releases/*) : ;;   # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — PR-URLs (operator handle) + #N are native provenance; exempt, mirroring the reference-durability gate
+              core/*|release/*|operations/*|packages/*) CHANGED+=("$f") ;;
+              *) : ;;   # out of C6 scope — intentional-identity files exempt
+            esac
+          done
+
+          if [ "${#CHANGED[@]}" -eq 0 ]; then
+            echo ":white_check_mark: Depersonalization — no changed files under the C6 domains (core/ release/ operations/ packages/)" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # --- 2. OPERATOR-SELF dimension (CD-B) -------------------------------
+          #     handle = $ACTOR (always present); name/email from OPERATOR_IDENTITY.
+          #     BOT-SKIP: a bot-authored PR must not blind the gate by resolving
+          #     the operator literal to the bot's identity.
+          BOT=0
+          case "$ACTOR" in *'[bot]') BOT=1 ;; esac
+          [ "${SENDER_TYPE:-}" = "Bot" ] && BOT=1
+
+          # Build the operator-literal pattern list (one literal per line). The
+          # handle comes from the actor; name/email lines come from the input.
+          OP_LITERALS=""
+          if [ "$BOT" -eq 0 ]; then
+            if [ "$IS_CANONICAL" -eq 1 ] || [ "$FORK_OPTED_OUT" -eq 0 ]; then
+              [ -n "${ACTOR:-}" ] && OP_LITERALS="$ACTOR"
+              if [ -n "${OPERATOR_IDENTITY:-}" ]; then
+                OP_LITERALS="$(printf '%s\n%s\n' "$OP_LITERALS" "$OPERATOR_IDENTITY")"
+              fi
+            fi
+          else
+            echo "::notice::repo-integrity depersonalization: actor is a bot — operator-self matching skipped (collaborator dimension still runs)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Collaborator dimension reads a fixed input, not the actor — it runs
+          # regardless of bot status.
+          COLLAB_LITERALS=""
+          if [ -n "${COLLABORATOR_NAMES:-}" ]; then
+            COLLAB_LITERALS="$COLLABORATOR_NAMES"
+          fi
+
+          # Compose the case-sensitive, word-boundary pattern set. Each non-empty
+          # line is matched as a literal (regex-escaped) with \b boundaries.
+          PATTERN_FILE="$(mktemp)"
+          esc_lines() {
+            # read literal lines, drop blanks, regex-escape, wrap in \b...\b
+            printf '%s\n' "$1" | while IFS= read -r ln || [ -n "$ln" ]; do
+              ln="$(printf '%s' "$ln" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+              [ -z "$ln" ] && continue
+              esc="$(printf '%s' "$ln" | sed 's/[][\\.^$*+?(){}|/]/\\&/g')"
+              printf '\\b%s\\b\n' "$esc"
+            done
+          }
+          esc_lines "$OP_LITERALS" >> "$PATTERN_FILE"
+          esc_lines "$COLLAB_LITERALS" >> "$PATTERN_FILE"
+
+          if [ ! -s "$PATTERN_FILE" ]; then
+            echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (bot actor and/or no inputs); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # --- 3 + 4. Scan each in-scope changed file (case-sensitive, word-
+          #     boundary). Lines bearing the override marker are suppressed +
+          #     reported (line-scoped). NO line-level safe-phrase exclusion.
+          FOUND=0
+          REPORT=""
+          SUPPRESSED=""
+          for f in "${CHANGED[@]}"; do
+            [ -f "$f" ] || continue   # deleted file — nothing to scan
+            # NET-NEW DELTA: scan only lines ADDED since the base (the same
+            # added-lines posture the issue-ref + reference-durability gates use),
+            # so a pre-existing operator/collaborator literal in a file the PR
+            # touched for unrelated reasons is never re-flagged. Keyed by head-file line.
+            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+              | awk '
+                /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+                /^\+\+\+/ { next }
+                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+                /^-/ { next }
+              ' || true)"
+            [ -z "$ADDED_LINES" ] && continue
+            # case-sensitive (no -i); match PII patterns against the added LINENO:CONTENT lines.
+            HITS="$(printf '%s\n' "$ADDED_LINES" | grep -E -f "$PATTERN_FILE" || true)"
+            [ -z "$HITS" ] && continue
+            while IFS= read -r hit; do
+              [ -z "$hit" ] && continue
+              LN="${hit%%:*}"
+              CONTENT="${hit#*:}"
+              # line-scoped override
+              if printf '%s' "$CONTENT" | grep -qE "$OVERRIDE"; then
+                SUPPRESSED="${SUPPRESSED}${f}:${LN} (override-suppressed)"$'\n'
+                continue
+              fi
+              # redact: echo only the line number + a short redacted marker, never
+              # the full PII value (mirror gitleaks --redact).
+              FOUND=1
+              REPORT="${REPORT}${f}:${LN}: <redacted — operator/collaborator personal data match>"$'\n'
+            done <<< "$HITS"
+          done
+          rm -f "$PATTERN_FILE"
+
+          if [ -n "$SUPPRESSED" ]; then
+            {
+              echo "### Override-suppressed depersonalization matches (reported for visibility):"
+              echo '```'
+              printf '%s' "$SUPPRESSED"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: Depersonalization — no operator/collaborator personal data in changed C6-domain files" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: Depersonalization gate FAILED"
+            echo ""
+            echo "A changed file under a C6 governance domain (\`core/\`, \`release/\`, \`operations/\`, \`packages/\`)"
+            echo "contains the operator's identifying values or a known collaborator's full name."
+            echo ""
+            echo "### Matches (file:line — value redacted):"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+            echo ""
+            echo "### Why"
+            echo ""
+            echo "Personal data is C6 (see \`core/standards/secrets-handling-policy.md\`): kept outside the workspace"
+            echo "or encrypted-at-rest, never inline in a tracked \`core/\`/\`release/\`/\`operations/\`/\`packages/\` file."
+            echo "Author against the depersonalization tokens (\`[OPERATOR_NAME]\`, \`[OPERATOR_GITHUB]\`, …) instead of a literal."
+            echo ""
+            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md)."
+            echo ""
+            echo "### Override (a legitimately-required identity literal)"
+            echo ""
+            echo 'Add the marker on the SAME line as the literal:'
+            echo '`<!-- repo-integrity: allow-depersonalization -->`'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 2 — Issue-reference validity (true per-#N resolution; exclude PRs;
+  #          detect transferred issues; IMP-NNN always invalid; placement).
+  # ---------------------------------------------------------------------------
+  issue-ref:
+    name: Issue-reference validity gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate and place-check issue references in changed markdown
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref[[:space:]]*-->'
+          # designated reference-block headers (reuse the parser-clean anchor family)
+          REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Rr]elated|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
+
+          # SCOPE: every changed .md MINUS the self-doc files that necessarily
+          # quote worked-example #N (they carry a file-top allow-issue-ref).
+          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true)
+
+          # Per-run resolution cache for #N (path under /tmp).
+          CACHE_DIR="$(mktemp -d)"
+          # resolve_issue: prints "valid" or a reason token. NO -L (a 3xx is
+          # unresolvable-in-this-repo). The gh exit code is the precise signal:
+          #   non-zero (404, or a 3xx redirect that gh will NOT follow) -> the
+          #   number does not resolve to a 200 issue in this repo -> unresolvable.
+          # On a genuine 200 (exit 0), the payload is then branched:
+          #   .pull_request != null -> pr-number (the issues endpoint 200s for PRs);
+          #   .repository_url not ending in this repo -> transferred (a transfer
+          #   that returns the destination payload — the NF-2 belt-and-suspenders);
+          #   otherwise -> valid.
+          # gh prints a JSON error body to STDOUT on 404 (with .status "404"), so
+          # branching on the exit code — not on body emptiness — is what keeps a
+          # 404 from being mis-labeled transferred.
+          resolve_issue() {
+            local n="$1" cf="$CACHE_DIR/$1"
+            if [ -f "$cf" ]; then cat "$cf"; return; fi
+            local body rc verdict repo_url is_pr
+            set +e
+            body="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${n}" 2>/dev/null)"
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              verdict="unresolvable"   # 404 or un-followed 3xx
+            else
+              repo_url="$(printf '%s' "$body" | jq -r '.repository_url // ""' 2>/dev/null || true)"
+              is_pr="$(printf '%s' "$body" | jq -r 'if .pull_request == null then "issue" else "pr" end' 2>/dev/null || echo "issue")"
+              if [ "$is_pr" = "pr" ]; then
+                verdict="pr-number"
+              elif ! printf '%s' "$repo_url" | grep -qE "/${GITHUB_REPOSITORY}\$"; then
+                verdict="transferred"
+              else
+                verdict="valid"
+              fi
+            fi
+            printf '%s' "$verdict" > "$cf"
+            printf '%s' "$verdict"
+          }
+
+          FOUND=0
+          REPORT=""
+          for f in "${ALL_CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            case "$f" in
+              core/rules/git-workflow.md|.github/PULL_REQUEST_TEMPLATE.md) continue ;;  # self-doc (file-top allow-issue-ref)
+              release/releases/*) continue ;;  # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — #N + PR-refs are native provenance; exempt, mirroring the reference-durability gate
+            esac
+            # whole-file override
+            if grep -qE "$OVERRIDE" "$f"; then
+              echo "::notice::repo-integrity issue-ref: a changed file carries allow-issue-ref — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            # locate a designated reference block (first occurrence)
+            REFBLOCK_LINE="$(grep -nE "$REFBLOCK_RE" "$f" | head -1 | cut -d: -f1 || true)"
+            [ -z "$REFBLOCK_LINE" ] && REFBLOCK_LINE=0
+
+            # NET-NEW DELTA: scan only lines ADDED since the base (the same
+            # added-lines posture the reference-durability gate uses), so a
+            # pre-existing reference in a file the PR touched for unrelated
+            # reasons is never re-flagged. The added text is keyed by its
+            # head-file line number.
+            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+              | awk '
+                /^@@/ {
+                  # @@ -a,b +c,d @@ -> new-file hunk starts at c
+                  plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next
+                }
+                /^\+\+\+/ { next }
+                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+                /^-/ { next }
+              ' || true)"
+            [ -z "$ADDED_LINES" ] && continue
+
+            IN_FENCE=0
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              [ -z "$entry" ] && continue
+              LN="${entry%%:*}"
+              line="${entry#*:}"
+              # fenced code: a ``` on an added line toggles fence state.
+              case "$line" in
+                '```'*) IN_FENCE=$((1 - IN_FENCE)); continue ;;
+              esac
+              [ "$IN_FENCE" -eq 1 ] && continue
+
+              # IMP-NNN is always invalid in file content (deprecated).
+              if printf '%s' "$line" | grep -qE '\bIMP-[0-9]+\b'; then
+                IMPS="$(printf '%s' "$line" | grep -oE '\bIMP-[0-9]+\b' || true)"
+                for imp in $IMPS; do
+                  FOUND=1
+                  REPORT="${REPORT}${f}:${LN}: ${imp} — deprecated IMP-NNN reference (use a GitHub issue number)"$'\n'
+                done
+              fi
+
+              # A #N rendered as a markdown link (e.g. [#N](...) or any
+              # [text](...N...) whose target is an issue URL) carries an INLINE
+              # PROVENANCE MARKER and is exempt from the reference-block placement
+              # rule (per the placement spec's inline-marker alternative). The
+              # link form is still validity-checked below.
+              HAS_PROVENANCE=0
+              printf '%s' "$line" | grep -qE '\]\([^)]*\)' && HAS_PROVENANCE=1
+
+              # #NNNN tokens on this line.
+              NUMS="$(printf '%s' "$line" | grep -oE '#[0-9]+' | tr -d '#' || true)"
+              [ -z "$NUMS" ] && continue
+              for n in $NUMS; do
+                V="$(resolve_issue "$n")"
+                case "$V" in
+                  valid)
+                    # placement: a valid #N must sit inside a designated
+                    # reference block OR carry an inline provenance marker
+                    # (a markdown link on the same line).
+                    if [ "$HAS_PROVENANCE" -eq 0 ] && { [ "$REFBLOCK_LINE" -eq 0 ] || [ "$LN" -lt "$REFBLOCK_LINE" ]; }; then
+                      FOUND=1
+                      REPORT="${REPORT}${f}:${LN}: #${n} resolves but is placed outside a designated reference block and carries no inline provenance marker"$'\n'
+                    fi
+                    ;;
+                  unresolvable)
+                    FOUND=1
+                    REPORT="${REPORT}${f}:${LN}: #${n} does not resolve to an issue in this repo (404 or redirect)"$'\n'
+                    ;;
+                  transferred)
+                    FOUND=1
+                    REPORT="${REPORT}${f}:${LN}: #${n} resolves to a DIFFERENT repository (transferred issue)"$'\n'
+                    ;;
+                  pr-number)
+                    FOUND=1
+                    REPORT="${REPORT}${f}:${LN}: #${n} is a pull-request number, not an issue"$'\n'
+                    ;;
+                esac
+              done
+            done <<< "$ADDED_LINES"
+          done
+          rm -rf "$CACHE_DIR"
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: Issue-reference validity — all #N in changed markdown resolve in-repo and sit in reference blocks" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: Issue-reference validity gate FAILED"
+            echo ""
+            echo "A changed markdown file references an issue that does not resolve to a real"
+            echo "issue IN THIS REPO, or a resolving reference sits outside a designated reference block."
+            echo ""
+            echo "### Findings (file:line):"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+            echo ""
+            echo "### Categories"
+            echo ""
+            echo "- **does not resolve / redirect** — a 404 or a redirect to another repo (a transferred issue does not resolve here)."
+            echo "- **different repository** — the number resolves to a TRANSFERRED issue now living in another repo."
+            echo "- **pull-request number** — the number is a PR, not an issue."
+            echo "- **deprecated IMP-NNN** — the legacy improvement id; use a GitHub issue \`#N\`."
+            echo "- **placed outside a reference block** — a valid \`#N\` must sit under \`### Issue References\` / \`### References\` / \`## Related\` / \`## Provenance\` / \`### Source(s)\`."
+            echo ""
+            echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md)."
+            echo ""
+            echo "### Override (a deliberately-quoted or external reference)"
+            echo ""
+            echo 'Add the marker anywhere in the file:'
+            echo '`<!-- repo-integrity: allow-issue-ref -->`'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 3 — Dead-file-reference (PRESERVED design: generalized link checker +
+  #          github-slugger anchors warn-mode + images). Scans the CHANGED delta
+  #          only (--files) so pre-existing corpus rot is not re-flagged; the
+  #          bare release-link-check.yml invocation keeps every new flag OFF.
+  # ---------------------------------------------------------------------------
+  dead-file-ref:
+    name: Dead-file-reference gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Resolve link and image targets and anchors across the changed corpus delta
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-dead-file-ref[[:space:]]*-->'
+
+          # Changed markdown in this PR; drop deleted files and per-file overrides.
+          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true)
+          FILES=()
+          for f in "${CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            if grep -qE "$OVERRIDE" "$f"; then
+              echo "::notice::repo-integrity dead-file-ref: a changed file carries allow-dead-file-ref — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            FILES+=("$f")
+          done
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo ":white_check_mark: Dead-file-reference — no changed markdown to check" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Scope stays BROAD (README/docs/.github covered) but the --files
+          # restriction limits the candidate set to the changed files, and
+          # --diff-base limits the actual link checks to lines ADDED since the
+          # base — so a pre-existing link in a file the PR touched for unrelated
+          # reasons is never re-flagged (the net-new added-lines posture the
+          # reference-durability gate uses). Anchors ship warn-mode (no
+          # --anchors-hard-fail) during calibration; images are checked. The
+          # bare release-link-check.yml invocation keeps every new flag OFF, so
+          # its contract is byte-for-byte unchanged.
+          set +e
+          python3 release/tools/check-release-links.py \
+            --roots core release docs .github --top-level-md \
+            --check-anchors --images \
+            --diff-base "$BASE_SHA" \
+            --files "${FILES[@]}" | tee /tmp/dead-file-ref.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Dead-file-reference check output"
+            echo '```'
+            cat /tmp/dead-file-ref.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$RC" -ne 0 ]; then
+            {
+              echo "## :x: Dead-file-reference gate FAILED"
+              echo ""
+              echo "A changed markdown file has a \`[text](path)\` link or \`![alt](path)\` image whose"
+              echo "target file is missing (anchors are warn-mode during calibration and do not fail the run)."
+              echo ""
+              echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md)."
+              echo ""
+              echo "### Override (a deliberately-broken or placeholder link)"
+              echo ""
+              echo 'Add the marker anywhere in the file:'
+              echo '`<!-- repo-integrity: allow-dead-file-ref -->`'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ":white_check_mark: Dead-file-reference — all link/image targets in the changed delta resolve" | tee -a "$GITHUB_STEP_SUMMARY"

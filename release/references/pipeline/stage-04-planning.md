@@ -1,0 +1,115 @@
+# Stage 4: Planning
+
+> **Source:** Stage 4 originating spec
+> **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
+
+## 1. Purpose
+Transform a scoped Milestone into a dependency-ordered implementation plan with file-level change specifications, so the engineer can execute sequentially without re-analyzing scope.
+
+## 2. Reference Model Alignment
+
+| Ref Model Attribute | Part 6 Definition | Our Implementation |
+|---|---|---|
+| Purpose | Commit capacity; establish timeline; allocate resources | Sequencing + change specification + risk identification |
+| Governance Focus | Capacity feasibility; stakeholder alignment | Can bundle ship as one release? Operator approves plan |
+| Artifact Inputs | Charter/scope, requirements, resource plan | Milestone, issue bodies, dep graph, current file state |
+| Artifact Outputs | Sprint/PI plan, timeline, resource assignments | Release plan (sequence, file change matrix, risk register, verification, rollback) |
+
+Key compression: No multi-team resource allocation or timeline negotiation. Planning = sequencing + change specification + risk identification.
+
+## 3. Persona
+
+| Role | Skills-Map Ref | Autonomy |
+|---|---|---|
+| Decision maker: Human operator | — | Tier 3 |
+| Release planning: Release Mgr Skill 13, Mode 1 | Dep ordering, readiness, risk, cadence | Tier 2 (Recommend) |
+| Technical analysis: PPM Agent Skill 12 | File analysis, change spec drafting, integration mapping | Tier 1 (Auto) |
+
+## 4. Inputs
+From Bundle: Milestone with assigned issues, dependency graph, version number.
+Set at Planning: Implementation sequence, file change matrix, risk register, delivery strategy, verification plan, rollback strategy.
+Contextual: GitHub Issue Dependencies API, current file state, release history, existing plans in `release/releases/plans/`.
+
+## 5. Process
+
+**Cutover:** This re-review protocol applies to releases that enter Stage 4
+on or after `2026-04-25`. Releases whose Stage 4 sub-task was created
+prior to that date are exempt — they predate the protocol. The cutover
+date is recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>) at the introducing release's entry.
+
+**Phase A0 — Triage→Design Re-Review per [triage-design-rereview.md](../standards/triage-design-rereview.md):** spoke produces re-review artifact (header + per-requirement table) at sub-task output head, before A1 begins. C3 classifications trigger Tier 0 — Premise Rejection per [release-process.md](../../governance/release-process.md) Inter-Stage Feedback Protocol. Effort tier per § 7 (trivial / standard / complex). Always-fires for releases subject to cutover.
+
+**Phase A0.5 — AC/substrate currency gate (G-PL1):** [elevates the prior unnamed AC-currency check to a named, enforced phase]. For each per-issue AC in the release scope, the Phase A0 spoke verifies AC-stated context (version refs, file paths, named upstream artifacts) against current platform state. CURRENCY-MISMATCH findings route Tier 1 [ADJUST] (AC refinement via `gh issue edit --body` + release-plan deviation-log entry) OR Tier 2 [SCOPE CHANGE] when the AC's premise itself is invalidated. Composes with Bundle Mutability A7 trigger T4 (Stage 4 boundary currency check) and with the Phase A0 Triage→Design Re-Review D2 column. **G-PL1 criterion:** every release-scoped issue's AC context is reconciled against current state before A1; unreconciled AC context (stale path / version / upstream-artifact ref) is a G-PL1 FAIL → route the issue to Tier 1 [ADJUST] before plan-design. Gate ID per the `G-[stage-abbrev][seq]` convention ([`core/schemas/gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Schema).
+
+**Phase A0.6 — Pre-plan crisping gate (G-PL2):** Before A1 plan-design begins, the Phase A0 spoke re-runs the Gate 1 substantive checks (G1-02 Description actionable / G1-04 Proposed Change names files-or-protocols / G1-05 AC verifiable, per [`core/schemas/gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Gate 1) against the CURRENT body of each bundled issue. Rationale: bundled bodies may be weak or stale at Stage 4 entry even when they passed at intake (intake-substrate drift). **G-PL2 criterion:** every bundled issue body passes the Gate 1 substantive checks at Stage 4 entry; any FAIL routes the issue to a crisping pre-gate — operator-gated body refinement (via `gh issue edit --body`, reusing the Gate 1 self-repair remediations) BEFORE plan-design proceeds. The crisping responsibility is housed inline in the `release-planner` skill (no cross-module dependency; the operations `pmo-process-designer` skill is NOT invoked — module Public-API discipline, [`core/ADRs/ADR-007`](../../../core/ADRs/ADR-007-core-module-boundary.md)). G-PL2 is judgment-graded (the "is this body crisp enough to plan against" assessment is the same judgment class as G1-02/G1-04/G1-05 recommend-tier).
+
+**Parallelization-Map currency check:** In addition to the AC-currency check above, the Phase A0 spoke verifies the milestone's standing `## Parallelization Map (recorded YYYY-MM-DD)` section — the standing milestone-description convention defined in the Stage 3 Bundle spec — is present and dated within the bundle-creation → Stage 4 entry window. Procedure:
+
+1. Read milestone description via `gh api repos/{REPO}/milestones/<N> --jq .description`.
+2. Locate the `## Parallelization Map (recorded YYYY-MM-DD)` H2 header. A **stale-dated map** (date older than the most recent A7 refresh-trigger event for this bundle, OR the map absent on a milestone required to carry one) is a **Phase A0 finding** routed Tier 1 [ADJUST] (re-run the embedded reconfirm procedure via the documented `gh issue list --milestone ... --jq` scan, update the date, amend the milestone description) OR Tier 2 [SCOPE CHANGE] when re-running the scan surfaces new hard-edges that materially change cross-milestone sequencing (operator decides re-sequence vs. defer-with-rationale).
+3. The check **composes with Bundle Mutability A7 trigger T5** — it is mechanically a sub-application of trigger T4 (Stage-4-boundary currency check): same procedure surface, narrower scope (the map's date stamp vs. T4's full T1/T2/T3 re-evaluation). The A7 Bundle Mutability Protocol lives in the release-process governance. The hard-vs-soft edge classifier — the reproducible regex-grep that sorts each cross-milestone reference into hard / soft / file-contention — is the canonical source of edge-class semantics applied during reconfirm, and lives as the Hard-vs-Soft Edge Classifier in the release-planner dependency-analysis reference.
+
+**Standing applicability.** The convention does not retroactively bind milestones that predate its adoption — they carry no Parallelization Map section by construction, so the Phase A0 currency check is suppressed for them. Future milestones reaching Stage 4 Planning carry the reconfirm step per this convention.
+
+**Phase A (Agent):** A1 Milestone validation entry gate (metrics + judgment per gate-evaluation-spec.md), A1.5 domain-best-practice sourcing-or-flag step (the SHIP-WITH-FLAG step below), A2 dependency-ordered sequencing (GitHub Dependencies API), A3 per-issue change specification (file-level: what to add/edit/remove), A4 file contention resolution (matrix, merge order, conflict detection), A5 release plan assembly (full plan with Delivery Strategy per Rev 1).
+
+**§ 5.7 — Phase A1.5: Domain-Best-Practice Sourcing-or-Flag Step (SHIP-WITH-FLAG mechanism):** After A1 milestone validation and BEFORE A2 sequencing, the Planning spoke determines whether the release operates on a domain whose external best-practice the platform does not already encode. If so, the spoke EITHER sources authoritative guidance OR explicitly flags the gap to the operator via a machine-readable `domain_practice` provenance label that downstream stages (Stage 5 Solutioning when activated; Stage 7 Dev Testing always) verify.
+
+The provenance label schema is **inlined here** — it lives in this pipeline spec rather than in a separate standard file, keeping the ceremony minimal. The schema also applies to Stage 5 design outputs when Solutioning is activated; the Stage 5 Solutioning spec's Domain-Best-Practice Sourcing Step inherits this label and defines the refinement obligations.
+
+**Two operating modes:**
+
+| Mode | Trigger | `domain_practice` label form | Downstream behavior |
+|---|---|---|---|
+| **A — Domain pre-known** | Platform already encodes the domain's best-practice (recurring domain; prior release authored the encoding) OR the operator confirms pre-known status at the Phase A1.5 prompt | `domain_practice: { source: <citation URL or repo-relative path>, date: <YYYY-MM-DD>, name: <practice-name> }` | Sourced design proceeds to A2 sequencing |
+| **B — Domain unknown (SHIP-WITH-FLAG path)** | Platform does NOT encode the domain's best-practice AND no inline sourcing happens at the Phase A1.5 prompt (automatic unfamiliar-domain detection is deferred to a follow-up; see Acquisition mechanism below) | `domain_practice: { source: UNSOURCED-DOMAIN, date: <YYYY-MM-DD>, rationale: <one-line operator-prompt result OR explicit "domain detection pending follow-up"> }` | Flag travels with release plan; Stage 7 Dev Testing verifies presence + dated field; Stage 9 Decision Briefing surfaces the flag for operator awareness; pipeline does NOT silently proceed |
+
+**Provenance label placement:** The Planning spoke embeds the resolved `domain_practice` label in the release plan file under the `### Release Class declaration` H3 (or as a sibling H3 `### Domain Practice Provenance` when the release plan template predates this convention). The label is machine-readable (single-line, key-value form); the `date` field is mandatory in BOTH modes so staleness is detectable. Releases that re-cite a previously-sourced domain after >180 days SHOULD re-confirm currency at A1.5 (the date field surfaces the gap for operator decision).
+
+**Acquisition mechanism (current state):** operator-prompt at Planning time OR explicit `UNSOURCED-DOMAIN` flag. Auto-detection of "is this an unfamiliar domain?" requires a domain-parameter keystone capability and is deferred to a follow-up — the operator-approved posture is SHIP-WITH-FLAG: ship the convention + flag mechanism now, fill in auto-detection later. The convention + flag mechanism is the current-state surface; the follow-up adds auto-detection on top of it.
+
+**Software / governance / pipeline-internal releases exempt:** Releases whose entire File Change Matrix consists of internal pmo-platform artifacts (governance edits, pipeline-spec edits, skill-internal changes, ADR work) do NOT trigger A1.5 sourcing — the "domain" is the platform's own internals, which are by definition already encoded. The Planning spoke records a `domain_practice` label whose `source` is `N/A — pipeline-internal release` with a date, and proceeds. This preserves the regression posture for governance/software releases: they add no sourcing step.
+
+**Cross-PR Overlap Audit (A4 extension):** A4 file contention resolution covers two distinct operations. (1) **Within-release contention**: files claimed by multiple change-specs in the current release plan; resolved via sequencing or scope split. (2) **Cross-PR contention**: files in the current change-spec also being modified by recently-merged or open PRs outside this release; surfaced via baseline-pinned analysis (last-N merged PRs + open PRs at audit-start commit SHA per `<OPERATOR_INSTANCE_ANALYSIS_PATH>/file-overlap-audit-<date>/`). Cross-PR contention informs sequencing (defer until upstream merges) or risk-register entries. **Distinction discipline**: this audit is NOT byte-identity verification of release-plan files at Engineering Commit 0 — that check confirms internal consistency of the plan; this check identifies external collisions across PRs. Both check forms operate at A4 but answer different questions. **Append-pattern detection (per [ADR-005](../../ADRs/ADR-005-append-pattern-aware-cross-pr-contention-scoring.md))**: post-cutover audits classify each contended file with an `overlap_class` enum (`append-pattern` / `line-range-overlap` / `single-pr`) computed from per-PR `line_ranges` (hunk-range JSON arrays); files with `overlap_class = append-pattern` are informational (structurally HIGH, operationally LOW — append-pattern PRs almost never conflict at merge time), while `line-range-overlap` retains the ADR-001 sequencing/scope-split mitigation guidance. Canonical implementation: `python3 release/tools/check-line-range-overlap.py` (optional for ≤3-PR audits; recommended for ≥3-PR cases for reproducibility). Cutover: applies to releases entering Stage 4 on or after the ADR-001 introducing-release merge SHA recorded in `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`; pre-cutover releases are exempt. Append-pattern detection (ADR-005) applies to releases entering Stage 4 strictly AFTER the ADR-005 introducing-release merge SHA; **the ADR-005 introducing release itself is exempt** (reflexive-pipeline-loop discipline — the rule shipping in a release cannot fire on its own bundling).
+
+**Baseline-pin temporal limitation:** The A4 audit is **baseline-pinned** — it surveys cross-PR contention against the audit-start commit SHA only. Concurrent releases merging to `main` AFTER the audit but BEFORE Stage 12 are NOT detected by A4. The mid-pipeline divergence checkpoint at [Stage 9 Phase A6.5](../../governance/release-process.md) (PRIMARY, HALT-eligible) plus informational checks at Stage 7/8 entry (SECONDARY, warn-only) complement the A4 baseline snapshot with stage-boundary re-checks; Stage 12 Phase A.5 remains the post-GO ultima-ratio detector per [`pipeline/stage-12-execute.md` § Phase A.5](stage-12-execute.md). **Cutover discipline:** Applies to releases entering Stage 4 strictly AFTER the v1.01-intake merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); **v1.01-intake itself is exempt** (reflexive-pipeline-loop discipline — this limitation is itself the subject of v1.01-intake, so v1.01-intake's own Stage 4 audit ran AS-IS per this discipline).
+
+**Phase B (Human):** Approve/modify/split/hold. Plan committed to release branch as first file.
+**Handoff:** Routes to Solutioning (Stage 5) when activation criteria met, or directly to Engineering (Stage 6) when skipped. Activation criteria per [`planning-solutioning-handoff.md`](../../../core/standards/planning-solutioning-handoff.md). Stage 4 spoke instantiates the per-release evaluation matrix in the release plan's § Stage Applicability Matrix.
+
+**Ticket lifecycle:** Claim: validate Status=Bundled + Milestone assigned, set Stage→4-Planning. Execute: release plan creation (A1-A5 + B approval). Resolve: post plan reference comment, commit plan to branch. No status change — remains Bundled until Engineering. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md) Ticket Lifecycle Protocol.
+
+**Framework dimensions touched:** Work Breakdown (sub-task decomposition); State Persistence (release plan). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
+
+## 6. Outputs
+Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy.
+
+The committed release-plan file is durable corpus and is governed by the reference-durability standard under the core standards set: state the plan's rules and decisions unconditionally and inline, summarize referenced content rather than linking to it, and confine any unavoidable bare issue reference to a designated reference block with an inline summary. A release-plan version label in the plan's own title is a narrative release identifier, not a load-bearing reference. The reference-durability hook flags violations when the plan file is written.
+
+## 7. Stage-Transition Gate
+Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
+Metrics: dep satisfaction, file coverage verified, change spec completeness, contention resolved, risk register populated, verification plan complete, Delivery Strategy specified, routing decision made.
+Judgment (1-5): sequence coherence, risk awareness, verification completeness, plan actionability.
+Calibration: planned vs. actual sequence, files, risks, verification — tracked post-release.
+
+## 8. Automation Level
+Overall Tier 2. Today: agent runs A1-A5 in conversation. Target: Planning mode in release-planner skill.
+
+## 9. Gap Summary
+14 gaps identified. Key items: release plan template (P3), sub-task decomposition (P2), inter-stage feedback (P3), handoff coordinator (P2).
+
+## 10. Retro
+Key lessons: Delivery Strategy (branch/PR/merge) must be in every plan. Sub-task decomposition is Engineering's responsibility — Planning hands off issue-level. File contention is the primary challenge for documentation-heavy releases. Inter-stage feedback protocol needed when plans don't survive implementation. Gap discovery rate is highest at Planning (14 gaps) — expected as first stage producing complete engineering handoff.
+
+## 11. Audit-Trail Capture
+
+This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md) per the [unified schema](../standards/pipeline-event-log-schema.md):
+
+| Event type | Subtype | When | Actor |
+|---|---|---|---|
+| `decision` | `d-class` | Per D-class decision rendered at the Operator Decision Gate (Phase D) — `subject` is the D-letter (D-A, D-B, …) | `operator` |
+| `escalation` | `tier-0` | Phase A0 re-review fires Tier 0 Premise Rejection (C3 classification) per [`triage-design-rereview.md` § 9](../standards/triage-design-rereview.md) | `spoke:#N` |
+| `re-review` | `phase-a0-row` | Phase A0 re-review row appended to `triage-design-rereview-instrumentation.md`; pipeline-event-log row carries `projects_to: triage-design-rereview-instrumentation.md:<row-anchor>` | `spoke:#N` |
+| `scope-change` | `tier-2-scope-change` | Tier 2 [SCOPE CHANGE] surfaced to operator per § Inter-Stage Feedback Protocol | `spoke:#N` |
+
+Cutover: events occurring on or after the FIRST release entering this stage strictly AFTER this protocol's introducing-release merge SHA. The introducing release itself: exempt (reflexive-pipeline-loop discipline).

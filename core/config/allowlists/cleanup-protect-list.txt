@@ -1,0 +1,24 @@
+# Cleanup Protect-List — cleanup-orphan-state.sh
+#
+# Branch names / glob patterns NEVER touched by the cleanup script,
+# regardless of merge state or worktree status.
+#
+# Format:
+#   - One pattern per line
+#   - Comments start with # (first non-whitespace char)
+#   - Blank lines ignored
+#   - Bash glob semantics (shell case matching): claude/* matches all claude/ prefixed branches
+#
+# Always-protected (built into the script, never need to list here):
+#   main, master, HEAD
+#
+# Typical operator additions:
+#   backup/*                      # operator-parked WIP convention
+#   chore/parked-*                # operator-parked chore branches
+#   feature/<specific-name>       # exact-match
+#
+# Add entries with a standard text editor. Allowlist additions document
+# WHY the path is allowlisted, not WHY the operator wants to silence sweeps.
+#
+# See: release/tools/cleanup-orphan-state.sh
+# Cross-reference: .claude/rules/release-process.md § Stage 13

@@ -1,0 +1,1036 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# blast-radius.sh — File reference fan-out tracer for Stage 5 Solutioning
+# Source: Stage 5 Solutioning tooling.
+# See pmo-platform/reference/protocols/blast-radius-protocol.md for usage.
+
+# ---------------------------------------------------------------------------
+# Version metadata (the contract is the schema, not the implementation)
+# ---------------------------------------------------------------------------
+readonly CLI_VERSION="0.1.0"
+readonly SCHEMA_VERSION="1"
+
+# ---------------------------------------------------------------------------
+# Pinned PATH for tool discipline (per bypass-mode-readiness.md posture)
+# ---------------------------------------------------------------------------
+PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+
+# ---------------------------------------------------------------------------
+# Exit codes
+# ---------------------------------------------------------------------------
+readonly EXIT_OK=0
+readonly EXIT_INTERNAL=1
+readonly EXIT_BAD_TARGET=2
+readonly EXIT_EXCLUDED_TARGET=3
+readonly EXIT_MISSING_DEP=4
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+HARD_CAP_DEPTH=4
+DEFAULT_DEPTH=2
+
+# ---------------------------------------------------------------------------
+# Argument parsing state
+# ---------------------------------------------------------------------------
+ARG_FORMAT=""
+ARG_DEPTH="$DEFAULT_DEPTH"
+ARG_INCLUDE_MIRRORS=0
+ARG_ROOT=""
+ARG_NO_COLOR=0
+declare -a ARG_EXCLUDE_ADDITIONAL=()
+ARG_TARGET=""
+
+# ---------------------------------------------------------------------------
+# Default exclusions (hardcoded; --exclude adds to these)
+# ---------------------------------------------------------------------------
+declare -a DEFAULT_EXCLUSIONS=(
+  ".git/"
+  "pmo-platform/packages/"
+  "projects/"
+  "node_modules/"
+  ".claude/skills/"
+)
+
+# Default scanned file types
+declare -a SCANNED_TYPES=(
+  "md"
+  "sh"
+  "json"
+  "yml"
+  "yaml"
+  "toml"
+)
+
+# ---------------------------------------------------------------------------
+# Color helpers (matches account-switcher.sh convention)
+# ---------------------------------------------------------------------------
+use_color() {
+  if [ "$ARG_NO_COLOR" = "1" ]; then
+    return 1
+  fi
+  [ -t 1 ] || return 1
+  return 0
+}
+
+c_bold()  { if use_color; then printf '\033[1m'; fi; }
+c_dim()   { if use_color; then printf '\033[2m'; fi; }
+c_red()   { if use_color; then printf '\033[31m'; fi; }
+c_green() { if use_color; then printf '\033[32m'; fi; }
+c_blue()  { if use_color; then printf '\033[34m'; fi; }
+c_reset() { if use_color; then printf '\033[0m'; fi; }
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+err() {
+  c_red >&2
+  printf 'blast-radius: ERROR: %s\n' "$*" >&2
+  c_reset >&2
+}
+
+# ---------------------------------------------------------------------------
+# Usage banner
+# ---------------------------------------------------------------------------
+usage() {
+  cat <<EOF
+blast-radius.sh — File reference fan-out tracer for Stage 5 Solutioning
+
+USAGE
+  blast-radius.sh [OPTIONS] <target_file>
+
+OPTIONS
+  --format=FORMAT       Output presenter: json | table | md
+                        Default: table if stdout is a tty, json otherwise
+  --depth=N             Recursion depth for second-order detection
+                        Default: 2; hard cap: $HARD_CAP_DEPTH
+  --include-mirrors     Include mirror-pair references in output (filtered by default)
+  --root=PATH           Repo root for scanning
+                        Default: \$(git rev-parse --show-toplevel)
+  --exclude=GLOB        Additional exclusion path-prefix; repeatable
+  --no-color            Disable ANSI color in table output
+  -h, --help            Show this help and exit
+  --version             Show CLI version + schema version and exit
+
+EXIT CODES
+  0  Success
+  1  Internal error
+  2  Bad target (path doesn't exist or is not a regular file)
+  3  Target is under an exclusion glob
+  4  Missing dependency (jq not on PATH)
+
+EXAMPLES
+  # Trace what references pipeline/stage-05-solutioning.md (table to terminal)
+  blast-radius.sh pmo-platform/reference/pipeline/stage-05-solutioning.md
+
+  # JSON output for downstream consumption
+  blast-radius.sh --format=json --depth=1 CLAUDE.md
+
+  # Include mirror-pair references (forensic mode)
+  blast-radius.sh --include-mirrors .claude/rules/release-process.md
+
+DOCS
+  See pmo-platform/reference/protocols/blast-radius-protocol.md
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Argument parser
+# ---------------------------------------------------------------------------
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help)
+        usage
+        exit "$EXIT_OK"
+        ;;
+      --version)
+        printf 'blast-radius %s (schema v%s)\n' "$CLI_VERSION" "$SCHEMA_VERSION"
+        exit "$EXIT_OK"
+        ;;
+      --format=*)
+        ARG_FORMAT="${1#--format=}"
+        ;;
+      --format)
+        shift
+        ARG_FORMAT="${1:-}"
+        ;;
+      --depth=*)
+        ARG_DEPTH="${1#--depth=}"
+        ;;
+      --depth)
+        shift
+        ARG_DEPTH="${1:-}"
+        ;;
+      --include-mirrors)
+        ARG_INCLUDE_MIRRORS=1
+        ;;
+      --root=*)
+        ARG_ROOT="${1#--root=}"
+        ;;
+      --root)
+        shift
+        ARG_ROOT="${1:-}"
+        ;;
+      --exclude=*)
+        ARG_EXCLUDE_ADDITIONAL+=("${1#--exclude=}")
+        ;;
+      --exclude)
+        shift
+        ARG_EXCLUDE_ADDITIONAL+=("${1:-}")
+        ;;
+      --no-color)
+        ARG_NO_COLOR=1
+        ;;
+      --)
+        shift
+        if [ $# -gt 0 ]; then
+          ARG_TARGET="$1"
+        fi
+        ;;
+      -*)
+        err "Unknown option: $1"
+        usage >&2
+        exit "$EXIT_INTERNAL"
+        ;;
+      *)
+        if [ -z "$ARG_TARGET" ]; then
+          ARG_TARGET="$1"
+        else
+          err "Multiple targets specified: '$ARG_TARGET' and '$1' — provide only one"
+          exit "$EXIT_INTERNAL"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  # Validate target presence
+  if [ -z "$ARG_TARGET" ]; then
+    err "No target file specified"
+    usage >&2
+    exit "$EXIT_INTERNAL"
+  fi
+
+  # Validate depth
+  if ! [[ "$ARG_DEPTH" =~ ^[0-9]+$ ]]; then
+    err "Invalid --depth value: '$ARG_DEPTH' (must be a non-negative integer)"
+    exit "$EXIT_INTERNAL"
+  fi
+  if [ "$ARG_DEPTH" -gt "$HARD_CAP_DEPTH" ]; then
+    err "--depth=$ARG_DEPTH exceeds hard cap $HARD_CAP_DEPTH"
+    exit "$EXIT_INTERNAL"
+  fi
+
+  # Validate format
+  if [ -n "$ARG_FORMAT" ]; then
+    case "$ARG_FORMAT" in
+      json|table|md) ;;
+      *)
+        err "Invalid --format value: '$ARG_FORMAT' (must be json | table | md)"
+        exit "$EXIT_INTERNAL"
+        ;;
+    esac
+  else
+    if [ -t 1 ]; then
+      ARG_FORMAT="table"
+    else
+      ARG_FORMAT="json"
+    fi
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Dependency check
+# ---------------------------------------------------------------------------
+check_deps() {
+  if ! command -v jq >/dev/null 2>&1; then
+    err "Missing dependency: jq (install via 'brew install jq' or ensure /usr/bin/jq exists)"
+    exit "$EXIT_MISSING_DEP"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Repo root resolution
+# ---------------------------------------------------------------------------
+resolve_root() {
+  if [ -n "$ARG_ROOT" ]; then
+    if [ ! -d "$ARG_ROOT" ]; then
+      err "--root path does not exist or is not a directory: $ARG_ROOT"
+      exit "$EXIT_INTERNAL"
+    fi
+    REPO_ROOT="$(cd "$ARG_ROOT" && pwd -P)"
+    return
+  fi
+
+  if command -v git >/dev/null 2>&1; then
+    local git_root
+    if git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+      REPO_ROOT="$git_root"
+      return
+    fi
+  fi
+
+  REPO_ROOT="$(pwd -P)"
+}
+
+# ---------------------------------------------------------------------------
+# Target resolution: absolute or repo-relative → repo-relative canonical form
+# ---------------------------------------------------------------------------
+resolve_target() {
+  local input="$ARG_TARGET"
+  local abs
+
+  # Absolute path
+  if [[ "$input" = /* ]]; then
+    abs="$input"
+  else
+    # Try repo-relative first (relative to REPO_ROOT)
+    if [ -e "$REPO_ROOT/$input" ]; then
+      abs="$REPO_ROOT/$input"
+    elif [ -e "$input" ]; then
+      # Try cwd-relative
+      abs="$(cd "$(dirname "$input")" && pwd -P)/$(basename "$input")"
+    else
+      err "Target file does not exist: $input"
+      exit "$EXIT_BAD_TARGET"
+    fi
+  fi
+
+  if [ ! -f "$abs" ]; then
+    err "Target is not a regular file: $abs"
+    exit "$EXIT_BAD_TARGET"
+  fi
+
+  # Normalize to repo-relative
+  case "$abs" in
+    "$REPO_ROOT"/*)
+      TARGET_REL="${abs#"$REPO_ROOT"/}"
+      ;;
+    "$REPO_ROOT")
+      err "Target equals repo root: $abs"
+      exit "$EXIT_BAD_TARGET"
+      ;;
+    *)
+      err "Target $abs is outside repo root $REPO_ROOT"
+      exit "$EXIT_BAD_TARGET"
+      ;;
+  esac
+
+  # Check target against exclusions
+  if path_under_exclusion "$TARGET_REL"; then
+    err "Target is under an exclusion: $TARGET_REL"
+    exit "$EXIT_EXCLUDED_TARGET"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Path-prefix exclusion test (returns 0 if path matches any exclusion)
+# ---------------------------------------------------------------------------
+path_under_exclusion() {
+  local p="$1"
+  local prefix
+  for prefix in "${DEFAULT_EXCLUSIONS[@]}"; do
+    case "$p" in
+      "${prefix}"*) return 0 ;;
+    esac
+  done
+  for prefix in "${ARG_EXCLUDE_ADDITIONAL[@]+"${ARG_EXCLUDE_ADDITIONAL[@]}"}"; do
+    [ -z "$prefix" ] && continue
+    case "$p" in
+      "${prefix}"*) return 0 ;;
+    esac
+  done
+  # Filter *.lock at any depth
+  case "$p" in
+    *.lock) return 0 ;;
+  esac
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Build scan file list (newline-delimited absolute paths)
+# Writes to: SCAN_LIST_FILE
+# ---------------------------------------------------------------------------
+build_scan_list() {
+  SCAN_LIST_FILE="$WORK_DIR/scan-list.txt"
+  local find_args=( "$REPO_ROOT" )
+  find_args+=( -type f )
+
+  # Type filter: -name "*.md" -o -name "*.sh" -o ...
+  find_args+=( "(" )
+  local first=1 ext
+  for ext in "${SCANNED_TYPES[@]}"; do
+    if [ "$first" = "1" ]; then
+      first=0
+      find_args+=( -name "*.${ext}" )
+    else
+      find_args+=( -o -name "*.${ext}" )
+    fi
+  done
+  find_args+=( ")" )
+
+  # Stream find output, filter via path_under_exclusion in shell loop, write repo-relative
+  find "${find_args[@]}" 2>/dev/null \
+    | while IFS= read -r abs; do
+        local rel="${abs#"$REPO_ROOT"/}"
+        if ! path_under_exclusion "$rel"; then
+          printf '%s\n' "$rel"
+        fi
+      done \
+    | sort -u > "$SCAN_LIST_FILE"
+
+  TOTAL_FILES_SCANNED=$(wc -l < "$SCAN_LIST_FILE" | tr -d ' ')
+}
+
+# ---------------------------------------------------------------------------
+# Mirror-pair auto-detection
+# Writes mirror partner mapping to MIRROR_MAP_FILE (format: "<a>\t<b>")
+# ---------------------------------------------------------------------------
+detect_mirror_pairs() {
+  MIRROR_MAP_FILE="$WORK_DIR/mirror-pairs.tsv"
+  : > "$MIRROR_MAP_FILE"
+
+  if [ ! -d "$REPO_ROOT/.claude/rules" ]; then
+    return
+  fi
+  if [ ! -d "$REPO_ROOT/pmo-platform/engineering/rules" ]; then
+    return
+  fi
+
+  local f bn mirror
+  for f in "$REPO_ROOT/.claude/rules"/*.md; do
+    [ -f "$f" ] || continue
+    bn="$(basename "$f")"
+    mirror="$REPO_ROOT/pmo-platform/engineering/rules/${bn}"
+    if [ -f "$mirror" ]; then
+      printf '.claude/rules/%s\tpmo-platform/engineering/rules/%s\n' \
+        "$bn" "$bn" >> "$MIRROR_MAP_FILE"
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Get a target's mirror partner (empty if none)
+# ---------------------------------------------------------------------------
+mirror_partner() {
+  local target="$1"
+  if [ ! -s "$MIRROR_MAP_FILE" ]; then
+    printf ''
+    return
+  fi
+  local a b
+  while IFS=$'\t' read -r a b; do
+    if [ "$a" = "$target" ]; then
+      printf '%s' "$b"
+      return
+    elif [ "$b" = "$target" ]; then
+      printf '%s' "$a"
+      return
+    fi
+  done < "$MIRROR_MAP_FILE"
+  printf ''
+}
+
+# ---------------------------------------------------------------------------
+# Find first-order referrers for a target
+# Args:
+#   $1 = target repo-relative path
+#   $2 = output file (TSV: file\tline\tcount\tsnippet)
+# ---------------------------------------------------------------------------
+find_first_order() {
+  local target="$1"
+  local out="$2"
+
+  # Compute T1, T2, T3 search tokens for the target (inlined; bash 3.2 has no namerefs).
+  # T1 = full path, T2 = basename, T3 = path-suffix-from-component-2
+  local t1="$target"
+  local t2
+  t2="$(basename "$target")"
+  local t3
+  case "$target" in
+    */*/*) t3="${target#*/}" ;;
+    *)     t3="$t2" ;;
+  esac
+  # If T3 collapsed to T1 (target was already 2-component), fall back to T2 for T3
+  if [ "$t3" = "$t1" ]; then
+    t3="$t2"
+  fi
+
+  local matches_raw="$WORK_DIR/matches-raw.txt"
+  : > "$matches_raw"
+
+  # Build a temp file of files to grep (exclude the target itself)
+  local files_to_grep="$WORK_DIR/files-to-grep.txt"
+  grep -vxF "$target" "$SCAN_LIST_FILE" > "$files_to_grep" || true
+
+  if [ ! -s "$files_to_grep" ]; then
+    : > "$out"
+    return
+  fi
+
+  # Build absolute paths for grep input
+  local files_abs="$WORK_DIR/files-abs.txt"
+  awk -v root="$REPO_ROOT/" '{print root $0}' "$files_to_grep" > "$files_abs"
+
+  # Grep each token with `-F` (literal string), `-H -n` (file + line)
+  # We grep three times rather than build a complex regex — simpler, faster
+  # in practice, and produces predictable output for line-level dedup.
+  grep_token() {
+    local token="$1"
+    [ -z "$token" ] && return
+    # xargs to feed file list (handles >ARG_MAX file counts safely)
+    < "$files_abs" tr '\n' '\0' \
+      | xargs -0 -I {} -n 1 grep -F -H -n "$token" {} 2>/dev/null \
+      || true
+  }
+
+  # Collect all match lines: <abs_path>:<line>:<text>
+  {
+    grep_token "$t1"
+    if [ "$t3" != "$t1" ]; then grep_token "$t3"; fi
+    if [ "$t2" != "$t3" ] && [ "$t2" != "$t1" ]; then grep_token "$t2"; fi
+  } > "$matches_raw"
+
+  # Parse: <abs_path>:<line>:<text> → <rel>\t<line>\t<text>
+  # Dedup by (rel, line). Compute reference_count per rel.
+  local parsed="$WORK_DIR/parsed.tsv"
+  awk -v root="$REPO_ROOT/" '
+    BEGIN { FS=":"; OFS="\t" }
+    {
+      # Reassemble: first field = abs path; second = line; rest = text
+      abs = $1
+      line = $2
+      text = $0
+      # Strip "abs:line:" prefix from text
+      prefix = abs ":" line ":"
+      idx = index(text, prefix)
+      if (idx == 1) {
+        text = substr(text, length(prefix) + 1)
+      }
+      # Make rel
+      rel = abs
+      if (substr(rel, 1, length(root)) == root) {
+        rel = substr(rel, length(root) + 1)
+      }
+      print rel, line, text
+    }
+  ' "$matches_raw" \
+    | sort -u -t $'\t' -k1,1 -k2,2n > "$parsed"
+
+  # Aggregate: per file, count of unique (file,line); emit one row per
+  # (file, line) with reference_count for the file aggregated separately.
+  # For simplicity, output: <rel>\t<line>\t<text>; downstream aggregator
+  # rolls up reference_count.
+  cp "$parsed" "$out"
+}
+
+# ---------------------------------------------------------------------------
+# JSON escape a string for embedding in a JSON value
+# Uses jq -R to produce a quoted JSON string.
+# ---------------------------------------------------------------------------
+json_escape() {
+  printf '%s' "$1" | jq -Rs .
+}
+
+# ---------------------------------------------------------------------------
+# Aggregate first-order TSV into JSON array
+# Filters out the target's mirror partner (unless --include-mirrors).
+# Args:
+#   $1 = first-order TSV (file\tline\ttext)
+#   $2 = target repo-relative path (for mirror partner lookup)
+# Sets globals:
+#   FIRST_ORDER_JSON     — JSON array of first-order entries
+#   FIRST_ORDER_COUNT    — count of distinct files
+#   FILTERED_MIRRORS_JSON — JSON array of filtered mirror entries
+#   FILTERED_MIRRORS_COUNT — count of filtered mirror entries
+# ---------------------------------------------------------------------------
+aggregate_first_order() {
+  local tsv="$1"
+  local target="$2"
+  local partner
+  partner="$(mirror_partner "$target")"
+
+  # Aggregate matches per file using jq
+  local agg
+  agg=$(awk -F '\t' '
+    {
+      file = $1
+      line = $2
+      text = $3
+      # Truncate snippet to 200 chars and strip leading whitespace
+      sub(/^[ \t]+/, "", text)
+      if (length(text) > 200) {
+        text = substr(text, 1, 200) "…"
+      }
+      key = file
+      count[key]++
+      # Store up to 5 matches per file
+      if (matches_count[key] < 5) {
+        matches_count[key]++
+        idx = matches_count[key]
+        m_line[key SUBSEP idx] = line
+        m_text[key SUBSEP idx] = text
+      }
+    }
+    END {
+      for (file in count) {
+        printf "%s\t%d", file, count[file]
+        for (i = 1; i <= matches_count[file]; i++) {
+          printf "\t%d\t%s", m_line[file SUBSEP i], m_text[file SUBSEP i]
+        }
+        printf "\n"
+      }
+    }
+  ' "$tsv")
+
+  # Build JSON entries
+  local fo_entries="[]"
+  local fm_entries="[]"
+  local fo_count=0
+  local fm_count=0
+
+  if [ -n "$agg" ]; then
+    # Sort: reference_count DESC, path ASC
+    local sorted
+    sorted=$(printf '%s\n' "$agg" | sort -t $'\t' -k2,2nr -k1,1)
+
+    fo_entries="$(jq -n '[]')"
+    fm_entries="$(jq -n '[]')"
+
+    while IFS= read -r row; do
+      [ -z "$row" ] && continue
+      local file count
+      file="$(printf '%s' "$row" | awk -F '\t' '{print $1}')"
+      count="$(printf '%s' "$row" | awk -F '\t' '{print $2}')"
+
+      local is_mirror=false
+      if [ -n "$partner" ] && [ "$file" = "$partner" ]; then
+        is_mirror=true
+      fi
+
+      # Build matches array
+      local match_pairs
+      match_pairs="$(printf '%s' "$row" | awk -F '\t' '{
+        for (i = 3; i <= NF; i += 2) {
+          if (i+1 <= NF) {
+            print $i "\t" $(i+1)
+          }
+        }
+      }')"
+
+      local matches_json
+      matches_json=$(
+        printf '%s\n' "$match_pairs" \
+          | jq -R -s '
+              split("\n")
+              | map(select(length > 0))
+              | map(split("\t"))
+              | map({line: (.[0] | tonumber), snippet: .[1]})
+            '
+      )
+
+      local entry
+      entry=$(jq -n \
+        --arg path "$file" \
+        --argjson ref_count "$count" \
+        --argjson matches "$matches_json" \
+        --argjson is_mirror "$is_mirror" \
+        '{path: $path, reference_count: $ref_count, matches: $matches, is_mirror: $is_mirror}')
+
+      if [ "$is_mirror" = "true" ] && [ "$ARG_INCLUDE_MIRRORS" = "0" ]; then
+        fm_entries=$(printf '%s\n%s\n' "$fm_entries" "$entry" | jq -s '.[0] + [.[1]]')
+        fm_count=$((fm_count + 1))
+      else
+        fo_entries=$(printf '%s\n%s\n' "$fo_entries" "$entry" | jq -s '.[0] + [.[1]]')
+        fo_count=$((fo_count + 1))
+      fi
+    done <<EOF
+$sorted
+EOF
+  fi
+
+  FIRST_ORDER_JSON="$fo_entries"
+  FIRST_ORDER_COUNT="$fo_count"
+  FILTERED_MIRRORS_JSON="$fm_entries"
+  FILTERED_MIRRORS_COUNT="$fm_count"
+}
+
+# ---------------------------------------------------------------------------
+# Compute second-order referrers from a list of first-order paths
+# Args:
+#   $1 = JSON array of first-order entries
+#   $2 = original target path (excluded from second-order results)
+# Sets:
+#   SECOND_ORDER_JSON  — JSON array
+#   SECOND_ORDER_COUNT — count
+# ---------------------------------------------------------------------------
+compute_second_order() {
+  local fo_json="$1"
+  local target="$2"
+
+  SECOND_ORDER_JSON="$(jq -n '[]')"
+  SECOND_ORDER_COUNT=0
+
+  if [ "$ARG_DEPTH" -lt 2 ]; then
+    return
+  fi
+
+  # Set of paths already in first-order + the original target
+  local seen_file="$WORK_DIR/seen.txt"
+  printf '%s\n' "$target" > "$seen_file"
+  printf '%s' "$fo_json" | jq -r '.[].path' >> "$seen_file"
+  sort -u "$seen_file" -o "$seen_file"
+
+  # For each first-order entry path, find its referrers
+  local fo_paths
+  fo_paths="$(printf '%s' "$fo_json" | jq -r '.[].path')"
+  if [ -z "$fo_paths" ]; then
+    return
+  fi
+
+  local so_tsv="$WORK_DIR/so.tsv"
+  : > "$so_tsv"
+
+  local via tsv2
+  while IFS= read -r via; do
+    [ -z "$via" ] && continue
+    tsv2="$WORK_DIR/so-${via//\//_}.tsv"
+    find_first_order "$via" "$tsv2"
+    # Mark each row with the via path
+    awk -v via="$via" -F '\t' '{print $0 "\t" via}' "$tsv2" >> "$so_tsv"
+  done <<EOF
+$fo_paths
+EOF
+
+  if [ ! -s "$so_tsv" ]; then
+    return
+  fi
+
+  # Filter out paths already in seen (target + first-order)
+  local so_filtered="$WORK_DIR/so-filtered.tsv"
+  awk -F '\t' -v seen="$seen_file" '
+    BEGIN {
+      while ((getline line < seen) > 0) {
+        seen_set[line] = 1
+      }
+      close(seen)
+    }
+    {
+      if (!($1 in seen_set)) print $0
+    }
+  ' "$so_tsv" > "$so_filtered"
+
+  if [ ! -s "$so_filtered" ]; then
+    return
+  fi
+
+  # Aggregate per (file): pick first via, count refs, store up to 5 matches
+  local agg
+  agg=$(awk -F '\t' '
+    {
+      file = $1
+      line = $2
+      text = $3
+      via = $4
+      sub(/^[ \t]+/, "", text)
+      if (length(text) > 200) {
+        text = substr(text, 1, 200) "…"
+      }
+      count[file]++
+      if (!(file in first_via)) first_via[file] = via
+      if (matches_count[file] < 5) {
+        matches_count[file]++
+        idx = matches_count[file]
+        m_line[file SUBSEP idx] = line
+        m_text[file SUBSEP idx] = text
+      }
+    }
+    END {
+      for (file in count) {
+        printf "%s\t%d\t%s", file, count[file], first_via[file]
+        for (i = 1; i <= matches_count[file]; i++) {
+          printf "\t%d\t%s", m_line[file SUBSEP i], m_text[file SUBSEP i]
+        }
+        printf "\n"
+      }
+    }
+  ' "$so_filtered")
+
+  local sorted
+  sorted=$(printf '%s\n' "$agg" | sort -t $'\t' -k2,2nr -k1,1)
+
+  local entries="$(jq -n '[]')"
+  local count=0
+  local mirror_partner_path
+  mirror_partner_path="$(mirror_partner "$target")"
+
+  while IFS= read -r row; do
+    [ -z "$row" ] && continue
+    local file refcount via
+    file="$(printf '%s' "$row" | awk -F '\t' '{print $1}')"
+    refcount="$(printf '%s' "$row" | awk -F '\t' '{print $2}')"
+    via="$(printf '%s' "$row" | awk -F '\t' '{print $3}')"
+
+    local is_mirror=false
+    if [ -n "$mirror_partner_path" ] && [ "$file" = "$mirror_partner_path" ]; then
+      is_mirror=true
+    fi
+
+    # Skip mirror entries unless --include-mirrors
+    if [ "$is_mirror" = "true" ] && [ "$ARG_INCLUDE_MIRRORS" = "0" ]; then
+      continue
+    fi
+
+    local match_pairs
+    match_pairs="$(printf '%s' "$row" | awk -F '\t' '{
+      for (i = 4; i <= NF; i += 2) {
+        if (i+1 <= NF) {
+          print $i "\t" $(i+1)
+        }
+      }
+    }')"
+
+    local matches_json
+    matches_json=$(
+      printf '%s\n' "$match_pairs" \
+        | jq -R -s '
+            split("\n")
+            | map(select(length > 0))
+            | map(split("\t"))
+            | map({line: (.[0] | tonumber), snippet: .[1]})
+          '
+    )
+
+    local entry
+    entry=$(jq -n \
+      --arg path "$file" \
+      --arg via "$via" \
+      --argjson ref_count "$refcount" \
+      --argjson matches "$matches_json" \
+      --argjson depth "2" \
+      --argjson is_mirror "$is_mirror" \
+      '{path: $path, via: $via, reference_count: $ref_count, matches: $matches, depth: $depth, is_mirror: $is_mirror}')
+
+    entries=$(printf '%s\n%s\n' "$entries" "$entry" | jq -s '.[0] + [.[1]]')
+    count=$((count + 1))
+  done <<EOF
+$sorted
+EOF
+
+  SECOND_ORDER_JSON="$entries"
+  SECOND_ORDER_COUNT="$count"
+}
+
+# ---------------------------------------------------------------------------
+# Assemble the v1 JSON output document
+# ---------------------------------------------------------------------------
+build_json() {
+  local elapsed="$1"
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  jq -n \
+    --arg schema_version "$SCHEMA_VERSION" \
+    --arg cli_version "$CLI_VERSION" \
+    --arg target "$TARGET_REL" \
+    --arg scanned_at "$timestamp" \
+    --arg scan_root "$REPO_ROOT" \
+    --argjson depth "$ARG_DEPTH" \
+    --argjson include_mirrors "$([ "$ARG_INCLUDE_MIRRORS" = "1" ] && echo true || echo false)" \
+    --argjson total_files_scanned "$TOTAL_FILES_SCANNED" \
+    --argjson first_order_count "$FIRST_ORDER_COUNT" \
+    --argjson second_order_count "$SECOND_ORDER_COUNT" \
+    --argjson filtered_mirrors "$FILTERED_MIRRORS_COUNT" \
+    --arg elapsed_seconds "$elapsed" \
+    --argjson first_order "$FIRST_ORDER_JSON" \
+    --argjson second_order "$SECOND_ORDER_JSON" \
+    --argjson filtered_mirrors_detail "$FILTERED_MIRRORS_JSON" \
+    '{
+      schema_version: $schema_version,
+      cli_version: $cli_version,
+      target: $target,
+      scanned_at: $scanned_at,
+      scan_root: $scan_root,
+      depth: $depth,
+      include_mirrors: $include_mirrors,
+      stats: {
+        total_files_scanned: $total_files_scanned,
+        first_order_count: $first_order_count,
+        second_order_count: $second_order_count,
+        filtered_mirrors: $filtered_mirrors,
+        elapsed_seconds: ($elapsed_seconds | tonumber)
+      },
+      first_order: $first_order,
+      second_order: $second_order,
+      filtered_mirrors_detail: $filtered_mirrors_detail
+    }'
+}
+
+# ---------------------------------------------------------------------------
+# Table presenter (off the JSON)
+# ---------------------------------------------------------------------------
+render_table() {
+  local json="$1"
+  local target depth include_mirrors total first_count second_count filtered elapsed
+
+  target=$(printf '%s' "$json" | jq -r '.target')
+  depth=$(printf '%s' "$json" | jq -r '.depth')
+  include_mirrors=$(printf '%s' "$json" | jq -r '.include_mirrors')
+  total=$(printf '%s' "$json" | jq -r '.stats.total_files_scanned')
+  first_count=$(printf '%s' "$json" | jq -r '.stats.first_order_count')
+  second_count=$(printf '%s' "$json" | jq -r '.stats.second_order_count')
+  filtered=$(printf '%s' "$json" | jq -r '.stats.filtered_mirrors')
+  elapsed=$(printf '%s' "$json" | jq -r '.stats.elapsed_seconds')
+
+  c_bold; printf 'Blast radius — '; c_reset; printf '%s\n' "$target"
+  c_dim;  printf '  depth=%s  include_mirrors=%s  scanned=%s files  elapsed=%ss  filtered_mirrors=%s\n' \
+    "$depth" "$include_mirrors" "$total" "$elapsed" "$filtered"
+  c_reset
+
+  printf '\n'
+  c_bold; printf 'First-order referrers (%s)\n' "$first_count"; c_reset
+
+  if [ "$first_count" -eq 0 ]; then
+    c_dim; printf '  (none)\n'; c_reset
+  else
+    printf '%s' "$json" | jq -r '
+      .first_order[]
+      | "  " + (.reference_count|tostring) + "× " + .path + (if .is_mirror then " [MIRROR]" else "" end)
+    '
+  fi
+
+  if [ "$depth" -ge 2 ]; then
+    printf '\n'
+    c_bold; printf 'Second-order referrers (%s)\n' "$second_count"; c_reset
+    if [ "$second_count" -eq 0 ]; then
+      c_dim; printf '  (none)\n'; c_reset
+    else
+      printf '%s' "$json" | jq -r '
+        .second_order[]
+        | "  " + (.reference_count|tostring) + "× " + .path + "  (via " + .via + ")" + (if .is_mirror then " [MIRROR]" else "" end)
+      '
+    fi
+  fi
+
+  if [ "$include_mirrors" = "true" ] || [ "$filtered" -gt 0 ]; then
+    printf '\n'
+    c_dim; printf 'Filtered mirror pairs: %s\n' "$filtered"; c_reset
+    if [ "$filtered" -gt 0 ]; then
+      printf '%s' "$json" | jq -r '
+        .filtered_mirrors_detail[]
+        | "  - " + .path + " (refs: " + (.reference_count|tostring) + ")"
+      '
+    fi
+  fi
+
+  c_dim
+  printf '\nUse --format=json for machine-readable output. See pmo-platform/reference/protocols/blast-radius-protocol.md\n'
+  c_reset
+}
+
+# ---------------------------------------------------------------------------
+# Markdown presenter (off the JSON)
+# ---------------------------------------------------------------------------
+render_md() {
+  local json="$1"
+  local target depth include_mirrors total first_count second_count filtered elapsed scanned_at
+
+  target=$(printf '%s' "$json" | jq -r '.target')
+  depth=$(printf '%s' "$json" | jq -r '.depth')
+  include_mirrors=$(printf '%s' "$json" | jq -r '.include_mirrors')
+  total=$(printf '%s' "$json" | jq -r '.stats.total_files_scanned')
+  first_count=$(printf '%s' "$json" | jq -r '.stats.first_order_count')
+  second_count=$(printf '%s' "$json" | jq -r '.stats.second_order_count')
+  filtered=$(printf '%s' "$json" | jq -r '.stats.filtered_mirrors')
+  elapsed=$(printf '%s' "$json" | jq -r '.stats.elapsed_seconds')
+  scanned_at=$(printf '%s' "$json" | jq -r '.scanned_at')
+
+  printf '# Blast radius — `%s`\n\n' "$target"
+  printf '| Stat | Value |\n|---|---|\n'
+  printf '| scanned_at | %s |\n' "$scanned_at"
+  printf '| depth | %s |\n' "$depth"
+  printf '| include_mirrors | %s |\n' "$include_mirrors"
+  printf '| total_files_scanned | %s |\n' "$total"
+  printf '| first_order_count | %s |\n' "$first_count"
+  printf '| second_order_count | %s |\n' "$second_count"
+  printf '| filtered_mirrors | %s |\n' "$filtered"
+  printf '| elapsed_seconds | %s |\n\n' "$elapsed"
+
+  printf '## First-order referrers (%s)\n\n' "$first_count"
+  if [ "$first_count" -eq 0 ]; then
+    printf '_(none)_\n'
+  else
+    printf '| Refs | Path | Mirror? |\n|---:|---|:---:|\n'
+    printf '%s' "$json" | jq -r '
+      .first_order[]
+      | [ (.reference_count|tostring), .path, (if .is_mirror then "✓" else "" end) ]
+      | "| " + (.[0]) + " | `" + (.[1]) + "` | " + (.[2]) + " |"
+    '
+  fi
+
+  if [ "$depth" -ge 2 ]; then
+    printf '\n## Second-order referrers (%s)\n\n' "$second_count"
+    if [ "$second_count" -eq 0 ]; then
+      printf '_(none)_\n'
+    else
+      printf '| Refs | Path | Via | Mirror? |\n|---:|---|---|:---:|\n'
+      printf '%s' "$json" | jq -r '
+        .second_order[]
+        | [ (.reference_count|tostring), .path, .via, (if .is_mirror then "✓" else "" end) ]
+        | "| " + (.[0]) + " | `" + (.[1]) + "` | `" + (.[2]) + "` | " + (.[3]) + " |"
+      '
+    fi
+  fi
+
+  if [ "$filtered" -gt 0 ]; then
+    printf '\n## Filtered mirror pairs (%s)\n\n' "$filtered"
+    printf '%s' "$json" | jq -r '
+      .filtered_mirrors_detail[]
+      | "- `" + .path + "` (refs: " + (.reference_count|tostring) + ")"
+    '
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+  parse_args "$@"
+  check_deps
+
+  WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/blast-radius.XXXXXX")"
+  trap 'rm -rf "$WORK_DIR"' EXIT
+
+  resolve_root
+  resolve_target
+
+  local start_ts end_ts elapsed
+  start_ts=$(date +%s)
+
+  build_scan_list
+  detect_mirror_pairs
+
+  local fo_tsv="$WORK_DIR/first-order.tsv"
+  find_first_order "$TARGET_REL" "$fo_tsv"
+  aggregate_first_order "$fo_tsv" "$TARGET_REL"
+
+  compute_second_order "$FIRST_ORDER_JSON" "$TARGET_REL"
+
+  end_ts=$(date +%s)
+  elapsed=$((end_ts - start_ts))
+  elapsed="${elapsed}.0"
+
+  local json
+  json=$(build_json "$elapsed")
+
+  case "$ARG_FORMAT" in
+    json)  printf '%s\n' "$json" ;;
+    table) render_table "$json" ;;
+    md)    render_md "$json" ;;
+  esac
+
+  exit "$EXIT_OK"
+}
+
+main "$@"

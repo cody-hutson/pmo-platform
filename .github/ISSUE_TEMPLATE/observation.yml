@@ -1,0 +1,39 @@
+name: Observation (Lightweight Gap Capture)
+description: Capture a gap or drift observation when a full Proposal is not yet authorable. Placeholder-class — Triage promotes to improvement.yml when ready.
+title: "[Observation]: "
+labels: ["observation", "status: proposed"]
+body:
+  - type: textarea
+    id: what-is-missing
+    attributes:
+      label: What is missing?
+      description: State the gap, drift, or friction point in 1–2 sentences. Do not propose a fix.
+      placeholder: "No standard for X. Currently, Y happens inconsistently."
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-good-looks-like
+    attributes:
+      label: What does good look like?
+      description: One sentence describing the intended end state. Do not specify HOW — that's Solutioning.
+      placeholder: "A documented protocol in governance that agents can reference for X."
+    validations:
+      required: true
+
+  - type: input
+    id: file-or-section
+    attributes:
+      label: File or section affected
+      description: Directional pointer to where the gap lives. File-level OK; section-level better if known.
+      placeholder: "pmo-platform/governance/OPERATIONS.md §Continuous Improvement Protocol"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional — evidence label, link to related issue, or context the author wants visible at promotion time.
+    validations:
+      required: false

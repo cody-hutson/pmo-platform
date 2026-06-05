@@ -1,0 +1,17 @@
+# Shell Injection Allowlist — .claude/hooks/block-shell-injection.sh
+#
+# Patterns of legitimate command-chain metachar usage that should not trigger
+# BLOCK-SHELL-INJECTION rules (e.g., pipe-to-formatter on a script's output,
+# legitimate $(...) value precomputation in stable workflows).
+#
+# Format:
+#   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
+#   - Comments start with # (first non-whitespace char)
+#   - Blank lines ignored
+#   - Patterns match the literal Bash command string
+#
+# Add entries with:
+#   ./.claude/hooks/allowlist-add.sh .claude/shell-injection-allowlist.txt '<pattern>'
+#
+# Initially empty; entries added during warn-mode shakedown.
+# ---

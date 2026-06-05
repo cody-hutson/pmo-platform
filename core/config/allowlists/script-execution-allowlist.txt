@@ -1,0 +1,53 @@
+# Script Execution Allowlist — core/hooks/block-destructive.sh BLOCK-DESTRUCTIVE-022
+#
+# Scripts whose execution via `bash <path>`, `sh <path>`, `source <path>`, or `. <path>`
+# is explicitly allowed. Other script invocations are blocked to prevent the
+# script-laundering Red Team mitigation (write attacker.sh, then bash attacker.sh).
+#
+# Format:
+#   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
+#   - Token-substituted at install time: [CLAUDE_WORKSPACE_ROOT]
+#   - Comments start with # (first non-whitespace char)
+#   - Blank lines ignored
+#   - Patterns match the literal path as it appears in the Bash command (not after ~ expansion)
+#
+# Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
+#   ./.claude/hooks/allowlist-add.sh .claude/script-execution-allowlist.txt '<pattern>'
+
+# Primary deploy script (Layer 1 deployment mechanism — writes to .claude/skills/)
+[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/core/deploy/deploy.sh
+./core/deploy/deploy.sh
+core/deploy/deploy.sh
+
+# Worktree deploy scripts (copies of the above in feature branches)
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/core/deploy/deploy.sh
+
+# Claude Code hook test runner (added for hook validation during engineering)
+[CLAUDE_WORKSPACE_ROOT]/.claude/hooks/tests/test-runner.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/.claude/hooks/tests/test-runner.sh
+./.claude/hooks/tests/test-runner.sh
+.claude/hooks/tests/test-runner.sh
+
+# Per-hook test files (invoked by test-runner or directly during engineering)
+[CLAUDE_WORKSPACE_ROOT]/.claude/hooks/tests/*.test.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/.claude/hooks/tests/*.test.sh
+./.claude/hooks/tests/*.test.sh
+.claude/hooks/tests/*.test.sh
+
+# Release-pipeline tools (Stage 5 Solutioning + Stage 6 Engineering tooling)
+[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/blast-radius.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
+./release/tools/blast-radius.sh
+release/tools/blast-radius.sh
+./release/tools/append-pipeline-event.sh
+release/tools/append-pipeline-event.sh
+./release/tools/synthesize-release-learnings.sh
+release/tools/synthesize-release-learnings.sh
+./release/tools/compute-cycle-time.sh
+release/tools/compute-cycle-time.sh
+./release/tools/cleanup-orphan-state.sh
+release/tools/cleanup-orphan-state.sh
+./release/tools/query-pipeline-event.sh
+release/tools/query-pipeline-event.sh
+./release/tools/automated-closeout.sh
+release/tools/automated-closeout.sh

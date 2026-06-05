@@ -1,0 +1,180 @@
+name: Improvement Proposal
+description: Propose a platform improvement
+title: "[Category]: "
+labels: ["status: proposed"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: "Optional at intake — triage validates and assigns priority. P1 = Urgent, P2 = High, P3 = Medium, P4 = Low"
+      options:
+        - P1 - Urgent
+        - P2 - High
+        - P3 - Medium
+        - P4 - Low
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: "REQUIRED. Pick the category that best fits this change. Triage (Stage 2) applies the matching label as part of CER Resolve — the template no longer auto-applies a category label. See `pmo-platform/reference/label-taxonomy.md` for category definitions. If none of these fit, use `observation.yml` instead."
+      options:
+        - Skill Update
+        - Protocol
+        - Structure
+        - Documentation
+        - Enhancement
+        - Tracker Schema
+        - Routing Rules
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: |
+        **Before composing — confirm tier.** If your insight reduces to "X is missing / drifting / suspect" with the next action being "look at it" rather than "do this specific thing", OR if "what good looks like" fits in one sentence with no specific change / affected file / AC proposed yet — file as `observation.yml` instead. This template is for proposals with a specific change you can name.
+
+        Describe the gap. State WHAT is missing or broken, not HOW to fix it.
+        Implementation mechanism belongs at Stage 5 Solutioning — commit it here only when the mechanism is determinate.
+        See `pmo-platform/reference/intake-style-guide.md` for the 5-test rule on what belongs at intake vs. Stage 5 Solutioning.
+      placeholder: Describe the gap, friction point, or enhancement.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        What triggered this? Label every factual claim with one of the five evidence labels:
+        [SOURCE] — verifiable citation (file path + line range, session date, commit SHA).
+        [INFERRED] — reasonable deduction from multiple sources.
+        [ASSUMPTION – CONFIRM] — uncertain claim the author wants validated at Triage.
+        [CONTEXT] — background fact from persistent governance (CLAUDE.md, rules/).
+        [RECOMMENDED] — proposed value the author is introducing (new date, threshold, etc.).
+        Mix label types — over-using [SOURCE] on uncertain claims is a calibration failure.
+      placeholder: |
+        [SOURCE: pmo-platform/reference/pipeline/stage-01-intake.md §5] — auto-logging rule does not enforce minimum fields.
+        [ASSUMPTION – CONFIRM] — The frequency is ≥10 instances/week based on scan heuristic; Triage should verify.
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-files
+    attributes:
+      label: Affected Files
+      description: |
+        REQUIRED. Either (a) list directional files (file-level minimum;
+        line-level optional) OR (b) write exactly:
+        `[ASSUMPTION – CONFIRM] TBD — identified in Planning`.
+        The deferral marker counts as "directional" per G3-03;
+        non-marker free-text passes submission but fails G3-03 at Bundle.
+      placeholder: |
+        pmo-platform/governance/OPERATIONS.md (edit — add section on X)
+        pmo-platform/skills/skill-name/SKILL.md (edit — update output format)
+
+        — OR —
+
+        [ASSUMPTION – CONFIRM] TBD — identified in Planning
+    validations:
+      required: true
+
+  - type: textarea
+    id: documentation-impact
+    attributes:
+      label: Documentation Impact
+      description: |
+        REQUIRED. Declare the K1 codified documentation this change touches.
+        Two acceptable forms:
+
+        (a) **Pointer list** — one bullet per affected doc: `file path | action (link / create / update) | brief reason`.
+        Pointers are directional at Intake (file-path level minimum; line-range optional); refined at Stage 5 in the File Change Matrix.
+
+        (b) **Explicit "None"** — write exactly: `None — no documentation impact (rationale: <one phrase>)`.
+        The rationale phrase is mandatory; bare `None` fails the Stage 13 Close gate (G-CL8).
+
+        **Scope:** K1 codified corpus only — `.claude/rules/`, `pmo-platform/reference/`, `pmo-platform/governance/`,
+        `pmo-platform/skills/*/SKILL.md` + `references/`, `CLAUDE.md`. Layer 2 (`projects/`) and release plans
+        (`pmo-platform/releases/plans/*`) are excluded — release plans are Stage 6 outputs, not declared targets.
+
+        **Why this exists:** the resolution of every declared item is verified at Stage 13 Close (G-CL8 via deploy.sh Check 28).
+        The *absence* of any answer is the gate-failing state; the explicit "None" answer resolves trivially.
+      placeholder: |
+        pmo-platform/reference/schemas/gate-criteria-spec.md | update | new G-CL8 criterion + v1.6 entry
+        .github/PULL_REQUEST_TEMPLATE.md | update | new ### Documentation Impact subsection
+        .claude/rules/release-process.md | update | Stage 1 / Stage 6 / Stage 13 narrative
+
+        — OR —
+
+        None — no documentation impact (rationale: internal regex fix; no user-visible docs)
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-change
+    attributes:
+      label: Proposed Change
+      description: |
+        Describe the outcome, not the mechanism. State what the system should do differently.
+        If you find yourself writing pseudocode, naming specific algorithm implementations, or prescribing specific implementation patterns, stop — that's Stage 5 Solutioning work.
+        For determinate design (e.g., "new section in OPERATIONS.md"), commit it here; for ambiguous design (e.g., "new skill mode"), defer to Solutioning and note "[ASSUMPTION – CONFIRM] mechanism TBD at Stage 5".
+    validations:
+      required: true
+
+  - type: input
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: "Optional at intake — triage and bundle discover full dependency graph. If known, use GitHub `#N` references. Do not use legacy `IMP-XXX` style — per `.claude/rules/git-workflow.md`, IMP-XXX is deprecated."
+      placeholder: "Requires #N first"
+    validations:
+      required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks & Cross-Cutting Impact
+      description: |
+        Name known risks, concurrent-work conflicts, or cross-issue conflicts this change introduces or exposes.
+        If none, write the literal phrase "None identified" — the explicit declaration is the signal that you checked.
+        Use [ASSUMPTION – CONFIRM] on risks you suspect but have not verified.
+      placeholder: |
+        - [ASSUMPTION – CONFIRM] May conflict with #N if both land in the same release (file X is touched by both).
+        - [SOURCE: release plan §Risk Register] Known downstream impact on Stage 7 Dev Testing cadence.
+        - None identified.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        List each criterion as a testable predicate, one bullet per AC. Every AC
+        must be verifiable by a fresh agent without clarifying questions. Start
+        each bullet with a verifiable verb (verify/check/confirm/assert/ensure/validate)
+        OR name a specific file/section/output AND a specific observable state.
+        Avoid vague goals ("works correctly", "handles gracefully", "improves flow").
+        Include a verification method per AC where non-obvious.
+      placeholder: |
+        - [ ] Verify that <file/section/output> contains <observable state> (method: <how>)
+        - [ ] <file/section/output> contains <observable state> (method: <how>)
+
+        Example:
+        - [ ] `pmo-platform/reference/pipeline/stage-01-intake.md` §7 contains row for G1-08 (method: grep "G1-08" pmo-platform/reference/pipeline/stage-01-intake.md returns ≥1 match)
+        - [ ] Verify that `improvement.yml` acceptance-criteria description is ≥ 40 characters (method: wc -c on the description block)
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Additional context, related items, legacy IMP ID if migrated.
+    validations:
+      required: false

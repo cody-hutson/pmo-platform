@@ -1,0 +1,45 @@
+# actionlint configuration
+#
+# Path-scoped suppression of shellcheck SC2016 propagation from
+# .github/workflows/pr-body-parser-clean.yml.
+#
+# Version-pin caveat (actionlint v1.7.1)
+# --------------------------------------
+# actionlint v1.7.1 (the pin in .github/workflows/security.yml) does NOT
+# support the `paths` config schema. On v1.7.1, this file is forward-compatible
+# documentation ONLY — actionlint silently ignores the `paths` block.
+#
+# The load-bearing suppression for v1.7.1 is the `-ignore` runtime flag in
+# .github/workflows/security.yml step "Run actionlint":
+#     ./actionlint -color -ignore 'shellcheck reported issue in this script: SC2016:.+'
+#
+# This config file documents the same suppression in the schema that newer
+# actionlint versions (≥ the release that introduced `paths`) will honor
+# automatically. When the security.yml actionlint pin is bumped to a version
+# supporting `paths`, the `-ignore` flag in the workflow CAN be removed and
+# this config file BECOMES the load-bearing mechanism.
+#
+# Rationale (why suppress SC2016 on pr-body-parser-clean.yml)
+# -----------------------------------------------------------
+# The embedded shell scripts in pr-body-parser-clean.yml intentionally use
+# single-quoted expressions for regex patterns (notably the `'^#{1,6}...$'`
+# anchors detecting the Issue References block). The trailing `$` is an
+# end-of-line regex anchor, NOT an unexpanded variable; actionlint propagates
+# these as SC2016 errors ("Expressions don't expand in single quotes, use
+# double quotes for that"), exiting with code 1 even though the shell scripts
+# are semantically correct.
+#
+# The alternative (rewriting the regex patterns with double-quote `\$`
+# escaping) was considered and rejected: it breaks regex-anchor idiom for
+# marginal aesthetic benefit. The suppression-at-source approach lets the
+# idiomatic regex patterns stand.
+#
+# This file scopes the SC2016 suppression to ONLY pr-body-parser-clean.yml —
+# no other workflows are exempted, and no other shellcheck rule is silenced.
+# Future legitimate shellcheck findings on any other workflow (or any other
+# rule on pr-body-parser-clean.yml) continue to surface as errors.
+
+paths:
+  .github/workflows/pr-body-parser-clean.yml:
+    ignore:
+      - 'shellcheck reported issue in this script: SC2016:.+'

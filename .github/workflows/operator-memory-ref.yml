@@ -1,0 +1,88 @@
+name: Operator-memory-reference gate
+
+# Prevention layer (ties to the encode-then-remove pattern).
+#
+# Fails a PR that ADDS a reference to the operator's LOCAL ~/.claude memory store
+# (feedback_*.md / OPERATOR_INSTANCE_MEMORY / .claude/memory / observations.md).
+# Those files are private to the operator's machine and never ship publicly; the durable
+# knowledge belongs encoded INLINE in canonical docs, not cited as a private-store pointer.
+#
+# Net-new added-lines posture (mirrors the repo-integrity delta gates) so a pre-existing
+# line in a file touched for unrelated reasons is never re-flagged.
+# Per-file override (deliberate documented exception): <!-- repo-integrity: allow-memory-ref -->
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  operator-memory-ref:
+    name: Operator-memory-reference gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Scan added lines for operator-local-memory references
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-memory-ref[[:space:]]*-->'
+          # Memory-file names matched with OR without a .md extension (catches backtick
+          # code-spans like `feedback_x_y` and prose like "feedback_x_y memory:", not just
+          # markdown links). The 2+-segment shape (prefix_word_word) avoids single-word
+          # false positives such as "feedback_loop".
+          MEM_RE='OPERATOR_INSTANCE_MEMORY|\.claude/memory|/memory/[a-z]|(feedback|project|reference|temp_pointer)_[a-z]+_[a-z_]+|observations\.md'
+
+          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' '*.sh' '*.py' 2>/dev/null || true)
+
+          FOUND=0
+          REPORT=""
+          for f in "${CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            if grep -qE "$OVERRIDE" "$f"; then
+              echo "::notice::operator-memory-ref: ${f} carries allow-memory-ref — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            ADDED="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+              | awk '
+                  /^@@/ { p=$3; sub(/^\+/,"",p); split(p,a,","); n=a[1]+0; next }
+                  /^\+\+\+/ { next }
+                  /^\+/ { print n ":" substr($0,2); n++; next }
+                  /^-/ { next }
+                ' || true)"
+            [ -z "$ADDED" ] && continue
+            HITS="$(printf '%s\n' "$ADDED" | grep -E "$MEM_RE" | grep -viE 'user_notes|generate_review\.py' || true)"
+            [ -z "$HITS" ] && continue
+            while IFS= read -r h; do
+              [ -z "$h" ] && continue
+              LN="${h%%:*}"
+              FOUND=1
+              REPORT="${REPORT}${f}:${LN}: references the operator local ~/.claude memory store"$'\n'
+            done <<< "$HITS"
+          done
+
+          if [ "$FOUND" -eq 1 ]; then
+            {
+              echo "## :x: Operator-memory-reference gate FAILED"
+              echo ""
+              echo "An added line references the operator's LOCAL \`~/.claude\` memory store"
+              echo "(\`feedback_*.md\` / \`OPERATOR_INSTANCE_MEMORY\` / \`.claude/memory\` / \`observations.md\`)."
+              echo "Those files are private to the operator's machine and do not ship publicly."
+              echo ""
+              echo "Fix: encode the principle INLINE in the canonical doc (the encode-then-remove"
+              echo "pattern), or add \`<!-- repo-integrity: allow-memory-ref -->\` to the file if the"
+              echo "reference is a deliberately-documented exception."
+              echo ""
+              printf '%s' "$REPORT"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo ":white_check_mark: Operator-memory-reference — no operator-local-memory references on added lines" | tee -a "$GITHUB_STEP_SUMMARY"

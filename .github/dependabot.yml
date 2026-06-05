@@ -1,0 +1,33 @@
+# Dependabot configuration — schedules version updates for GitHub Actions.
+# Pairs with security alerts (auto-enabled on visibility flip to public) and
+# Dependabot security updates (operator-enabled separately).
+#
+# v2 layout deviation (Tier 1 [ADJUST] per application Phase 2):
+# The K1 standard §5.1 schema requires at least 2 update entries (github-actions
+# + one language-specific ecosystem). cody-hutson/pmo-platform v2 layout ships
+# zero Python dependency manifests (no requirements.txt / pyproject.toml /
+# setup.py / setup.cfg / Pipfile at any path — verified at Stage 6 via
+# `gh api 'repos/cody-hutson/pmo-platform/git/trees/main?recursive=1'`).
+# Per §5.2 fallback clause: "application phases may ship a single github-actions
+# entry — but this places the repo BELOW the 2-entry schema minimum and requires
+# an operator override with rationale recorded in the application-phase release
+# plan deviation log." Recorded in the application Phase 2 PR body deviation log.
+#
+# When v2 ships its first Python dependency manifest, add the corresponding
+# package-ecosystem entry to restore the 2-entry minimum.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    labels:
+      - "dependabot"
+      - "cluster: security"
+    commit-message:
+      prefix: "deps"
+      include: "scope"

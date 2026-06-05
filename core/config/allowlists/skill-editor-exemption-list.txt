@@ -1,0 +1,13 @@
+# Skill-Editor Exemption List
+#
+# Skills listed here are exempt from:
+#   - .claude/hooks/block-skill-direct-edit.sh (Gate 2, edit-time enforcement)
+#   - deploy.sh --check Check 6 (canonical-structure threshold evaluation)
+#   - deploy.sh --check Check 10 (editor audit-trail assertion)
+#
+# Format: one skill-name per line. Blank lines and #-prefixed comments ignored.
+# Governance: additions follow the "No ungoverned changes" protocol
+# (CLAUDE.md Guardrails) — GitHub Issue + plan + PR required.
+#
+# See: pmo-platform/reference/standards/canonical-skill-structure.md §5
+pmo-skill-refiner-selftest-canary

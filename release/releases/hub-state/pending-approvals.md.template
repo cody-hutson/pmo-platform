@@ -1,0 +1,42 @@
+---
+schema_version: "v1.0"
+milestone: "vX.Y-<milestone-slug>"
+created_at: "<ISO 8601 UTC of first row enqueue>"
+last_updated: "<ISO 8601 UTC of most recent row mutation>"
+last_session_id: "<worktree>__<ISO-start>__<short-sha>"
+---
+
+# Pending Approvals — vX.Y
+
+<!--
+SURFACE A — queued-approval substrate.
+Canonical schema: core/standards/hub-session-continuity.md § 3.1.
+
+CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md):
+  THIS .template file is CUSTOMIZABLE-PUBLIC (tracked in pmo-platform).
+  The RUNTIME INSTANCE the hub writes to is OPERATOR-INSTANCE — it lives at
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/pending-approvals.md and is NOT
+  git-tracked. Reason: pending approvals mutate on every routing decision
+  (10-50+ writes per release); tracking the runtime instance produces
+  release-branch noise with no cross-operator readership benefit. Audit
+  trail is preserved via the pipeline-event-log (also operator-instance)
+  plus GitHub Issue comments carrying the Decision Briefing context.
+
+HUB INSTALL CONTRACT:
+  On first pending-approval emit for a release, the hub copies this
+  template to <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/pending-approvals.md
+  (creating the per-release directory lazily), substitutes vX.Y/milestone
+  slug into the frontmatter, and appends the first PA-NNN row.
+
+TABLE BELOW IS APPEND-ONLY. Rows mutate IN-PLACE only to update status +
+resolved_at + resolution. Field semantics per the canonical schema spec.
+
+status enum: pending / resolved / superseded / withdrawn
+decision_type enum: d-class:D-N / scope-lock / gate:go-no-go /
+                    tier-N-escalation / disposition / override
+reversibility enum: CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE
+confidence enum: HIGH / MEDIUM / LOW
+-->
+
+| id | created_at | source_stage | source_sub_task | decision_type | options | recommended | context_pointer | reversibility | confidence | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|

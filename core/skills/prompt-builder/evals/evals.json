@@ -1,0 +1,26 @@
+{
+  "skill_name": "prompt-builder",
+  "evals": [
+    {
+      "id": 1,
+      "name": "critique-everyday-vendor-demo",
+      "prompt": "Hey, I've been using this prompt to summarize my vendor demo recordings but the outputs are uneven and miss things I care about. Can you help me improve it?\n\n```\nTake this transcript and tell me what the vendor is selling and whether we should care about it. Also pull out any pricing they mentioned.\n```\n\nFor context: I'm a senior TPM and these recordings are 30-60 min Zoom demos. I usually have 3-5 of these to process per week and I'm trying to decide whether to forward them to my exec sponsor or kill them. Pricing matters because we're under budget freeze through Q3.",
+      "expected_output": "A short critique identifying high-leverage gaps (no audience calibration, vague output spec, missing forward/kill decision frame, no pricing structure, no transcript tag), followed by a rewritten prompt the user can paste-and-use that addresses these specifically.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "interview-agent-impact-analysis",
+      "prompt": "I want to build a subagent I can fire off in parallel during change-management work. It should take a proposed system change and produce an impact analysis — what teams are affected, what's the rollback plan, what's the blast radius. I'm not sure exactly what the prompt should look like, can you help me build it?",
+      "expected_output": "A small set of targeted clarifying questions (max 5) covering inputs, output format, scope boundaries, and handoff context — phrased specifically for a change-management impact-analysis subagent. Should NOT immediately produce a full prompt without first asking.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "critique-skill-description-undertriggering",
+      "prompt": "Here's the description for a skill I'm building. It does data visualization — pulls from our reporting database, builds charts, formats them for our internal Confluence pages, handles the standard chart types (bar, line, pie, scatter) and our standard color palette. But Claude almost never invokes it when I'd expect — like when I ask 'show me Q4 revenue trends' it just answers from training data instead of using the skill. Can you fix the description?\n\n```\ndescription: A data visualization skill that creates charts from database data.\n```",
+      "expected_output": "A critique that identifies the description is too short, lacks specific trigger phrases, doesn't lead with what it does, and isn't 'pushy' enough to combat undertriggering. Followed by a rewritten YAML description (under ~150 words) that includes specific user phrases like 'show me Q4 revenue trends', leads with action verbs, and explicitly invites triggering on adjacent phrasings.",
+      "files": []
+    }
+  ]
+}

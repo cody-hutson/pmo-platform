@@ -1,0 +1,113 @@
+# pmo-platform — operator.toml
+#
+# Canonical operator-instance configuration. Single source of truth for
+# the [OPERATOR_*] / [CLAUDE_WORKSPACE_ROOT] / [COWORK_INSTALL_PATH_BASE]
+# token vocabulary defined at core/standards/depersonalization-spec.md.
+#
+# Canonical location: ~/.config/pmo-platform/operator.toml (per XDG Base Directory Spec)
+# Per-workspace override: <workspace>/operator.local.toml (optional)
+# Resolution order: operator.local.toml > operator.toml > template defaults
+# Required permissions: chmod 600 (operator-only read/write)
+#
+# This file is read at:
+#   - Install time by docs/scripts/setup-workspace.sh (token substitution + write resolved files)
+#   - Update time by ./update.sh (regenerate managed sections per composition-surface-spec.md § 3.2)
+#   - Runtime by deploy.sh, core/hooks/*.sh (read [CLAUDE_WORKSPACE_ROOT] etc.)
+#
+# Edit this file directly OR run ./update.sh which prompts for missing values.
+# After edits, run ./update.sh to regenerate resolved files with new values.
+
+[meta]
+# Schema version. Bump on breaking schema changes. update.sh schema migration
+# logic keys on this field.
+schema_version = 1
+
+# Identification of the managing tool. Do not edit.
+managed_by = "pmo-platform"
+
+[identity]
+# Operator's full name. Resolves [OPERATOR_NAME].
+# Example: "Firstname Lastname"
+operator_name = ""
+
+# Operator's primary email. Resolves [OPERATOR_EMAIL].
+# Example: "jane.doe@example.com"
+operator_email = ""
+
+# Operator's git commit email. Used for Co-Authored-By trailers.
+# Defaults to operator_email when unset.
+# Resolves [OPERATOR_GIT_EMAIL].
+operator_git_email = ""
+
+# Operator's GitHub handle (no @ prefix). Resolves [OPERATOR_GITHUB].
+# Used in egress allowlist patterns (repos/<handle>/*), comms-writer signatures,
+# and doc prose. Empty string disables GitHub-keyed allowlist entries.
+# Example: "jane-doe"
+operator_github = ""
+
+# Operator's phone (optional; signature blocks). Resolves [OPERATOR_PHONE].
+# Empty string omits phone from signature blocks.
+operator_phone = ""
+
+# Operator's role title. Resolves [OPERATOR_ROLE_TITLE].
+# Example: "Senior Program Manager"
+operator_role_title = ""
+
+# Operator's organization. Resolves [OPERATOR_ORGANIZATION].
+# Example: "Acme Corp"
+operator_organization = ""
+
+[paths]
+# Claude workspace root. Resolves [CLAUDE_WORKSPACE_ROOT].
+# Default: $HOME/Claude
+# Tilde-prefixed paths expand at read time.
+claude_workspace_root = ""
+
+# Operator POSIX home directory. Resolves [OPERATOR_HOMEDIR_PATH].
+# Default: $HOME (resolved at read time when this field is empty).
+operator_homedir_path = ""
+
+# Cowork install path base. Resolves [COWORK_INSTALL_PATH_BASE].
+# Default: $HOME/Library/Application Support/Claude/local-agent-mode-sessions
+# Auto-discovered by setup-workspace.sh when empty.
+cowork_install_path = ""
+
+# pmo-platform package repository name. Used for egress allowlist patterns
+# of the form repos/<operator_github>/<pmo_platform_repo_name>/*.
+# Default: "pmo-platform" (canonical upstream name).
+# Override only if operator forked under a different name.
+pmo_platform_repo_name = "pmo-platform"
+
+# --- Operator-instance path overrides ---
+# Resolve <OPERATOR_INSTANCE_*_PATH> angle-bracket tokens per
+# core/standards/depersonalization-spec.md §4. Empty string → resolve to
+# canonical default (typically ${claude_workspace_root}/personal/pmo-instance/<stem>/).
+# Non-empty string → use override verbatim.
+
+# Resolves <OPERATOR_INSTANCE_HUB_STATE_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/hub-state
+# Consumer: core/standards/hub-session-continuity.md §2 (runtime persistence
+# of pending-approvals, action-items, sessions surfaces).
+operator_instance_hub_state_path = ""
+
+# Resolves <OPERATOR_INSTANCE_ROADMAPS_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/roadmaps
+# Consumer: initiative-roadmap *instances* are authored operator-local here,
+# de-scoped from the tracked tree per core/ADRs/ADR-012. The roadmap
+# *framework* convention stays in-repo at
+# core/standards/initiative-roadmap-framework.md.
+operator_instance_roadmaps_path = ""
+
+[platform]
+# Work-board adapter. Selects which work-tracking surface the platform
+# integrates with. Reserved field per pmo-platform repo-adapter
+# parameterization (operator decision tracked in milestone final-consolidation).
+# Valid: "github" | "jira+github" | "gitlab+jira"
+# Default: "github"
+work_board = "github"
+
+# Comms platform adapter. Selects the team-comms surface comms-writer
+# defaults to when authoring messages.
+# Valid: "" (none) | "slack" | "teams" | "email"
+# Default: "" (no platform-specific formatting)
+comms_platform = ""

@@ -1,0 +1,33 @@
+name: Skill license check
+
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'release/skills/pmo-skill-refiner/scripts/package_skill.py'
+      - 'release/tools/check-skill-licenses.py'
+      - '.github/workflows/skill-license-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - 'release/skills/pmo-skill-refiner/scripts/package_skill.py'
+      - 'release/tools/check-skill-licenses.py'
+      - '.github/workflows/skill-license-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  license-check:
+    name: Verify BSL LICENSE in every .skill package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Run skill-package license checker
+        run: python3 release/tools/check-skill-licenses.py

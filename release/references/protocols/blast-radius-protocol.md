@@ -1,0 +1,261 @@
+# Blast Radius Protocol
+
+> **Source:** Sub-slice 1 — Stage 5 Solutioning support.
+> **CLI:** [`release/tools/blast-radius.sh`](../../tools/blast-radius.sh)
+
+---
+
+## 1. What this is
+
+The blast-radius CLI traces **file-reference fan-out** for a target file across the workspace: which files mention it (first-order), which files mention THOSE files (second-order), and where those references live (line numbers + snippets). This protocol document is the CLI's **consumer-facing manual** — when to run it, how to read its output, how to classify impact, and how Stage 4 release-planner / Stage 5 design reviewers consume the result.
+
+The tool answers a single Stage 5 question: **"If I change this file, what else could break?"** It does so via grep-based reference detection (not static analysis), so it captures markdown links, prose mentions, frontmatter cross-references, and shell-script path strings — anything that mentions the target by full path, repo-relative path, or basename.
+
+The schema is the contract; the implementation is replaceable. Schema v1 is locked at this release.
+
+---
+
+## 2. When to use
+
+Three primary triggers — plus operator-initiated ad-hoc use:
+
+| Trigger | Stage | Use |
+|---|---|---|
+| **Cross-PR contention check** | Stage 4 (Release Planning A4) | Before bundling a Milestone, run the CLI against each affected file in the change matrix. Compare results against in-flight PRs (open + last-N merged) to identify external collisions. |
+| **Transitive dependency mapping** | Stage 5 (Solutioning A3) | Replaces the manual `grep` step in [`release/references/pipeline/stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) Phase A §A3. Each Stage 5 spoke runs the CLI on the target file(s) under design; cites the output in the spoke's Evidence section. |
+| **Operator ad-hoc impact analysis** | Any | Operator inspecting a proposed change can run the CLI directly to gauge reach before authorizing scope. |
+
+**Do NOT use** for: byte-identity verification of mirror pairs (use `core/deploy/deploy.sh --check` Check 9), skill-deployment drift (use `core/deploy/deploy.sh --check` Check 12), or production-state audit. The CLI is a static-content analyzer over markdown/sh/json/yml/toml files in the source tree — not a runtime observer.
+
+---
+
+## 3. Invocation
+
+### Synopsis
+
+```
+./release/tools/blast-radius.sh [OPTIONS] <target_file>
+```
+
+### Flags
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--format=json\|table\|md` | `table` if stdout is a tty, `json` otherwise | Output presenter |
+| `--depth=N` | `2` | Recursion depth for second-order detection; hard cap `4` |
+| `--include-mirrors` | unset (mirrors filtered) | Include mirror-pair references in output (annotated `[MIRROR]`) |
+| `--root=PATH` | `git rev-parse --show-toplevel` | Repo root for scanning; falls back to invocation cwd |
+| `--exclude=GLOB` | (additive to default) | Additional exclusion path-prefix; repeatable |
+| `--no-color` | unset | Disable ANSI color in table output |
+| `-h`, `--help` | — | Usage banner |
+| `--version` | — | CLI version + schema version |
+
+### Examples
+
+```bash
+# Default: table output, depth=2
+./release/tools/blast-radius.sh release/references/pipeline/stage-05-solutioning.md
+
+# JSON for downstream skill consumption
+./release/tools/blast-radius.sh --format=json --depth=1 CLAUDE.md
+
+# Forensic mode — show mirror-pair references too
+./release/tools/blast-radius.sh --include-mirrors release/governance/release-process.md
+
+# Embed in a sub-task comment
+./release/tools/blast-radius.sh --format=md CLAUDE.md > /tmp/blast.md
+```
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success; output on stdout |
+| `1` | Internal error or invalid flag value |
+| `2` | Bad target (does not exist or not a regular file) |
+| `3` | Target is under an exclusion glob |
+| `4` | Missing dependency (`jq` not on PATH) |
+
+### Hook compliance
+
+The CLI uses only `grep`, `find`, `jq`, `sort`, `awk`, `sed` — all permitted under the `bypass-mode-readiness.md` hook layer. **However**, BLOCK-DESTRUCTIVE-022 (subprocess script execution) requires the CLI's path to be present in `core/config/allowlists/script-execution-allowlist.txt` before bash invocation succeeds. This is a one-time operator/deployment step; the entry covers absolute, worktree, and relative invocation forms. See [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
+
+---
+
+## 4. Output interpretation
+
+The CLI emits a JSON v1 document (or a table/markdown rendering of it). Schema:
+
+```json
+{
+  "schema_version": "1",
+  "cli_version": "0.1.0",
+  "target": "release/references/pipeline/stage-05-solutioning.md",
+  "scanned_at": "2026-05-11T16:42:00Z",
+  "scan_root": "${HOME}/Claude",
+  "depth": 2,
+  "include_mirrors": false,
+  "stats": {
+    "total_files_scanned": 593,
+    "first_order_count": 16,
+    "second_order_count": 24,
+    "filtered_mirrors": 0,
+    "elapsed_seconds": 4.2
+  },
+  "first_order": [
+    {
+      "path": "release/references/how-to/hub-spoke-bridge.md",
+      "reference_count": 4,
+      "matches": [
+        {"line": 56, "snippet": "see pipeline/stage-05-solutioning.md"},
+        {"line": 212, "snippet": "per pipeline/stage-05-solutioning.md"}
+      ],
+      "is_mirror": false
+    }
+  ],
+  "second_order": [
+    {
+      "path": "release/references/pipeline/stage-04-planning.md",
+      "via": "release/references/how-to/hub-spoke-bridge.md",
+      "reference_count": 2,
+      "matches": [
+        {"line": 102, "snippet": "hub-spoke-bridge.md Procedure 0"}
+      ],
+      "depth": 2,
+      "is_mirror": false
+    }
+  ],
+  "filtered_mirrors_detail": []
+}
+```
+
+### Field semantics
+
+- **`schema_version`** — Output contract version. Increments on backward-incompatible changes; consumers pin to a major version with a 1-release transition window for v2 migration.
+- **`cli_version`** — Implementation version. Bumped per material code change; does not affect schema.
+- **`target`** — Repo-relative path of the analyzed file.
+- **`scan_root`** — Absolute repo root (from `git rev-parse --show-toplevel` or `--root`).
+- **`depth`** — Maximum recursion depth applied. `1` = first-order only; `2` = first + second order; `3-4` = transitive.
+- **`include_mirrors`** — Reflects the `--include-mirrors` flag at invocation time.
+- **`stats.first_order_count`** — Distinct files in `first_order`. **This is the AC2 metric.**
+- **`stats.filtered_mirrors`** — Count of mirror-partner files suppressed from `first_order` (when `--include-mirrors` is unset). Detail lives in `filtered_mirrors_detail`.
+
+### `first_order` vs. `second_order` vs. `filtered_mirrors_detail`
+
+| Array | Meaning | Sort order |
+|---|---|---|
+| `first_order` | Files directly mentioning the target | `reference_count` DESC, then `path` ASC |
+| `second_order` | Files mentioning a first-order file (transitive at depth=2). `via` records which first-order file led to this finding. | Same as above |
+| `filtered_mirrors_detail` | Mirror-partner files that WOULD have appeared in `first_order` but were suppressed because the target is one half of a registered mirror pair (and `--include-mirrors` was unset) | Same as above |
+
+### `via` chain interpretation
+
+`second_order[].via` names the first-order file that pointed to the second-order finding (first match wins on ties). At `depth=2`, `via` is always a first-order path. At `depth>2`, `via` chains back to depth-2 and so on — but the CLI does not record the full chain in v1 schema; it records the most-recent hop.
+
+### Match snippet truncation
+
+`matches[].snippet` is truncated to 200 characters with a trailing `…` ellipsis. Up to 5 match lines are recorded per file; if the file has >5 matches, `reference_count` still reflects the total.
+
+---
+
+## 5. Impact classification rules
+
+Apply these tiers to the CLI output to decide release-process treatment:
+
+### Cosmetic — ship without escalation
+
+- **Criteria:** ≤1 first-order referrer AND all matches are non-load-bearing (index entries, navigation lists, README "see also" lists, file enumerations).
+- **Decision:** Ship in the release plan without ceremony. Mention in the change spec only.
+- **Stage routing:** Stage 5 Solutioning spoke may issue brief output ("Cosmetic — no design surface"). Stage 6 commits without sub-task decomposition beyond the issue itself.
+
+### Behavioral — Risk Register entry + per-referrer verify
+
+- **Criteria:** 2-5 first-order referrers, OR any second-order chain that crosses a skill / governance / rules boundary (i.e., a referrer in `release/skills/**` or `core/rules/**` or `core/governance/**`).
+- **Decision:** Add a Risk Register entry to the release plan. Stage 6 verifies each referrer at commit time (does it still resolve? does it still mean what it meant?). Stage 7 DT runs the CLI again post-edit to confirm no new break references.
+- **Stage routing:** Standard Stage 5 / Stage 6 / Stage 7 / Stage 8 flow with explicit per-referrer verification.
+
+### Structural — requires Solutioning treatment (cannot skip Stage 5)
+
+- **Criteria:** ≥6 first-order referrers, OR any reference from a CRITICAL file (`CLAUDE.md`, `core/rules/*`, `deploy.sh`, any `SKILL.md`).
+- **Decision:** Treat as architectural change. Stage 5 Solutioning is mandatory (cannot skip via mixed-routing protocol). If the reference chain crosses 3+ governance layers (e.g., touches CLAUDE.md AND `core/rules/*` AND a skill SKILL.md), surface as a D-class operator decision.
+- **Stage routing:** Full pipeline with explicit Operator Decision Gate at Stage 5.
+
+### Tiebreaker rules
+
+- If the count places the change in one tier but criticality places it in a higher tier, take the higher tier.
+- If the CLI reports `is_mirror: true` matches and `--include-mirrors` was set, exclude those from the count for classification purposes (they are byte-identical-by-design, not load-bearing references).
+
+---
+
+## 6. How Stage 4 release-planner consumes the output
+
+Stage 4 (Release Planning) integrates blast-radius output into two activities:
+
+1. **A4 Cross-PR Overlap Audit** — For each file in the change matrix, run the CLI to compute first-order fan-out. Compare against `gh pr list --state open` files-touched and the last-N merged PRs at the baseline SHA. Surface external collisions as Risk Register entries (R6-class).
+2. **A5 Change-spec sequencing** — When two issues in the same Milestone touch the same file, blast-radius output informs the sequencing decision. The issue whose change has the larger blast radius typically commits LAST (so it can verify against the smaller change already merged).
+
+The CLI's `--format=md` output is suitable for direct paste into a release plan's Contention Map section.
+
+---
+
+## 7. How Stage 5 spokes consume the output
+
+Stage 5 spokes (per-issue solutioning) cite the CLI invocation + summarize output in their Evidence section. Pattern:
+
+```
+### Evidence
+- Ran `./release/tools/blast-radius.sh <target>`:
+  - first_order_count: <N>
+  - Impact classification: <Cosmetic | Behavioral | Structural>
+  - Notable referrers: <list top 3-5 by reference_count>
+  - Mirror partners filtered: <count>
+```
+
+For Structural-tier targets, the Stage 5 spoke MUST enumerate the affected referrers and address each in the design spec ("how does this change preserve referrer X's expectation?").
+
+The CLI replaces the manual `grep -rln` step that previously lived in spoke prompts.
+
+---
+
+## 8. Mirror-pair handling
+
+The CLI auto-detects mirror pairs by **path topology**: any file present in BOTH `core/rules/<basename>` AND `core/rules/<basename>` is registered as a mirror pair at scan time. By default, when the target is one half of a mirror pair, the CLI suppresses references to its partner from `first_order` and records the count in `stats.filtered_mirrors` (detail in `filtered_mirrors_detail`).
+
+**Why suppress?** The mirror pair is enforced byte-identical by `core/deploy/deploy.sh --check` Check 9. A reference from `release/governance/release-process.md` to `release/governance/release-process.md` (or vice versa) is a structural artifact of the mirror discipline, not an organic dependency. Suppressing it cleans the signal.
+
+**When to use `--include-mirrors`:** Forensic operator review — auditing whether mirror partners reference each other in unexpected ways, or whether the mirror discipline is leaking. The `filtered_mirrors_detail` array is also populated even when filtering is on, so the operator can see what was hidden.
+
+**Source of truth:** [`core/rules/skill-deployment.md`](../../../core/rules/skill-deployment.md) and [`core/rules/harness-deployment.md`](../../../core/rules/harness-deployment.md) define the mirror discipline. `core/deploy/deploy.sh --check` Check 9 enforces it. The CLI's auto-detection picks up any pair present in both directories — including pairs not yet enforced by Check 9 (forward-compatible).
+
+---
+
+## 9. Limitations
+
+- **Markdown link parsing only.** The CLI does not parse YAML frontmatter cross-references (e.g., `consumed-by:` fields in SKILL.md). If a skill ecosystem grows to depend on structured frontmatter, future v2 schema may add a `frontmatter_references` field.
+- **Code-block false positives possible but rare.** A path mentioned inside a fenced code block ( ``` ) is still captured. Sampling on `release-process.md` shows <5% false-positive rate. Operator verification of each finding is cheap (re-run the grep manually).
+- **Performance ceiling.** Bash + grep degrades non-linearly past ~2000 files. Current repo (~600 markdown files) is well within bounds (first-order <1s, second-order at N=2 ~5-10s). If the repo grows 5x, migration to Python+tree-sitter+DAG-construction is the planned escape; schema v1 is preserved across migrations.
+- **Mirror-pair detection is path-topology only.** A pair of files that share basename in `core/rules/` and `core/rules/` is treated as a mirror, regardless of byte-identity. Intentional but documented: byte-identity enforcement is `deploy.sh --check` Check 9's job, not the CLI's.
+- **Symlinks not followed.** The CLI scans the source tree as-stored on disk.
+- **Cross-repo references not detected.** Any reference outside `--root` is invisible. If skills/external repos consume PMO files, this is not captured.
+
+---
+
+## 10. Maintenance
+
+- **Adding new mirror pairs:** Zero CLI changes. Auto-detection picks up any new pair at next invocation. Ensure `core/deploy/deploy.sh --check` Check 9 enforces byte-identity for the new pair.
+- **Adding new scanned file types:** Edit the `SCANNED_TYPES` array in `blast-radius.sh` and commit per standard release process.
+- **Adding new default exclusions:** Edit the `DEFAULT_EXCLUSIONS` array in `blast-radius.sh`. Prefer operator-passed `--exclude` flags over hardcoded defaults when the exclusion is contextual.
+- **Schema bumps to v2:** Backward-incompatible changes (renaming fields, restructuring arrays) require a 1-release transition window where v1 readers and v2 readers must coexist. Document v1→v2 migration in `blast-radius-protocol-v2-migration.md` at the time of the bump.
+- **Hook allowlist:** The CLI's path lives in `core/config/allowlists/script-execution-allowlist.txt`. If the path moves (e.g., directory rename), update the allowlist entry per [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) §"Allowlist Maintenance".
+
+---
+
+## 11. See also
+
+- [`release/references/pipeline/stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) — Stage 5 Phase A §A3 cross-reference (canonical consumer)
+- [`release/references/pipeline/stage-04-planning.md`](../pipeline/stage-04-planning.md) — Stage 4 A4 Cross-PR Overlap Audit (canonical consumer)
+- [`core/rules/skill-deployment.md`](../../../core/rules/skill-deployment.md) — Mirror-pair source of truth (`core/rules/` ↔ `core/rules/`)
+- [`core/rules/harness-deployment.md`](../../../core/rules/harness-deployment.md) — Mirror discipline for harness artifacts
+- [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) — Hook layer + allowlist maintenance
+- [`release/references/how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) — Spoke prompt templates citing this CLI
+- [`release/tools/blast-radius.sh`](../../tools/blast-radius.sh) — The CLI itself

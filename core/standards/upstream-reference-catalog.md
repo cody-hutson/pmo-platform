@@ -1,0 +1,157 @@
+<!-- reference-durability: allow-link -->
+# Upstream-Reference Catalog — PMO Skill Artifacts
+
+**Origin:** R2 (Upstream Compatibility Check) — process-hardening defense-in-depth bundle.
+**Tier:** K1 codified-knowledge corpus per [knowledge-architecture.md](../disciplines/knowledge-architecture.md).
+**Primary consumers:** Operator Decision Gate at Stage 4 ([`hub-spoke-bridge.md` §D-Gate Template](../../release/references/how-to/hub-spoke-bridge.md)); Collective Review Decision Briefing at Stage 5→6 ([`.claude/rules/release-process.md`](../../release/governance/release-process.md) Collective Review Protocol bullet 5).
+**Secondary consumers:** Stage 5 Solutioning spokes producing Evidence-Grounding artifacts ([`evidence-grounding-standard.md`](evidence-grounding-standard.md) — upstream-reference is one of three justification categories).
+
+## Purpose
+
+Codifies the canonical upstream sources for PMO skill artifacts. The D-Gate Template in [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) and the Collective Review Protocol cross-D scan in [`.claude/rules/release-process.md`](../../release/governance/release-process.md) consult this catalog when rendering Upstream Compatibility verdicts (aligned / diverged-with-rationale / N/A). The catalog gives future spokes a queryable surface — replacing tacit knowledge held by individual operators with a documented reference.
+
+R2 net new work is this catalog. The D-Gate Template's per-D Upstream Compatibility subsection (existed since 2026-04-26) and the CR Protocol cross-D scan (already existing) already enforce verdict scaffolding at the Operator Decision Gate; this catalog is the durable surface those scaffolds consult.
+
+## Schema (per-entry)
+
+| Field | Type | Purpose |
+|---|---|---|
+| `artifact_class` | string (kebab-case) | E.g., `skill-md-frontmatter`, `skill-references-directory`, `skill-md-body-anatomy` |
+| `upstream_source` | string | Canonical authority (e.g., `anthropic-skills:skill-creator` SKILL.md) |
+| `upstream_citation` | path + line | Exact file:line pin (e.g., `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md:1-4`) |
+| `upstream_required` | string list | Fields/conventions the upstream marks REQUIRED |
+| `upstream_optional` | string list | Fields/conventions the upstream marks OPTIONAL |
+| `pmo_extensions` | object list | PMO-specific extensions over upstream — each names: extension field, governing doc, rationale |
+| `pmo_restrictions` | object list | PMO-specific narrowing of upstream — each names: restriction, governing doc, rationale |
+| `drift_check_protocol` | string | How to verify the catalog entry remains accurate (manual review cadence + drift signal) |
+| `last_verified_date` | ISO date | Most recent drift check |
+| `last_verified_commit` | short SHA | Commit SHA at verification |
+
+## Entries
+
+### Entry: skill-md-frontmatter
+
+This entry is the **D-Version case study** worked example referenced in the originating release body. The Anthropic upstream `skill-creator` produces `name` + `description` frontmatter only; PMO's D-Version adds `version:` as required. The catalog entry codifies the divergence so future spokes consult the entry rather than re-discovering it.
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `skill-md-frontmatter` |
+| `upstream_source` | `anthropic-skills:skill-creator` |
+| `upstream_citation` | `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md:1-4` |
+| `upstream_required` | `name`, `description` |
+| `upstream_optional` | (none documented in upstream SKILL.md frontmatter) |
+| `pmo_extensions` | `[{field: "version", governing: "version-field-semantics.md", rationale: "Platform release tag at last material edit; dual-gate enforced per D-Version (PreToolUse hook + deploy.sh --check)"}]` |
+| `pmo_restrictions` | `[{restriction: "description triggering accuracy convention", governing: "canonical-skill-structure.md", rationale: "PMO triggering tuning per skill-creator README guidance"}]` |
+| `drift_check_protocol` | "Verify Anthropic SKILL.md at upstream_citation on every minor PMO release (manual read of frontmatter lines 1-4); surface drift via Stage 13 Close re-verification + Tier 2 [SCOPE CHANGE] for next-release remediation. Future deploy.sh --check Check (deferred — see Drift-check protocol § below)." |
+| `last_verified_date` | `2026-05-23` |
+| `last_verified_commit` | `01e39de` (aggregate merge SHA — `01e39de8a8f632095ccb9e4fa5ba323b828d0a27`) |
+
+**D-Version case study application** — how future spokes use this entry:
+
+1. Stage 4 Operator Decision Gate produces D-decision touching skill frontmatter (e.g., adding new required field, changing required-status).
+2. D-Gate spoke reads this entry's `upstream_required` / `upstream_optional` / `pmo_extensions`.
+3. D-Gate spoke renders Upstream Compatibility verdict per the D-Gate Template applicability rule:
+   - `aligned` — D-decision does not change upstream-required set
+   - `diverged-with-rationale` — D-decision adds a PMO extension; rationale references this entry's `pmo_extensions[].governing` (e.g., `version-field-semantics.md` for the `version:` field)
+   - `N/A` — D-decision does not modify skill-authoring surface (per D-Gate Template applicability)
+4. Collective Review Protocol bullet 5 cross-D scan reads the verdict and aggregates with other D-decisions' Upstream Compatibility findings.
+
+### Entry: skill-references-directory
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `skill-references-directory` |
+| `upstream_source` | `anthropic-skills:skill-creator` |
+| `upstream_citation` | `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md` §Anatomy of a Skill (skill-creator scaffolder uses `references/` plural directory name) |
+| `upstream_required` | `references/` (plural) when reference files apply |
+| `upstream_optional` | reference files themselves are context-dependent |
+| `pmo_extensions` | `[{field: "D-Refs threshold", governing: "canonical-skill-structure.md § 2", rationale: "PMO mandates references/ when skill has sufficient procedural complexity; threshold is context-dependent per D-Refs"}]` |
+| `pmo_restrictions` | (none) |
+| `drift_check_protocol` | "Verify Anthropic skill-creator scaffolder output on Anthropic skills framework release; surface drift via Stage 13 Close re-verification." |
+| `last_verified_date` | `2026-05-16` |
+| `last_verified_commit` | `4b71c81` |
+
+**Retrospective evidence:** This entry's `references/` plural canonical resolves the `reference/` vs `references/` 4-way disagreement caught at Stage 7 DT. Future Stage 5 spokes consult this entry when canonicalizing skill directory conventions — the upstream-aligned plural form is the documented canonical.
+
+### Entry: skill-md-body-anatomy
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `skill-md-body-anatomy` |
+| `upstream_source` | `anthropic-skills:skill-creator` |
+| `upstream_citation` | `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md` §Anatomy of a Skill |
+| `upstream_required` | H1 skill title + body sections per Anthropic skill-creator §Anatomy |
+| `upstream_optional` | section ordering varies by skill |
+| `pmo_extensions` | `[{field: "Guardrails (Platform) + Domain-Specific Failure Modes sections", governing: "failure-mode-standard.md + canonical-skill-structure.md", rationale: "PMO mandates structured failure-mode discipline per ≥3 domain-specific anti-patterns enforced at G7 gate"}]` |
+| `pmo_restrictions` | `[{restriction: "Body sections follow canonical structure", governing: "canonical-skill-structure.md", rationale: "Triggering accuracy + downstream skill discoverability"}]` |
+| `drift_check_protocol` | "Verify Anthropic skill-creator SKILL.md §Anatomy on Anthropic skills framework release; surface drift via Stage 13 Close re-verification." |
+| `last_verified_date` | `2026-05-16` |
+| `last_verified_commit` | `4b71c81` |
+
+### Entry: skill-progressive-disclosure
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `skill-progressive-disclosure` |
+| `upstream_source` | `anthropic-skills:skill-creator` |
+| `upstream_citation` | `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md` §Progressive Disclosure |
+| `upstream_required` | SKILL.md as the entry point; references/ for detail; scripts/ for executables |
+| `upstream_optional` | references/ count and granularity varies by skill |
+| `pmo_extensions` | `[{field: "PMO-specific reference patterns (e.g., specs/, protocols/)", governing: "canonical-skill-structure.md", rationale: "PMO skills produce additional reference categories beyond Anthropic baseline"}]` |
+| `pmo_restrictions` | (none) |
+| `drift_check_protocol` | "Verify Anthropic skill-creator SKILL.md §Progressive Disclosure on Anthropic skills framework release." |
+| `last_verified_date` | `2026-05-16` |
+| `last_verified_commit` | `4b71c81` |
+
+### Entry: github-issue-dependencies
+
+This entry codifies GitHub's native issue dependencies API (GA August 2025). PMO adoption is governed by [`ticket-information-architecture.md § Native Dependencies`](../../release/references/specs/ticket-information-architecture.md#native-dependencies) under Model A (body→native one-way mirror, body remains authoritative). Source: Stage 5 design.
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `github-issue-dependencies` |
+| `upstream_source` | GitHub Issues platform — native `blocks` / `blocked-by` API (GA Aug 2025) |
+| `upstream_citation` | GitHub REST API: `repos/{owner}/{repo}/issues/{issue_number}/dependencies/{blocked_by,blocking}`; GitHub GraphQL API: `addIssueDependency` / `removeIssueDependency` mutations |
+| `upstream_required` | Issue node ID (resolved via `gh api graphql -f query='{ repository(owner: "...", name: "...") { issue(number: <N>) { id } } }'`); valid `blocks`/`blocked-by` directionality |
+| `upstream_optional` | Per-issue dependency cap (50 native deps per issue — upstream limit, non-configurable) |
+| `pmo_extensions` | `[{field: "Typed-dep schema (FS/SS/FF/SF + lead/lag) in body Dependencies field", governing: "ticket-information-architecture.md § Dependencies Field — Typed Schema", rationale: "PMBOK CPM convention is richer than native blocks/blocked-by single-semantic; typed schema is body-only; native mirrors only the FS+0d subset"}, {field: "Body-as-authority invariant", governing: "ticket-information-architecture.md § Conflict Resolution", rationale: "Body remains authoritative; native is a projected display surface. AC#4 reframed at Collective Review 2026-05-22 — drift-detection replaces literal bidirectional auto-sync"}, {field: "Stage 2 A3.5 native-mirror substep", governing: "pipeline/stage-02-triage.md § Native-Dep Mirror", rationale: "One-way mirror fires after G2-04 dependency validation passes; non-gate-blocking; idempotent"}, {field: "deploy.sh Check 21 drift detection", governing: "deploy.sh Check 21", rationale: "Workspace-wide body↔native parity check; warn-mode initial per bypass-mode-readiness.md shakedown precedent"}]` |
+| `pmo_restrictions` | `[{restriction: "Native mirror is one-way (body→native only)", governing: "ticket-information-architecture.md § Native Dependencies — Adoption Model", rationale: "Bidirectional sync would invert body-as-authority; one-way + drift-detection preserves the invariant"}, {restriction: "Only FS+0d subset of typed body deps mirrors to native", governing: "ticket-information-architecture.md § Native Dependencies — Adoption Model", rationale: "Native blocks/blocked-by lacks expressivity for SS/FF/SF + lead/lag — those types stay body-only by design"}]` |
+| `drift_check_protocol` | Per-release verification at Stage 13 Phase A4.5 (re-run mirror algorithm as parity-check; report drift in Verification Evidence). Workspace-wide drift detection via `deploy.sh --check` Check 21 (warn-mode initial; flip-to-enforce after 2-3 release shakedown). Cap-handling: if `addIssueDependency` returns "cap reached" (50/issue), flag to operator and suspend further mirror writes for that issue; body remains authoritative without native projection. |
+| `last_verified_date` | `2026-05-22` |
+| `last_verified_commit` | `0f7c9ee` (Engineering Commit 0) |
+
+**Case study application** — how future spokes use this entry:
+
+1. Stage 5 spoke producing a D-decision touching dependency-tracking surfaces (e.g., new dependency edge semantics, new dependency-graph algorithm input) reads this entry's `upstream_required` / `upstream_optional` / `pmo_extensions` / `pmo_restrictions`.
+2. D-Gate spoke renders Upstream Compatibility verdict per the D-Gate Template applicability rule:
+   - `aligned` — D-decision adopts native blocks/blocked-by verbatim
+   - `diverged-with-rationale` — D-decision modifies the mirror subset or invariants; rationale references this entry's `pmo_extensions[].governing` or `pmo_restrictions[].governing`
+   - `N/A` — D-decision does not touch dependency-tracking surface
+3. Collective Review Protocol bullet 5 cross-D scan aggregates with other D-decisions' Upstream Compatibility findings.
+
+[+ additional entries as future spokes discover them; catalog is extensible — new entries follow the same schema and reference patterns]
+
+## Drift-check protocol (catalog hygiene)
+
+The catalog itself is subject to upstream drift. Mitigation:
+
+| Mechanism | Detail |
+|---|---|
+| Per-release catalog re-verification | Stage 13 Close adds a 1-line check: re-read upstream SKILL.md(s) cited in catalog; verify `upstream_required` / `upstream_optional` unchanged. Bump `last_verified_date` + `last_verified_commit` per affected entry on drift. |
+| Future `deploy.sh --check` Check (deferred) | Future check that reads catalog entries' `upstream_citation` and compares against current upstream content. **Not in scope yet** — manual re-verification suffices at current volume (~4 catalog entries). When catalog exceeds ~20 entries, file follow-up issue. |
+| Catalog drift surfaces as Tier 2 [SCOPE CHANGE] | If a release's Stage 13 catalog re-verification finds drift, surface as Tier 2 [SCOPE CHANGE] per [`.claude/rules/release-process.md`](../../release/governance/release-process.md) Inter-Stage Feedback Protocol for next-release remediation. |
+
+## Cross-references
+
+| Surface | Reference | Role |
+|---|---|---|
+| D-Gate Template | [`hub-spoke-bridge.md` §D-Gate Template](../../release/references/how-to/hub-spoke-bridge.md) | Per-D Upstream Compatibility verdict scaffolding consults this catalog |
+| Collective Review Protocol | [`.claude/rules/release-process.md` Collective Review Protocol bullet 5](../../release/governance/release-process.md) | Cross-D upstream-compatibility scan consults this catalog |
+| Parent framework binding | [`decision-discipline.md` § 7.4](../disciplines/decision-discipline.md) | Mechanism 1 (Localization Check) application at D-decision-content level |
+| Evidence-Grounding standard | [`evidence-grounding-standard.md`](evidence-grounding-standard.md) | Upstream-reference is one of three justification categories |
+| Version-field-semantics | [`version-field-semantics.md`](version-field-semantics.md) | D-Version case study governance doc; cited in `skill-md-frontmatter` entry |
+| Canonical skill structure | [`canonical-skill-structure.md`](canonical-skill-structure.md) | Skill structure governance; cited in `skill-references-directory` + `skill-md-body-anatomy` entries |
+
+## Cutover
+
+**Applies to:** all D-decisions rendered at the Operator Decision Gate (Stage 4) going forward. The catalog-consultation discipline applies prospectively to all D-decisions after this catalog takes effect.

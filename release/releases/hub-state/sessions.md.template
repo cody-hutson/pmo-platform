@@ -1,0 +1,39 @@
+---
+schema_version: "v1.0"
+milestone: "vX.Y-<milestone-slug>"
+created_at: "<ISO 8601 UTC of first session emit>"
+last_updated: "<ISO 8601 UTC of most recent session emit>"
+---
+
+# Hub Sessions — vX.Y
+
+<!--
+SURFACE C (OPTIONAL) — hub session boundaries.
+Canonical schema: core/standards/hub-session-continuity.md § 3.3.
+
+CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md):
+  THIS .template file is CUSTOMIZABLE-PUBLIC (tracked in pmo-platform).
+  The RUNTIME INSTANCE the hub writes to is OPERATOR-INSTANCE — it lives at
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/sessions.md and is NOT git-tracked.
+
+  Surface C is OPTIONAL and informational only — it is NOT load-bearing for
+  the Resume Procedure. Surfaces A (pending-approvals) and B (the
+  operator-instance pipeline-event-log) are the load-bearing continuity
+  mechanism. Surface C exists for operator-facing session-boundary inspection.
+
+HUB INSTALL CONTRACT:
+  If the operator chooses to maintain Surface C (operator preference; not
+  hub-mandatory), the hub copies this template to
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/sessions.md on first session emit
+  and appends a row per session boundary.
+
+TABLE BELOW IS APPEND-ONLY. Rows are NOT mutated in-place.
+
+Composite session-ID format: <worktree>__<ISO-start>__<short-sha>
+events_emitted is best-effort hub-self-report (count of pipeline-event-log
+rows emitted during the session). Drift acceptable — Surface C is
+informational only.
+-->
+
+| session_id | started_at | ended_at | worktree | commit_sha_start | commit_sha_end | events_emitted |
+|---|---|---|---|---|---|---|

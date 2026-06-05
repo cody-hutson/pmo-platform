@@ -1,0 +1,93 @@
+name: Install tests
+
+# Runs the full deploy-test harness under core/deploy/tests/ against /tmp
+# sandboxes (no writes outside the sandbox roots):
+#   - test_sandbox_roots.sh        --dry-run plumbing (CLI flag / env-var precedence)
+#   - test_install_end_to_end.sh   full real install + update flow (catches
+#                                  embedded-Python heredoc bugs the dry-run can't see)
+#   - test_lib_composition.sh      bash-3.2 array-scope contract + manifest entry count
+#   - test_install_exit_propagation.sh  install.sh propagates setup-workspace.sh exit codes
+#   - test_deploy_sandbox.sh       PMO_PLATFORM_DEPLOY_ROOT sandbox-safety proof
+#   - test_detect_install_path_spaces.sh  cowork_install_path with internal spaces
+#                                  resolves (config-first session resolution)
+#   - test_compose.py              compose.py Pattern-C primitives + installed_sha
+#                                  two-hash tamper units (pytest; 25 tests)
+#   - test_notify_version_skew.sh  SessionStart version-skew hook resolution
+#                                  (both layouts x skew/equal + reaches-compare proof)
+#
+# Platform: macOS (setup-workspace.sh hard-fails on non-Darwin per its
+# check_platform gate; the end-to-end test self-skips on Linux too).
+#
+# Security: this workflow does NOT consume any untrusted github.event.*
+# inputs (no issue titles, PR bodies, comment bodies, head refs, etc.).
+# All `run:` blocks are static shell invocations on workspace files only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shell-tests:
+    name: Shell harness (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify prerequisites
+        run: |
+          uname -s
+          command -v python3
+          command -v shasum
+          command -v git
+
+      - name: Ensure jq
+        # macos-latest images normally ship with jq, but install defensively
+        # so the test harness has a known dependency baseline.
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            brew install jq
+          fi
+          jq --version
+
+      - name: Ensure pytest
+        # test_compose.py is a pytest module (uses the tmp_path fixture). Run it
+        # under pytest, not as a bare script — `python3 test_compose.py` collects
+        # nothing and exits 0, silently skipping all 25 units. Install defensively.
+        # The macos-latest system python3 is externally-managed (PEP 668), so a
+        # bare `pip install` aborts with externally-managed-environment; install
+        # into the user site with --break-system-packages. Idempotent: only run
+        # the install when pytest is not already importable.
+        run: |
+          if ! python3 -m pytest --version >/dev/null 2>&1; then
+            python3 -m pip install --user --break-system-packages pytest
+          fi
+          python3 -m pytest --version
+
+      - name: Run sandbox-roots regression (test_sandbox_roots.sh)
+        run: bash core/deploy/tests/test_sandbox_roots.sh
+
+      - name: Run end-to-end install test (test_install_end_to_end.sh)
+        run: bash core/deploy/tests/test_install_end_to_end.sh
+
+      - name: Run composition-lib regression (test_lib_composition.sh)
+        run: bash core/deploy/tests/test_lib_composition.sh
+
+      - name: Run install exit-propagation test (test_install_exit_propagation.sh)
+        run: bash core/deploy/tests/test_install_exit_propagation.sh
+
+      - name: Run deploy-sandbox safety proof (test_deploy_sandbox.sh)
+        run: bash core/deploy/tests/test_deploy_sandbox.sh
+
+      - name: Run cowork-path-spaces regression (test_detect_install_path_spaces.sh)
+        run: bash core/deploy/tests/test_detect_install_path_spaces.sh
+
+      - name: Run compose.py units (test_compose.py)
+        run: python3 -m pytest core/deploy/tests/test_compose.py -v
+
+      - name: Run version-skew hook regression (test_notify_version_skew.sh)
+        run: bash core/deploy/tests/test_notify_version_skew.sh

@@ -1,0 +1,38 @@
+# Egress Allowlist — core/hooks/block-egress.sh BLOCK-EGRESS-004 (curl POST) and BLOCK-EGRESS-007 (gh api POST)
+#
+# Hosts / gh-api paths to which outbound uploads (POST/PUT/PATCH/DELETE) are permitted.
+# Uses bash glob patterns (shell case matching), NOT regex.
+#
+# Format:
+#   - One pattern per line
+#   - Token-substituted at install time: [OPERATOR_GITHUB]
+#   - Comments start with # (first non-whitespace char)
+#   - Blank lines ignored
+#   - For curl/wget: match the host portion of the URL (e.g., api.github.com)
+#   - For gh api: match the path (e.g., repos/[OPERATOR_GITHUB]/pmo-platform/issues*)
+#
+# Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
+#   ./.claude/hooks/allowlist-add.sh .claude/egress-allowlist.txt '<pattern>'
+#
+# ---
+
+# GitHub API hosts (for curl calls to GitHub)
+api.github.com
+*.github.com
+uploads.github.com
+
+# GitHub API write paths (used via gh api -X POST/PUT/PATCH/DELETE)
+repos/[OPERATOR_GITHUB]/pmo-platform/issues*
+repos/[OPERATOR_GITHUB]/pmo-platform/pulls*
+repos/[OPERATOR_GITHUB]/pmo-platform/milestones*
+repos/[OPERATOR_GITHUB]/pmo-platform/labels*
+repos/[OPERATOR_GITHUB]/pmo-platform/projects*
+repos/[OPERATOR_GITHUB]/pmo-platform/comments*
+repos/[OPERATOR_GITHUB]/pmo-platform/releases*
+repos/[OPERATOR_GITHUB]/pmo-platform/git/refs*
+repos/[OPERATOR_GITHUB]/*
+graphql
+
+# Anthropic API (Claude API — for any direct calls)
+api.anthropic.com
+console.anthropic.com

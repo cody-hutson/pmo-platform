@@ -1,0 +1,15 @@
+# MCP Write-Tool Allowlist — core/hooks/block-mcp-writes.sh BLOCK-MCP-001
+#
+# MCP tool names whose write-side invocation is explicitly permitted.
+# Write verbs matched at audit time:
+#   (create|edit|update|delete|add|transition|share|attach|permission|publish|
+#    invite|grant|export|copy|move|comment|post|send|email|upload|import|
+#    replace|insert|remove|archive)
+#
+# Format: one fully-qualified tool name per line (grep -Fxq fixed-string match)
+# Comments start with #.
+#
+# Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
+#   ./.claude/hooks/allowlist-add.sh .claude/mcp-write-allowlist.txt '<tool-name>'
+#
+# ---
