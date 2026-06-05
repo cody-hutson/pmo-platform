@@ -6,7 +6,7 @@ skills, governance specs, and Python release tooling driven by Claude Code — s
 
 ## Contribution model
 
-This is a personal, single-maintainer project. Write access is limited to invited
+This is currently a single-maintainer project. Write access is limited to invited
 collaborators, and unsolicited external pull requests generally won't be merged. If
 you'd like to contribute, open an issue to ask about collaborator access — it's granted
 by invitation only.
