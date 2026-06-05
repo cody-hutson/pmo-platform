@@ -8,11 +8,9 @@ Only the latest commit on `main` is supported. Tagged releases are historical re
 
 If you believe you have found a security vulnerability in this repository, please report it privately. Do **not** open a public issue, PR, or discussion for security reports.
 
-- **Preferred — GitHub Private Vulnerability Reporting (PVR).** Open a private security advisory from the repository's **Security → Advisories → "Report a vulnerability"** page. The report stays private until a fix is coordinated. _(Available once this repository is public and PVR is enabled — see Defenses below.)_
-- **Alternate — Email.** chutson.git@gmail.com
-  - **Subject:** `[pmo-platform security] <short description>`
-
-**Please include:** affected file(s) or commit, steps to reproduce, expected vs. actual behavior, and any proof-of-concept.
+- **Preferred:** [open a private security advisory](https://github.com/cody-hutson/pmo-platform/security/advisories/new) (GitHub Private Vulnerability Reporting).
+- **Email (alternate):** chutson.git@gmail.com — subject `[travel-planner security] <short description>`.
+- **Include:** affected file(s) or commit, steps to reproduce, expected vs. actual behavior, and any proof-of-concept.
 
 ## Response Expectations
 
