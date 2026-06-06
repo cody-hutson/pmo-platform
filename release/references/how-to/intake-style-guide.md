@@ -16,6 +16,8 @@ The PMO platform commits **WHAT** at intake (problem statement, constraints, obs
 
 This doc gives ticket authors (agents and humans) a binary checklist they can apply before submitting an intake ticket — and gives Triage a reference point for self-repair guidance.
 
+When an idea is not yet intake-ready, the `intake-desk` skill is the conversational front door (the intake funnel): it meets the idea at its altitude, identifies the work-item type and its place in the intake hierarchy, elicits the type- and level-appropriate fields, applies the 5-test rule live, and logs a well-formed item to the work tracker — never a scratch file.
+
 `[SOURCE: <OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/recommendations.md §C, §D]`
 
 ---

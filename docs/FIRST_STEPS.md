@@ -128,7 +128,7 @@ With a project configured, the daily skills have context to work from:
 - `/daily-status` — generate an AM/PM Teams-ready update from your trackers.
 - `/comms-writer` — draft an audience-calibrated stakeholder message.
 
-The full roster (12 skills) is in [operations/README.md](../operations/README.md); the governing rules are [operations/OPERATIONS.md](../operations/OPERATIONS.md).
+The full roster (13 skills) is in [operations/README.md](../operations/README.md); the governing rules are [operations/OPERATIONS.md](../operations/OPERATIONS.md).
 
 ---
 
@@ -249,7 +249,7 @@ The Q&A habit from [§1](#1-explore--play-qa-with-the-repo) is your standing too
 
 ## Where to go next
 
-- [operations/README.md](../operations/README.md) — the 12 PMO-practitioner skills.
+- [operations/README.md](../operations/README.md) — the 13 PMO-practitioner skills.
 - [release/README.md](../release/README.md) — the 6 release skills and pipeline references.
 - [release/references/how-to/hub-spoke-bridge.md](../release/references/how-to/hub-spoke-bridge.md) — the full hub operating guide.
 - [docs/module-apis.md](module-apis.md) — the consolidated cross-module API and composition patterns.

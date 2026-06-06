@@ -19,6 +19,7 @@ Skills exposed to other modules and to consumers:
 | `daily-status` | invocation | AM/PM Teams-ready daily status updates |
 | `delivery-engine` | invocation | Backlog → release-readiness; DoR/DoD gates; sprint planning |
 | `file-router` | invocation | Classifies and routes incoming files in PMO workspace |
+| `intake-desk` | invocation | Conversational intake front door — elicits typed, level-aware work items from a raw idea |
 | `pmo-process-designer` | invocation | Converts business context into structured requirements/processes |
 | `pmo-technical-analyst` | invocation | Reviews technical artifacts (FDDs, integration specs) with TPM judgment |
 | `ppm-agent` | invocation | Strategic PMO brain — pushes actionable items to resolution |
@@ -83,7 +84,7 @@ Re-verify at any SHA by running [`../core/deploy/tools/cross-module-audit.sh`](.
 
 ## Module contents
 
-This module hosts the operations skills (`artifact-generator`, `change-management`, `comms-writer`, `daily-status`, `delivery-engine`, `file-router`, `pmo-process-designer`, `pmo-technical-analyst`, `ppm-agent`, `project-initiator`, `tracker-manager`, `weekly-status-rollup`) and the operations governance file (`operations/OPERATIONS.md`).
+This module hosts the operations skills (`artifact-generator`, `change-management`, `comms-writer`, `daily-status`, `delivery-engine`, `file-router`, `intake-desk`, `pmo-process-designer`, `pmo-technical-analyst`, `ppm-agent`, `project-initiator`, `tracker-manager`, `weekly-status-rollup`) and the operations governance file (`operations/OPERATIONS.md`).
 
 ## Future-Extraction Readiness
 
