@@ -1,0 +1,82 @@
+{
+  "skill_name": "intake-desk",
+  "evals": [
+    {
+      "id": 1,
+      "name": "elicit-bug-reproduction-environment",
+      "prompt": "Help me file this as an issue: deploy.sh blew up on me yesterday. I ran the deploy and it errored out about some unbound variable when nothing had changed. I'm on main. Can you help me write this up as a work item?",
+      "expected_output": "Mode A. Phase 1 proposes an assumed altitude (run-the-business / solution-level) and confirms. Phase 2 lands type = bug per the type-landing criteria (broken existing behavior, expected-vs-actual delta, reproduction narratable), one item. Phase 3 elicits the bug-distinctive fields via observation-by-proxy: presses for exact reproduction steps (the exact command, the exact error text) and the environment (branch, commit SHA, OS, tool versions) — these two fields are the test of AC2 for a bug. Also captures expected vs actual behavior, evidence (labeled), affected files, documentation impact, and a verifiable acceptance criterion. Derives the required field set from bug.yml at use time (does not rely on a duplicated inline list). Applies the 5-test live as the clarity gate. Phase 4 renders a [Bug]: body with a leading **Severity:** line (no severity label exists), obtains an explicit binary AskUserQuestion approval, then describes emitting via gh issue create with the bug.yml default labels. Never writes a scratch file. ADR is never offered.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "elicit-story-acceptance-criteria-value",
+      "prompt": "I have a rough idea I want to turn into a work item. It would be nice if the daily status skill could pull from the open-meetings tracker automatically instead of me pasting it in. Help me scope this idea for intake.",
+      "expected_output": "Mode A. Phase 1 proposes change-the-business at stakeholder/story altitude and confirms. Phase 2 lands type = improvement (a named change). Phase 3 uses a workshop-of-one scenario walk to surface the value and the acceptance criteria — the story-distinctive fields (AC + value), the test of AC2 for a story. Captures Category (the improvement dropdown, carried in the body and via title prefix for Triage to label), Description (WHAT not HOW), Proposed Change framed as an outcome, evidence, affected files, documentation impact, risks, and verifiable ACs. Defers any mechanism the user proposes as [ASSUMPTION – CONFIRM] mechanism deferred to Stage 5 — owner: design. Stops eliciting once the 5-test passes for the story altitude (clarity gate; no question-count cap, no over-interview). Phase 4 renders an [<Category>]: improvement body and obtains binary AskUserQuestion approval before emit.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "elicit-initiative-outcomes-domain-one-item-body-decomposition",
+      "prompt": "Help me log this idea as a work item — I think we need a whole customer self-service pickup tool capability across the portfolio. It's bigger than one change. Can you help me get it into the backlog as a work item?",
+      "expected_output": "Mode A. Phase 1 proposes change-the-business at business/initiative altitude and confirms. Phase 2 lands type = improvement framed as an initiative AND creates exactly ONE work item — it does NOT auto-decompose into N child issues. Phase 3 uses down-laddering plus document analysis to surface outcomes and domain context — the initiative-distinctive fields (outcomes + domain), the test of AC2 for an initiative. The candidate child work (discovery / research / integration / development / testing / rollout) is rendered as a decomposition callout in the body for later slicing, NOT auto-created as children. Records the intended granularity (initiative) in the body. Over-definition at this altitude = committing child-level task breakdown, so it stops at outcomes + domain + the callout. Phase 4 obtains binary AskUserQuestion approval before emit. KEY ASSERTION: ONE item with a body decomposition callout, never multiple child issues.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "reclassification-reroute-bug-to-improvement",
+      "prompt": "Help me write up this bug as a work item: the file-router never files my vendor PDFs into the right folder. It just leaves them unrouted. I want it to handle PDFs.",
+      "expected_output": "Mode A. Phase 2 initially entertains type = bug, but as elicitation reveals the behavior is a missing capability (PDFs were never a supported input) rather than broken existing behavior — failing the bug type-landing criteria (no broken-existing-behavior, no expected-vs-actual delta) — re-routes the type to improvement with a one-line rationale ('this reads less like a bug and more like a missing capability — switching to an improvement; here's why'), resets to the improvement field set, and continues. Demonstrates AC1's re-route-on-reclassification. Does NOT lock the first classification and ship a mistyped bug. The type was held provisional through Phase 3.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "mode-b-triage-readiness-check-failing-draft",
+      "prompt": "Is this intake-ready? Check this draft I already wrote:\n\nTitle: Improve the thing\nDescription: The reporting is slow and annoying. We should make it faster by rewriting the query with a binary search and caching the results in a Trie.\nAcceptance: it works better.",
+      "expected_output": "Mode B (the user pasted a draft and asked is-this-intake-ready — does NOT re-elicit from scratch). Runs the 5-test once. Reports FAIL with the specific failing tests: T2 (a determinate mechanism — binary search + Trie + caching — is committed at intake; that is a HOW that belongs at Stage 5) and T3 (the AC 'it works better' is a vibe, not a verifiable predicate); likely T4 (no file pointer) and T5 (no risks). Returns the WHAT-framing rewrite: state the observable outcome and constraints, mark the mechanism [ASSUMPTION – CONFIRM] mechanism deferred to Stage 5 — owner: design, and give a verifiable AC. Does not file anything.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "altitude-assumed-then-user-corrects-resort",
+      "prompt": "Help me file this idea as a work item: we should make onboarding faster.",
+      "expected_output": "Mode A. Phase 1 opens with the run-the-business vs change-the-business cut, proposes an ASSUMED specific altitude stated back explicitly as an assumption (e.g. 'this reads like change-the-business at roughly an initiative level — does that match?'), and asks the user to confirm or correct (a good AskUserQuestion candidate). When the user corrects it ('no, it's just one small tweak to the onboarding checklist'), the desk accepts the correction and RE-SORTS to the corrected altitude (task/small change), then proceeds to type-landing at the corrected altitude. KEY ASSERTION: altitude is proposed as a labeled assumption and confirmed/corrected by the user — never silently classified; a correction re-sorts the item.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "unresolved-altitude-carried-as-triage-owned-assumption",
+      "prompt": "Help me log this idea — I genuinely don't know how big this is. Something about our intake process feels off but I can't tell if it's one fix or a whole rework. Just get it captured.",
+      "expected_output": "Mode A. Phase 1 proposes an assumed altitude and tries to confirm, but the user genuinely cannot align on the size/altitude even after one disambiguating question. The desk does NOT stall and does NOT fabricate a confident altitude. It proceeds at a best-guess altitude AND carries the altitude as a flagged owned assumption in the body: '[ASSUMPTION – CONFIRM] altitude unresolved (one fix vs rework) — owner: triage — to close: human reviewer sizes at triage'. KEY ASSERTION: an unresolvable altitude becomes a triage-owned [ASSUMPTION – CONFIRM] body item, the loop proceeds rather than stalling, and nothing is fabricated.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "assumptions-emitted-as-stage-owned-handoff-items",
+      "prompt": "Help me write this up as a work item: the deploy keeps failing intermittently and I think it's a dependency thing but I'm not sure which package, and I don't know what files to touch yet.",
+      "expected_output": "Mode A. Lands type = bug or improvement per the landing criteria. Phase 3 re-elicits the unclear fields ONCE (which package? which files?); when the user genuinely cannot resolve them now, the desk renders each as a STAGE-OWNED assumption body line rather than fabricating or dropping: '[ASSUMPTION – CONFIRM] failing dependency unidentified — owner: root-cause — to close: reproduce + bisect' and '[ASSUMPTION – CONFIRM] TBD — identified in Planning' for Affected Files (owner: dependency/design). Groups them in an 'Open assumptions (owned for downstream closure)' block. KEY ASSERTION: unknowns become tagged, stage-owned handoff items (root-cause / dependency / design / etc.) carried in the body for progressive downstream closure — the desk does NOT investigate-and-close them and does NOT invent values.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "clarity-exit-no-question-count-cap",
+      "prompt": "Help me file this bug: running `./deploy.sh --check` on main @ 2fa2240 (macOS, bash 5.2) prints 'CHANGED_PACKAGES: unbound variable' and exits 1 when no packages changed; expected a clean pass. The fix lands in core/deploy/deploy.sh. AC: --check passes with no package changes; a regression test covers the empty-change path.",
+      "expected_output": "Mode A. The user's first message already supplies reproduction, environment, expected vs actual, affected file, and a verifiable AC. The desk recognizes the 5-test PASSES for the bug at solution altitude on the FIRST pass, so the clarity gate is met — it STOPS eliciting (offers 'anything else to add?' once at most), does NOT continue interrogating to satisfy a question count, and proceeds to render + binary AskUserQuestion confirm. KEY ASSERTION: the exit is the 5-test passing (clarity gate), NOT a Max-5-questions cap; an already-clear ask is not over-interviewed.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "negative-trigger-ppm-agent-transcript-processing",
+      "prompt": "Triage this transcript and tell me what action items came out of the meeting.",
+      "expected_output": "NEGATIVE TRIGGER — intake-desk must NOT fire. This is artifact-processing of an existing transcript (ppm-agent's surface: 'triage this', 'what came out of this'), not authoring a new work item from a raw idea. The correct behavior is to defer to ppm-agent. If intake-desk were to start a from-scratch elicitation interview here, that is the trigger-poaching failure mode. Verifies the object-noun boundary (existing artifact vs unformed idea).",
+      "files": []
+    },
+    {
+      "id": 11,
+      "name": "negative-trigger-file-router-file-object",
+      "prompt": "File this CSV — where does it go?",
+      "expected_output": "NEGATIVE TRIGGER — intake-desk must NOT fire. The object is a file (a CSV) being routed to a folder — file-router's surface ('file this', 'where does this go', 'classify this'). intake-desk's 'help me file this idea as an issue' carries a work-item object; this carries a file object. The correct behavior is file-router classification, not an elicitation interview. Verifies the object-noun disambiguation that keeps 'file this' from collision.",
+      "files": []
+    }
+  ]
+}

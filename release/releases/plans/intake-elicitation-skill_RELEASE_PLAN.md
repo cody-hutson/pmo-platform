@@ -7,8 +7,9 @@ references block at the end.
 
 ## Summary (30 seconds)
 
-Single-issue, version-less release delivering a new conversational intake-elicitation skill (`intake-elicitor`)
-in the operations module. Class `novel` (trigger (a): introduces a new skill). Branch topology SINGLE — one issue,
+Single-issue, version-less release delivering a new conversational intake-elicitation skill (`intake-desk`)
+in the operations module. (Renamed from `intake-elicitor` at the Stage 5 Re-Solutioning rev 2 per the operator's
+PR review; see the Deviation Log.) Class `novel` (trigger (a): introduces a new skill). Branch topology SINGLE — one issue,
 one release branch, plan committed as Engineering Commit 0. Stages 5–13 all apply (no SKIPs); Stage 5 Solutioning
 is the load-bearing stage because the issue explicitly defers skill modes, technique-library content, MVP type set,
 and the work-item-type-system registry-binding mechanism to Stage 5. File-change count is about six paths: one new
@@ -140,16 +141,16 @@ Note on Stages 10/11: deploy-and-verify activities for a skill release fold into
 
 | Path | Intent | Notes / grounding |
 |---|---|---|
-| `operations/skills/intake-elicitor/SKILL.md` | ADD | The skill definition: elicitation loop plus technique library plus per-type/level field maps. Frontmatter `name` plus `description` (upstream minimum) plus `version` plus `license`; no migration marker at birth. At least three domain-specific failure modes (five authored) plus Principal Standard checklist. |
-| `operations/skills/intake-elicitor/references/elicitation-loop.md` | ADD | The four-phase loop plus the altitude model plus the type/hierarchy re-routing rule plus the 5-test rule applied live. |
-| `operations/skills/intake-elicitor/references/type-map.md` | ADD | The type-registry seam — current four-type set, intake hierarchy, per-type/level required-field map keyed to the issue templates. The single file the type system later repoints. |
-| `operations/skills/intake-elicitor/references/technique-library.md` | ADD | BABOK technique cards adapted to a single-user, async, agent-mediated context plus a when-to-apply selector. |
-| `operations/skills/intake-elicitor/references/output-contract.md` | ADD | The emission contract — confirm-before-emit gate, the gh-issue-create mechanics with the dropdown-to-label map, the Severity-in-body convention, the Observation-tier fallback, the no-gh fallback, and the never-a-tracked-scratch-file invariant. |
-| `operations/skills/intake-elicitor/evals/evals.json` | ADD | At least three entry-altitude worked transcripts (bug/story/initiative) plus a Mode B 5-test case plus at least two negative-trigger guards vs file-router and ppm-agent. Drives Stage 7/8. |
-| `core/deploy/deploy.sh` | EDIT | Register `intake-elicitor` in the OPERATIONS_SKILLS array (alphabetical, between file-router and pmo-process-designer) — NOT SKILL_LIST (deprecated). This corrects the issue body's stale "register in SKILL_LIST" reference. Check 5 (roster-drift) then reconciles the array against the new on-disk dir. |
-| `packages/intake-elicitor.skill` | ADD | Build the package via the repo packaging tool. License injected at build. Check 7 (package-freshness) is release-blocking. |
-| `core/ADRs/ADR-016-intake-elicitor-type-registry-seam.md` | ADD | The type-registry parameterization seam ADR (forward-coupled to the work-item type system). Authored as a file alongside the implementation. |
-| `release/references/how-to/intake-style-guide.md` | EDIT | Name `intake-elicitor` as the intake funnel — one link-free durable-prose sentence (the file has no allow-link marker). Preserve the 5-test rule and existing structure. |
+| `operations/skills/intake-desk/SKILL.md` | ADD | The skill definition: operating principles, mode detection, the four-phase loop summary, reference-file index. Frontmatter `name: intake-desk` plus tool-agnostic `description` (noun-anchored triggers) plus `version` plus `license`; no migration marker at birth. Six domain-specific failure modes (≥3 floor; tags spelled out on first use) plus Reversibility Discipline. The confirm gate is AskUserQuestion; the hard "Max 5 questions" is cadence-only, not an exit. No Provenance block (the ADR carries the lineage). |
+| `operations/skills/intake-desk/references/elicitation-loop.md` | ADD | The four-phase loop, the binary phase gates, the altitude model (assume + run/change-the-business + confirm + triage-carry), the altitude-relative over-definition rule, one-ticket-per-request + decomposition→body callout, clarity-based exit (no hard limit) + re-elicit-unclear, assumptions-as-owned-handoff-items, and the 5-test rule applied live. |
+| `operations/skills/intake-desk/references/type-map.md` | ADD | The type registry (3 types — improvement / bug / observation; NO adr) → template path + when-to-choose + type-landing criteria, plus the altitude→emphasis table. The required field set is DERIVED at use time from each `.github/ISSUE_TEMPLATE/<type>.yml` (the living source) — not duplicated. Carries the durable "why no ADR type" statement. |
+| `operations/skills/intake-desk/references/technique-library.md` | ADD | BABOK technique cards plus a domain-adaptive (domain × topic × altitude) selector and an extensibility header contract; general/functional/technical/design rows plus an advertising placeholder. |
+| `operations/skills/intake-desk/references/output-contract.md` | ADD | A tool-agnostic intake-emit process (work tracker / work item / item reference) plus a labeled "MVP target: GitHub Issues" subsection (gh mechanics, dropdown carriage, Severity-in-body, observation-tier fallback, no-tracker fallback). AskUserQuestion confirm + auth gate; assumptions-as-owned-items in the render step; the downstream investigate-and-close boundary; the never-a-tracked-scratch-file invariant; parameterization deferred. |
+| `operations/skills/intake-desk/evals/evals.json` | ADD | `skill_name: intake-desk`; bug/story/initiative/reclassification/Mode-B cases plus two negative-trigger guards (vs file-router and ppm-agent), plus rev-2 cases: altitude-assume-then-correct, unresolved-altitude→triage-owned-assumption, assumptions-as-owned-items, clarity-exit (no question cap), and container→one-item+body-decomposition-callout. No `adr` expectation. Drives Stage 7/8. |
+| `core/deploy/deploy.sh` | EDIT | Register `intake-desk` in the OPERATIONS_SKILLS array (alphabetical, between file-router and pmo-process-designer) — NOT SKILL_LIST (deprecated). This corrects the issue body's stale "register in SKILL_LIST" reference. Check 5 (roster-drift) then reconciles the array against the on-disk dir. |
+| `packages/intake-desk.skill` | ADD | Build the package via the repo packaging tool (the old `intake-elicitor.skill` is deleted). License injected at build. Check 7 (package-freshness) is release-blocking. |
+| `core/ADRs/ADR-016-intake-front-door-architectural-boundary.md` | ADD | The architectural-boundary ADR — intake as a distinct front-door component, its verb-disjoint boundary vs ppm-agent / project-initiator / architecture, and the downstream handoff contract (typed item + stage-owned assumptions + body decomposition callout). Authored as a file alongside the implementation. Reversibility MODERATE. |
+| `release/references/how-to/intake-style-guide.md` | EDIT | Name `intake-desk` as the intake funnel — one link-free durable-prose sentence (the file has no allow-link marker); "work tracker" (tool-agnostic). Preserve the 5-test rule and existing structure. |
 
 OPERATIONS.md funnel pointer is DEFERRED (not in MVP): the issue says intake-style-guide "and/or" OPERATIONS.md, and
 the style guide alone satisfies the AC. The OPERATIONS.md pointer touches a byte-identical mirror pair (Check 9), so
@@ -173,7 +174,7 @@ Stage 12, re-run the audit.
 |---|---|---|---|---|---|
 | R1 | Scope-creep — "do-everything elicitor." The technique library plus type coverage balloon beyond an MVP. | Med / High | 80/20 MVP — Stage 5 fixes the agreed highest-frequency type set (against the current four types) and a bounded technique library; coverage grows incrementally post-ship. Stage 9 Deep review checks the MVP boundary held. | Stage 5 Solutioning plus operator at Stage 9 | CHEAP |
 | R2 | Soft coupling to the unshipped type system. The skill designs a parameterization seam toward a type registry that is proposed and unshipped. | Med / Med | Bind the MVP to the current four-type set with a documented seam, not to the unshipped registry (AC5 [ADJUST]). Stage 5 verifies the type-system state at session entry, designs against today's substrate, surfaces any drift as input correction. | Stage 5 Solutioning | CHEAP |
-| R3 | Intake-ownership overlap with project-initiator / ppm-agent. The elicitor's "front door that produces typed work items" could blur ownership. | Med / Med | Stage 5 delineates ownership explicitly: the elicitor produces a typed work item (front-door); ppm-agent processes existing artifacts; project-initiator scaffolds/closes projects. Distinct verbs, distinct trigger sets. Stage 5 runs a cross-skill trigger-collision check so the new triggers do not poach ppm-agent's processing surface. | Stage 5 Solutioning plus Stage 8 QA | CHEAP |
+| R3 | Intake-ownership overlap with project-initiator / ppm-agent. `intake-desk`'s "front door that produces typed work items" could blur ownership. | Med / Med | Stage 5 delineates ownership explicitly (and ADR-016 records it as a verb-disjoint component boundary): `intake-desk` authors a typed work item (front-door); ppm-agent processes existing artifacts; project-initiator scaffolds/closes projects; architecture authors ADRs. Distinct verbs, distinct trigger sets. Stage 5 runs a cross-skill trigger-collision check so the new triggers do not poach ppm-agent's or file-router's surface. | Stage 5 Solutioning plus Stage 8 QA | CHEAP |
 | R4 | Rollback complexity. | Low / Low | New skill is purely additive — a new directory, one array line, one new package, one funnel-pointer edit. No existing skill or governance contract is modified destructively. Rollback = revert the PR plus deploy clean-up plus remove the array line. | Stage 12 Execute / Stage 13 | CHEAP |
 | R5 | Stale registration target (SKILL_LIST). The issue body points registration at a renamed array. | Realized / Low | Corrected in the File Change Matrix: register in OPERATIONS_SKILLS. Carried as Stage 5/6 input correction (not a body amendment). Check 5 roster-drift catches any miss at deploy. | Stage 6 Engineering | CHEAP |
 | R6 | Unsourced elicitation-technique domain. The technique library is the platform's first encoding of the requirements-elicitation domain; shipping it un-sourced risks ad-hoc technique quality. | Med / Med | SHIP-WITH-FLAG at Stage 4; Stage 5 sources an authoritative elicitation reference (done — IIBA BABOK Guide v3) and upgrades the label to Mode A; Stage 7 verifies the dated flag; Stage 9 surfaces it. | Stage 5 Solutioning | CHEAP |
@@ -234,12 +235,17 @@ the style guide names it.
 Issues resolved: the conversational intake-elicitation skill issue is implemented by this release. It is marked closed
 at Stage 13 (not at this PR's merge), so the ordered close-out is preserved.
 
-Key decisions: a single new operations skill named `intake-elicitor`; two modes (Elicit and Triage-readiness check);
-MVP bound to the current four work-item types via a `references/type-map.md` registry seam (the type system later
-repoints the table with no SKILL.md rewrite); emission via `gh issue create` after a confirm gate, with a dropdown-to-
-label map plus a Severity-in-body convention plus an Observation-tier fallback for fields that cannot be represented;
-the elicitation technique content sourced to IIBA BABOK Guide v3 (upgrading the domain-practice label from
-SHIP-WITH-FLAG to Mode A); one ADR records the type-registry seam mechanism.
+Key decisions (as re-solutioned at rev 2): a single new operations skill named `intake-desk`; two modes (Elicit and
+Triage-readiness check); MVP bound to the current three work-item types (improvement / bug / observation; NO adr) via
+a `references/type-map.md` type registry whose required field set is DERIVED at use time from each
+`.github/ISSUE_TEMPLATE/<type>.yml` (the type system later repoints the registry with no SKILL.md rewrite); emission to
+the configured work tracker (GitHub MVP via `gh issue create`) after an AskUserQuestion confirm gate, with a dropdown
+carriage map plus a Severity-in-body convention plus an observation-tier fallback for fields that cannot be represented;
+one work item per request (container child work is a body decomposition callout for later slicing, never auto-created);
+altitude proposed as an assumption then confirmed (unresolved → triage-owned assumption); unknowns emitted as
+stage-owned `[ASSUMPTION – CONFIRM]` handoff items; the elicitation technique content sourced to IIBA BABOK Guide v3
+(upgrading the domain-practice label from SHIP-WITH-FLAG to Mode A); one ADR records the intake-front-door
+architectural boundary + downstream handoff contract.
 
 Reversibility: CHEAP / Confidence HIGH — additive new skill; single-PR revert restores prior state.
 
@@ -251,6 +257,25 @@ Cross-references: see the Source references block below for the issue, sub-task,
 
 ## Deviation Log
 
+- Stage 5 Re-Solutioning (rev 2), driven by the operator's PR review (2026-06-06): the design was re-opened and twelve
+  design changes folded, superseding the affected parts of the rev-1 design and the rev-1 build on the release PR.
+  Headline deltas: (A) renamed `intake-elicitor` → `intake-desk` (dir, `name:`, `description:`, deploy.sh array member,
+  package, style-guide pointer, ADR cross-refs, this plan); (B) dropped the `adr` type — intake elicits improvement /
+  bug / observation only (ADRs are an architecture act, not intake); (C) one work item per request — container child
+  work becomes a body decomposition callout for later slicing, never auto-created; (D) confirm-before-emit moved to a
+  binary AskUserQuestion (auth capture too) and the hard "Max 5 questions" exit removed in favor of clarity-based exit
+  (the 5-test is the gate); (E) altitude proposed as an assumption (run/change-the-business self-ID) then confirmed, with
+  an unresolved altitude carried as a triage-owned assumption; (F) unknowns emitted as stage-owned `[ASSUMPTION –
+  CONFIRM]` handoff items; (G) domain-adaptive (domain × topic × altitude) technique selection with an extensibility
+  contract; (H) explicit binary phase gates + per-type landing criteria + altitude-relative over-definition rule; (I)
+  tool-agnostic process language with a labeled GitHub MVP subsection; (J) the type-map DERIVES the field set from each
+  `.github/ISSUE_TEMPLATE/<type>.yml` rather than duplicating it; (K) removed stale-prone Provenance/example/count
+  content for fork-durability; (L) reframed + renamed ADR-016 to the intake-front-door architectural boundary + handoff
+  contract (file `ADR-016-intake-front-door-architectural-boundary.md`; old type-registry-seam file renamed).
+  Failure-mode count: rev-2 authors six (the rev-1 `-F`-specific mode generalized to tool-agnostic structured-field
+  carriage; two new domain-specific modes added). Deferred / out-of-scope, enriched: target-tracker parameterization
+  (#384 / #409 / #383), downstream assumption investigate-and-close (#427), root-cause guidance (#428), migration
+  playbooks (#429). #412 still closes at Stage 13.
 - Domain-practice label upgraded SHIP-WITH-FLAG (Stage 4, UNSOURCED-DOMAIN) → Mode A (Stage 5), sourced to IIBA BABOK
   Guide v3 — Elicitation and Collaboration knowledge area (Prepare / Conduct / Confirm), the Techniques chapter
   (interviews, workshops, observation, document analysis), and the Requirements Classification Schema (business /
@@ -279,5 +304,5 @@ section embeds a bare issue number.
 - Milestone: intake-elicitation-skill (#109)
 - Soft external dependency — work-item type system (proposed, out of scope): #409
 - Soft external dependency — idea-refinement surface (proposed, out of scope): #411
-- ADR — type-registry parameterization seam: ADR-016
+- ADR — intake front door architectural boundary + downstream handoff contract: ADR-016
 - Baseline anchor commit: 2fa2240

@@ -89,12 +89,12 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP.
 **File:** [ADR-014-managed-section-two-hash-tamper-detection.md](ADR-014-managed-section-two-hash-tamper-detection.md)
 
-### ADR-016 — intake-elicitor type-registry parameterization seam (forward-coupled to the work-item type system)
+### ADR-016 — intake front door as a distinct architectural component (boundary + downstream handoff contract)
 
-**Status:** Accepted (intake-elicitation-skill Stage 5 Collective Review scope-lock 2026-06-06).
-**Decision:** The `intake-elicitor` skill binds its MVP to the current four work-item types (improvement / bug / observation / adr, keyed to the four `.github/ISSUE_TEMPLATE/*.yml` files) via a single data table `operations/skills/intake-elicitor/references/type-map.md` that the elicitation loop reads — the SKILL.md loop is table-driven and never branches per-type inline. The work-item type system, when it lands, repoints or extends `type-map.md` (or the one-line registry source in SKILL.md); no loop rewrite is required. The seam is additive, anticipated forward-debt: a flat table suffices for the four current types, and a single-file rewrite covers the case where the type system's registry shape diverges.
-**Reversibility:** CHEAP.
-**File:** [ADR-016-intake-elicitor-type-registry-seam.md](ADR-016-intake-elicitor-type-registry-seam.md)
+**Status:** Accepted (intake-elicitation-skill Stage 5 Collective Review scope-lock + operator PR review 2026-06-06).
+**Decision:** Introducing the conversational intake front door (`intake-desk`) establishes a distinct architectural component at the head of the work-item lifecycle. The ADR records (1) intake/elicitation as that component; (2) the component boundary, stated as disjoint verbs — `intake-desk` authors a typed work item, `ppm-agent` processes existing artifacts, `project-initiator` scaffolds/closes projects, architecture authors ADRs (so intake does not author ADRs); and (3) the handoff contract to triage/downstream — a typed item plus stage-owned `[ASSUMPTION – CONFIRM]` items for progressive closure plus a body decomposition callout (one item per request, never auto-decomposed). The work-item type system, when it lands, extends the type set the front door binds to; the component boundary and handoff contract are unaffected.
+**Reversibility:** MODERATE.
+**File:** [ADR-016-intake-front-door-architectural-boundary.md](ADR-016-intake-front-door-architectural-boundary.md)
 
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
