@@ -1,28 +1,18 @@
 name: Reference durability
 
-# Scans ONLY durable-corpus diffs (paths filter) and ONLY added lines (the net-new
-# delta), so pre-existing corpus rot does not fail an unrelated PR. Drops the `edited`
-# trigger (a PR-body-only edit never touches a durable file), avoiding the shared-
-# release-PR double-run that the parser-clean workflow incurs. Enforces the
-# reference-durability standard: Class L (markdown links), Class V (version-cutover
-# apparatus), and the positional issue-reference rule.
+# Runs on EVERY pull request (no paths filter), so this required status check always
+# reports a result and never blocks a PR as required-but-absent. The job's internal
+# is_durable() predicate selects which changed files to scan, so a PR that changes no
+# durable-corpus file completes as a clean empty scan and passes; durable-corpus PRs
+# scan identically. Scans ONLY added lines (the net-new delta), so pre-existing corpus
+# rot does not fail an unrelated PR. Drops the `edited` trigger (a PR-body-only edit
+# never touches a durable file), avoiding the shared-release-PR double-run that the
+# parser-clean workflow incurs. Enforces the reference-durability standard: Class L
+# (markdown links), Class V (version-cutover apparatus), and the positional
+# issue-reference rule.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'core/rules/**'
-      - 'core/standards/**'
-      - 'core/specs/**'
-      - 'core/disciplines/**'
-      - 'core/schemas/**'
-      - 'release/references/**'
-      - 'release/governance/**'
-      - 'release/standards/**'
-      - 'release/specs/**'
-      - 'release/schemas/**'
-      - '**/skills/*/SKILL.md'
-      - '**/skills/*/references/**'
-      - 'release/releases/plans/*_RELEASE_PLAN.md'
 
 permissions:
   contents: read

@@ -80,13 +80,21 @@ Three primitives enforce this standard, all warn-mode-initial per the harness sh
 |---|---|---|
 | Agent-harness hook | PreToolUse on Write and Edit to durable-corpus paths | warn-mode-initial via the shared harness mode file; logs to a per-hook warn-log; in enforce-mode blocks with a teaching message |
 | Deploy-check check | the deploy-check run | warn-mode-initial via the deploy-check mode file; reports the saturation snapshot via the standard warn-or-issue helper |
-| CI workflow | pull request touching durable-corpus paths | scans added lines only (the net-new delta), so pre-existing corpus does not fail an unrelated PR; fails on net-new violations |
+| CI workflow | every pull request; the job's path predicate selects which changed files to scan | scans added lines only (the net-new delta), so pre-existing corpus does not fail an unrelated PR; fails on net-new violations |
 
 The hook and deploy-check report the current saturation; the CI workflow is the gatekeeper that enforces the delta — no NEW fragile references versus the base. The hook honors a per-hook mode file and a per-hook warn-log so hook-time and deploy-time logs stay separate, matching every existing harness hook.
 
 ### The flagged-class patterns
 
 The patterns are tuned during the warn-mode shakedown and validated against a checked-in corpus fixture with a labeled expected-match set, so precision is measurable rather than asserted. The fixture pairs true cutover clauses drawn from the real corpus with benign-prose negatives, and the hook plus check self-test asserts the match-set. Flip-to-enforce is gated on the fixture passing — a clean warn-log alone is insufficient, because a warn-log records only matches and is therefore blind to false negatives.
+
+## CI trigger scope
+
+The CI workflow runs on every pull request. It carries no path filter on its trigger. The decision about which changed files to scan is made inside the job by the durable-corpus path predicate, not by a trigger-level filter. When a pull request changes no durable-corpus file, the predicate selects nothing, the scan is empty, and the job completes successfully.
+
+This matters because the workflow's job is a required status check on the main branch. A required check must report a result on a pull request, or the platform treats the check as required-but-absent and refuses to merge even when every other check is green. A trigger-level path filter would skip the workflow entirely on a pull request that touches only non-corpus files, so the required check would never report and the pull request would be blocked. Running on every pull request guarantees the required check always reports: it passes as an empty scan on a pull request outside the durable corpus, and it scans normally on a pull request that touches durable-corpus files. The selection behavior for durable-corpus pull requests is unchanged, because the path predicate inside the job is the single place that decides what gets scanned.
+
+A common close-out scenario makes the difference concrete. A release close-out pull request edits the release log, the release notes, and the release index — files that sit outside the durable corpus and legitimately carry bare issue references that a separate issue-reference-validity gate handles. The durable-corpus path predicate excludes those files, so this workflow scans nothing and passes as an empty scan, while the required check still reports the result that lets the close-out pull request merge.
 
 ## Reference durability versus link resolution
 
