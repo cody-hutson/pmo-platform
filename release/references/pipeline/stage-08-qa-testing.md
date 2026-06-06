@@ -48,7 +48,7 @@ Verdict: MET / NOT MET / PARTIAL
 Severity: [if NOT MET: Blocker / Warning]
 ```
 
-**Per-criterion verdict enum** (extended for AC drift): `MET / NOT MET / PARTIAL / N/A-WITH-RATIONALE / REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM` per [`release/governance/release-process.md § Inter-Stage Feedback Protocol § AC-Drift Handling Protocol`](../../governance/release-process.md). Drift verdicts (`N/A-WITH-RATIONALE`, `REINTERPRET-WITH-RATIONALE`, `FLAG-UPSTREAM`) carry a required `Drift-rationale:` field per the protocol; `FLAG-UPSTREAM` routes Tier 1 [ADJUST] or Tier 2 [SCOPE CHANGE] per § Inter-Stage Feedback Protocol (NOT Lane 2 QA→DT Return per Phase C). **Cutover discipline:** Applies to all releases entering Stage 8 going forward.
+**Per-criterion verdict enum** (extended for AC drift): `MET / NOT MET / PARTIAL / N/A-WITH-RATIONALE / REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM` per [`release/governance/release-process.md § Inter-Stage Feedback Protocol § AC-Drift Handling Protocol`](../../governance/release-process.md). Drift verdicts (`N/A-WITH-RATIONALE`, `REINTERPRET-WITH-RATIONALE`, `FLAG-UPSTREAM`) carry a required `Drift-rationale:` field per the protocol; `FLAG-UPSTREAM` routes Tier 1 [ADJUST] or Tier 2 [SCOPE CHANGE] per § Inter-Stage Feedback Protocol (NOT Lane 2 QA→DT Return per Phase C). **Cutover discipline:** Applies to all releases entering Stage 8 going forward. Each non-MET verdict additionally keys the disposition axis per the **Finding Disposition Decision Framework** below (fix-now / defer / accept), with a strengthened Step 0 gate for `NOT MET` acceptance criteria.
 
 **Phase C — Three-Lane Routing:**
 
@@ -60,10 +60,75 @@ Severity: [if NOT MET: Blocker / Warning]
 
 Critical routing difference: Lane 2 returns to Dev Testing, not directly to Engineering. This preserves the quality gate chain and composes with the DT↔Engineering iteration loop as its QA-initiated variant — full specification in the protocol reference.
 
+### Finding Disposition Decision Framework
+
+Phase B renders a **verdict** per criterion (`MET / NOT MET / PARTIAL`) and Phase C routes it to a **lane** (WHERE). This subsection adds the **disposition axis** (WHEN): for each finding, *fix-now* (this release) / *defer* (a future release) / *accept* (as-is). Disposition is rendered by the operator at Phase E (Tier 3); the framework is advisory input, not auto-correction.
+
+**Inherited from the shared framework by reference (NOT re-specified here).** Stage 8 reuses, unchanged, the stage-agnostic disposition machinery defined in [`release/references/standards/finding-disposition-framework.md`](../standards/finding-disposition-framework.md):
+
+- the **5-factor disposition matrix** (§ 3) — Effort (High) · Best-Practice Alignment (High) · Downstream Impact (Medium) · Reversibility/Risk (Medium) · Scope-Window (Low, gate-modifier), each with its Fix-Now / Defer / Accept signals;
+- the **Step 1 weighted disposition** logic and the **Step 2 tie-break** order (§ 4) — weight spine High = 3 / Medium = 2 / Low = 1; ties resolve Reversibility-Accept → cheap-and-open-Fix-Now → Defer (the conservative default);
+- the **stage-agnostic scoring skeleton** (§ 5) — `disposition(finding) → {fix-now, defer, accept, escalate}`, advisory until calibration justifies promotion.
+
+Stage 8 **defines only its own Step 0 precedence gate** (below) — the stage-specific gate the shared framework's § 6 contract requires each consumer to inject — and **adds** the PARTIAL keying and the three-lane composition. The shared matrix and Steps 1–2 are authoritative in the framework doc; they are **not** duplicated here.
+
+#### Step 0 — QA hard precedence (the strengthened gate)
+
+Stage 8's Step 0 is **strictly stronger** than Stage 7's and is keyed on the per-criterion **verdict** (lines 47/51), not DT severity:
+
+- **NOT MET** → a **contractual gap**. Its **only no-override disposition is fix-now**, routed **Lane 2 → QA Return to Dev Testing** (the existing Phase C path). A NOT-MET AC is **never** Defer or Accept by the weighted layer. **Deferring _or accepting_ a NOT-MET AC requires an explicit operator override with a recorded Operator Override Record** (below). Absent that record, a NOT-MET AC cannot leave the release as anything but fix-now — silent defer/accept is foreclosed. *(This is the override gate; it rides Lane 2.)*
+- **PARTIAL** → keyed by its **unmet remainder** (see "PARTIAL deferral criteria" below).
+- **MET** → no gate; not a finding requiring disposition.
+- **Drift verdicts** (`N/A-WITH-RATIONALE` / `REINTERPRET-WITH-RATIONALE` / `FLAG-UPSTREAM`, line 51) are **out of this gate** — they retain their own `Drift-rationale:` requirement and `FLAG-UPSTREAM` Tier-1/Tier-2 routing per the AC-Drift Handling Protocol. This framework keys only on `MET / NOT MET / PARTIAL`.
+
+**Why stronger than Stage 7:** Stage 7's Step 0 permits an in-scope **Blocker** to be auto-dispositioned **fix-now** by the weighted layer and is silent on override records. Stage 8 (a) keys on the **contractual `NOT MET`** verdict, (b) forbids *any non-fix* disposition of it absent operator sign-off, and (c) requires that sign-off to be **recorded** — because an acceptance criterion is a commitment from issue creation, and deferring/accepting it is a conscious scope change, not routine prioritization.
+
+**Operator Override Record** (required for any deferred-or-accepted NOT-MET, or AC-blocking PARTIAL, criterion):
+
+| Field | Content |
+|---|---|
+| **Criterion** | the AC item verbatim (the contractual text being dispositioned away from fix-now) |
+| **Verdict + evidence** | `NOT MET` / `PARTIAL` + the Phase B evidence line (what was found) |
+| **Disposition** | `Defer` or `Accept` (the non-fix disposition being authorized) |
+| **Operator rationale** | why the conscious scope change is acceptable (1–3 sentences; "routine prioritization" is **not** a valid rationale) |
+| **Reversibility + landing** | reversibility tier + where the gap lands: **Defer** → a next-release issue number (the gap gets a tracked home); **Accept** → recorded in the Acceptance Report fitness assessment |
+
+The agent **surfaces** the NOT-MET/PARTIAL gap and the *requirement* for an Override Record; it does **not** self-author the override (Tier 3 — acceptance is human judgment per § 8). A **CONDITIONAL ACCEPT** at Phase E that covers a NOT-MET/PARTIAL AC **must** carry an Override Record per criterion — this is the existing "documented rationale" of that verdict made specific. CONDITIONAL ACCEPT is the **named vehicle** for an accepted NOT-MET/PARTIAL AC; no parallel verdict is invented.
+
+#### PARTIAL deferral criteria
+
+A `PARTIAL` keys the gate by its **unmet remainder**:
+
+- **Unmet remainder is non-AC-blocking** (cosmetic, outside the AC's contractual scope, or aspirational with no documented commitment) → routes the **Step 1 weighted layer**; **may be deferred or accepted without an operator override** (a deferral opens a next-release issue; an acceptance carries the one-line weighted-layer rationale). This is the "substantially met, minor remainder" case CONDITIONAL ACCEPT contemplates.
+- **Unmet remainder is itself an acceptance commitment** (a contractual sub-criterion is undelivered) → **escalates to the Step-0 NOT-MET gate**: fix-now (Lane 2 → DT return) is the only no-override disposition; defer/accept requires the Operator Override Record.
+- **Test:** *"Is the unmet portion something we agreed to deliver?"* — **yes → NOT-MET gate**; **no → weighted layer.**
+
+#### Disposition × three-lane composition
+
+The lane says WHERE a finding routes; the disposition says WHEN it is addressed; Step 0 constrains WHICH dispositions are legal for a NOT-MET/PARTIAL AC.
+
+| Lane (Phase C) | Disposition composition |
+|---|---|
+| **Lane 1 — Cosmetic** (non-AC) | **Accept (informational)** by default — the existing "Note — log, no action required" *is* the accept disposition; the weighted layer is not exercised and Step 0 does not fire (no AC at stake). |
+| **Lane 2 — AC Gap** (`NOT MET`, fixable) | **Step 0 fires.** Default = **fix-now** → the existing QA Return to Dev Testing path. **Defer or Accept is legal only with the Operator Override Record.** The override gate lives here. |
+| **Lane 3 — Acceptance Judgment** (subjective AC, fitness) | **Tier-3 disposition by the operator at Phase E.** A subjective/fitness AC judged acceptable-as-is is an **Accept** carrying the Override Record when the underlying verdict is NOT-MET/PARTIAL. The weighted layer is advisory input to the judgment. |
+
+#### Stage 7 ↔ Stage 8 differentiation (what is shared vs. what QA overrides)
+
+This is the inverse view of the differentiation note in [`stage-07-dev-testing.md`](stage-07-dev-testing.md) § Finding Disposition Decision Framework: Stage 7 states "what QA will override"; this states "what QA inherits + its stronger gate."
+
+| Element | Stage 7 (Dev Testing) | Stage 8 (QA — this stage) |
+|---|---|---|
+| 5-factor matrix (§ 3) | references the shared framework | **inherited unchanged** (references the same shared framework) |
+| Step 1 weighted disposition + Step 2 tie-break (§ 4) | references the shared framework | **inherited unchanged** (references the same shared framework) |
+| Step 0 hard precedence | open **Blocker** → fix-now-or-escalate; never silent defer/accept; **Note** → Accept | **STRENGTHENED:** **NOT-MET AC** → fix-now is the only no-override disposition; defer/accept needs a **recorded operator override**. Strictly stronger — Stage 7 permits in-scope Blocker auto-fix-now and records no override; Stage 8 forbids any non-fix disposition of a NOT-MET AC absent recorded sign-off. |
+| Finding vocabulary | DT severity (Blocker / Warning / Note) | QA per-criterion verdict (`MET / NOT MET / PARTIAL`); NOT-MET keys the gate, PARTIAL keys by unmet remainder; drift verdicts are out-of-gate |
+| Routing on Defer | new next-release issue | **same**, plus a deferred NOT-MET/PARTIAL-AC-blocking criterion additionally requires the Operator Override Record |
+
 **Phase D — Iteration Loop:**
 QA Pass 1 → Route findings per lanes → Lane actions executed (Lane 2 triggers QA→DT Return per [DT↔QA Handoff Protocol](stage-07-dev-testing.md#dtqa-handoff-protocol); DT runs full re-review per the DT-Eng iteration loop, iterates with Engineering, emits Verified Signal on PASS) → QA Pass 2 (full re-review per Stage 8 §5 Phase D) triggered by Verified Signal → If new findings, route again → Escalation at iteration count > 2 (flag to operator). Iteration cap rationale: more than 2 passes indicates a systemic issue, not incremental fixes.
 
-**Phase E — Human Review (Tier 3):** 3 verdicts — ACCEPT (all AC met, fitness confirmed), CONDITIONAL ACCEPT (minor gaps with documented rationale), REJECT (AC gaps requiring Engineering rework) / HOLD (scope question requiring Planning review).
+**Phase E — Human Review (Tier 3):** 3 verdicts — ACCEPT (all AC met, fitness confirmed), CONDITIONAL ACCEPT (minor gaps with documented rationale), REJECT (AC gaps requiring Engineering rework) / HOLD (scope question requiring Planning review). For each finding, apply the **Finding Disposition Decision Framework** to render disposition (fix-now / defer / accept); a CONDITIONAL ACCEPT covering a `NOT MET` or AC-blocking `PARTIAL` criterion MUST carry an Operator Override Record per that framework's Step 0.
 
 **Ticket lifecycle:** Claim: set Stage→8-QATesting. Execute: A-E. Resolve: post acceptance report, route per verdict. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md).
 
