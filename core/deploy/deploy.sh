@@ -33,6 +33,7 @@ OPERATIONS_SKILLS=(
   daily-status
   delivery-engine
   file-router
+  intake-elicitor
   pmo-process-designer
   pmo-technical-analyst
   ppm-agent

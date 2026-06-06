@@ -1,0 +1,54 @@
+{
+  "skill_name": "intake-elicitor",
+  "evals": [
+    {
+      "id": 1,
+      "name": "elicit-bug-reproduction-environment",
+      "prompt": "Help me file this as an issue: deploy.sh blew up on me yesterday. I ran the deploy and it errored out about some unbound variable when nothing had changed. I'm on main. Can you help me write this up as a work item?",
+      "expected_output": "Mode A. Detects altitude = solution-level; proposes type = bug (broken behavior, not a missing capability). Elicits the bug-distinctive fields via observation-by-proxy: presses for exact reproduction steps (the exact command, the exact error text) and the environment (branch, commit SHA, OS, tool versions) — these two fields are the test of AC2 for a bug. Also captures expected vs actual behavior, evidence (labeled), affected files, documentation impact, and a verifiable acceptance criterion. Applies the 5-test live. Renders a [Bug]: body with a leading **Severity:** line (no severity label exists), confirms with the user, then describes emitting via gh issue create with --label bug --label \"status: proposed\". Never writes a scratch file.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "elicit-story-acceptance-criteria-value",
+      "prompt": "I have a rough idea I want to turn into a work item. It would be nice if the daily status skill could pull from the open-meetings tracker automatically instead of me pasting it in. Help me scope this idea for intake.",
+      "expected_output": "Mode A. Detects altitude = stakeholder/story level; proposes type = improvement (a named change). Uses a workshop-of-one scenario walk to surface the value and the acceptance criteria — the story-distinctive fields (AC + value), which is the test of AC2 for a story. Captures Category (the required improvement dropdown, carried in the body and via title prefix for Triage to label), Description (WHAT not HOW), Proposed Change framed as an outcome, evidence, affected files, documentation impact, risks, and verifiable ACs. Defers any mechanism the user proposes as [ASSUMPTION – CONFIRM] deferred to Stage 5. Stops eliciting once the 5-test passes (does not over-interview). Renders an [<Category>]: improvement body and confirms before emit.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "elicit-initiative-outcomes-domain-decomposition",
+      "prompt": "Help me log this idea as a work item — I think we need a whole capability around onboarding new projects faster across the portfolio. It's bigger than one change. Can you help me get it into the backlog as a work item?",
+      "expected_output": "Mode A. Detects altitude = business/initiative level; proposes type = improvement framed as an initiative. Uses down-laddering plus document analysis to surface outcomes and domain context — the initiative-distinctive fields (outcomes + domain), the test of AC2 for an initiative. Surfaces the hierarchy decomposition (the candidate child items) as a recommendation but does NOT auto-create child issues (unauthorized cascade is out of scope). Records the intended granularity (initiative) in the body. Applies the 5-test; if the initiative is too broad to be atomic (T1 fails) it surfaces the split rather than emitting one giant item. Confirms before emit.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "reclassification-reroute-bug-to-improvement",
+      "prompt": "Help me write up this bug as a work item: the file-router never files my vendor PDFs into the right folder. It just leaves them unrouted. I want it to handle PDFs.",
+      "expected_output": "Mode A. Initially entertains type = bug, but as elicitation reveals the behavior is a missing capability (PDFs were never a supported input) rather than broken existing behavior, re-routes the type to improvement with a one-line rationale ('this reads less like a bug and more like a missing capability — switching to an improvement; here's why'), resets to the improvement field set, and continues. Demonstrates AC1's re-route-on-reclassification. Does NOT lock the first classification and ship a mistyped bug.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "mode-b-triage-readiness-check-failing-draft",
+      "prompt": "Is this intake-ready? Check this draft I already wrote:\n\nTitle: Improve the thing\nDescription: The reporting is slow and annoying. We should make it faster by rewriting the query with a binary search and caching the results in a Trie.\nAcceptance: it works better.",
+      "expected_output": "Mode B (the user pasted a draft and asked is-this-intake-ready — does NOT re-elicit from scratch). Runs the 5-test once. Reports FAIL with the specific failing tests: T2 (a determinate mechanism — binary search + Trie + caching — is committed at intake; that is a HOW that belongs at Stage 5) and T3 (the AC 'it works better' is a vibe, not a verifiable predicate); likely T4 (no file pointer) and T5 (no risks). Returns the WHAT-framing rewrite: state the observable outcome and constraints, mark the mechanism [ASSUMPTION – CONFIRM] deferred to Stage 5, and give a verifiable AC. Does not file anything.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "negative-trigger-ppm-agent-transcript-processing",
+      "prompt": "Triage this transcript and tell me what action items came out of the meeting.",
+      "expected_output": "NEGATIVE TRIGGER — intake-elicitor must NOT fire. This is artifact-processing of an existing transcript (ppm-agent's surface: 'triage this', 'what came out of this'), not authoring a new work item from a raw idea. The correct behavior is to defer to ppm-agent. If intake-elicitor were to start a from-scratch elicitation interview here, that is the trigger-poaching failure mode. Verifies the object-noun boundary (existing artifact vs unformed idea).",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "negative-trigger-file-router-file-object",
+      "prompt": "File this CSV — where does it go?",
+      "expected_output": "NEGATIVE TRIGGER — intake-elicitor must NOT fire. The object is a file (a CSV) being routed to a folder — file-router's surface ('file this', 'where does this go', 'classify this'). intake-elicitor's 'help me file this idea as an issue' carries a work-item object; this carries a file object. The correct behavior is file-router classification, not an elicitation interview. Verifies the object-noun disambiguation that keeps 'file this' from collision.",
+      "files": []
+    }
+  ]
+}
