@@ -100,10 +100,22 @@ The `## Blast Radius` content bucket — emitted as `#### Blast Radius` H4 neste
 
 **Composition with the Phase A3.2 doc-corpus-reorg ref-form enumeration:** If the change moves or renames at least one durable-corpus file (a doc-corpus reorg), the `#### Blast Radius` section MUST include or reference the complete six-form ref-form table (F1–F6) produced at Phase A3.2 per the doc-corpus-reorg ref-form protocol. Like the Cascade-Sweep block, the ref-form table can live in `### Detail` as a sibling to `#### Blast Radius` when substantial, or inline when bounded. This fires on a path change (file move/rename); § 5.6 fires on a value change (count/enumeration/threshold) — the two are orthogonal triggers and a change can emit both.
 
+**Required-when-triggered: BLOCK-DESTRUCTIVE-022 script-execution allowlist callout.** When the design introduces a **new in-tree bash CLI** — any executable `*.sh` script the platform will invoke via `bash <path>` / `sh <path>` / `source <path>` / `. <path>`, placed under `release/tools/`, `core/hooks/`, `core/deploy/`, or any other tracked location — the `#### Blast Radius` section MUST list the script's required `core/config/allowlists/script-execution-allowlist.txt` entries. The script-execution guard (rule ID **BLOCK-DESTRUCTIVE-022**) blocks any subprocess script execution whose path is not in that allowlist, so a new CLI that is not pre-allowlisted will be blocked at first invocation. The guard matches the literal path as it appears in the Bash command (glob `case` patterns, NOT regex; matched before `~` expansion), so the same script needs **all four invocation forms** allowlisted:
+
+| # | Invocation form | Pattern shape (example for `release/tools/<script>.sh`) |
+|---|---|---|
+| 1 | Absolute workspace path | `[CLAUDE_WORKSPACE_ROOT]/.../release/tools/<script>.sh` |
+| 2 | Worktree-glob path | `[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/<script>.sh` |
+| 3 | `./relative/path` form | `./release/tools/<script>.sh` |
+| 4 | Bare `relative/path` form | `release/tools/<script>.sh` |
+
+This is a **required-when-triggered** checklist row: it fires only when the design introduces a new in-tree bash CLI, and is OMITTED entirely (non-ceremony) when the change introduces no new executable script. When it fires, the four allowlist lines are part of the Stage 6 `### Output for Stage 6` file-change spec (a MODIFY of `core/config/allowlists/script-execution-allowlist.txt`) — they are not deferred to a follow-up release, because the CLI is unrunnable until allowlisted. The blast-radius CLI entries already in that allowlist are the worked example of all four forms.
+
 **Anti-patterns:**
 - File list without intent/reversibility columns
 - Consumer enumeration omitted (R1 R4 N-way scan cannot run)
 - Cross-PR contention check skipped when Stage 4 release plan declared in-flight overlap
+- New in-tree bash CLI introduced but BLOCK-DESTRUCTIVE-022 allowlist entries omitted (or listed in fewer than all four invocation forms) — the CLI is unrunnable until allowlisted, and a partial form set blocks the un-listed invocation paths
 
 ## Feasibility Assessment
 
