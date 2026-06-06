@@ -2,20 +2,19 @@
 name: intake-desk
 description: >
   The conversational front door for intake — turns a half-formed idea into a
-  well-formed, correctly-typed, correctly-placed work item, logged to the work
+  well-formed, correctly-typed, correctly-placed work item logged to the work
   tracker. Meets you at any altitude (a single bug or a portfolio initiative),
   proposes the work-item type and its place in the intake hierarchy, elicits the
   type- and level-appropriate fields (a bug's reproduction and environment; a
-  story's acceptance criteria and value; an initiative's outcomes and domain),
-  applies the 5-test rule live, confirms the drafted item with you, then logs it —
-  never a scratch file. One work item per request (it notes container/child
-  candidates in the body for later slicing; it does not auto-decompose). Two modes:
+  story's acceptance criteria and value), applies the 5-test rule live, confirms
+  the drafted item with you, then logs it — never a scratch file. One work item per
+  request (child candidates are noted in the body for later slicing; it does not
+  auto-decompose). Two modes:
   Elicit (guided interview) and Triage-readiness check (run the 5-test against a
   draft you already wrote). Use when the user says "help me file this idea as an
   issue", "turn this into a work item", "log this idea", "what type of work item
-  is this", "scope this idea for intake", "is this intake-ready", "help me write
-  up this bug/story/initiative", or shares a rough idea and asks to get it into
-  the backlog as a work item.
+  is this", "scope this idea for intake", "is this intake-ready", or "help me write
+  up this bug/story/initiative".
 version: v3.19
 license: BUSL-1.1
 ---
