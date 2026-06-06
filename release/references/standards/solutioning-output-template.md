@@ -98,6 +98,8 @@ The `## Blast Radius` content bucket — emitted as `#### Blast Radius` H4 neste
 
 **Composition with Stage 5 § 5.6 Cascade-completeness sweep:** If the spec includes a count / enumeration / threshold update (per § 5.6 T1 / T2 / T3), the `#### Blast Radius` section MUST include or reference a `### Cascade-Sweep` block. The Cascade-Sweep block can live in `### Detail` (as a sibling to `#### Blast Radius`) when the sweep is substantial, or inline within `#### Blast Radius` when the sweep is bounded (1-2 file × value pairs).
 
+**Composition with the Phase A3.2 doc-corpus-reorg ref-form enumeration:** If the change moves or renames at least one durable-corpus file (a doc-corpus reorg), the `#### Blast Radius` section MUST include or reference the complete six-form ref-form table (F1–F6) produced at Phase A3.2 per the doc-corpus-reorg ref-form protocol. Like the Cascade-Sweep block, the ref-form table can live in `### Detail` as a sibling to `#### Blast Radius` when substantial, or inline when bounded. This fires on a path change (file move/rename); § 5.6 fires on a value change (count/enumeration/threshold) — the two are orthogonal triggers and a change can emit both.
+
 **Anti-patterns:**
 - File list without intent/reversibility columns
 - Consumer enumeration omitted (R1 R4 N-way scan cannot run)
