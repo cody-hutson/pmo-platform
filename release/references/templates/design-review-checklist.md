@@ -35,9 +35,10 @@ Consumes blast-radius CLI output per [`release/references/protocols/blast-radius
 - [ ] **1.3** Each entry in `first_order[]` triaged: `path` + `reference_count` + a sample `matches[]` snippet quoted in spoke evidence for any path with `reference_count ≥ 3`.
 - [ ] **1.4** If classification is **structural**: D-class operator decision rendered per [`hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) D-Gate Template — does NOT auto-pass.
 - [ ] **1.5** If `first_order_count` exceeds the 90th-percentile baseline for similar-scope changes: flag in Section 5 Risk Register as contention risk.
+- [ ] **1.6** *(Conditional — fires only when the change moves or renames at least one durable-corpus file.)* The spoke output contains the complete doc-corpus-reorg ref-form table per [`doc-corpus-reorg-ref-forms.md`](../protocols/doc-corpus-reorg-ref-forms.md) — all six forms (F1 module-rooted literal · F2 relative-inbound · F3 root-escape · F4 mover-internal-outbound · F5 retained-sibling→mover · F6 governed mirror-pair) present, each with a reproducible sweep command and per-occurrence disposition (REWRITE / N/A / MIRROR-SYNC), and a verdict line. This is the confirmation gate: its presence is what lets the exit gate **confirm** completeness-by-construction rather than **discover** an undercount after the rewrite is built. When no file moves, check 1.6 is OMITTED entirely (not marked "N/A") — omission is the non-ceremony signal, the same omission discipline § 5.6 and check 3.5 follow.
 
-**Pass criterion:** Checks 1.1–1.3 all PASS; checks 1.4–1.5 conditionally PASS (only-if-applicable, explicitly marked N/A with rationale when not triggered).
-**Fail action:** Block Engineering until first-order findings are documented in spoke output Evidence.
+**Pass criterion:** Checks 1.1–1.3 all PASS; checks 1.4–1.5 conditionally PASS (only-if-applicable, explicitly marked N/A with rationale when not triggered). Check 1.6 conditionally PASS — when a durable-corpus file moves or is renamed, the six-form table (F1–F6) must be present and grounded; when no file moves, check 1.6 is OMITTED.
+**Fail action:** Block Engineering until first-order findings are documented in spoke output Evidence. When check 1.6 is triggered and the six-form ref-form enumeration is absent or ungrounded (re-running a cited sweep returns rows the table does not enumerate), block Engineering authorization until the complete enumeration is present; return to Phase A3.2.
 
 ---
 
