@@ -13,6 +13,8 @@ source_observations:
   - "Stage 5 Collective Review scope-lock (2026-06-06) — design ACCEPT-WITH-CONDITIONS; ADR to be authored as a core/ADRs/ file alongside the implementation, consistent with ADR-005/006/008/011/013/014"
 ---
 
+<!-- repo-integrity: allow-issue-ref -->
+
 # ADR-016 — intake-elicitor type-registry parameterization seam
 
 ## Status
@@ -25,11 +27,11 @@ implementer must honor.
 
 ## Context
 
-[`#412`](https://github.com/cody-hutson/pmo-platform/issues/412) introduces a conversational intake-elicitation skill
+`#412` introduces a conversational intake-elicitation skill
 (`intake-elicitor`) that must elicit type- and level-specific fields against the platform's work-item type set — a
 bug needs reproduction and environment, a story needs acceptance criteria and value, an initiative needs outcomes and
 domain. The natural source of that type set, its hierarchy, and its per-type/per-level required fields is the
-**work-item type system** proposed in [`#409`](https://github.com/cody-hutson/pmo-platform/issues/409).
+**work-item type system** proposed in `#409`.
 
 But #409 is `status: proposed` and unshipped (verified at commit `2fa2240`: state OPEN, milestone null). The MVP must
 therefore bind to **today's** four work-item types — `improvement`, `bug`, `observation`, `adr` (keyed to the four
@@ -111,8 +113,8 @@ downstream consumer beyond #409 (which is unshipped and will consume the seam by
 
 ## Related Issues
 
-- [`#412`](https://github.com/cody-hutson/pmo-platform/issues/412) — the conversational intake-elicitation skill (this release).
-- [`#409`](https://github.com/cody-hutson/pmo-platform/issues/409) — the work-item type system (forward-coupled; later repoints `type-map.md`).
-- [`#414`](https://github.com/cody-hutson/pmo-platform/issues/414) — Stage 4 Release Planning (the AC5 [ADJUST] that frames the seam).
-- [`#417`](https://github.com/cody-hutson/pmo-platform/issues/417) — Stage 5 Solutioning (the design that recommends this ADR).
+- `#412` — the conversational intake-elicitation skill (this release).
+- `#409` — the work-item type system (forward-coupled; later repoints `type-map.md`).
+- `#414` — Stage 4 Release Planning (the AC5 [ADJUST] that frames the seam).
+- `#417` — Stage 5 Solutioning (the design that recommends this ADR).
 - Milestone: intake-elicitation-skill (#109).

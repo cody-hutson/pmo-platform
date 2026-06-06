@@ -89,10 +89,10 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP.
 **File:** [ADR-014-managed-section-two-hash-tamper-detection.md](ADR-014-managed-section-two-hash-tamper-detection.md)
 
-### ADR-016 — intake-elicitor type-registry parameterization seam (forward-coupled to #409)
+### ADR-016 — intake-elicitor type-registry parameterization seam (forward-coupled to the work-item type system)
 
 **Status:** Accepted (intake-elicitation-skill Stage 5 Collective Review scope-lock 2026-06-06).
-**Decision:** The `intake-elicitor` skill binds its MVP to the current four work-item types (improvement / bug / observation / adr, keyed to the four `.github/ISSUE_TEMPLATE/*.yml` files) via a single data table `operations/skills/intake-elicitor/references/type-map.md` that the elicitation loop reads — the SKILL.md loop is table-driven and never branches per-type inline. The work-item type system (#409), when it lands, repoints or extends `type-map.md` (or the one-line registry source in SKILL.md); no loop rewrite is required. The seam is additive, anticipated forward-debt: a flat table suffices for the four current types, and a single-file rewrite covers the case where #409's registry shape diverges.
+**Decision:** The `intake-elicitor` skill binds its MVP to the current four work-item types (improvement / bug / observation / adr, keyed to the four `.github/ISSUE_TEMPLATE/*.yml` files) via a single data table `operations/skills/intake-elicitor/references/type-map.md` that the elicitation loop reads — the SKILL.md loop is table-driven and never branches per-type inline. The work-item type system, when it lands, repoints or extends `type-map.md` (or the one-line registry source in SKILL.md); no loop rewrite is required. The seam is additive, anticipated forward-debt: a flat table suffices for the four current types, and a single-file rewrite covers the case where the type system's registry shape diverges.
 **Reversibility:** CHEAP.
 **File:** [ADR-016-intake-elicitor-type-registry-seam.md](ADR-016-intake-elicitor-type-registry-seam.md)
 
