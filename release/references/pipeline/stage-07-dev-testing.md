@@ -70,9 +70,9 @@ grep -nE "^[[:space:]]*domain_practice:" release/releases/plans/v<X.Y>_RELEASE_P
 
 **Phase C — Content Quality Review (Tier 2 Recommend):** 5 scored dimensions — clarity (1-5, threshold 3), accuracy (1-5, threshold 3), internal consistency (1-5, threshold 4, Blocker), convention depth (1-5, threshold 3), escape detection (count).
 
-**Phase D — Report Assembly (Tier 1 Auto):** Compile findings, classify (Blocker/Warning/Note), calculate escape rate, render verdict: PASS (no blockers, all ≥ threshold) / CONDITIONAL PASS (no blockers, 1-2 below) / FAIL (any blocker).
+**Phase D — Report Assembly (Tier 1 Auto):** Compile findings, classify (Blocker/Warning/Note), assign per-finding disposition (fix-now / defer / accept) per the [Finding Disposition Decision Framework](#finding-disposition-decision-framework), calculate escape rate, render verdict: PASS (no blockers, all ≥ threshold) / CONDITIONAL PASS (no blockers, 1-2 below) / FAIL (any blocker).
 
-**Phase E — Human Review + Iteration Routing (Tier 3):** Review findings, accept or override with rationale. Route per verdict: PASS/CONDITIONAL PASS → advance to Stage 8. FAIL with Tier 1 findings → return to Engineering per [DT↔Engineering Iteration Loop Protocol](#dtengineering-iteration-loop-protocol); Engineering fixes via Phase E, DT re-enters at targeted re-review scope. FAIL with Tier 2/3 findings → escalate to operator per inter-stage feedback protocol. On Pass 2+, DT executes targeted re-review (per iteration protocol), then re-enters Phase D for updated verdict before returning to Phase E.
+**Phase E — Human Review + Iteration Routing (Tier 3):** Review findings, accept or override with rationale. Apply the [Finding Disposition Decision Framework](#finding-disposition-decision-framework) to render per-finding disposition (fix-now / defer / accept). Route per verdict: PASS/CONDITIONAL PASS → advance to Stage 8. FAIL with Tier 1 findings → return to Engineering per [DT↔Engineering Iteration Loop Protocol](#dtengineering-iteration-loop-protocol); Engineering fixes via Phase E, DT re-enters at targeted re-review scope. FAIL with Tier 2/3 findings → escalate to operator per inter-stage feedback protocol. On Pass 2+, DT executes targeted re-review (per iteration protocol), then re-enters Phase D for updated verdict before returning to Phase E.
 
 **Ticket lifecycle:** Claim: set Stage→7-DevTesting. Execute: Pass 1 = A-E. Pass 2+ = targeted re-review per iteration protocol → D → E. Resolve: post quality report (with iteration history if applicable), route per final verdict. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md).
 
@@ -153,6 +153,49 @@ DT classifies each finding by severity (Blocker/Warning/Note per Phase D) AND by
 
 **Classification rule:** "Fixable within scope" = the fix does not change acceptance criteria, does not require new files outside the change matrix, and does not alter the design approach. When uncertain, classify as Tier 2 (over-escalate per the inter-stage feedback protocol escalation rule).
 
+### Finding Disposition Decision Framework
+
+The Finding Classification table above is the **WHERE-axis** — it routes a finding (Engineering vs operator) at Tier 1/2/3. This subsection adds the **WHEN-axis** — for each finding, *fix-now* (this release) vs *defer* (a future release) vs *accept* (as-is). The two axes compose: classify WHERE first, then dispose WHEN. Disposition is applied by the human at Phase E (Tier 3); the framework is advisory input, not auto-correction.
+
+The disposition matrix (5 factors), the Step 1 weighted-disposition logic, the Step 2 tie-break, and the scoring skeleton are the **stage-agnostic core** — defined once in [`release/references/standards/finding-disposition-framework.md`](../standards/finding-disposition-framework.md) and shared verbatim with Stage 8 QA. The factors are **Effort (H)**, **Best-Practice Alignment (H)**, **Downstream Impact (M)**, **Reversibility/Risk (M)**, and **Scope-Window (L, gate-modifier)**; the decision logic weights signals High = 3 / Medium = 2 / Low = 1 and resolves ties Reversibility-Accept > cheap-and-open-Fix-Now > Defer. Stage 7 reuses that shared core unchanged and defines only its own **Step 0 precedence gate** below.
+
+#### Step 0 — Stage-7 precedence gate (applied before weighing)
+
+An open **Blocker** is **fix-now** when "fixable within scope" (per the Classification rule above), else **escalate** (Tier 2/3). An open Blocker is **never** Defer or Accept by the weighted layer; doing so requires an explicit operator override with documented rationale. A **Note** is **Accept (informational)** — the `Note → Logged → No action` row above *is* the accept disposition. (This gate is why a trivial best-practice Blocker/Warning can never be silently "accepted as-is" — the originating failure this framework prevents.) Warnings, and Blockers the gate did not force, fall through to the shared Step 1 / Step 2 logic in the framework doc.
+
+This gate is the Stage-7-specific Step 0 that the shared framework's § 6 contract requires each consuming stage to inject. Stage 8 QA injects a strictly stronger gate (NOT-MET acceptance criterion → no defer/accept without a recorded operator override) over the same shared core.
+
+#### Disposition → routing consequence
+
+The disposition the human renders maps onto the existing severity (Blocker/Warning/Note) + routing-tier structure as follows — it layers on the Finding Classification table; it does not replace it:
+
+| Disposition | Routing consequence | Tier |
+|---|---|---|
+| Fix-now (in scope) | Engineering `fix(dt):` commit on the release branch (the existing DT↔Engineering loop) | Tier 1 |
+| Fix-now (needs scope change) | Operator decides per inter-stage feedback protocol | Tier 2 |
+| Defer | Open a **next-release issue** (new disposition — the finding leaves this release with a tracked home) | — |
+| Accept | Note / logged + one-line rationale; no routing | — |
+
+#### Worked example (representative DT finding)
+
+*Representative-maps the originating "v7.2 F-02" case (a trivial best-practice finding wrongly recommended "accept-as-is") to a current-tree equivalent.*
+
+**Finding F-EX (representative):** During Pass 1 DT of a release, the deprecated-path scan (Phase A) flags one new file containing a single documentary reference to a removed path; the fix is to swap it for the current path. Severity: **Warning**. PR/branch: **open**.
+
+| Factor | Signal | Reading |
+|---|---|---|
+| Effort | Fix-Now | one-line edit, single file, no design decision |
+| Best-Practice Alignment | Fix-Now | moves toward the documented current-path convention (cite-able) |
+| Downstream Impact | Defer | no downstream stage depends on it |
+| Reversibility / Risk | Fix-Now | additive one-line swap, CHEAP, no regression risk |
+| Scope-Window | Fix-Now | branch still open |
+
+**Disposition:** Step 0 — Warning, gate does not force. Step 1 — `Effort=Fix-Now AND (Best-Practice=Fix-Now) AND Reversibility≠Accept AND Scope-Window=open` → **Fix-Now**. Routed Tier 1 (`fix(dt):` commit). **This is the correct call** — the prior ad-hoc "accept-as-is" is foreclosed: a trivial, documented-best-practice, low-risk fix on an open branch is fix-now, exactly per operator feedback. Had the branch been **merged** (Scope-Window=Defer), Step 1's Defer clause fires → open a next-release issue (not silent accept).
+
+#### Stage 7 ↔ Stage 8 differentiation (for the QA adaptation)
+
+Stage 8 QA ([`stage-08-qa-testing.md`](stage-08-qa-testing.md)) reuses the shared matrix (factors + Steps 1–2) **unchanged** and **strengthens only Step 0**: a **NOT-MET acceptance criterion** cannot be deferred or accepted without an **explicit operator override** — strictly stronger than the Stage 7 Blocker gate (Stage 7 permits in-scope Blocker auto-fix-now; Stage 8 forbids any non-fix disposition of a NOT-MET AC absent operator sign-off). The QA per-criterion verdict (MET / NOT MET / PARTIAL) keys the strengthened gate. The shared core (matrix + Steps 1–2 + scoring) lives in the framework doc so both stages cite one source.
+
 ### Targeted Re-Review (Pass 2+)
 
 After Engineering commits fixes, DT runs a targeted re-review — not a full re-run:
@@ -205,6 +248,9 @@ Engineering MAY batch multiple Tier 1 fixes into a single commit when they addre
 | Engineering fix routing | Operator relays findings to Engineering session | Agent-to-agent handoff with structured finding payload |
 | Re-review trigger | Operator triggers DT re-review session | Auto-triggered on `fix(dt):` commit detection |
 | Escalation | Operator monitors iteration count | Auto-escalation at threshold with structured package |
+| Finding disposition | Human applies the disposition matrix at Phase E (Tier 3) | Scoring function auto-recommends disposition; human confirms (Tier 2) — per-factor signals become structured finding metadata |
+
+The disposition scoring-function stub — `disposition(finding) → {fix-now, defer, accept, escalate}` — lives with the shared mechanics in [`release/references/standards/finding-disposition-framework.md`](../standards/finding-disposition-framework.md) § 5 (the stage-agnostic Steps 1–2 skeleton; Stage 7's open-Blocker Step 0 gate is prepended per § 6). The function is **advisory** (recommends; human confirms) until calibration data justifies promotion, consistent with Stage 7's no-auto-correction principle.
 
 ## DT↔QA Handoff Protocol
 
