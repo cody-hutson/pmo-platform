@@ -44,3 +44,15 @@ release/references/pipeline/stage-03-bundle.md
 release/references/pipeline/stage-04-planning.md
 release/references/pipeline/stage-12-execute.md
 release/references/specs/release-personas.md
+
+# Release plans by design carry release-scope issue references. The release-corpus
+# frontmatter schema (release/references/standards/release-corpus-schema.md) MANDATES
+# an `issues: ["#N", ...]` field on every plan, and plan bodies document their scope
+# by issue number — both are structural properties of the artifact class, not removable
+# fragile references. The sibling repository-integrity issue-reference gate already
+# exempts the whole `release/releases/*` tree "mirroring the reference-durability gate";
+# this entry realizes that already-expressed parity (the durability gate had not yet
+# mirrored it for plans). Directory-prefix exemption matches the `release/releases/archive/`
+# precedent above and avoids per-release allowlist churn. Notes are not listed because
+# the gate's plan-path predicate covers `*_RELEASE_PLAN.md` only.
+release/releases/plans/
