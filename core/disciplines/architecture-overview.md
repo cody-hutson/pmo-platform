@@ -273,3 +273,9 @@ The actual work being managed by the platform:
 5. **Both agents share a filesystem** — schemas, templates, and governance are read in place (no deployment needed for non-skill assets)
 6. **Platform changes never bypass git** — modifications to `pmo-platform/` always flow through branch → PR → merge, even within a single Claude Code session
 7. **Operations changes stay in `projects/`** — project artifacts, status, and operational state never leak into `pmo-platform/`
+
+---
+
+## Related References
+
+- [`core/diagrams/architecture-platform-structure.md`](../diagrams/architecture-platform-structure.md) — the centralized, current-state ASCII structural map of the modular-monolith top-level layout. This overview narrates how the platform works; that artifact is the maintained tree of where everything lives. The artifact reciprocates with a link back to this overview as a parent it depicts.

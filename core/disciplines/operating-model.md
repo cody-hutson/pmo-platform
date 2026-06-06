@@ -502,4 +502,10 @@ Each block below is the composition view of one stage — Skill + Governance + T
 
 ---
 
+## Related References
+
+- [`core/diagrams/architecture-platform-structure.md`](../diagrams/architecture-platform-structure.md) — the centralized, current-state ASCII structural map of the modular-monolith top-level layout. This operating model defines skill ownership, governance composition, and the per-stage execution blueprint that run on top of that structure; the artifact is the maintained tree of where the modules and their contents live. The artifact reciprocates with a link back to this operating model as a parent it depicts.
+
+---
+
 *Operating model authored at Stage 6 Engineering per Stage 5 spec and Collective Review record 2026-05-10. Companion files: the function-spine document (cross-referenced once from § 3.2 above) and the modular pipeline-stages reference (cascade ships in PR-1 ahead of this PR).*

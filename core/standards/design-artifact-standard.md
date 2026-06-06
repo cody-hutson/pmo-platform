@@ -39,7 +39,7 @@ This standard is the **META framework** governing design-artifact discipline. It
 | **Agent process** | Steps an agent (skill, hub, spoke) takes through a workflow | Mermaid or ASCII flow-block per [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md) decision rule | Embedded in parent doc (skill SKILL.md, pipeline-stage doc) | Section anchor in parent | `process-flow-diagram-standards.md` examples |
 | **Human process** | Steps a human operator takes through a workflow | Same as agent process | Same | Same | Same |
 | **Concept model** | Named structural concept and its relationships | ASCII tree + structured tables | Embedded in parent doc (explanation/ folder) | Section anchor in parent | [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md), [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) |
-| **Skill flow** | Mode-routing, internal phases, or invocation flow for a skill | Mermaid OR Mode-card tables per `process-flow-diagram-standards.md` | Co-located: `pmo-platform/skills/<skill>/SKILL.md` (embedded) or `pmo-platform/skills/<skill>/diagrams/` (dedicated, rare) | `skill-flow-<skill-name>.md` (dedicated); section anchor (embedded) | `pmo-skill-refiner/SKILL.md`, `delivery-engine/SKILL.md` |
+| **Skill flow** | Mode-routing, internal phases, or invocation flow for a skill | Mermaid OR Mode-card tables per `process-flow-diagram-standards.md` | Co-located: `{core,operations,release}/skills/<skill>/SKILL.md` (embedded) or `{core,operations,release}/skills/<skill>/diagrams/` (dedicated, rare) | `skill-flow-<skill-name>.md` (dedicated); section anchor (embedded) | `pmo-skill-refiner/SKILL.md`, `delivery-engine/SKILL.md` |
 | **Decision tree** | Gate-and-branch logic for a routing decision | Mermaid (gate nodes) per `process-flow-diagram-standards.md` | Embedded in parent doc | Section anchor in parent | [`version-management-protocol.md`](../../release/references/protocols/version-management-protocol.md), [`triage-design-rereview.md`](../../release/references/standards/triage-design-rereview.md) |
 
 For each class, the tool column names the source-of-truth format. All formats are text-based and agent-readable. Per § 6, proprietary tools (Lucid / Figma / Miro / Whimsical), binary formats (SVG), and server-side-rendered formats (PlantUML) are rejected.
@@ -48,11 +48,11 @@ For each class, the tool column names the source-of-truth format. All formats ar
 
 **Decision:** Hybrid co-location/centralized.
 
-- **Centralized at `pmo-platform/reference/diagrams/`** for cross-cutting / platform-anchor diagrams that are referenced from **≥3 parent docs**.
+- **Centralized at `core/diagrams/`** for cross-cutting / platform-anchor diagrams that are referenced from **≥3 parent docs**.
 - **Embedded in parent doc** for diagrams that exist primarily to explain a specific doc's content (the dominant existing pattern — Mermaid blocks in [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md), ASCII trees in [`architecture-overview.md`](../disciplines/architecture-overview.md)).
-- **Co-located at `pmo-platform/skills/<skill>/diagrams/`** for skill-specific flow diagrams when the diagram is owned by the skill's behavior, not a cross-cutting concern.
+- **Co-located at `{core,operations,release}/skills/<skill>/diagrams/`** for skill-specific flow diagrams when the diagram is owned by the skill's behavior, not a cross-cutting concern.
 
-**Centralization-test (the only rule that triggers a dedicated diagram file in `reference/diagrams/`):** A diagram is centralized only when it is referenced from ≥3 distinct parent docs. Below the threshold, embed.
+**Centralization-test (the only rule that triggers a dedicated diagram file in `core/diagrams/`):** A diagram is centralized only when it is referenced from ≥3 distinct parent docs. Below the threshold, embed.
 
 **Source-of-truth format:** markdown — Mermaid blocks for the process-flow class; ASCII tree for the architecture / concept-model class; tables for the data-flow class. No SVG, no PlantUML, no binary formats.
 
@@ -60,9 +60,9 @@ For each class, the tool column names the source-of-truth format. All formats ar
 
 ```
 Is the diagram referenced from ≥3 parent docs?
-   ├── YES → dedicated file at pmo-platform/reference/diagrams/<flow-type>-<artifact-name>.md
+   ├── YES → dedicated file at core/diagrams/<flow-type>-<artifact-name>.md
    └── NO  → embed in parent doc
-              ├── If skill-owned    → embed in pmo-platform/skills/<skill>/SKILL.md
+              ├── If skill-owned    → embed in {core,operations,release}/skills/<skill>/SKILL.md
               └── Otherwise         → embed in the governing reference/standards/pipeline doc
 ```
 
@@ -200,7 +200,7 @@ The override goes in the release plan's deviation log section. Override is gover
 
 Every design artifact carries bidirectional links between itself and the source files it depicts.
 
-**Dedicated artifact file (in `pmo-platform/reference/diagrams/` or `pmo-platform/skills/<skill>/diagrams/`):**
+**Dedicated artifact file (in `core/diagrams/` or `{core,operations,release}/skills/<skill>/diagrams/`):**
 
 - Includes a § Related References section linking to every source file the artifact depicts (governance files, skill SKILL.md, pipeline-stage docs).
 - Each linked source file reciprocates with an inline link to the artifact in its § Related References section.
@@ -218,7 +218,7 @@ Every design artifact carries bidirectional links between itself and the source 
 
 ### Read
 
-- Agents MAY READ any design artifact freely. No permission check is required. Design artifacts live in `pmo-platform/reference/` / `pmo-platform/skills/<skill>/` and are governed by the standard read-access conventions for those locations.
+- Agents MAY READ any design artifact freely. No permission check is required. Design artifacts live in `core/` / `{core,operations,release}/skills/<skill>/` and are governed by the standard read-access conventions for those locations.
 
 ### Write
 
