@@ -117,7 +117,7 @@ Now that you've seen one composition, the rest of the platform is yours to explo
 
 **Module catalogs:**
 
-- [`operations/README.md` § Public API](../operations/README.md) — 12 invocation skills covering daily-status, comms, requirements, project initiation, delivery management.
+- [`operations/README.md` § Public API](../operations/README.md) — 13 invocation skills covering intake, daily-status, comms, requirements, project initiation, delivery management.
 - [`release/README.md` § Public API](../release/README.md) — 6 invocation skills covering release planning, build review, implementation planning, deployment.
 - [`core/README.md` § Public API](../core/README.md) — 3 invocation skills (`prompt-builder`, `pmo-qa-auditor`, `eval-writer`) plus the shared kernel.
 

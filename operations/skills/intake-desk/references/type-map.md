@@ -42,14 +42,10 @@ Three types. Keyed to the issue-form templates under `.github/ISSUE_TEMPLATE/`.
 
 ## Why there is no `adr` type
 
-ADRs are architecture-authored decision records, produced by the architecture
-activity — not by conversational intake. An intake front door elicits **work to be
-done** (improvement / bug / observation), not design decisions already made. If an
-intake conversation surfaces that a decision needs recording, the desk notes it and
-hands off to architecture; it does not author an ADR. This boundary is part of the
-component delineation recorded in the intake-front-door-architectural-boundary ADR
-(see § Provenance): intake-desk authors a new work item, architecture authors ADRs —
-disjoint verbs.
+No `adr` type — authoring an ADR is an architecture act, not intake. The full
+rationale (intake authors a typed work item; architecture authors ADRs — disjoint
+verbs) lives with the component boundary in the intake-front-door-architectural-boundary
+ADR (see § Provenance).
 
 ## Type-landing criteria ("have we landed on the right type?")
 

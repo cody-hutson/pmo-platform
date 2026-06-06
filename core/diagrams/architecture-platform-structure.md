@@ -43,7 +43,7 @@ pmo-platform/                      ← modular-monolith repository root
 │   └── settings.json.template     ← token-resolved settings seed
 │
 ├── operations/                    ← PMO OPERATIONS MODULE (PMO practitioners)
-│   ├── skills/                    ← 12 operations skills (ppm-agent, daily-status, comms-writer,
+│   ├── skills/                    ← 13 operations skills (ppm-agent, daily-status, comms-writer,
 │   │                                 delivery-engine, tracker-manager, artifact-generator, …)
 │   ├── templates/                 ← project + tracker templates (RAID, PROJECT.md, status-log, …)
 │   ├── OPERATIONS.md              ← operations-module governance
@@ -89,10 +89,10 @@ pmo-platform/                      ← modular-monolith repository root
 | Module | Role | Consumer audience | Deployed skills |
 |---|---|---|---|
 | `core/` | Shared kernel — hooks, disciplines, schemas, specs, standards, deploy infra, shared skills | Both (operations + release) | 3 |
-| `operations/` | PMO-operations capability | PMO practitioners | 12 |
+| `operations/` | PMO-operations capability | PMO practitioners | 13 |
 | `release/` | Release-pipeline / SDLC management | Platform builders | 6 (+1 source-only canary) |
 
-The skill partition (operations = 12, release = 6 + 1 canary, core = 3) is the locked skill-to-module map. The kernel's three shared skills (`prompt-builder`, `eval-writer`, `pmo-qa-auditor`) are the ones invoked from both consumer modules; everything else lives in the module whose capability it serves.
+The skill partition (operations = 13, release = 6 + 1 canary, core = 3) is the locked skill-to-module map. The kernel's three shared skills (`prompt-builder`, `eval-writer`, `pmo-qa-auditor`) are the ones invoked from both consumer modules; everything else lives in the module whose capability it serves.
 
 ## How structure maps to behavior
 
@@ -113,7 +113,7 @@ This block carries the bidirectional cross-reference contract: each source doc t
 - [`core/disciplines/architecture-overview.md`](../disciplines/architecture-overview.md) — the prose single-source-of-truth for how the platform works (module isolation, deployment model, governance tiers). This artifact is the centralized structural tree that overview narrates; the overview reciprocates with a link here.
 - [`core/disciplines/operating-model.md`](../disciplines/operating-model.md) — skill ownership, governance composition, and the per-stage execution blueprint that runs on top of this structure. Reciprocates with a link here.
 - [`README.md`](../../README.md) — the repository overview, whose "Top-level layout" and "Architecture" sections present the same modular-monolith structure for a first-time reader. This artifact is the detailed, agent-maintained expansion of that layout.
-- [`operations/README.md`](../../operations/README.md) — the operations-module Public API (the 12-skill operations roster this tree summarizes).
+- [`operations/README.md`](../../operations/README.md) — the operations-module Public API (the 13-skill operations roster this tree summarizes).
 - [`release/README.md`](../../release/README.md) — the release-module Public API (the release-skill roster and pipeline surface this tree summarizes).
 - [`core/README.md`](../README.md) — the kernel-module Public API (the shared hooks, disciplines, schemas, and 3 shared skills this tree summarizes).
 - [`core/standards/design-artifact-standard.md`](../standards/design-artifact-standard.md) — the governing standard under which this artifact is produced, stored (`core/diagrams/`), named, and refreshed.

@@ -23,6 +23,9 @@ decision is captured as a committed ADR document rather than a tracked issue, an
 authored as a file alongside the [`intake-desk`](../../operations/skills/intake-desk/SKILL.md)
 implementation in the same release.
 
+Provenance: `intake-desk` skill (#412), milestone intake-elicitation-skill (#109);
+forward-coupled to the work-item type system (#409).
+
 ## Context
 
 The platform is introducing a conversational intake skill, `intake-desk`, that takes a
@@ -68,12 +71,14 @@ The boundary is clean because the components' verbs are disjoint:
 | Component | Owns (verb class) | Does NOT do |
 |---|---|---|
 | **`intake-desk`** | **Authors** a typed, well-formed work item from a raw idea — the front door. | Process existing artifacts; scaffold projects; author decision records. |
-| **`ppm-agent`** | **Processes existing** artifacts (transcripts, RAID, status, exports) and pushes existing items to resolution. | Author a new item from a raw idea via guided elicitation. |
-| **`project-initiator`** | **Scaffolds and closes projects** (folder structure, project metadata, portfolio health, archival). | Produce a single work item; elicit requirements for a backlog item. |
+| **`ppm-agent`** | **Processes existing** artifacts across project and release surfaces (transcripts, RAID, status, exports) and pushes existing items to resolution. | Author a new item from a raw idea via guided elicitation. |
+| **`project-initiator`** | **Structures new project folders** for the toolkit to use, and **archives closed projects** from rollups. | Produce a single work item; elicit requirements for a backlog item. |
 | **architecture** (not a single skill) | **Authors ADRs / design decisions.** | (Conversely) is not authored by intake — `intake-desk` does not author ADRs. |
 
-`intake-desk` is **upstream** of `ppm-agent` (it creates the item `ppm-agent` later
-processes) and **orthogonal** to `project-initiator` (item-level vs project-level). The
+`intake-desk` sits **upstream** of `ppm-agent` for the items it authors — its output is
+**one** input `ppm-agent` may later process, not `ppm-agent`'s sole upstream (`ppm-agent`
+also processes existing project- and release-side artifacts that never passed through the
+front door) — and is **orthogonal** to `project-initiator` (item-level vs project-level). The
 last row is the durable statement of the dropped-`adr`-type decision: an intake front
 door elicits **work to be done** (improvement / bug / observation), not design decisions
 already made. When an intake conversation surfaces that a decision needs recording, the
@@ -141,8 +146,8 @@ decision does not introduce a data migration or a schema change.
 When the platform's work-item type system lands, it extends the type set the front door
 binds to. The component boundary and the handoff contract recorded here are **unaffected**
 — they concern *which component authors* and *what it hands off*, not *what the type
-registry looks like*. The type system is named below as a forward-coupled related item,
-not as this ADR's thesis.
+registry looks like*. The type system (recorded in § Status provenance as a
+forward-coupled item) is not this ADR's thesis.
 
 ## Related ADRs
 
@@ -153,10 +158,3 @@ not as this ADR's thesis.
   parameterize-the-instance / retain-the-frame discipline at the roadmap-instance layer;
   the same discipline lets the front door bind to the current work-item types while the
   component boundary stays fixed.
-
-## Related Issues
-
-- `#412` — the conversational intake skill (this release; the front door).
-- `#409` — the work-item type system (forward-coupled; later extends the type set the
-  front door binds to).
-- Milestone: intake-elicitation-skill (#109).

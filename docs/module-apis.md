@@ -19,7 +19,7 @@
 
 **Audience:** PMO practitioner (Senior Program Manager, Technical Program Manager, PMO Director).
 
-### Skills (12 invocation)
+### Skills (13 invocation)
 
 | Skill | Mode | Description |
 |---|---|---|
@@ -29,6 +29,7 @@
 | [`daily-status`](../operations/skills/daily-status/) | invocation | AM / PM Teams-ready daily status updates. |
 | [`delivery-engine`](../operations/skills/delivery-engine/) | invocation | Backlog → release-readiness; DoR / DoD gates; sprint planning. |
 | [`file-router`](../operations/skills/file-router/) | invocation | Classifies and routes incoming files in the PMO workspace. |
+| [`intake-desk`](../operations/skills/intake-desk/) | invocation | Conversational intake front door — elicits typed, level-aware work items from a raw idea. |
 | [`pmo-process-designer`](../operations/skills/pmo-process-designer/) | invocation | Converts business context into structured requirements / processes. |
 | [`pmo-technical-analyst`](../operations/skills/pmo-technical-analyst/) | invocation | Reviews technical artifacts (FDDs, integration specs) with TPM judgment. |
 | [`ppm-agent`](../operations/skills/ppm-agent/) | invocation | Strategic PMO brain — pushes actionable items to resolution. |
