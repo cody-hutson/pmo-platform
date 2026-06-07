@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # core/schemas/
 
 **Purpose:** Structured contract schemas — the typed-format definitions that agents and gates validate documents and handoffs against.

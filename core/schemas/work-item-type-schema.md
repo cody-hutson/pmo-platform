@@ -10,7 +10,7 @@
 **Architectural basis:** [`../ADRs/ADR-017-work-item-type-layer.md`](../ADRs/ADR-017-work-item-type-layer.md) (D1 hybrid — thin generic entity + declarative type layer; D2 methodology-projected; D4 Tier-2 scope change).
 **Pattern precedents (mirrored by pattern, referenced by name — no path dependency):** the `custom_methodology_definition` escape hatch (CASE 1/2/3 skill-consumption + N=2 governance-promotion) and the EAD mechanism that derives `raid-log.schema.json` from the RAID Item entity field schema.
 **Consumers (downstream):** `tracker-manager` (the single schema-validation enforcement point), `intake-desk` (repoints its `references/type-map.md` registry portion here), `delivery-engine` / `ppm-agent` / `weekly-status-rollup` (read the registry for kind fields + the cross-kind rollup — the one-time read refit is a deferred propagation slice, not this doc).
-**Cross-references:** see [§8](#8-cross-references).
+**Cross-references:** see the Cross-References section (§8) below.
 
 ---
 

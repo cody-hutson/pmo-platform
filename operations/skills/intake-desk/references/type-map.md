@@ -82,8 +82,8 @@ decomposition callout for later slicing — never auto-created as child items.
 ## Forward-coupling (the platform type registry)
 
 The platform's declarative work-item type system is the registry this file's type
-portion couples to. Its grammar — the type-pack meta-schema — is
-[`work-item-type-schema.md`](../../../../core/schemas/work-item-type-schema.md): a
+portion couples to. Its grammar — the type-pack meta-schema — is the work-item
+type-pack meta-schema doc (`core/schemas/work-item-type-schema.md`), in which a
 work-item **kind** is declared as data (a `kind_id` + `display_name` +
 `methodology_projection` + `fields` + versioned `criteria` + `relationships` +
 `lifecycle_behavior`), projecting onto the general hierarchy via the
