@@ -1,4 +1,5 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- PR TITLE: type(scope): summary (#N) — type one of {release,feat,fix,chore,docs,refactor,ci,test,revert}; scope = vX.Y for release PRs or a component (ci, a skill name); #N reference-only (no close-family verbs in the title). See core/rules/git-workflow.md section PR Title Convention. -->
 ## vX.Y: [Release Title]
 
 ### Summary (30 seconds)
