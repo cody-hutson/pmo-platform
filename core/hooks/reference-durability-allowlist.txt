@@ -45,6 +45,19 @@ release/references/pipeline/stage-04-planning.md
 release/references/pipeline/stage-12-execute.md
 release/references/specs/release-personas.md
 
+# Entity-model derivation surface — pervasive intra-doc anchor links on touched lines.
+# entity-field-schemas.md (G2 field schemas) is a navigational reference doc whose
+# AC-checklist, §3 per-entity sections, and §4 X-rule table cross-link to each other and
+# to project-entity-model.md via intra-doc anchors ([§3.0](#30-...), [§3.6](#36-...), etc.).
+# The reference-durability issue-ref detector cannot distinguish an anchor link's `#N`
+# fragment (e.g. `#3`, `#30`, `#36`) from a bare GitHub issue reference, and is not
+# governed by the per-file allow-link marker. The ADR-018 Work Item amendment (roster
+# 17->18 cascade + the new §3.18 field schema) re-touched lines carrying these
+# pre-existing anchor links, surfacing them in the added-lines delta. They are NOT
+# net-new fragile refs — they are the doc's own navigation. Exempting the file mirrors
+# the sibling project-entity-model.md entry above (same derivation surface, same reason).
+core/schemas/entity-field-schemas.md
+
 # Release plans by design carry release-scope issue references. The release-corpus
 # frontmatter schema (release/references/standards/release-corpus-schema.md) MANDATES
 # an `issues: ["#N", ...]` field on every plan, and plan bodies document their scope

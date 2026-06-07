@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # core/disciplines/
 
 **Purpose:** Understanding- and rationale-oriented documents — *why* the platform takes the shape it does. These are the load-bearing models, frameworks, and methodological disciplines that downstream skills, governance, and schemas consume by reference.
@@ -27,7 +28,8 @@
 | [corpus-curation.md](corpus-curation.md) | 5-tier evidence rubric (ET1–ET5) + orthogonality axiom + the 6-step curation protocol + a 6-domain source taxonomy. |
 | [km-protocols.md](km-protocols.md) | KM-artifact lifecycle state machine + two-key staleness-by-criticality model + the K5→K1 lessons-learned pipeline + doc-debt scoring. |
 | [applicability-framework.md](applicability-framework.md) | When a codified practice applies, when it is contraindicated, and how to resolve conflicts between competing practices. |
-| [project-entity-model.md](project-entity-model.md) | The 17-entity canonical data model — per-entity fields, lifecycle, storage tier, owning-agent triplet. Consumed by every operational skill. |
+| [project-entity-model.md](project-entity-model.md) | The 18-entity canonical data model — per-entity fields, lifecycle, storage tier, owning-agent triplet. Consumed by every operational skill. |
+| [work-organization-mapping-framework.md](work-organization-mapping-framework.md) | The domain-neutral standardization of work organization — universal hierarchy concept + the hierarchy-by-methodology map (keyed by archetype name) + shipped best-practice default work-item schemas + the user plug-and-play override model. Projects any methodology's work levels onto the canonical Work Item entity via `work_item_type`. |
 
 ## Discipline meta-protocols
 
