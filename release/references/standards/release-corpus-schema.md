@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Release Corpus Schema — Frontmatter Contract for Plans + Notes
 
 ## Purpose
