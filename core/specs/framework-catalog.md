@@ -64,6 +64,7 @@ Authoritative registry of every named framework, methodology, or standard the pl
 | Fowler design heuristics | EXTERNAL | Fowler — YAGNI (current bliki ed.) | — | domain-aware-stage5-design | software domain best-practice guide (simplicity-first heuristic — ET5, paired contraindication mandatory); referenced by core/standards/domain-best-practices/software.md | evolving | 12mo | 2026-06-07 | 2027-06-07 | Workspace owner ([OPERATOR_NAME]) |
 | domain-best-practices/software | INTERNAL | domain-aware-stage5-design | core/standards/domain-best-practices/software.md | domain-aware-stage5-design | software-domain design-consumption guide (Stage 5/7) | emerging | continuous | 2026-06-07 | continuous | Workspace owner ([OPERATOR_NAME]) |
 | domain-best-practices/governance | INTERNAL | domain-aware-stage5-design | core/standards/domain-best-practices/governance.md | domain-aware-stage5-design | governance-domain design-consumption guide (Stage 5/7) | emerging | continuous | 2026-06-07 | continuous | Workspace owner ([OPERATOR_NAME]) |
+| work-organization-mapping-framework | INTERNAL | declarative-workitem-type-model | core/disciplines/work-organization-mapping-framework.md | declarative-workitem-type-model | work-organization standardization (universal hierarchy concept + hierarchy-by-methodology map + best-practice default work-item schemas + user plug-and-play); consumed by intake-desk / delivery-engine / ppm-agent + the declarative work-item type layer | emerging | continuous | 2026-06-07 | continuous | Workspace owner ([OPERATOR_NAME]) |
 
 ## Notes
 
