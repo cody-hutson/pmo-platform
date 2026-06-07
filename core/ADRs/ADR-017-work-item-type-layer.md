@@ -8,7 +8,8 @@ tags: [entity-model, work-item, type-system, methodology-projection, tier-2-scop
 source_observations:
   - "The frozen 17-entity model bottoms out at Milestone — no delivery work-item entity exists beneath Milestone/Workstream, so container rollup has no child to aggregate from. (Work-Item Type Layer initiative discovery.)"
   - "A work-item instance IS a tracked record (boundary axiom) so it needs entity-graph membership; but the work-item TYPE set is open/declarative and cannot be a frozen-roster member. The tension resolves as a hybrid: one thin generic entity + a separate declarative type layer."
-  - "Relationship vocabulary (7 MVP types) and methodology->type projection both already exist and are frozen/built — WITL references and unifies them, it does not redefine them. (per the directional-not-authoritative intake principle — reconcile, don't perpetuate.)"
+  - "The governance is a standardization of work organization: it ships universal principles, a domain-neutral methodology->hierarchy map (the work-organization mapping framework), and best-practice default work-item schemas, and supports the user bringing/overriding their own work-item types. Work TYPES are user config, not baked into the package; the operator's own project work and the platform's own dev tooling are instances under the model, not its definition."
+  - "Relationship vocabulary (7 MVP types) already exists and is frozen/built — WITL references it, it does not redefine it. (per the directional-not-authoritative intake principle — reconcile, don't perpetuate.)"
 ---
 
 # ADR-017 — Work-Item Type Layer (WITL)
@@ -36,22 +37,49 @@ is Milestone. Container rollup (the F3 gap — "all work items belonging to Mile
 X") and work-item-level referential integrity (a `BLOCKS`/`DEPENDS_ON` edge to or
 from a work item) are therefore unmodellable: there is no node to attach the edge to.
 
-Two adjacent assets already exist and are authoritative:
+Two in-package assets are relevant:
 
 - The **7 MVP relationship types** (`GENERATES` / `DEPENDS_ON` / `BLOCKS` /
   `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO`), built and frozen in
   `frontmatter-schema.md` §Category 4. WITL **references** them; it never redefines
   the vocabulary.
-- The **methodology→work-item-type projection** in
-  [`ticket-information-architecture.md` §Methodology Variation](../../release/references/specs/ticket-information-architecture.md#methodology-variation--work-item-types)
-  (Issue → Story / Task / Work-Package, on the release/ticket side). `Work Item` is
-  already the canonical term: the glossary
-  [`terminology-glossary.md` §term-work-item](../specs/terminology-glossary.md#term-work-item)
-  defines it and its Appendix B bans Story / Epic / Feature / User-Story / Ticket /
-  Work-Package as canonical synonyms.
+- The **canonical term** `Work Item`, fixed by the glossary
+  [`terminology-glossary.md` §term-work-item](../specs/terminology-glossary.md#term-work-item),
+  whose Appendix B bans Story / Epic / Feature / User-Story / Ticket / Work-Package
+  as canonical synonyms. The methodology→kind projection (Issue → Story / Task /
+  Work-Package and the like) is not owned by any release-pipeline support tool — it
+  is a property of the domain-neutral **work-organization mapping framework**
+  shipped in `core/` (see the Governance spectrum below).
 
 The operator ratified D1/D2/D4 for the Work-Item Type Layer initiative on
 2026-06-07.
+
+### Governance spectrum — standardization of work organization
+
+This entity model is a **standardization / templatization of work organization**,
+shipped **full-spectrum and plug-and-play down to the ticket level**. It is not a
+codification of the operator's own project work or of the platform's own
+GitHub/pipeline development — those are *instances* under the model and must not
+define its best-practice structure, nor may operational/dev-tooling data be baked
+into the governance template. The package ships:
+
+1. **Concept of Work Organization** (K1) — the universal principles and the purpose
+   of each hierarchy level.
+2. **Hierarchy-by-methodology map** (K1) — a domain-neutral, best-practice map of
+   how typical methodologies populate the hierarchy (the **work-organization mapping
+   framework**).
+3. **Work-item best-practice schemas** (K1) — the shipped default work-item schemas.
+
+…and supports:
+
+4. **User plug-and-play** (K4) — the user brings or overrides their own work-item
+   schemas (operator-local). **Work TYPES are user config, not baked into the
+   package.**
+
+The agent reasons over the shipped layers 1–3 to understand any user's brought work
+(4) "by nature." This ADR governs the structure (the entity + the map + the
+best-practice defaults + the type-pack meta-schema grammar); the concrete work-item
+types are user config.
 
 ## Decision
 
@@ -78,12 +106,13 @@ type-scoped sub-states; they do not re-found the base machine.
 ### D2 — Vocabulary = methodology-projected
 
 The canonical kind is `Work Item`. Story / Bug / Test / Task are **per-methodology
-projections** declared in the declarative type layer's type-pack, unifying with the
-existing
-`ticket-information-architecture.md` projection table. **No glossary amendment** —
-the glossary already bans the non-canonical synonyms and already names
-`ticket-information-architecture.md` as the owner of Work Item semantics (see
-§ Two views, one concept below).
+projections** declared in the declarative type layer's type-pack, projected onto the
+**general hierarchy** through the domain-neutral **work-organization mapping
+framework** (the best-practice methodology→hierarchy map shipped in `core/`) — *not*
+onto any release-pipeline support tool. **No glossary amendment** — the glossary
+already bans the non-canonical synonyms and remains the single canonical home of the
+term `Work Item` (see § Operations entity vs. dev-tooling ticket below for why the
+operations template stands alone and does not couple to the release pipeline).
 
 ### D3 — Now-milestone scope
 
@@ -100,27 +129,33 @@ amendment (which added `impact` / `action_plan` to an existing entity; this adds
 entity — the larger-but-still-precedented move, same change *class*). The roster is
 **RE-FROZEN at 18 entities** with this addition.
 
-## Two views, one concept (CR-F1 — the unification, not a name collision)
+## Operations entity vs. dev-tooling ticket (kernel discipline — analogous, not the same concept)
 
-There are two surfaces named "Work Item", and they are **two views of one concept**,
-not a name collision and not a duplicated definition:
+Two surfaces carry work-item-shaped data, and they are **analogous but NOT the same
+governed concept**:
 
-- The **entity-domain `Work Item`** — entity 18 in
-  [`project-entity-model.md`](../disciplines/project-entity-model.md): a tracked data
-  record with a field schema, a two-axis lifecycle, and graph membership.
-- The **release/ticket-domain `Work Item`** — the GitHub-Issue-backed unit whose
-  methodology projection (Issue → Story / Task / Work-Package) is owned by
-  [`ticket-information-architecture.md` §Methodology Variation](../../release/references/specs/ticket-information-architecture.md#methodology-variation--work-item-types),
-  and whose canonical name is fixed by
-  [`terminology-glossary.md` §term-work-item](../specs/terminology-glossary.md#term-work-item).
+- The **operations `Work Item`** — entity 18 in
+  [`project-entity-model.md`](../disciplines/project-entity-model.md): the
+  operations-domain hierarchy node. A tracked data record with a field schema, a
+  two-axis lifecycle, and entity-graph membership. Its canonical name is fixed by
+  [`terminology-glossary.md` §term-work-item](../specs/terminology-glossary.md#term-work-item);
+  its methodology→kind projection runs through the domain-neutral
+  **work-organization mapping framework** shipped in `core/`.
+- The **platform's own dev-tooling ticket** — the GitHub-Issue-backed unit the
+  release pipeline uses to develop the platform itself. It is the platform's
+  *instance* of work tracking, not the governed operations concept.
 
-D2 **unifies** these: the entity REFERENCES the
-`ticket-information-architecture.md` projection table rather than forking it. The
-entity-domain view adds the record/field/lifecycle/graph semantics; the
-release/ticket-domain view supplies the methodology→kind projection. The glossary is
-**not amended** — it remains the single canonical home of the term, and this ADR
-points at it so the two views are documented as the same concept seen from the
-data-architecture side and the ticket-architecture side.
+These are **analogous, not unified.** The operations `Work Item` entity does **not**
+depend on, fork, or unify with the release-pipeline ticket model, and the operations
+governance template must **not** bake the platform's own dev-tooling structure into
+itself. This is a **kernel discipline**: `core/` governance must not couple to
+`release/`. A dependency from the operations entity model onto a release-pipeline
+support tool would be a kernel→`release/` dependency inversion — it would let the
+platform's own dev tooling define the best-practice work-organization structure that
+the template ships for *any* user. The projection therefore lands on the general
+hierarchy via the in-`core/` work-organization mapping framework (a domain-neutral
+methodology→hierarchy map), keeping the operations template self-standing. The
+glossary remains the single canonical home of the term `Work Item`.
 
 ## Consequences
 
@@ -131,8 +166,10 @@ data-architecture side and the ticket-architecture side.
 - **Future work-item kinds never amend the roster** — the thin-entity dividend: a new
   methodology or kind parameterizes the declarative type layer, with zero
   governance change per kind.
-- **One model, two views** — the entity-domain and release/ticket-domain "Work Item"
-  are unified through the shared projection table, not duplicated.
+- **The operations template stands alone** — the operations `Work Item` entity
+  projects onto the general hierarchy through the in-`core/` work-organization
+  mapping framework; it neither depends on nor unifies with the release-pipeline
+  ticket model, so `core/` carries no coupling to `release/`.
 
 ### Negative / cost
 
@@ -161,7 +198,7 @@ block); it crosses to EXPENSIVE at the first consumer.
 | Option | Decision | Rationale |
 |---|---|---|
 | **(A) Floating type layer (no entity)** | Rejected | A declarative type system with no entity-graph member violates the boundary axiom (a work-item instance IS a tracked record); leaves rollup/integrity edges with no node to attach to (F3 stays open); breaks referential integrity for `BLOCKS`/`DEPENDS_ON` to/from work items. |
-| **(B) 18th "fat" entity (type baked in)** | Rejected | One entity per kind, or one entity with a frozen kind-enum + all per-kind fields inline, re-freezes an OPEN set (every new methodology/kind becomes a roster Tier-2 — exactly the governance debt the hybrid avoids); explodes the field list; collides with the existing methodology-projection layer instead of unifying with it. |
+| **(B) 18th "fat" entity (type baked in)** | Rejected | One entity per kind, or one entity with a frozen kind-enum + all per-kind fields inline, re-freezes an OPEN set (every new methodology/kind becomes a roster Tier-2 — exactly the governance debt the hybrid avoids); explodes the field list; collides with the work-organization mapping framework instead of projecting through it. |
 | **(C) Reuse Milestone / Artifact** | Rejected | Milestone is a dated checkpoint (wrong semantics + cardinality); Artifact is a deliverable file whose Axis-1 *delegates to Axis-2* (a backing-file Domain lifecycle) — a work item is operational, not a file. Neither carries a `work_item_type` discriminator or the work-item Axis-1 machine. |
 | **(D) Hybrid — thin generic entity + declarative type layer (this ADR)** | **Chosen** | Satisfies the boundary axiom (the instance is a graph member), gives rollup/integrity a node, and keeps the open type set declarative so future kinds never amend the roster. |
 
