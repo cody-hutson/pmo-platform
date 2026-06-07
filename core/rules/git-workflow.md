@@ -92,6 +92,37 @@ If a preflight operation (e.g., "folder expected on main doesn't exist in my wor
    - **Manual path (fallback, single branch):** `git branch -d [branch]` deletes a single local branch; `gh api -X DELETE repos/[OPERATOR_GITHUB]/pmo-platform/git/refs/heads/[branch]` deletes the remote ref. Use the manual path for one-off interactive cleanup; use the automated path for sweep-class operations.
    - In a worktree: delete the branch only AFTER step 8's detach/remove — `git branch -d [branch]` fails if the branch is currently checked out.
 
+### PR Title Convention
+
+A PR title must stand on its own: a reader should see the change **class**, the **milestone**, the **work item**, and a **description** without opening the PR. Titles follow one grammar:
+
+```
+type(scope): summary  (#N[, #M])
+```
+
+| Element | Rule | Lets a reader decode |
+|---|---|---|
+| `type` | REQUIRED. One of the closed set `release` · `feat` · `fix` · `chore` · `docs` · `refactor` · `ci` · `test` · `revert`. Same vocabulary as the `feat:` / `fix:` prefixes in §Commit Messages above. | the change class (the "chore / fix / feat" question) |
+| `scope` | REQUIRED for release-pipeline PRs — the version, e.g. `v1.06`. Otherwise a short component slug (`ci`, `release-notes`, a skill name). Omit only for a genuinely repo-wide change, leaving `type: summary`. | the milestone / area |
+| `summary` | REQUIRED. Concise and imperative. | the description |
+| `(#N)` | OPTIONAL. Trailing issue/PR reference(s), **reference-only**. | the work item |
+
+Worked examples, one per type:
+
+- `release(v1.06): Solutioning protocols — finding-disposition framework`
+- `chore(v1.06): Stage 13 close-out — INDEX + DIGEST + NOTES (#N)`
+- `feat(git-workflow): add a governed PR-title convention + CI gate (#N)`
+- `fix(ci): reference-durability always-run so the required check reports`
+- `docs(release-notes): correct the v1.05 deployment date`
+- `refactor(deploy): modularize the deploy.sh checks`
+- `test(eval): add intake-desk trigger cases`
+- `ci(repo-integrity): widen the depersonalization scope`
+- `revert: feat(git-workflow) PR-title gate`
+
+**Title `#N` is reference-only.** GitHub's auto-close parser scans the title as well as the body, so a `#N` in a title must never follow a close-family verb (`close` / `closes` / `fix` / `fixes` / `resolve` / `resolves`, and their tenses) — that would auto-close the issue straight from the title. Close-family verbs + `#N` stay confined to the body's dedicated Issue References block, exactly as the Parser-clean PR body discipline above requires; the title carries only the bare `(#N)` form.
+
+**Enforcement.** The CI workflow `pr-title-convention.yml` validates the title on PR open/edit, mirroring the `pr-body-parser-clean.yml` body gate. It ships **warn-mode initial** — a non-conforming title is reported in the run summary but does not block the merge — giving the legacy bare `vX.Y: …` release shorthand a transition window; the canonical release form is `release(vX.Y): …`. Auto-generated titles (`Revert …`, `Merge …`) and bot authors are exempt. A title that legitimately cannot conform declares an override by adding `<!-- pr-title-convention: allow -->` anywhere in the PR body.
+
 ## Reference Durability
 
 Durable-corpus files — governance rules, standards, specs, disciplines, schemas, skill SKILL.md files, and committed release-plan files — must survive the events the platform performs: repository migration, milestone re-bundling and renumbering, and history rewrites. When authoring durable-corpus content, state every rule unconditionally and inline, summarize referenced content rather than linking to it, and confine any unavoidable bare issue reference to a designated reference block with an inline summary so the meaning survives even if the number rots. This is the same shape as the parser-clean discipline above: an authoring discipline enforced at commit and PR time. The full ladder of reference forms, the self-containment test, and the override-marker and allowlist mechanism live in the reference-durability standard under the core standards set.
