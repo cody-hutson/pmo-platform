@@ -2,7 +2,7 @@
 name: release-executor
 description: >
   Executes approved release plans. Modes: Execute release · Verify release · Rollback release · Close release. Creates snapshots, applies file changes, closes IMP items, updates release log, runs verification, runs automated Stage 13 close-out. Requires an approved plan with Dry-Run Record. Triggers: "execute the release", "deploy v[X.Y]", "ship v[X.Y]", "verify the release", "rollback v[X.Y]", "go live with v[X.Y]", "close the release", "finalize v[X.Y]", "stage 13 close", "run the close-out", "automated close-out".
-version:
+version: v3.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -388,7 +388,8 @@ Mode G executes the write-phase of the split Pattern Review protocol (per [`core
 
 3. **Per-cluster Execute (snapshot-first not required — no file modifications, only GitHub state):**
    For each cluster in the manifest:
-   a. **File the new Proposal:** `gh issue create --repo cody-hutson/pmo-platform -F <approved_body_file> --label "improvement" --label "status: proposed" --label "category: <category-from-body>" --title "<title-from-body>"`. Capture the new issue number → `<new_proposal_id>`. The body is the LITERAL `<approved_body_file>` content; NO modification, NO synthesis post-approval (per the LITERAL-body operator approval gate + the Mode D failure-mode entry).
+   a. **File the new Proposal:** `gh issue create --repo {REPO} -F <approved_body_file> --label "improvement" --label "status: proposed" --title "<title-from-body>"` (`{REPO}` = the workspace-constant repo slug used throughout this skill). Capture the new issue number → `<new_proposal_id>`. The body is the LITERAL `<approved_body_file>` content; NO modification, NO synthesis post-approval (per the LITERAL-body operator approval gate + the Mode D failure-mode entry).
+      - **Category travels in the body, not as a label.** Do NOT pass a `--label "category: <X>"` token: no `category:`-prefixed label exists in the live taxonomy (`gh label list --search category` → empty), so a `category:` `--label` makes `gh issue create` fail at runtime. The live scheme applies a **type label** (`skill-update` / `protocol` / `structure` / `documentation` / `enhancement` …) at Triage, not a `category:` prefix; the Category value is carried as body content per the 9-field Proposal mapping that the `<approved_body_file>` already encodes. Pass only the two labels above (`improvement` + `status: proposed`); a type label is applied later at Triage. (Read-back in Step 3.d asserts only `improvement` + `status: proposed`, consistent with this.)
    b. **Post close comment on each source observation:** for each `obs_id` in `cluster.source_observation_ids`: `gh issue comment <obs_id> --body "Promoted to #<new_proposal_id> via Pattern Review YYYY-MM-DD per OPERATIONS.md § Pattern Review Cadence Protocol Rule 3."`.
    c. **Close each source observation:** `gh issue close <obs_id> --reason "not planned"` (per `decision-discipline.md` § 4.2 emergence semantics — source observations are not rejected, they are subsumed into the Proposal).
    d. **Read-back verification per write-verify operating principle:** `gh issue view <new_proposal_id> --json state,labels,body` → assert state=OPEN, labels include `improvement` + `status: proposed`, body matches `<approved_body_file>` content. On mismatch: halt; report which cluster failed at which step; offer rollback (re-open source observations via `gh issue reopen` + delete new Proposal via `gh issue delete` — Mode G's rollback path is reversible per its CHEAP/MODERATE reversibility tier).

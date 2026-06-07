@@ -10,6 +10,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 |---|---|---|---|---|---|---|---|
 | v1.01 | v1.01-intake | #66, #101, #105, #237, #274 | #460 | `a3ddc5429df7d8e546da40547d28a6c7f9b75351` | `v1.01` | VERIFIED | 2026-06-01 |
 | v1.02 | v1.02-triage-and-related | #38, #183, #347, #343 | #493 | `8a0e7a17f2f68e6d49acaf4384d652ee3bd4e02c` | `v1.02` | VERIFIED | 2026-06-02 |
+| v1.03 | v1.03-bundle-and-related | (unrecoverable — re-versioned) | #515 | (unrecoverable — re-versioned) | (unrecoverable — re-versioned) | VERIFIED | 2026-06-02 |
 | v1.04 | v1.04-planning | #42, #337, #517 | #540 | `e84913768ebbb1b97a8ab0af5ea5ac1195f78a60` | `v1.04` | VERIFIED | 2026-06-02 |
 | v3.18 | v3.18-corpus-integrity-enforcement | #538, #410 | #562 | `44f670aa3846527f51952094013c84a4d75aad51` | `v3.18` | VERIFIED | 2026-06-03 |
 | v3.19 | v3.19-close-out-reliability-backstops | #576, #581, #583, #584, #556 | #588, #591, #592, #598 | `a300f53519c8c35510f9b6b4acf2fbc698a75299` (#588), `bc09bed29e552896adf9eb6d2cce65ac93889e40` (#591), `abfe43a7c0ea82e6e74e295afa8b1d9d265dacb7` (#592), `532cdc922a5c39a6e0c2c39790f00316e9d8119c` (#598) | `v3.19` | VERIFIED | 2026-06-03 |

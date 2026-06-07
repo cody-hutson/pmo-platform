@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Release Corpus Schema — Frontmatter Contract for Plans + Notes
 
 ## Purpose
@@ -161,7 +162,7 @@ Promote `components` to controlled vocabulary if drift bites within 5 post-cutov
 
 ### Validator implementation
 
-A Python validator at `release/scripts/lint_release_corpus.py` (authored alongside this schema as the D5 deliverable) executes Tier 1–3 checks and is invoked by `deploy.sh` Check 15 (release-corpus cross-link integrity). The validator output discriminates by `type:` value to produce template-aware error messages (per the template-aware gate-checks discipline).
+A Python validator at `core/deploy/tools/lint_release_corpus.py` (authored alongside this schema as the D5 deliverable) executes Tier 1–3 checks and is invoked by `deploy.sh` Check 20 (note-content lint per release-notes-standard.md §3.2). The earlier Check 15 (release-corpus cross-link integrity) was RETIRED in v2; the release-corpus link surface is covered separately by the doc-link primitive. The validator output discriminates by `type:` value to produce template-aware error messages (per the template-aware gate-checks discipline).
 
 ## Failure modes
 
@@ -180,7 +181,7 @@ A Python validator at `release/scripts/lint_release_corpus.py` (authored alongsi
 |---|---|
 | [release-notes-standard.md](release-notes-standard.md) | Owns the BODY content rules for user-facing notes (audience, voice, sections, JTBD framing). This schema adds the FRONTMATTER contract for those same files. They compose: a release note has both rules applied. |
 | [version-field-semantics.md](../../../core/standards/version-field-semantics.md) | Owns `version:` field semantics in SKILL.md frontmatter. Establishes that `version:` is a release-tag-at-last-material-edit field. This schema reuses that field semantics: `version:` in a release plan/note matches the release Milestone, not the last-edit tag (different semantics for different artifact class). The two standards are orthogonal — SKILL.md vs. release corpus — but field naming aligned for query consistency. |
-| [doc-link-maintenance-protocol.md](../../../core/standards/doc-link-maintenance-protocol.md) | Owns the link-resolution discipline that powers the `links.*` fields' integrity. This schema's `links:` shape is what the doc-link-maintenance primitive resolves; deploy.sh Check 15 invokes the primitive against the release-corpus surface (per CR-D2 disjoint scope from Check 14). |
+| [doc-link-maintenance-protocol.md](../../../core/standards/doc-link-maintenance-protocol.md) | Owns the link-resolution discipline that powers the `links.*` fields' integrity. This schema's `links:` shape is what the doc-link-maintenance primitive resolves. The earlier deploy.sh Check 15 that invoked the primitive against the release-corpus surface was RETIRED in v2; deploy.sh Check 14 invokes the primitive against the governance + skill SKILL.md corpus, and the release-corpus link surface is covered by the release-corpus link checker. |
 
 ## Cutover
 
@@ -189,7 +190,7 @@ This schema applies forward-only (the release that authors it is the first compl
 ## Cross-references
 
 - [release-notes-standard.md](release-notes-standard.md) — body-content rules for user-facing notes
-- [doc-link-maintenance-protocol.md](../../../core/standards/doc-link-maintenance-protocol.md) — link-integrity primitive consumed by Check 15
+- [doc-link-maintenance-protocol.md](../../../core/standards/doc-link-maintenance-protocol.md) — link-integrity primitive (consumed by Check 14; the earlier Check 15 release-corpus invocation was retired in v2)
 - [version-field-semantics.md](../../../core/standards/version-field-semantics.md) — `version:` field discipline (SKILL.md context; conceptually adjacent)
 - [duplicate-source-discipline.md](../../../core/standards/duplicate-source-discipline.md) — register-or-remove rule (the schema is the source of truth; INDEX/DIGEST are derivatives)
 - `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` — the LOG anchor target for `links.log_anchor`

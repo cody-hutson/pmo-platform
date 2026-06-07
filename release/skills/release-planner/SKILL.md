@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
-version: v11.20
+version: v3.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -84,7 +84,15 @@ Proceed to the corresponding mode section below (Mode A Backlog Analysis, Mode B
 
 **Steps:**
 1. Read the bundle and unbundled-Approved queue via `read_bundle_issues(milestone)` + `read_approved_queue_for_theme(theme_labels)`. The function-contract returns a list of `IssueRecord` per issue: `{number, title, state, labels, priority, status, theme, milestone, body, affected_files, dependencies, parse_status}`. Underlying mechanism: `gh issue list --milestone "<title>" --state open --json number,title,state,labels,milestone,body --limit 5000` (per `git-workflow.md § Batch CLI Query Limits`). For the unbundled queue: `gh issue list --label "status: approved" --search "no:milestone" --json number,title,labels,createdAt,body --limit 5000`. Parsing is delegated to `release/tools/bundle-issues-parser.py` which extracts `affected_files` and `dependencies` from each `### Affected Files` and `### Dependencies` body section in a single read pass.
-2. The parsed fields are already available from `read_bundle_issues()` — no separate parse step. The `IssueRecord` schema exposes number/title/priority/status/theme/milestone/body/affected_files/dependencies/parse_status to subsequent steps.
+
+   **Step 1.5 — Bundleability pre-filter (run BEFORE the parser measures/parses).** Non-bundleable work-item types legitimately have no `### Affected Files` field (their intake templates do not define one), so parsing them as bundle candidates is a category error that depresses the parse-rate against bodies the parser was never meant to read. Partition the candidate set into three groups **before** any parse-rate is computed or the dependency graph is built — this is a `release-planner` filter, **NOT** a `bundle-issues-parser.py` change (the parser stays a pure per-body function; the exclusion stays visible and auditable on the planner side rather than hidden inside a silent parser skip):
+
+   1. **Conformant-bundleable** (the only set the parse-rate denominator and Steps 2–5 operate on): issues typed `improvement` or `bug` that have a recognized `### Affected Files` heading (after the parser's heading-alias / suffix-tolerant match).
+   2. **Type-excluded** (set aside — not parsed, not counted, not a failure): issues carrying a `sub-task`, `observation`, or `adr` label; issues whose title is `[Initiative]`-prefixed; and umbrella / roster bodies (e.g., Skill-Update suites and multi-item rosters that enumerate child work rather than name an atomic change). These are excluded by **type/shape**, not by parse outcome.
+   3. **Needs-body-repair** (set aside — surfaced, not failed): `improvement`|`bug` bodies with **no** recognized `### Affected Files` heading after alias/suffix matching. Route these to a `needs-body-repair` queue surfaced to the operator (older-schema or non-conformant bodies whose repair is a separate, out-of-scope pass); exclude them from the parse-rate denominator so a non-conformant body cannot make the run report a spurious `parse-failed`/BLOCKING.
+
+   **Denominator rule:** every parse-rate, the dependency graph, the bundle suggestions, and the File Contention Map operate on the **conformant-bundleable** set only. Report the `Type-excluded` and `Needs-body-repair` counts alongside the parse-quality summary (Step 5 output) as an auditable record — never silently drop them. (Design basis: the ratified Stage 5 spec for the bundle-issues verification surface — the conformant-bundleable denominator + Mode A pre-filter; the parser-side robustification is its sibling and is owned by `bundle-issues-parser.py`, not this skill.)
+2. The parsed fields are already available from `read_bundle_issues()` — no separate parse step (run over the **conformant-bundleable** set from Step 1.5). The `IssueRecord` schema exposes number/title/priority/status/theme/milestone/body/affected_files/dependencies/parse_status to subsequent steps.
 3. Build the dependency graph per the algorithm specified in `references/dependency-analysis.md` § Dependency Graph Construction Algorithm — Kahn's BFS topological sort over `Map<issue_number, Set[issue_number]>` adjacency list, priority-desc (P1>P2>P3>P4) → issue-number-asc tie-breaker, cycle detection via residual-subgraph DFS extraction. After Kahn's emits the topo-sorted sequence, invoke `references/dependency-analysis.md` § Step 5: Longest-Path Computation (CPM) to produce the schedule-determining chain (DP-DAG longest-path relaxation; degraded mode default until typed-dep substrate populates). Identify:
    - Dependency chains (A → B → C)
    - Independent items (no dependencies)
@@ -125,7 +133,8 @@ For each suggested bundle, run the G3-07 check per `core/schemas/gate-criteria-s
 |---|---|---|---|---|
 | <path> | #N, #M, ... | edit×K, add×J, delete×L | NONE \| BINARY \| MULTI-WAY \| CONFLICT | <operator hint per severity> |
 
-**Parse-quality:** <N> issues parsed cleanly · <M> deferred (excluded) · <K> parse-failed (BLOCKING)
+**Parse-quality:** <N> issues parsed cleanly · <M> deferred (excluded) · <K> parse-failed (BLOCKING) — denominator = conformant-bundleable only (per Step 1.5)
+**Pre-filter (Step 1.5):** <T> type-excluded (sub-task/observation/adr/[Initiative]/umbrella) · <R> needs-body-repair (improvement|bug, no Affected Files heading — surfaced to operator, excluded from denominator)
 
 **Bundle 2:** ...
 ```

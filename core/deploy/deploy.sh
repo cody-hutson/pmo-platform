@@ -1893,12 +1893,28 @@ cmd_check() {
       flag_warn_or_issue "doc-link-maintenance" "/usr/bin/python3 not executable; cannot run primitive"
     else
       local c14_output c14_exit=0
+      # --require-targets (per #459): a declared --target-paths glob resolving to
+      # zero files is a path-resolution failure (exit 3), not a clean pass — so a
+      # relocated/typo'd scan surface can never read GREEN.
+      # Target globs match the post-restructure live layout (per #459 follow-up):
+      # release specs/standards live under release/references/ (recursively
+      # covered by the release/references/ entry, which also covers the release
+      # schema files under references/standards/); release has no rules surface
+      # (rules are core-only via core/rules/); operations has no references/ or
+      # schemas/ dirs (OPERATIONS.md + operations/skills/*/SKILL.md are the
+      # operations governance + skill scope). The earlier release/{schemas,specs,
+      # standards,rules}/ and operations/{references,schemas}/ globs never matched
+      # this layout and were dropped to keep every glob zero-yield-free.
       c14_output=$(/usr/bin/python3 "$c14_script" \
-        --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,release/schemas/,release/specs/,release/standards/,release/rules/,operations/OPERATIONS.md,operations/references/,operations/schemas/,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
+        --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,operations/OPERATIONS.md,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
         --allowlist "$c14_allowlist" \
         --output-format tsv \
+        --require-targets \
         --exclude-code-blocks 2>&1) || c14_exit=$?
-      if [[ $c14_exit -eq 0 ]]; then
+      if [[ $c14_exit -eq 3 ]]; then
+        # Path-resolution failure — never a silent PASS (per #459 fail-loud).
+        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(echo "$c14_output" | head -1) — a declared --target-paths glob resolved to zero files (relocated/typo'd scan surface); fix the glob list in this check"
+      elif [[ $c14_exit -eq 0 ]]; then
         log "  OK:    no broken cross-refs in scope"
       else
         local c14_findings
@@ -2143,7 +2159,7 @@ cmd_check() {
   # ADR-framework-catalog — parallels Check 13's TEMPLATE_SYNC_MAP registry,
   # not Check 14's corpus glob. Invokes the primitive at
   # core/deploy/tools/check-version-anchors.py over the governed
-  # registry release/specs/framework-catalog.md. Sub-checks:
+  # registry core/specs/framework-catalog.md. Sub-checks:
   # 18a catalog completeness / 18b catalog↔doc anchor consistency / 18c cadence
   # aging. Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15 precedent); flip-to-enforce timeline + explicit reflexive
@@ -2154,7 +2170,10 @@ cmd_check() {
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 18: Framework-corpus version-anchor drift detection"
     local c18_script="core/deploy/tools/check-version-anchors.py"
-    local c18_catalog="release/specs/framework-catalog.md"
+    # Live catalog is core/specs/framework-catalog.md (was the dead
+    # release/specs/ path → Check 18 emitted a false "catalog registry missing"
+    # every run, the loud-but-wrong inverse of silent-pass). Fixed per #459.
+    local c18_catalog="core/specs/framework-catalog.md"
     if [[ ! -f "$c18_script" ]]; then
       flag_warn_or_issue "framework-anchor-drift" "primitive script missing: $c18_script"
     elif [[ ! -x "/usr/bin/python3" ]]; then
@@ -2166,7 +2185,11 @@ cmd_check() {
       c18_output=$(/usr/bin/python3 "$c18_script" \
         --catalog-path "$c18_catalog" \
         --output-format tsv 2>&1) || c18_exit=$?
-      if [[ $c18_exit -eq 0 ]]; then
+      if [[ $c18_exit -eq 3 ]]; then
+        # Path-resolution failure — the tool could not resolve its catalog
+        # target. Never a silent PASS (per #459 fail-loud).
+        flag_warn_or_issue "framework-anchor-drift" "path-resolution failure (exit 3): $(echo "$c18_output" | head -1) — catalog target did not resolve"
+      elif [[ $c18_exit -eq 0 ]]; then
         log "  OK:    catalog complete, anchors consistent, no overdue reviews"
       else
         local c18_findings
@@ -2257,16 +2280,26 @@ cmd_check() {
     else
       local c20_output c20_exit=0
       c20_output=$(/usr/bin/python3 "$c20_lint_script" --check note-content 2>&1) || c20_exit=$?
-      local c20_findings=0
-      if [[ $c20_exit -ne 0 ]]; then
-        c20_findings=$(echo "$c20_output" | wc -l | tr -d ' ')
-      fi
-      if [[ $c20_findings -eq 0 ]]; then
-        log "  OK:    Section 6a content clean (forward-only from the lint cutover)"
-      else
+      if [[ $c20_exit -eq 3 ]]; then
+        # Path-resolution failure (exit 3 / CORPUS-PATH-UNRESOLVED) — a required
+        # corpus dir did not resolve, so the lint is unverifiable, NOT clean. This
+        # is the exact vacuous-pass #83 fixes; surface it as FAIL/DRIFT, never an
+        # OK (per #459 fail-loud).
         flag_warn_or_issue "note-content-lint" \
-          "$c20_findings finding(s) in Section 6a content — see release-notes-standard.md §3.2"
+          "path-resolution failure (exit 3): $(echo "$c20_output" | head -1) — corpus path misconfigured; Check 20 cannot lint"
         echo "$c20_output" | head -10 | sed 's/^/         [6a]     /' || true
+      else
+        local c20_findings=0
+        if [[ $c20_exit -ne 0 ]]; then
+          c20_findings=$(echo "$c20_output" | wc -l | tr -d ' ')
+        fi
+        if [[ $c20_findings -eq 0 ]]; then
+          log "  OK:    Section 6a content clean (forward-only from the lint cutover)"
+        else
+          flag_warn_or_issue "note-content-lint" \
+            "$c20_findings finding(s) in Section 6a content — see release-notes-standard.md §3.2"
+          echo "$c20_output" | head -10 | sed 's/^/         [6a]     /' || true
+        fi
       fi
     fi
   fi
@@ -2627,8 +2660,16 @@ cmd_check() {
     else
       local c23_output c23_exit=0
       c23_output=$(/usr/bin/python3 "$c23_script" --verify 2>&1) || c23_exit=$?
-      if [[ $c23_exit -eq 0 ]]; then
-        log "  OK:    LOG ↔ INDEX rows aligned (version/date/class/scope/status/plan/note)"
+      if [[ $c23_exit -eq 3 ]]; then
+        # Path-resolution / parse failure (exit 3) — the generator could not
+        # resolve LOG/INDEX or parsed zero rows, so --verify is unverifiable, NOT
+        # clean. Was the silent-pass that let Check 23 read OK on a path error
+        # (#85/#459); surface as FAIL/DRIFT, never an OK.
+        flag_warn_or_issue "release-log-index-consistency" \
+          "path-resolution failure (exit 3): $(echo "$c23_output" | head -1) — LOG/INDEX did not resolve or parsed zero rows"
+        echo "$c23_output" | head -10 | sed 's/^/         /' || true
+      elif [[ $c23_exit -eq 0 ]]; then
+        log "  OK:    LOG ↔ INDEX rows aligned (version/milestone/date/release-pr/notes-link)"
       else
         local c23_findings
         c23_findings=$(echo "$c23_output" | wc -l | tr -d ' ')

@@ -6,49 +6,51 @@
 
 ## Purpose
 
-Detect and remediate stale cross-references in the workspace's documentation corpus. Stale links and outdated path references survive reorganizations and erode navigability. The protocol provides automated detection (governance + skill SKILL.md via Check 14; release-corpus via Check 15) and a manual-checklist clause for the semantic-drift pattern that automation cannot reach.
+Detect and remediate stale cross-references in the workspace's documentation corpus. Stale links and outdated path references survive reorganizations and erode navigability. The protocol provides automated detection (governance + skill SKILL.md via Check 14; the earlier release-corpus Check 15 was retired in v2 — the release-corpus link surface is covered by the release-corpus link checker) and a manual-checklist clause for the semantic-drift pattern that automation cannot reach.
 
 ## Three Patterns
 
 | Pattern | Description | Originating evidence | Detection mechanism |
 |---|---|---|---|
 | **A — deleted-target** | Link resolves to a file that no longer exists |  (`IMPROVEMENTS.md` references) | Link-resolver primitive |
-| **B — path-drift** | Link points to an outdated directory after a reorg |  (`.claude/evals/results/` → `pmo-platform/engineering/evals/results/`) | Link-resolver primitive |
+| **B — path-drift** | Link points to an outdated directory after a reorg |  (e.g. a pre-restructure `pmo-platform/...` path → its live `core/`/`release/`/`operations/` location) | Link-resolver primitive |
 | **C — temporal-language drift** | Stale "deferred", "interim", "Future:" framing |  | **Manual checklist; automation tracked at F-1** |
 
 ## The Primitive
 
-`pmo-platform/engineering/tools/check-doc-links.py` — Python stdlib-only (`/usr/bin/python3` 3.9+). Parses markdown links, resolves relative paths, reports broken refs as TSV/JSON.
+`core/deploy/tools/check-doc-links.py` — Python stdlib-only (`/usr/bin/python3` 3.9+). Parses markdown links, resolves relative paths, reports broken refs as TSV/JSON.
 
 **Usage:**
 ```bash
-python3 pmo-platform/engineering/tools/check-doc-links.py \
+python3 core/deploy/tools/check-doc-links.py \
   --target-paths <comma-separated-globs> \
   [--allowlist .claude/skip-doc-link-check.txt] \
+  [--require-targets] \
   [--output-format tsv|json|github]
 ```
 
-**Self-test:** `python3 pmo-platform/engineering/tools/check-doc-links.py --self-test`
+**Self-test:** `python3 core/deploy/tools/check-doc-links.py --self-test`
 
-**Path resolution:** Inline `[text](path)` and reference-style `[text][label]`. Relative paths resolve from source-file directory; workspace-rooted-style paths (`pmo-platform/`, `.claude/`, `projects/`, `memory/`) get a workspace-root fallback (matches GitHub web rendering). Fenced code blocks excluded.
+**Fail-loud on unresolved targets:** `--require-targets` treats a `--target-paths` glob entry that resolves to zero files as a path-resolution failure (exit 3) rather than a clean pass, so a relocated or typo'd scan surface cannot read GREEN. Check 14 passes this flag.
+
+**Path resolution:** both inline links (`[text]` followed by a parenthesized path) and reference-style links (`[text]` followed by a `[label]`) are parsed. Relative paths resolve from source-file directory; workspace-rooted-style paths get a workspace-root fallback (matches GitHub web rendering). The resolver carries both the live module-relative prefixes (`core/`, `release/`, `operations/`, `docs/`) and the legacy `pmo-platform/`/`.claude/` prefixes for backward-compat. Fenced code blocks excluded.
 
 ## Enforcement Surfaces
 
 | Check | Scope | Posture |
 |---|---|---|
-| **Check 14** | Governance + skill SKILL.md (`pmo-platform/governance/`, `pmo-platform/reference/`, `.claude/rules/`, `pmo-platform/skills/*/SKILL.md`) | warn-mode initial; logs to `.claude/hooks/doc-link-warn-log.jsonl` |
-| **Check 15** | Release corpus (`pmo-platform/governance/RELEASE_LOG.md`, `pmo-platform/releases/plans/*.md`, `pmo-platform/releases/notes/*.md`) | warn-mode initial; same log surface |
+| **Check 14** | Governance + reference + rules + skill SKILL.md across the live modules (`core/governance/`, `core/disciplines/`, `core/schemas/`, `core/standards/`, `core/specs/`, `core/rules/`, `core/CLAUDE.md.template`, `release/governance/`, `release/references/`, `operations/OPERATIONS.md`, and `{core,operations,release}/skills/*/SKILL.md`) | warn-mode initial; logs to the deploy-check warn-log surface |
+| **Check 15** | RETIRED in v2 — the release-corpus cross-link integrity check was removed; the release-corpus link surface is covered by the release-corpus link checker, and note-content is linted by Check 20 via `lint_release_corpus.py` | n/a (retired) |
 
-Both checks call the same primitive script with disjoint `--target-paths`. Layer 2 (Operations) is excluded per CLAUDE.md domain boundary.
+Check 14 calls the primitive with the live module-scoped `--target-paths`. Layer 2 (Operations) governance + references are in scope; project/operational content is excluded per CLAUDE.md domain boundary.
 
 ## Allowlist
 
 `.claude/skip-doc-link-check.txt` — one pattern per line; trailing slash matches directories; `#` introduces comments.
 
-**Default entries:**
-- `pmo-platform/releases/archive/` — historical references by design
-- `pmo-platform/analysis/legacy-imp-audit-*/` — audit evidence
-- `pmo-platform/analysis/cross-domain-drift-audit-*/` — audit evidence
+**Default entries (illustrative — the allowlist file itself is operator-instance):**
+- `release/releases/archive/` — historical references by design
+- audit-evidence subtrees (e.g. `legacy-imp-audit-*/`, `cross-domain-drift-audit-*/`) — read-once analysis artifacts
 
 **Adding entries:** standard text editor + governance approval for non-trivial scope expansion. Allowlist additions document WHY the path is allowlisted, not WHY the operator wants to silence warnings.
 
@@ -67,7 +69,7 @@ Until F-1 ships automated text-pattern detection, operators executing post-reorg
 
 ```bash
 grep -rEn "\b(deferred|interim|Future:|TODO:|pending|will be|to be added|not yet)\b" \
-  pmo-platform/reference/ .claude/rules/ pmo-platform/governance/
+  core/standards/ core/specs/ core/rules/ release/references/ release/governance/
 ```
 
 Findings route to the standard surgical-fix path — small commits, parser-clean PR body, mark stale framing as current-state or remove it.
@@ -108,7 +110,7 @@ A link can be perfectly resolvable today — it passes the link-resolution check
 
 ## Related
 
-- Companion check: Check 15 (release-corpus scope)
+- Release-corpus link surface: covered by the release-corpus link checker (the earlier Check 15 was retired in v2)
 - Pattern C automation: F-1
 - Broken-ref backlog drainage: F-4
 - Frontmatter schema backfill (corpus hygiene): F-3

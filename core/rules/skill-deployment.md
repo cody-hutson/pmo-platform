@@ -170,9 +170,10 @@ governance presence (Check 4), skill-roster drift (Check 5), canonical-structure
 rules-mirror sync (Check 9), editor audit-trail on migrated skills (Check 10),
 harness sync (Check 11), user-local skills mirror sync (Check 12), template-sync
 drift detection (Check 13), doc-link maintenance — governance + skill SKILL.md
-scope (Check 14), release-corpus cross-link integrity — RELEASE_LOG +
-plans + notes scope (Check 15), framework-corpus version-anchor
-drift detection — catalog-registry scope (Check 18), RELEASE_LOG ↔ RELEASE_INDEX consistency (Check 23), universal-vs-localized-context authoring guardrail — DC1-DC4 signature scan over Layer-1 corpus (Check 25), doc-impact resolution at Stage 13 close — per-issue Documentation Impact declaration verified against release-branch commit range (Check 28), return-value-conformance for hub-spawned spokes — `.claude/agents/pmo-*.md` cross-reference scan (Check 29), and slash-command quoting lint — pmo-authored slash commands under `pmo-platform/harness/*/commands/*.md` scanned for unquoted `$ARGUMENTS` in Bash-execution context (Check 30).
+scope (Check 14; the earlier release-corpus Check 15 was retired in v2),
+note-content lint — release-notes-standard.md §3.2 over the release notes
+(Check 20), framework-corpus version-anchor
+drift detection — catalog-registry scope (Check 18), RELEASE_LOG ↔ RELEASE_INDEX consistency (Check 23), universal-vs-localized-context authoring guardrail — DC1-DC4 signature scan over Layer-1 corpus (Check 25), doc-impact resolution at Stage 13 close — per-issue Documentation Impact declaration verified against release-branch commit range (Check 28), return-value-conformance for hub-spawned spokes — `.claude/agents/pmo-*.md` cross-reference scan (Check 29), and slash-command quoting lint — pmo-authored slash commands under `harness/*/commands/*.md` scanned for unquoted `$ARGUMENTS` in Bash-execution context (Check 30).
 Use `--check` (without `--warn`) to exit non-zero on any drift. Checks 6-7, 11-13 always-enforce;
-Checks 8-10, 14, 15, 18, 23, 25, 28, 29, and 30 default to warn-mode per `.claude/hooks/deploy-check.mode` during their
+Checks 8-10, 14, 18, 20, 23, 25, 28, 29, and 30 default to warn-mode per `.claude/hooks/deploy-check.mode` during their
 respective shakedown windows. For structured output (Stage 13 evidence): `./deploy.sh --report`

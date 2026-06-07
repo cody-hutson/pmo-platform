@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Release-corpus integrity validator for deploy.sh Checks 15 and 20.
+"""Release-corpus integrity validator for deploy.sh Check 20.
 
-Per the v11.04b-3 D5 Stage 5 spec; extended in v11.18 with
-the note-content checks from release-notes-standard.md §3.2 (checks 9-12).
+Per the v11.04b-3 D5 Stage 5 spec; extended with the note-content
+checks from release-notes-standard.md §3.2 (checks 9-12). Check 15
+(release-corpus cross-link integrity) was RETIRED in v2; this validator is
+wired to Check 20 (note-content lint).
 
 Validates:
 
@@ -21,15 +23,16 @@ Validates:
       - 11: 'Why it matters:' beat present per Section 6a bullet
             (or <!-- impact:foundational --> escape marker)
       - 12: No raw file paths in Section 6a bullet bodies
-      Forward-only from v11.18 (the release that ships the new standard).
+      Floored at the lowest live version family (v1.x) per NOTE_CONTENT_CUTOVER.
 
-Composes with the doc-link primitive (`check-doc-links.py`) which Check 15
-also invokes for cross-link resolution. This validator handles the
-schema/structural checks that go beyond link resolution.
+This validator handles the schema/structural checks that go beyond link
+resolution. (The doc-link primitive `check-doc-links.py` covers cross-link
+resolution separately under Check 14; Check 15 was retired in v2.)
 
-Authored under the v11.04b-3 D5 deliverable; extended in
-v11.18; lives at core/deploy/tools/lint_release_corpus.py
-per the established engineering tooling location.
+Authored under the v11.04b-3 D5 deliverable; lives at
+core/deploy/tools/lint_release_corpus.py per the established engineering
+tooling location. Corpus paths target the live modular-monolith layout
+(release/releases/...).
 
 Usage:
     python3 core/deploy/tools/lint_release_corpus.py
@@ -39,7 +42,10 @@ Usage:
     python3 core/deploy/tools/lint_release_corpus.py --check type-coherence
     python3 core/deploy/tools/lint_release_corpus.py --check note-content
 
-Exit codes: 0 = pass, 1 = findings (one or more checks failed).
+Exit codes: 0 = pass, 1 = content findings (one or more checks failed),
+3 = path-resolution failure (a required corpus dir/file did not resolve —
+CORPUS-PATH-UNRESOLVED — the surface is unverifiable, not clean). Exit 3
+matches the cross-module-audit.sh family convention (per #459).
 """
 from __future__ import annotations
 
@@ -49,10 +55,13 @@ import sys
 from pathlib import Path
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-PLANS_DIR = WORKSPACE_ROOT / "pmo-platform" / "releases" / "plans"
-NOTES_DIR = WORKSPACE_ROOT / "pmo-platform" / "releases" / "notes"
-INDEX_PATH = WORKSPACE_ROOT / "pmo-platform" / "releases" / "RELEASE_INDEX.md"
-LOG_PATH = WORKSPACE_ROOT / "pmo-platform" / "governance" / "RELEASE_LOG.md"
+# Live modular-monolith layout (post-restructure). The pre-restructure
+# pmo-platform/... prefix is DEAD — the corpus lives under release/releases/.
+# Note: RELEASE_LOG.md is under release/releases/ (NOT governance/).
+PLANS_DIR = WORKSPACE_ROOT / "release" / "releases" / "plans"
+NOTES_DIR = WORKSPACE_ROOT / "release" / "releases" / "notes"
+INDEX_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_INDEX.md"
+LOG_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_LOG.md"
 
 CANONICAL_FILENAME_RE = re.compile(
     r"^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?(-[0-9a-z][-0-9a-z]*)?_(RELEASE_PLAN|RELEASE_NOTES)\.md$"
@@ -69,19 +78,19 @@ CUTOVER_RELEASES = {"v11.04b-3", "v11.04b-3-doc-cleanup"}
 REQUIRED_FIELDS = {"version", "date", "type", "issues", "pr", "links"}
 TYPE_VALUES = {"plan", "note", "abandoned-plan", "phase-plan", "audit-plan"}
 
-# Note-content lint (release-notes-standard.md §3.2 checks 9-12), forward-only
-# from v11.18 (the release that ships the new standard).
+# Note-content lint (release-notes-standard.md §3.2 checks 9-12).
 #
-# Cutover handling: version-tuple ordering does NOT map cleanly to chronological
-# release order (v12.09 and v16.02 have higher version-tuples than v11.18 but
-# shipped earlier). PRE_CUTOVER_EXEMPT lists those releases explicitly. Future
-# releases shipping after v11.18 with version-tuple >= (11, 18, "", 0) AND not
-# in the exempt set are subject to the lint.
-NOTE_CONTENT_CUTOVER = (11, 18, "", 0)
-PRE_CUTOVER_EXEMPT_VERSIONS = {
-    "v12.09",  # shipped 2026-05-15, predates v11.18 (2026-05-17)
-    "v16.02",  # shipped 2026-05-17 morning, predates v11.18
-}
+# Cutover floor reset to (1, 0, "", 0) for the re-versioned modular-monolith
+# corpus: every live note is in the v1.x / v3.x families, all of which are
+# BELOW the prior (11, 18) floor — so the old floor skipped all 11 live notes
+# and Check 20 passed vacuously even with correct paths. The §3.2 content
+# discipline is forward-going; the re-versioned corpus has no pre-standard
+# legacy to grandfather, so the floor is the lowest live family (v1.x) and the
+# exempt set is empty. (Version-less notes parse to (0,0,'',0) and stay below
+# (1,0) — a known, accepted boundary: version-less notes predate the version-
+# keyed convention; linting them needs a version-less branch, not a floor change.)
+NOTE_CONTENT_CUTOVER = (1, 0, "", 0)
+PRE_CUTOVER_EXEMPT_VERSIONS: set[str] = set()
 SECTION_6A_HEADER_RE = re.compile(r"^##\s+What changed for everyone", re.IGNORECASE)
 NEXT_H2_RE = re.compile(r"^##\s+")
 VERSION_KEY_RE = re.compile(r"^v(\d+)\.(\d+)([a-z])?(?:-(\d+))?")
@@ -108,6 +117,26 @@ BANNED_JARGON_REGEX = [
     (re.compile(r"\bgate-blocking\b", re.IGNORECASE), "gate-blocking"),
     (re.compile(r"\breversibility tier\b", re.IGNORECASE), "reversibility tier (standalone phrase)"),
 ]
+
+
+# Sentinel prefix for path-resolution-failure findings. main() maps any finding
+# carrying this prefix to exit 3 (path-config error) per the #459 fail-loud
+# contract — distinct from content findings (exit 1) and clean (exit 0).
+CORPUS_PATH_UNRESOLVED_PREFIX = "CORPUS-PATH-UNRESOLVED"
+
+
+def _rel(path: Path) -> str:
+    """Repo-root-relative display string; defensive against paths outside root.
+
+    All corpus dirs resolve inside WORKSPACE_ROOT in normal operation, but a
+    misconfigured path could sit outside it; relative_to() would then raise
+    ValueError. Fall back to the absolute path string so a path-resolution
+    finding never crashes the linter (Mode-3 robustness, per the Stage 5 spec).
+    """
+    try:
+        return str(path.relative_to(WORKSPACE_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def parse_frontmatter(text: str) -> dict | None:
@@ -160,13 +189,17 @@ def is_post_cutover(version: str) -> bool:
 def check_filename_compliance() -> list[str]:
     findings: list[str] = []
     if not PLANS_DIR.exists():
-        return findings
+        # A missing corpus dir is a PATH-RESOLUTION FAILURE, not a clean pass:
+        # silently returning [] is the exact vacuous-pass #83 fixes. Emit a
+        # distinct finding so main() can exit 3 (path-config error) rather than
+        # let Check 20 read GREEN against a non-existent surface.
+        return [f"CORPUS-PATH-UNRESOLVED: plans dir does not resolve at {_rel(PLANS_DIR)} — corpus path misconfigured"]
     for path in sorted(PLANS_DIR.glob("*.md")):
         name = path.name
         if name in FILENAME_ALLOWLIST:
             continue
         if not CANONICAL_FILENAME_RE.match(name):
-            findings.append(f"FILENAME-NONCOMPLIANT: pmo-platform/releases/plans/{name} does not match canonical regex; add to FILENAME_ALLOWLIST if intentional")
+            findings.append(f"FILENAME-NONCOMPLIANT: {_rel(path)} does not match canonical regex; add to FILENAME_ALLOWLIST if intentional")
     return findings
 
 
@@ -174,11 +207,12 @@ def check_schema_validity() -> list[str]:
     findings: list[str] = []
     for directory in (PLANS_DIR, NOTES_DIR):
         if not directory.exists():
+            findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: corpus dir does not resolve at {_rel(directory)} — corpus path misconfigured")
             continue
         for path in sorted(directory.glob("v11.04b-3*.md")):
             text = path.read_text(encoding="utf-8")
             fm = parse_frontmatter(text)
-            rel = str(path.relative_to(WORKSPACE_ROOT))
+            rel = _rel(path)
             if fm is None:
                 findings.append(f"SCHEMA-MISSING: {rel} is post-cutover (v11.04b-3+) but lacks YAML frontmatter")
                 continue
@@ -194,8 +228,13 @@ def check_schema_validity() -> list[str]:
 def check_index_row_count() -> list[str]:
     findings: list[str] = []
     if not LOG_PATH.exists() or not INDEX_PATH.exists():
+        # Either surface missing is a PATH-RESOLUTION FAILURE (the row-count gate
+        # cannot run). Emit CORPUS-PATH-UNRESOLVED so main() exits 3 rather than
+        # silently returning a near-empty finding set.
+        if not LOG_PATH.exists():
+            findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: RELEASE_LOG.md does not resolve at {_rel(LOG_PATH)} — corpus path misconfigured")
         if not INDEX_PATH.exists():
-            findings.append(f"INDEX-MISSING: {INDEX_PATH.relative_to(WORKSPACE_ROOT)} does not exist")
+            findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: RELEASE_INDEX.md does not resolve at {_rel(INDEX_PATH)} — corpus path misconfigured")
         return findings
     log_rows = sum(1 for line in LOG_PATH.read_text().splitlines() if re.match(r"^\| v[0-9]", line))
     index_rows = sum(1 for line in INDEX_PATH.read_text().splitlines() if re.match(r"^\| v[0-9]", line))
@@ -208,13 +247,14 @@ def check_type_coherence() -> list[str]:
     findings: list[str] = []
     for directory, expected_type in ((PLANS_DIR, "plan"), (NOTES_DIR, "note")):
         if not directory.exists():
+            findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: corpus dir does not resolve at {_rel(directory)} — corpus path misconfigured")
             continue
         for path in sorted(directory.glob("v11.04b-3*.md")):
             text = path.read_text(encoding="utf-8")
             fm = parse_frontmatter(text)
             if fm is None:
                 continue
-            rel = str(path.relative_to(WORKSPACE_ROOT))
+            rel = _rel(path)
             type_val = fm.get("type", "")
             if not type_val:
                 continue
@@ -280,12 +320,20 @@ def parse_bullets(section_text: str) -> list[str]:
 def check_note_content() -> list[str]:
     """Lint Section 6a content per release-notes-standard.md §3.2 checks 9-12.
 
-    Forward-only from v11.18 — pre-cutover notes exempt.
+    Floor is NOTE_CONTENT_CUTOVER; version-less notes (tuple (0,0)) stay exempt.
     """
     findings: list[str] = []
     if not NOTES_DIR.exists():
-        return findings
+        # PATH-RESOLUTION FAILURE — a missing notes dir is the exact vacuous
+        # pass #83 fixes (Check 20 lints nothing and reads GREEN). Emit a
+        # distinct finding so main() exits 3, never silently exits 0.
+        return [f"{CORPUS_PATH_UNRESOLVED_PREFIX}: notes dir does not resolve at {_rel(NOTES_DIR)} — corpus path misconfigured"]
 
+    # check-12 banned-path needle: detects RAW pre-restructure repo paths in
+    # Section 6a prose. The pmo-platform/ literal is intentionally retained
+    # (modernizing it to also catch release/-rooted paths is accepted-residual
+    # for v3.20 per the Stage 5 spec; the ratified deliberate-violation DT proof
+    # depends on this needle matching pmo-platform/...).
     path_re = re.compile(r"(?:pmo-platform/|\.claude/)\S+")
     link_strip_re = re.compile(r"\[[^\]]*\]\([^)]*\)")
 
@@ -300,7 +348,7 @@ def check_note_content() -> list[str]:
             continue
 
         text = path.read_text(encoding="utf-8")
-        rel = str(path.relative_to(WORKSPACE_ROOT))
+        rel = _rel(path)
         section_6a = extract_section_6a(text)
 
         if section_6a is None:
@@ -359,6 +407,15 @@ def main() -> int:
 
     for f in findings:
         print(f)
+
+    # Exit-code contract (per #459 fail-loud): a path-resolution failure
+    # (CORPUS-PATH-UNRESOLVED — a required corpus dir/file did not resolve) is
+    # NOT a content finding. It exits 3 (path-config error) so deploy.sh can
+    # distinguish "could not run against the corpus" from real §3.2 findings
+    # (exit 1) and clean (exit 0). A path-resolution failure dominates: if any
+    # is present, exit 3 regardless of other findings.
+    if any(f.startswith(CORPUS_PATH_UNRESOLVED_PREFIX) for f in findings):
+        return 3
     return 1 if findings else 0
 
 
