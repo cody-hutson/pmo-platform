@@ -753,6 +753,17 @@ Required chip-prompt content — Stage 7/8/9 chip prompts MUST embed these three
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Stage 5 Chip Pattern — Design-Exploration Discipline:**
+
+When the hub authors a Stage 5 Solutioning chip prompt AND the issue carries a design choice with two or more candidate approaches, the chip MUST direct the spoke to run the design-exploration protocol BEFORE the trade-off matrix — divergent generation of ≥3 genuinely distinct candidates, then convergent narrowing (elimination against hard constraints with one-line kill-reasons), then the trade-off matrix on the survivors. This is the D-D instruction's second landing surface (the first is the Stage-5 Phase A4 spec): routing it into the Stage-5 chip propagates the instruction to spawned spokes so a spoke does not anchor on its first solution and retrofit alternatives to pass the design-review checklist's ≥3-alternatives check. The instruction is OMITTED (with a one-line spoke rationale) when the issue's design has a single forced approach — the same non-ceremony omission signal the protocol itself uses.
+
+Required chip-prompt content — Stage 5 Solutioning chip prompts (when the ≥2-candidate predicate holds) MUST embed:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block, BEFORE the trade-off-matrix / ADR step): *"Run the design-exploration protocol per `release/references/standards/design-exploration.md` BEFORE the trade-off matrix: generate ≥3 genuinely distinct candidate approaches (distinctness test on mechanism / blast radius / reversibility / placement), eliminate against hard constraints with a one-line kill-reason each, then score the survivors on the canonical axes (Reversibility × Confidence × Blast radius × Upstream-compat). Omit with a one-line rationale only if the design has a single forced approach."*
+2. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/standards/design-exploration.md (divergent generation → convergent narrowing → trade-off matrix; the §6 worked example + the omission/non-ceremony signal)`.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Stage 5 Chip Pattern — Adversarial Design Review Discipline:**
 
 When the hub authors a Stage 5 chip prompt AND Solutioning has fired for the release (Phase 0 Activation Gate ACTIVE), every Stage 5 Solutioning spoke launched via Procedure 3 MUST be paired with a sequential follow-on launch of the `pmo-adversarial` agent (subagent_type `pmo-adversarial`) that reviews the Solutioning spoke's output. The adversarial review fires AFTER the Solutioning spoke posts its output comment AND BEFORE the hub composes the Collective Review Decision Briefing — sequential ordering preserves independence (the adversarial reviewer reads the FINISHED designing-spoke output, then produces 3 structured-list findings advisory to the Operator). The pairing is **uniform** — every in-scope Stage 5 spoke output gets an adversarial review when Solutioning fires; no per-issue selective routing.
