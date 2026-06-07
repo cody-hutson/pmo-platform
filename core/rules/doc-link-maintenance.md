@@ -39,7 +39,7 @@ python3 core/deploy/tools/check-doc-links.py \
 
 | Check | Scope | Posture |
 |---|---|---|
-| **Check 14** | Governance + reference + rules + skill SKILL.md across the live modules (`core/governance/`, `core/standards/`, `core/specs/`, `core/rules/`, `release/governance/`, `release/references/`, `operations/OPERATIONS.md`, `operations/references/`, and `{core,operations,release}/skills/*/SKILL.md`) | warn-mode initial; logs to the deploy-check warn-log surface |
+| **Check 14** | Governance + reference + rules + skill SKILL.md across the live modules (`core/governance/`, `core/disciplines/`, `core/schemas/`, `core/standards/`, `core/specs/`, `core/rules/`, `core/CLAUDE.md.template`, `release/governance/`, `release/references/`, `operations/OPERATIONS.md`, and `{core,operations,release}/skills/*/SKILL.md`) | warn-mode initial; logs to the deploy-check warn-log surface |
 | **Check 15** | RETIRED in v2 — the release-corpus cross-link integrity check was removed; the release-corpus link surface is covered by the release-corpus link checker, and note-content is linted by Check 20 via `lint_release_corpus.py` | n/a (retired) |
 
 Check 14 calls the primitive with the live module-scoped `--target-paths`. Layer 2 (Operations) governance + references are in scope; project/operational content is excluded per CLAUDE.md domain boundary.

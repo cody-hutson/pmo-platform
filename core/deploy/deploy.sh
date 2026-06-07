@@ -2159,7 +2159,7 @@ cmd_check() {
   # ADR-framework-catalog — parallels Check 13's TEMPLATE_SYNC_MAP registry,
   # not Check 14's corpus glob. Invokes the primitive at
   # core/deploy/tools/check-version-anchors.py over the governed
-  # registry release/specs/framework-catalog.md. Sub-checks:
+  # registry core/specs/framework-catalog.md. Sub-checks:
   # 18a catalog completeness / 18b catalog↔doc anchor consistency / 18c cadence
   # aging. Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15 precedent); flip-to-enforce timeline + explicit reflexive
