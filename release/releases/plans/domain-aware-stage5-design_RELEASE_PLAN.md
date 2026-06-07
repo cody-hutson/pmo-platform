@@ -9,8 +9,7 @@ links:
   log_anchor: "#domain-aware-stage5-design"
 reversibility-tier: CHEAP
 themes: ["cluster:pipeline-definitions", "cluster:knowledge-architecture"]
-domain_practice: "{ source: N/A — pipeline-internal release, date: 2026-06-07, name: domain best-practice corpus (self-referential) }"
-domain: governance
+domain_practice: "{ source: N/A — pipeline-internal release, date: 2026-06-07, domain: governance }"
 ---
 
 <!-- reference-durability: allow-version-ref -->
