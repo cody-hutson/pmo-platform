@@ -1,3 +1,5 @@
+<!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Blast Radius Protocol
 
 > **Source:** Sub-slice 1 — Stage 5 Solutioning support.
@@ -259,3 +261,51 @@ The CLI auto-detects mirror pairs by **path topology**: any file present in BOTH
 - [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) — Hook layer + allowlist maintenance
 - [`release/references/how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) — Spoke prompt templates citing this CLI
 - [`release/tools/blast-radius.sh`](../../tools/blast-radius.sh) — The CLI itself
+- [`release/references/protocols/mixed-release-solutioning-routing.md`](mixed-release-solutioning-routing.md) — § 6 C1 dependency-isolation consumer of blast-radius output (§ 12 forward-note)
+
+---
+
+## 12. Domain-appropriate impact analysis (method selection + opt-out)
+
+`blast-radius.sh` is the **doc-corpus inbound-reference tracer**: it answers "which files mention this file?" over the markdown/sh/json/yml/toml source tree (§ 1, § 9). It is the **DEFAULT** Stage-5 A3 impact-analysis instrument for doc / governance / pipeline-internal deliverables, and that default is unchanged. For a deliverable whose domain is not the doc corpus — a code module's import graph, a UI component's dependency tree, a platform's solution-component dependency — the markdown tracer returns a structurally-inapplicable signal (§ 9 names this limitation). The Stage-5 A3 method-selector that chooses the domain-appropriate fan-out method lives in [`release/references/pipeline/stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) Phase A3.1; that selector is the **activation authority** (it decides which method fires for which domain). This section is the protocol-level **home** for the opt-out record schema the selector references and for a worked code-domain example. The selector branches on the `domain:` class field authored at Stage 4 Phase A1.5 (per [`release/references/pipeline/stage-04-planning.md`](../pipeline/stage-04-planning.md) § 5.7) — the same single substrate field the domain-guide index reads; the method-selection consumes that field, it does not re-derive a domain signal.
+
+### Opt-out record schema
+
+When a non-doc deliverable has no domain-appropriate instrument at design time, the Stage-5 spoke records the following block in its Evidence section (modeled on the § 7 spoke-citation block — it cites a *different* method plus a not-applicable statement for the default tool). This is a **within-A3 opt-out**: the issue stays in Stage 5, A3 fires, and design proceeds; it is NOT the whole-issue `SKIP` token from the mixed-routing protocol (which removes the issue from Stage 5 entirely, with no design at all).
+
+```
+### Impact analysis (Phase A3 — domain-aware)
+- Deliverable domain (domain: class field): <software | web | enterprise-platform | ...>
+- Method selected: <code import-graph | component dependency-tree | solution-component graph | blast-radius.sh>
+- blast-radius.sh applicability: NOT APPLICABLE — markdown-tree tracer has no model of <import graph | component tree | solution-component dependency> (§ 9)
+- Fan-out performed: <command(s) run OR manual trace described> → <N first-order consumers, top referrers>
+- Impact classification: <Cosmetic | Behavioral | Structural> (§ 5 tiers, reused domain-agnostically)
+```
+
+The impact-classification tiers in § 5 (Cosmetic ≤1 / Behavioral 2–5 / Structural ≥6-or-critical) are **domain-agnostic** — they branch on first-order count plus criticality, not on "doc-ness" — and apply to every method. Only the fan-out discovery mechanism is domain-specific. An opt-out record missing the `Fan-out performed` line (no command and no manual-trace description) is an incomplete A3, not a valid opt-out: it fails the Section 1 exit gate in [`design-review-checklist.md`](../templates/design-review-checklist.md), which accepts a populated opt-out record's method + applicability + fan-out + tier lines in lieu of the schema-v1 fields when the method selected is not `blast-radius.sh`.
+
+### Worked example — code-domain fan-out
+
+A Stage-5 spoke designs a change to the event-schema-writing function inside the helper `release/tools/append-pipeline-event.sh`, classified `domain: software`. `blast-radius.sh` would surface *doc* mentions of the file path but not the *callers* of the function — the wrong set for impact purposes. The domain-appropriate method is **import/call-graph fan-out**:
+
+```
+# first-order: who imports / sources / calls this module?
+rg -n "append-pipeline-event\.sh|append_pipeline_event" --type sh --type py release/ core/
+# → callers: query-pipeline-event.sh (sources it), automated-closeout.sh
+# second-order: who calls THOSE? (transitive, depth=2 to match blast-radius depth)
+rg -n "query-pipeline-event|automated-closeout" release/ core/
+```
+
+`first_order = 2 callers` → **Behavioral** tier (§ 5) → Risk Register entry + per-caller verify at Stage 6. The fan-out is over the **call/import graph**, not the doc-reference graph. First-order semantics for this method: a first-order consumer is a file that directly sources, imports, or calls the changed module (a re-export counted once); second-order is depth=2, matching the blast-radius depth default, so the § 5 count-tiers are computed on a reproducibly-defined population.
+
+### Deferred fan-out tooling
+
+A domain-fan-out *instrument* — an import-graph / component-tree / solution-component-graph CLI analogous to `blast-radius.sh` for the doc corpus — is a separate future capability; no such tool exists in `release/tools/` today (`blast-radius.sh` is the only fan-out tracer, and its `SCANNED_TYPES` carry no language-import model per § 9 / § 10). Until that instrument ships, non-doc domains use the manual fan-out documented above plus the opt-out record. The manual fan-out + opt-out is a **complete** A3 on its own — design still happens; the deferred tool is an ergonomics upgrade, not a correctness gate.
+
+### Downstream blast-radius consumers (forward-note)
+
+Other surfaces compute gates from `blast-radius.sh` schema-v1 output on a deliverable's files — the mixed-routing dependency-isolation control (per [`mixed-release-solutioning-routing.md`](mixed-release-solutioning-routing.md) § 6 C1) and the Stage 4 A4 Cross-PR Overlap Audit (§ 6 above). When a deliverable's A3 records a non-markdown method plus an opt-out, those consumers must use the domain-appropriate fan-out set rather than the structurally-inapplicable markdown trace; the wiring for each is authored when that path activates (mixed-routing is documented-but-disabled today, so this is latent, not live). Stating it here prevents a silent divergence in which one consumer opts a deliverable out of the markdown tracer while another still computes a gate from its degraded output.
+
+### Cutover (introducing-release-exempt)
+
+This section's method-selection home + opt-out record apply to releases entering Stage 5 strictly AFTER this protocol's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). **The introducing release itself is exempt** (reflexive-pipeline-loop discipline — it is itself a pipeline-internal/governance release, so its own Stage-5 A3 takes the markdown-tree DEFAULT). All releases that entered Stage 5 prior to the introducing release are also exempt.
