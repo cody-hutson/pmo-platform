@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.07] - 2026-06-07
+
+The work-item type layer lands as a methodology-agnostic, best-practice template — a thin generic Work Item entity beneath Milestone/Workstream, a domain-neutral work-organization mapping framework, and a declarative type-pack meta-schema — so a user brings their own work types and an agent understands their work structure by nature.
+
+[Full notes](release/releases/notes/v1.07_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.07)
+
 ## [domain-aware-stage5-design] - 2026-06-07
 
 Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release) — Stage 5/7 design becomes domain-aware instead of assuming every deliverable is a pmo-platform markdown file. Shipped single-branch via one [release pull request](https://github.com/cody-hutson/pmo-platform/pull/503) (the release-tracking corpus records the PR and merge SHA).
