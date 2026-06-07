@@ -9,6 +9,21 @@ Per CR Conflict A resolution: single shared tool with umbrella name
 'bundle-issues-parser.py' rather than per-concern tools. Stdlib-only Python 3.9+;
 matches check-doc-links.py / lint_release_corpus.py precedent.
 
+Parse semantics (#291 v3.20 robustification — DS-1..DS-4 of the ratified Stage 5 spec):
+  - Section headings are matched suffix-tolerantly (a trailing parenthetical/colon
+    no longer defeats the match) and against a closed alias set (e.g. "Files Affected").
+  - Affected-Files paths are extracted by extension-token OR module-prefixed-dir
+    matching (bare filenames, skill-relative paths, and `core/`|`release/`|`operations/`
+    prefixes all recognized), from bullet AND prose lines.
+  - A MISSING Dependencies section parses CLEAN (deps are optional at intake per
+    improvement.yml and absent from bug/observation/adr templates) — previously it
+    parsed FAILED, a false negative. An AF section with an explicit no-files
+    declaration ("None — label-only") parses CLEAN with zero files.
+  - The conformant-bundleable parse target (improvement|bug bodies with a recognized
+    AF heading) is measured at >=90% combined-clean; the release-planner Mode A
+    pre-filter (a separate SKILL.md change, not in this tool) sets aside bodies with
+    no recognized AF heading.
+
 Usage:
   python3 bundle-issues-parser.py --milestone "v2.10-..." [--output-format json|tsv|github]
   python3 bundle-issues-parser.py --issues 46,49,57 [--output-format json]
@@ -55,10 +70,49 @@ class IssueRecord:
 
 DEFERRAL_MARKER = "[ASSUMPTION – CONFIRM] TBD — identified in Planning"
 SECTION_HEADING_RE = re.compile(r"^###\s+", re.MULTILINE)
-BACKTICK_PATH_RE = re.compile(r"`([^`\s]+/[^`]*)`")
-WORKSPACE_PATH_RE = re.compile(
-    r"(?:pmo-platform|\.claude|projects|memory)/[^\s,)`]+"
+
+# DS-2 (#291) — heading-variant alias sets. Closed, evidence-bounded sets drawn
+# from the live open-issue corpus survey (#461 Stage 5 spec); NOT fuzzy matching.
+# First-match-wins; ordered most-common first.
+AF_HEADING_ALIASES = [
+    "Affected Files",
+    "Files Affected",
+    "Affected surfaces",
+    "Affected file",
+    "Affected paths",
+    "Files / surfaces affected",
+]
+DEP_HEADING_ALIASES = [
+    "Dependencies",
+    "Dependency",
+    "Depends on",
+    "Blocked by",
+    "Relationships",
+]
+
+# DS-3 (#291) — generalized path extraction. Replaces the legacy
+# BACKTICK_PATH_RE (required an internal '/') → WORKSPACE_PATH_RE (required a
+# known top-level prefix) cascade, which missed bare filenames (`PMO.md`,
+# `deploy.sh`), skill-relative paths (`delivery-engine/references/x.md`), and the
+# current module prefixes (`core/`, `release/`, `operations/`). Two ordered
+# matchers, backticked-or-not:
+#   1. EXT_PATH_RE  — any extension-bearing token (captures bare + relative + prefixed)
+#   2. DIR_PATH_RE  — module-prefixed trailing-slash directory tokens
+EXT_PATH_RE = re.compile(
+    r"`?([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|py|sh|ya?ml|toml|json|txt|j2|cfg))`?"
 )
+DIR_PATH_RE = re.compile(
+    r"`?((?:core|release|operations|docs|packages|pmo-platform|\.claude|projects|memory|\.github)"
+    r"/[A-Za-z0-9_./-]*)`?"
+)
+# DS-4 (#291) — explicit no-files declaration inside a present AF section
+# (e.g. "None — label-only update", "no file changes"). Marks the section clean
+# with zero files rather than failed.
+NONE_FILES_RE = re.compile(
+    r"^\s*[-*]?\s*(?:none\b|no file changes\b|no files\b|n/?a\b|label-only\b)",
+    re.IGNORECASE,
+)
+
 INTENT_RE = re.compile(
     r"\((add|edit|delete)\s*(?:—|--|-)\s*[^)]*\)", re.IGNORECASE
 )
@@ -66,11 +120,19 @@ DEP_RE = re.compile(r"#(\d+)")
 
 
 def extract_section(body: str, heading: str) -> Optional[str]:
-    """Extract content of a '### <heading>' section until next H2/H3 or two blank lines."""
+    """Extract content of a '## <heading>' section until next H2/H3 or two blank lines.
+
+    DS-1 (#291): heading match is prefix-anchored and suffix-tolerant — a trailing
+    parenthetical or colon (e.g. '### Affected Files (proposed)', '## Affected Files:')
+    no longer defeats the match. Monotonic widening: `\\b[^\\n]*$` is a superset of the
+    prior `\\s*$`, so no previously-matched heading is lost.
+    """
     if not body:
         return None
-    # Find the heading (case-insensitive, tolerate trailing whitespace)
-    pat = re.compile(rf"^##+\s+{re.escape(heading)}\s*$", re.MULTILINE | re.IGNORECASE)
+    # Find the heading (case-insensitive, prefix-anchored, suffix-tolerant)
+    pat = re.compile(
+        rf"^#{{2,4}}\s+{re.escape(heading)}\b[^\n]*$", re.MULTILINE | re.IGNORECASE
+    )
     m = pat.search(body)
     if not m:
         return None
@@ -86,42 +148,96 @@ def extract_section(body: str, heading: str) -> Optional[str]:
     return rest
 
 
+def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
+    """DS-2 (#291): return the first section matching any heading alias (first-match-wins)."""
+    for heading in aliases:
+        section = extract_section(body, heading)
+        if section is not None:
+            return section
+    return None
+
+
+def _extract_paths(text: str) -> List[str]:
+    """DS-3 (#291): extract file-path tokens from a line of AF text.
+
+    Ordered: extension-bearing tokens first (bare/relative/prefixed, backticked or
+    not), then module-prefixed trailing-slash directory tokens. Dedup preserving order.
+    """
+    paths: List[str] = []
+    for m in EXT_PATH_RE.finditer(text):
+        paths.append(m.group(1))
+    for m in DIR_PATH_RE.finditer(text):
+        p = m.group(1)
+        if p not in paths:
+            paths.append(p)
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for p in paths:
+        if p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    return ordered
+
+
 def parse_affected_files(body: str) -> Tuple[List[FileRecord], str]:
-    """Extract Affected Files records. Returns (files, parse_status)."""
-    section = extract_section(body, "Affected Files")
+    """Extract Affected Files records. Returns (files, parse_status).
+
+    DS-2/DS-3/DS-4 (#291): alias-aware heading match; generalized path extraction
+    (bullets AND prose lines); a present-but-explicit-None section ('None — label-only')
+    returns clean with zero files rather than failed. A present section with bullets
+    but zero parseable paths and no None-marker stays failed (prose/component-name —
+    genuinely unparseable; routes to the Mode A set-aside or body-repair queue).
+    """
+    section = extract_section_aliased(body, AF_HEADING_ALIASES)
     if section is None:
         return [], "failed"
     if DEFERRAL_MARKER in section:
         return [], "deferred"
+    content_lines = [ln.strip() for ln in section.splitlines() if ln.strip()]
     files: List[FileRecord] = []
     for line in section.splitlines():
         line = line.strip()
-        if not line or not (line.startswith("-") or line.startswith("*")):
+        if not line:
             continue
-        item = line.lstrip("-* ").strip()
-        # Try backticked path first
-        m = BACKTICK_PATH_RE.search(item)
-        if m:
-            path = m.group(1)
+        if line.startswith("-") or line.startswith("*"):
+            item = line.lstrip("-* ").strip()
         else:
-            m = WORKSPACE_PATH_RE.search(item)
-            if not m:
-                continue
-            path = m.group(0)
-        # Intent
+            # DS-3: also scan prose lines (FC-3) for path tokens; no intent marker.
+            item = line
+        found = _extract_paths(item)
+        if not found:
+            continue
         intent_m = INTENT_RE.search(item)
         intent = intent_m.group(1).lower() if intent_m else "edit"
-        files.append(FileRecord(path=path, intent=intent))
+        for path in found:
+            files.append(FileRecord(path=path, intent=intent))
+    # Dedup paths preserving first-seen order/intent.
+    seen: Set[str] = set()
+    deduped: List[FileRecord] = []
+    for f in files:
+        if f.path not in seen:
+            seen.add(f.path)
+            deduped.append(f)
+    files = deduped
     if not files:
+        # DS-4: explicit no-files declaration → clean (zero files); else failed.
+        if any(NONE_FILES_RE.match(cl) for cl in content_lines):
+            return [], "clean"
         return [], "failed"
     return files, "clean"
 
 
 def parse_dependencies(body: str) -> Tuple[Set[int], str]:
-    """Extract Dependencies references. Returns (deps, parse_status)."""
-    section = extract_section(body, "Dependencies")
+    """Extract Dependencies references. Returns (deps, parse_status).
+
+    DS-4 (#291): an ABSENT Dependencies section returns (set(), "clean") — deps are
+    optional at intake (improvement.yml `required: false`) and absent entirely from
+    bug.yml/observation.yml/adr.yml. A previously-returned "failed" on absence was a
+    false negative that rolled otherwise-clean issues to non-clean.
+    """
+    section = extract_section_aliased(body, DEP_HEADING_ALIASES)
     if section is None:
-        return set(), "failed"
+        return set(), "clean"
     if DEFERRAL_MARKER in section:
         return set(), "deferred"
     deps = {int(m.group(1)) for m in DEP_RE.finditer(section)}
@@ -300,17 +416,127 @@ Stuff.
     if dstatus_h2 != "clean" or deps_h2 != {46}:
         failures.append(f"H2 clean deps: got {dstatus_h2} / {deps_h2}")
 
+    # Test 1c: missing Dependencies section parses CLEAN (DS-4 / FC-4 #291).
+    # Was "failed" pre-v3.20 — a false negative on optional-at-intake deps.
+    body_nodep = """### Affected Files
+- `core/foo.md` (edit — fix)
+"""
+    files_nd, st_nd = parse_affected_files(body_nodep)
+    deps_nd, dst_nd = parse_dependencies(body_nodep)
+    if st_nd != "clean" or len(files_nd) != 1:
+        failures.append(f"FC-4 AF clean (core/ prefix): got {st_nd} / {files_nd}")
+    if dst_nd != "clean" or deps_nd != set():
+        failures.append(f"FC-4 missing-deps→clean: got {dst_nd} / {deps_nd}")
+
     # Test 2: deferred marker
     body2 = "### Affected Files\n[ASSUMPTION – CONFIRM] TBD — identified in Planning\n\n### Dependencies\n- #99\n"
     _, s2 = parse_affected_files(body2)
     if s2 != "deferred":
         failures.append(f"deferred: got {s2}")
 
-    # Test 3: parse failure (no section)
+    # Test 3: parse failure (no AF section at all → FC-6 set-aside class)
     body3 = "## Description\nNo affected files section.\n"
     _, s3 = parse_affected_files(body3)
     if s3 != "failed":
         failures.append(f"parse failure: got {s3}")
+
+    # ---- #291 v3.20 per-failure-class fixtures (DS-6) ----
+    # Each asserts the SPECIFIC recovery the ratified #461 spec designed. Where
+    # relevant, the same fixture FAILS against the pre-v3.20 parser (regression guard).
+
+    # FC-1a: current module prefixes (core/ release/ operations/) bare in a bullet.
+    # Pre-v3.20 WORKSPACE_PATH_RE matched only pmo-platform|.claude|projects|memory.
+    fc1a = """### Affected Files
+- core/schemas/project-schema.md (edit — add axis)
+- release/references/specs/x.md (edit — sibling pattern)
+- operations/runbook.md (edit — note)
+"""
+    f1a, s1a = parse_affected_files(fc1a)
+    if s1a != "clean" or [x.path for x in f1a] != [
+        "core/schemas/project-schema.md",
+        "release/references/specs/x.md",
+        "operations/runbook.md",
+    ]:
+        failures.append(f"FC-1a module-prefix paths: got {s1a} / {[x.path for x in f1a]}")
+
+    # FC-1b: bare filename, backticked, no internal '/' (BACKTICK_PATH_RE missed it).
+    fc1b = "### Affected Files\n- `deploy.sh` (edit — workspace root)\n- `CLAUDE.md` (edit — refresh tree)\n"
+    f1b, s1b = parse_affected_files(fc1b)
+    if s1b != "clean" or [x.path for x in f1b] != ["deploy.sh", "CLAUDE.md"]:
+        failures.append(f"FC-1b bare backticked filename: got {s1b} / {[x.path for x in f1b]}")
+
+    # FC-1c: skill-relative path (no known top-level prefix) — recovers via ext-token.
+    fc1c = "### Affected Files\n- delivery-engine/references/x.md (edit)\n- weekly-status-rollup/SKILL.md (edit)\n"
+    f1c, s1c = parse_affected_files(fc1c)
+    if s1c != "clean" or [x.path for x in f1c] != [
+        "delivery-engine/references/x.md",
+        "weekly-status-rollup/SKILL.md",
+    ]:
+        failures.append(f"FC-1c skill-relative path: got {s1c} / {[x.path for x in f1c]}")
+
+    # FC-1d: module-prefixed trailing-slash directory (no file extension).
+    fc1d = "### Affected Files\n- pmo-platform/engineering/ (edit — directory)\n- core/deploy/tools/ (edit)\n"
+    f1d, s1d = parse_affected_files(fc1d)
+    if s1d != "clean" or [x.path for x in f1d] != [
+        "pmo-platform/engineering/",
+        "core/deploy/tools/",
+    ]:
+        failures.append(f"FC-1d trailing-slash dir: got {s1d} / {[x.path for x in f1d]}")
+
+    # FC-2: heading parenthetical suffix — extract_section must still match (DS-1).
+    fc2 = "### Affected Files (directional — confirmed in Planning)\n- `core/foo.md` (edit)\n"
+    f2, s2b = parse_affected_files(fc2)
+    if s2b != "clean" or [x.path for x in f2] != ["core/foo.md"]:
+        failures.append(f"FC-2 heading parenthetical suffix: got {s2b} / {[x.path for x in f2]}")
+    # FC-2 variant: trailing colon.
+    fc2b = "## Affected Files:\n- `release/bar.py` (edit)\n"
+    f2c, s2c = parse_affected_files(fc2b)
+    if s2c != "clean" or [x.path for x in f2c] != ["release/bar.py"]:
+        failures.append(f"FC-2 heading trailing-colon: got {s2c} / {[x.path for x in f2c]}")
+
+    # FC-2 alias (DS-2): "Files Affected" heading variant resolves.
+    fc2_alias = "### Files Affected\n- `core/baz.md` (edit)\n"
+    f2d, s2d = parse_affected_files(fc2_alias)
+    if s2d != "clean" or [x.path for x in f2d] != ["core/baz.md"]:
+        failures.append(f"FC-2 heading alias 'Files Affected': got {s2d} / {[x.path for x in f2d]}")
+    # Dep alias resolves too.
+    fc_depalias = "### Affected Files\n- `core/q.md` (edit)\n\n### Depends on\n- #123\n"
+    _, dep_a_st = parse_affected_files(fc_depalias)
+    deps_a, deps_a_st = parse_dependencies(fc_depalias)
+    if deps_a_st != "clean" or deps_a != {123}:
+        failures.append(f"FC-2 dep alias 'Depends on': got {deps_a_st} / {deps_a}")
+
+    # FC-3: prose-style AF section (paths in a sentence, no dash bullets).
+    fc3 = (
+        "### Affected Files\n"
+        "The fix touches `core/deploy/deploy.sh` and the helper at "
+        "release/tools/cleanup-orphan-state.sh as well.\n"
+    )
+    f3, s3b = parse_affected_files(fc3)
+    if s3b != "clean" or set(x.path for x in f3) != {
+        "core/deploy/deploy.sh",
+        "release/tools/cleanup-orphan-state.sh",
+    }:
+        failures.append(f"FC-3 prose-style section: got {s3b} / {[x.path for x in f3]}")
+
+    # FC-5: intake-deferral marker → deferred (intended state, not failed). Covered
+    # by Test 2 above; re-assert here that a present deferral in AF yields 'deferred'.
+    fc5 = "### Affected Files\n[ASSUMPTION – CONFIRM] TBD — identified in Planning\n"
+    _, s5 = parse_affected_files(fc5)
+    if s5 != "deferred":
+        failures.append(f"FC-5 deferral marker: got {s5}")
+
+    # FC-7: explicit no-files declaration inside a present AF section → clean/empty.
+    fc7 = "### Affected Files\nNone — label-only update via `gh issue edit --add-label`.\n"
+    f7, s7 = parse_affected_files(fc7)
+    if s7 != "clean" or f7 != []:
+        failures.append(f"FC-7 explicit None declaration: got {s7} / {f7}")
+    # FC-7 negative: a present section with a component-name bullet and NO path and
+    # NO None-marker stays failed (genuinely unparseable; routes to set-aside).
+    fc7n = "### Affected Files\n- 17 GitHub milestones (see table below)\n"
+    _, s7n = parse_affected_files(fc7n)
+    if s7n != "failed":
+        failures.append(f"FC-7 component-name-no-path stays failed: got {s7n}")
 
     # Test 4: severity tiers
     recs = [
