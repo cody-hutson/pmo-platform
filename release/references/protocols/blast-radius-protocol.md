@@ -286,17 +286,22 @@ The impact-classification tiers in § 5 (Cosmetic ≤1 / Behavioral 2–5 / Stru
 
 ### Worked example — code-domain fan-out
 
-A Stage-5 spoke designs a change to the event-schema-writing function inside the helper `release/tools/append-pipeline-event.sh`, classified `domain: software`. `blast-radius.sh` would surface *doc* mentions of the file path but not the *callers* of the function — the wrong set for impact purposes. The domain-appropriate method is **import/call-graph fan-out**:
+A Stage-5 spoke designs a change to the `parse_skill_md` function inside the Python module `release/skills/pmo-skill-refiner/scripts/utils.py`, classified `domain: software`. `blast-radius.sh` would surface *doc* mentions of the file path but not the modules that `import` the symbol — the wrong set for impact purposes (this is precisely the import edge the markdown tracer has no model of, § 9). The domain-appropriate method is **import/call-graph fan-out** over the real `from … import` statements:
 
 ```
-# first-order: who imports / sources / calls this module?
-rg -n "append-pipeline-event\.sh|append_pipeline_event" --type sh --type py release/ core/
-# → callers: query-pipeline-event.sh (sources it), automated-closeout.sh
-# second-order: who calls THOSE? (transitive, depth=2 to match blast-radius depth)
-rg -n "query-pipeline-event|automated-closeout" release/ core/
+# first-order: who imports this module? (run from the repo root; reproduces exactly)
+rg -n "from scripts\.utils import|import scripts\.utils" --type py release/skills/pmo-skill-refiner/scripts/
+# → 4 importers:
+#     run_eval.py:19           from scripts.utils import parse_skill_md
+#     run_eval_audit.py:36     from scripts.utils import parse_skill_md
+#     improve_description.py:17 from scripts.utils import parse_skill_md
+#     run_loop.py:21           from scripts.utils import parse_skill_md
+# second-order: who imports THOSE? (transitive, depth=2 to match blast-radius depth)
+rg -n "from scripts\.(run_eval|run_eval_audit|improve_description|run_loop) import" --type py release/skills/pmo-skill-refiner/scripts/
+# → run_loop.py imports improve_description + run_eval (the only depth-2 edges)
 ```
 
-`first_order = 2 callers` → **Behavioral** tier (§ 5) → Risk Register entry + per-caller verify at Stage 6. The fan-out is over the **call/import graph**, not the doc-reference graph. First-order semantics for this method: a first-order consumer is a file that directly sources, imports, or calls the changed module (a re-export counted once); second-order is depth=2, matching the blast-radius depth default, so the § 5 count-tiers are computed on a reproducibly-defined population.
+`first_order = 4 importers` → **Behavioral** tier (§ 5) → Risk Register entry + per-caller verify at Stage 6. The fan-out is over the **import graph** (genuine `from scripts.utils import` edges `blast-radius.sh` cannot reach), not the doc-reference graph. First-order semantics for this method: a first-order consumer is a file that directly sources, imports, or calls the changed module (a re-export counted once); second-order is depth=2, matching the blast-radius depth default, so the § 5 count-tiers are computed on a reproducibly-defined population. The pinned first-order command above is the reproducibility contract — running it against the branch tree returns exactly the 4 importers shown.
 
 ### Deferred fan-out tooling
 
