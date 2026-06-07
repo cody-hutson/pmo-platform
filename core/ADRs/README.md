@@ -23,6 +23,7 @@ ADRs follow the format established by ADR-005 (see [`../../release/ADRs/ADR-005-
 | ADR-007 | **core** | module-restructure | module-restructure | 2026-05-27 |
 | ADR-008 | **core** | module-restructure | architectural intent; later implementation | 2026-05-27 |
 | ADR-009 | **core** | module-restructure | architectural intent; later implementation | 2026-05-27 |
+| ADR-017 | **core** | declarative-workitem-type-model | data-architecture (WITL) | 2026-06-07 |
 
 ## Module-restructure ADR composition graph
 
@@ -95,6 +96,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Decision:** Introducing the conversational intake front door (`intake-desk`) establishes a distinct architectural component at the head of the work-item lifecycle. The ADR records (1) intake/elicitation as that component; (2) the component boundary, stated as disjoint verbs — `intake-desk` authors a typed work item, `ppm-agent` processes existing artifacts, `project-initiator` scaffolds/closes projects, architecture authors ADRs (so intake does not author ADRs); and (3) the handoff contract to triage/downstream — a typed item plus stage-owned `[ASSUMPTION – CONFIRM]` items for progressive closure plus a body decomposition callout (one item per request, never auto-decomposed). The work-item type system, when it lands, extends the type set the front door binds to; the component boundary and handoff contract are unaffected.
 **Reversibility:** MODERATE.
 **File:** [ADR-016-intake-front-door-architectural-boundary.md](ADR-016-intake-front-door-architectural-boundary.md)
+
+## Data-architecture ADRs
+
+### ADR-017 — Work-Item Type Layer (WITL): thin generic Work Item entity + declarative type layer
+
+**Status:** Proposed (flips to Accepted at the declarative-workitem-type-model Stage 9 GO — that GO renders the Tier-2 SCOPE CHANGE).
+**Decision:** Resolve the work-item modeling tension as a HYBRID (D1): add ONE thin generic `Work Item` entity (roster #18) carrying Entity Core 7 + a `work_item_type` discriminator + a polymorphic `parent_ref` (Milestone or Workstream) + the built 7 MVP relationships by reference; externalize ALL type variability to a separate declarative type-pack layer (#507). Vocabulary is methodology-projected (D2 — canonical kind `Work Item`; Story/Bug/Test/Task are projections; no glossary amendment). Now-scope (D4) = this ADR + C2 meta-schema (#507) + C1 authorization (#506); roster RE-FROZEN at 18 via a scoped Tier-2 (RAID-2026-05-16-precedented).
+**Reversibility:** EXPENSIVE (once #507 + downstream consume the entity it is a contract; pre-consumption MODERATE).
+**File:** [ADR-017-work-item-type-layer.md](ADR-017-work-item-type-layer.md)
 
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
