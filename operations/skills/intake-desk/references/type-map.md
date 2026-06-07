@@ -79,15 +79,29 @@ Story vs initiative differentiate by altitude-driven field emphasis within
 until a first-class type ships. The candidate child work of a container is a body
 decomposition callout for later slicing — never auto-created as child items.
 
-## Forward-coupling (the type system, later)
+## Forward-coupling (the platform type registry)
 
-When the platform's work-item type system lands, it repoints or extends the type
-registry portion of this file (the type set, their templates, the when-to-choose
-cues, and the landing criteria). The field-derivation contract is unaffected — it
-always points at whatever template set is current. The architectural boundary and
-the downstream handoff contract this skill establishes are governed by the
-intake-front-door-architectural-boundary ADR (see § Provenance) and are independent
-of the type-registry shape.
+The platform's declarative work-item type system is the registry this file's type
+portion couples to. Its grammar — the type-pack meta-schema — is
+[`work-item-type-schema.md`](../../../../core/schemas/work-item-type-schema.md): a
+work-item **kind** is declared as data (a `kind_id` + `display_name` +
+`methodology_projection` + `fields` + versioned `criteria` + `relationships` +
+`lifecycle_behavior`), projecting onto the general hierarchy via the
+work-organization mapping framework's Layer-2 map. When a deployment declares its
+kinds in a type-pack, the **type registry portion of this file** (the type set,
+their templates, the when-to-choose cues, and the landing criteria) is sourced from
+that pack rather than restated here — read **per invocation**, never cached across
+calls (kinds are project-level mutable). The meta-schema's grammar, EAD
+materialization, the custom-kind escape hatch, and the registry-read contract are
+the platform mechanism; this file is the prototyped intake consumer of it.
+
+The field-derivation contract is unaffected — it always derives the required-field
+set from whatever source is current (the issue-form `.yml` templates today; a
+declared kind's `fields.kind_specific[]` once a deployment's type-pack supplies
+them). The architectural boundary and the downstream handoff contract this skill
+establishes are governed by the intake-front-door-architectural-boundary ADR (see
+§ Provenance) and are independent of the type-registry shape — the *registry* is
+repointed (an implementation detail), the front-door boundary is not.
 
 ## Provenance
 
