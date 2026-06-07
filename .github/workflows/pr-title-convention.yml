@@ -1,0 +1,105 @@
+name: PR title convention
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  title-convention:
+    name: PR title grammar check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+
+          # Rollout mode: "warn" reports without blocking; "enforce" fails the check.
+          # Flip to "enforce" once live titles have converged on the convention.
+          MODE="warn"
+
+          TITLE="${PR_TITLE:-}"
+
+          # 0. Empty title (shouldn't happen) — nothing to check
+          if [ -z "$TITLE" ]; then
+            echo "PR title is empty — nothing to scan" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # 1. Exemptions (early pass)
+          #    a. Bot authors (login ends in the literal "[bot]")
+          case "${PR_AUTHOR:-}" in
+            *'[bot]')
+              echo ":information_source: Author \`$PR_AUTHOR\` is a bot — title check skipped" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+          esac
+          #    b. GitHub auto-generated titles (revert / merge)
+          if printf '%s' "$TITLE" | grep -qE '^(Revert|Merge) '; then
+            echo ":information_source: Auto-generated title (Revert/Merge) — title check skipped" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          #    c. Explicit override marker in the PR body
+          if [ -n "${PR_BODY:-}" ] && printf '%s\n' "$PR_BODY" | grep -qE '<!--[[:space:]]*pr-title-convention:[[:space:]]*allow[[:space:]]*-->'; then
+            echo ":information_source: Override marker present in PR body — title check skipped" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # 2. Grammar check — type(scope): summary
+          TYPES='release|feat|fix|chore|docs|refactor|ci|test|revert'
+          GRAMMAR_OK=1
+          if ! printf '%s' "$TITLE" | grep -qE "^(${TYPES})(\([^)]+\))?: .+"; then
+            GRAMMAR_OK=0
+          fi
+
+          # 3. Title auto-close check — close-family verb directly before #N.
+          #    GitHub's auto-close parser scans titles too; keep #N reference-only.
+          CLOSE_MATCH=$(printf '%s' "$TITLE" \
+            | grep -inE '(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved) +#[0-9]' || true)
+
+          # 4. Verdict — conforming title passes cleanly
+          if [ "$GRAMMAR_OK" -eq 1 ] && [ -z "$CLOSE_MATCH" ]; then
+            echo ":white_check_mark: PR title conforms — \`$TITLE\`" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # 5. Report the violation (teach the grammar)
+          {
+            echo "## :warning: PR title convention"
+            echo ""
+            echo "Title checked: \`$TITLE\`"
+            echo ""
+            if [ "$GRAMMAR_OK" -eq 0 ]; then
+              echo "**Does not match the grammar** \`type(scope): summary (#N)\`."
+              echo ""
+              echo "- \`type\` is one of: release · feat · fix · chore · docs · refactor · ci · test · revert"
+              echo "- \`scope\` is the version (\`v1.06\`) for release-pipeline PRs, otherwise a component (\`ci\`, a skill name); omit only for a repo-wide change, leaving \`type: summary\`"
+              echo "- \`summary\` is concise and imperative"
+              echo "- \`(#N)\` is an optional trailing work-item reference, reference-only"
+              echo ""
+              echo "Examples: \`feat(git-workflow): add the PR-title gate (#N)\` · \`chore(v1.06): Stage 13 close-out\` · \`fix(ci): always-run the required check\`"
+              echo ""
+            fi
+            if [ -n "$CLOSE_MATCH" ]; then
+              echo "**Close-family verb + \`#N\` detected in the title.** GitHub's auto-close parser scans titles, so this would auto-close an issue straight from the title:"
+              echo '```'
+              echo "$CLOSE_MATCH"
+              echo '```'
+              echo "Keep \`#N\` reference-only in the title (the bare \`(#N)\` form); put \`Closes #N\` only in the PR body's Issue References block."
+              echo ""
+            fi
+            echo "See \`core/rules/git-workflow.md\` section PR Title Convention. Override (only if the title legitimately cannot conform): add \`<!-- pr-title-convention: allow -->\` to the PR body."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          # 6. Mode gate — warn reports without blocking; enforce fails the check
+          if [ "$MODE" = "enforce" ]; then
+            exit 1
+          fi
+          echo "::warning::PR title does not conform to the convention (warn-mode — not blocking). See the job summary."
+          exit 0

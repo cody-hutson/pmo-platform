@@ -19,6 +19,7 @@ Single-operator PMO platform with Claude Code as primary contributor. The 13-sta
 | 7 | Issue Dependencies (native) | **Adopt per Model A (body→native one-way mirror)** | Convention (ticket-information-architecture.md § Native Dependencies) + `deploy.sh --check` Check 21 (warn-mode initial) | Body Dependencies field remains authoritative (per `ticket-information-architecture.md § Conflict Resolution` "Body fields are authoritative"); native `blocks`/`blocked-by` is a one-way projected display surface mirroring the `FS+0d` subset of typed body deps. AC4 reframed at Collective Review (operator-rendered ACCEPT): "intent stays observable" via drift-detection, not literal bidirectional auto-sync. See ADR-3 revision below. |
 | 8 | GitHub Projects | **Defer** | — | High setup overhead. A follow-up PR adds boards, automations, views, and agent integration. |
 | 9 | PR Metadata Protocol | **Defer** | — | Setting milestone/labels/assignees/reviewers on PRs via `gh pr create` flags. A follow-up PR defines the exact protocol and flag set. |
+| 10 | PR Title Convention | **Adopt** | Convention (`git-workflow.md` § PR Title Convention) + CI (`pr-title-convention.yml`, warn-mode initial) | A PR title should decode its type, milestone, work item, and description on its own. Ratifies the de-facto conventional-commits pattern (`type(scope): summary`); the CI gate mirrors the `pr-body-parser-clean.yml` body check. |
 
 ## Architecture Decision Records
 

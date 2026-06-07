@@ -43,7 +43,7 @@ Set at Stage 7: quality review scores (1-5 per dimension), finding list with sev
 
 **Cutover discipline:** Applies to all releases going forward.
 
-**Domain-Practice Provenance Verification Step:** Phase A asserts that the release plan file (`release/releases/plans/v<X.Y>_RELEASE_PLAN.md`) carries a `domain_practice` provenance label authored by the Stage 4 Planning spoke's Domain-Best-Practice Sourcing-or-Flag Step. The label is verified for:
+**Domain-Practice Provenance Verification Step:** Phase A asserts that the release plan file (`release/releases/plans/v<X.Y>_RELEASE_PLAN.md`) carries a `domain_practice` provenance label authored by the Stage 4 Planning spoke's Domain-Best-Practice Sourcing-or-Flag Step. This is a Tier-1 deterministic check — it verifies *that a domain was declared*, not that the design conforms to it (conformance is the separate Phase C dimension; see the provenance-vs-conformance composition note under Phase C). The label is verified for:
 
 1. **Presence:** the release plan must contain a single-line `domain_practice:` label (within the `### Release Class declaration` H3 or a sibling `### Domain Practice Provenance` H3, per the Stage 4 placement convention).
 2. **`date` field populated:** the label's `date` field must be a `YYYY-MM-DD` value (mandatory in BOTH Mode A and Mode B, so staleness is detectable).
@@ -51,10 +51,13 @@ Set at Stage 7: quality review scores (1-5 per dimension), finding list with sev
    - Mode A — a citation URL or repo-relative path
    - Mode B — the literal token `UNSOURCED-DOMAIN` paired with a `rationale` sub-field
    - Software / governance / pipeline-internal exemption — the literal token `N/A — pipeline-internal release`, per the Stage 4 pipeline-internal exemption
+4. **`domain:` class field present (mandatory in every mode):** the label must carry a `domain:` key INSIDE the `domain_practice` object, naming the deliverable's abstract domain class (e.g., `software`, `governance`, `web`, `data`). Per Stage 4 §5.7 the `domain:` field is mandatory in EVERY mode — Mode A, Mode B, AND the pipeline-internal exemption — so no release reaches Stage 5/7 carrying an unclassified deliverable, and the design-aware downstream consumers (the impact-analysis method selector, the design-best-practice review criterion, and the domain-guide index) all read this one field. The check asserts the key is present and in-label (a sibling-to-`source` member of the `domain_practice` object, not a separate top-level frontmatter key). This field is the input the Phase C domain-practice conformance dimension resolves the guide from — the provenance step verifying its presence is what lets Phase C assume a resolvable class.
 
 **Verification command:**
 ```bash
+# (1) label present; (2) the in-label domain: class field present
 grep -nE "^[[:space:]]*domain_practice:" release/releases/plans/v<X.Y>_RELEASE_PLAN.md
+grep -nE "domain_practice:.*\bdomain:[[:space:]]*[A-Za-z]" release/releases/plans/v<X.Y>_RELEASE_PLAN.md
 ```
 
 **Failure classification:**
@@ -65,10 +68,25 @@ grep -nE "^[[:space:]]*domain_practice:" release/releases/plans/v<X.Y>_RELEASE_P
 | Label present, `date` field missing or malformed | Warning | Tier 1 — Engineering refreshes the label via `fix(dt):` commit |
 | Label present, Mode B `UNSOURCED-DOMAIN` with no `rationale` sub-field | Warning | Tier 1 — Engineering adds rationale via `fix(dt):` commit |
 | Label present, Mode B `UNSOURCED-DOMAIN` with rationale — but rationale does not name the unresolved domain | Note | Logged; no routing (the explicit UNSOURCED-DOMAIN flag with any rationale satisfies the disclosure obligation) |
+| Label present, but the mandatory in-label `domain:` class field is absent (or placed as a separate top-level key rather than inside `domain_practice`) | Warning | Tier 1 — Engineering adds the in-label `domain:` class field via `fix(dt):` commit; the field is mandatory in every mode per Stage 4 §5.7 |
 
 **Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning).
 
-**Phase C — Content Quality Review (Tier 2 Recommend):** 5 scored dimensions — clarity (1-5, threshold 3), accuracy (1-5, threshold 3), internal consistency (1-5, threshold 4, Blocker), convention depth (1-5, threshold 3), escape detection (count).
+**Phase C — Content Quality Review (Tier 2 Recommend):** 5 always-on scored dimensions + 1 conditional (domain-practice conformance). The 5 always-on dimensions — clarity (1-5, threshold 3), accuracy (1-5, threshold 3), internal consistency (1-5, threshold 4, Blocker), convention depth (1-5, threshold 3), escape detection (count) — score on every release. The conditional 6th dimension (domain-practice conformance, below) scores only when a domain guide applies for the deliverable's domain.
+
+> **Provenance vs. conformance — two distinct, composed checks.** The Phase A *Domain-Practice Provenance Verification Step* checks that the `domain_practice` **label is present** (dated, sourced, and carrying the mandatory `domain:` class field) — it verifies *that a domain was declared*. It is Tier-1 deterministic ("label present", a grep). The Phase C *domain-practice conformance dimension* checks that **the design meets that declared domain's authoritative practice** — it verifies *that the design is right for the declared domain*. It is Tier-2 LLM-graded ("design meets the domain's practice"). Provenance is necessary but not sufficient: a present, well-formed label can still front a domain-wrong design. The two checks compose — provenance gates label hygiene, conformance gates design conformance; neither subsumes the other.
+
+- **domain-practice conformance** (1-5, threshold 3, **conditional** — scored only when a domain guide applies for the deliverable's domain): assess the implemented design against the target domain's authoritative practice. This is a WIRING of the shipped applicability framework — it invokes, and does NOT redefine, [`applicability-framework.md`](../../../core/disciplines/applicability-framework.md) §2 Applicability Profile, §3 Contraindication Catalog (CI-*), and the §4 precedence ladder, against the deliverable's domain guide under [`core/standards/domain-best-practices/`](../../../core/standards/domain-best-practices/). Resolve the guide `core/standards/domain-best-practices/<domain>.md` from the `domain:` class field inside the release plan's `domain_practice` label (the abstract domain signal the Phase A provenance step verified present — this dimension consumes that field, it does not re-derive the domain). Then run §2 `APPLIES-WHEN` scoping → §3 `CONTRAINDICATED-WHEN` evaluation (any CI-* that fires on an applied practice is a finding) → score conformance to the guide's practice dimensions. This is the ASSESSMENT counterpart to Phase A's provenance (label-present) check — see the composition note above. When no guide exists for the resolved domain, emit a `Note`-severity `DOMAIN-PRACTICE-NOT-ASSESSED` finding naming the unresolved domain (an honest signal — no score, no block; it feeds the domain-guide library demand-signal). **Governance / pipeline-internal deliverables run the FULL walk — no exemption short-circuit:** a governance deliverable carries `domain: governance`, so resolve `governance.md`, confirm `APPLIES-WHEN`, and run the §3 check (the governance guide's contraindication is CI-3 — research-grade / formal-audit imposed where lightweight self-review suffices). A well-behaved governance design does not trip CI-3 and meets the compliance/auditability/traceability dimensions → conformance met, no false finding. The `N/A — pipeline-internal release` token governs the Phase A *provenance* exemption only; it does NOT exempt this conformance dimension. (This is consistent with Stage 4 §5.7's "sourcing-exempt, not classification-exempt" reconciliation: a pipeline-internal release skips external sourcing, but its `domain:` class still resolves the governance guide, which IS the encoding of the platform's own internal-deliverable practice.)
+
+**Domain-practice conformance — failure classification (mirrors the Phase A provenance-table form):**
+
+| Finding | Severity | Routing |
+|---|---|---|
+| Domain guide exists; a `CONTRAINDICATED-WHEN` CI-* fires on an applied practice | Blocker when the contraindication is structural; else Major | Tier 1 — Engineering re-designs the contraindicated practice via `fix(dt):` commit; Tier 2 when it needs design revision |
+| Domain guide exists; conformance score < threshold 3 | Warning → Major/Minor at report assembly | Tier 1 — Engineering addresses the shortfall via `fix(dt):` commit |
+| No guide for the resolved domain (`DOMAIN-PRACTICE-NOT-ASSESSED`) | Note | Logged; no routing; flags the domain-guide library demand-signal (the missing-guide gap) |
+
+**Cutover (introducing-release-exempt):** The domain-practice conformance dimension applies to releases entering Stage 7 Dev Testing strictly AFTER this dimension's introducing-release merge SHA recorded in the release log. **The introducing release itself is exempt** — the dimension shipping in a release does not score its own Stage 7 (it would assess its own not-yet-shipped rule, a reflexive-pipeline loop); the introducing release's own Stage 7 runs under the rules in force before this dimension shipped.
 
 **Phase D — Report Assembly (Tier 1 Auto):** Compile findings, classify (Blocker/Warning/Note), assign per-finding disposition (fix-now / defer / accept) per the [Finding Disposition Decision Framework](#finding-disposition-decision-framework), calculate escape rate, render verdict: PASS (no blockers, all ≥ threshold) / CONDITIONAL PASS (no blockers, 1-2 below) / FAIL (any blocker).
 
