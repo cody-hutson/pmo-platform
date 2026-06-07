@@ -156,7 +156,12 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
-GENERATE_INDEX="$SCRIPT_DIR/generate_release_index.py"
+# The deterministic INDEX generator lives in core/deploy/tools/, NOT alongside
+# this script. The prior "$SCRIPT_DIR/generate_release_index.py" pointed at a
+# non-existent release/tools/ path, so the "[[ -x "$GENERATE_INDEX" ]]" guard in
+# phase_append_release_index always failed and silently fell through to the
+# hand-append fallback (#459 — silent-fallthrough class). Point at the real tool.
+GENERATE_INDEX="$REPO_ROOT/core/deploy/tools/generate_release_index.py"
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 

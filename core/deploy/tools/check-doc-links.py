@@ -6,7 +6,12 @@ Two modes (mode discrimination via flag presence):
   broken-refs mode (default — when --from-path/--to-path NOT supplied):
     Parses markdown link references in target files, resolves relative paths,
     and reports broken cross-references as TSV/JSON/GitHub-Actions output.
-    Exit codes: 0 = no broken refs, 1 = broken refs found.
+    Exit codes: 0 = no broken refs, 1 = broken refs found,
+    3 = path-resolution failure (with --require-targets: a declared
+    --target-paths glob entry resolved to zero files — the target surface is
+    unverifiable, not clean). Exit 3 matches the cross-module-audit.sh family
+    convention so deploy.sh can distinguish "found drift" (1) from "could not
+    run against the target" (3).
 
   rewrite-map mode (when BOTH --from-path AND --to-path supplied):
     Scans target files for references whose path starts with --from-path,
@@ -236,6 +241,42 @@ def expand_globs(globs: list[str]) -> list[Path]:
     return out
 
 
+def find_unresolved_globs(globs: list[str]) -> list[str]:
+    """Return the subset of declared glob entries that resolve to ZERO files.
+
+    Mirrors expand_globs's per-entry resolution semantics (literal file, literal
+    dir, then glob pattern) but reports which declared entries yielded nothing
+    rather than the matched files. A zero-yield entry is a path-resolution
+    failure (clause 2 of the fail-loud contract): the scan surface is missing,
+    typo'd, or relocated — unverifiable, not clean. Kept separate from
+    expand_globs so the latter's return contract is unchanged (the
+    cross_module_audit_helper.py importer depends on it).
+    """
+    unresolved: list[str] = []
+    for g in globs:
+        g = g.strip()
+        if not g:
+            continue
+        as_path = Path(g) if Path(g).is_absolute() else WORKSPACE_ROOT / g
+        if as_path.is_file():
+            continue
+        if as_path.is_dir():
+            if not any(as_path.rglob("*.md")):
+                unresolved.append(g)
+            continue
+        matched = False
+        for m in sorted(WORKSPACE_ROOT.glob(g)):
+            if m.is_file() and m.suffix == ".md":
+                matched = True
+                break
+            if m.is_dir() and any(m.rglob("*.md")):
+                matched = True
+                break
+        if not matched:
+            unresolved.append(g)
+    return unresolved
+
+
 def scan_file(source_file: Path, allowlist: list[str]) -> list[dict]:
     if is_allowlisted(source_file, allowlist):
         return []
@@ -362,7 +403,7 @@ def emit_rewrite_map_markdown(entries: list[dict]) -> str:
 def run_self_test() -> int:
     """Sanity check: parser + resolver + rewrite-map mode + EMIT-ONLY enforcement.
 
-    6 fixtures:
+    7 fixtures:
       1. Existing: code-block exclusion + single broken ref.
       2. NEW: module-prefix-resolution (v2 prefix recognized via dual-prefix table).
       3. NEW: rewrite-map TSV output mode.
@@ -371,6 +412,9 @@ def run_self_test() -> int:
       6. NEW: EMIT-ONLY structural enforcement (mtime + content-hash unchanged
               after scan_file_for_rewrite_map invocation) — per Stage 5 spec
               Surface 2.4 rule #1 + adversarial-review PR-3/FM-1.
+      7. NEW: --require-targets path-resolution-failure detection (zero-yield
+              glob → flagged; populated scan-root → not flagged) — the #459
+              fail-loud contract clause 2.
     """
     import tempfile
 
@@ -488,7 +532,29 @@ def run_self_test() -> int:
         assert hash_before == hash_after, \
             f"fixture 6 EMIT-ONLY violation: content hash changed ({hash_before[:8]} → {hash_after[:8]})"
 
-    print("self-test OK (6 fixtures passed)")
+    # ─── Fixture 7: --require-targets path-resolution-failure detection ────
+    # Clause 2 of the fail-loud contract: a glob resolving to zero files is a
+    # path-resolution failure. find_unresolved_globs must flag a guaranteed-
+    # missing scan-root and pass a resolvable one. A directory that exists but
+    # contains no .md files is ALSO a zero-yield (unverifiable) target.
+    missing_glob = "core/__definitely_not_a_real_dir_zzqx__/"
+    unresolved = find_unresolved_globs([missing_glob])
+    assert unresolved == [missing_glob], \
+        f"fixture 7: missing scan-root not flagged (got {unresolved})"
+    # A real, populated scan-root must NOT be flagged.
+    resolvable = find_unresolved_globs(["core/rules/"])
+    assert resolvable == [], \
+        f"fixture 7: populated scan-root wrongly flagged as unresolved (got {resolvable})"
+    # An existing dir with zero .md files is a zero-yield target → flagged.
+    with tempfile.TemporaryDirectory() as td:
+        empty_dir = Path(td) / "no_md_here"
+        empty_dir.mkdir()
+        (empty_dir / "notes.txt").write_text("not markdown\n")
+        empty_yield = find_unresolved_globs([str(empty_dir)])
+        assert empty_yield == [str(empty_dir)], \
+            f"fixture 7: dir with zero .md files not flagged (got {empty_yield})"
+
+    print("self-test OK (7 fixtures passed)")
     return 0
 
 
@@ -542,7 +608,12 @@ def main() -> int:
         help="Output format. 'markdown' applies to rewrite-map mode only (renders as markdown table); broken-refs mode 'markdown' falls back to TSV.",
     )
     p.add_argument("--exclude-code-blocks", action="store_true", default=True, help="(default on) skip refs inside fenced code blocks")
-    p.add_argument("--self-test", action="store_true", help="Run internal smoke test (6 fixtures) and exit")
+    p.add_argument(
+        "--require-targets",
+        action="store_true",
+        help="(broken-refs mode) treat a --target-paths glob entry that resolves to ZERO files as a path-resolution failure: emit a finding to stderr and exit 3. Opt-in — callers that do not pass it keep the prior exit-0-on-empty-scan behavior. Has no effect in rewrite-map mode (EMIT-ONLY).",
+    )
+    p.add_argument("--self-test", action="store_true", help="Run internal smoke test (7 fixtures) and exit")
     # ─── Rewrite-map mode flags (per Stage 5 spec Surface 2.1) ──────
     p.add_argument(
         "--from-path",
@@ -574,6 +645,23 @@ def main() -> int:
     globs = [g.strip() for g in args.target_paths.split(",") if g.strip()]
     files = expand_globs(globs)
     allowlist = load_allowlist(Path(args.allowlist)) if args.allowlist else []
+
+    # ─── Path-resolution-failure guard (broken-refs mode, opt-in) ──────────
+    # Clause 2 of the fail-loud contract: a declared --target-paths glob that
+    # resolves to zero files is unverifiable, not clean. Without --require-targets
+    # the prior behavior is preserved (zero-yield globs are silently skipped), so
+    # EMIT-ONLY callers and ad-hoc operator scans are unaffected. rewrite-map mode
+    # returns above before reaching here, so this never fires in that mode.
+    if args.require_targets and not rewrite_mode:
+        unresolved = find_unresolved_globs(globs)
+        if unresolved:
+            print(
+                "error: --target-paths entr%s resolved to zero files (path-resolution "
+                "failure — target surface missing/relocated, not clean): %s"
+                % ("ies" if len(unresolved) > 1 else "y", ", ".join(unresolved)),
+                file=sys.stderr,
+            )
+            return 3
 
     if rewrite_mode:
         # ─── Rewrite-map mode (EMIT-ONLY; exit 0 regardless of entry count) ─

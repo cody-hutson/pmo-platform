@@ -2,7 +2,7 @@
 """Framework version-anchor drift detection primitive (deploy.sh Check 18).
 
 Catalog-registry-driven (NOT prose corpus-scan) per ADR-v11.12-002.
-Reads pmo-platform/reference/specs/framework-catalog.md (the governed registry,
+Reads core/specs/framework-catalog.md (the governed registry,
 parallels Check 13's TEMPLATE_SYNC_MAP) and runs three sub-checks:
 
   18a  catalog completeness  — every data row has non-empty framework/class/
@@ -18,16 +18,20 @@ parallels Check 13's TEMPLATE_SYNC_MAP) and runs three sub-checks:
        next_review_due == 'continuous' is skipped (emerging tier). — severity P3.
 
 Interface:
-  --catalog-path PATH    catalog markdown (default: pmo-platform/reference/specs/framework-catalog.md)
+  --catalog-path PATH    catalog markdown (default: core/specs/framework-catalog.md)
   --output-format tsv|json   (default tsv)
   --self-test            run internal smoke test and exit
 
 TSV columns: framework<TAB>check<TAB>detail<TAB>severity
-Exit codes: 0 = no findings, 1 = findings found.
+Exit codes: 0 = no findings, 1 = findings found,
+3 = path-resolution failure (catalog file not found / unreadable — the
+registry target does not resolve, so the check is unverifiable, not clean).
+Exit 3 matches the cross-module-audit.sh family convention so deploy.sh can
+distinguish "found drift" (1) from "could not run against the target" (3).
 
 Authored under the v11.12 Stage 5 spec. Error-isolation idiom
-mirrors check-doc-links.py (Check 14): missing catalog -> single clean finding +
-exit 1, never an unhandled traceback.
+mirrors check-doc-links.py (Check 14): the catalog target either resolves and
+is checked, or a path-resolution failure exits 3 — never an unhandled traceback.
 """
 from __future__ import annotations
 
@@ -39,7 +43,7 @@ from pathlib import Path
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
-DEFAULT_CATALOG_REL = "pmo-platform/reference/specs/framework-catalog.md"
+DEFAULT_CATALOG_REL = "core/specs/framework-catalog.md"
 
 CLASS_ENUM = {"EXTERNAL", "INTERNAL"}
 TIER_ENUM = {"stable", "evolving", "emerging"}
@@ -214,20 +218,23 @@ def check_18c(rows: list[dict], today: datetime.date) -> list[dict]:
 
 
 def run_all(catalog_path: Path, today: datetime.date | None = None) -> tuple[list[dict], str | None]:
+    """Run 18a/18b/18c against the catalog. Returns (findings, error).
+
+    A non-None `error` signals a PATH-RESOLUTION FAILURE (catalog file missing
+    or unreadable — the registry target does not resolve). main() maps a path-
+    resolution failure to exit 3 (distinct from exit 1 for real findings), per
+    the #459 fail-loud contract: an unresolvable target is unverifiable, not
+    clean, and must not read GREEN. A malformed-but-present catalog table is a
+    real finding (exit 1), not a path-resolution failure — the file resolved.
+    """
     if today is None:
         today = datetime.date.today()
     if not catalog_path.exists():
-        return [{
-            "framework": "(catalog)", "check": "18a-completeness",
-            "detail": f"catalog file not found: {catalog_path}", "severity": "P1",
-        }], None
+        return [], f"catalog file not found: {catalog_path}"
     try:
         text = catalog_path.read_text(encoding="utf-8", errors="replace")
     except OSError as e:
-        return [{
-            "framework": "(catalog)", "check": "18a-completeness",
-            "detail": f"catalog unreadable: {e}", "severity": "P1",
-        }], None
+        return [], f"catalog unreadable: {e}"
     rows, err = parse_catalog_table(text)
     if err:
         return [{
@@ -352,8 +359,11 @@ def main() -> int:
 
     findings, err = run_all(catalog_path)
     if err:
-        print(err, file=sys.stderr)
-        return 1
+        # Path-resolution failure (catalog missing/unreadable) → exit 3, NOT a
+        # silent pass and NOT a findings-exit-1. The unresolved target is
+        # unverifiable; deploy.sh maps exit 3 to FAIL/DRIFT (per #459).
+        print(f"error: path-resolution failure — {err}", file=sys.stderr)
+        return 3
     if args.output_format == "tsv":
         print(emit_tsv(findings))
     else:
