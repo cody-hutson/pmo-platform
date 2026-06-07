@@ -3,15 +3,13 @@ title: ADR-017 — Work-Item Type Layer (WITL) — thin generic Work Item entity
 status: Proposed
 date: 2026-06-07
 release: declarative-workitem-type-model
-deciders: "operator (D1/D2/D4 ratified 2026-06-07) + Stage 5 Solutioning (#506) + Collective Review scope-lock"
+deciders: "operator (D1/D2/D4 ratified 2026-06-07) + Stage 5 Solutioning + Collective Review scope-lock"
 tags: [entity-model, work-item, type-system, methodology-projection, tier-2-scope-change, hybrid-architecture]
 source_observations:
-  - "The frozen 17-entity model bottoms out at Milestone — no delivery work-item entity exists beneath Milestone/Workstream, so container rollup has no child to aggregate from. (#409 WITL discovery.)"
+  - "The frozen 17-entity model bottoms out at Milestone — no delivery work-item entity exists beneath Milestone/Workstream, so container rollup has no child to aggregate from. (Work-Item Type Layer initiative discovery.)"
   - "A work-item instance IS a tracked record (boundary axiom) so it needs entity-graph membership; but the work-item TYPE set is open/declarative and cannot be a frozen-roster member. The tension resolves as a hybrid: one thin generic entity + a separate declarative type layer."
-  - "Relationship vocabulary (7 MVP types) and methodology->type projection both already exist and are frozen/built — WITL references and unifies them, it does not redefine them. (#497 directional-not-authoritative; reconcile, don't perpetuate.)"
+  - "Relationship vocabulary (7 MVP types) and methodology->type projection both already exist and are frozen/built — WITL references and unifies them, it does not redefine them. (per the directional-not-authoritative intake principle — reconcile, don't perpetuate.)"
 ---
-
-<!-- repo-integrity: allow-issue-ref -->
 
 # ADR-017 — Work-Item Type Layer (WITL)
 
@@ -25,9 +23,9 @@ required by the FROZEN-roster clause of
 Per the core-ADR convention, this decision is captured as a committed ADR document
 authored alongside the entity-model and field-schema edits in the same release.
 
-Provenance: release `declarative-workitem-type-model`; C1 authorization (#506);
-C2 type meta-schema (#507); forward from the Work-Item Type Layer tracking
-umbrella (#409, which ratified D1/D2/D4 on 2026-06-07).
+Provenance: this decision establishes the Work-Item Type Layer; the layer's
+authorization and the subsequent declarative type-pack meta-schema are tracked
+under the Work-Item Type Layer initiative (D1/D2/D4 ratified 2026-06-07).
 
 ## Context
 
@@ -52,8 +50,8 @@ Two adjacent assets already exist and are authoritative:
   defines it and its Appendix B bans Story / Epic / Feature / User-Story / Ticket /
   Work-Package as canonical synonyms.
 
-The operator ratified D1/D2/D4 on 2026-06-07 (the WITL ADR comment on the #409
-umbrella).
+The operator ratified D1/D2/D4 for the Work-Item Type Layer initiative on
+2026-06-07.
 
 ## Decision
 
@@ -65,21 +63,23 @@ inherited Entity Core 7 + a `work_item_type` **discriminator** + a **polymorphic
 `relationships[]` (the built 7 MVP types, by reference). The entity joins the graph
 (referential integrity + the rollup edge); **all type variability** — Story / Bug /
 Test / Task fields, per-kind readiness/done/gate criteria — lives in the separate
-**declarative type-pack layer** (C2 / #507). The pattern mirrors the platform's own
+**declarative type-pack layer** (a subsequent slice of this initiative). The
+pattern mirrors the platform's own
 `delivery_approach` + `custom_methodology_definition` and the RAID-Item →
 `raid-log.schema.json` EAD materialization.
 
 The entity's **Axis-1 base machine** —
 `backlog → ready → in-progress → in-review → done | cancelled` — is owned **here**
 (it is required at C1 for the entity to satisfy V-CORE-03; an entity with no Axis-1
-machine would be the only roster member missing one). #507's type-packs **project**
-methodology-specific labels over this base and MAY add type-scoped sub-states; they
-do not re-found the base machine.
+machine would be the only roster member missing one). The declarative type layer's
+type-packs **project** methodology-specific labels over this base and MAY add
+type-scoped sub-states; they do not re-found the base machine.
 
 ### D2 — Vocabulary = methodology-projected
 
 The canonical kind is `Work Item`. Story / Bug / Test / Task are **per-methodology
-projections** declared in #507's type-pack, unifying with the existing
+projections** declared in the declarative type layer's type-pack, unifying with the
+existing
 `ticket-information-architecture.md` projection table. **No glossary amendment** —
 the glossary already bans the non-canonical synonyms and already names
 `ticket-information-architecture.md` as the owner of Work Item semantics (see
@@ -87,10 +87,10 @@ the glossary already bans the non-canonical synonyms and already names
 
 ### D3 — Now-milestone scope
 
-This ADR (establishing) + the C2 type meta-schema (#507) + the C1 authorization
-(#506). The deferred slices — C3 methodology breakdown, C5 propagation refit, C6
-rollup/translation-fidelity, C7 storage/projection, C8 glossary, C9 migration — are
-tracked on the #409 umbrella and are out of this milestone.
+This ADR (establishing) + the declarative type-pack meta-schema + the layer
+authorization. The deferred slices — methodology breakdown, propagation refit,
+rollup/translation-fidelity, storage/projection, glossary, migration — are tracked
+under the Work-Item Type Layer initiative and are out of this milestone.
 
 ### D4 — Tier-2 SCOPE CHANGE
 
@@ -129,7 +129,7 @@ data-architecture side and the ticket-architecture side.
 - The container↔work-item **rollup edge exists** — the F3 gap closes; Milestone /
   Workstream status can aggregate from work-item children.
 - **Future work-item kinds never amend the roster** — the thin-entity dividend: a new
-  methodology or kind parameterizes the declarative type layer (#507), with zero
+  methodology or kind parameterizes the declarative type layer, with zero
   governance change per kind.
 - **One model, two views** — the entity-domain and release/ticket-domain "Work Item"
   are unified through the shared projection table, not duplicated.
@@ -139,8 +139,8 @@ data-architecture side and the ticket-architecture side.
 - One scoped Tier-2 plus a roster `17 → 18` count cascade across two corpus files
   (`project-entity-model.md`, `entity-field-schemas.md`) — mechanical, enumerated in
   the Stage 5 cascade-sweep.
-- #507 (C2) becomes a **hard consumer**: once it resolves `work_item_type` against
-  the type registry, the entity is a contract.
+- the declarative type layer becomes a **hard consumer**: once it resolves
+  `work_item_type` against the type registry, the entity is a contract.
 
 ### Cross-D upstream-compat
 
@@ -150,11 +150,11 @@ the frozen-roster anti-pattern this initiative exists to eliminate.
 
 ## Reversibility
 
-**EXPENSIVE / Confidence HIGH.** Once #507 + downstream consume the entity it is a
-contract; undo means unwinding the type layer + every consumer. The Tier-2 + this ADR
-+ the Stage 9 GO are the sign-off gate. Pre-consumption — before #507's Engineering
-lands — the change is MODERATE (a new file + an additive §4 block); it crosses to
-EXPENSIVE at the first consumer.
+**EXPENSIVE / Confidence HIGH.** Once the type layer + downstream consume the entity
+it is a contract; undo means unwinding the type layer + every consumer. The Tier-2 +
+this ADR + the Stage 9 GO are the sign-off gate. Pre-consumption — before the type
+layer's implementation lands — the change is MODERATE (a new file + an additive §4
+block); it crosses to EXPENSIVE at the first consumer.
 
 ## Alternatives considered
 
@@ -171,8 +171,9 @@ EXPENSIVE at the first consumer.
   `intake-desk` as the work-item-lifecycle front door and records that "the
   work-item type system, when it lands, extends the type set the front door binds
   to." THIS is that system; `intake-desk` is the creator owning-agent of the
-  Work Item entity, and its `references/type-map.md` seam repoints to #507 when C2
-  lands. The component boundary and handoff contract ADR-016 recorded are unaffected.
+  Work Item entity, and its `references/type-map.md` seam repoints to the type layer
+  when it lands. The component boundary and handoff contract ADR-016 recorded are
+  unaffected.
 - The Two-Axis Entity Lifecycle ADR (ratified at Collective Review, 2026-05-16) — the
   Axis-1 / Axis-2 lifecycle basis the Work Item entity instantiates (Axis-1 operational
   machine owned here; Axis-2 = Living (B)).
