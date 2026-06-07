@@ -2903,7 +2903,7 @@ cmd_check() {
   # Verifies every released version on or after the configurable cutoff
   # (default v1.00 — the first released version; override via
   # RELEASE_NOTE_CHECK_CUTOFF to scope to a later baseline) has
-  # a corresponding pmo-platform/releases/notes/vX.Y_RELEASE_NOTES.md file.
+  # a corresponding ${PMO_INSTANCE_PATH}/releases/notes/vX.Y_RELEASE_NOTES.md file.
   #
   # Composes with — does NOT replace — Check 20 (note-content lint).
   # Check 20 lints CONTENT of notes that exist; Check 26 detects PRESENCE drift.
