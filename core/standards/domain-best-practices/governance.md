@@ -4,6 +4,7 @@ purpose: A K1 universal reference that carries an Applicability Profile and inde
 type: standard
 reversibility: CHEAP / Confidence HIGH
 domain: governance
+framework_version_anchor: "domain-aware-stage5-design"
 consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is governance); the domain-best-practice review criterion (a Stage-5/7 reviewer checks a governance deliverable against this guide's concepts and contraindications); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==governance, including the pipeline-internal-exempt case)"
 frameworks_cited: "PMI PMBOK 7th (2021); PRINCE2 2017; Nonaka SECI (1995); Diátaxis (current) — all registered in core/specs/framework-catalog.md"
 ---
