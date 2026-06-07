@@ -2,6 +2,7 @@
 # Work-Item Type-Pack Meta-Schema
 
 **Status:** Canonical
+**Meta-schema version:** v1
 **Owner:** `../schemas/work-item-type-schema.md`
 **Layer:** 1 (Engineering, git-tracked)
 **Type:** schema-spec doc (the K1 *grammar*; type-pack *instances* are K4 user config)
@@ -239,6 +240,10 @@ Each anti-pattern below is conditional ("do NOT do X when Y, because Z"), distin
 - **Root cause.** Conflating *what gates a kind has* with *which gates the project fires*.
 - **Mitigation.** A kind declares the gate set in `criteria.gate`; `lifecycle_behavior` selects which fire by the project `lifecycle` key (§1.2). Default to the project lifecycle, never the kind.
 - **Principal vs. junior.** Principal keys behavior off the project lifecycle; junior assumes sprints and silently misfires on Waterfall/Kanban.
+
+### 7.5 Test-kind vs. test-artifact (do not collapse the layers)
+
+A `test` **kind** is a Work Item — a tracked unit of work (the const `base` Work Item entity, distinguished by `work_item_type: test`). A test **deliverable** — a test plan, a test case, a test suite — is the **Artifact** entity, a different layer and a different record. The two relate via the `GENERATES` MVP edge (the work item generates the artifact), not by being the same row. Do NOT model a test plan or test case as a `work_item_type`, and do NOT fold a `test` work item into the Artifact entity: collapsing the two erases the work-vs-deliverable distinction the entity model draws and breaks the cross-kind rollup (§4), which keys on `work_item_type` over Work Item records only.
 
 ---
 

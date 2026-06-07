@@ -5,7 +5,7 @@ type: reference
 kind: disciplines
 status: Canonical
 reversibility: CHEAP / Confidence HIGH
-version:
+version: v1.07
 composes_with:
   - project-entity-model.md
   - knowledge-architecture.md
