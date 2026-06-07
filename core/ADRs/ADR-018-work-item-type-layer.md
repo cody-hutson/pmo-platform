@@ -1,5 +1,5 @@
 ---
-title: ADR-017 — Work-Item Type Layer (WITL) — thin generic Work Item entity + declarative type layer
+title: ADR-018 — Work-Item Type Layer (WITL) — thin generic Work Item entity + declarative type layer
 status: Proposed
 date: 2026-06-07
 release: declarative-workitem-type-model
@@ -12,7 +12,7 @@ source_observations:
   - "Relationship vocabulary (7 MVP types) already exists and is frozen/built — WITL references it, it does not redefine it. (per the directional-not-authoritative intake principle — reconcile, don't perpetuate.)"
 ---
 
-# ADR-017 — Work-Item Type Layer (WITL)
+# ADR-018 — Work-Item Type Layer (WITL)
 
 ## Status
 

@@ -51,7 +51,7 @@ release/references/specs/release-personas.md
 # to project-entity-model.md via intra-doc anchors ([§3.0](#30-...), [§3.6](#36-...), etc.).
 # The reference-durability issue-ref detector cannot distinguish an anchor link's `#N`
 # fragment (e.g. `#3`, `#30`, `#36`) from a bare GitHub issue reference, and is not
-# governed by the per-file allow-link marker. The ADR-017 Work Item amendment (roster
+# governed by the per-file allow-link marker. The ADR-018 Work Item amendment (roster
 # 17->18 cascade + the new §3.18 field schema) re-touched lines carrying these
 # pre-existing anchor links, surfacing them in the added-lines delta. They are NOT
 # net-new fragile refs — they are the doc's own navigation. Exempting the file mirrors

@@ -23,7 +23,7 @@ ADRs follow the format established by ADR-005 (see [`../../release/ADRs/ADR-005-
 | ADR-007 | **core** | module-restructure | module-restructure | 2026-05-27 |
 | ADR-008 | **core** | module-restructure | architectural intent; later implementation | 2026-05-27 |
 | ADR-009 | **core** | module-restructure | architectural intent; later implementation | 2026-05-27 |
-| ADR-017 | **core** | declarative-workitem-type-model | data-architecture (WITL) | 2026-06-07 |
+| ADR-018 | **core** | declarative-workitem-type-model | data-architecture (WITL) | 2026-06-07 |
 
 ## Module-restructure ADR composition graph
 
@@ -99,12 +99,12 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ## Data-architecture ADRs
 
-### ADR-017 — Work-Item Type Layer (WITL): thin generic Work Item entity + declarative type layer
+### ADR-018 — Work-Item Type Layer (WITL): thin generic Work Item entity + declarative type layer
 
 **Status:** Proposed (flips to Accepted at the declarative-workitem-type-model Stage 9 GO — that GO renders the Tier-2 SCOPE CHANGE).
 **Decision:** Resolve the work-item modeling tension as a HYBRID (D1): add ONE thin generic `Work Item` entity (roster no. 18) carrying Entity Core 7 + a `work_item_type` discriminator + a polymorphic `parent_ref` (Milestone or Workstream) + the built 7 MVP relationships by reference; externalize ALL type variability to a separate declarative type-pack layer (the C2 type meta-schema). Vocabulary is methodology-projected (D2 — canonical kind `Work Item`; Story/Bug/Test/Task are projections; no glossary amendment). Now-scope (D4) = this ADR + the C2 type meta-schema + the C1 authorization; roster RE-FROZEN at 18 via a scoped Tier-2 (RAID-2026-05-16-precedented).
 **Reversibility:** EXPENSIVE (once the C2 type layer + downstream consume the entity it is a contract; pre-consumption MODERATE).
-**File:** [ADR-017-work-item-type-layer.md](ADR-017-work-item-type-layer.md)
+**File:** [ADR-018-work-item-type-layer.md](ADR-018-work-item-type-layer.md)
 
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 

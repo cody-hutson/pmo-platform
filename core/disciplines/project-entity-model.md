@@ -18,7 +18,7 @@ This doc satisfies the seven acceptance criteria of the establishing issue. Each
 |---|---|---|---|
 | **AC-1** | All 17 entities defined with single-paragraph rationale + first-class justification | [§4](#4-entity-definitions-18) — per-entity *Rationale & first-class justification* | Frozen Artifact 1 (roster + tier) |
 | **AC-2** | Field list per entity (≥3 required fields each) | [§3](#3-entity-core-schema) (6 required core) + [§4](#4-entity-definitions-18) per-entity (≥3 required entity-specific) | Frozen Artifacts 2, 3 |
-| **AC-3** | Relationship matrix (entity-pair × MVP type) for ≥10 common chains | [§5](#5-relationship-matrix) — 17 directed chains + adjacency grid | Frozen Artifact 4 (16 chains + the ADR-017 rollup edge) |
+| **AC-3** | Relationship matrix (entity-pair × MVP type) for ≥10 common chains | [§5](#5-relationship-matrix) — 17 directed chains + adjacency grid | Frozen Artifact 4 (16 chains + the ADR-018 rollup edge) |
 | **AC-4** | Lifecycle state machine per entity (DOMAIN A/B/C inheritance from `frontmatter-schema.md`) | [§3](#3-entity-core-schema) two-axis model + [§4](#4-entity-definitions-18) per-entity Axis-1 machines + Axis-2 pattern | the Two-Axis Entity Lifecycle ADR + Frozen Artifacts 1, 3 |
 | **AC-5** | Owning-agent matrix — which skills read/write per entity | [§6](#6-owning-agent-matrix) | Frozen Artifact 5 |
 | **AC-6** | Cross-references to project-schema, frontmatter-schema, document-ecosystem-design, methodology-parameterization, Deep Research C06/C07/C12/C17 | [§9](#9-cross-references) | §9 targets |
@@ -94,7 +94,7 @@ Every entity carries these core fields **plus** its entity-specific fields ([§4
 
 Per-entity record: **Rationale & first-class justification** · **Entity-specific fields** (on top of the 7 Core; `✅`=required `⚪`=optional · type · cardinality) · **Axis-1 operational state machine** · **Axis-2 content pattern** · **storage_tier** · **persistence_mode** · **owning-agent triplet**. Field lists + Axis-1 machines transcribe FROZEN Artifact 3; tier / persistence / Axis-2 transcribe FROZEN Artifact 1; owning-agent transcribes FROZEN Artifact 5. **The roster and field lists are FROZEN — any change requires reopening the establishing issue via a Tier-2 SCOPE CHANGE.**
 
-> **Amended per [SCOPE CHANGE — RESOLVED via ADR-017] (declarative-workitem-type-model, Tier-2):** the roster is extended from 17 to **18** by the addition of the generic `Work Item` entity ([#18](#18-work-item), [§4](#4-entity-definitions-18)) — a thin entity-graph member whose type variability is externalized to the declarative type layer (the C2 type layer of the same release) per D1 hybrid. Precedented by the 2026-05-16 RAID Item Tier-2 amendment (scoped addition + re-freeze). Roster + field lists **RE-FROZEN at 18 entities** as of 2026-06-07. Authorization: this milestone's Stage 9 GO.
+> **Amended per [SCOPE CHANGE — RESOLVED via ADR-018] (declarative-workitem-type-model, Tier-2):** the roster is extended from 17 to **18** by the addition of the generic `Work Item` entity ([#18](#18-work-item), [§4](#4-entity-definitions-18)) — a thin entity-graph member whose type variability is externalized to the declarative type layer (the C2 type layer of the same release) per D1 hybrid. Precedented by the 2026-05-16 RAID Item Tier-2 amendment (scoped addition + re-freeze). Roster + field lists **RE-FROZEN at 18 entities** as of 2026-06-07. Authorization: this milestone's Stage 9 GO.
 
 ### Project-scoped entities (live in `[Project]/`)
 
@@ -255,11 +255,11 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 - **Axis-2:** Hybrid (C — agent-drafted, human-ratified) · **storage_tier:** portfolio-level → `projects/_config/` · **persistence_mode:** file-backed
 - **Owning agents:** creates `ppm-agent` · maintains `weekly-status-rollup` · readers: `comms-writer`
 
-### Work-item tier entity (added by Tier-2 SCOPE CHANGE — ADR-017)
+### Work-item tier entity (added by Tier-2 SCOPE CHANGE — ADR-018)
 
 #### 18. Work Item
 
-**Rationale & first-class justification.** The generic delivery work-item beneath Milestone/Workstream — the finest unit of tracked work (the model previously bottomed out at Milestone). First-class because, by the boundary axiom ([§2](#2-scope--boundary-axiom): "a logical entity is a data record the PMO tracks"), a work-item instance IS a tracked record needing graph membership for referential integrity and container rollup; it is the `BELONGS_TO` source of the rollup edge that lets Milestone/Workstream status aggregate from its children. **Thin and stable by design (D1 hybrid):** the entity carries only a `work_item_type` discriminator + a polymorphic `parent_ref`; ALL kind/field variability (Story/Bug/Test/Task fields, per-kind readiness/done/gate criteria) lives in the separate declarative type-pack layer, so future kinds parameterize this entity and never amend the roster. `work_item_type`'s value domain is an EXTERNAL, OPEN registry (the declarative type layer) — deliberately not a frozen enum (the open-set property is why the type *set* cannot be a frozen-roster member while the generic *entity* can). Added by Tier-2 SCOPE CHANGE (ADR-017); roster RE-FROZEN at 18 with this addition.
+**Rationale & first-class justification.** The generic delivery work-item beneath Milestone/Workstream — the finest unit of tracked work (the model previously bottomed out at Milestone). First-class because, by the boundary axiom ([§2](#2-scope--boundary-axiom): "a logical entity is a data record the PMO tracks"), a work-item instance IS a tracked record needing graph membership for referential integrity and container rollup; it is the `BELONGS_TO` source of the rollup edge that lets Milestone/Workstream status aggregate from its children. **Thin and stable by design (D1 hybrid):** the entity carries only a `work_item_type` discriminator + a polymorphic `parent_ref`; ALL kind/field variability (Story/Bug/Test/Task fields, per-kind readiness/done/gate criteria) lives in the separate declarative type-pack layer, so future kinds parameterize this entity and never amend the roster. `work_item_type`'s value domain is an EXTERNAL, OPEN registry (the declarative type layer) — deliberately not a frozen enum (the open-set property is why the type *set* cannot be a frozen-roster member while the generic *entity* can). Added by Tier-2 SCOPE CHANGE (ADR-018); roster RE-FROZEN at 18 with this addition.
 
 - **Fields:** `work_item_type`✅ str·1 *(discriminator; value domain = the declarative type registry — `[ASSUMPTION–CONFIRM @ C2 type layer]`)* · `parent_ref`✅ typed-ref·1 *(polymorphic `BELONGS_TO` → Milestone.id OR Workstream.id)*
 - **Axis-1:** `backlog → ready → in-progress → in-review → done | cancelled` (generic base machine; the C2 type-pack layer projects methodology labels + MAY add type-scoped sub-states over this base)
@@ -268,7 +268,7 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 
 ## 5. Relationship Matrix
 
-Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` to Target". The 7 MVP relationship types — `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO` — and their cardinalities are **canonical in `frontmatter-schema.md §Category 4`** (and `document-ecosystem-design.md §4`); they are **referenced here, not redefined**. The 17 chains below instantiate `document-ecosystem-design.md §4`'s delivery-methodology chains at *entity* granularity (AC-3 requires ≥10); chains 1–16 are FROZEN Artifact 4, chain 17 (the Work Item rollup edge) was added by ADR-017.
+Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` to Target". The 7 MVP relationship types — `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO` — and their cardinalities are **canonical in `frontmatter-schema.md §Category 4`** (and `document-ecosystem-design.md §4`); they are **referenced here, not redefined**. The 17 chains below instantiate `document-ecosystem-design.md §4`'s delivery-methodology chains at *entity* granularity (AC-3 requires ≥10); chains 1–16 are FROZEN Artifact 4, chain 17 (the Work Item rollup edge) was added by ADR-018.
 
 ### 5.1 Directed chains (FROZEN Artifact 4 — verbatim)
 
@@ -294,7 +294,7 @@ Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` 
 
 ### 5.2 Adjacency grid (expanded N×N view of the 17 directed chains)
 
-Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities with no frozen outbound/inbound edge omitted for compactness; the 17 chains above are authoritative — chains 1–16 are FROZEN Artifact 4, chain 17 is the ADR-017 Work Item rollup edge — this grid is a navigational view, not an expansion of scope.)
+Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities with no frozen outbound/inbound edge omitted for compactness; the 17 chains above are authoritative — chains 1–16 are FROZEN Artifact 4, chain 17 is the ADR-018 Work Item rollup edge — this grid is a navigational view, not an expansion of scope.)
 
 | Source ↓ \ Target → | Portfolio | Program | Project | Milestone | Plan | Decision | RAID Item | Artifact | Person |
 |---|---|---|---|---|---|---|---|---|---|
@@ -312,7 +312,7 @@ Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities
 | **Strategic Initiative** | | GENERATES | | | | | | | |
 | **Work Item** | | | | BELONGS_TO | | | | | |
 
-> **Work Item rollup edge (chain 17, added by ADR-017, 2026-06-07).** `Work Item → Milestone BELONGS_TO many:1` is the directed rollup chain — status/progress aggregates *up* from work-item children to the container. It is the entity-graph realization of the entity's `parent_ref`. `parent_ref` is **polymorphic**: it also admits a Workstream parent. The Milestone rollup is the canonical/required frozen chain (the F3 rollup target); `Work Item → Workstream BELONGS_TO` is the *same edge type against the alternate polymorphic target*, covered by the field-level polymorphism and the cross-entity X-rule in `entity-field-schemas.md §4` (not enumerated as a second frozen chain — the frozen chains are illustrative common chains per AC-3 ≥10, not exhaustive).
+> **Work Item rollup edge (chain 17, added by ADR-018, 2026-06-07).** `Work Item → Milestone BELONGS_TO many:1` is the directed rollup chain — status/progress aggregates *up* from work-item children to the container. It is the entity-graph realization of the entity's `parent_ref`. `parent_ref` is **polymorphic**: it also admits a Workstream parent. The Milestone rollup is the canonical/required frozen chain (the F3 rollup target); `Work Item → Workstream BELONGS_TO` is the *same edge type against the alternate polymorphic target*, covered by the field-level polymorphism and the cross-entity X-rule in `entity-field-schemas.md §4` (not enumerated as a second frozen chain — the frozen chains are illustrative common chains per AC-3 ≥10, not exhaustive).
 
 ## 6. Owning-Agent Matrix
 

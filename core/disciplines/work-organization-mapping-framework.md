@@ -21,13 +21,13 @@ glossary_anchor: "terminology-glossary.md#term-work-item (Work Item canonical; S
 
 This document is the platform's **standardization of work organization**: a domain-neutral, methodology-agnostic model of how work decomposes, what each hierarchy level is *for*, how typical methodologies populate that hierarchy, what default work-item schemas ship out of the box, and how a user brings or overrides their own work-item types so that an agent understands any deployment's work *by nature*. It is shipped **full-spectrum and plug-and-play down to the work-item level**.
 
-It is the doc [`ADR-017`](../ADRs/ADR-017-work-item-type-layer.md) forward-references as "the work-organization mapping framework shipped in `core/`": the methodology→kind projection (a tracked unit displayed as Story / Task / Work-Package) is a property of **this** domain-neutral map, not of any release-pipeline support tool. ADR-017 establishes the thin generic `Work Item` entity; this framework is the map that entity's kinds project through.
+It is the doc [`ADR-018`](../ADRs/ADR-018-work-item-type-layer.md) forward-references as "the work-organization mapping framework shipped in `core/`": the methodology→kind projection (a tracked unit displayed as Story / Task / Work-Package) is a property of **this** domain-neutral map, not of any release-pipeline support tool. ADR-018 establishes the thin generic `Work Item` entity; this framework is the map that entity's kinds project through.
 
 The framework composes with — and does **not** restate — four substrates that remain their own single sources of truth:
 
 - [`project-entity-model.md`](project-entity-model.md) — the FROZEN canonical entity roster (the hierarchy nodes, the relationship chains, the `Work Item` entity §18). Layer 1 *cites* it by pointer; it is never re-defined here.
 - [`knowledge-architecture.md`](knowledge-architecture.md) — the K1–K5 tiers + the parameterization seam. Layers 1–3 are K1 (shipped); Layer 4 is K4 (operator-local).
-- The 8 delivery-approach **archetypes**, defined by name in the methodology corpus and catalogued in [`framework-catalog.md`](../specs/framework-catalog.md). Layer 2 references them **by name only** (Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe, Hybrid, Custom) — a name reference to an external body of practice, exactly the posture the catalog uses for PMBOK/SAFe/Scrum, and exactly the posture ADR-017 and the entity model already use. **No dependency on any release-pipeline file results.**
+- The 8 delivery-approach **archetypes**, defined by name in the methodology corpus and catalogued in [`framework-catalog.md`](../specs/framework-catalog.md). Layer 2 references them **by name only** (Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe, Hybrid, Custom) — a name reference to an external body of practice, exactly the posture the catalog uses for PMBOK/SAFe/Scrum, and exactly the posture ADR-018 and the entity model already use. **No dependency on any release-pipeline file results.**
 - [`terminology-glossary.md`](../specs/terminology-glossary.md) — `Work Item` is canonical; Story / Epic / Feature / User-Story / Work-Package are **non-canonical projections / display labels** (Appendix B). This map treats every methodology kind name as a projection, never a canonical kind.
 
 > **Placement note (why `core/`, reference-by-name).** This map is universal-platform-knowledge consumed by skills/agents regardless of release-pipeline operation, so [`universal-vs-release-pipeline-split-rule.md`](../standards/universal-vs-release-pipeline-split-rule.md) §2 routes it to `core/disciplines/`. The archetype catalog stays in its release-class consumer's tree (the split-rule §5 audit already ratified that placement). Referencing a methodology *by name* is not a path/code dependency on the file that happens to also describe it; the kernel discipline (no `core/`→`release/` dependency) holds.
@@ -93,7 +93,7 @@ The work-breakdown dimension, per archetype, has three facets: **(i) level names
 
 **Work-breakdown:** `Epic` (grouping label) ⊐ `Story` (commit unit, **Work Item level**) ⊐ `Task` (execution sub-unit, **Work Item level**).
 
-- `Story` and `Task` are **both Work-Item-level kinds**. Per the entity model, the `Work Item` entity is the single hierarchy node beneath Milestone; Story-vs-Task is a *kind* distinction *within* that level (handled by Layer 3 / the declarative type layer), **not** a new hierarchy level. This is the load-bearing modeling call: **methodology "levels" below Milestone collapse onto the single Work Item entity-level and are distinguished by `work_item_type`, not by adding entity-graph nodes.** It matches ADR-017's rejected alternative (B) ("don't add an entity per kind").
+- `Story` and `Task` are **both Work-Item-level kinds**. Per the entity model, the `Work Item` entity is the single hierarchy node beneath Milestone; Story-vs-Task is a *kind* distinction *within* that level (handled by Layer 3 / the declarative type layer), **not** a new hierarchy level. This is the load-bearing modeling call: **methodology "levels" below Milestone collapse onto the single Work Item entity-level and are distinguished by `work_item_type`, not by adding entity-graph nodes.** It matches ADR-018's rejected alternative (B) ("don't add an entity per kind").
 - `Epic` is a **backlog-grouping label, NOT a hierarchy level** — Appendix B of the glossary bans `Epic` as a canonical term (it maps to "Milestone + Issue"). An Epic groups large Stories; it does not occupy its own level.
 
 ### 2.3 Waterfall — end-to-end {#waterfall-map}
@@ -141,7 +141,7 @@ The remaining catalogued archetypes are mapped at **level-name + general-level g
 
 ## Layer 3 — Work-Item Best-Practice default schemas (K1) {#layer-3-schemas}
 
-The package ships **default work-item schemas per the map** — the best-practice defaults a deployment gets out of the box. Load-bearing constraint: these are authored from **methodology best practice** (the Scrum Guide's definition of a Story; PMBOK's definition of a WBS work package; IEEE-1044 defect classification), **NOT** reverse-engineered from the platform's own issue templates or from any release-pipeline ticket model. The platform's own dev-tooling tickets are an *instance under the model*, not its definition (ADR-017's "operations entity vs. dev-tooling ticket" discipline).
+The package ships **default work-item schemas per the map** — the best-practice defaults a deployment gets out of the box. Load-bearing constraint: these are authored from **methodology best practice** (the Scrum Guide's definition of a Story; PMBOK's definition of a WBS work package; IEEE-1044 defect classification), **NOT** reverse-engineered from the platform's own issue templates or from any release-pipeline ticket model. The platform's own dev-tooling tickets are an *instance under the model*, not its definition (ADR-018's "operations entity vs. dev-tooling ticket" discipline).
 
 ### 3.1 Default-schema shape {#schema-shape}
 
@@ -254,7 +254,7 @@ This framework **consumes** these sources by pointer (duplicate-source-disciplin
 
 | Reference | Role relative to this framework |
 |---|---|
-| [`ADRs/ADR-017-work-item-type-layer.md`](../ADRs/ADR-017-work-item-type-layer.md) | Establishes the thin generic `Work Item` entity + the type layer; forward-references **this** framework by name as "shipped in `core/`". This doc satisfies those references. |
+| [`ADRs/ADR-018-work-item-type-layer.md`](../ADRs/ADR-018-work-item-type-layer.md) | Establishes the thin generic `Work Item` entity + the type layer; forward-references **this** framework by name as "shipped in `core/`". This doc satisfies those references. |
 | [`project-entity-model.md`](project-entity-model.md) | The FROZEN hierarchy substrate — §4 per-level purpose, §5 + chain 17 the rollup edge, §18 the `Work Item` entity. Layer 1 cites it; never restated. |
 | [`knowledge-architecture.md`](knowledge-architecture.md) | K1 (Layers 1–3 shipped) vs K4 (Layer 4 user-local) split + §3 parameterization seam Layer 4 instantiates. |
 | [`../standards/universal-vs-release-pipeline-split-rule.md`](../standards/universal-vs-release-pipeline-split-rule.md) | §2 routes this map to `core/`; §5 ratifies the archetype catalog's `release/` placement (why reference-by-name, no relocation). |
