@@ -268,7 +268,7 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 
 ## 5. Relationship Matrix
 
-Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` to Target". The 7 MVP relationship types — `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO` — and their cardinalities are **canonical in `frontmatter-schema.md §Category 4`** (and `document-ecosystem-design.md §4`); they are **referenced here, not redefined**. The 17 chains below instantiate `document-ecosystem-design.md §4`'s delivery-methodology chains at *entity* granularity (AC-3 requires ≥10); chains 1–16 are FROZEN Artifact 4, chain #17 (the Work Item rollup edge) was added by ADR-017.
+Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` to Target". The 7 MVP relationship types — `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO` — and their cardinalities are **canonical in `frontmatter-schema.md §Category 4`** (and `document-ecosystem-design.md §4`); they are **referenced here, not redefined**. The 17 chains below instantiate `document-ecosystem-design.md §4`'s delivery-methodology chains at *entity* granularity (AC-3 requires ≥10); chains 1–16 are FROZEN Artifact 4, chain 17 (the Work Item rollup edge) was added by ADR-017.
 
 ### 5.1 Directed chains (FROZEN Artifact 4 — verbatim)
 
@@ -294,7 +294,7 @@ Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` 
 
 ### 5.2 Adjacency grid (expanded N×N view of the 17 directed chains)
 
-Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities with no frozen outbound/inbound edge omitted for compactness; the 17 chains above are authoritative — chains 1–16 are FROZEN Artifact 4, chain #17 is the ADR-017 Work Item rollup edge — this grid is a navigational view, not an expansion of scope.)
+Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities with no frozen outbound/inbound edge omitted for compactness; the 17 chains above are authoritative — chains 1–16 are FROZEN Artifact 4, chain 17 is the ADR-017 Work Item rollup edge — this grid is a navigational view, not an expansion of scope.)
 
 | Source ↓ \ Target → | Portfolio | Program | Project | Milestone | Plan | Decision | RAID Item | Artifact | Person |
 |---|---|---|---|---|---|---|---|---|---|
@@ -312,7 +312,7 @@ Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities
 | **Strategic Initiative** | | GENERATES | | | | | | | |
 | **Work Item** | | | | BELONGS_TO | | | | | |
 
-> **Work Item rollup edge (chain #17, added by ADR-017, 2026-06-07).** `Work Item → Milestone BELONGS_TO many:1` is the directed rollup chain — status/progress aggregates *up* from work-item children to the container. It is the entity-graph realization of the entity's `parent_ref`. `parent_ref` is **polymorphic**: it also admits a Workstream parent. The Milestone rollup is the canonical/required frozen chain (the F3 rollup target); `Work Item → Workstream BELONGS_TO` is the *same edge type against the alternate polymorphic target*, covered by the field-level polymorphism and the cross-entity X-rule in `entity-field-schemas.md §4` (not enumerated as a second frozen chain — the frozen chains are illustrative common chains per AC-3 ≥10, not exhaustive).
+> **Work Item rollup edge (chain 17, added by ADR-017, 2026-06-07).** `Work Item → Milestone BELONGS_TO many:1` is the directed rollup chain — status/progress aggregates *up* from work-item children to the container. It is the entity-graph realization of the entity's `parent_ref`. `parent_ref` is **polymorphic**: it also admits a Workstream parent. The Milestone rollup is the canonical/required frozen chain (the F3 rollup target); `Work Item → Workstream BELONGS_TO` is the *same edge type against the alternate polymorphic target*, covered by the field-level polymorphism and the cross-entity X-rule in `entity-field-schemas.md §4` (not enumerated as a second frozen chain — the frozen chains are illustrative common chains per AC-3 ≥10, not exhaustive).
 
 ## 6. Owning-Agent Matrix
 

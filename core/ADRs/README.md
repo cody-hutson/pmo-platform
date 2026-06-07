@@ -102,8 +102,8 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 ### ADR-017 — Work-Item Type Layer (WITL): thin generic Work Item entity + declarative type layer
 
 **Status:** Proposed (flips to Accepted at the declarative-workitem-type-model Stage 9 GO — that GO renders the Tier-2 SCOPE CHANGE).
-**Decision:** Resolve the work-item modeling tension as a HYBRID (D1): add ONE thin generic `Work Item` entity (roster #18) carrying Entity Core 7 + a `work_item_type` discriminator + a polymorphic `parent_ref` (Milestone or Workstream) + the built 7 MVP relationships by reference; externalize ALL type variability to a separate declarative type-pack layer (#507). Vocabulary is methodology-projected (D2 — canonical kind `Work Item`; Story/Bug/Test/Task are projections; no glossary amendment). Now-scope (D4) = this ADR + C2 meta-schema (#507) + C1 authorization (#506); roster RE-FROZEN at 18 via a scoped Tier-2 (RAID-2026-05-16-precedented).
-**Reversibility:** EXPENSIVE (once #507 + downstream consume the entity it is a contract; pre-consumption MODERATE).
+**Decision:** Resolve the work-item modeling tension as a HYBRID (D1): add ONE thin generic `Work Item` entity (roster no. 18) carrying Entity Core 7 + a `work_item_type` discriminator + a polymorphic `parent_ref` (Milestone or Workstream) + the built 7 MVP relationships by reference; externalize ALL type variability to a separate declarative type-pack layer (the C2 type meta-schema). Vocabulary is methodology-projected (D2 — canonical kind `Work Item`; Story/Bug/Test/Task are projections; no glossary amendment). Now-scope (D4) = this ADR + the C2 type meta-schema + the C1 authorization; roster RE-FROZEN at 18 via a scoped Tier-2 (RAID-2026-05-16-precedented).
+**Reversibility:** EXPENSIVE (once the C2 type layer + downstream consume the entity it is a contract; pre-consumption MODERATE).
 **File:** [ADR-017-work-item-type-layer.md](ADR-017-work-item-type-layer.md)
 
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)

@@ -222,7 +222,7 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 
 > **⛇ FREEZE-GATE ARTIFACT — the exact surface the RAID-Log machine-schema pilot consumes.** Transcribed **verbatim** from the "Output for Stage 6" Tables A–F, with the **Finding-3 Option-A amendment applied** (operator decision 2026-05-16; `project-entity-model.md` §4.6 RE-FROZEN): `impact ✅` / `action_plan ⚪` are **first-class frozen entity fields** (no longer conditional). The B-CONDITIONAL block and all `[ASSUMPTION–CONFIRM]` framing are **dropped**; V-RAID-12 / V-RAID-13 / NT-RAID-4 are **added** per the amendment.
 
-**Entity:** RAID Item · #6 of 18 · tier `project-scoped → [Project]/` · `persistence_mode: embedded-in-parent` (rows in the RAID Log artifact) · `content_lifecycle_pattern: Living (B)` (Frozen Artifact 1, immutable).
+**Entity:** RAID Item · no. 6 of 18 · tier `project-scoped → [Project]/` · `persistence_mode: embedded-in-parent` (rows in the RAID Log artifact) · `content_lifecycle_pattern: Living (B)` (Frozen Artifact 1, immutable).
 
 **A. Field table — Core (Frozen Artifact 2, inherited verbatim):**
 
@@ -566,7 +566,7 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 
 #### 3.18 Work Item (WI)
 
-Field schema for the generic `Work Item` entity (`project-entity-model.md` §4 #18) — the thin entity-graph member whose type variability is externalized to the declarative type layer (the C2 type layer of the same release). Core 7 inherited (§3.0); only the two discriminating entity-specific fields are listed.
+Field schema for the generic `Work Item` entity (`project-entity-model.md` §4 entity 18) — the thin entity-graph member whose type variability is externalized to the declarative type layer (the C2 type layer of the same release). Core 7 inherited (§3.0); only the two discriminating entity-specific fields are listed.
 
 | Field | Type | Req | Card | Default | references: | Notes |
 |---|---|---|---|---|---|---|
