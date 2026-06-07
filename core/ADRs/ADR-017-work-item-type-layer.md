@@ -57,7 +57,7 @@ The operator ratified D1/D2/D4 for the Work-Item Type Layer initiative on
 
 ### D1 — Data model = HYBRID
 
-Add **one thin generic `Work Item` entity** to the roster (entity #18): the
+Add **one thin generic `Work Item` entity** to the roster (entity 18): the
 inherited Entity Core 7 + a `work_item_type` **discriminator** + a **polymorphic
 `parent_ref`** (a `BELONGS_TO` parent that is a Milestone *or* a Workstream) +
 `relationships[]` (the built 7 MVP types, by reference). The entity joins the graph
@@ -105,7 +105,7 @@ entity — the larger-but-still-precedented move, same change *class*). The rost
 There are two surfaces named "Work Item", and they are **two views of one concept**,
 not a name collision and not a duplicated definition:
 
-- The **entity-domain `Work Item`** — entity #18 in
+- The **entity-domain `Work Item`** — entity 18 in
   [`project-entity-model.md`](../disciplines/project-entity-model.md): a tracked data
   record with a field schema, a two-axis lifecycle, and graph membership.
 - The **release/ticket-domain `Work Item`** — the GitHub-Issue-backed unit whose
