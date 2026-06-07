@@ -1896,8 +1896,17 @@ cmd_check() {
       # --require-targets (per #459): a declared --target-paths glob resolving to
       # zero files is a path-resolution failure (exit 3), not a clean pass — so a
       # relocated/typo'd scan surface can never read GREEN.
+      # Target globs match the post-restructure live layout (per #459 follow-up):
+      # release specs/standards live under release/references/ (recursively
+      # covered by the release/references/ entry, which also covers the release
+      # schema files under references/standards/); release has no rules surface
+      # (rules are core-only via core/rules/); operations has no references/ or
+      # schemas/ dirs (OPERATIONS.md + operations/skills/*/SKILL.md are the
+      # operations governance + skill scope). The earlier release/{schemas,specs,
+      # standards,rules}/ and operations/{references,schemas}/ globs never matched
+      # this layout and were dropped to keep every glob zero-yield-free.
       c14_output=$(/usr/bin/python3 "$c14_script" \
-        --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,release/schemas/,release/specs/,release/standards/,release/rules/,operations/OPERATIONS.md,operations/references/,operations/schemas/,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
+        --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,operations/OPERATIONS.md,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
         --allowlist "$c14_allowlist" \
         --output-format tsv \
         --require-targets \
