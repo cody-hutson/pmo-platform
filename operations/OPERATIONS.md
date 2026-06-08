@@ -162,6 +162,8 @@ Governs how multi-mode skills select which mode to run on a given invocation. Pa
 
 **Enforcement.** Structural placement (Mode Selection as first operational subsection of SKILL.md body) is the load-bearing enforcement mechanism for always-ask tier — agents reading SKILL.md encounter the AUQ instruction before any mode-specific content. Guardrails text in individual skill bodies serves as a secondary reminder. A post-hoc pmo-qa-auditor gate check (Layer 3 in the layered forcing-function pattern) is deferred; activate via a new GitHub Issue if drift is observed across the 3 always-ask skills.
 
+**Skill ↔ pipeline alignment (upstream design contract).** The three tiers above govern *when a skill asks for its mode*; the upstream question — *is mode-resolution a human decision or a state-read, and how does a skill's gate/checklist vocabulary stay aligned to the canonical pipeline gate IDs* — is governed by the [skill-pipeline-alignment standard](../core/standards/skill-pipeline-alignment.md). Its decision-test DT-1 (ask-for-mode vs read-pipeline-state) composes with this tier classification and feeds the tier choice; DT-2 (parallel-vocabulary-leak vs gate IDs) and DT-3 (shared-stage-work extraction) operationalize [ADR-019](../core/ADRs/ADR-019-specialists-compose-not-absorb.md) at the skill↔pipeline seam. Consult it when authoring or reviewing a multi-mode SKILL.md.
+
 ### Output Priority
 
 1. **Analysis and judgment** → Synthesized findings, recommendations, evidence chains

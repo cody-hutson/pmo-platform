@@ -274,6 +274,8 @@ Execution tools and skills that "implement the framework" MUST:
 
 **Compliance posture:** This is a MUST for new tools and a SHOULD for existing tools (retrofit on-demand as they are edited). Existing files are not retroactively rewritten; compliance propagates organically as files are touched per the "No ungoverned changes" protocol.
 
+**Skill ↔ pipeline alignment (Tool-layer ↔ Process-layer contract).** A skill is a Tool-layer implementation that runs *inside* the Process layer's 13-stage pipeline. How any skill aligns to the stages it runs in — whether it is 1:1 stage-mapped, one of several stage-internal steps, or a cross-stage composing service, plus the decision-tests that keep its mode/gate vocabulary from shadowing the canonical pipeline IDs — is governed by the skill-pipeline-alignment standard (`core/standards/skill-pipeline-alignment.md`). That standard is the Tool-layer alignment contract for this dimension; it operationalizes ADR-019 (`core/ADRs/ADR-019-specialists-compose-not-absorb.md`, "Specialists compose, not absorb") at the skill↔pipeline seam. This framework owns the layer *relationship*; the alignment standard owns the skill-side *conformance rules*.
+
 **First citations:** `hub-spoke-bridge.md` gets the retrofit citation in Wave 2a (§ Framework Alignment). `implementation-execution-pattern.md` is a retrofit candidate deferred to the next edit of that file (low priority — no term collisions).
 
 ---
