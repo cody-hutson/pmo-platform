@@ -108,7 +108,7 @@ If any conjunct fails, the step belongs in the existing owner; the second skill 
 | Register-or-remove | [duplicate-source-discipline.md](duplicate-source-discipline.md) | The §1 register-or-remove rule DT-2 LEAK remediation and the §7 future-check trigger rest on. |
 | Review discipline | [review-discipline-principles.md](../disciplines/review-discipline-principles.md) | The review-class discipline `pmo-qa-auditor` / `build-reviewer` apply when checking DT-conformance. |
 
-## §9 References
+## References
 
 The issue and ADR numbers below are provenance for this record; the prose above leads with self-describing roles so the meaning survives renumbering. This block is the designated reference home.
 
