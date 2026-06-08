@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.08] - 2026-06-08
+
+The skill-suite architecture spine lands: every role-named skill now has a binding architectural rule — Specialists compose shared function-skills rather than re-implementing them (ADR-019) — backed by a codified skill↔pipeline alignment standard, and the pmo-skill-refiner factory now fails loudly if its wrapped Anthropic scaffolder drifts in format instead of silently degrading.
+
+[Full notes](release/releases/notes/v1.08_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.08)
+
 ## [v1.07] - 2026-06-07
 
 The work-item type layer lands as a methodology-agnostic, best-practice template — a thin generic Work Item entity beneath Milestone/Workstream, a domain-neutral work-organization mapping framework, and a declarative type-pack meta-schema — so a user brings their own work types and an agent understands their work structure by nature.
