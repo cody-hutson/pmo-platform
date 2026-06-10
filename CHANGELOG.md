@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [memory-to-corpus-codification] - 2026-06-10
+
+Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release) — a verification-only close-out of the memory-to-corpus codification scope. All nine targeted behavioral rules (five workspace guardrails + four git-workflow rules) were verified already present in the tracked corpus with their provenance recorded; the three now-redundant operator memory files were archived and retired from the operator memory store; and the tickets and milestone description were reconciled to live state. No user-visible behavior changes. Shipped single-branch via one [release pull request](https://github.com/cody-hutson/pmo-platform/pull/604) (the release-tracking corpus records the PR and merge SHA).
+
+[Full notes](release/releases/notes/memory-to-corpus-codification_RELEASE_NOTES.md)
+
 ## [v1.08] - 2026-06-08
 
 The skill-suite architecture spine lands: every role-named skill now has a binding architectural rule — Specialists compose shared function-skills rather than re-implementing them (ADR-019) — backed by a codified skill↔pipeline alignment standard, and the pmo-skill-refiner factory now fails loudly if its wrapped Anthropic scaffolder drifts in format instead of silently degrading.
