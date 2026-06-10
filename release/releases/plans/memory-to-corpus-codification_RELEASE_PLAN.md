@@ -11,6 +11,8 @@ reversibility-tier: CHEAP
 themes: ["epic:knowledge-corpus", "cluster:process-protocol", "cluster:documentation"]
 ---
 
+<!-- repo-integrity: allow-memory-ref -->
+
 # memory-to-corpus-codification Release Plan
 
 **Milestone:** `memory-to-corpus-codification`
