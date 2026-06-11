@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -635,6 +635,36 @@ structural conformance and content quality.
   and notes "1 cross-project item included because it affects [Project X]'s cutover."
   Junior dumps everything from PORTFOLIO.md context and produces a cluttered output that
   buries the actual blockers for the project the user asked about.
+
+### TRACKER_UPDATES emitted without the Section 8.6 dependency scan — PROC
+
+- **Signature (observable signal):** A response carries a populated TRACKER_UPDATES
+  block but no TRACKER_IMPACT_MATRIX, or a matrix containing only DIRECT rows with no
+  per-update "No secondary effects identified" records — there is no evidence the
+  five-step scan protocol ran against the trackers already loaded in context.
+- **Conditional:** do NOT emit a TRACKER_UPDATES block when the Section 8.6 dependency
+  scan has not been executed against every proposed update, because tracker updates
+  ripple — closing a risk moves a Daily Status Log carry-forward item, a decision
+  re-dates an Open Meetings Tracker entry — and unscanned SECONDARY effects leave the
+  operational trackers internally inconsistent while the pipeline status advances to
+  CLOSED on DIRECT-only resolution.
+- **Root cause:** The scan is a post-pass over data already in context — it adds no
+  new reads and no new visible artifact beyond the matrix, so it feels like ceremony
+  once the updates themselves are drafted; the deterministic five-step protocol
+  ("always execute") exists precisely because the step is structurally easy to
+  rationalize away.
+- **Mitigation:** Run the five-step scan for every proposed update: extract entities →
+  cross-reference all loaded trackers → SECONDARY matrix entry per match → "No
+  secondary effects identified" per non-match → flag ambiguous entities for user
+  review. Render the TRACKER_IMPACT_MATRIX after every TRACKER_UPDATES block, and
+  hold pipeline status at TRACKERS_PENDING until every matrix entry is resolved —
+  never advance to CLOSED on the DIRECT rows alone.
+- **Principal response vs. junior response:** Principal scans and surfaces "BLK-012
+  closure also resolves carry-forward action #3 in the Daily Status Log and stales
+  agenda item 2 in Thursday's steerco — 2 SECONDARY updates appended." Junior emits
+  the DIRECT updates, skips the matrix, and marks the run CLOSED; the un-cascaded
+  secondary effects surface a week later as tracker drift the next processing run has
+  to reverse-engineer.
 
 ## Shared Behavioral Rules
 

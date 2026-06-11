@@ -2,7 +2,7 @@
 name: pmo-technical-analyst
 description: >
   Reviews technical artifacts with senior TPM judgment — surfaces risks not obvious from the document alone. Modes: FDD review · Integration risk · Architecture assessment · Dependency identification · Feasibility feedback. Use when uploading FDDs, integration specs, or architecture documents. Triggers: "review this FDD", "what are the technical risks", "check this integration design", "architecture review", "feasibility check", "what's missing from this spec."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -490,6 +490,65 @@ structural conformance and content quality.
   authoring assigned to J. Smith + L. Davis." Junior mentions J. Smith in the dependency
   map and the SPOF risk stays implicit — surfacing the day J. Smith goes on PTO during
   cutover week.
+
+### Bidirectional integration reviewed in one direction only — PROC
+
+- **Signature (observable signal):** A Mode B review of a two-way integration (e.g.,
+  an ERP↔CRM sync) assesses data flow, error handling, retry, and monitoring for the
+  direction the spec foregrounds, while the inverse direction appears only in the
+  data-flow description — no per-failure-point assessment, no reconciliation check,
+  no monitoring verdict for the return path.
+- **Conditional:** do NOT close a Mode B integration assessment when only one
+  direction of a bidirectional flow has been taken through the per-touchpoint checks
+  (error handling at source/transport/transform/load/target, retry and dead-letter,
+  monitoring, reconciliation), because each direction is its own integration with its
+  own failure points — the unreviewed return path is where un-monitored silent
+  failures accumulate, and specs habitually document the primary direction in detail
+  while hand-waving the inverse.
+- **Root cause:** The spec's own structure anchors the review — the foregrounded
+  direction gets sections, tables, and field mappings, while the inverse direction
+  gets a sentence; the agent walks the document instead of walking the touchpoint
+  inventory, so the thinly-documented direction silently inherits a thin review.
+- **Mitigation:** Before assessing, enumerate touchpoints directionally: a
+  bidirectional integration contributes two assessment units. Run the full step 3
+  checklist per direction and render both in the output; when the spec
+  under-documents the inverse direction, that absence is itself a gap finding with a
+  drafted remediation ("return-path error handling unspecified — drafted dependency
+  entry and monitoring AC below"), not a reason to skip the assessment.
+- **Principal response vs. junior response:** Principal renders "Order sync ERP→CRM:
+  6 checks assessed; CRM→ERP status writeback: error handling and reconciliation
+  UNSPECIFIED in spec — 2 gap findings + drafted ACs." Junior reviews the direction
+  with the nice diagram and ships; the writeback path fails silently in week two of
+  hypercare and nobody can say what the retry behavior was supposed to be.
+
+### Feasibility verdict rendered without conditional dependency flags — PROC
+
+- **Signature (observable signal):** A feasibility check concludes "feasible" or "not
+  feasible" as a flat verdict, while the analysis body names external dependencies
+  (refresh cadence, capacity, vendor timeline, an unconfirmed [ASSUMPTION – CONFIRM]
+  item) that the verdict actually rests on — none of which are attached to the
+  verdict as explicit conditions.
+- **Conditional:** do NOT render a feasibility verdict when the dependencies and
+  unconfirmed assumptions the verdict rests on have not been attached as explicit
+  conditions ("feasible IF the data-warehouse refresh moves to hourly AND the vendor
+  API rate limit is confirmed sufficient"), because a flat verdict gets quoted forward
+  into planning decisions stripped of its conditions — when a load-bearing dependency
+  later fails, the record shows the analyst said "feasible."
+- **Root cause:** The verdict is the headline the requester wants, and conditions read
+  like hedging; under pressure to be decisive the agent renders the conclusion and
+  leaves the qualifying dependencies scattered in the dependency map instead of
+  binding them to the verdict where quotation will carry them.
+- **Mitigation:** Before rendering any feasibility verdict, sweep the dependency map
+  and the [ASSUMPTION – CONFIRM] inventory for items the verdict depends on; render
+  the verdict in conditional form with each load-bearing dependency named, its owner,
+  and its confirmation path. A verdict with zero conditions requires an explicit "no
+  load-bearing external dependencies identified" statement, not silence.
+- **Principal response vs. junior response:** Principal renders "Feasible [MODERATE ·
+  confidence: MEDIUM] — conditional on (1) hourly warehouse refresh (owner: data
+  team, unconfirmed), (2) tax-engine API v2 availability by the integration window
+  (vendor-committed)" and the conditions travel with the quote. Junior renders
+  "feasible"; the warehouse refresh stays daily; the integration ships late and the
+  feasibility analysis is remembered as wrong rather than unread.
 
 ## Shared Behavioral Rules
 

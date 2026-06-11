@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -217,6 +217,32 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
   follow-up needed by Friday"). Junior ships "MTG-01: Reservation Clearing & Unwinding"
   and the dev who joined the channel last week asks "what's MTG-01?" — derailing the
   channel into an unrelated explanation thread.
+
+### Daily Status Log appended before the posting-confirmation gate — PROC
+
+- **Signature (observable signal):** Today's AM/PM update appears in the Daily Status
+  Log under the date header, but the session shows no user confirmation that the
+  update was posted to Teams — the append ran at generation time instead of after the
+  Post-Generation confirmation prompt.
+- **Conditional:** do NOT append a generated update to the Daily Status Log when the
+  user has not yet confirmed the Teams post, because the Log records what was actually
+  posted — a pre-confirmation append plants a phantom update that the next generation
+  run reads as "yesterday's update" for carry-forward comparison, corrupting every
+  downstream delta.
+- **Root cause:** The Log append is an auto-write (operational tracker, no approval
+  gate), and the agent conflates "no approval needed for the write" with "no ordering
+  constraint on the write" — collapsing the three-step Post-Generation sequence
+  (save → prompt → append after confirmation) into one pass to feel complete.
+- **Mitigation:** Honor the Post-Generation Actions order: (1) save to 08-Generated/,
+  (2) prompt for posting, (3) append to the Daily Status Log and update the Open
+  Meetings Tracker only after the user confirms the post. If the user never confirms,
+  the update stays in 08-Generated/ only; regenerate or discard at the next run —
+  never backfill the Log with an unposted update.
+- **Principal response vs. junior response:** Principal saves to 08-Generated/,
+  prompts, and appends only on confirmation — if the user edits the message before
+  posting, the Log captures the posted version. Junior appends at generation time;
+  the user never posts (or posts an edited version); tomorrow's AM update carries
+  forward deltas against a message the team never saw.
 
 ## Multi-Project Support
 

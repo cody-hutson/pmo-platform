@@ -531,6 +531,63 @@ structural conformance and content quality.
   findings with 6 drafted REQs; each is approved piecemeal, no one designs the workflow,
   and implementation discovers the missing process as a scope dispute.
 
+### Requirement structured without the completeness pass and AC draft — PROC
+
+- **Signature (observable signal):** Mode A output contains REQ-### rows that specify
+  behavior but carry no acceptance criteria and no exception handling, with no
+  corresponding DRAFT sub-requirement or gap finding acknowledging the absence — the
+  completeness assessment silently did not run for those rows.
+- **Conditional:** do NOT structure a requirement into the REQ-### table without
+  running the Mode A completeness assessment (actor, trigger, expected behavior,
+  exception handling, acceptance criteria) and drafting the missing pieces, because an
+  AC-less requirement is untestable and unverifiable downstream — it enters the FRD
+  looking finished, then surfaces as a scope dispute at UAT when nobody can say what
+  "done" means for it.
+- **Root cause:** Extraction and structuring (steps 1-3) scale linearly with source
+  volume and produce visible table rows fast; the per-requirement completeness
+  assessment (step 4) and gap drafting (steps 5-6) are judgment passes that multiply
+  effort per row, so under a large source document the agent ships the structured
+  table and skips the assessment for the rows that needed it most.
+- **Mitigation:** Run the step 4 completeness check on every REQ row before output:
+  each of the five completeness elements is present, or its absence is converted to a
+  drafted DRAFT-labeled sub-requirement or AC (per the push-to-resolve REQ-014a-c
+  pattern) — never silently absent. A REQ row with missing elements and no paired
+  draft is an incomplete Mode A output, not a smaller one.
+- **Principal response vs. junior response:** Principal ships "REQ-014 (returns
+  handling) — scoped; AC missing in source; drafted AC-014a/b/c below, DRAFT —
+  confirm with business owner." Junior ships REQ-014 as a clean-looking table row;
+  the missing AC is discovered when the dev team builds to their own interpretation
+  and UAT fails on a behavior nobody specified.
+
+### Traceability matrix shipped without the broken-link flagging pass — PROC
+
+- **Signature (observable signal):** A Mode D traceability matrix renders rows where
+  DEC, DESIGN, JIRA, or EVIDENCE cells are simply blank — no "NOT LINKED" flag, no
+  broken-link inventory, no per-link remediation action — yet chain integrity metrics
+  are still reported as if the link scan ran.
+- **Conditional:** do NOT ship a Mode D traceability matrix when broken links are left
+  as blank cells instead of flagged open loops with drafted remediations, because the
+  broken-link inventory (Mode D steps 2-3) is the matrix's entire diagnostic payload —
+  a blank cell is ambiguous between "not yet scanned" and "scanned and broken," and
+  the chain integrity metric computed over unflagged blanks understates the break
+  count the TPM acts on.
+- **Root cause:** Step 1 (build the chain from available artifacts) produces a
+  complete-looking table on its own, and the broken-link pass (steps 2-3: identify
+  each break, draft the specific action) is a separate pass over every row that is
+  easy to truncate when the requirement set is large — the matrix looks done before
+  the diagnostic work happened.
+- **Mitigation:** After building the chain, run the broken-link pass row by row: every
+  empty link cell becomes an explicit "NOT LINKED" open-loop flag with the specific
+  drafted action ("REQ-007 has no Jira ticket — recommended: create Story in OTC
+  backlog, DRAFT AC below"). Compute chain integrity metrics only from the flagged
+  matrix, and reconcile: the flagged-broken-link count must equal the metric's
+  broken-link contribution.
+- **Principal response vs. junior response:** Principal ships a matrix where every
+  break is a flagged open loop with a remediation, and the integrity report reads
+  "78% fully traced; 9 broken links, all with drafted actions." Junior ships a matrix
+  with quiet blank cells and a flattering integrity number; the unflagged breaks
+  surface at phase-gate review when someone asks why REQ-007 was never built.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
