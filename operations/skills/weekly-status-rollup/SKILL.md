@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -306,6 +306,35 @@ structural conformance and content quality.
   Section 3, with project sections referencing "see Cross-Project: J. Smith conflict."
   Junior writes the conflict three times — once in [PROJECT_KEY], once in OTC, once in
   Section 3 — and the rollup reads as a longer, less coherent document.
+
+### Daily-log coverage gap read as a quiet week — INPUT
+
+- **Signature (observable signal):** "This Week" bullets, health colors, and
+  write-back proposals are derived from a Daily Status Log that covers only
+  part of the reporting window — a mid-week run with Monday–current gaps, or a
+  Friday run with unlogged days — and the output presents the synthesis as the
+  week's record with no statement naming the uncovered days.
+- **Conditional:** do NOT synthesize "This Week" sections or health colors as a
+  full-week record when the Daily Status Log has entries for only part of the
+  reporting window, because a day with no log entry is indistinguishable from a
+  quiet day — treating silence as no-movement converts missing data into
+  implied-GREEN evidence that flows through Section 1 into the PORTFOLIO.md
+  write-back.
+- **Root cause:** The Inputs step reads "this week's AM and PM updates (Monday
+  through current day)" as whatever entries exist; a missing day produces no
+  error at read time, so the gap is invisible at synthesis — absence of
+  evidence quietly becomes evidence of absence.
+- **Mitigation:** Before synthesis, run the roll-up input-coverage checklist:
+  enumerate expected-vs-present log days for the reporting window, label
+  uncovered days in Sections 1–2 ("Tue–Wed: no daily log — not assessed"),
+  derive health only from covered evidence, and exclude write-back fields
+  whose support falls inside the gap. Treat "no entry" as NO DATA, never as
+  "no movement."
+- **Principal response vs. junior response:** Principal ships the roll-up with
+  the gap named and health scoped to covered days, so leadership reads exactly
+  what is and is not known. Junior rolls up the days that have entries and
+  presents it as the week — a blocker that surfaced on an unlogged Wednesday
+  reaches SteerCo as GREEN.
 
 ## Generation Schedule
 

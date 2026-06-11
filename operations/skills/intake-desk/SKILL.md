@@ -15,7 +15,7 @@ description: >
   issue", "turn this into a work item", "log this idea", "what type of work item
   is this", "scope this idea for intake", "is this intake-ready", or "help me write
   up this bug/story/initiative".
-version: v3.19
+version: v1.10
 license: BUSL-1.1
 ---
 
@@ -172,9 +172,8 @@ the emit recommendation.
 
 Category tags below are spelled out on first use, per the failure-mode taxonomy:
 **PROC** = Process/Workflow adherence · **OUT** = Output/Framing quality · **TRIG**
-= Trigger/Scope · **HAND** = Handoff/Escalation (the fifth tag, **INPUT** =
-Input/Evidence handling, is defined here for completeness; this skill's failure
-surface concentrates in the four above).
+= Trigger/Scope · **HAND** = Handoff/Escalation · **INPUT** = Input/Evidence
+handling.
 
 ### Over-elicitation past intake-ready — PROC
 
@@ -326,3 +325,35 @@ surface concentrates in the four above).
   assumption the right agent later closes. Junior either invents a plausible value
   (planting a false premise) or omits the unknown (losing it), forcing rework when
   the gap surfaces downstream.
+
+### Work item filed without consulting existing tracker state — INPUT
+
+- **Signature (observable signal):** The desk runs the full loop and files a new
+  work item whose scope an existing open item already owns — the same defect,
+  the same capability gap, or a subset of an open item's stated scope — with no
+  tracker-search evidence in the conversation and no existing-item candidates
+  surfaced at the confirm gate.
+- **Conditional:** do NOT log a new work item without consulting the work
+  tracker for an existing owner of the same scope, because the tracker state is
+  an input to correct placement just as the idea is — a duplicate splits one
+  workstream across two homes, strands the new context away from the existing
+  item's labels and history, and exits intake looking well-formed while making
+  the backlog less true.
+- **Root cause:** The loop's input is the user's idea, and the framing ("log
+  this idea") implies novelty; the output contract consults tracker state only
+  AFTER the create (the read-back step). Nothing in the four phases forces the
+  pre-filing question "does this item already exist?" — so novelty is assumed,
+  never derived.
+- **Mitigation:** Between the clarity gate and the confirm gate, run a scoped
+  search of the configured tracker on the drafted item's key terms (GitHub MVP:
+  `gh issue list --search "<key terms>" --state open`). Surface any plausible
+  match as its own question before rendering the binary confirm ("possible
+  existing owner: an open item with matching scope — file new anyway / enrich
+  the existing item"), leaving the binary confirm untouched; on "enrich," skip
+  the confirm-and-create path entirely and deliver the captured content as a
+  comment-ready block for the existing item.
+- **Principal response vs. junior response:** Principal surfaces the near-match
+  at confirm and lets the user choose enrich-vs-new, so one workstream keeps
+  one home. Junior files the well-formed duplicate; it passes the 5-test
+  cleanly, and triage later spends a cycle discovering, reconciling, and
+  closing the split.
