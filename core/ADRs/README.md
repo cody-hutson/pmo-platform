@@ -106,6 +106,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** EXPENSIVE (once the C2 type layer + downstream consume the entity it is a contract; pre-consumption MODERATE).
 **File:** [ADR-018-work-item-type-layer.md](ADR-018-work-item-type-layer.md)
 
+## Automation-governance ADRs
+
+### ADR-020 — Agent-script promotion ladder: form-anchored five-rung enum (AS0–AS4)
+
+**Status:** Accepted (operator-ratified at the v1.09 Stage 5 scope-lock 2026-06-10 — single-issue-release equivalent gate per § Status enum).
+**Decision:** Adopt the form-anchored five-rung enum AS0 (agent procedure) / AS1 (documented command) / AS2 (tracked tool, agent-invoked) / AS3 (checkpoint-wired) / AS4 (autonomous guard) as the promotion-ladder vocabulary for the agent-to-script promotion framework, with the split-promotion rule (judgment-class steps promote only their evidence-gathering substrate) and the caller-type AS2/AS3 boundary test (AS3 iff the invoker is another governed executable). Rejected: reusing the gate-criteria Check enum (parallel-vocabulary leak), a 4-rung collapse (erases the documented-command rung where most promotions begin), and a continuous readiness score (not schema-validatable). Canonical definition: [core/standards/agent-script-promotion-framework.md](../standards/agent-script-promotion-framework.md).
+**Reversibility:** CHEAP at ship, trending MODERATE as downstream artifacts accumulate rung citations.
+**File:** [ADR-020-agent-script-promotion-ladder.md](ADR-020-agent-script-promotion-ladder.md)
+
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
 ### ADR-003 — Operating Model Composition
