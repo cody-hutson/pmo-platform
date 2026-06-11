@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -566,6 +566,67 @@ structural conformance and content quality.
   scope change by EOD Friday so engineering can re-baseline Monday." Junior writes
   "It would be helpful to have your thoughts on the scope change when you have a
   chance" — and the escalation does not get acted on until the deadline has passed.
+
+### Framework-governed status update drafted as a freeform Type 4 brief — TRIG
+
+- **Signature (observable signal):** A "status update" request that matches
+  daily-status's surface (AM/PM/EOD update, daily connect, post-testing status)
+  or weekly-status-rollup's surface (weekly roll-up, SteerCo, portfolio health)
+  is drafted as a comms-writer Type 4 brief — composed from conversation context,
+  without the carry-forward-tracker derivation or PORTFOLIO.md write-back the
+  owning skill performs.
+- **Conditional:** do NOT draft a daily AM/PM update or weekly portfolio roll-up
+  as a Type 4 executive brief when the request matches the daily-status or
+  weekly-status-rollup trigger surface, because those skills derive status
+  content from carry-forward trackers and the Daily Status Update Framework and
+  (for the roll-up) write health state back to PORTFOLIO.md — a freeform Type 4
+  substitute produces unsourced status theater and silently skips the tracker
+  write-backs the platform depends on.
+- **Root cause:** "Status update" is shared vocabulary across three skills; Type
+  4's own trigger list includes "status update for leadership" and SteerCo
+  preparation, so the request lands here on phrasing alone — and drafting from
+  conversational context is faster than routing to the skill that must read five
+  tracker files first.
+- **Mitigation:** Before drafting any status communication, classify cadence and
+  derivation: daily / AM/PM / team-channel → daily-status owns it; weekly /
+  portfolio / SteerCo document → weekly-status-rollup owns it; a one-off
+  audience-calibrated brief built FROM already-derived status → Type 4 proceeds.
+  When the framing is comms but the content is framework-derived, request the
+  owning skill's output as input rather than re-deriving it.
+- **Principal response vs. junior response:** Principal routes the AM update to
+  daily-status and offers to calibrate the result for a different audience
+  afterward. Junior drafts a plausible Type 4 "morning status" from chat memory;
+  it contradicts the carry-forward tracker, the Daily Status Log never gets
+  appended, and the team's trust in the channel update erodes.
+
+### Governed project artifact produced as a Type 7 documentation update — TRIG
+
+- **Signature (observable signal):** A request phrased as "draft / write / put
+  together [artifact]" where the artifact is a governed project deliverable with
+  a defined Document Tier and template — RAID Log, Project Plan, Test Plan,
+  Training Plan, FDD — is fulfilled as a Type 7 Confluence/documentation output
+  instead of routing to artifact-generator's staged 08-Generated/ flow.
+- **Conditional:** do NOT produce a governed project artifact through the Type 7
+  documentation path when the request names a deliverable with a defined
+  Document Tier and template, because artifact-generator owns artifact
+  scaffolding — staging in 08-Generated/ with metadata and the Tier 1 approval
+  gate — and a comms-formatted artifact bypasses the staging and approval
+  lifecycle that stakeholder-facing documents require.
+- **Root cause:** "Draft a" / "write the" verbs lead both skills' trigger sets,
+  and Type 7's "documentation update" reads as a catch-all for any
+  document-shaped output; the push-to-resolve bias completes the draft rather
+  than questioning whether the output is a communication at all.
+- **Mitigation:** At type detection, ask of the deliverable: is the output a
+  message ABOUT project state (a communication — proceed), or IS it project
+  state (an artifact — route to artifact-generator)? Artifacts have a home
+  folder in the 01–08 structure and an approval tier; communications have a
+  recipient. Type 7 stays for formatting an update to existing documentation,
+  not for originating governed artifacts.
+- **Principal response vs. junior response:** Principal routes "draft the
+  training plan" to artifact-generator and offers the announcement comm as the
+  companion piece comms-writer legitimately owns. Junior writes a training plan
+  as a Confluence update; it never lands in 08-Generated/ staging, and the
+  unapproved artifact circulates to stakeholders outside the tier protocol.
 
 ## Shared Behavioral Rules
 

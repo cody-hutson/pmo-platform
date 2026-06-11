@@ -11,6 +11,7 @@ description: >
   for arbitrary AI systems. Use whenever the user asks to write evals, audit
   evals, add eval coverage, calibrate a judge, build a rubric, write a judge
   prompt, or diagnose why a judge keeps passing broken outputs.
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -507,3 +508,63 @@ behavior, distinct from the evals it produces.
   calibration as complete, and production surfaces discover that the judges'
   shared family biases were hidden by the agreement metric — forcing a
   re-calibration cycle after the judge has already been deployed.
+
+### Eval execution or benchmark request accepted as an authoring invocation — TRIG
+
+- **Signature (observable signal):** A request to run, score, or benchmark evals
+  ("run the evals on [skill]", "what's the pass rate", "benchmark this") is
+  accepted, and the session produces pass/fail results, benchmark numbers, or
+  score tables — outputs this skill cannot ground, because it authors evals and
+  does not execute them.
+- **Conditional:** do NOT accept an eval-execution or benchmarking request as an
+  eval-writer invocation when the ask is to run or score existing evals rather
+  than author or audit them, because the skill's contract stops at authoring
+  (Stages 0–4) — execution belongs to the pmo-skill-refiner harness and CI — and
+  any pass-rate the authoring side reports is imagined rather than measured,
+  which is precisely the fabricated-results failure an eval discipline exists to
+  prevent.
+- **Root cause:** "Evals" vocabulary blurs author and executor; the user wants a
+  number, the skill knows the suite intimately, and predicting outcomes from
+  reading the suite feels like service — the "you author, you do not run"
+  boundary is stated in the Role but no input check enforces it at invocation.
+- **Mitigation:** At mode detection, when the verb is run / score / benchmark /
+  measure: route to the executor (pmo-skill-refiner's run_eval.py harness for
+  per-skill suites; CI for pipeline gates) and offer the authoring-side work
+  that IS in scope — reviewing the suite before the run, or interpreting
+  failures after a real run produces them. Never emit a pass/fail figure no
+  harness produced.
+- **Principal response vs. junior response:** Principal says "authoring is mine;
+  the run belongs to the refiner harness — invoke it, and I'll review the
+  failures it surfaces." Junior "runs" the evals by reading them, reports "9/10
+  would pass," and the invented benchmark enters a release-readiness
+  conversation as if it were measured.
+
+### Review mode applied to a non-eval audit target — TRIG
+
+- **Signature (observable signal):** "Audit this" / "review this" with a
+  SKILL.md, a skill's runtime output, or a governance doc as the target is
+  routed into Review mode, and the A-01..A-23 anti-pattern catalog plus
+  decision-tree rule coverage are graded against an artifact that is not an eval
+  suite — producing category-error findings ("no judge-validation evidence")
+  against, say, a status update.
+- **Conditional:** do NOT run Review mode when the audit target is not an eval
+  artifact (evals.json, judge prompts, rubrics, calibration protocols, failure
+  taxonomies), because the audit-trigger surface is shared — pmo-qa-auditor
+  audits skill outputs, pmo-skill-editor Mode D audits skill definitions,
+  eval-writer Review audits eval suites — and grading a non-eval artifact
+  against the eval anti-pattern catalog produces findings that are noise for the
+  target while covering none of the gates the right auditor would run.
+- **Root cause:** Review mode's trigger table keys on audit verbs, not target
+  shape; once the mode fires, the rule machinery runs regardless of what was
+  pasted — and eval-adjacent artifacts (a skill that contains eval instructions,
+  a gate spec) look enough like eval content to pass a glance check.
+- **Mitigation:** Before Review Step 1, classify the target: eval artifacts →
+  proceed; a SKILL.md or .skill → pmo-skill-editor Mode D; a produced output →
+  pmo-qa-auditor; a stage-gate's judgment content → in scope (the stage-gate
+  playbook). When the target mixes shapes (a skill plus its evals/ directory),
+  scope the review to the evals/ subtree and name the boundary.
+- **Principal response vs. junior response:** Principal classifies the pasted
+  artifact first, routes the SKILL.md audit to pmo-skill-editor, and keeps
+  Review for the evals/ directory. Junior runs the A-XX audit on a SKILL.md,
+  reports "binary-judge rule not satisfied" against a file that defines no
+  judges, and the real definition-quality gaps (Mode D's D1–D9) go unexamined.

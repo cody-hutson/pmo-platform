@@ -13,7 +13,7 @@ description: >
   cross-skill false-positive detection). For modifying EXISTING PMO skills,
   coordinates with pmo-skill-editor. Use when the user wants to create a new
   PMO skill or iterate on an existing skill's eval/description/trigger set.
-version: v11.16
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -243,6 +243,66 @@ Competencies the refiner is at risk for:
 - **Root cause:** deploy.sh auto-detects an install path via fingerprint scanning; detection is probabilistic, not authoritative. In sessions where skills-plugin has multiple session UUIDs (from plugin reinstalls, app updates, or account re-auth), detection can resolve to the wrong session. The refiner does not own session detection — that belongs to deploy.sh and the deploy-detection investigation — but the refiner's handoff sequence can either respect or ignore the pre-check.
 - **Mitigation:** In the handoff message produced by Workflow step 10 (Create-New) or step 8 (Refine-Existing), embed an explicit `core/deploy/deploy.sh --check --warn` pre-check with a pass criterion ("expected: exit 0 with ≥ 20 PASS rows"). Instruct the user to abort deploy on non-clean check output and surface via the deploy-detection investigation. Never provide a bare `--deploy` instruction without the pre-check paired.
 - **Principal response vs. junior response:** Principal respects the boundary — session canonicity lives in deploy.sh and the deploy-detection investigation, and the refiner's job is to route the user through the correct runbook sequence. Junior treats deploy as "the obvious next step" and provides the raw deploy command, assuming session detection will "just work" — until it doesn't.
+
+### Refiner pipeline applied to a skip-route request — TRIG
+
+- **Signature (observable signal):** The full refiner pipeline — nine-question
+  Interview, PMO 7-field injection, eval harness — runs against a request the
+  When-to-use-vs-skip table routes elsewhere: a generic non-PMO skill, a
+  structural-only SKILL.md edit with no eval work, or a plugin with commands,
+  hooks, or MCP servers.
+- **Conditional:** do NOT run the refiner pipeline when the request matches a
+  skip-route row (generic non-PMO skill → anthropic-skills:skill-creator;
+  structural edit absent eval work → pmo-skill-editor; plugin creation → the
+  plugin tooling), because the refiner's value-add is the PMO injection layer
+  plus eval rigor on PMO-suite skills — over-applying it injects platform
+  fields into artifacts that must not carry them and burns the interview and
+  harness budget on work the routed tool does directly.
+- **Root cause:** The refiner reads as "the skill factory," so every
+  skill-adjacent request gravitates to the wrapper; the skip table exists but
+  sits after the trigger match, and running the familiar pipeline feels more
+  thorough than handing off.
+- **Mitigation:** Make the skip-table check the first act of every invocation,
+  before Interview Q1: classify the request against the three skip rows; on a
+  match, route to the table's named destination with a one-line reason.
+  Boundary-straddling requests (eval work plus structural change) split per the
+  boundary rule — refiner scope first, explicit editor delegation second.
+- **Principal response vs. junior response:** Principal routes the generic skill
+  to skill-creator and notes what the refiner would add if it ever joins the
+  PMO suite. Junior interviews for nine questions, injects delivery_approach
+  and dependency-graph stubs into a generic utility skill, and the consumer now
+  carries PMO-platform fields it cannot honor.
+
+### Eval-suite authoring absorbed into the refiner instead of eval-writer — TRIG
+
+- **Signature (observable signal):** During a refinement session the refiner
+  authors substantive eval content — new judge prompts, rubrics, failure
+  taxonomies, calibration protocols — from its own judgment rather than routing
+  the authoring to eval-writer; the workspace gains eval artifacts that never
+  passed the trace-driven, binary-judge, calibration-protocol discipline.
+- **Conditional:** do NOT author new eval-suite content (judge prompts, rubrics,
+  failure taxonomies, calibration protocols) inside the refiner when the need is
+  eval authoring rather than harness execution, because eval-writer owns
+  authoring per the 2026 eval-writing consensus (trace-driven criteria, binary
+  judges, cross-family calibration) — the refiner's preserved harness EXECUTES
+  suites (run_eval.py, run_loop.py, blind A/B); it has no authoring framework,
+  and refiner-authored judges skip the disciplines that keep judges honest.
+- **Root cause:** The refiner's Use When list includes "run evals on [skill]"
+  and "benchmark [skill]," and an eval-shaped session invites filling eval gaps
+  inline; writing a quick judge prompt feels like part of the iteration loop,
+  and the author/execute boundary lives in eval-writer's Role text, not in the
+  refiner's own skip table.
+- **Mitigation:** When a refinement session surfaces an eval-content gap
+  (missing judge, no rubric, taxonomy holes), hand the authoring to eval-writer
+  (Author mode, per-skill playbook) and consume its artifacts in the next
+  harness run; the refiner's in-scope eval work is execution, variance
+  analysis, description-trigger optimization, and A/B comparison over authored
+  suites.
+- **Principal response vs. junior response:** Principal pauses the iteration,
+  routes the missing judge to eval-writer, and re-runs the harness against the
+  authored artifact. Junior drafts a judge prompt inline "to keep the loop
+  moving"; it is a five-point single-family judge with no calibration set, and
+  the suite's verdicts drift unvalidated for the next three iterations.
 
 ## References
 

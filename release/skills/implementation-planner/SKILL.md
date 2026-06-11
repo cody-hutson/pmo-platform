@@ -12,7 +12,7 @@ description: >
   reference workflow in `release/references/how-to/implementation-execution-pattern.md`.
   Use when the user has a build-reviewer findings register ready for planning,
   needs remediation sequencing, or wants to plan the fixes before execution.
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -530,6 +530,69 @@ These domain-specific anti-patterns coexist with `## Anti-Laziness Rules for the
   writes "maintain enum consistency across Docs 11, 14, 15, 19," the executor
   applies each edit but cannot verify completeness, and the RT-5 ships with an
   unverified coordination claim that downstream audits flag as a gap.
+
+### Remediation plan synthesized without an upstream findings register — TRIG
+
+- **Signature (observable signal):** An Implementation Register and batch plan
+  are produced from prose complaints, a conversation, or an ad-hoc gap list — no
+  build-reviewer findings register (Finding IDs, severities, root causes,
+  affected documents) exists as input — so Step 1 finding-validation has nothing
+  to validate against and RT classifications are grounded in the planner's own
+  reading rather than reviewed findings.
+- **Conditional:** do NOT generate a remediation implementation plan when no
+  structured findings register from an upstream review exists, because the
+  skill's contract converts reviewed findings into minimal-change plans — the
+  register's Finding IDs, severities, and root causes are what Step 1
+  validation, RT classification, and batch sequencing operate on — and a plan
+  synthesized from prose substitutes the planner's one-pass impression for the
+  review discipline, producing remediation with no traceable finding behind any
+  edit.
+- **Root cause:** "Plan the fixes" arrives naturally after any complaint, and the
+  planner can always produce a plausible plan; insisting on a register first
+  feels like ceremony when the user already "knows" what is wrong — but the
+  Input Requirements name the complete register as mandatory precisely because
+  un-reviewed findings are the planner's primary garbage-in surface.
+- **Mitigation:** At input validation, when no findings register is present:
+  route to build-reviewer first (full pack review) or, for a handful of
+  user-asserted defects, ask the user to confirm each as a finding row (ID,
+  severity, affected document, evidence) before planning — and label the
+  resulting register user-asserted. Never silently promote prose complaints into
+  CONFIRMED findings.
+- **Principal response vs. junior response:** Principal routes to build-reviewer
+  or formalizes the user's assertions into a labeled mini-register before
+  planning. Junior plans directly from the complaint thread; three of the
+  "findings" do not reproduce in the source files, and the executor discovers
+  the phantom targets mid-batch.
+
+### Release planning claimed through the remediation-planning surface — TRIG
+
+- **Signature (observable signal):** A "build the implementation plan" / "plan
+  the work" request whose subject is a versioned release — GitHub issues,
+  milestones, bundling, a release branch — is fulfilled with the
+  findings-register remediation machinery (RT types, RI-NNN records,
+  document-pack batches) instead of routing to the release pipeline's planning
+  surface (release-planner; Stage 4 release planning).
+- **Conditional:** do NOT apply the findings-to-remediation machinery when the
+  request is release planning over a backlog of issues rather than remediation
+  of a reviewed document pack, because the platform's release lifecycle owns
+  that surface — release-planner and the Stage 4 pipeline produce release plans
+  with dependency graphs, sequencing, and risk registers keyed to issues and
+  milestones — and the RT-1..RT-8 taxonomy has no representation for backlog
+  bundling, branch topology, or milestone scoping.
+- **Root cause:** "Implementation plan" is genuinely ambiguous in this workspace
+  — the release pipeline generates implementation plans per release, and this
+  skill produces remediation implementation plans — so the description-trigger
+  overlap routes backlog asks here whenever the user does not say "release."
+- **Mitigation:** Check the input's shape before Domain Detection: a findings
+  register plus a document pack → proceed; issues / milestones / backlog /
+  release-version vocabulary → name release-planner (or the Stage 4 pipeline)
+  and route. When a release plan needs remediation-style file specs inside it,
+  that is Stage 5/6 of the pipeline — not this skill's register flow.
+- **Principal response vs. junior response:** Principal routes the backlog ask to
+  release-planner and notes what this skill can contribute once a review
+  produces findings. Junior shoehorns issues into pseudo-findings, classifies
+  milestone scoping as RT-5 coordination, and produces a plan no pipeline stage
+  can consume.
 
 ## Calibration Context
 

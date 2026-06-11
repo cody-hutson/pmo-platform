@@ -2,7 +2,7 @@
 name: release-executor
 description: >
   Executes approved release plans. Modes: Execute release · Verify release · Rollback release · Close release. Creates snapshots, applies file changes, closes IMP items, updates release log, runs verification, runs automated Stage 13 close-out. Requires an approved plan with Dry-Run Record. Triggers: "execute the release", "deploy v[X.Y]", "ship v[X.Y]", "verify the release", "rollback v[X.Y]", "go live with v[X.Y]", "close the release", "finalize v[X.Y]", "stage 13 close", "run the close-out", "automated close-out".
-version: v3.20
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -812,6 +812,70 @@ structural conformance and content quality.
 - **Root cause:** [systemic pattern: re-render-from-source instead of consume-as-approved] → [proximal cause: Mode G inputs include both the approved body file AND the cluster metadata; re-rendering from metadata feels "cleaner" but loses the operator-approval bond] → [observable signal: filed issue body differs from the Mode D Decision Briefing's inline-rendered body even though both derive from the same cluster].
 - **Mitigation:** Mode G Step 3.a MUST invoke `gh issue create -F <approved_body_file>`; the `<approved_body_file>` is read verbatim — Mode G performs no string-templating, no field substitution, no re-rendering. The manifest's `approved_body_file` field is the load-bearing artifact; cluster metadata is informational only (used for label assignment and title extraction via `head -1` of body, not body synthesis).
 - **Principal response vs. junior response:** Principal treats the approved-body file as immutable input — `gh issue create -F <file>` is the verbatim consumer; cluster metadata informs only labels/title extraction. Junior re-synthesizes the body from manifest fields because "the inputs are the same and re-rendering is cleaner" — producing a filed Proposal whose body the operator never literally approved.
+
+### Mode A snapshot execution invoked for a git-native release — TRIG
+
+- **Signature (observable signal):** "Execute the release" / "deploy v[X.Y]" for
+  a release whose execution mechanism is the git pipeline — a release branch
+  whose PR merge IS the deploy, Stage 12 tagging, and deploy.sh — is routed into
+  Mode A, which begins creating snapshot copies and applying file edits
+  directly, duplicating or fighting the PR-based execution path.
+- **Conditional:** do NOT execute a release through Mode A's snapshot-and-apply
+  machinery when the release is a git-native release whose plan executes via PR
+  merge, tag, and deploy.sh at Stage 12, because the two execution paths are
+  distinct by design — the Cowork path uses snapshots as its only review and
+  rollback surface, while the git path's PR diff is the review and git history
+  is the snapshot — and applying Mode A to a git-native release double-executes
+  changes outside the release branch, bypassing the PR review the governance
+  path requires.
+- **Root cause:** The trigger set ("execute the release", "deploy vX.Y", "ship
+  vX.Y") predates the dual-path split and reads identically for both lineages;
+  Mode A is this skill's headline mode, and nothing in its input validation
+  asks WHICH execution path the release plan declares.
+- **Mitigation:** At Mode A input validation, read the plan's execution context:
+  a plan on a release branch with PR-based execution (plans under
+  release/releases/plans/, Stage 12 obligations) → the execution surface is the
+  pipeline (merge, tag, deploy.sh) and this skill's in-scope contributions are
+  Mode B verification and Mode D/E/F close-out; a Cowork-path plan with a
+  Dry-Run Record and snapshot protocol → Mode A proceeds. On a git-native plan
+  the absent Dry-Run Record is lineage, not a missing artifact — the
+  Dry-Run-Record PROC entry above governs Cowork-lineage plans only. Name the
+  path explicitly in the execution report.
+- **Principal response vs. junior response:** Principal identifies the
+  git-native plan, declines snapshot execution, points to the Stage 12 sequence
+  — then runs Mode D when close-out is the actual need. Junior snapshots
+  twenty-three files and starts applying edits to the working tree while the
+  release branch holds the same changes awaiting PR review, and the operator
+  must untangle a double-applied release.
+
+### Mode inferred from trigger phrasing on a direct invocation — TRIG
+
+- **Signature (observable signal):** A direct (non-chained) invocation proceeds
+  straight into a mode because the phrasing "obviously" matched — "something
+  broke" routes to Rollback, "finalize v1.10" routes to Close — without the
+  mandatory AskUserQuestion mode gate this skill requires on every direct
+  invocation.
+- **Conditional:** do NOT auto-route to a mode from trigger phrasing on a direct
+  invocation, because this skill is classified Always-ask — Execute and
+  Rollback are inverse operations on shared release state, and a phrase-guessed
+  misfire between them (executing when the operator wanted rollback readiness,
+  rolling back when the operator meant verify) corrupts release state in a way
+  that requires additional snapshots to repair.
+- **Root cause:** Trigger-match heuristics are the platform's default
+  mode-selection pattern, and most skills auto-route safely; the executor's
+  exception (Always-ask) is easy to flatten back to the default under flow
+  pressure, especially when the user's phrasing matches one trigger list
+  verbatim.
+- **Mitigation:** On every direct invocation, fire the AskUserQuestion mode gate
+  before any mode-specific content — even when the phrasing seems unambiguous.
+  The one-question cost is the designed price for the Execute/Rollback
+  asymmetry; only chained invocations with a pre-filled mode token skip it (a
+  dormant branch under the current cascade allowlist).
+- **Principal response vs. junior response:** Principal asks the mode question,
+  gets "Verify" where the phrase implied Rollback, and runs the read-only check
+  the operator actually wanted. Junior pattern-matches "something broke" to
+  Mode C, restores three files from stale snapshots over the operator's
+  in-progress hotfix, and the recovery now needs its own recovery.
 
 ## Reference Files
 

@@ -336,6 +336,38 @@ structural conformance and content quality.
   presents it as the week — a blocker that surfaced on an unlogged Wednesday
   reaches SteerCo as GREEN.
 
+### Roll-up generated as a substitute for the week's unprocessed work — TRIG
+
+- **Signature (observable signal):** The weekly roll-up is generated for a week
+  whose substrate is missing — the Daily Status Log has no entries for the
+  period, trackers show no updates since before the window — and the skill
+  fills the gap by summarizing raw transcripts and unprocessed artifacts
+  directly into Sections 1–5, then proposes a PORTFOLIO.md write-back derived
+  from that one-pass synthesis.
+- **Conditional:** do NOT generate the weekly roll-up directly from unprocessed
+  artifacts when the week's Daily Status Log and tracker substrate are missing
+  for the period, because this skill rolls up results that ppm-agent and
+  daily-status produced during the week — it does not summarize transcripts or
+  analyze artifacts — and a roll-up synthesized from raw inputs replaces the
+  week's evidence chain with a single unsourced pass whose health colors then
+  write back into PORTFOLIO.md as if derived.
+- **Root cause:** The Friday deadline does not move when the week's processing
+  did not happen; the skill has read access to everything and CAN produce a
+  plausible roll-up, so backfilling silently feels like saving the SteerCo —
+  and the substrate gap is invisible in the output unless declared.
+- **Mitigation:** At input collection, check substrate coverage for the date
+  range. When the Daily Status Log or trackers have gaps, surface the gap and
+  route: run the backlog of transcripts through ppm-agent / daily-status first,
+  or produce a partial roll-up that names the uncovered days and excludes the
+  write-back for unsupported fields. Never write health indicators back to
+  PORTFOLIO.md from data that skipped processing.
+- **Principal response vs. junior response:** Principal reports
+  "Wednesday–Thursday were never processed," offers the catch-up path, and
+  ships a roll-up with the gap labeled. Junior synthesizes the whole week from
+  raw transcripts at 4:55 PM Friday; the roll-up reads complete, the write-back
+  lands, and the portfolio dashboard now carries health colors derived from
+  nothing the platform can audit.
+
 ## Generation Schedule
 
 Typically generated:

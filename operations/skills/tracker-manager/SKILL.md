@@ -479,6 +479,37 @@ structural conformance and content quality.
   the PPM Agent re-proposes the same under-evidenced CLOSE actions next run and the
   operator wonders why the pipeline never learns.
 
+### Tracker updates self-derived from a raw artifact — TRIG
+
+- **Signature (observable signal):** Invoked with "update the trackers" plus a
+  raw artifact (transcript, email, meeting notes) and no TRACKER_UPDATE block,
+  the skill reads the artifact and derives its own adds, modifies, and closes —
+  deciding what should change rather than validating structured instructions an
+  upstream processing skill produced.
+- **Conditional:** do NOT derive tracker changes directly from a raw artifact
+  when no TRACKER_UPDATE instruction block exists, because deciding what should
+  change is the read-side job of ppm-agent and the processing skills — this
+  skill is the write-side validator and executor — and self-derived updates
+  skip the analysis layer that produces evidence citations and the dependency
+  scan (the Tracker Impact Matrix), landing writes whose justification never
+  existed upstream of the write.
+- **Root cause:** "Update the trackers from this transcript" reads as one job,
+  and the skill CAN parse a transcript well enough to guess updates; routing
+  back through ppm-agent feels like indirection when the user handed the
+  artifact directly to the engine that owns the files.
+- **Mitigation:** When invoked without TRACKER_UPDATE instructions, route the
+  artifact to ppm-agent (or the owning processing skill) for analysis and
+  consume its emitted TRACKER_UPDATES block on the return path. If the user
+  insists on direct processing, first render the proposed changes AS a
+  TRACKER_UPDATE block — evidence field populated per entry — then run the
+  normal validate → consolidate → approve cycle against it rather than writing
+  from impression.
+- **Principal response vs. junior response:** Principal returns "this needs the
+  read-side first" and comes back with a change summary sourced from
+  ppm-agent's instructions. Junior derives nine updates from the transcript
+  directly; two of them close items the read-side dependency scan would have
+  kept open, and the silent losses surface a week later as forgotten blockers.
+
 ## Reference Files
 
 - `references/tracker-schemas.md` — Complete schema definitions for all operational trackers.
