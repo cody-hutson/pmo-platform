@@ -2,7 +2,7 @@
 name: pmo-process-designer
 description: >
   Converts business context into structured, traceable requirements and process documentation. Modes: Requirements definition · Workflow documentation · Gap analysis · Traceability matrix · Compliance mapping. Use when uploading business requirements, FDDs, or Jira exports. Triggers: "document this process", "build the requirements", "build the traceability matrix", "write the FRD", "trace from requirement to Jira", "what's the gap."
-version: v11.16
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -501,6 +501,35 @@ structural conformance and content quality.
   support case, tax-engine migration, etc. — not requirements gaps)" and the operator
   knows which list to act on. Junior produces "16 orphan tickets" and the operator
   either spends a day misanalyzing them or stops trusting the traceability output.
+
+### Requirement-granularity gap findings masking a process-level root cause — OUT
+
+- **Signature (observable signal):** Section 4 (Gap Analysis) or a Mode C coverage matrix
+  lists multiple sibling requirement-level gap findings — each with its own drafted
+  REQ-### remediation — that all stem from one undesigned process area (an undefined
+  approval workflow, handoff protocol, or exception path), with no process-level finding
+  naming the shared root cause.
+- **Conditional:** do NOT frame a cluster of related requirement-level gaps as independent
+  point findings with per-REQ drafted remediations when two or more gaps share a
+  process-level root cause (an undesigned workflow, handoff, or exception path), because
+  requirement-granularity framing fragments a systemic design gap into point patches —
+  each drafted REQ passes review individually while the undesigned process ships
+  unaddressed, and the gap resurfaces as a scope dispute during implementation.
+- **Root cause:** Push-to-resolve rewards draftable artifacts, and requirements are the
+  unit this skill can draft (the REQ-014a–c pattern); the process-checklist blind spots
+  are likewise detected per-requirement. Both pressures pull the finding altitude down to
+  the granularity the agent can remediate rather than the granularity of the cause.
+- **Mitigation:** After assembling gap findings (Mode A step 5, Mode C step 4), run a
+  clustering pass: group gaps by shared process area. Where ≥ 2 gaps share a root cause,
+  emit ONE process-level finding naming it (severity assessed at the cluster level), nest
+  the drafted REQ remediations under it as children, and recommend the process-design
+  remediation (Mode B documentation of the missing workflow) alongside the REQ drafts.
+- **Principal response vs. junior response:** Principal reports "1 process-level finding:
+  returns-approval workflow undesigned (HIGH) — 6 dependent requirement gaps; drafted
+  REQ-014a–f attached; recommend Mode B workflow documentation before sign-off," and the
+  business owner sees one design decision to make. Junior reports 6 independent MEDIUM
+  findings with 6 drafted REQs; each is approved piecemeal, no one designs the workflow,
+  and implementation discovers the missing process as a scope dispute.
 
 ## Shared Behavioral Rules
 

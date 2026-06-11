@@ -13,7 +13,7 @@ description: >
   "are all my skills deployed").
 delivery_approach: n/a
 principal_standard_pass: 6/8
-version: v10.2-canary
+version: v1.10-canary
 license: BUSL-1.1
 ---
 
@@ -104,6 +104,36 @@ This skill produces report-only outputs. No decision-class items are emitted. pm
 - **Mitigation:** In the output's Summary paragraph, include a check for uncommitted or staged changes affecting `release/skills/` or `deploy.sh` — if present, prefix the drift report with "⚠️ In-flight changes detected; drift report is transitional" and suggest re-running after the PR merges. This is a statelessness concession: the skill does not read open PRs, but it reads working-tree state which is a proxy.
 - **Principal response vs. junior response:** Principal acknowledges the skill's statelessness and calibrates the output framing to be informational rather than alarming during known-unstable states. Junior treats every drift as a defect and produces noise that the operator has to triage.
 
+### Canary self-status emitted as standalone consumer-facing artifact — OUT
+
+- **Signature (observable signal):** A canary run produces its roster report or its own
+  fixture status as a standalone consumer-facing artifact — a file written to disk or
+  staged to a project folder, a stakeholder-styled "deployment health" deliverable, or a
+  report augmented with recommendations or next actions — instead of the contracted
+  inline two-section output (one summary paragraph + one drift table).
+- **Conditional:** do NOT emit the canary's roster report or its own fixture status as a
+  standalone consumer-facing artifact or augment it with recommendations or next actions,
+  because the canary is a report-only permanent fixture whose output contract is one
+  inline summary paragraph plus one drift table — a standalone or advisory artifact
+  escalates smoke-test output into a production deployment-health product that consumers
+  begin to act on.
+- **Root cause:** The roster report superficially resembles a deployment-health
+  deliverable, and suite-wide habits (artifacts staged for review, push-to-resolve,
+  recommendations appended to findings) pull toward producing a durable consumer
+  artifact. The fixture's narrower report-only contract is easy to override with the
+  suite default.
+- **Mitigation:** Render the report inline in conversation only, in the two-section
+  Output Contract shape. Do not write the report to any file, do not stage it as an
+  artifact, and do not append recommendations or actions; when drift is real, state the
+  drift fact in the table and leave follow-up to the operator via the "Skip and route
+  elsewhere" routing list (pmo-qa-auditor Mode D, pmo-skill-editor, pmo-skill-refiner).
+- **Principal response vs. junior response:** Principal keeps the canary inside its
+  fixture surface — inline two-section report, [SOURCE]-labeled counts, no artifact, no
+  advice — and lets the operator route any follow-up. Junior "upgrades" the output to a
+  polished deployment-health artifact with remediation steps; consumers start acting on
+  fixture output, and the canary's smoke-test role quietly becomes a production reporting
+  surface no one designed or reviews.
+
 ## Principal Standard Target
 
 ≥ 6/8 PASS at creation per `core/standards/principal-standard-checklist.md`.
@@ -114,7 +144,7 @@ Competencies this skill naturally strengthens:
 - **Evidence-Based Execution** — all output facts are [SOURCE]-labeled from filesystem and deploy.sh content.
 - **Judgment Under Uncertainty** — TRIG failure mode explicitly handles the "in-flight refactor" uncertainty case.
 - **Operational Awareness** — knows not to produce recommendations (report-only); escalates via pmo-qa-auditor Mode D routing rather than taking direct action.
-- **Learning & Escalation** — failure modes surface the three ways the canary itself can mis-report.
+- **Learning & Escalation** — failure modes surface the ways the canary itself can mis-report.
 
 Competencies this skill is at risk for:
 - **Organizational Leverage** — low; the canary is a narrow utility that serves one check. Leverage compounds only over time as an always-on smoke test.
