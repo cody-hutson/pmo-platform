@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
-version: v3.20
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -554,6 +554,46 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 - **Root cause:** A bundled issue feels "already triaged," so re-checking body substantiveness at Stage 4 entry feels redundant — but intake-substrate drift and operator force-bundle overrides mean a body that passed Gate 1 at intake can be stale or thin at planning time. Re-running the substantive checks is a separate pass that is mechanically easy to skip when the bundle looks settled.
 - **Mitigation:** Run Phase A0.6 (G-PL2) before A1: re-evaluate each bundled body against `gate-criteria-spec.md § Gate 1` substantive criteria (G1-02 / G1-04 / G1-05); on any FAIL, route the issue to the crisping pre-gate (operator-gated body refinement via `gh issue edit --body`, reusing the Gate 1 self-repair remediations) and do not plan against it until it passes. House crisping inline in this skill — do not hand off to an operations-module skill (module Public-API discipline).
 - **Principal response vs. junior response:** Principal re-runs the substantive checks at Stage 4 entry, surfaces the 2 weak bodies, and crisps them (or routes to operator) before drafting change-specs. Junior treats "bundled" as "body is fine," drafts change-specs against thin bodies, and the ambiguity surfaces at Engineering as an unimplementable spec requiring a round-trip back to Planning.
+
+### Size-band breach self-remediated instead of handed to the operator — HAND
+
+- **Signature (observable signal):** A Mode A bundle suggestion or Mode B plan whose
+  bundle-composition size-check lands outside the doctrine's target band (15-25 pts at
+  current calibration; thresholds carry [CALIBRATE-AFTER-3]) ships with the scope
+  silently adjusted — issues dropped, merged, or split by the planner on its own — or
+  proceeds at the breached size with the band assessment omitted from the output; no
+  operator decision point carrying the disposition options appears.
+- **Conditional:** do NOT self-trim, self-merge, or silently proceed when the
+  size-check lands outside the bundle-composition doctrine's target band, because the
+  band's dispositions (split by sub-capability / merge with an adjacent slice /
+  ship-as-is with documented rationale) are scope decisions that bind Milestone
+  composition and downstream Engineering — the planner's contract is
+  recommend-then-operator-decides, and the established HALT-and-prompt pattern
+  (bundle-refresh outcome paths, cross-milestone remediation options, the plan's
+  operator-decision gates) exists precisely so a capacity breach surfaces as a
+  decision, not as an invisible scope mutation.
+- **Root cause:** The size-check returns a number, and the doctrine's disposition
+  table reads like an algorithm — "above band → split" looks executable, so the
+  planner executes it, conflating the doctrine's positive guidance with authorization
+  to mutate scope. Dropping an issue from a suggested bundle does not feel like a
+  decision because no file changed — but the milestone roster downstream is built from
+  exactly this output.
+- **Mitigation:** When the size-check lands outside the target band, emit the
+  size-target band assessment with the total and per-issue points, then HALT the
+  recommendation at an explicit operator decision: present the disposition options
+  from the doctrine's table — split by sub-capability (with the proposed cut lines),
+  merge with a named adjacent slice, or proceed-with-rationale recording an
+  operator-judgment override (the oversized-precedent shape in the doctrine's worked
+  examples) — each tagged with reversibility and confidence. Record the selected
+  disposition in the plan's Operator Decisions block (Mode B; for a Mode A bundle
+  suggestion, in the suggestion's disposition section). The planner proposes the cut
+  lines; the operator owns the cut.
+- **Principal response vs. junior response:** Principal emits "54 pts — above band;
+  options: (A) split at the synthesis boundary into 2 slices [proposed lists],
+  (B) proceed oversized with documented rationale," and the milestone that ships
+  reflects an operator choice with a recorded why. Junior quietly drops three issues
+  to land at 24 pts and ships the "clean" bundle — the operator discovers the orphaned
+  issues a release later, with no record of who descoped them or why.
 
 ## Reference Files
 

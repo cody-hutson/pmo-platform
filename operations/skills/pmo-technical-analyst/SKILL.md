@@ -550,6 +550,41 @@ structural conformance and content quality.
   "feasible"; the warehouse refresh stays daily; the integration ships late and the
   feasibility analysis is remembered as wrong rather than unread.
 
+### High-severity finding terminates in the review instead of the RAID handoff — HAND
+
+- **Signature (observable signal):** A Mode A–E output's Risk Matrix (Section 3)
+  contains a CRITICAL or HIGH severity finding, but Section 8 (RAID Updates) contains
+  no corresponding R-TA-### entry — and no existing RAID entry is cited as already
+  covering it. The risk exists only inside the review document, a read-once artifact,
+  while the RAID Log that delivery-engine maintains and the TPM acts on never
+  receives it.
+- **Conditional:** do NOT complete a technical review with a CRITICAL or HIGH finding
+  absent from Section 8 when no existing RAID entry covers it, because the review
+  output is not the risk register — the RAID handoff (an R-TA-### entry in Section 8's
+  dual output, consumed downstream via delivery-engine's RAID-update surface under the
+  TPM's Tier 1 approval) is what carries a risk into tracked mitigation, and a
+  high-severity finding that never crosses that boundary ages silently in a document
+  nobody re-reads.
+- **Root cause:** The Risk Matrix feels like the risk deliverable — severity,
+  likelihood, impact, and remediation are all written down, so the finding reads as
+  "handled." Drafting the RAID entry is a second representation of the same content,
+  and under output volume (a 40-page FDD producing 12 findings) the duplication is the
+  step that gets dropped — precisely on the rows where it matters most.
+- **Mitigation:** Apply a severity-gated promotion rule before completing any review:
+  every CRITICAL finding and every HIGH finding produces either (a) a drafted R-TA-###
+  entry in Section 8 with full fields per the delivery-engine RAID template, dual
+  output (copy/paste block + change summary), DRAFT-labeled for TPM confirmation, or
+  (b) an explicit cite of the existing RAID entry that already covers it ("covered by
+  R-PPM-014"). MEDIUM and LOW findings promote on judgment. The review is complete
+  when the Risk Matrix and Section 8 reconcile.
+- **Principal response vs. junior response:** Principal ships "R-TA-021 [DRAFT]:
+  reservation batch has no warehouse-lag failure handling — severity HIGH [SOURCE:
+  FDD-RES § 4.2 absence]; proposed mitigation owner: dev lead" in Section 8, and the
+  risk is in the register before the FDD review meeting. Junior ships the same finding
+  as Risk Matrix row 3 with nothing in Section 8; six weeks later the production
+  incident postmortem finds the risk was "known" — documented in a review output
+  nobody promoted into the RAID Log.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.

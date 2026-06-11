@@ -368,6 +368,46 @@ structural conformance and content quality.
   lands, and the portfolio dashboard now carries health colors derived from
   nothing the platform can audit.
 
+### Cross-project RAID escalation not propagated to the sibling project's surfaces — HAND
+
+- **Signature (observable signal):** A RAID escalation or shared-dependency risk read
+  from Project A's inputs (RAID entries, carry-forward blockers) materially affects
+  sibling Project B — a shared resource, a dependent milestone, an integration both
+  consume — but the rollup carries it only under Project A's Section 2: Section 3
+  (Cross-Project Items) omits it, and the Section 6 write-back leaves Project B's
+  PORTFOLIO.md row (Top Risks / Health Indicators / Critical Path Item) untouched
+  by it.
+- **Conditional:** do NOT confine a risk to its originating project's summary when its
+  RAID evidence names a sibling project's resource, milestone, or integration, because
+  PORTFOLIO.md rows are the per-project handoff surface for downstream consumers —
+  daily-status, project-initiator, and portfolio visualizations read Project B's row,
+  not Project A's narrative — and an escalation that never reaches the sibling's row
+  leaves every downstream read of Project B reporting clean state while its exposure
+  is already on the record one row up.
+- **Root cause:** RAID entries arrive project-scoped (read per-project in input
+  order), so the synthesis defaults to the project that owns the entry; recognizing
+  the sibling impact requires cross-referencing the entry's content against the other
+  projects' milestones and resources — the one synthesis step with no single-project
+  home. The rollup is also the only weekly surface where this propagation can happen,
+  so a miss here has no downstream catch.
+- **Mitigation:** During Section 3 composition, run the roll-up input-coverage
+  checklist's sibling-reference sweep: scan each project's new and updated RAID
+  entries and aged blockers for sibling-project references (shared named resources,
+  dependent milestone dates, common integrations). On a hit: place the full
+  item in Section 3 with both projects named (per the no-duplication convention,
+  Section 2 summaries carry only the "see Cross-Project" pointer and the
+  project-specific impact), and propagate to BOTH projects' rows at the Section 6
+  write-back — the sibling's Top Risks or affected Health Indicator cites the same
+  RAID source ([SOURCE: RAID R-PPM-052]) — inside the same human-in-the-loop approval.
+- **Principal response vs. junior response:** Principal writes the shared-resource
+  conflict into Section 3, pointers into both Section 2 summaries, and proposes
+  write-back rows for both projects ("Project B: Top Risk + Schedule indicator 🟡 —
+  [SOURCE: RAID R-PPM-052, shared cutover resource]") at the checkpoint. Junior
+  records the risk under the project that filed it; Project B's row stays green and
+  every portfolio read — dashboards, the next rollup, project-initiator scans — sees
+  B clean all week, and B's team learns about the shared-resource exposure when it
+  lands on them.
+
 ## Generation Schedule
 
 Typically generated:

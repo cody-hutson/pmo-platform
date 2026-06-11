@@ -628,6 +628,82 @@ structural conformance and content quality.
   as a Confluence update; it never lands in 08-Generated/ staging, and the
   unapproved artifact circulates to stakeholders outside the tier protocol.
 
+### Ambiguous audience calibrated by guess instead of NOT READY escalation — HAND
+
+- **Signature (observable signal):** A draft ships READY FOR SEND with a tone register
+  and framing chosen for an audience that has no entry in
+  `references/audience-profiles.md` and no calibration context in the invocation — or
+  whose Handoff Manifest entry carries thin `context` or
+  `evidence_quality: [ASSUMPTION – CONFIRM]` — with no Section 5 audience note naming
+  the calibration as a guess and no NOT READY gap statement requesting the profile.
+  (Distinct from the tone-register PROC entry above, whose trigger is a channel and
+  audience explicitly named in the input — this entry fires when they are NOT
+  resolvable.)
+- **Conditional:** do NOT resolve an ambiguous or unprofiled audience by silently
+  picking a tone register when the audience profile is absent from
+  `references/audience-profiles.md` and the upstream context (user statement or the
+  ppm-agent Handoff Manifest `context` / `evidence_quality` fields) does not
+  disambiguate, because audience calibration is this skill's load-bearing judgment — a
+  misjudged register to an unknown stakeholder is exactly the send the readiness
+  verdict exists to stop, and the chained contract's "flag, don't ask" rule routes the
+  gap back as a NOT READY draft with a specific need, not as a guess.
+- **Root cause:** READY FOR SEND with a complete-looking draft demonstrates
+  push-to-resolve; surfacing "I don't know who this reader is" feels like failing to
+  deliver. Chained invocation compounds the pressure — AskUserQuestion is suppressed
+  (`chained=true`), and the agent reads suppression as license to guess rather than as
+  the cue to use the flag-don't-ask channel the Chained Invocation Contract provides.
+- **Mitigation:** Before calibrating, resolve the audience against
+  `references/audience-profiles.md`. On a miss with no disambiguating context: produce
+  the draft in a neutral-professional register, mark it NOT READY with the specific gap
+  ("NEEDS: audience profile or calibration guidance for [recipient] — no profile entry;
+  manifest context insufficient"), and record the register choice in Section 5 audience
+  notes. When chained, the NOT READY verdict plus gap statement IS the handoff response
+  the upstream manifest loop expects; an upstream
+  `evidence_quality: [ASSUMPTION – CONFIRM]` on the audience context never resolves
+  into a READY register guess.
+- **Principal response vs. junior response:** Principal ships the draft NOT READY with
+  "NEEDS: calibration guidance for the named recipient — not in audience-profiles;
+  defaulted to neutral-exec register pending confirmation," and the user supplies one
+  line that flips it READY. Junior infers a register from the recipient's job title,
+  marks READY, and the misjudged tone lands on a stakeholder the PMO has never
+  profiled — a relationship cost no retraction email fully undoes.
+
+### Chained `cascade_scope` treated as send authorization — HAND
+
+- **Signature (observable signal):** A chained invocation (`chained=true`, ppm-agent
+  [COMMS] manifest) produces output that crosses the draft→send boundary: the
+  communication is narrated as dispatched or scheduled ("escalation sent to the
+  steering committee," "this goes out at 9 AM"), the Section 2 verdict is framed as
+  send authorization rather than send readiness, or a further cascade step fires at
+  `cascade_depth_remaining` 0 — while the session contains no explicit user approval
+  of the send.
+- **Conditional:** do NOT treat the manifest's `cascade_scope` (or the chained
+  invocation itself) as authorization to send or to represent the draft as sent when
+  no explicit user approval of the send exists in the session, because `cascade_scope`
+  authorizes the draft only — the C4 Tier gate in this skill's Chained Invocation
+  Contract routes every Tier 1 stakeholder-facing send through explicit user approval
+  even when chained, and the Reversibility Discipline reserves the act of sending as
+  the user's decision (defaulting to IRREVERSIBLE for exec escalations) precisely
+  because the send, not the draft, establishes the downstream commitment.
+- **Root cause:** Chained context arrives pre-authorized — a scope field, a depth
+  budget, a complete manifest — and the whole envelope reads as "the human already
+  approved this work." The draft→send boundary is invisible at the text layer (the
+  same words serve both states), so the draft authorization generalizes across it,
+  and "READY FOR SEND" drifts from a readiness verdict into permission language.
+- **Mitigation:** Terminate every chained invocation at the Tier 2 draft: readiness
+  verdict plus a send-pending note naming the user as the send authority ("READY FOR
+  SEND — awaiting your approval per the C4 Tier gate; nothing has been sent"). Never
+  narrate a send as done or scheduled, never trigger further cascade at depth 0 (no
+  auto-invoking tracker-manager to log the draft), and attach the reversibility tier
+  to the send act itself so the approval gate's weight is visible in the output.
+- **Principal response vs. junior response:** Principal ships the chained draft with
+  "READY FOR SEND — your approval executes the send (IRREVERSIBLE for this C-suite
+  escalation); nothing has gone out," and the user owns the commitment. Junior writes
+  "Escalation sent to the steering committee" in the chained output summary — nothing
+  was actually sent, the user reads the summary as a completed action, and the
+  escalation everyone believes is on the leadership record never reaches a recipient
+  until the deadline it was escalating has already passed.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.

@@ -305,6 +305,40 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
   section while milestone go/no-go status — the only thing that matters that
   week — is missing.
 
+### Daily Connect Prep generated over unprocessed Communications Tracker entries — HAND
+
+- **Signature (observable signal):** A Daily Connect Prep output is generated and saved
+  to `08-Generated/` while the Communications Tracker read (input 5) shows ACTIVE-tier
+  MSG entries newer than the last processed update — pending actionable comms or
+  awaiting-response items no ppm-agent run has triaged into carry-forward state — and
+  the prep output neither reflects them nor flags their existence.
+- **Conditional:** do NOT generate a silent Daily Connect Prep when the Communications
+  Tracker contains ACTIVE-tier entries newer than the last processed update that have
+  not been triaged into carry-forward state, because this skill formats current state
+  rather than analyzing artifacts — untriaged messages may carry blockers or decisions
+  the team walks into the Daily Connect without, and the triage that resolves them
+  belongs to ppm-agent (the tracker's lifecycle manager), not to a formatting pass.
+- **Root cause:** The prep template sources "messages sent since the last update,"
+  which reads as a mechanical filter; the distinction between "include the new entries
+  in the prep" and "the new entries were never processed into project state" is easy to
+  collapse when the goal is producing the prep file. Crossing the boundary the other
+  way — self-triaging the messages — also feels like push-to-resolve, but strategic
+  triage is explicitly outside this skill's role.
+- **Mitigation:** Compare Communications Tracker entry timestamps and lifecycle tier
+  against the Daily Status Log's last update. When untriaged ACTIVE entries exist,
+  render the prep WITH a prep-note placed outside the Teams-ready body (it is
+  PMO-internal routing, not channel content, and the ID-strip rule still governs the
+  Teams-ready block): "⚠️ N unprocessed Communications Tracker entries since the AM
+  update — recommend ppm-agent processing before the Daily Connect," listing the
+  affected messages by descriptive subject. Do not self-triage the messages into
+  blockers or decisions, and do not silently omit them.
+- **Principal response vs. junior response:** Principal ships the prep with the
+  unprocessed-entries note and the one-line route to ppm-agent, so the TPM either
+  processes them or walks in knowing the prep's blind spot. Junior either ships the
+  prep silently (the team discovers the missed escalation mid-meeting) or plays PPM
+  Agent and triages the messages inline — producing strategic judgments a formatting
+  skill was never specified to make.
+
 ## Multi-Project Support
 
 When multiple projects are active (per PORTFOLIO.md):

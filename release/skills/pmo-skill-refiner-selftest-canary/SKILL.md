@@ -134,6 +134,41 @@ This skill produces report-only outputs. No decision-class items are emitted. pm
   fixture output, and the canary's smoke-test role quietly becomes a production reporting
   surface no one designed or reviews.
 
+### Fixture-induced drift row passed to the consumer without [CANARY EXPECTED] annotation — HAND
+
+- **Signature (observable signal):** The roster report's drift table contains a row
+  caused by the canary's own permanent-fixture status — its source directory present
+  under `release/skills/` while intentionally absent from the deployed-roster arrays
+  and `packages/` (source-only per ADR-04) — rendered with the same Status value as a
+  genuine factory-regression drift row, with no annotation distinguishing it.
+- **Conditional:** do NOT hand a drift row to the report consumer without a
+  `[CANARY EXPECTED]` annotation when the row is induced by the canary's own ADR-04
+  fixture status rather than by roster drift, because the report's consumers — the
+  operator reading the table, or a deep audit routed onward to pmo-qa-auditor Mode D —
+  cannot distinguish fixture-induced signal from factory regression at the report
+  boundary, and an unannotated expected row either triggers a noise escalation or
+  trains the reader to skim past drift rows, masking the real regression the smoke
+  test exists to catch.
+- **Root cause:** The set comparison is honest — the fixture row IS a
+  folder-vs-roster mismatch — and annotating it requires the canary to model its own
+  exclusion as a known state rather than a finding. A report-only skill defaults to
+  printing what the comparison returns; the annotation is boundary work on top of the
+  comparison.
+- **Mitigation:** Maintain the known-fixture predicate inside the workflow: a drift row
+  whose subject is the canary itself (or any registered source-only fixture) renders
+  with Status `[CANARY EXPECTED]` and one clause naming the basis ("source-only
+  permanent fixture per ADR-04 — excluded from the deploy roster by design"). The
+  Summary line then splits the count — "K drift entries flagged (J expected-fixture,
+  K−J actionable)" — so the existing routing note (deep audit → pmo-qa-auditor Mode D)
+  receives only actionable signal. The annotation stays report-internal: still no
+  recommendations, no actions.
+- **Principal response vs. junior response:** Principal annotates the expected row,
+  splits the summary count, and the operator reads the table in five seconds with zero
+  false escalations. Junior prints the raw set difference; the operator either
+  escalates the canary's own row as a deploy defect (noise) or learns that "the drift
+  table always has one row" — and the day a real skill goes missing from the roster,
+  the genuine row inherits the learned shrug.
+
 ## Principal Standard Target
 
 ≥ 6/8 PASS at creation per `core/standards/principal-standard-checklist.md`.
