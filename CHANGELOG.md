@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.09] - 2026-06-11
+
+The agent-to-script promotion framework lands: a five-rung promotion ladder (AS0–AS4, decision record ADR-020) now governs when repeated agent work earns a script and what a script owes once it exists — evidence triggers and counter-signals gate each promotion, judgment-class steps promote only their evidence-gathering substrate, and every promoted script ships with its point-of-use citation in the same pull request. Grounded in a completed census of all 71 tracked scripts and a ranked 8-candidate opportunity inventory.
+
+[Full notes](release/releases/notes/v1.09_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.09)
+
 ## [memory-to-corpus-codification] - 2026-06-10
 
 Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release) — a verification-only close-out of the memory-to-corpus codification scope. All nine targeted behavioral rules (five workspace guardrails + four git-workflow rules) were verified already present in the tracked corpus with their provenance recorded; the three now-redundant operator memory files were archived and retired from the operator memory store; and the tickets and milestone description were reconciled to live state. No user-visible behavior changes. Shipped single-branch via one [release pull request](https://github.com/cody-hutson/pmo-platform/pull/604) (the release-tracking corpus records the PR and merge SHA).
