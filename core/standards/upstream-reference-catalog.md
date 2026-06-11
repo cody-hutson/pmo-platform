@@ -43,10 +43,11 @@ This entry is the **D-Version case study** worked example referenced in the orig
 | `pmo_extensions` | `[{field: "version", governing: "version-field-semantics.md", rationale: "Platform release tag at last material edit; dual-gate enforced per D-Version (PreToolUse hook + deploy.sh --check)"}]` |
 | `pmo_restrictions` | `[{restriction: "description triggering accuracy convention", governing: "canonical-skill-structure.md", rationale: "PMO triggering tuning per skill-creator README guidance"}]` |
 | `drift_check_protocol` | "Verify Anthropic SKILL.md at upstream_citation on every minor PMO release (manual read of frontmatter lines 1-4); surface drift via Stage 13 Close re-verification + Tier 2 [SCOPE CHANGE] for next-release remediation. Future deploy.sh --check Check (deferred — see Drift-check protocol § below). Now also enforced at runtime as invariant A1 by the pmo-skill-refiner pre-injection scaffolder-drift guard (`scripts/quick_validate.py::assert_scaffolder_skeleton`)." |
-| `last_verified_date` | `2026-06-08` |
-| `last_verified_commit` | `f7d882a` |
+| `last_verified_date` | `2026-06-11` |
+| `last_verified_commit` | `353ad8b` |
 
 > Re-verified 2026-06-08 (v1.08 scaffolder-drift guard): upstream required frontmatter set unchanged (still exactly `name` + `description`). One BENIGN non-structural drift observed — the upstream `description` *text* differs between the two installed copies (cache: "update or optimize"; marketplace: "edit, or optimize"); the required *field set* is unchanged, so this does not affect the asserted invariant. The guard deliberately does NOT assert description wording.
+> Re-verified 2026-06-11 (v1.09 agent-script-promotion D-2 side effect): `head -6` on both installed copies — required field set unchanged (exactly `name` + `description`); the benign description-text drift between cache and marketplace copies persists.
 
 **D-Version case study application** — how future spokes use this entry:
 
@@ -70,10 +71,11 @@ This entry is the **D-Version case study** worked example referenced in the orig
 | `pmo_extensions` | `[{field: "D-Refs threshold", governing: "canonical-skill-structure.md § 2", rationale: "PMO mandates references/ when skill has sufficient procedural complexity; threshold is context-dependent per D-Refs"}]` |
 | `pmo_restrictions` | (none) |
 | `drift_check_protocol` | "Verify Anthropic skill-creator scaffolder output on Anthropic skills framework release; surface drift via Stage 13 Close re-verification. Now also enforced at runtime as invariant A2 by the pmo-skill-refiner pre-injection scaffolder-drift guard (`scripts/quick_validate.py::assert_scaffolder_skeleton`) — singular-`reference/` rejection; absence of `references/` is not a failure (upstream-optional)." |
-| `last_verified_date` | `2026-06-08` |
-| `last_verified_commit` | `f7d882a` |
+| `last_verified_date` | `2026-06-11` |
+| `last_verified_commit` | `353ad8b` |
 
 > Re-verified 2026-06-08 (v1.08 scaffolder-drift guard): upstream §Anatomy still shows the `references/` (plural) directory name; the convention is unchanged. (Benign upstream `description`-text drift noted on the `skill-md-frontmatter` entry does not touch this invariant.)
+> Re-verified 2026-06-11 (v1.09 agent-script-promotion D-2 side effect): §Anatomy `references/` (plural) convention unchanged at the cited lines.
 
 **Retrospective evidence:** This entry's `references/` plural canonical resolves the `reference/` vs `references/` 4-way disagreement caught at Stage 7 DT. Future Stage 5 spokes consult this entry when canonicalizing skill directory conventions — the upstream-aligned plural form is the documented canonical.
 
@@ -89,10 +91,11 @@ This entry is the **D-Version case study** worked example referenced in the orig
 | `pmo_extensions` | `[{field: "Guardrails (Platform) + Domain-Specific Failure Modes sections", governing: "failure-mode-standard.md + canonical-skill-structure.md", rationale: "PMO mandates structured failure-mode discipline per ≥3 domain-specific anti-patterns enforced at G7 gate"}]` |
 | `pmo_restrictions` | `[{restriction: "Body sections follow canonical structure", governing: "canonical-skill-structure.md", rationale: "Triggering accuracy + downstream skill discoverability"}]` |
 | `drift_check_protocol` | "Verify Anthropic skill-creator SKILL.md §Anatomy on Anthropic skills framework release; surface drift via Stage 13 Close re-verification. Now also enforced at runtime as invariant A3 by the pmo-skill-refiner pre-injection scaffolder-drift guard (`scripts/quick_validate.py::assert_scaffolder_skeleton`) — asserts ≥1 top-level `#` H1 in the post-frontmatter body." |
-| `last_verified_date` | `2026-06-08` |
-| `last_verified_commit` | `f7d882a` |
+| `last_verified_date` | `2026-06-11` |
+| `last_verified_commit` | `353ad8b` |
 
 > Re-verified 2026-06-08 (v1.08 scaffolder-drift guard): upstream §Anatomy + §Progressive Disclosure intact; the required body anatomy (H1 title + body sections) is unchanged. (Benign upstream `description`-text drift noted on the `skill-md-frontmatter` entry does not touch this invariant.)
+> Re-verified 2026-06-11 (v1.09 agent-script-promotion D-2 side effect): §Anatomy intact (H1 + body-section convention unchanged).
 
 ### Entry: skill-progressive-disclosure
 
@@ -106,8 +109,10 @@ This entry is the **D-Version case study** worked example referenced in the orig
 | `pmo_extensions` | `[{field: "PMO-specific reference patterns (e.g., specs/, protocols/)", governing: "canonical-skill-structure.md", rationale: "PMO skills produce additional reference categories beyond Anthropic baseline"}]` |
 | `pmo_restrictions` | (none) |
 | `drift_check_protocol` | "Verify Anthropic skill-creator SKILL.md §Progressive Disclosure on Anthropic skills framework release." |
-| `last_verified_date` | `2026-05-16` |
-| `last_verified_commit` | `4b71c81` |
+| `last_verified_date` | `2026-06-11` |
+| `last_verified_commit` | `353ad8b` |
+
+> Re-verified 2026-06-11 (v1.09 agent-script-promotion D-2 side effect): §Progressive Disclosure intact — SKILL.md entry point, `references/` for detail, `scripts/` for executables; the repeated-helper-work → bundle-and-cite guidance ("put it in `scripts/`, and tell the skill to use it") verbatim at the cited section. First re-verification since 2026-05-16.
 
 ### Entry: github-issue-dependencies
 
