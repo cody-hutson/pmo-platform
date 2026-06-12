@@ -660,7 +660,7 @@ structural conformance and content quality.
   hold pipeline status at TRACKERS_PENDING until every matrix entry is resolved —
   never advance to CLOSED on the DIRECT rows alone.
 - **Principal response vs. junior response:** Principal scans and surfaces "BLK-012
-  closure also resolves carry-forward action #3 in the Daily Status Log and stales
+  closure also resolves carry-forward action 3 in the Daily Status Log and stales
   agenda item 2 in Thursday's steerco — 2 SECONDARY updates appended." Junior emits
   the DIRECT updates, skips the matrix, and marks the run CLOSED; the un-cascaded
   secondary effects surface a week later as tracker drift the next processing run has
