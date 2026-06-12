@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Stage 13: Close
 
 > **Source:** Stage 13 design + operational-deployment compression
