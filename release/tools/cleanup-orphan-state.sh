@@ -39,18 +39,22 @@
 #     --force                  Allow git branch -D + git worktree remove --force; requires --apply
 #     SELF — the script's own runtime worktree is never removed (a new SELF action
 #     class; --force does not override)
+#     LIVE — worktrees held by a live process are skipped ("SKIP — live session
+#     (pid …)"; re-checked at apply time); fail-closed when lsof is unavailable;
+#     --force does not override
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
-#                              stale-ref prune + SELF-guard fixture (via isolated throwaway
-#                              branches + synthetic survivor candidate, net-zero state);
-#                              exit 0 on success
+#                              stale-ref prune + SELF-guard fixture + liveness fixture (via
+#                              isolated throwaway branches + synthetic survivor candidate +
+#                              synthetic live holder, net-zero state); exit 0 on success
 #
 # Hook compatibility (verified per Stage 5 spec §Evidence-Grounding):
 #   - All deletions via git porcelain (broad exemption per Hub Decision 1) —
 #     incl. `git remote prune <remote>` (local-tracking-ref reconciliation only;
 #     read-only against the server, no server-side ref deletion)
 #   - gh api -X DELETE git/refs/heads/* permitted via the egress allowlist
+#   - lsof is read-only inspection, invoked by absolute path (PATH pin intact)
 #   - Zero rm/rmdir/unlink usage
 #
 # Exit codes: 0 = success, 1 = validation failure, 2 = workspace-boundary check failed
@@ -220,6 +224,86 @@ compute_self_worktree() {
   fi
 }
 
+# ─── Liveness oracle (#326, ADR-021) ────────────────────────────────────────
+
+# One-shot all-process cwd snapshot via lsof (absolute path — the pinned PATH
+# /usr/bin:/bin cannot see /usr/sbin where macOS keeps lsof). Entries are
+# "pid<TAB>command<TAB>cwd" strings (bash-3.2-safe; no associative arrays).
+# ORACLE_STATE: ok | unavailable. FAIL-CLOSED: consumers in classify_worktree
+# convert any residual REMOVE to a conservative SKIP when not ok. Self-canary:
+# a scan that cannot see this script's own cwd is malfunctioning → unavailable.
+LSOF_BIN=""
+LIVE_CWD_ENTRIES=()
+ORACLE_STATE="unavailable"
+ORACLE_BUILT=0
+LIVE_HIT=""   # "pid <pid>, <command>" of the most recent worktree_is_live match
+
+resolve_lsof_bin() {
+  LSOF_BIN=""
+  local c
+  for c in /usr/sbin/lsof /usr/bin/lsof; do
+    if [[ -x "$c" ]]; then LSOF_BIN="$c"; break; fi
+  done
+}
+
+build_liveness_map() {
+  LIVE_CWD_ENTRIES=(); ORACLE_STATE="unavailable"
+  resolve_lsof_bin
+  if [[ -z "$LSOF_BIN" ]]; then
+    echo "WARN liveness oracle unavailable — lsof not found at /usr/sbin/lsof or /usr/bin/lsof; fail-closed (would-be-REMOVE worktrees will be conservatively SKIPPED)" >&2
+    return 0
+  fi
+  local line pid="" cmd=""
+  while IFS= read -r line; do
+    case "$line" in
+      p*) pid="${line#p}" ;;
+      c*) cmd="${line#c}" ;;
+      n*) if [[ -n "$pid" ]]; then LIVE_CWD_ENTRIES+=("${pid}	${cmd}	${line#n}"); fi ;;
+    esac
+  done < <("$LSOF_BIN" -a -d cwd -Fcn 2>/dev/null || true)
+  # Self-canary: this bash process holds its own cwd — it MUST be in the map.
+  # Necessary-not-sufficient: it witnesses that the scan RAN and parsed, not
+  # that the enumeration is complete (ADR-021 Consequences).
+  local own e rest cwd found=0
+  own="$(pwd -P)"
+  for e in "${LIVE_CWD_ENTRIES[@]:-}"; do
+    [[ -z "$e" ]] && continue
+    rest="${e#*	}"; cwd="${rest#*	}"
+    if [[ "$cwd" == "$own" ]]; then found=1; break; fi
+  done
+  if [[ "$found" -eq 1 ]]; then
+    ORACLE_STATE="ok"
+    echo "PASS liveness oracle — ${#LIVE_CWD_ENTRIES[@]} live cwd(s) mapped via $LSOF_BIN" >&2
+  else
+    echo "WARN liveness oracle unavailable — scan missing the script's own cwd (self-canary); fail-closed" >&2
+  fi
+  return 0
+}
+
+ensure_liveness_map() {
+  if [[ "$ORACLE_BUILT" -eq 0 ]]; then
+    build_liveness_map
+    ORACLE_BUILT=1
+  fi
+  return 0
+}
+
+# Returns 0 when a live process has its cwd at or under the candidate path;
+# sets LIVE_HIT to "pid <pid>, <command>" for the report label.
+worktree_is_live() {
+  local cand e pid rest cmd cwd
+  cand="$(physical_path "$1")"
+  LIVE_HIT=""
+  for e in "${LIVE_CWD_ENTRIES[@]:-}"; do
+    [[ -z "$e" ]] && continue
+    pid="${e%%	*}"; rest="${e#*	}"; cmd="${rest%%	*}"; cwd="${rest#*	}"
+    case "$cwd" in
+      "$cand"|"$cand"/*) LIVE_HIT="pid ${pid}, ${cmd}"; return 0 ;;
+    esac
+  done
+  return 1
+}
+
 # ─── Outcome detection ───────────────────────────────────────────────────────
 
 # Populated by detect_*. Format per record: tab-separated fields.
@@ -289,30 +373,40 @@ classify_worktree() {
     fi
   done
 
+  ensure_liveness_map
   cand_phys="$(physical_path "$path")"
 
   worktree_is_clean "$path" || status="dirty"
   disk=$(worktree_size_mb "$path")
 
   # Clause precedence (v1.11 combined design spec, D-3): protective context
-  # classes first (primary → SELF), tree-state classes second (dirty →
-  # protected → not-merged). A dirty SELF tree reports SELF. Protective classes
-  # are facts about WHO holds the tree, are stable across tree-state changes,
-  # and are never overridden by --force (the apply loops act only on
-  # action == "REMOVE"). The primary clause also matches the physically-
-  # normalized main-worktree path — the WORKSPACE_ROOT comparison alone never
-  # fires on the real primary (the primary checkout is a child of the
-  # workspace root, not the root itself).
+  # classes first (primary → SELF → live), tree-state classes second (dirty →
+  # protected → not-merged). A dirty SELF tree reports SELF; a dirty live-held
+  # tree reports the live session. Protective classes are facts about WHO holds
+  # the tree, are stable across tree-state changes, and are never overridden by
+  # --force (the apply loops act only on action == "REMOVE"). The primary
+  # clause also matches the physically-normalized main-worktree path — the
+  # WORKSPACE_ROOT comparison alone never fires on the real primary (the
+  # primary checkout is a child of the workspace root, not the root itself).
+  # Fail-closed conversion runs after the chain so state labels stay
+  # informative when the oracle is down and only unprovable would-be-removals
+  # are blocked.
   if [[ "$path" == "$WORKSPACE_ROOT" ]] || [[ -n "$MAIN_WORKTREE" && "$cand_phys" == "$MAIN_WORKTREE" ]]; then
     action="SKIP — primary checkout"
   elif [[ -n "$SCRIPT_WORKTREE" && "$cand_phys" == "$SCRIPT_WORKTREE" ]]; then
     action="SELF — script's own runtime worktree (protected)"
+  elif [[ "$ORACLE_STATE" == "ok" ]] && worktree_is_live "$cand_phys"; then
+    action="SKIP — live session (${LIVE_HIT})"
   elif [[ "$status" == "dirty" ]]; then
     action="SKIP — uncommitted changes"
   elif [[ -n "$branch" ]] && is_protected "$branch"; then
     action="SKIP — protected branch"
   elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then
     action="SKIP — branch not fully merged"
+  fi
+
+  if [[ "$action" == "REMOVE" && "$ORACLE_STATE" != "ok" ]]; then
+    action="SKIP — liveness oracle unavailable (fail-closed)"
   fi
 
   WORKTREE_CANDIDATES+=("${path}	${branch}	${status}	${disk}	${action}")
@@ -384,7 +478,7 @@ emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]}
-  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 a ref
+  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -414,6 +508,7 @@ emit_markdown() {
     case "$action" in
       SELF*) ((sc++)) || true ;;
       "SKIP — live session"*) ((lvc++)) || true ;;
+      "SKIP — liveness oracle unavailable"*) ((fcc++)) || true ;;
     esac
   done
 
@@ -428,7 +523,7 @@ emit_markdown() {
 - **Remote branches:** $rc total ($rr $verb)
 - **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
-- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions
+- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions$([[ "$ORACLE_STATE" == "ok" ]] || echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
 
 ## Detail — Local branches
 
@@ -494,6 +589,9 @@ EOF
   if [[ "$lvc" -gt 0 ]]; then
     echo "- $lvc worktree(s) skipped — held by live sessions"
   fi
+  if [[ "$fcc" -gt 0 ]]; then
+    echo "- $fcc removal(s) blocked — liveness oracle unavailable (fail-closed)"
+  fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
   # `set -e` that aborted the caller before the apply phase (the v1.02 apply-path no-op
@@ -505,7 +603,7 @@ EOF
 
 emit_json() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE"
+  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$ORACLE_STATE"
   printf '  "local_branches":[\n'
   local first=1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -582,6 +680,33 @@ apply_removals() {
     else
       echo "FAIL remote $name — gh api DELETE failed" >&2
       REMOTE_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — gh api DELETE failed"
+    fi
+  done
+
+  # Apply-time liveness re-verification (v1.11 amendment A-Recheck): the
+  # classification-time map ages across the multi-minute branch/remote phases
+  # above (per-branch gh calls), while removal is the LAST step — and git
+  # porcelain does NOT refuse removal of a clean live-held tree. Rebuild the
+  # map once at the worktree-apply-loop entry and re-check each row still
+  # REMOVE: a fresh hit rewrites the row in place to the live-session skip;
+  # oracle-unavailable at re-check time converts residual REMOVEs fail-closed
+  # (same labels as classification time). Residual exposure after this
+  # re-check is the seconds between it and the porcelain call.
+  build_liveness_map
+  idx=-1
+  for r in "${WORKTREE_CANDIDATES[@]:-}"; do
+    ((idx++)) || true
+    [[ -z "$r" ]] && continue
+    path=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $5}' <<<"$r")
+    [[ "$action" != "REMOVE" ]] && continue
+    if [[ "$ORACLE_STATE" == "ok" ]]; then
+      if worktree_is_live "$path"; then
+        echo "SKIPPED worktree $path — live session detected at apply time (${LIVE_HIT})" >&2
+        WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — live session (${LIVE_HIT})"
+      fi
+    else
+      echo "SKIPPED worktree $path — liveness oracle unavailable at apply time; fail-closed" >&2
+      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — liveness oracle unavailable (fail-closed)"
     fi
   done
 
@@ -846,6 +971,71 @@ selftest_self_guard() {
   return 0
 }
 
+# #326 — liveness-gate fixture. Unit canaries on the oracle (own cwd MUST read
+# live; a never-created path MUST NOT), then end-to-end: a synthetic live
+# holder (background sleep cwd-anchored in a throwaway worktree) must classify
+# the tree "SKIP — live session"; after the holder dies, a fresh inner run must
+# drop the label (each inner run builds its own map — no memo staleness).
+# Holder self-expires (sleep 20) even on abnormal exit. Net-zero via porcelain.
+selftest_liveness_gate() {
+  resolve_lsof_bin
+  if [[ -z "$LSOF_BIN" ]]; then
+    echo "self-test: liveness check SKIPPED — lsof not found (runtime is fail-closed on this host)" >&2
+    return 0
+  fi
+  ensure_liveness_map
+  if [[ "$ORACLE_STATE" != "ok" ]]; then
+    echo "self-test: liveness check FAILED — oracle unavailable despite lsof at $LSOF_BIN (self-canary missing)" >&2
+    exit 1
+  fi
+  if ! worktree_is_live "$(pwd -P)"; then
+    echo "self-test: liveness check FAILED — script's own cwd not detected live (under-detection)" >&2
+    exit 1
+  fi
+  if worktree_is_live "${TMPDIR:-/tmp}/cleanup-selftest-nolive-$$-${RANDOM}"; then
+    echo "self-test: liveness check FAILED — never-created path detected live (over-detection)" >&2
+    exit 1
+  fi
+
+  local script_abs slug branch wt base out holder="" fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-live-$$"
+  branch="chore/${slug}"
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  if [[ -z "$base" ]] || ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: liveness end-to-end SKIPPED — could not create throwaway worktree" >&2
+    return 0
+  fi
+
+  ( cd "$wt" && exec /bin/sleep 20 ) & holder=$!
+  /bin/sleep 1   # settle: let the holder reach its cwd
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: liveness end-to-end FAILED — inner dry-run exited non-zero" >&2
+  elif ! grep -F "${slug}" <<<"$out" | grep -q '"action":"SKIP — live session'; then
+    echo "self-test: liveness end-to-end FAILED — live-held worktree not labeled live-session" >&2
+    fail=1
+  fi
+
+  kill "$holder" >/dev/null 2>&1 || true
+  wait "$holder" 2>/dev/null || true
+  if [[ "$fail" -eq 0 ]]; then
+    out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || true
+    if grep -F "${slug}" <<<"$out" | grep -q '"action":"SKIP — live session'; then
+      echo "self-test: liveness end-to-end FAILED — live label persisted after holder exit" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove "$wt" >/dev/null 2>&1 || git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: liveness check PASS — canaries + synthetic-holder end-to-end" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -859,6 +1049,8 @@ self_test() {
   selftest_verify_and_prune
   echo "self-test: exercising SELF-guard via inner invocation (inside worktree + from primary)..." >&2
   selftest_self_guard
+  echo "self-test: exercising liveness gate (oracle canaries + synthetic live holder)..." >&2
+  selftest_liveness_gate
   echo "self-test: PASS" >&2
   exit 0
 }
