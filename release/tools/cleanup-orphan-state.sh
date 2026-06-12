@@ -25,29 +25,41 @@
 #     --dry-run                Enumerate + report; no mutation (default)
 #     --apply                  Execute removals after enumeration (opt-in). The apply
 #                              phase runs in order: (1) remove REMOVE-action branches /
-#                              worktrees via git porcelain; (2) verify — re-check each
-#                              REMOVED target is actually gone, reclassifying any survivor
-#                              to "SKIPPED — survived apply" (never silently claim success);
-#                              (3) prune — drop stale remote-tracking refs (origin/<branch>)
-#                              whose server-side branch was already deleted (e.g. on PR
-#                              merge), via `git remote prune`, so the report's remote view
-#                              matches reality. Steps 2-3 are no-ops in --dry-run.
+#                              worktrees via git porcelain; (2) resolve — one bounded
+#                              re-evaluation pass removing local branches freed by this
+#                              run's worktree removals (fixed point in a single
+#                              invocation); (3) verify — re-check each REMOVED target
+#                              (incl. resolve-pass removals) is actually gone,
+#                              reclassifying any survivor to "SKIPPED — survived apply"
+#                              (never silently claim success); (4) prune — drop stale
+#                              remote-tracking refs (origin/<branch>) whose server-side
+#                              branch was already deleted (e.g. on PR merge), via
+#                              `git remote prune`, so the report's remote view matches
+#                              reality. Steps 2-4 are no-ops in --dry-run.
 #   OUTPUT (one of, default --markdown):
 #     --markdown               Human-readable report (default)
 #     --json                   Machine-readable
 #   SAFETY (additive):
 #     --force                  Allow git branch -D + git worktree remove --force; requires --apply
+#     SELF — the script's own runtime worktree is never removed (a new SELF action
+#     class; --force does not override)
+#     LIVE — worktrees held by a live process are skipped ("SKIP — live session
+#     (pid …)"; re-checked at apply time); fail-closed when lsof is unavailable;
+#     --force does not override
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
-#                              stale-ref prune (via isolated throwaway branches + synthetic
-#                              survivor candidate, net-zero state); exit 0 on success
+#                              stale-ref prune + SELF-guard, liveness, and fixed-point
+#                              fixtures (via isolated throwaway branches + synthetic
+#                              survivor candidate + synthetic live holder, net-zero
+#                              state); exit 0 on success
 #
 # Hook compatibility (verified per Stage 5 spec §Evidence-Grounding):
 #   - All deletions via git porcelain (broad exemption per Hub Decision 1) —
 #     incl. `git remote prune <remote>` (local-tracking-ref reconciliation only;
 #     read-only against the server, no server-side ref deletion)
 #   - gh api -X DELETE git/refs/heads/* permitted via the egress allowlist
+#   - lsof is read-only inspection, invoked by absolute path (PATH pin intact)
 #   - Zero rm/rmdir/unlink usage
 #
 # Exit codes: 0 = success, 1 = validation failure, 2 = workspace-boundary check failed
@@ -112,7 +124,7 @@ PROTECTED_ALWAYS=("$MAIN_BRANCH" "master" "HEAD")
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,38p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,42p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -184,6 +196,124 @@ worktree_is_clean() {
   [[ -z "$(git -C "$path" status --porcelain 2>/dev/null)" ]]
 }
 
+# ─── Self-worktree + path normalization (#333) ──────────────────────────────
+
+# Physical-path normalization: resolves symlink components (macOS /tmp →
+# /private/tmp; $TMPDIR under /private/var) by cd-ing in a subshell. Falls back
+# to the input string when the path does not exist — the safe direction for
+# both consumers (a nonexistent path can be neither SELF nor live-held).
+physical_path() {
+  (cd -- "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"
+}
+
+# SCRIPT_WORKTREE: physical toplevel of the worktree containing the script's
+# runtime cwd. EMPTY when (a) cwd is not inside a git worktree, or (b) cwd is
+# the PRIMARY checkout — #333 AC4: from the primary, the SELF logic is a
+# structural no-op. MAIN_WORKTREE: physical path of the repo's main worktree
+# (first `git worktree list --porcelain` entry — upstream git lists it first).
+SCRIPT_WORKTREE=""
+MAIN_WORKTREE=""
+
+compute_self_worktree() {
+  local top main
+  top="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
+  main="$(git worktree list --porcelain 2>/dev/null | awk 'NR==1 && /^worktree /{sub(/^worktree /,""); print}' || true)"
+  if [[ -n "$main" ]]; then MAIN_WORKTREE="$(physical_path "$main")"; fi
+  if [[ -n "$top" ]]; then
+    top="$(physical_path "$top")"
+    if [[ -n "$MAIN_WORKTREE" && "$top" == "$MAIN_WORKTREE" ]]; then
+      SCRIPT_WORKTREE=""   # primary: SELF never fires (#333 AC4)
+    else
+      SCRIPT_WORKTREE="$top"
+    fi
+  fi
+}
+
+# ─── Liveness oracle (#326, ADR-021) ────────────────────────────────────────
+
+# One-shot all-process cwd snapshot via lsof (absolute path — the pinned PATH
+# /usr/bin:/bin cannot see /usr/sbin where macOS keeps lsof). Entries are
+# "pid<TAB>command<TAB>cwd" strings (bash-3.2-safe; no associative arrays).
+# ORACLE_STATE: ok | unavailable. FAIL-CLOSED: consumers in classify_worktree
+# convert any residual REMOVE to a conservative SKIP when not ok. Self-canary:
+# a scan that cannot see this script's own cwd is malfunctioning → unavailable.
+# ORACLE_BUILT distinguishes never-consulted (lazy memo never fired — e.g. a
+# scope that classifies zero worktrees) from consulted-and-degraded: the
+# "unavailable" initializer is a fail-closed default, not host evidence, so
+# the report emitters claim UNAVAILABLE only when ORACLE_BUILT=1 (DT F-01).
+LSOF_BIN=""
+LIVE_CWD_ENTRIES=()
+ORACLE_STATE="unavailable"
+ORACLE_BUILT=0
+LIVE_HIT=""   # "pid <pid>, <command>" of the most recent worktree_is_live match
+
+resolve_lsof_bin() {
+  LSOF_BIN=""
+  local c
+  for c in /usr/sbin/lsof /usr/bin/lsof; do
+    if [[ -x "$c" ]]; then LSOF_BIN="$c"; break; fi
+  done
+}
+
+build_liveness_map() {
+  LIVE_CWD_ENTRIES=(); ORACLE_STATE="unavailable"
+  ORACLE_BUILT=1   # consultation marker — set by the builder itself so the
+                   # A-Recheck direct call also counts as a consultation
+  resolve_lsof_bin
+  if [[ -z "$LSOF_BIN" ]]; then
+    echo "WARN liveness oracle unavailable — lsof not found at /usr/sbin/lsof or /usr/bin/lsof; fail-closed (would-be-REMOVE worktrees will be conservatively SKIPPED)" >&2
+    return 0
+  fi
+  local line pid="" cmd=""
+  while IFS= read -r line; do
+    case "$line" in
+      p*) pid="${line#p}" ;;
+      c*) cmd="${line#c}" ;;
+      n*) if [[ -n "$pid" ]]; then LIVE_CWD_ENTRIES+=("${pid}	${cmd}	${line#n}"); fi ;;
+    esac
+  done < <("$LSOF_BIN" -a -d cwd -Fcn 2>/dev/null || true)
+  # Self-canary: this bash process holds its own cwd — it MUST be in the map.
+  # Necessary-not-sufficient: it witnesses that the scan RAN and parsed, not
+  # that the enumeration is complete (ADR-021 Consequences).
+  local own e rest cwd found=0
+  own="$(pwd -P)"
+  for e in "${LIVE_CWD_ENTRIES[@]:-}"; do
+    [[ -z "$e" ]] && continue
+    rest="${e#*	}"; cwd="${rest#*	}"
+    if [[ "$cwd" == "$own" ]]; then found=1; break; fi
+  done
+  if [[ "$found" -eq 1 ]]; then
+    ORACLE_STATE="ok"
+    echo "PASS liveness oracle — ${#LIVE_CWD_ENTRIES[@]} live cwd(s) mapped via $LSOF_BIN" >&2
+  else
+    echo "WARN liveness oracle unavailable — scan missing the script's own cwd (self-canary); fail-closed" >&2
+  fi
+  return 0
+}
+
+ensure_liveness_map() {
+  if [[ "$ORACLE_BUILT" -eq 0 ]]; then
+    build_liveness_map
+  fi
+  return 0
+}
+
+# Returns 0 when a live process has its cwd at or under the candidate path;
+# sets LIVE_HIT to "pid <pid>, <command>" for the report label.
+worktree_is_live() {
+  local cand e pid rest cmd cwd
+  cand="$(physical_path "$1")"
+  LIVE_HIT=""
+  for e in "${LIVE_CWD_ENTRIES[@]:-}"; do
+    [[ -z "$e" ]] && continue
+    pid="${e%%	*}"; rest="${e#*	}"; cmd="${rest%%	*}"; cwd="${rest#*	}"
+    case "$cwd" in
+      "$cand"|"$cand"/*) LIVE_HIT="pid ${pid}, ${cmd}"; return 0 ;;
+    esac
+  done
+  return 1
+}
+
 # ─── Outcome detection ───────────────────────────────────────────────────────
 
 # Populated by detect_*. Format per record: tab-separated fields.
@@ -240,15 +370,53 @@ classify_remote() {
 
 classify_worktree() {
   local path="$1" branch="$2"
-  local status="clean" disk action="REMOVE"
+  local status="clean" disk action="REMOVE" cand_phys existing
+
+  # Dedup guard (v1.11 operator scope call): under the default --all scope,
+  # detect_spawn_task and detect_historical can both row the same worktree;
+  # the first row wins so the emitters and the protective counters stay
+  # truthful (one row per candidate). Plain `if` per the set -e discipline.
+  for existing in "${WORKTREE_CANDIDATES[@]:-}"; do
+    [[ -z "$existing" ]] && continue
+    if [[ "${existing%%$'\t'*}" == "$path" ]]; then
+      return 0
+    fi
+  done
+
+  ensure_liveness_map
+  cand_phys="$(physical_path "$path")"
 
   worktree_is_clean "$path" || status="dirty"
   disk=$(worktree_size_mb "$path")
 
-  if [[ "$path" == "$WORKSPACE_ROOT" ]]; then action="SKIP — primary checkout"
-  elif [[ "$status" == "dirty" ]]; then action="SKIP — uncommitted changes"
-  elif [[ -n "$branch" ]] && is_protected "$branch"; then action="SKIP — protected branch"
-  elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then action="SKIP — branch not fully merged"
+  # Clause precedence (v1.11 combined design spec, D-3): protective context
+  # classes first (primary → SELF → live), tree-state classes second (dirty →
+  # protected → not-merged). A dirty SELF tree reports SELF; a dirty live-held
+  # tree reports the live session. Protective classes are facts about WHO holds
+  # the tree, are stable across tree-state changes, and are never overridden by
+  # --force (the apply loops act only on action == "REMOVE"). The primary
+  # clause also matches the physically-normalized main-worktree path — the
+  # WORKSPACE_ROOT comparison alone never fires on the real primary (the
+  # primary checkout is a child of the workspace root, not the root itself).
+  # Fail-closed conversion runs after the chain so state labels stay
+  # informative when the oracle is down and only unprovable would-be-removals
+  # are blocked.
+  if [[ "$path" == "$WORKSPACE_ROOT" ]] || [[ -n "$MAIN_WORKTREE" && "$cand_phys" == "$MAIN_WORKTREE" ]]; then
+    action="SKIP — primary checkout"
+  elif [[ -n "$SCRIPT_WORKTREE" && "$cand_phys" == "$SCRIPT_WORKTREE" ]]; then
+    action="SELF — script's own runtime worktree (protected)"
+  elif [[ "$ORACLE_STATE" == "ok" ]] && worktree_is_live "$cand_phys"; then
+    action="SKIP — live session (${LIVE_HIT})"
+  elif [[ "$status" == "dirty" ]]; then
+    action="SKIP — uncommitted changes"
+  elif [[ -n "$branch" ]] && is_protected "$branch"; then
+    action="SKIP — protected branch"
+  elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then
+    action="SKIP — branch not fully merged"
+  fi
+
+  if [[ "$action" == "REMOVE" && "$ORACLE_STATE" != "ok" ]]; then
+    action="SKIP — liveness oracle unavailable (fail-closed)"
   fi
 
   WORKTREE_CANDIDATES+=("${path}	${branch}	${status}	${disk}	${action}")
@@ -320,7 +488,7 @@ emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]}
-  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 a ref
+  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -347,6 +515,11 @@ emit_markdown() {
     action=$(awk -F'\t' '{print $5}' <<<"$r"); disk=$(awk -F'\t' '{print $4}' <<<"$r")
     [[ "$action" == "$want" ]] && { ((wr++)) || true; disk_total=$((disk_total + disk)); }
     [[ "$action" == FAILED* ]] && ((wfails++)) || true
+    case "$action" in
+      SELF*) ((sc++)) || true ;;
+      "SKIP — live session"*) ((lvc++)) || true ;;
+      "SKIP — liveness oracle unavailable"*) ((fcc++)) || true ;;
+    esac
   done
 
   cat <<EOF
@@ -360,6 +533,7 @@ emit_markdown() {
 - **Remote branches:** $rc total ($rr $verb)
 - **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
+- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
 
 ## Detail — Local branches
 
@@ -419,6 +593,18 @@ EOF
   if [[ "$MODE" == "apply" && $((bfails + wfails)) -gt 0 ]]; then
     echo "- ⚠ $((bfails + wfails)) removal(s) FAILED — see the PASS/FAIL log on stderr; a git safety guard refused (\`git branch -d\` on an unmerged branch, or \`git worktree remove\` on a dirty tree). Re-run with \`--force\` only if the deletion is intentional."
   fi
+  if [[ "$sc" -gt 0 ]]; then
+    echo "- $sc worktree(s) protected as script's own runtime (SELF)"
+  fi
+  if [[ "$lvc" -gt 0 ]]; then
+    echo "- $lvc worktree(s) skipped — held by live sessions"
+  fi
+  if [[ "$fcc" -gt 0 ]]; then
+    echo "- $fcc removal(s) blocked — liveness oracle unavailable (fail-closed)"
+  fi
+  if [[ "$FREED_RESOLVED" -gt 0 ]]; then
+    echo "- $FREED_RESOLVED branch(es) removed after being freed by this run's worktree removals (resolve pass)"
+  fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
   # `set -e` that aborted the caller before the apply phase (the v1.02 apply-path no-op
@@ -430,7 +616,12 @@ EOF
 
 emit_json() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE"
+  # Never-consulted must not read "unavailable" (DT F-01): a never-built map
+  # carries no host-health evidence in either direction, so report the third
+  # state rather than overclaiming degradation (or health).
+  local oracle_field="$ORACLE_STATE"
+  if [[ "$ORACLE_BUILT" -eq 0 ]]; then oracle_field="not-consulted"; fi
+  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$oracle_field"
   printf '  "local_branches":[\n'
   local first=1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -510,6 +701,33 @@ apply_removals() {
     fi
   done
 
+  # Apply-time liveness re-verification (v1.11 amendment A-Recheck): the
+  # classification-time map ages across the multi-minute branch/remote phases
+  # above (per-branch gh calls), while removal is the LAST step — and git
+  # porcelain does NOT refuse removal of a clean live-held tree. Rebuild the
+  # map once at the worktree-apply-loop entry and re-check each row still
+  # REMOVE: a fresh hit rewrites the row in place to the live-session skip;
+  # oracle-unavailable at re-check time converts residual REMOVEs fail-closed
+  # (same labels as classification time). Residual exposure after this
+  # re-check is the seconds between it and the porcelain call.
+  build_liveness_map
+  idx=-1
+  for r in "${WORKTREE_CANDIDATES[@]:-}"; do
+    ((idx++)) || true
+    [[ -z "$r" ]] && continue
+    path=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $5}' <<<"$r")
+    [[ "$action" != "REMOVE" ]] && continue
+    if [[ "$ORACLE_STATE" == "ok" ]]; then
+      if worktree_is_live "$path"; then
+        echo "SKIPPED worktree $path — live session detected at apply time (${LIVE_HIT})" >&2
+        WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — live session (${LIVE_HIT})"
+      fi
+    else
+      echo "SKIPPED worktree $path — liveness oracle unavailable at apply time; fail-closed" >&2
+      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — liveness oracle unavailable (fail-closed)"
+    fi
+  done
+
   idx=-1
   for r in "${WORKTREE_CANDIDATES[@]:-}"; do
     ((idx++)) || true
@@ -525,6 +743,91 @@ apply_removals() {
     fi
   done
 
+  return 0
+}
+
+# ─── Fixed-point resolve pass (#53) ─────────────────────────────────────────
+
+# After the worktree loop, branches that were "SKIP — active worktree attached"
+# at detection — or, under --historical, never enumerated at all (attached
+# branches are filtered at detect time) — may have become removable. Exactly
+# ONE bounded re-evaluation pass: worktree removal frees branches; branch
+# removal frees nothing further, so a single pass reaches the fixed point for
+# the enumerated input. Invariant: ONLY worktrees this run actually REMOVED
+# free their branches — SELF / live-session / dirty / FAILED worktrees keep
+# their branches attached-and-skipped. Runs between apply_removals and
+# verify_apply; verify then re-checks pass-2 REMOVED rows exactly like pass-1
+# rows. Returns 0 unconditionally (set -e discipline).
+FREED_RESOLVED=0
+
+resolve_freed_branches() {
+  echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
+  local branch_flag="-d"
+  if [[ "$FORCE" == "1" ]]; then branch_flag="-D"; fi
+
+  local r wbranch waction freed
+  freed=()
+  for r in "${WORKTREE_CANDIDATES[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    waction=$(awk -F'\t' '{print $5}' <<<"$r")
+    [[ "$waction" != "REMOVED" ]] && continue
+    wbranch=$(awk -F'\t' '{print $2}' <<<"$r")
+    [[ -z "$wbranch" ]] && continue
+    if git show-ref --verify --quiet "refs/heads/${wbranch}"; then
+      freed+=("$wbranch")
+    fi
+  done
+  if [[ ${#freed[@]} -eq 0 ]]; then
+    echo "PASS resolve — no branches freed by this run's worktree removals" >&2
+    return 0
+  fi
+
+  local b i c idx row name action unique
+  for b in "${freed[@]:-}"; do
+    [[ -z "$b" ]] && continue
+    idx=-1; row=""; i=-1
+    for c in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
+      ((i++)) || true
+      [[ -z "$c" ]] && continue
+      name=$(awk -F'\t' '{print $1}' <<<"$c")
+      if [[ "$name" == "$b" ]]; then idx=$i; row="$c"; break; fi
+    done
+
+    if [[ $idx -lt 0 ]]; then
+      # Unrowed (the --historical case): classify fresh — post-removal state.
+      classify_local "$b" 0
+      idx=$(( ${#LOCAL_BRANCH_CANDIDATES[@]} - 1 ))
+      row="${LOCAL_BRANCH_CANDIDATES[$idx]}"
+    fi
+
+    action=$(awk -F'\t' '{print $6}' <<<"$row")
+    if [[ "$action" == "SKIP — active worktree attached" ]]; then
+      # Re-evaluate the recorded skip against live post-removal state.
+      if is_protected "$b"; then
+        echo "SKIPPED resolve $b — protected" >&2; continue
+      fi
+      if branch_has_worktree "$b"; then
+        echo "SKIPPED resolve $b — still attached to a worktree" >&2; continue
+      fi
+      unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${b}" 2>/dev/null || echo "?")
+      if [[ "$unique" != "0" ]]; then
+        echo "SKIPPED resolve $b — unique commits exist ($unique)" >&2; continue
+      fi
+      action="REMOVE"
+    fi
+    if [[ "$action" != "REMOVE" ]]; then
+      echo "SKIPPED resolve $b — $action" >&2; continue
+    fi
+
+    if git branch $branch_flag "$b" 2>&1 | sed 's/^/  git: /' >&2; then
+      echo "PASS resolve $b removed (freed by same-run worktree removal)" >&2
+      LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"REMOVED"
+      ((FREED_RESOLVED++)) || true
+    else
+      echo "FAIL resolve $b — git branch refused; use --force if intentional" >&2
+      LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"FAILED — git branch refused"
+    fi
+  done
   return 0
 }
 
@@ -727,16 +1030,193 @@ selftest_verify_and_prune() {
   return 0
 }
 
+# #333 — SELF-guard fixture. End-to-end via inner invocation: re-runs this
+# script from INSIDE a throwaway worktree (recursion-safe — inner runs are
+# --dry-run, never --self-test) and asserts the SELF action class; then from
+# the PRIMARY checkout (read-only dry-run; zero git state change) and asserts
+# no SELF row appears (AC4). PID-scoped chore/ branch + --release-close slug
+# keep the inner scope away from real branches. Net-zero via git porcelain.
+selftest_self_guard() {
+  local script_abs slug branch wt base out_inside out_main fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-self-$$"
+  branch="chore/${slug}"
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: SELF-guard check SKIPPED — no HEAD commit" >&2; return 0
+  fi
+  if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: SELF-guard check SKIPPED — could not create throwaway worktree" >&2; return 0
+  fi
+
+  out_inside=$(cd "$wt" && "$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: SELF-guard check FAILED — inner dry-run (cwd inside worktree) exited non-zero" >&2
+  elif ! grep -F "${slug}" <<<"$out_inside" | grep -q '"action":"SELF'; then
+    echo "self-test: SELF-guard check FAILED — worktree not classified SELF when script cwd is inside it" >&2
+    fail=1
+  fi
+
+  # AC4 — from the primary checkout the SELF logic is a structural no-op.
+  if [[ "$fail" -eq 0 && -n "$MAIN_WORKTREE" && -d "$MAIN_WORKTREE" ]]; then
+    out_main=$(cd "$MAIN_WORKTREE" && "$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || true
+    if grep -q '"action":"SELF' <<<"$out_main"; then
+      echo "self-test: SELF-guard check FAILED — SELF row emitted when invoked from the primary (AC4)" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove "$wt" >/dev/null 2>&1 || git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: SELF-guard check PASS — SELF from inside; no SELF from primary" >&2
+  return 0
+}
+
+# #326 — liveness-gate fixture. Unit canaries on the oracle (own cwd MUST read
+# live; a never-created path MUST NOT), then end-to-end: a synthetic live
+# holder (background sleep cwd-anchored in a throwaway worktree) must classify
+# the tree "SKIP — live session"; after the holder dies, a fresh inner run must
+# drop the label (each inner run builds its own map — no memo staleness).
+# Holder self-expires (sleep 20) even on abnormal exit. Net-zero via porcelain.
+selftest_liveness_gate() {
+  resolve_lsof_bin
+  if [[ -z "$LSOF_BIN" ]]; then
+    echo "self-test: liveness check SKIPPED — lsof not found (runtime is fail-closed on this host)" >&2
+    return 0
+  fi
+  ensure_liveness_map
+  if [[ "$ORACLE_STATE" != "ok" ]]; then
+    echo "self-test: liveness check FAILED — oracle unavailable despite lsof at $LSOF_BIN (self-canary missing)" >&2
+    exit 1
+  fi
+  if ! worktree_is_live "$(pwd -P)"; then
+    echo "self-test: liveness check FAILED — script's own cwd not detected live (under-detection)" >&2
+    exit 1
+  fi
+  if worktree_is_live "${TMPDIR:-/tmp}/cleanup-selftest-nolive-$$-${RANDOM}"; then
+    echo "self-test: liveness check FAILED — never-created path detected live (over-detection)" >&2
+    exit 1
+  fi
+
+  local script_abs slug branch wt base out holder="" fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-live-$$"
+  branch="chore/${slug}"
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  if [[ -z "$base" ]] || ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: liveness end-to-end SKIPPED — could not create throwaway worktree" >&2
+    return 0
+  fi
+
+  ( cd "$wt" && exec /bin/sleep 20 ) & holder=$!
+  /bin/sleep 1   # settle: let the holder reach its cwd
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: liveness end-to-end FAILED — inner dry-run exited non-zero" >&2
+  elif ! grep -F "${slug}" <<<"$out" | grep -q '"action":"SKIP — live session'; then
+    echo "self-test: liveness end-to-end FAILED — live-held worktree not labeled live-session" >&2
+    fail=1
+  fi
+
+  kill "$holder" >/dev/null 2>&1 || true
+  wait "$holder" 2>/dev/null || true
+  if [[ "$fail" -eq 0 ]]; then
+    out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || true
+    if grep -F "${slug}" <<<"$out" | grep -q '"action":"SKIP — live session'; then
+      echo "self-test: liveness end-to-end FAILED — live label persisted after holder exit" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove "$wt" >/dev/null 2>&1 || git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: liveness check PASS — canaries + synthetic-holder end-to-end" >&2
+  return 0
+}
+
+# #53 — fixed-point fixture. A clean throwaway worktree on a branch based at
+# the merge-base of HEAD and origin/main (v1.11 amendment A-Fixture: an
+# ancestor of BOTH baselines — zero unique commits vs origin/main, so
+# REMOVE-eligible, AND merged into the invoking HEAD, so `git branch -d`
+# deletable from any legal invocation state) goes through a REAL --apply: the
+# worktree must be removed AND its freed branch must be removed in the SAME
+# run (resolve pass), with the branch row reading REMOVED in the same report.
+# Slug-scoped --release-close bounds the inner apply to fixture objects; the
+# inner prune is reconciliation-class (existing selftest_verify_and_prune
+# precedent).
+selftest_fixed_point() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: fixed-point check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs slug branch wt base out fail=0
+  base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: fixed-point check SKIPPED — no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    return 0
+  fi
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-fp-$$"
+  branch="chore/${slug}"
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: fixed-point check SKIPPED — could not create throwaway worktree" >&2
+    return 0
+  fi
+  if is_protected "$branch"; then
+    echo "self-test: fixed-point check SKIPPED — operator protect-list matches '$branch'" >&2
+    git worktree remove --force "$wt" >/dev/null 2>&1 || true
+    git branch -D "$branch" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: fixed-point check FAILED — inner --apply exited non-zero" >&2
+  else
+    if git show-ref --verify --quiet "refs/heads/${branch}"; then
+      echo "self-test: fixed-point check FAILED — freed branch '$branch' survived the same --apply run (#53 regression)" >&2
+      fail=1
+    fi
+    if [[ -d "$wt" ]]; then
+      echo "self-test: fixed-point check FAILED — worktree '$wt' survived --apply" >&2
+      fail=1
+    fi
+    if [[ "$fail" -eq 0 ]] && ! grep -F "\"name\":\"${branch}\"" <<<"$out" | grep -q '"action":"REMOVED"'; then
+      echo "self-test: fixed-point check FAILED — branch row not REMOVED in the same-run report" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
   load_protect_list
+  compute_self_worktree
   detect_spawn_task
   echo "self-test: detection completed — ${#LOCAL_BRANCH_CANDIDATES[@]} local / ${#REMOTE_BRANCH_CANDIDATES[@]} remote / ${#WORKTREE_CANDIDATES[@]} worktree candidates" >&2
   echo "self-test: exercising apply path against an isolated throwaway branch..." >&2
   selftest_apply_path
   echo "self-test: exercising post-apply verify + stale-ref prune paths..." >&2
   selftest_verify_and_prune
+  echo "self-test: exercising SELF-guard via inner invocation (inside worktree + from primary)..." >&2
+  selftest_self_guard
+  echo "self-test: exercising liveness gate (oracle canaries + synthetic live holder)..." >&2
+  selftest_liveness_gate
+  echo "self-test: exercising fixed-point apply (worktree + freed branch in one run)..." >&2
+  selftest_fixed_point
   echo "self-test: PASS" >&2
   exit 0
 }
@@ -768,6 +1248,7 @@ done
 workspace_boundary_check
 [[ "$SELF_TEST" == "1" ]] && self_test
 load_protect_list
+compute_self_worktree
 
 case "$SCOPE" in
   all)
@@ -779,14 +1260,19 @@ case "$SCOPE" in
   historical)    detect_historical ;;
 esac
 
-# Apply BEFORE emitting: apply_removals rewrites candidate action fields to REMOVED /
-# FAILED so the emitted report reflects ACTUAL execution, not just the planned action.
-# verify_apply re-checks REMOVED targets and reclassifies any survivor to SKIPPED (AC4);
-# prune_remote_tracking reconciles the local remote-tracking view (AC3). All three run in
-# --apply only and return 0 so emit still runs after them under set -e. Plain `if` (not
-# `[[ … ]] && …`) keeps control flow obvious and immune to set -e short-circuit semantics.
+# Apply BEFORE emitting, FOUR phases in order: (1) apply_removals rewrites candidate
+# action fields to REMOVED / FAILED so the emitted report reflects ACTUAL execution,
+# not just the planned action; (2) resolve_freed_branches runs ONE bounded
+# re-evaluation pass removing local branches freed by this run's worktree removals
+# (fixed point in a single invocation — #53); (3) verify_apply re-checks REMOVED
+# targets (incl. resolve-pass removals) and reclassifies any survivor to SKIPPED
+# (AC4); (4) prune_remote_tracking reconciles the local remote-tracking view (AC3).
+# All four run in --apply only and return 0 so emit still runs after them under
+# set -e. Plain `if` (not `[[ … ]] && …`) keeps control flow obvious and immune to
+# set -e short-circuit semantics.
 if [[ "$MODE" == "apply" ]]; then
   apply_removals
+  resolve_freed_branches
   verify_apply
   prune_remote_tracking
 fi
