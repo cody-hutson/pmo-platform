@@ -237,6 +237,10 @@ compute_self_worktree() {
 # ORACLE_STATE: ok | unavailable. FAIL-CLOSED: consumers in classify_worktree
 # convert any residual REMOVE to a conservative SKIP when not ok. Self-canary:
 # a scan that cannot see this script's own cwd is malfunctioning → unavailable.
+# ORACLE_BUILT distinguishes never-consulted (lazy memo never fired — e.g. a
+# scope that classifies zero worktrees) from consulted-and-degraded: the
+# "unavailable" initializer is a fail-closed default, not host evidence, so
+# the report emitters claim UNAVAILABLE only when ORACLE_BUILT=1 (DT F-01).
 LSOF_BIN=""
 LIVE_CWD_ENTRIES=()
 ORACLE_STATE="unavailable"
@@ -253,6 +257,8 @@ resolve_lsof_bin() {
 
 build_liveness_map() {
   LIVE_CWD_ENTRIES=(); ORACLE_STATE="unavailable"
+  ORACLE_BUILT=1   # consultation marker — set by the builder itself so the
+                   # A-Recheck direct call also counts as a consultation
   resolve_lsof_bin
   if [[ -z "$LSOF_BIN" ]]; then
     echo "WARN liveness oracle unavailable — lsof not found at /usr/sbin/lsof or /usr/bin/lsof; fail-closed (would-be-REMOVE worktrees will be conservatively SKIPPED)" >&2
@@ -288,7 +294,6 @@ build_liveness_map() {
 ensure_liveness_map() {
   if [[ "$ORACLE_BUILT" -eq 0 ]]; then
     build_liveness_map
-    ORACLE_BUILT=1
   fi
   return 0
 }
@@ -528,7 +533,7 @@ emit_markdown() {
 - **Remote branches:** $rc total ($rr $verb)
 - **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
-- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions$([[ "$ORACLE_STATE" == "ok" ]] || echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
+- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
 
 ## Detail — Local branches
 
@@ -611,7 +616,12 @@ EOF
 
 emit_json() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$ORACLE_STATE"
+  # Never-consulted must not read "unavailable" (DT F-01): a never-built map
+  # carries no host-health evidence in either direction, so report the third
+  # state rather than overclaiming degradation (or health).
+  local oracle_field="$ORACLE_STATE"
+  if [[ "$ORACLE_BUILT" -eq 0 ]]; then oracle_field="not-consulted"; fi
+  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$oracle_field"
   printf '  "local_branches":[\n'
   local first=1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
