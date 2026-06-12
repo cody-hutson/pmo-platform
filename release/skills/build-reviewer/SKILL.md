@@ -12,7 +12,7 @@ description: >
   wants a final production-readiness review of a document pack, including:
   "review the copilot builder files", "audit the pmo platform",
   "review this document pack", "find gaps in the builder doc pack".
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -310,6 +310,66 @@ that already governs review behavior.
   produces the register and the list independently, some criticals end up only
   in the register, some items land in the list without register backing, and
   the implementation-planner downstream inherits the routing error.
+
+### Production-readiness review invoked mid-authoring — TRIG
+
+- **Signature (observable signal):** A findings register is produced against a
+  document pack still in active authoring — no completion claim, declared review
+  round, or stable baseline exists for the target — and the findings enumerate
+  known-incomplete sections and placeholder content as defects.
+- **Conditional:** do NOT run a final production-readiness review when the target
+  document pack is still in active authoring with no declared completion claim or
+  review-round baseline, because review-class work fires at activity-exit —
+  findings against known-incomplete content are noise that consumes
+  remediation-planning capacity downstream and devalues the "final review"
+  verdict the pack owner relies on at release time.
+- **Root cause:** "Review the pack" phrasing arrives at any point in the pack's
+  life; the dimension machinery runs identically on a half-built pack, and early
+  invocation feels diligent — but the mandate is FINAL production-readiness, not
+  in-progress feedback, and the distinction is invisible unless the reviewer
+  checks pack state before loading a dimension pack.
+- **Mitigation:** Before Domain Detection, confirm the review trigger: a
+  completion claim, a declared remediation-round boundary, or an explicit
+  pre-release gate. If the pack is mid-authoring, say so and offer the
+  right-sized alternative — a scoped review of the completed subset, or deferral
+  to the declared review point — rather than running all dimensions against
+  moving content.
+- **Principal response vs. junior response:** Principal verifies the pack has
+  reached a reviewable baseline, names the round under review in the register
+  header, and scopes findings to content the authors consider done. Junior runs
+  the full dimension set on a half-built pack, files thirty findings against
+  content the authors already know is unfinished, and the register's
+  signal-to-noise damage makes the next real review round land flat.
+
+### Pack-level review machinery claimed for a single-artifact audit — TRIG
+
+- **Signature (observable signal):** build-reviewer is invoked on "review this" /
+  "audit this" where the target is one artifact — a single skill output, a single
+  SKILL.md, or one document — and the full findings-register apparatus (pack
+  dimensions, six summary deliverables) is rendered against a target the platform
+  routes to pmo-qa-auditor (output audit) or pmo-skill-editor Mode D
+  (skill-definition audit).
+- **Conditional:** do NOT claim a review request when the target is a single
+  skill output or a single skill definition rather than a governed document pack,
+  because the platform routes single-output review to pmo-qa-auditor and
+  skill-definition audit to pmo-skill-editor Mode D — the pack-level dimension
+  machinery produces dimension verdicts with no pack to exercise them on, while
+  the right gate set (G1–G7, the Phase 8 baseline dimensions) never runs.
+- **Root cause:** "Review" and "audit" are the highest-collision trigger words in
+  the platform — build-reviewer, pmo-qa-auditor, eval-writer Review, and
+  pmo-skill-editor Mode D all answer them; this skill's description matches first
+  when the user mentions files, and no target-shape check runs before a dimension
+  pack loads.
+- **Mitigation:** Check the target's shape before Domain Detection: a
+  multi-document governed pack → proceed; a single skill output → name
+  pmo-qa-auditor as the owner and route; a SKILL.md or .skill file →
+  pmo-skill-editor Mode D; an eval suite → eval-writer Review mode. The routing
+  sentence costs seconds; a mis-scoped review costs hours.
+- **Principal response vs. junior response:** Principal checks the target shape,
+  routes with a one-line rationale, and the right audit gates run. Junior loads
+  the generic pack against a single output, produces a seven-dimension register
+  where a G1–G7 audit was wanted, and the operator re-runs the work through the
+  right skill.
 
 ## Context for Calibration
 

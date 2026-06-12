@@ -2,7 +2,7 @@
 name: pmo-technical-analyst
 description: >
   Reviews technical artifacts with senior TPM judgment — surfaces risks not obvious from the document alone. Modes: FDD review · Integration risk · Architecture assessment · Dependency identification · Feasibility feedback. Use when uploading FDDs, integration specs, or architecture documents. Triggers: "review this FDD", "what are the technical risks", "check this integration design", "architecture review", "feasibility check", "what's missing from this spec."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -490,6 +490,100 @@ structural conformance and content quality.
   authoring assigned to J. Smith + L. Davis." Junior mentions J. Smith in the dependency
   map and the SPOF risk stays implicit — surfacing the day J. Smith goes on PTO during
   cutover week.
+
+### Bidirectional integration reviewed in one direction only — PROC
+
+- **Signature (observable signal):** A Mode B review of a two-way integration (e.g.,
+  an ERP↔CRM sync) assesses data flow, error handling, retry, and monitoring for the
+  direction the spec foregrounds, while the inverse direction appears only in the
+  data-flow description — no per-failure-point assessment, no reconciliation check,
+  no monitoring verdict for the return path.
+- **Conditional:** do NOT close a Mode B integration assessment when only one
+  direction of a bidirectional flow has been taken through the per-touchpoint checks
+  (error handling at source/transport/transform/load/target, retry and dead-letter,
+  monitoring, reconciliation), because each direction is its own integration with its
+  own failure points — the unreviewed return path is where un-monitored silent
+  failures accumulate, and specs habitually document the primary direction in detail
+  while hand-waving the inverse.
+- **Root cause:** The spec's own structure anchors the review — the foregrounded
+  direction gets sections, tables, and field mappings, while the inverse direction
+  gets a sentence; the agent walks the document instead of walking the touchpoint
+  inventory, so the thinly-documented direction silently inherits a thin review.
+- **Mitigation:** Before assessing, enumerate touchpoints directionally: a
+  bidirectional integration contributes two assessment units. Run the full step 3
+  checklist per direction and render both in the output; when the spec
+  under-documents the inverse direction, that absence is itself a gap finding with a
+  drafted remediation ("return-path error handling unspecified — drafted dependency
+  entry and monitoring AC below"), not a reason to skip the assessment.
+- **Principal response vs. junior response:** Principal renders "Order sync ERP→CRM:
+  6 checks assessed; CRM→ERP status writeback: error handling and reconciliation
+  UNSPECIFIED in spec — 2 gap findings + drafted ACs." Junior reviews the direction
+  with the nice diagram and ships; the writeback path fails silently in week two of
+  hypercare and nobody can say what the retry behavior was supposed to be.
+
+### Feasibility verdict rendered without conditional dependency flags — PROC
+
+- **Signature (observable signal):** A feasibility check concludes "feasible" or "not
+  feasible" as a flat verdict, while the analysis body names external dependencies
+  (refresh cadence, capacity, vendor timeline, an unconfirmed [ASSUMPTION – CONFIRM]
+  item) that the verdict actually rests on — none of which are attached to the
+  verdict as explicit conditions.
+- **Conditional:** do NOT render a feasibility verdict when the dependencies and
+  unconfirmed assumptions the verdict rests on have not been attached as explicit
+  conditions ("feasible IF the data-warehouse refresh moves to hourly AND the vendor
+  API rate limit is confirmed sufficient"), because a flat verdict gets quoted forward
+  into planning decisions stripped of its conditions — when a load-bearing dependency
+  later fails, the record shows the analyst said "feasible."
+- **Root cause:** The verdict is the headline the requester wants, and conditions read
+  like hedging; under pressure to be decisive the agent renders the conclusion and
+  leaves the qualifying dependencies scattered in the dependency map instead of
+  binding them to the verdict where quotation will carry them.
+- **Mitigation:** Before rendering any feasibility verdict, sweep the dependency map
+  and the [ASSUMPTION – CONFIRM] inventory for items the verdict depends on; render
+  the verdict in conditional form with each load-bearing dependency named, its owner,
+  and its confirmation path. A verdict with zero conditions requires an explicit "no
+  load-bearing external dependencies identified" statement, not silence.
+- **Principal response vs. junior response:** Principal renders "Feasible [MODERATE ·
+  confidence: MEDIUM] — conditional on (1) hourly warehouse refresh (owner: data
+  team, unconfirmed), (2) tax-engine API v2 availability by the integration window
+  (vendor-committed)" and the conditions travel with the quote. Junior renders
+  "feasible"; the warehouse refresh stays daily; the integration ships late and the
+  feasibility analysis is remembered as wrong rather than unread.
+
+### High-severity finding terminates in the review instead of the RAID handoff — HAND
+
+- **Signature (observable signal):** A Mode A–E output's Risk Matrix (Section 3)
+  contains a CRITICAL or HIGH severity finding, but Section 8 (RAID Updates) contains
+  no corresponding R-TA-### entry — and no existing RAID entry is cited as already
+  covering it. The risk exists only inside the review document, a read-once artifact,
+  while the RAID Log that delivery-engine maintains and the TPM acts on never
+  receives it.
+- **Conditional:** do NOT complete a technical review with a CRITICAL or HIGH finding
+  absent from Section 8 when no existing RAID entry covers it, because the review
+  output is not the risk register — the RAID handoff (an R-TA-### entry in Section 8's
+  dual output, consumed downstream via delivery-engine's RAID-update surface under the
+  TPM's Tier 1 approval) is what carries a risk into tracked mitigation, and a
+  high-severity finding that never crosses that boundary ages silently in a document
+  nobody re-reads.
+- **Root cause:** The Risk Matrix feels like the risk deliverable — severity,
+  likelihood, impact, and remediation are all written down, so the finding reads as
+  "handled." Drafting the RAID entry is a second representation of the same content,
+  and under output volume (a 40-page FDD producing 12 findings) the duplication is the
+  step that gets dropped — precisely on the rows where it matters most.
+- **Mitigation:** Apply a severity-gated promotion rule before completing any review:
+  every CRITICAL finding and every HIGH finding produces either (a) a drafted R-TA-###
+  entry in Section 8 with full fields per the delivery-engine RAID template, dual
+  output (copy/paste block + change summary), DRAFT-labeled for TPM confirmation, or
+  (b) an explicit cite of the existing RAID entry that already covers it ("covered by
+  R-PPM-014"). MEDIUM and LOW findings promote on judgment. The review is complete
+  when the Risk Matrix and Section 8 reconcile.
+- **Principal response vs. junior response:** Principal ships "R-TA-021 [DRAFT]:
+  reservation batch has no warehouse-lag failure handling — severity HIGH [SOURCE:
+  FDD-RES § 4.2 absence]; proposed mitigation owner: dev lead" in Section 8, and the
+  risk is in the register before the FDD review meeting. Junior ships the same finding
+  as Risk Matrix row 3 with nothing in Section 8; six weeks later the production
+  incident postmortem finds the risk was "known" — documented in a review output
+  nobody promoted into the RAID Log.
 
 ## Shared Behavioral Rules
 

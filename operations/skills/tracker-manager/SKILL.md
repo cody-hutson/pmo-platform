@@ -2,7 +2,7 @@
 name: tracker-manager
 description: >
   Generic update engine for all operational trackers in 04-PMO-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -449,6 +449,66 @@ structural conformance and content quality.
   auto-writes everything; a malformed RAID entry lands in the stakeholder-facing log;
   the operator discovers it during the next SteerCo prep when the entry is already
   consumed by the weekly rollup.
+
+### Consolidated report omits the rejection-log sections — OUT
+
+- **Signature (observable signal):** A TRACKER MANAGER REPORT (or Step 2 consolidated
+  change summary) presents an APPLIED-only view of the run — the REJECTED, VALIDATION
+  ERRORS, and/or REJECTION PATTERNS sections are absent — when the run rejected an
+  Evidence-Gate CLOSE, dropped a malformed instruction, or flagged an out-of-scope write.
+  A clean-looking report with no rejection surface is indistinguishable from a run where
+  rejections were never tracked.
+- **Conditional:** do NOT emit a TRACKER MANAGER REPORT or consolidated change summary
+  without its REJECTED, VALIDATION ERRORS, and REJECTION PATTERNS sections when any update
+  in the run was rejected, dropped, or flagged, because an applied-only report overstates
+  run health and starves the PPM Agent's rejection-pattern learning loop — the upstream
+  skill re-proposes the same defective updates on every future processing run.
+- **Root cause:** Applied changes are the run's "product" and rejections feel like
+  housekeeping; under consolidation pressure the report gets built from the applied queue
+  alone. Each rejection was already stated in-line during processing, which makes omitting
+  it from the consolidated artifact feel like de-duplication rather than data loss.
+- **Mitigation:** Build the report from all queues, not just APPLIED. Render the REJECTED,
+  VALIDATION ERRORS, and REJECTION PATTERNS sections on every run — populated when
+  non-empty, an explicit "none" when empty — so a zero-rejection run is distinguishable
+  from an untracked one. Carry each Step 6 rejection record into the report — what was
+  proposed and why rejected into REJECTED, the pattern note into REJECTION PATTERNS.
+- **Principal response vs. junior response:** Principal's report shows "APPLIED: 9 ·
+  REJECTED: 2 (Evidence Gate) · VALIDATION ERRORS: 1 · REJECTION PATTERNS: close-without-
+  evidence on transcript-only items," and the next PPM run proposes better-evidenced
+  closes. Junior reports the 9 applied changes; the 2 rejections and the pattern vanish;
+  the PPM Agent re-proposes the same under-evidenced CLOSE actions next run and the
+  operator wonders why the pipeline never learns.
+
+### Tracker updates self-derived from a raw artifact — TRIG
+
+- **Signature (observable signal):** Invoked with "update the trackers" plus a
+  raw artifact (transcript, email, meeting notes) and no TRACKER_UPDATE block,
+  the skill reads the artifact and derives its own adds, modifies, and closes —
+  deciding what should change rather than validating structured instructions an
+  upstream processing skill produced.
+- **Conditional:** do NOT derive tracker changes directly from a raw artifact
+  when no TRACKER_UPDATE instruction block exists, because deciding what should
+  change is the read-side job of ppm-agent and the processing skills — this
+  skill is the write-side validator and executor — and self-derived updates
+  skip the analysis layer that produces evidence citations and the dependency
+  scan (the Tracker Impact Matrix), landing writes whose justification never
+  existed upstream of the write.
+- **Root cause:** "Update the trackers from this transcript" reads as one job,
+  and the skill CAN parse a transcript well enough to guess updates; routing
+  back through ppm-agent feels like indirection when the user handed the
+  artifact directly to the engine that owns the files.
+- **Mitigation:** When invoked without TRACKER_UPDATE instructions, route the
+  artifact to ppm-agent (or the owning processing skill) for analysis and
+  consume its emitted TRACKER_UPDATES block on the return path. If the user
+  insists on direct processing, first render the proposed changes AS a
+  TRACKER_UPDATE block — evidence field populated per entry — then run the
+  normal validate → consolidate → approve cycle against it rather than writing
+  from impression.
+- **Principal response vs. junior response:** Principal returns "this needs the
+  read-side first" and comes back with a change summary sourced from
+  ppm-agent's instructions. Junior derives nine updates from the transcript
+  directly; two of them close items the read-side dependency scan would have
+  kept open, and the silent losses surface a week later as forgotten blockers.
 
 ## Reference Files
 

@@ -2,7 +2,7 @@
 name: delivery-engine
 description: >
   Operational backbone for backlog health through release readiness. Modes: Backlog scan · Ticket insight · DoR gate · Sprint planning · Execution control · DoD gate · RAID updates. Use for sprint planning, backlog review, quality gates, or velocity tracking across Agile and Waterfall governance. Triggers: "run DoR on this", "run DoD on this", "check this backlog", "plan the sprint", "velocity check", "is this release ready", "update the RAID log."
-version: v11.16
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -580,6 +580,40 @@ structural conformance and content quality.
   framings, and labels each section with its target audience. Junior ships agile-only,
   the SPM lead asks for the milestone view at SteerCo, and the agent has to redo the
   work.
+
+### Velocity history consumed without window qualification — INPUT
+
+- **Signature (observable signal):** A Mode D capacity model derives sprint
+  capacity, or a Mode E velocity check reads sprint health, from a raw velocity
+  average — a point value lifted straight from the velocity history — when the
+  underlying window includes anomalous sprints (holiday or half-staffed sprints,
+  scope-churn sprints), spans fewer than 3 completed sprints, or shows the
+  points-per-item inflation signature that `references/sprint-defaults.md` §3.2
+  requires cross-checking.
+- **Conditional:** do NOT consume velocity history as a planning input without
+  qualifying the window when the history includes anomalous sprints or fewer
+  than 3 completed sprints, because sprint-defaults.md §3.1–3.2 makes
+  unqualified velocity unreliable as a forecasting basis — a capacity model
+  built on a corrupted average commits the team to a scope the real throughput
+  cannot support.
+- **Root cause:** The velocity history arrives as authoritative-looking numbers
+  (tracker-exported, arithmetically clean); averaging is one step while window
+  qualification — outlier exclusion with documentation, stabilization-timeline
+  check, throughput cross-check — is several. The evidence-over-invention
+  principle guards against fabricated velocity but not against real numbers
+  consumed uncritically.
+- **Mitigation:** Before any capacity use of velocity: (1) check window size
+  against the §3.1 stabilization table (1–2 sprints = do not forecast; 3–5 =
+  wide ranges); (2) exclude outlier sprints and document the exclusion (§3.2
+  rule 2); (3) express velocity as a range, never a point (§3.2 rule 1);
+  (4) cross-check throughput for point inflation (§3.2 rule 4). Label the
+  derived capacity with its basis ("velocity 28–35 over sprints 4–8; sprint 6
+  excluded — holiday week").
+- **Principal response vs. junior response:** Principal qualifies the window,
+  excludes the holiday sprint with a documented note, plans against the range
+  floor, and shows the basis in the capacity model. Junior averages every
+  visible sprint into "32 points," plans to it as a commitment, and the team
+  discovers mid-sprint that the number was one-third holiday artifact.
 
 ## Shared Behavioral Rules
 

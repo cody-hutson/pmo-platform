@@ -2,7 +2,7 @@
 name: change-management
 description: >
   Plans and tracks organizational change for go-lives and system transitions. Modes: Impact assessment · Training plan · Readiness checklist · Hypercare plan · Adoption tracking · Change matrix review. Ensures no deployment proceeds without impact assessment, training, and readiness validation. Triggers: "change impact assessment", "training plan", "readiness checklist", "hypercare plan", "adoption plan", "are we ready for go-live", "post-go-live support."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -563,6 +563,44 @@ structural conformance and content quality.
   produces a complete draft. Junior writes the email body inline in the schedule, the
   user pastes it without a comms-writer review, and discovers the draft is missing the
   recipient list, signature, and compliance check.
+
+### Readiness gap remediation not routed to the owning skill — HAND
+
+- **Signature (observable signal):** A Mode C readiness checklist renders a NOT READY or
+  AT RISK item (or a CONDITIONAL / NOT READY overall verdict) whose remediation is owned
+  by another skill's surface — a missing cutover plan or environment-readiness
+  verification (delivery-engine outputs), an unsent pre-go-live communication
+  (comms-writer draft), or a go-live risk requiring escalation — and the output's Next
+  Actions and RAID Updates sections contain no corresponding follow-up tag ([DELIVERY],
+  [COMMS]) or [RISK] / [DECISION] recommendation back to ppm-agent. The remediation
+  exists only as checklist-row prose.
+- **Conditional:** do NOT terminate a Mode C readiness output at the checklist when a
+  NOT READY or AT RISK item's remediation is owned by delivery-engine, comms-writer, or
+  ppm-agent, because checklist-row prose is not a handoff — the interaction contract
+  routes technical readiness evidence through delivery-engine outputs and escalations
+  through [RISK] / [DECISION] tags, and a gap that never crosses the skill boundary
+  stays unremediated while the checklist ages toward the go/no-go date.
+- **Root cause:** The readiness checklist feels like the terminal deliverable — rendering
+  the verdict completes the requested artifact, and emitting the cross-skill follow-up
+  tags (with the full 5-field handoff structure: Tag, Context, Source, Scope, Inputs)
+  is extra work after the "real" output is done. The remediation column gives the
+  appearance of routing without any consumer skill ever receiving it.
+- **Mitigation:** For every NOT READY / AT RISK item, classify the remediation owner.
+  When the owner is another skill, emit the follow-up tag with the full 5-field handoff
+  structure (comms-writer's intake flags "⚠️ Incomplete handoff" on missing fields):
+  [DELIVERY] for cutover-plan / environment-readiness / release-gate evidence,
+  [COMMS] for unsent communications (per the Mode F boundary), and [RISK] / [DECISION]
+  recommendations to ppm-agent in Next Actions for items needing escalation or a framed
+  decision. The checklist row then cites its emitted tag — remediation routed, not just
+  described.
+- **Principal response vs. junior response:** Principal renders "Technical: NOT READY —
+  no validated cutover plan" and emits the [DELIVERY] tag (Context: readiness item
+  blocked on cutover plan; Source: readiness checklist row 12, 2026-04-15; Scope:
+  produce/confirm cutover plan status; Inputs: readiness checklist, cutover FDD) plus a
+  [RISK] recommendation for the go/no-go exposure — the gap is in delivery-engine's
+  queue the same day. Junior renders the same NOT READY row with "remediation: cutover
+  plan needed (owner: delivery team)" and stops; the checklist is re-reviewed two weeks
+  later with the same row unremediated, now inside the go/no-go window.
 
 ## Shared Behavioral Rules
 

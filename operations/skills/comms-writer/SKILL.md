@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -566,6 +566,143 @@ structural conformance and content quality.
   scope change by EOD Friday so engineering can re-baseline Monday." Junior writes
   "It would be helpful to have your thoughts on the scope change when you have a
   chance" — and the escalation does not get acted on until the deadline has passed.
+
+### Framework-governed status update drafted as a freeform Type 4 brief — TRIG
+
+- **Signature (observable signal):** A "status update" request that matches
+  daily-status's surface (AM/PM/EOD update, daily connect, post-testing status)
+  or weekly-status-rollup's surface (weekly roll-up, SteerCo, portfolio health)
+  is drafted as a comms-writer Type 4 brief — composed from conversation context,
+  without the carry-forward-tracker derivation or PORTFOLIO.md write-back the
+  owning skill performs.
+- **Conditional:** do NOT draft a daily AM/PM update or weekly portfolio roll-up
+  as a Type 4 executive brief when the request matches the daily-status or
+  weekly-status-rollup trigger surface, because those skills derive status
+  content from carry-forward trackers and the Daily Status Update Framework and
+  (for the roll-up) write health state back to PORTFOLIO.md — a freeform Type 4
+  substitute produces unsourced status theater and silently skips the tracker
+  write-backs the platform depends on.
+- **Root cause:** "Status update" is shared vocabulary across three skills; Type
+  4's own trigger list includes "status update for leadership" and SteerCo
+  preparation, so the request lands here on phrasing alone — and drafting from
+  conversational context is faster than routing to the skill that must read five
+  tracker files first.
+- **Mitigation:** Before drafting any status communication, classify cadence and
+  derivation: daily / AM/PM / team-channel → daily-status owns it; weekly /
+  portfolio / SteerCo document → weekly-status-rollup owns it; a one-off
+  audience-calibrated brief built FROM already-derived status → Type 4 proceeds.
+  When the framing is comms but the content is framework-derived, request the
+  owning skill's output as input rather than re-deriving it.
+- **Principal response vs. junior response:** Principal routes the AM update to
+  daily-status and offers to calibrate the result for a different audience
+  afterward. Junior drafts a plausible Type 4 "morning status" from chat memory;
+  it contradicts the carry-forward tracker, the Daily Status Log never gets
+  appended, and the team's trust in the channel update erodes.
+
+### Governed project artifact produced as a Type 7 documentation update — TRIG
+
+- **Signature (observable signal):** A request phrased as "draft / write / put
+  together [artifact]" where the artifact is a governed project deliverable with
+  a defined Document Tier and template — RAID Log, Project Plan, Test Plan,
+  Training Plan, FDD — is fulfilled as a Type 7 Confluence/documentation output
+  instead of routing to artifact-generator's staged 08-Generated/ flow.
+- **Conditional:** do NOT produce a governed project artifact through the Type 7
+  documentation path when the request names a deliverable with a defined
+  Document Tier and template, because artifact-generator owns artifact
+  scaffolding — staging in 08-Generated/ with metadata and the Tier 1 approval
+  gate — and a comms-formatted artifact bypasses the staging and approval
+  lifecycle that stakeholder-facing documents require.
+- **Root cause:** "Draft a" / "write the" verbs lead both skills' trigger sets,
+  and Type 7's "documentation update" reads as a catch-all for any
+  document-shaped output; the push-to-resolve bias completes the draft rather
+  than questioning whether the output is a communication at all.
+- **Mitigation:** At type detection, ask of the deliverable: is the output a
+  message ABOUT project state (a communication — proceed), or IS it project
+  state (an artifact — route to artifact-generator)? Artifacts have a home
+  folder in the 01–08 structure and an approval tier; communications have a
+  recipient. Type 7 stays for formatting an update to existing documentation,
+  not for originating governed artifacts.
+- **Principal response vs. junior response:** Principal routes "draft the
+  training plan" to artifact-generator and offers the announcement comm as the
+  companion piece comms-writer legitimately owns. Junior writes a training plan
+  as a Confluence update; it never lands in 08-Generated/ staging, and the
+  unapproved artifact circulates to stakeholders outside the tier protocol.
+
+### Ambiguous audience calibrated by guess instead of NOT READY escalation — HAND
+
+- **Signature (observable signal):** A draft ships READY FOR SEND with a tone register
+  and framing chosen for an audience that has no entry in
+  `references/audience-profiles.md` and no calibration context in the invocation — or
+  whose Handoff Manifest entry carries thin `context` or
+  `evidence_quality: [ASSUMPTION – CONFIRM]` — with no Section 5 audience note naming
+  the calibration as a guess and no NOT READY gap statement requesting the profile.
+  (Distinct from the tone-register PROC entry above, whose trigger is a channel and
+  audience explicitly named in the input — this entry fires when they are NOT
+  resolvable.)
+- **Conditional:** do NOT resolve an ambiguous or unprofiled audience by silently
+  picking a tone register when the audience profile is absent from
+  `references/audience-profiles.md` and the upstream context (user statement or the
+  ppm-agent Handoff Manifest `context` / `evidence_quality` fields) does not
+  disambiguate, because audience calibration is this skill's load-bearing judgment — a
+  misjudged register to an unknown stakeholder is exactly the send the readiness
+  verdict exists to stop, and the chained contract's "flag, don't ask" rule routes the
+  gap back as a NOT READY draft with a specific need, not as a guess.
+- **Root cause:** READY FOR SEND with a complete-looking draft demonstrates
+  push-to-resolve; surfacing "I don't know who this reader is" feels like failing to
+  deliver. Chained invocation compounds the pressure — AskUserQuestion is suppressed
+  (`chained=true`), and the agent reads suppression as license to guess rather than as
+  the cue to use the flag-don't-ask channel the Chained Invocation Contract provides.
+- **Mitigation:** Before calibrating, resolve the audience against
+  `references/audience-profiles.md`. On a miss with no disambiguating context: produce
+  the draft in a neutral-professional register, mark it NOT READY with the specific gap
+  ("NEEDS: audience profile or calibration guidance for [recipient] — no profile entry;
+  manifest context insufficient"), and record the register choice in Section 5 audience
+  notes. When chained, the NOT READY verdict plus gap statement IS the handoff response
+  the upstream manifest loop expects; an upstream
+  `evidence_quality: [ASSUMPTION – CONFIRM]` on the audience context never resolves
+  into a READY register guess.
+- **Principal response vs. junior response:** Principal ships the draft NOT READY with
+  "NEEDS: calibration guidance for the named recipient — not in audience-profiles;
+  defaulted to neutral-exec register pending confirmation," and the user supplies one
+  line that flips it READY. Junior infers a register from the recipient's job title,
+  marks READY, and the misjudged tone lands on a stakeholder the PMO has never
+  profiled — a relationship cost no retraction email fully undoes.
+
+### Chained `cascade_scope` treated as send authorization — HAND
+
+- **Signature (observable signal):** A chained invocation (`chained=true`, ppm-agent
+  [COMMS] manifest) produces output that crosses the draft→send boundary: the
+  communication is narrated as dispatched or scheduled ("escalation sent to the
+  steering committee," "this goes out at 9 AM"), the Section 2 verdict is framed as
+  send authorization rather than send readiness, or a further cascade step fires at
+  `cascade_depth_remaining` 0 — while the session contains no explicit user approval
+  of the send.
+- **Conditional:** do NOT treat the manifest's `cascade_scope` (or the chained
+  invocation itself) as authorization to send or to represent the draft as sent when
+  no explicit user approval of the send exists in the session, because `cascade_scope`
+  authorizes the draft only — the C4 Tier gate in this skill's Chained Invocation
+  Contract routes every Tier 1 stakeholder-facing send through explicit user approval
+  even when chained, and the Reversibility Discipline reserves the act of sending as
+  the user's decision (defaulting to IRREVERSIBLE for exec escalations) precisely
+  because the send, not the draft, establishes the downstream commitment.
+- **Root cause:** Chained context arrives pre-authorized — a scope field, a depth
+  budget, a complete manifest — and the whole envelope reads as "the human already
+  approved this work." The draft→send boundary is invisible at the text layer (the
+  same words serve both states), so the draft authorization generalizes across it,
+  and "READY FOR SEND" drifts from a readiness verdict into permission language.
+- **Mitigation:** Terminate every chained invocation at the Tier 2 draft: readiness
+  verdict plus a send-pending note naming the user as the send authority ("READY FOR
+  SEND — awaiting your approval per the C4 Tier gate; nothing has been sent"). Never
+  narrate a send as done or scheduled, never trigger further cascade at depth 0 (no
+  auto-invoking tracker-manager to log the draft), and attach the reversibility tier
+  to the send act itself so the approval gate's weight is visible in the output.
+- **Principal response vs. junior response:** Principal ships the chained draft with
+  "READY FOR SEND — your approval executes the send (IRREVERSIBLE for this C-suite
+  escalation); nothing has gone out," and the user owns the commitment. Junior writes
+  "Escalation sent to the steering committee" in the chained output summary — nothing
+  was actually sent, the user reads the summary as a completed action, and the
+  escalation everyone believes is on the leadership record never reaches a recipient
+  until the deadline it was escalating has already passed.
 
 ## Shared Behavioral Rules
 

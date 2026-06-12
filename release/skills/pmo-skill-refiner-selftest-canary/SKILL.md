@@ -13,7 +13,7 @@ description: >
   "are all my skills deployed").
 delivery_approach: n/a
 principal_standard_pass: 6/8
-version: v10.2-canary
+version: v1.10-canary
 license: BUSL-1.1
 ---
 
@@ -104,6 +104,71 @@ This skill produces report-only outputs. No decision-class items are emitted. pm
 - **Mitigation:** In the output's Summary paragraph, include a check for uncommitted or staged changes affecting `release/skills/` or `deploy.sh` — if present, prefix the drift report with "⚠️ In-flight changes detected; drift report is transitional" and suggest re-running after the PR merges. This is a statelessness concession: the skill does not read open PRs, but it reads working-tree state which is a proxy.
 - **Principal response vs. junior response:** Principal acknowledges the skill's statelessness and calibrates the output framing to be informational rather than alarming during known-unstable states. Junior treats every drift as a defect and produces noise that the operator has to triage.
 
+### Canary self-status emitted as standalone consumer-facing artifact — OUT
+
+- **Signature (observable signal):** A canary run produces its roster report or its own
+  fixture status as a standalone consumer-facing artifact — a file written to disk or
+  staged to a project folder, a stakeholder-styled "deployment health" deliverable, or a
+  report augmented with recommendations or next actions — instead of the contracted
+  inline two-section output (one summary paragraph + one drift table).
+- **Conditional:** do NOT emit the canary's roster report or its own fixture status as a
+  standalone consumer-facing artifact or augment it with recommendations or next actions,
+  because the canary is a report-only permanent fixture whose output contract is one
+  inline summary paragraph plus one drift table — a standalone or advisory artifact
+  escalates smoke-test output into a production deployment-health product that consumers
+  begin to act on.
+- **Root cause:** The roster report superficially resembles a deployment-health
+  deliverable, and suite-wide habits (artifacts staged for review, push-to-resolve,
+  recommendations appended to findings) pull toward producing a durable consumer
+  artifact. The fixture's narrower report-only contract is easy to override with the
+  suite default.
+- **Mitigation:** Render the report inline in conversation only, in the two-section
+  Output Contract shape. Do not write the report to any file, do not stage it as an
+  artifact, and do not append recommendations or actions; when drift is real, state the
+  drift fact in the table and leave follow-up to the operator via the "Skip and route
+  elsewhere" routing list (pmo-qa-auditor Mode D, pmo-skill-editor, pmo-skill-refiner).
+- **Principal response vs. junior response:** Principal keeps the canary inside its
+  fixture surface — inline two-section report, [SOURCE]-labeled counts, no artifact, no
+  advice — and lets the operator route any follow-up. Junior "upgrades" the output to a
+  polished deployment-health artifact with remediation steps; consumers start acting on
+  fixture output, and the canary's smoke-test role quietly becomes a production reporting
+  surface no one designed or reviews.
+
+### Fixture-induced drift row passed to the consumer without [CANARY EXPECTED] annotation — HAND
+
+- **Signature (observable signal):** The roster report's drift table contains a row
+  caused by the canary's own permanent-fixture status — its source directory present
+  under `release/skills/` while intentionally absent from the deployed-roster arrays
+  and `packages/` (source-only per ADR-04) — rendered with the same Status value as a
+  genuine factory-regression drift row, with no annotation distinguishing it.
+- **Conditional:** do NOT hand a drift row to the report consumer without a
+  `[CANARY EXPECTED]` annotation when the row is induced by the canary's own ADR-04
+  fixture status rather than by roster drift, because the report's consumers — the
+  operator reading the table, or a deep audit routed onward to pmo-qa-auditor Mode D —
+  cannot distinguish fixture-induced signal from factory regression at the report
+  boundary, and an unannotated expected row either triggers a noise escalation or
+  trains the reader to skim past drift rows, masking the real regression the smoke
+  test exists to catch.
+- **Root cause:** The set comparison is honest — the fixture row IS a
+  folder-vs-roster mismatch — and annotating it requires the canary to model its own
+  exclusion as a known state rather than a finding. A report-only skill defaults to
+  printing what the comparison returns; the annotation is boundary work on top of the
+  comparison.
+- **Mitigation:** Maintain the known-fixture predicate inside the workflow: a drift row
+  whose subject is the canary itself (or any registered source-only fixture) renders
+  with Status `[CANARY EXPECTED]` and one clause naming the basis ("source-only
+  permanent fixture per ADR-04 — excluded from the deploy roster by design"). The
+  Summary line then splits the count — "K drift entries flagged (J expected-fixture,
+  K−J actionable)" — so the existing routing note (deep audit → pmo-qa-auditor Mode D)
+  receives only actionable signal. The annotation stays report-internal: still no
+  recommendations, no actions.
+- **Principal response vs. junior response:** Principal annotates the expected row,
+  splits the summary count, and the operator reads the table in five seconds with zero
+  false escalations. Junior prints the raw set difference; the operator either
+  escalates the canary's own row as a deploy defect (noise) or learns that "the drift
+  table always has one row" — and the day a real skill goes missing from the roster,
+  the genuine row inherits the learned shrug.
+
 ## Principal Standard Target
 
 ≥ 6/8 PASS at creation per `core/standards/principal-standard-checklist.md`.
@@ -114,7 +179,7 @@ Competencies this skill naturally strengthens:
 - **Evidence-Based Execution** — all output facts are [SOURCE]-labeled from filesystem and deploy.sh content.
 - **Judgment Under Uncertainty** — TRIG failure mode explicitly handles the "in-flight refactor" uncertainty case.
 - **Operational Awareness** — knows not to produce recommendations (report-only); escalates via pmo-qa-auditor Mode D routing rather than taking direct action.
-- **Learning & Escalation** — failure modes surface the three ways the canary itself can mis-report.
+- **Learning & Escalation** — failure modes surface the ways the canary itself can mis-report.
 
 Competencies this skill is at risk for:
 - **Organizational Leverage** — low; the canary is a narrow utility that serves one check. Leverage compounds only over time as an always-on smoke test.
