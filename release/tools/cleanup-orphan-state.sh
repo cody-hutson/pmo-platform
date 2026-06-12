@@ -37,11 +37,14 @@
 #     --json                   Machine-readable
 #   SAFETY (additive):
 #     --force                  Allow git branch -D + git worktree remove --force; requires --apply
+#     SELF — the script's own runtime worktree is never removed (a new SELF action
+#     class; --force does not override)
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
-#                              stale-ref prune (via isolated throwaway branches + synthetic
-#                              survivor candidate, net-zero state); exit 0 on success
+#                              stale-ref prune + SELF-guard fixture (via isolated throwaway
+#                              branches + synthetic survivor candidate, net-zero state);
+#                              exit 0 on success
 #
 # Hook compatibility (verified per Stage 5 spec §Evidence-Grounding):
 #   - All deletions via git porcelain (broad exemption per Hub Decision 1) —
@@ -184,6 +187,39 @@ worktree_is_clean() {
   [[ -z "$(git -C "$path" status --porcelain 2>/dev/null)" ]]
 }
 
+# ─── Self-worktree + path normalization (#333) ──────────────────────────────
+
+# Physical-path normalization: resolves symlink components (macOS /tmp →
+# /private/tmp; $TMPDIR under /private/var) by cd-ing in a subshell. Falls back
+# to the input string when the path does not exist — the safe direction for
+# both consumers (a nonexistent path can be neither SELF nor live-held).
+physical_path() {
+  (cd -- "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"
+}
+
+# SCRIPT_WORKTREE: physical toplevel of the worktree containing the script's
+# runtime cwd. EMPTY when (a) cwd is not inside a git worktree, or (b) cwd is
+# the PRIMARY checkout — #333 AC4: from the primary, the SELF logic is a
+# structural no-op. MAIN_WORKTREE: physical path of the repo's main worktree
+# (first `git worktree list --porcelain` entry — upstream git lists it first).
+SCRIPT_WORKTREE=""
+MAIN_WORKTREE=""
+
+compute_self_worktree() {
+  local top main
+  top="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
+  main="$(git worktree list --porcelain 2>/dev/null | awk 'NR==1 && /^worktree /{sub(/^worktree /,""); print}' || true)"
+  if [[ -n "$main" ]]; then MAIN_WORKTREE="$(physical_path "$main")"; fi
+  if [[ -n "$top" ]]; then
+    top="$(physical_path "$top")"
+    if [[ -n "$MAIN_WORKTREE" && "$top" == "$MAIN_WORKTREE" ]]; then
+      SCRIPT_WORKTREE=""   # primary: SELF never fires (#333 AC4)
+    else
+      SCRIPT_WORKTREE="$top"
+    fi
+  fi
+}
+
 # ─── Outcome detection ───────────────────────────────────────────────────────
 
 # Populated by detect_*. Format per record: tab-separated fields.
@@ -240,15 +276,43 @@ classify_remote() {
 
 classify_worktree() {
   local path="$1" branch="$2"
-  local status="clean" disk action="REMOVE"
+  local status="clean" disk action="REMOVE" cand_phys existing
+
+  # Dedup guard (v1.11 operator scope call): under the default --all scope,
+  # detect_spawn_task and detect_historical can both row the same worktree;
+  # the first row wins so the emitters and the protective counters stay
+  # truthful (one row per candidate). Plain `if` per the set -e discipline.
+  for existing in "${WORKTREE_CANDIDATES[@]:-}"; do
+    [[ -z "$existing" ]] && continue
+    if [[ "${existing%%$'\t'*}" == "$path" ]]; then
+      return 0
+    fi
+  done
+
+  cand_phys="$(physical_path "$path")"
 
   worktree_is_clean "$path" || status="dirty"
   disk=$(worktree_size_mb "$path")
 
-  if [[ "$path" == "$WORKSPACE_ROOT" ]]; then action="SKIP — primary checkout"
-  elif [[ "$status" == "dirty" ]]; then action="SKIP — uncommitted changes"
-  elif [[ -n "$branch" ]] && is_protected "$branch"; then action="SKIP — protected branch"
-  elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then action="SKIP — branch not fully merged"
+  # Clause precedence (v1.11 combined design spec, D-3): protective context
+  # classes first (primary → SELF), tree-state classes second (dirty →
+  # protected → not-merged). A dirty SELF tree reports SELF. Protective classes
+  # are facts about WHO holds the tree, are stable across tree-state changes,
+  # and are never overridden by --force (the apply loops act only on
+  # action == "REMOVE"). The primary clause also matches the physically-
+  # normalized main-worktree path — the WORKSPACE_ROOT comparison alone never
+  # fires on the real primary (the primary checkout is a child of the
+  # workspace root, not the root itself).
+  if [[ "$path" == "$WORKSPACE_ROOT" ]] || [[ -n "$MAIN_WORKTREE" && "$cand_phys" == "$MAIN_WORKTREE" ]]; then
+    action="SKIP — primary checkout"
+  elif [[ -n "$SCRIPT_WORKTREE" && "$cand_phys" == "$SCRIPT_WORKTREE" ]]; then
+    action="SELF — script's own runtime worktree (protected)"
+  elif [[ "$status" == "dirty" ]]; then
+    action="SKIP — uncommitted changes"
+  elif [[ -n "$branch" ]] && is_protected "$branch"; then
+    action="SKIP — protected branch"
+  elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then
+    action="SKIP — branch not fully merged"
   fi
 
   WORKTREE_CANDIDATES+=("${path}	${branch}	${status}	${disk}	${action}")
@@ -320,7 +384,7 @@ emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]}
-  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 a ref
+  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -347,6 +411,10 @@ emit_markdown() {
     action=$(awk -F'\t' '{print $5}' <<<"$r"); disk=$(awk -F'\t' '{print $4}' <<<"$r")
     [[ "$action" == "$want" ]] && { ((wr++)) || true; disk_total=$((disk_total + disk)); }
     [[ "$action" == FAILED* ]] && ((wfails++)) || true
+    case "$action" in
+      SELF*) ((sc++)) || true ;;
+      "SKIP — live session"*) ((lvc++)) || true ;;
+    esac
   done
 
   cat <<EOF
@@ -360,6 +428,7 @@ emit_markdown() {
 - **Remote branches:** $rc total ($rr $verb)
 - **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
+- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions
 
 ## Detail — Local branches
 
@@ -418,6 +487,12 @@ EOF
   echo "- $((lr + rr)) branches $noun, $((lc + rc - lr - rr - bfails)) skipped, $wr worktrees $noun, ≈${disk_total} MB $recov$([[ "$MODE" == "apply" ]] && echo ", $pc stale tracking ref(s) pruned")"
   if [[ "$MODE" == "apply" && $((bfails + wfails)) -gt 0 ]]; then
     echo "- ⚠ $((bfails + wfails)) removal(s) FAILED — see the PASS/FAIL log on stderr; a git safety guard refused (\`git branch -d\` on an unmerged branch, or \`git worktree remove\` on a dirty tree). Re-run with \`--force\` only if the deletion is intentional."
+  fi
+  if [[ "$sc" -gt 0 ]]; then
+    echo "- $sc worktree(s) protected as script's own runtime (SELF)"
+  fi
+  if [[ "$lvc" -gt 0 ]]; then
+    echo "- $lvc worktree(s) skipped — held by live sessions"
   fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
@@ -727,16 +802,63 @@ selftest_verify_and_prune() {
   return 0
 }
 
+# #333 — SELF-guard fixture. End-to-end via inner invocation: re-runs this
+# script from INSIDE a throwaway worktree (recursion-safe — inner runs are
+# --dry-run, never --self-test) and asserts the SELF action class; then from
+# the PRIMARY checkout (read-only dry-run; zero git state change) and asserts
+# no SELF row appears (AC4). PID-scoped chore/ branch + --release-close slug
+# keep the inner scope away from real branches. Net-zero via git porcelain.
+selftest_self_guard() {
+  local script_abs slug branch wt base out_inside out_main fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-self-$$"
+  branch="chore/${slug}"
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: SELF-guard check SKIPPED — no HEAD commit" >&2; return 0
+  fi
+  if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: SELF-guard check SKIPPED — could not create throwaway worktree" >&2; return 0
+  fi
+
+  out_inside=$(cd "$wt" && "$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: SELF-guard check FAILED — inner dry-run (cwd inside worktree) exited non-zero" >&2
+  elif ! grep -F "${slug}" <<<"$out_inside" | grep -q '"action":"SELF'; then
+    echo "self-test: SELF-guard check FAILED — worktree not classified SELF when script cwd is inside it" >&2
+    fail=1
+  fi
+
+  # AC4 — from the primary checkout the SELF logic is a structural no-op.
+  if [[ "$fail" -eq 0 && -n "$MAIN_WORKTREE" && -d "$MAIN_WORKTREE" ]]; then
+    out_main=$(cd "$MAIN_WORKTREE" && "$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || true
+    if grep -q '"action":"SELF' <<<"$out_main"; then
+      echo "self-test: SELF-guard check FAILED — SELF row emitted when invoked from the primary (AC4)" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove "$wt" >/dev/null 2>&1 || git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: SELF-guard check PASS — SELF from inside; no SELF from primary" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
   load_protect_list
+  compute_self_worktree
   detect_spawn_task
   echo "self-test: detection completed — ${#LOCAL_BRANCH_CANDIDATES[@]} local / ${#REMOTE_BRANCH_CANDIDATES[@]} remote / ${#WORKTREE_CANDIDATES[@]} worktree candidates" >&2
   echo "self-test: exercising apply path against an isolated throwaway branch..." >&2
   selftest_apply_path
   echo "self-test: exercising post-apply verify + stale-ref prune paths..." >&2
   selftest_verify_and_prune
+  echo "self-test: exercising SELF-guard via inner invocation (inside worktree + from primary)..." >&2
+  selftest_self_guard
   echo "self-test: PASS" >&2
   exit 0
 }
@@ -768,6 +890,7 @@ done
 workspace_boundary_check
 [[ "$SELF_TEST" == "1" ]] && self_test
 load_protect_list
+compute_self_worktree
 
 case "$SCOPE" in
   all)
