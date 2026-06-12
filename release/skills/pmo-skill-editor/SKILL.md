@@ -2,7 +2,7 @@
 name: pmo-skill-editor
 description: >
   Edit, audit, and regression-test any skill in the PMO Agent Suite. Modes: Targeted edit · Full audit · Regression check · Remediation apply. Maintains skill definitions with full awareness of cross-skill contracts and architecture. Triggers: "edit this skill", "modify this skill", "change this skill", "check for regressions", "audit this skill", "apply these fixes", "what breaks if I change this."
-version: v11.13
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -618,6 +618,63 @@ structural conformance and content quality.
   to reference docs and keeps SKILL.md project-agnostic. Junior inlines for speed,
   and the skill becomes non-portable — a future deployment to another org would
   require a rewrite of SKILL.md to strip the embedded names.
+
+### New-skill creation claimed through the editor — TRIG
+
+- **Signature (observable signal):** A request to create a skill that does not
+  yet exist ("make a skill that does X", "add a skill for Y") is executed as a
+  Mode A edit — the editor scaffolds a new SKILL.md and directory — instead of
+  routing to pmo-skill-refiner (Interview → scaffold-wrap → 7-field injection →
+  eval harness) or the Anthropic scaffolder.
+- **Conditional:** do NOT scaffold a new skill through Mode A when no existing
+  SKILL.md is the edit target, because the editor's machinery presupposes an
+  existing skill with consumers — dependency-graph impact analysis, Phase 8
+  baseline regression, and change manifests all key on prior state — and
+  new-skill authoring belongs to pmo-skill-refiner, whose interview, PMO-field
+  injection, and eval harness are exactly the disciplines a from-scratch skill
+  needs and the editor does not run.
+- **Root cause:** The editor is "the skill that touches skills," so any
+  skill-shaped request gravitates to it; Mode A's ad-hoc edit format accepts a
+  natural-language description that does not obviously fail when the target does
+  not exist yet.
+- **Mitigation:** At mode selection, when the named target has no existing
+  directory under the skills tree: stop and route to pmo-skill-refiner Mode 2
+  (PMO skills) or the Anthropic scaffolder (generic), per the refiner's own
+  routing table. The editor re-enters legitimately later — for structural edits
+  to the skill the refiner produced.
+- **Principal response vs. junior response:** Principal routes creation to the
+  refiner and offers to handle the post-creation structural pass. Junior
+  scaffolds a bare SKILL.md in Mode A; it ships without interview-derived
+  failure modes, trigger evidence, or eval coverage, and the refiner's
+  pre-handoff gate — built to stop exactly that — never ran.
+
+### Skill-output audit routed to Mode D definition audit — TRIG
+
+- **Signature (observable signal):** "Audit this" with a skill's produced
+  artifact in hand — a status update, findings register, drafted communication —
+  is routed to Mode D, which grades the producing skill's SKILL.md against the
+  Phase 8 baseline; the artifact itself is never audited, and the verdict
+  ("meets baseline") is reported as if it cleared the artifact.
+- **Conditional:** do NOT run a Mode D quality audit when the thing to be audited
+  is a skill's output rather than its definition, because output auditing
+  belongs to pmo-qa-auditor (G1–G7 gates against the principal-contributor
+  standard) — Mode D inspects the SKILL.md's structure and instructions, so its
+  verdict says nothing about whether THIS artifact is ready to act on, and
+  reporting it as such gives the operator false clearance.
+- **Root cause:** "Audit this skill" and "audit this [output of a skill]"
+  compress to the same phrasing; Mode D is this skill's only audit mode, so the
+  trigger-match lands there whenever "audit" appears near a skill name — and
+  definition quality correlates loosely enough with output quality that the
+  category error is not obvious from the verdict.
+- **Mitigation:** At mode selection, ask of the target: a definition (SKILL.md /
+  .skill) → Mode D; a produced artifact → route to pmo-qa-auditor with the
+  artifact and its producing-skill context; both wanted → run two explicitly
+  separate audits with separate verdicts. Never let a definition verdict stand
+  in for an artifact verdict.
+- **Principal response vs. junior response:** Principal routes the artifact to
+  pmo-qa-auditor, reserves Mode D for the definition, and reports two distinct
+  verdicts when both were wanted. Junior runs Mode D, reports "meets Phase 8
+  baseline," and the operator ships a flawed artifact believing it was audited.
 
 ---
 

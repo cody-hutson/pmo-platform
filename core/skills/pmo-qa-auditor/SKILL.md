@@ -2,6 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -570,6 +571,39 @@ A4.1). This mirrors the bidirectional-compliance principle applied to G4 in an e
   the Evidence column. Junior skips G7 entirely because the file-type check landed
   on "markdown," and the audited SKILL.md passes with missing domain-specific
   failure-mode enumeration undetected.
+
+### Audited output's self-reported quality claims accepted as gate evidence — INPUT
+
+- **Signature (observable signal):** A gate verdict's Evidence column cites the
+  audited output's own assertions about itself — an embedded self-consistency
+  declaration ("summary counts verified against table rows"), a self-compliance
+  note ("this section passes the structural checks"), or the bare presence of
+  evidence-quality labels — rather than the auditor's re-derivation: no recount
+  of the rows, no re-run of the G7 regexes, no spot-check of a labeled claim
+  against its cited source.
+- **Conditional:** do NOT accept the audited output's self-reported quality
+  claims as gate evidence when the underlying check can be re-derived from the
+  artifact content, because the audit's input is another agent's self-describing
+  output and grading the description rather than the content certifies the
+  claim instead of the work — the echo-chamber failure with the auditor as the
+  amplifier.
+- **Root cause:** Skill outputs in this suite narrate their own compliance by
+  design (self-consistency check steps, evidence-quality labels, self-compliance
+  notes), so a trust-shaped sentence is usually already present in the input;
+  re-derivation costs effort, while agreeing with a confident claim feels like
+  confirmation.
+- **Mitigation:** Derive gate evidence from the artifact, never from its
+  narration: recount table rows behind any count claim (G1/G6); re-run the G7
+  Phase 1 regexes on the section content regardless of any self-compliance
+  note; for G4, spot-check at least one [SOURCE]-labeled claim per output
+  against the cited source when that source is available in context, and record
+  the label-accuracy result; cite the re-derivation, not the quoted claim, in
+  the Evidence column.
+- **Principal response vs. junior response:** Principal recounts the gate table,
+  re-runs the regex, finds that the "self-consistency verified" output actually
+  has a 6-vs-5 mismatch, and renders FAIL with the recount as evidence. Junior
+  quotes the output's own verification sentence into the Evidence column, and
+  the audit certifies a defect the audited skill had asserted away.
 
 ## Reference Docs
 

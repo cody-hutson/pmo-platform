@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.10] - 2026-06-12
+
+Failure-mode coverage completes across the whole skill catalog: every one of the 23 skills now documents at least one domain-specific failure mode in each of the five categories — wrong-invocation, bad-input, skipped-step, output-shape, and handoff. 45 new entries (each written against the skill's real working surface and LLM-quality-graded before merge) close every remaining gap, with the biggest upgrades on the boundary behaviors: wrong-invocation coverage rose from roughly half the catalog to all of it, handoff coverage from two-thirds to all of it. Two high-volume skills gained reference checklists (project-setup scaffold verification; weekly roll-up input coverage), every modified skill carries a current version field — including three that previously had none — and all 22 deployed skills shipped with rebuilt packages. Additions-only: no existing entry, mode, or contract was changed.
+
+[Full notes](release/releases/notes/v1.10_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.10)
+
 ## [v1.09] - 2026-06-11
 
 The agent-to-script promotion framework lands: a five-rung promotion ladder (AS0–AS4, decision record ADR-020) now governs when repeated agent work earns a script and what a script owes once it exists — evidence triggers and counter-signals gate each promotion, judgment-class steps promote only their evidence-gathering substrate, and every promoted script ships with its point-of-use citation in the same pull request. Grounded in a completed census of all 71 tracked scripts and a ranked 8-candidate opportunity inventory.

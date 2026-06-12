@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -306,6 +306,107 @@ structural conformance and content quality.
   Section 3, with project sections referencing "see Cross-Project: J. Smith conflict."
   Junior writes the conflict three times — once in [PROJECT_KEY], once in OTC, once in
   Section 3 — and the rollup reads as a longer, less coherent document.
+
+### Daily-log coverage gap read as a quiet week — INPUT
+
+- **Signature (observable signal):** "This Week" bullets, health colors, and
+  write-back proposals are derived from a Daily Status Log that covers only
+  part of the reporting window — a mid-week run with Monday–current gaps, or a
+  Friday run with unlogged days — and the output presents the synthesis as the
+  week's record with no statement naming the uncovered days.
+- **Conditional:** do NOT synthesize "This Week" sections or health colors as a
+  full-week record when the Daily Status Log has entries for only part of the
+  reporting window, because a day with no log entry is indistinguishable from a
+  quiet day — treating silence as no-movement converts missing data into
+  implied-GREEN evidence that flows through Section 1 into the PORTFOLIO.md
+  write-back.
+- **Root cause:** The Inputs step reads "this week's AM and PM updates (Monday
+  through current day)" as whatever entries exist; a missing day produces no
+  error at read time, so the gap is invisible at synthesis — absence of
+  evidence quietly becomes evidence of absence.
+- **Mitigation:** Before synthesis, run the roll-up input-coverage checklist:
+  enumerate expected-vs-present log days for the reporting window, label
+  uncovered days in Sections 1–2 ("Tue–Wed: no daily log — not assessed"),
+  derive health only from covered evidence, and exclude write-back fields
+  whose support falls inside the gap. Treat "no entry" as NO DATA, never as
+  "no movement."
+- **Principal response vs. junior response:** Principal ships the roll-up with
+  the gap named and health scoped to covered days, so leadership reads exactly
+  what is and is not known. Junior rolls up the days that have entries and
+  presents it as the week — a blocker that surfaced on an unlogged Wednesday
+  reaches SteerCo as GREEN.
+
+### Roll-up generated as a substitute for the week's unprocessed work — TRIG
+
+- **Signature (observable signal):** The weekly roll-up is generated for a week
+  whose substrate is missing — the Daily Status Log has no entries for the
+  period, trackers show no updates since before the window — and the skill
+  fills the gap by summarizing raw transcripts and unprocessed artifacts
+  directly into Sections 1–5, then proposes a PORTFOLIO.md write-back derived
+  from that one-pass synthesis.
+- **Conditional:** do NOT generate the weekly roll-up directly from unprocessed
+  artifacts when the week's Daily Status Log and tracker substrate are missing
+  for the period, because this skill rolls up results that ppm-agent and
+  daily-status produced during the week — it does not summarize transcripts or
+  analyze artifacts — and a roll-up synthesized from raw inputs replaces the
+  week's evidence chain with a single unsourced pass whose health colors then
+  write back into PORTFOLIO.md as if derived.
+- **Root cause:** The Friday deadline does not move when the week's processing
+  did not happen; the skill has read access to everything and CAN produce a
+  plausible roll-up, so backfilling silently feels like saving the SteerCo —
+  and the substrate gap is invisible in the output unless declared.
+- **Mitigation:** At input collection, check substrate coverage for the date
+  range. When the Daily Status Log or trackers have gaps, surface the gap and
+  route: run the backlog of transcripts through ppm-agent / daily-status first,
+  or produce a partial roll-up that names the uncovered days and excludes the
+  write-back for unsupported fields. Never write health indicators back to
+  PORTFOLIO.md from data that skipped processing.
+- **Principal response vs. junior response:** Principal reports
+  "Wednesday–Thursday were never processed," offers the catch-up path, and
+  ships a roll-up with the gap labeled. Junior synthesizes the whole week from
+  raw transcripts at 4:55 PM Friday; the roll-up reads complete, the write-back
+  lands, and the portfolio dashboard now carries health colors derived from
+  nothing the platform can audit.
+
+### Cross-project RAID escalation not propagated to the sibling project's surfaces — HAND
+
+- **Signature (observable signal):** A RAID escalation or shared-dependency risk read
+  from Project A's inputs (RAID entries, carry-forward blockers) materially affects
+  sibling Project B — a shared resource, a dependent milestone, an integration both
+  consume — but the rollup carries it only under Project A's Section 2: Section 3
+  (Cross-Project Items) omits it, and the Section 6 write-back leaves Project B's
+  PORTFOLIO.md row (Top Risks / Health Indicators / Critical Path Item) untouched
+  by it.
+- **Conditional:** do NOT confine a risk to its originating project's summary when its
+  RAID evidence names a sibling project's resource, milestone, or integration, because
+  PORTFOLIO.md rows are the per-project handoff surface for downstream consumers —
+  daily-status, project-initiator, and portfolio visualizations read Project B's row,
+  not Project A's narrative — and an escalation that never reaches the sibling's row
+  leaves every downstream read of Project B reporting clean state while its exposure
+  is already on the record one row up.
+- **Root cause:** RAID entries arrive project-scoped (read per-project in input
+  order), so the synthesis defaults to the project that owns the entry; recognizing
+  the sibling impact requires cross-referencing the entry's content against the other
+  projects' milestones and resources — the one synthesis step with no single-project
+  home. The rollup is also the only weekly surface where this propagation can happen,
+  so a miss here has no downstream catch.
+- **Mitigation:** During Section 3 composition, run the roll-up input-coverage
+  checklist's sibling-reference sweep: scan each project's new and updated RAID
+  entries and aged blockers for sibling-project references (shared named resources,
+  dependent milestone dates, common integrations). On a hit: place the full
+  item in Section 3 with both projects named (per the no-duplication convention,
+  Section 2 summaries carry only the "see Cross-Project" pointer and the
+  project-specific impact), and propagate to BOTH projects' rows at the Section 6
+  write-back — the sibling's Top Risks or affected Health Indicator cites the same
+  RAID source ([SOURCE: RAID R-PPM-052]) — inside the same human-in-the-loop approval.
+- **Principal response vs. junior response:** Principal writes the shared-resource
+  conflict into Section 3, pointers into both Section 2 summaries, and proposes
+  write-back rows for both projects ("Project B: Top Risk + Schedule indicator 🟡 —
+  [SOURCE: RAID R-PPM-052, shared cutover resource]") at the checkpoint. Junior
+  records the risk under the project that filed it; Project B's row stays green and
+  every portfolio read — dashboards, the next rollup, project-initiator scans — sees
+  B clean all week, and B's team learns about the shared-resource exposure when it
+  lands on them.
 
 ## Generation Schedule
 

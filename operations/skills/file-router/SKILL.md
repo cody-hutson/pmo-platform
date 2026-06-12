@@ -2,7 +2,7 @@
 name: file-router
 description: >
   Classifies, routes, and triggers processing for new files arriving in the PMO workspace. Uses three-layer classification (content analysis, project identification, filename patterns) with confidence thresholds. Triggers: "route this", "file this", "where does this go", "classify this", "I have a new transcript", "I just uploaded this", "what folder does this go in."
-version: v11.04
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -421,6 +421,36 @@ structural conformance and content quality.
   surfaces escalated items even when the queue is not the current request's focus. Junior
   routes the current batch, ignores the queue, and the queue accumulates until a manual
   cleanup is required.
+
+### Transcript routed without the register-and-trigger pipeline steps — PROC
+
+- **Signature (observable signal):** A transcript is saved to the correct
+  05-Transcripts/ sub-folder, but no TR-### Transcript Register entry, no structured
+  TRACKER_UPDATE instruction, and no "ready for PPM Agent processing" prompt accompany
+  the route — the FILE ROUTING SUMMARY shows the file routed with an empty DOWNSTREAM
+  TRIGGERS section.
+- **Conditional:** do NOT report a transcript as routed when the Processing Pipeline
+  steps after the save (TR-### register entry, TRACKER_UPDATE instruction,
+  downstream-processing prompt) have not been executed, because a routed-but-
+  unregistered transcript never enters the Transcript Register — the UNASSIGNED stall
+  detection and the PPM processing queue both key on TR-### entries, so the file sits
+  in the right folder while remaining invisible to every downstream mechanism.
+- **Root cause:** Saving the file feels like completion — the visible artifact moved
+  to the right place. The register entry, TRACKER_UPDATE block, and trigger prompt are
+  bookkeeping steps with no immediately visible effect, and under batch pressure the
+  agent truncates the pipeline at the filesystem action.
+- **Mitigation:** Treat the four transcript pipeline steps as one atomic unit:
+  save → TR-### register entry (auto-incremented) → TRACKER_UPDATE instruction for the
+  Transcript Register → "Process now?" prompt. A FILE ROUTING SUMMARY that lists a
+  transcript without a corresponding register entry and downstream trigger is
+  incomplete output; do not emit it until all four steps are done or a blocked step is
+  explicitly surfaced.
+- **Principal response vs. junior response:** Principal completes
+  save-register-update-trigger as one unit and the transcript is processable the
+  moment routing finishes. Junior saves the file and reports "routed"; three weeks
+  later the operator finds an unprocessed transcript in the folder that no stall flag
+  ever surfaced — because the stall detection watches the register the transcript
+  never entered.
 
 ## Shared Behavioral Rules
 

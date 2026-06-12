@@ -14,6 +14,7 @@ description: >
   for…", "write a prompt for", "sharpen this prompt", or whenever the user
   shares a block of text that is clearly an LLM prompt and asks for any kind of
   feedback or revision.
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -477,3 +478,41 @@ Discipline`. Each entry uses the 5-field conditional template per
   authority claim, and the rewrite ships with rationale that the live
   source would have contradicted — a trust-erosion failure the
   live-refresh discipline is specifically designed to prevent.
+
+### SKILL.md text handed back as terminal output at the skill-instantiation boundary — HAND
+
+- **Signature (observable signal):** A critique-mode or interview-mode output whose
+  target type is `SKILL.md body` or `skill description` ends at the copy/paste-ready
+  code block with no routing note — while the request context indicates the text is
+  destined for the live platform: the user wants a NEW deployed PMO skill, or the
+  draft IS an existing deployed skill's SKILL.md the user intends to paste over.
+- **Conditional:** do NOT terminate at a paste-ready SKILL.md body when the request is
+  skill instantiation or modification of a deployed PMO skill rather than prompt text
+  alone, because the body text is one layer of the platform contract — creation
+  belongs with pmo-skill-refiner (its Create-New workflow wraps the upstream
+  scaffolder, injects the PMO-required fields, runs the eval harness, and enforces its
+  pre-handoff gate) and edits to existing deployed skills flow through pmo-skill-editor
+  Mode A (change manifest, dependency-graph consultation, version bump, editor
+  audit-trail trailer) — a raw-pasted body bypasses the edit-time hook and audit trail
+  and lands a skill that fails the platform's structural gates.
+- **Root cause:** "Draft a SKILL.md body" is squarely inside this skill's target
+  types, so producing excellent text feels like the whole job; the deployment seam
+  (scaffolding, field injection, eval evidence, edit-session audit trail) is invisible
+  at the text layer. Push-to-resolve then argues for handing over the most
+  finished-looking artifact — a complete file — when the platform-correct finish is
+  the text plus the routing handoff.
+- **Mitigation:** At target-type detection, additionally classify the destination:
+  prompt text (terminal here) vs. deployed platform skill (handoff required). For
+  platform-destined output, append a routing note to the output — NEW skill: "take
+  this draft into pmo-skill-refiner (Create New); it scaffolds, injects the
+  PMO-required sections, and runs the eval harness." EXISTING deployed skill: "apply
+  via pmo-skill-editor Mode A — direct Write/Edit to a migrated SKILL.md is
+  hook-guarded (warn or enforce per the configured mode) and skips the audit trail."
+  The drafted text remains the deliverable; the routing note is the boundary work.
+- **Principal response vs. junior response:** Principal hands back the draft plus the
+  one-line route ("this is a deployed-skill edit — run it through pmo-skill-editor
+  Mode A so the change manifest and version bump land"), and the platform's gates see
+  a compliant change. Junior hands back beautiful text with no routing; the user
+  pastes it over the live SKILL.md, the edit-time hook fires (or warn-mode lets it
+  through), and deploy-check later flags a skill with no audit trail whose required
+  PMO sections the text never carried.

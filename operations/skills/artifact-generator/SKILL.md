@@ -2,7 +2,7 @@
 name: artifact-generator
 description: >
   Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in 08-Generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
-version: v10.2
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -402,3 +402,38 @@ structural conformance and content quality.
   single file and verifies the header is intact. Junior writes content alone, the health
   check misses the artifact, and the auto-archive never triggers — the file accumulates
   in 08-Generated/ indefinitely.
+
+### Prior-artifact content carried forward as current fact — INPUT
+
+- **Signature (observable signal):** A staged artifact contains specific values —
+  owners, dates, metrics, vendor names, risk statements — that trace verbatim to
+  the prior artifact or closest-analog template used as the structural guide
+  (Step 1's not-in-catalog analog path, or Step 2's "existing artifacts of the
+  same type"), but are absent from, or contradicted by, the current PROJECT.md
+  and operational trackers.
+- **Conditional:** do NOT carry a prior artifact's embedded content values into a
+  new artifact when the prior artifact serves as a structural guide or closest
+  analog, because the prior artifact is point-in-time content from another
+  context — values copied from it pass the no-invention check (a source exists)
+  while being wrong for the current project, which makes them harder to catch
+  than outright fabrication.
+- **Root cause:** Step 1 directs using the closest analog for uncataloged types
+  as a STRUCTURE source; Step 2's same-type read serves the update path, where
+  the failure is carrying stale values without re-verification — not content
+  reuse per se. Under generation pressure, structure-reuse silently widens into
+  content-reuse: adapting the populated example is faster than re-deriving each
+  field from PROJECT.md and the live trackers.
+- **Mitigation:** Treat prior artifacts and analogs consulted as structural
+  guides as structure-only inputs (on Step 2's update path, the current version
+  is the legitimate content base — re-verify carried values instead of
+  discarding them). After drafting, check every factual value in the new
+  artifact against its live source (PROJECT.md, operational trackers, the
+  triggering source artifact). Any value whose only provenance is the prior
+  artifact is re-derived from a live source or relabeled `[ASSUMPTION – CONFIRM]`
+  with the staleness named; set the metadata `confidence` to MEDIUM or LOW while
+  analog-derived values remain.
+- **Principal response vs. junior response:** Principal lifts the section
+  skeleton, re-derives every field from live sources, and flags the two fields
+  with no current source as labeled assumptions. Junior adapts the populated
+  example wholesale — last quarter's go-live date and a rolled-off stakeholder's
+  name ship in a stakeholder-ready artifact staged for promotion.

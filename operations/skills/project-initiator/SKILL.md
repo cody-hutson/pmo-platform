@@ -2,7 +2,7 @@
 name: project-initiator
 description: >
   Manages the full project lifecycle — scaffolding new projects and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]."
-version: v11.16
+version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -643,6 +643,36 @@ structural conformance and content quality.
   and surfaces the evidence in the summary. Junior reports success after the write
   returns, and the silent failure (schema drift, permission error, partial write)
   surfaces only when weekly-status-rollup tries to read the project and fails.
+
+### Starter trackers seeded with sample content instead of empty-but-properly-formatted — OUT
+
+- **Signature (observable signal):** A Mode A Step 4 starter tracker (Daily Status Log,
+  Communications Tracker, Open Meetings Tracker, Transcript Register, RAID_Log.csv, Key
+  Terms Glossary, or a governance-specific tracker) is generated containing example rows,
+  demonstration entries, or illustrative content (e.g., a sample BLK-001 blocker, a
+  placeholder R-PPM-001 risk row) rather than the contracted empty-but-properly-formatted
+  shape — correct headers and lifecycle/policy text, zero entries.
+- **Conditional:** do NOT seed Step 4 starter artifacts with sample rows or demonstration
+  entries when scaffolding a new project, because every 04-PMO-Operations/ starter is
+  contracted as empty-but-properly-formatted and downstream skills read these trackers as
+  live operational state from day one — a sample blocker row surfaces in the first
+  daily-status AM update as a real blocker, and a sample RAID row with Section = ACTIVE
+  enters tracker-manager's active counts.
+- **Root cause:** Format-demonstration habit — an empty table feels unhelpful, so the
+  author adds an example row "to show the format." The templates already carry the format
+  in their headers and policy text; the example row adds nothing except fake operational
+  state.
+- **Mitigation:** Generate each Step 4 tracker artifact (items 1–6 plus the
+  governance-specific trackers) with structural content only: section headers, column
+  headers, and policy/lifecycle text per the template. Zero entry rows. After generation,
+  verify each tracker contains no ID-bearing rows (no BLK-/DEC-/MSG-/MTG-/TR-/R-/A-/I-/D-
+  prefixed entries); if format illustration is genuinely needed, put it in the Step 8
+  summary prose, never inside the tracker file.
+- **Principal response vs. junior response:** Principal ships the starter trackers
+  empty-but-properly-formatted and lets the first processing cycle populate them with
+  real entries. Junior ships trackers pre-seeded with "example" rows; the first AM update
+  reports a phantom blocker, tracker-manager counts a phantom risk, and the operator's
+  first experience of the new project is cleaning fabricated state out of the trackers.
 
 ## Cross-Skill Integration
 
