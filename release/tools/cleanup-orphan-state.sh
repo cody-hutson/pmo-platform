@@ -25,13 +25,17 @@
 #     --dry-run                Enumerate + report; no mutation (default)
 #     --apply                  Execute removals after enumeration (opt-in). The apply
 #                              phase runs in order: (1) remove REMOVE-action branches /
-#                              worktrees via git porcelain; (2) verify — re-check each
-#                              REMOVED target is actually gone, reclassifying any survivor
-#                              to "SKIPPED — survived apply" (never silently claim success);
-#                              (3) prune — drop stale remote-tracking refs (origin/<branch>)
-#                              whose server-side branch was already deleted (e.g. on PR
-#                              merge), via `git remote prune`, so the report's remote view
-#                              matches reality. Steps 2-3 are no-ops in --dry-run.
+#                              worktrees via git porcelain; (2) resolve — one bounded
+#                              re-evaluation pass removing local branches freed by this
+#                              run's worktree removals (fixed point in a single
+#                              invocation); (3) verify — re-check each REMOVED target
+#                              (incl. resolve-pass removals) is actually gone,
+#                              reclassifying any survivor to "SKIPPED — survived apply"
+#                              (never silently claim success); (4) prune — drop stale
+#                              remote-tracking refs (origin/<branch>) whose server-side
+#                              branch was already deleted (e.g. on PR merge), via
+#                              `git remote prune`, so the report's remote view matches
+#                              reality. Steps 2-4 are no-ops in --dry-run.
 #   OUTPUT (one of, default --markdown):
 #     --markdown               Human-readable report (default)
 #     --json                   Machine-readable
@@ -45,9 +49,10 @@
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
-#                              stale-ref prune + SELF-guard fixture + liveness fixture (via
-#                              isolated throwaway branches + synthetic survivor candidate +
-#                              synthetic live holder, net-zero state); exit 0 on success
+#                              stale-ref prune + SELF-guard, liveness, and fixed-point
+#                              fixtures (via isolated throwaway branches + synthetic
+#                              survivor candidate + synthetic live holder, net-zero
+#                              state); exit 0 on success
 #
 # Hook compatibility (verified per Stage 5 spec §Evidence-Grounding):
 #   - All deletions via git porcelain (broad exemption per Hub Decision 1) —
@@ -119,7 +124,7 @@ PROTECTED_ALWAYS=("$MAIN_BRANCH" "master" "HEAD")
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,38p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,42p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -592,6 +597,9 @@ EOF
   if [[ "$fcc" -gt 0 ]]; then
     echo "- $fcc removal(s) blocked — liveness oracle unavailable (fail-closed)"
   fi
+  if [[ "$FREED_RESOLVED" -gt 0 ]]; then
+    echo "- $FREED_RESOLVED branch(es) removed after being freed by this run's worktree removals (resolve pass)"
+  fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
   # `set -e` that aborted the caller before the apply phase (the v1.02 apply-path no-op
@@ -725,6 +733,91 @@ apply_removals() {
     fi
   done
 
+  return 0
+}
+
+# ─── Fixed-point resolve pass (#53) ─────────────────────────────────────────
+
+# After the worktree loop, branches that were "SKIP — active worktree attached"
+# at detection — or, under --historical, never enumerated at all (attached
+# branches are filtered at detect time) — may have become removable. Exactly
+# ONE bounded re-evaluation pass: worktree removal frees branches; branch
+# removal frees nothing further, so a single pass reaches the fixed point for
+# the enumerated input. Invariant: ONLY worktrees this run actually REMOVED
+# free their branches — SELF / live-session / dirty / FAILED worktrees keep
+# their branches attached-and-skipped. Runs between apply_removals and
+# verify_apply; verify then re-checks pass-2 REMOVED rows exactly like pass-1
+# rows. Returns 0 unconditionally (set -e discipline).
+FREED_RESOLVED=0
+
+resolve_freed_branches() {
+  echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
+  local branch_flag="-d"
+  if [[ "$FORCE" == "1" ]]; then branch_flag="-D"; fi
+
+  local r wbranch waction freed
+  freed=()
+  for r in "${WORKTREE_CANDIDATES[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    waction=$(awk -F'\t' '{print $5}' <<<"$r")
+    [[ "$waction" != "REMOVED" ]] && continue
+    wbranch=$(awk -F'\t' '{print $2}' <<<"$r")
+    [[ -z "$wbranch" ]] && continue
+    if git show-ref --verify --quiet "refs/heads/${wbranch}"; then
+      freed+=("$wbranch")
+    fi
+  done
+  if [[ ${#freed[@]} -eq 0 ]]; then
+    echo "PASS resolve — no branches freed by this run's worktree removals" >&2
+    return 0
+  fi
+
+  local b i c idx row name action unique
+  for b in "${freed[@]:-}"; do
+    [[ -z "$b" ]] && continue
+    idx=-1; row=""; i=-1
+    for c in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
+      ((i++)) || true
+      [[ -z "$c" ]] && continue
+      name=$(awk -F'\t' '{print $1}' <<<"$c")
+      if [[ "$name" == "$b" ]]; then idx=$i; row="$c"; break; fi
+    done
+
+    if [[ $idx -lt 0 ]]; then
+      # Unrowed (the --historical case): classify fresh — post-removal state.
+      classify_local "$b" 0
+      idx=$(( ${#LOCAL_BRANCH_CANDIDATES[@]} - 1 ))
+      row="${LOCAL_BRANCH_CANDIDATES[$idx]}"
+    fi
+
+    action=$(awk -F'\t' '{print $6}' <<<"$row")
+    if [[ "$action" == "SKIP — active worktree attached" ]]; then
+      # Re-evaluate the recorded skip against live post-removal state.
+      if is_protected "$b"; then
+        echo "SKIPPED resolve $b — protected" >&2; continue
+      fi
+      if branch_has_worktree "$b"; then
+        echo "SKIPPED resolve $b — still attached to a worktree" >&2; continue
+      fi
+      unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${b}" 2>/dev/null || echo "?")
+      if [[ "$unique" != "0" ]]; then
+        echo "SKIPPED resolve $b — unique commits exist ($unique)" >&2; continue
+      fi
+      action="REMOVE"
+    fi
+    if [[ "$action" != "REMOVE" ]]; then
+      echo "SKIPPED resolve $b — $action" >&2; continue
+    fi
+
+    if git branch $branch_flag "$b" 2>&1 | sed 's/^/  git: /' >&2; then
+      echo "PASS resolve $b removed (freed by same-run worktree removal)" >&2
+      LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"REMOVED"
+      ((FREED_RESOLVED++)) || true
+    else
+      echo "FAIL resolve $b — git branch refused; use --force if intentional" >&2
+      LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"FAILED — git branch refused"
+    fi
+  done
   return 0
 }
 
@@ -1036,6 +1129,67 @@ selftest_liveness_gate() {
   return 0
 }
 
+# #53 — fixed-point fixture. A clean throwaway worktree on a branch based at
+# the merge-base of HEAD and origin/main (v1.11 amendment A-Fixture: an
+# ancestor of BOTH baselines — zero unique commits vs origin/main, so
+# REMOVE-eligible, AND merged into the invoking HEAD, so `git branch -d`
+# deletable from any legal invocation state) goes through a REAL --apply: the
+# worktree must be removed AND its freed branch must be removed in the SAME
+# run (resolve pass), with the branch row reading REMOVED in the same report.
+# Slug-scoped --release-close bounds the inner apply to fixture objects; the
+# inner prune is reconciliation-class (existing selftest_verify_and_prune
+# precedent).
+selftest_fixed_point() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: fixed-point check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs slug branch wt base out fail=0
+  base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: fixed-point check SKIPPED — no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    return 0
+  fi
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-fp-$$"
+  branch="chore/${slug}"
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: fixed-point check SKIPPED — could not create throwaway worktree" >&2
+    return 0
+  fi
+  if is_protected "$branch"; then
+    echo "self-test: fixed-point check SKIPPED — operator protect-list matches '$branch'" >&2
+    git worktree remove --force "$wt" >/dev/null 2>&1 || true
+    git branch -D "$branch" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: fixed-point check FAILED — inner --apply exited non-zero" >&2
+  else
+    if git show-ref --verify --quiet "refs/heads/${branch}"; then
+      echo "self-test: fixed-point check FAILED — freed branch '$branch' survived the same --apply run (#53 regression)" >&2
+      fail=1
+    fi
+    if [[ -d "$wt" ]]; then
+      echo "self-test: fixed-point check FAILED — worktree '$wt' survived --apply" >&2
+      fail=1
+    fi
+    if [[ "$fail" -eq 0 ]] && ! grep -F "\"name\":\"${branch}\"" <<<"$out" | grep -q '"action":"REMOVED"'; then
+      echo "self-test: fixed-point check FAILED — branch row not REMOVED in the same-run report" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -1051,6 +1205,8 @@ self_test() {
   selftest_self_guard
   echo "self-test: exercising liveness gate (oracle canaries + synthetic live holder)..." >&2
   selftest_liveness_gate
+  echo "self-test: exercising fixed-point apply (worktree + freed branch in one run)..." >&2
+  selftest_fixed_point
   echo "self-test: PASS" >&2
   exit 0
 }
@@ -1094,14 +1250,19 @@ case "$SCOPE" in
   historical)    detect_historical ;;
 esac
 
-# Apply BEFORE emitting: apply_removals rewrites candidate action fields to REMOVED /
-# FAILED so the emitted report reflects ACTUAL execution, not just the planned action.
-# verify_apply re-checks REMOVED targets and reclassifies any survivor to SKIPPED (AC4);
-# prune_remote_tracking reconciles the local remote-tracking view (AC3). All three run in
-# --apply only and return 0 so emit still runs after them under set -e. Plain `if` (not
-# `[[ … ]] && …`) keeps control flow obvious and immune to set -e short-circuit semantics.
+# Apply BEFORE emitting, FOUR phases in order: (1) apply_removals rewrites candidate
+# action fields to REMOVED / FAILED so the emitted report reflects ACTUAL execution,
+# not just the planned action; (2) resolve_freed_branches runs ONE bounded
+# re-evaluation pass removing local branches freed by this run's worktree removals
+# (fixed point in a single invocation — #53); (3) verify_apply re-checks REMOVED
+# targets (incl. resolve-pass removals) and reclassifies any survivor to SKIPPED
+# (AC4); (4) prune_remote_tracking reconciles the local remote-tracking view (AC3).
+# All four run in --apply only and return 0 so emit still runs after them under
+# set -e. Plain `if` (not `[[ … ]] && …`) keeps control flow obvious and immune to
+# set -e short-circuit semantics.
 if [[ "$MODE" == "apply" ]]; then
   apply_removals
+  resolve_freed_branches
   verify_apply
   prune_remote_tracking
 fi
