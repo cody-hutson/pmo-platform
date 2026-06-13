@@ -520,7 +520,7 @@ The dual-write mechanism is **NOT triple-authoring**. The operator (or `release-
 **Length-budget escape hatch.** The 5-15 line cap is a soft target; the per-bullet shape mandate (capability + WHAT + *Why it matters* beat + linked issue) typically produces 2-4 visual markdown lines per bullet, so a release with ≥6 bullets may exceed 15 lines. When that happens, the operator MUST choose one of:
 
 1. **Trim** — drop bullets with the lowest user-impact severity until the cap holds; the canonical note (Surface 1) carries the full bullet set.
-2. **Link out** — write a single CHANGELOG entry pointing to the canonical note (`See [v<X.Y> release notes](release/releases/notes/vX.Y_RELEASE_NOTES.md) for full change list.`) and skip per-bullet enumeration entirely.
+2. **Link out** — write a single CHANGELOG entry pointing to the canonical note (`See [v<X.Y> release notes](release/releases/notes/v<X.Y>_RELEASE_NOTES.md) for full change list.`) and skip per-bullet enumeration entirely.
 3. **Drop the beat** — for the affected release ONLY, emit `**<Capability>.** <one-sentence WHAT>. ([#N](...))` without the *Why it matters* beat in CHANGELOG.md. The beat stays present in Surface 1 (GitHub Releases) at full length. This option preserves bullet cardinality at the cost of dropping the inherited §2.2 voice rule for CHANGELOG only; the operator must document the trade-off in the Stage 13 sub-task comment.
 
 The default is option 1 (Trim). Option 2 fires automatically when a release has >10 Section 6a bullets. Option 3 requires explicit operator authorization per release.

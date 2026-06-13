@@ -1,0 +1,123 @@
+name: Doc-link check
+
+# PR-time cross-reference-integrity gate (issue #169) — promotes the deploy-time
+# Check-14 primitive (core/deploy/tools/check-doc-links.py) to a PR gate, so a
+# broken outbound markdown reference in the governance / reference / rules-mirror
+# / skill corpora is caught at PR time, not only at deploy time. Single source of
+# truth with Check 14: both invoke the SAME primitive over the SAME --target-paths.
+#
+# Runs on EVERY pull request (no paths filter), so this status check always
+# reports a result and never sits required-but-absent on a shared release PR; a PR
+# that changes no in-scope file still scans the corpus identically (the scan is
+# whole-corpus, not changed-files — link integrity is a global property). Also
+# runs on push to main as a post-merge guard (mirrors release-link-check.yml).
+#
+# Posture: WARN-MODE INITIAL per the doc-link-maintenance.md flip-to-enforce
+# timeline (Check 14 / bypass-mode-readiness precedent). At ship the scoped corpus
+# is at a 0-real-residual baseline (issue #169 drained the 13 pre-existing broken
+# refs and the engine natively skips <...> placeholder + meta-doc-literal targets),
+# so in warn mode the gate is green and a future PR that introduces a NET-NEW
+# broken ref surfaces an inline ::warning annotation without blocking the merge.
+# Flip to enforce by setting WARN_MODE: 'false' below (one-line change) once the
+# operator closes the shakedown per doc-link-maintenance.md § Flip-to-Enforce.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  doc-link-check:
+    name: Cross-reference integrity (governance + reference + rules + skills)
+    runs-on: ubuntu-latest
+    env:
+      # Flip to 'false' to make a broken outbound reference fail the PR (enforce
+      # mode). 'true' = warn-mode-initial: annotate + pass. See header.
+      WARN_MODE: 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Detector precision probe (primitive self-test)
+        run: |
+          set -euo pipefail
+          # A warn-mode scan is blind to a detector regression (it would pass an
+          # empty result), so the primitive's self-test is a HARD gate independent
+          # of WARN_MODE: a parser/resolver/exclusion regression fails the PR.
+          # Mirrors the reference-durability.yml precision-probe step.
+          python3 core/deploy/tools/check-doc-links.py --self-test
+
+      - name: Scan corpus for broken outbound references
+        run: |
+          set -uo pipefail
+
+          # Same engine + same --target-paths as deploy.sh Check 14 (single source
+          # of truth). --require-targets: a glob resolving to zero files is a
+          # path-resolution failure (exit 3), never a silent green — a relocated
+          # scan surface cannot pass. --output-format github: inline file/line/
+          # broken-target annotations in the PR (issue #169 AC: failure output
+          # names file, line, and broken-ref target).
+          set +e
+          OUTPUT=$(python3 core/deploy/tools/check-doc-links.py \
+            --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,operations/OPERATIONS.md,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
+            --allowlist core/deploy/allowlists/skip-doc-link-check-ci.txt \
+            --output-format github \
+            --require-targets \
+            --exclude-code-blocks 2>&1)
+          EXIT=$?
+          set -e
+
+          # Surface the annotations (each line is a ::warning file=,line=:: that
+          # GitHub renders inline on the PR diff).
+          if [ -n "$OUTPUT" ]; then
+            printf '%s\n' "$OUTPUT"
+          fi
+
+          if [ "$EXIT" -eq 3 ]; then
+            # Path-resolution failure is ALWAYS hard-fail, independent of WARN_MODE
+            # — a missing/relocated scan surface means the gate ran against nothing
+            # and must not read green (fail-loud contract).
+            {
+              echo "## :x: Doc-link check — path-resolution failure"
+              echo ""
+              echo "A declared scan target resolved to zero files (scan surface missing or relocated):"
+              echo ""
+              printf '%s\n' "$OUTPUT"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+
+          if [ "$EXIT" -eq 0 ]; then
+            echo ":white_check_mark: Doc-link check — no broken outbound references in scope" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # EXIT == 1 → broken outbound reference(s) found.
+          {
+            echo "## :warning: Doc-link check — broken outbound reference(s) found"
+            echo ""
+            echo "An outbound markdown reference in the governance / reference / rules-mirror / skill corpus does not resolve to an existing target. Each annotation above names the source file, line, and broken target."
+            echo ""
+            echo "### Remediation"
+            echo ""
+            echo "- **Path-drift (a moved file):** update the link to the file's current path (e.g. a pre-restructure \`pmo-platform/...\` path → its live \`core/\`/\`release/\`/\`operations/\` location)."
+            echo "- **Deleted target:** remove the link, or repoint it at the surviving doc."
+            echo "- **Intentional placeholder/example:** use an angle-bracket placeholder (e.g. \`<X.Y>\`, \`<OPERATOR_INSTANCE_*>\`) — the engine skips angle-bracket and meta-doc-literal targets natively."
+            echo ""
+            echo "See \`core/rules/doc-link-maintenance.md\` (PR-time gate) and \`core/standards/doc-link-maintenance-protocol.md\` (authoritative protocol)."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "_Warn-mode-initial: reported, not blocking. Flip to enforce per \`core/rules/doc-link-maintenance.md\` § Flip-to-Enforce._" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit 1
