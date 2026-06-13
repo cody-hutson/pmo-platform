@@ -1,5 +1,5 @@
 ---
-title: ADR-021 — Skill sourcing-coupling posture (own-with-harvest default; guarded-wrap exception)
+title: ADR-022 — Skill sourcing-coupling posture (own-with-harvest default; guarded-wrap exception)
 status: Proposed
 date: 2026-06-13
 release: knowledge-architecture-initiative (epic knowledge-corpus)
@@ -13,7 +13,7 @@ source_observations:
 
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-021 — Skill sourcing-coupling posture
+# ADR-022 — Skill sourcing-coupling posture
 
 ## Status
 
