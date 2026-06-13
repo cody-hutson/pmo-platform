@@ -342,6 +342,65 @@ Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST
 
 ---
 
+## Platform-Config Resolution Protocol
+
+Platform configuration is split across two surfaces by concern and resolved by a single cascading resolver. This protocol defines the resolution order, the default-fallback, and the two-track update governance. It **composes with** the Methodology Awareness Protocol above — `default_delivery_approach` is a hierarchy-resolvable field whose resolution this protocol governs, while the `delivery_approach` enum + validation + Custom-block handling stay canonical in the Methodology Awareness Protocol and its cross-referenced schema. This protocol does NOT duplicate the methodology vocabulary.
+
+**Two surfaces (per [`core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md`](../ADRs/ADR-021-platform-config-vs-operator-toml-split.md)):**
+
+- [`core/config/operator.toml.template`](../config/operator.toml.template) — operator-ENVIRONMENT / IDENTITY: identity, paths, `[adapters]` host-selectors (`repo_host`/`ticketing`/`kb`/`ai_tool` — the onboarding seam), `[methodology].default_delivery_approach`. Security-sensitive (`chmod 600`; depersonalization token vocabulary).
+- [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) — platform-BEHAVIOR: `[bundling]` (`bundle_doctrine_frame`, `release_size_target_pts`), `[release_class].default_release_class`, `[relationship_mapping]`, `[calibration]`. Freely tunable; no PII. Field schema: [`schemas/platform-config-schema.md`](../schemas/platform-config-schema.md).
+
+**Cross-references:**
+
+- [`schemas/platform-config-schema.md`](../schemas/platform-config-schema.md) — field / type / allowed-values / default / calibration-policy / consuming-surface / cutover-SHA
+- [`config/platform-config.toml.template`](../config/platform-config.toml.template) + [`config/operator.toml.template`](../config/operator.toml.template) — the two surfaces (Layer-1 defaults)
+- [`standards/composition-surface-spec.md`](../standards/composition-surface-spec.md) — the durability contract platform-config.toml carries
+- [`docs/platform-config-reference.md`](../../docs/platform-config-reference.md) — the human-readable catalog
+
+### Rule 1 — Resolve the effective value via the 5-rung cascade
+
+A consumer asking "what is the effective value of field `F` for scope `S`?" resolves by precedence — **most-specific overrides least-specific**:
+
+| Rung | Precedence | Surface | Layer |
+|---|---|---|---|
+| 1 | lowest | global default — `platform-config.toml.template` / `operator.toml.template` | Layer 1 (always present) |
+| 2 | ↑ | portfolio override — `projects/_config/PORTFOLIO.md` frontmatter `platform_config: {...}` | Layer 2 (optional) |
+| 3 | ↑ | program override — `projects/<Program>/_config/program-config.toml` | Layer 2 (optional) |
+| 4 | ↑ | project override — `projects/<Project>/PROJECT.md` frontmatter `platform_config: {...}` | Layer 2 (optional) |
+| 5 | **highest** | individual override — `~/.config/pmo-platform/platform-config.toml` `[overrides]` (and `operator.toml` for identity/adapters) | Layer 2 (optional) |
+
+`effective(F, S)` = the value of `F` at the **highest-precedence rung that SETS `F`**; fall through to rung 1 (global default) if no higher rung sets it.
+
+**Individual is highest precedence** deliberately: an individual operator's explicit override is the most-specific intent and wins even over a project setting. This matches git's `--local > --global` *specificity* logic and the existing `operator.local.toml > operator.toml` precedent. (This is the one genuinely-designed ordering choice; CHEAP to flip to individual-as-base if the operator later intends that.)
+
+**No per-tier operator value ever lands in a tracked Layer-1 file.** The Layer-1 templates ship defaults + schema; per-tier values live in the Layer-2 surfaces above. This mirrors the `delivery_approach` precedent exactly (enum Layer-1 / value Layer-2).
+
+### Rule 2 — Apply the 3-level default-fallback (never hard-fail)
+
+1. Field set at ≥1 rung → resolve per Rule 1.
+2. Field set ONLY at rung 1 (global default) → use the default. **Common case** — and the reason the Layer-1 templates ship a value for every field.
+3. Field absent even from rung 1 (operator deleted it, or a consumer references a not-yet-added field) → the consumer uses its **own documented hardcoded fallback** and logs `[platform-config: field <F> unresolved; using consumer default <V>]`. A consumer MUST declare its fallback so an absent/corrupt config never hard-fails a release. (Mirrors the methodology-parameterization CASE-3 "emit WITH caveat — never silently default" discipline.)
+
+### Rule 3 — Single resolution at the hub; spokes read injected values
+
+To avoid hub-vs-spoke divergence, config is resolved ONCE at the hub (release-pipeline Procedure 0) and the resolved values are injected into each spoke's chip prompt. **Spokes do NOT re-resolve** — they read the value the hub injected. `release-planner` (Mode A) and `release-executor` (Mode A) resolve their named fields at session start. `deploy.sh` / hooks extend the existing `operator.toml` rung-reader idiom to also read `platform-config.toml` (`resolve_platform_config`).
+
+### Rule 4 — Two-track update governance (split on the Layer boundary)
+
+| Track | What changes | Governance weight |
+|---|---|---|
+| **Track A — schema / default change (Layer 1)** | edit a default in a template, add/remove a field, change an allowed-values set, edit `platform-config-schema.md` | **Full governed PR** — GitHub Issue (`improvement.yml`) + plan + PR review per CLAUDE.md "No ungoverned changes." These are governance files (a default changes behavior for every install that has not overridden — same blast radius as a governance-rule change). The PR diff IS the dry-run. |
+| **Track B — per-tier value set (Layer 2)** | operator sets a field for their own portfolio / program / project / individual scope | **No PR — operator-instance write.** Same as setting `delivery_approach: Kanban` in a PROJECT.md. Layer 2 is git-ignored + Cowork-owned; it never enters the release PR. The operator's own instance history is their audit trail. |
+
+The AC "audit trail: git history of config field changes is the canonical change record" applies to **Track A** (the tracked templates + schema); Layer-2 value sets are audited by the operator's own instance history, not the platform repo.
+
+### Rule 5 — Cutover
+
+This resolution protocol applies to releases entering the pipeline **after this release's merge SHA**; **this release (adapter-config-foundation) itself is exempt** (reflexive-pipeline-loop discipline). Engineering anchors the SHA at Stage 12. Merge SHA: `[STAGE-12-MERGE-SHA — anchored at Stage 12 Execute]`.
+
+---
+
 ## Framework Review Cadence Protocol
 
 The platform references many named frameworks (PMBOK, SAFe, Nonaka SECI, Diátaxis, ADKAR, Cost of Delay, three-gulfs-methodology, failure-mode-standard, …). Every such framework is registered in [`framework-catalog.md`](../specs/framework-catalog.md) — the single source of truth for its version anchor, applicability, and review tier. The convention, primitive, and enforcement surface are codified in [`standards/framework-corpus-discipline.md`](../standards/framework-corpus-discipline.md); **this section is the authoritative copy of the tier-assignment rule and review trigger** (the catalog and the protocol doc reference back here per `duplicate-source-discipline.md` register-or-remove).

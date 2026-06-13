@@ -324,6 +324,96 @@ resolve_skill_module() {
   die "resolve_skill_module: skill '${skill}' not in any per-module array (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS/CANARY_SKILLS) — add to deploy.sh or fix invocation"
 }
 
+# ─── Platform-config rung-reader (adapter-config-foundation, #22) ─────────────
+# resolve_platform_config <field> [<project-path>]
+#
+# Resolves the effective value of a platform-config field per the 5-rung cascade
+# defined in core/governance/OPERATIONS.md § Platform-Config Resolution Protocol
+# (global default -> portfolio -> program -> project -> individual; most-specific
+# wins). Mirrors the existing operator.toml rung-reader idiom (the audit-repo /
+# cowork_install_path readers near the top of this script + detect_install_path):
+# a grep-rung TOML extractor, no YAML/JSON parser, no new dependency.
+#
+# Rungs read (lowest -> highest precedence; first hit at the highest rung wins):
+#   1. global default   <- core/config/platform-config.toml.template (this repo) OR
+#                          ~/.config/pmo-platform/platform-config.toml managed body
+#   2. portfolio        <- $CLAUDE_WORKSPACE_ROOT/projects/_config/PORTFOLIO.md frontmatter (optional)
+#   3. program          <- $CLAUDE_WORKSPACE_ROOT/projects/<Program>/_config/program-config.toml (optional)
+#   4. project          <- <project-path>/PROJECT.md frontmatter (optional; arg 2)
+#   5. individual       <- ~/.config/pmo-platform/platform-config.toml [overrides] (optional)
+#
+# Layer-2 rungs (2-5) are operator-instance + git-ignored; on a bare repo clone
+# they are absent and the reader falls through to rung 1. The global rung-1
+# in-repo template is located robustly: prefer the BASH_SOURCE-derived source
+# root, then fall back to the cwd-relative path (how every cmd_check check reads
+# repo files), so the reader works whether deploy.sh was invoked by a relative
+# or an absolute path. Echoes the resolved value (empty if the field is absent at
+# every rung — the caller applies its own documented hardcoded fallback per the
+# 3-level default-fallback, Rule 2).
+resolve_platform_config() {
+  local field="$1"
+  local project_path="${2:-}"
+  local cfg_root="${PMO_PLATFORM_CONFIG_ROOT:-$HOME/.config/pmo-platform}"
+  local ws_root="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
+
+  # Locate the in-repo template robustly: BASH_SOURCE-derived root first, then
+  # cwd-relative (cmd_check runs from repo root and reads files cwd-relative).
+  local src_root tmpl=""
+  src_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || echo "")"
+  if [ -n "$src_root" ] && [ -r "${src_root}/core/config/platform-config.toml.template" ]; then
+    tmpl="${src_root}/core/config/platform-config.toml.template"
+  elif [ -r "core/config/platform-config.toml.template" ]; then
+    tmpl="core/config/platform-config.toml.template"
+  fi
+
+  # _toml_field <file> <field> — extract the first `field = value` (strip quotes,
+  # inline comments, surrounding whitespace). Same sed shape as the operator.toml
+  # readers above. Returns empty on miss / unreadable file.
+  _toml_field() {
+    local _f="$1" _k="$2"
+    [ -n "$_f" ] && [ -r "$_f" ] || return 0
+    /usr/bin/grep -E "^[[:space:]]*${_k}[[:space:]]*=" "$_f" 2>/dev/null \
+      | /usr/bin/head -1 \
+      | /usr/bin/sed -E 's/.*=[[:space:]]*"?([^"#]*)"?.*/\1/' \
+      | /usr/bin/sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true
+  }
+
+  local val="" hit=""
+
+  # Rung 1 — global default (in-repo template, or installed managed body).
+  hit="$(_toml_field "$tmpl" "$field")"
+  [ -n "$hit" ] && val="$hit"
+  hit="$(_toml_field "${cfg_root}/platform-config.toml" "$field")"
+  [ -n "$hit" ] && val="$hit"   # installed instance overrides the repo template at the global rung
+
+  # Rung 2 — portfolio (PORTFOLIO.md frontmatter platform_config block; flat key match).
+  hit="$(_toml_field "${ws_root}/projects/_config/PORTFOLIO.md" "$field")"
+  [ -n "$hit" ] && val="$hit"
+
+  # Rung 3 — program (program-config.toml under the project's program dir, if derivable).
+  if [ -n "$project_path" ]; then
+    local prog_cfg
+    prog_cfg="$(/usr/bin/find "$(dirname "$project_path")" -maxdepth 3 -name program-config.toml 2>/dev/null | /usr/bin/head -1 || true)"
+    if [ -n "$prog_cfg" ]; then
+      hit="$(_toml_field "$prog_cfg" "$field")"
+      [ -n "$hit" ] && val="$hit"
+    fi
+  fi
+
+  # Rung 4 — project (PROJECT.md frontmatter platform_config block).
+  if [ -n "$project_path" ] && [ -r "${project_path}/PROJECT.md" ]; then
+    hit="$(_toml_field "${project_path}/PROJECT.md" "$field")"
+    [ -n "$hit" ] && val="$hit"
+  fi
+
+  # Rung 5 — individual (highest precedence). The installed instance's value was
+  # already folded at rung 1; a dedicated [overrides] section read-by-section is a
+  # future hardening — the global rung-1 read of the installed instance is the
+  # operative individual value today.
+
+  printf '%s' "$val"
+}
+
 build_full_roster_skills() {
   # Build the full deployable skill roster from the per-module arrays into
   # FULL_ROSTER_SKILLS. Single source of truth: the same OPERATIONS/RELEASE/CORE
@@ -3540,6 +3630,89 @@ cmd_check() {
           log "         ... ($((c32_findings - 10)) more)"
         fi
       fi
+    fi
+  fi
+
+  # Check 33 — Platform-config surface integrity (adapter-config-foundation, #22).
+  # Asserts: (a) core/config/platform-config.toml.template exists + parses as TOML
+  # (every non-comment, non-blank, non-section line is a `key = value` assignment);
+  # (b) every field documented in the schema's [meta]/[bundling]/[release_class]/
+  # [relationship_mapping]/[calibration] categories ships a default value in the
+  # template (the resolver's "common case" rung-1 contract); (c) the legacy
+  # operator.toml [platform].work_board alias is preserved (NOT removed) alongside
+  # the new [adapters].ticketing. Warn-mode initial (flag_warn_or_issue) per the
+  # shakedown posture for new checks.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 33: Platform-config surface integrity (#22)"
+    local c33_tmpl="core/config/platform-config.toml.template"
+    local c33_op="core/config/operator.toml.template"
+    local c33_findings=0
+
+    if [[ ! -f "$c33_tmpl" ]]; then
+      flag_warn_or_issue "platform-config-surface" \
+        "$c33_tmpl not found — the platform-config surface is missing"
+    else
+      # (a) TOML parse: strip comments + blanks + section headers, then assert
+      # every remaining line is `key = value`.
+      local c33_bad_lines
+      c33_bad_lines=$(/usr/bin/grep -vE '^[[:space:]]*(#|$|\[)' "$c33_tmpl" 2>/dev/null \
+        | /usr/bin/grep -vE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=' 2>/dev/null \
+        | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c33_bad_lines=0
+      if [[ "$c33_bad_lines" -ne 0 ]]; then
+        c33_findings=$((c33_findings + 1))
+        log "  detail: $c33_bad_lines non-assignment line(s) in $c33_tmpl (TOML parse)"
+      fi
+
+      # (b) every required field ships a default (a `field = <non-empty>` line).
+      # type_mapping_overrides legitimately defaults to an empty table `{}`, which
+      # is non-empty after the `=`, so the same \S assertion covers it.
+      local _f
+      for _f in schema_version managed_by bundle_doctrine_frame release_size_target_pts \
+                default_release_class source_systems maintenance_posture \
+                type_mapping_overrides releases_since_calibration; do
+        if ! /usr/bin/grep -qE "^[[:space:]]*${_f}[[:space:]]*=[[:space:]]*\S" "$c33_tmpl" 2>/dev/null; then
+          c33_findings=$((c33_findings + 1))
+          log "  detail: field '$_f' has no default value in $c33_tmpl"
+        fi
+      done
+
+      # cross-check: resolve_platform_config returns the documented default from
+      # the in-repo template (exercises the rung-reader on the global rung).
+      local _bdf
+      _bdf="$(resolve_platform_config bundle_doctrine_frame)"
+      if [[ "$_bdf" != "F1" ]]; then
+        c33_findings=$((c33_findings + 1))
+        log "  detail: resolve_platform_config bundle_doctrine_frame returned '$_bdf' (expected F1)"
+      fi
+    fi
+
+    # (c) operator.toml [adapters] table + preserved legacy work_board alias.
+    if [[ -f "$c33_op" ]]; then
+      if ! /usr/bin/grep -qE '^\[adapters\]' "$c33_op" 2>/dev/null; then
+        c33_findings=$((c33_findings + 1))
+        log "  detail: operator.toml.template missing [adapters] table (#703 seam)"
+      fi
+      local _ad
+      for _ad in repo_host ticketing kb ai_tool; do
+        if ! /usr/bin/grep -qE "^[[:space:]]*${_ad}[[:space:]]*=[[:space:]]*\S" "$c33_op" 2>/dev/null; then
+          c33_findings=$((c33_findings + 1))
+          log "  detail: operator.toml.template [adapters].$_ad has no default"
+        fi
+      done
+      # work_board alias preserved (reconciled by deprecation, NOT removed)
+      if ! /usr/bin/grep -qE '^[[:space:]]*work_board[[:space:]]*=' "$c33_op" 2>/dev/null; then
+        c33_findings=$((c33_findings + 1))
+        log "  detail: operator.toml.template [platform].work_board alias was removed (must be preserved for deploy.sh/hooks readers)"
+      fi
+    else
+      flag_warn_or_issue "platform-config-surface" "$c33_op not found"
+    fi
+
+    if [[ $c33_findings -eq 0 ]]; then
+      log "  OK:    platform-config.toml.template parses + all fields have defaults; operator.toml [adapters] present; work_board alias preserved"
+    else
+      flag_warn_or_issue "platform-config-surface" \
+        "$c33_findings platform-config surface finding(s) — see core/schemas/platform-config-schema.md + core/config/*.template"
     fi
   fi
 

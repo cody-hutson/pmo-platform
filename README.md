@@ -52,7 +52,7 @@ After that, the module READMEs cover each module's full skill roster.
 | [`core/`](core/README.md) | Shared kernel — hooks, schemas, shared skills, disciplines, deploy infrastructure | [Module README](core/README.md) |
 | [`docs/`](docs/) | User-facing documentation — install, getting started, workspace setup, module APIs | [Docs index](docs/) |
 
-For the consolidated cross-module API reference, see [docs/module-apis.md](docs/module-apis.md).
+For the consolidated cross-module API reference, see [docs/module-apis.md](docs/module-apis.md). For the catalog of every platform configuration field (what it does, its default, and where to set it), see [docs/platform-config-reference.md](docs/platform-config-reference.md).
 
 Top-level layout:
 
