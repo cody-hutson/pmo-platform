@@ -45,6 +45,10 @@ FIRST_STEPS.md also covers the conventions worth knowing up front — governed-v
 
 After that, the module READMEs cover each module's full skill roster.
 
+## Configuration
+
+Platform behavior is configurable from one place. Every field — what it does, its default, and where to set it — is in the [configuration catalog](docs/platform-config-reference.md). Two surfaces hold your choices: `operator.toml` (environment + identity + host adapters — repo, ticketing, KB, AI tool) and `platform-config.toml` (tunable behavior — bundling, release-class default, calibration). Both ship as templates `./install.sh` lays down; values resolve most-specific-wins (global default → portfolio → program → project → individual). Setting a value for your own scope is a local edit; changing a shipped default is a governed change. See the **Platform-Config Resolution Protocol** in [OPERATIONS.md](core/governance/OPERATIONS.md) for precedence + update rules.
+
 ## Module overview
 
 | Module | Role | More |
@@ -54,7 +58,7 @@ After that, the module READMEs cover each module's full skill roster.
 | [`core/`](core/README.md) | Shared kernel — hooks, schemas, shared skills, disciplines, deploy infrastructure | [Module README](core/README.md) |
 | [`docs/`](docs/) | User-facing documentation — install, getting started, workspace setup, module APIs | [Docs index](docs/) |
 
-For the consolidated cross-module API reference, see [docs/module-apis.md](docs/module-apis.md). For the catalog of every platform configuration field (what it does, its default, and where to set it), see [docs/platform-config-reference.md](docs/platform-config-reference.md).
+For the consolidated cross-module API reference, see [docs/module-apis.md](docs/module-apis.md).
 
 Top-level layout:
 
