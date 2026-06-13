@@ -79,6 +79,28 @@ Story vs initiative differentiate by altitude-driven field emphasis within
 until a first-class type ships. The candidate child work of a container is a body
 decomposition callout for later slicing — never auto-created as child items.
 
+## Enabled type-pack resolution (the lock-in seam)
+
+The work-item `type:` is assigned at Triage by resolving the deployment's **enabled
+type-pack** — never hard-coded in this corpus file (the kind *values* are
+operator-local K4 config, not public package content). Resolution follows the
+work-organization mapping framework's Layer-4 (K4, operator-local) precedence:
+
+1. Read the deployment's `delivery_approach` (operator config / `PROJECT.md`). If it
+   enables a type-pack, that pack is the source of the work-item `type:` set, the
+   **intake-form → `type:` mapping**, and the per-kind landing criteria — read **per
+   invocation** (kinds are deployment-mutable), never cached across calls.
+2. If no pack is enabled, only the canonical intake categories below apply
+   (`improvement` / `bug` / `observation`) and no work-item `type:` is assigned.
+
+This is the seam that keeps new arrivals **born-typed**: when a pack is enabled, every
+triaged item lands with its work-item `type:` from the pack's mapping, so the backlog
+does not drift untyped. The mechanism is methodology-neutral — the Agile/Scrum (or any)
+kind values live in the operator-local pack (per the intake front-door architectural
+boundary, see § Provenance); this file supplies only the resolution rule. The type
+registry portion this couples to is the platform's declarative work-item type system;
+see § Forward-coupling.
+
 ## Forward-coupling (the platform type registry)
 
 The platform's declarative work-item type system is the registry this file's type
