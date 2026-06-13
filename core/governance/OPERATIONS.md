@@ -397,7 +397,7 @@ The AC "audit trail: git history of config field changes is the canonical change
 
 ### Rule 5 — Cutover
 
-This resolution protocol applies to releases entering the pipeline **after this release's merge SHA**; **this release (adapter-config-foundation) itself is exempt** (reflexive-pipeline-loop discipline). Engineering anchors the SHA at Stage 12. Merge SHA: `[STAGE-12-MERGE-SHA — anchored at Stage 12 Execute]`.
+This resolution protocol applies to releases entering the pipeline **after this release's merge SHA**; **this release (adapter-config-foundation) itself is exempt** (reflexive-pipeline-loop discipline). Engineering anchors the SHA at Stage 12. Merge SHA: `71047a527eed34d24a0bf059acfc73c20b7ec6b5` (adapter-config-foundation, v1.14).
 
 ---
 
