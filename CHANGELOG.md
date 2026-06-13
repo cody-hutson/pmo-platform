@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [cross-reference-integrity-ci] - 2026-06-13
+
+Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release). The reference-integrity rules the pre-commit hook applies locally now also run as warn-mode checks when a pull request opens.
+
+### Added
+
+- **Broken intra-repo links are now caught when a pull request opens.** A new link-check runs the same link-resolution engine the deploy step already uses, over the same files. *Why it matters:* a dead cross-reference is surfaced while it is still easy to fix, instead of at deploy time. ([#169](https://github.com/cody-hutson/pmo-platform/issues/169))
+- **A stale skill-count claim or a live legacy IMP-XXX reference added to a skill spec is now caught on a pull request.** *Why it matters:* the platform's documentation can't quietly drift out of sync with how many skills actually ship. ([#130](https://github.com/cody-hutson/pmo-platform/issues/130))
+
+### Fixed
+
+- **The positional issue-reference check now agrees exactly with the pre-commit hook.** The pull-request check now uses the same line-position logic as the hook. *Why it matters:* the same reference passes or is flagged the same way whether it is checked on your machine or on the pull request. ([#314](https://github.com/cody-hutson/pmo-platform/issues/314))
+
+[Full notes](release/releases/notes/cross-reference-integrity-ci_RELEASE_NOTES.md)
+
 ## [v1.11] - 2026-06-12
 
 ### Added
