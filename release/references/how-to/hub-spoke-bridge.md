@@ -289,6 +289,13 @@ or "Architectural Decision Gates" section.
   - If upstream-compatible: <evidence of the compatibility check
     performed — date of docs review, schema version cited, conflict
     absence confirmed>
+  - Sourcing posture (REQUIRED when the D-decision introduces or changes a
+    skill's Anthropic coupling): state the chosen posture — own /
+    guarded-wrap / pass-through — per
+    [ADR-021](../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md),
+    with the blast-radius × commodity-stability justification.
+    Stakeholder-facing / judgment skills are own-only. ADR-021 holds the
+    rule; this line cites it.
 **Reversibility / Confidence:** <CHEAP|MODERATE|EXPENSIVE|IRREVERSIBLE> /
   <HIGH|MEDIUM|LOW>
 
