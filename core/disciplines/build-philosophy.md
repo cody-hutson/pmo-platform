@@ -21,7 +21,7 @@ consumers: "skill authors/reviewers (pmo-skill-refiner, pmo-skill-editor, build-
 ## §Purpose
 
 The platform is built on a small set of engineering values. Their *content* is already
-codified — deeply — across ~21 [`core/disciplines/`](README.md) docs, dozens of
+codified — deeply — across the [`core/disciplines/`](README.md) docs, the
 `core/standards/`, the [`core/ADRs/`](../ADRs/README.md) set, and the `core/hooks/`
 guards. What was missing is a **spine**: a single surface that (1) names these values as
 first-class and (2) makes their enforcement **coverage** across every toolkit surface
