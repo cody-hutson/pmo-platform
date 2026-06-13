@@ -1,0 +1,173 @@
+name: Skill-count / IMP-XXX drift
+
+# Runs on EVERY pull request (no paths filter), so this required status check
+# always reports a result and never blocks a PR as required-but-absent. The
+# detector's own path globs select which changed files to scan (skill specs for
+# the IMP detector; any changed *.md for the count detector), so a PR that
+# changes no in-scope file completes as a clean empty scan and passes. Scans
+# ONLY added lines (the net-new delta), so pre-existing corpus rot — including
+# CLOSED-issue history and legitimately-stale historical roster mentions — never
+# fails an unrelated PR (the R-S3 mitigation, achieved structurally). Drops the
+# `edited` trigger (a PR-body-only edit never touches an in-scope file), avoiding
+# the shared-release-PR double-run. PR-time mirror of deploy-time deploy.sh
+# Check 5(c) (the skill-roster / hardcoded-count guard), but with a
+# runtime-computed authority so it self-updates as the roster grows.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+env:
+  # Warn-mode-initial per core/rules/bypass-mode-readiness.md +
+  # core/rules/doc-link-maintenance.md. The corpus is clean of live IMP-XXX in
+  # skill specs today (0 hits) and carries no stale roster total on a current
+  # line, so the gate fires on nothing at the shakedown baseline and only
+  # annotates net-new regressions. Flip-to-enforce (set to 'false') once the
+  # warn-window confirms zero false-positive annotations on real PRs — tracked as
+  # a Stage-13 flip-to-enforce assessment line item. When 'true', findings are
+  # reported to the job summary but the job still exits 0 (no hard block).
+  WARN_MODE: 'true'
+
+jobs:
+  skill-count-imp:
+    name: Skill-count / IMP-XXX delta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+
+      - name: Detector precision probe (self-test)
+        run: |
+          set -euo pipefail
+          # Per the CDF-2 amendment: a warn-log is blind to false negatives, so
+          # the detector's precision is gated on an in-tool self-test with a
+          # labeled expected-match set. A self-test miss fails the PR — the
+          # detector is broken. This step is ALWAYS hard-fail, independent of
+          # WARN_MODE (a broken detector is not a warn-able finding).
+          python3 core/deploy/tools/check-skill-count-imp.py --self-test
+
+      - name: Scan added lines for IMP-XXX refs and skill-count drift
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          DETECTOR='core/deploy/tools/check-skill-count-imp.py'
+
+          # map_added_lines — diff-hunk -> file-line mapper. Reads a `git diff` on
+          # stdin and emits "<TRUE_FILE_LINE>\t<CONTENT>" for each ADDED ('+')
+          # line, computing the position in the NEW file from each
+          # `@@ -a,b +c,d @@` hunk header. Byte-identical idiom to
+          # reference-durability.yml: lines inside fenced code blocks are NOT
+          # emitted (the detector must not fire on fenced example content) but
+          # still advance the counter so true-file-line positions stay aligned.
+          map_added_lines() {
+            awk '
+              /^@@/ {
+                m = $0
+                sub(/^@@ -[0-9]+(,[0-9]+)? \+/, "", m)
+                split(m, a, /[ ,]/)
+                newline = a[1] + 0
+                in_hunk = 1
+                fence = 0
+                next
+              }
+              in_hunk && /^\+\+\+/ { next }
+              in_hunk && /^\+/ {
+                content = substr($0, 2)
+                if (content ~ /^[[:space:]]*```/) { fence = !fence; newline++; next }
+                if (!fence) { printf "%d\t%s\n", newline, content }
+                newline++
+                next
+              }
+              in_hunk && /^-/ { next }
+              in_hunk && /^ /  { newline++; next }
+            '
+          }
+
+          # Changed markdown files in this PR (the count detector's scope is any
+          # changed *.md; the detector itself further restricts the IMP detector
+          # to skill-spec globs).
+          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true)
+
+          WORKDIR="$(mktemp -d)"
+          PAIRS=()
+          for f in "${CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue   # deleted file — nothing to scan
+
+            # Added lines for this file, mapped to TRUE file-line numbers, fenced
+            # code excluded. This is the net-new delta only — pre-existing corpus
+            # content (historical roster mentions, CLOSED-issue refs) is never in
+            # this set, which is the structural R-S3 guarantee.
+            ADDED_MAPPED="$(git diff "$BASE_SHA"..."$HEAD_SHA" -- "$f" | map_added_lines)"
+            [ -z "$ADDED_MAPPED" ] && continue
+
+            # Stash the delta in a content file and hand the detector the REAL
+            # path (so glob-matching + finding attribution use the true path)
+            # paired with the delta content file (so only added lines are scanned).
+            safe="$(printf '%s' "$f" | tr '/' '_')"
+            printf '%s\n' "$ADDED_MAPPED" > "$WORKDIR/$safe"
+            PAIRS+=( "--scan-pair" "$f::=::$WORKDIR/$safe" )
+          done
+
+          if [ "${#PAIRS[@]}" -eq 0 ]; then
+            echo ":white_check_mark: Skill-count / IMP-XXX — no in-scope added lines in this PR" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Run the detector. Capture both the annotations (stdout) and the exit
+          # code without tripping `set -e`.
+          set +e
+          OUT="$(python3 "$DETECTOR" "${PAIRS[@]}" --mode both --output-format github)"
+          RC=$?
+          set -e
+
+          if [ "$RC" -eq 3 ]; then
+            {
+              echo "## :x: Skill-count / IMP-XXX check — scan-surface error"
+              echo ""
+              echo "A declared scan surface could not be read (exit 3). This is a"
+              echo "fail-loud condition independent of warn-mode — a relocated or"
+              echo "renamed file must not read green."
+              echo ""
+              printf '%s\n' "$OUT"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: Skill-count / IMP-XXX — no net-new IMP-XXX refs in skill specs and no skill-count drift on added lines" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # RC == 1 — findings. Re-emit as proper Actions annotations (the
+          # detector's github format prints ::error lines), then write a
+          # human-readable remediation block to the job summary.
+          printf '%s\n' "$OUT"
+
+          {
+            echo "## :x: Skill-count / IMP-XXX check FAILED"
+            echo ""
+            echo "Net-new finding(s) on added lines in this PR:"
+            echo ""
+            echo '```'
+            printf '%s\n' "$OUT"
+            echo '```'
+            echo "### Remediation"
+            echo ""
+            echo "- **Live IMP-XXX in a skill spec:** the \`IMP-NNN\` namespace predates the issue tracker and no longer resolves. Replace it with the live reference (an issue number in a designated reference block, or an inline description of the thing it pointed to). If a historical citation is genuinely unavoidable, add \`<!-- skill-count-imp: allow-imp-ref -->\` anywhere in the file."
+            echo "- **Skill-count drift:** the claimed roster total does not match the authoritative count computed from the live \`{operations,release,core}/skills/*/\` tree. Both the public-roster count (canary excluded) and the directory count (canary included) are accepted. Either correct the number, or — if the line is a legitimately-scoped subtotal that happens to use a totalizing phrase — add \`<!-- skill-count-imp: allow-count -->\` anywhere in the file."
+            echo ""
+            echo "This gate is the PR-time mirror of \`deploy.sh\` Check 5(c). See \`core/deploy/tools/check-skill-count-imp.py\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "${WARN_MODE:-true}" = "true" ]; then
+            echo "::warning::skill-count-imp findings present; WARN_MODE is on, not failing the PR (flip to enforce once the warn-window is clean)."
+            exit 0
+          fi
+          exit 1

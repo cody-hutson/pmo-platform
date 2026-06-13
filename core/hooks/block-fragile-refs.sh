@@ -3,11 +3,15 @@
 #
 # Reference-durability issue (v3.18-corpus-integrity-enforcement):
 # Flags fragile references on net-new/modified content destined for durable-corpus
-# paths, per core/standards/reference-durability-standard.md. Three detectors:
+# paths, per core/standards/reference-durability-standard.md. Four detectors:
 #   - Class L (BLOCK-FRAGILE-REF-001): markdown link sequences  ]( on a content line
 #   - Class V (BLOCK-FRAGILE-REF-002): version-cutover apparatus (idiom + version token)
 #   - Positional issue-reference (BLOCK-FRAGILE-REF-003): a bare #N outside a designated
 #     reference block, OR a content-free #N inside one (rung-5 "summarize inline" guard)
+#   - Class U (BLOCK-FRAGILE-REF-004): a raw github.com/<owner>/<repo>/{issues,pull,milestone}
+#     URL (durability-ladder rung-6 — rots on any repository move); the ref-permitted
+#     ledger surfaces are categorically exempt (is_ledger_exempt), all other durable
+#     corpus is flagged unless the file declares the allow-url override marker
 #
 # Matcher scope: Write, Edit
 #
@@ -47,6 +51,10 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 # exemption-list pattern). This finds the allowlist in whichever checkout the hook runs
 # from — primary or worktree — which matters during engineering before deployment.
 readonly ALLOWLIST="${HOOK_DIR}/reference-durability-allowlist.txt"
+# Shared positional-issue-ref classifier (single source of the positional decision; the
+# fixture-runner and the reference-durability CI invoke this same file via `awk -f`, so
+# the positional logic cannot drift across the three surfaces). Resolves beside the hook.
+readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
 
 # --- THE FLAGGED-CLASS PATTERNS (validated against core/hooks/testdata/cutover-fixtures.txt) ---
 # Class L — markdown link sequence (fenced code blocks are stripped before scanning).
@@ -59,6 +67,12 @@ readonly LINK_RE='\]\('
 #   (d) the "reflexive-pipeline-loop" cutover idiom
 # A bare version label naming the current line ("v2.1 is now current") does NOT match.
 readonly CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+# Class U — raw github.com/<owner>/<repo>/{issues,pull,milestone} URL. A rung-6 reference
+# that rots on any repository move/migration. Owner/repo-agnostic so it survives the repo's
+# own rename. The terminal anchor ([/#?]|$) is the over-match guard: it matches .../issues/333,
+# .../pull/682, .../milestone/3, and the bare .../issues index, but NOT the bare repo URL
+# github.com/<owner>/<repo> (no 3rd path segment) and NOT a word like "pullrequest".
+readonly URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
 # Reference-block header (reuses the parser-clean anchor-regex shape; H1-H6, lenient colon).
 readonly REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 # A bare issue reference: a # followed by digits, optionally bracketed (matches #42, #[42]).
@@ -164,12 +178,29 @@ CONTENT="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.content // .tool_inpu
 # --- PER-FILE OVERRIDE MARKERS (suppress a class for this file; matches still reported) ---
 ALLOW_LINK=0
 ALLOW_VERSION=0
+ALLOW_URL=0
 if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
   ALLOW_LINK=1
 fi
 if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
   ALLOW_VERSION=1
 fi
+if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
+  ALLOW_URL=1
+fi
+
+# --- LEDGER-SURFACE EXEMPTION (Class U scope; mirrors the CI is_ledger_exempt predicate) ---
+# The ref-permitted ledger surfaces (the five named in the universal-vs-release-pipeline
+# split rule) are categorically exempt from the raw-URL class — a ledger URL is native
+# provenance there. The hook's durable-corpus scope gate above already excludes
+# release/releases/* and top-level CHANGELOG.md (neither matches a durable glob), so this
+# is defense-in-depth + self-documentation: if the scope gate ever widens, this stays the
+# Class-U guard. Class L / Class V / positional issue-ref are unaffected by this flag.
+LEDGER_EXEMPT=0
+case "$FILE_PATH" in
+  */release/releases/*|release/releases/*) LEDGER_EXEMPT=1 ;;
+  */CHANGELOG.md|CHANGELOG.md) LEDGER_EXEMPT=1 ;;
+esac
 
 # --- MODE check (shared harness .mode; warn|enforce|off) ---
 MODE="warn"
@@ -193,6 +224,7 @@ STRIPPED="$("$PRINTF" '%s\n' "$CONTENT" | "$AWK" '
 link_matches=""
 version_matches=""
 issueref_matches=""
+url_matches=""
 
 if [ "$ALLOW_LINK" -eq 0 ]; then
   link_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$LINK_RE" || true)"
@@ -200,48 +232,44 @@ fi
 if [ "$ALLOW_VERSION" -eq 0 ]; then
   version_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$CUTOVER_RE" || true)"
 fi
+# Class U — raw ledger URL. Suppressed by the allow-url marker OR by ledger-surface exemption.
+if [ "$ALLOW_URL" -eq 0 ] && [ "$LEDGER_EXEMPT" -eq 0 ]; then
+  url_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$URL_RE" || true)"
+fi
 
 # Positional issue-reference detector (always on; not governed by the link/version markers).
 # Pass 1: locate the FIRST reference-block header line number (0 = none present).
 refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
 [ -z "$refblock_line" ] && refblock_line=0
 
-# Pass 2: walk each line; flag a bare issue ref that is (a) before the block / no block, or
-# (b) inside the block but not self-describing (too few non-reference words on the line).
-issueref_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$AWK" \
-  -v refline="$refblock_line" \
-  -v issuere="$ISSUEREF_RE" \
-  -v minwords="$MIN_SELFDESCRIBE_WORDS" '
-  BEGIN { infence = 0 }
-  {
-    line = $0
-    # skip blank lines
-    if (line ~ /^[[:space:]]*$/) next
-    # does this line carry a bare issue reference?
-    if (line !~ issuere) next
-    in_block = (refline > 0 && NR >= refline)
-    if (!in_block) {
-      printf "%d:OUTSIDE-BLOCK:%s\n", NR, line
-    } else {
-      # self-describing check: count words that are NOT the issue reference token
-      tmp = line
-      gsub(issuere, " ", tmp)        # remove the issue ref(s)
-      gsub(/^[#>*[:space:]-]+/, "", tmp)  # strip leading markdown/list punctuation
-      n = split(tmp, parts, /[[:space:]]+/)
-      words = 0
-      for (i = 1; i <= n; i++) { if (parts[i] ~ /[A-Za-z]/) words++ }
-      if (words < minwords) {
-        printf "%d:CONTENT-FREE-IN-BLOCK:%s\n", NR, line
-      }
-    }
-  }
-' || true)"
+# Pass 2: classify each line via the SHARED positional classifier
+# (core/hooks/lib/positional-issueref.awk — the same file the fixture-runner and the CI
+# invoke, so the positional logic is single-sourced and cannot drift). The hook has true
+# file lines already (NR over the stripped payload) and the refblock line from Pass 1; it
+# feeds the classifier "<NR>\t<line>" records and passes its own ISSUEREF_RE in so the
+# byte-identical-regex invariant is preserved. Output shape ("<lineno>:VERDICT:<line>") is
+# identical to the previous inline awk, so the downstream report wiring is unchanged.
+if [ -f "$POSITIONAL_LIB" ]; then
+  issueref_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$AWK" '{ printf "%d\t%s\n", NR, $0 }' \
+    | "$AWK" -f "$POSITIONAL_LIB" \
+        -v refline="$refblock_line" \
+        -v issuere="$ISSUEREF_RE" \
+        -v minwords="$MIN_SELFDESCRIBE_WORDS" || true)"
+else
+  # Fail-open for THIS detector only if the shared classifier is missing (a deployment
+  # defect — the lib ships in the same commit). Mirrors the hook's jq fail-open posture:
+  # a degraded positional check must not block all durable-corpus writes. The Class L and
+  # Class V detectors above are unaffected. Logged so the gap is visible.
+  log_error "DEPENDENCY-MISSING: positional classifier not found at $POSITIONAL_LIB (positional issue-ref check skipped this run)"
+  issueref_matches=""
+fi
 
 # --- AGGREGATE + REPORT ---
 have_findings=0
 [ -n "$link_matches" ] && have_findings=1
 [ -n "$version_matches" ] && have_findings=1
 [ -n "$issueref_matches" ] && have_findings=1
+[ -n "$url_matches" ] && have_findings=1
 
 [ "$have_findings" -eq 0 ] && exit 0
 
@@ -277,15 +305,19 @@ build_report() {
   if [ -n "$issueref_matches" ]; then
     "$PRINTF" '  [BLOCK-FRAGILE-REF-003] issue-reference placement on:\n%s\n' "$issueref_matches"
   fi
+  if [ -n "$url_matches" ]; then
+    "$PRINTF" '  [BLOCK-FRAGILE-REF-004] Class U (raw github.com/.../{issues,pull,milestone} URL) on:\n%s\n' "$url_matches"
+  fi
 }
 
 REPORT="$(build_report)"
-readonly TEACH="Rewrite as an inline summary (durability-ladder rung 1-2), or confine an unavoidable issue reference to a designated reference block with a summary noun phrase. Per-file escape: add an HTML comment '<!-- reference-durability: allow-link -->' or '<!-- reference-durability: allow-version-ref -->'. See core/standards/reference-durability-standard.md."
+readonly TEACH="Rewrite as an inline summary (durability-ladder rung 1-2), or confine an unavoidable issue reference to a designated reference block with a summary noun phrase. A raw github.com/.../{issues,pull,milestone} URL (Class U) is rung-6 — summarize inline rather than link, except in the ref-permitted ledger surfaces. Per-file escape: add an HTML comment '<!-- reference-durability: allow-link -->', '<!-- reference-durability: allow-version-ref -->', or '<!-- reference-durability: allow-url -->'. See core/standards/reference-durability-standard.md."
 
 if [ "$MODE" = "warn" ]; then
   [ -n "$link_matches" ]     && log_warn "BLOCK-FRAGILE-REF-001" "Class L markdown link in $FILE_PATH"
   [ -n "$version_matches" ]  && log_warn "BLOCK-FRAGILE-REF-002" "Class V version-cutover apparatus in $FILE_PATH"
   [ -n "$issueref_matches" ] && log_warn "BLOCK-FRAGILE-REF-003" "issue-reference placement in $FILE_PATH"
+  [ -n "$url_matches" ]      && log_warn "BLOCK-FRAGILE-REF-004" "Class U raw ledger URL in $FILE_PATH"
   "$PRINTF" '[CLAUDE-HOOK:%s:RULE:WARN] fragile reference(s) in %s (warn-mode active — not blocking; would block in enforce-mode):\n%s\n%s\n' \
     "$HOOK_NAME" "$FILE_PATH" "$REPORT" "$TEACH" >&2
   exit 0
@@ -295,6 +327,7 @@ fi
 [ -n "$link_matches" ]     && log_block "BLOCK-FRAGILE-REF-001"
 [ -n "$version_matches" ]  && log_block "BLOCK-FRAGILE-REF-002"
 [ -n "$issueref_matches" ] && log_block "BLOCK-FRAGILE-REF-003"
+[ -n "$url_matches" ]      && log_block "BLOCK-FRAGILE-REF-004"
 "$PRINTF" '[CLAUDE-HOOK:%s:RULE] BLOCKED: fragile reference(s) in %s:\n%s\nOverride: %s\n' \
   "$HOOK_NAME" "$FILE_PATH" "$REPORT" "$TEACH" >&2
 exit 2

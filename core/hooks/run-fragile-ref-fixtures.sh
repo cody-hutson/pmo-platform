@@ -19,6 +19,9 @@ readonly AWK="/usr/bin/awk"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 FIXTURE="${1:-${SCRIPT_DIR}/testdata/cutover-fixtures.txt}"
+# Shared positional-issue-ref classifier (single source of the positional decision; the
+# hook and the reference-durability CI invoke this same file via `awk -f`).
+POSITIONAL_LIB="${SCRIPT_DIR}/lib/positional-issueref.awk"
 
 if [ ! -f "$FIXTURE" ]; then
   "$PRINTF" 'FAIL: fixture not found: %s\n' "$FIXTURE" >&2
@@ -28,6 +31,7 @@ fi
 # Detectors — byte-identical to block-fragile-refs.sh.
 LINK_RE='\]\('
 CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
 REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 ISSUEREF_RE='#\[?[0-9]+\]?'
 MIN_SELFDESCRIBE_WORDS=3
@@ -44,6 +48,14 @@ matches_class() {
       ;;
     VERSION)
       "$PRINTF" '%s\n' "$content" | "$GREP" -qE "$CUTOVER_RE"
+      ;;
+    URL)
+      # Class U: a raw github.com/<owner>/<repo>/{issues,pull,milestone} URL.
+      # Ledger-surface exemption is a path property evaluated by the hook/CI scope gate,
+      # not by this content-level regex — the fixture's CLEAN-URL cases that depend on the
+      # allow-url marker or ledger exemption are exercised at the hook/CI integration test,
+      # not here. This case asserts the regex's content-match precision only.
+      "$PRINTF" '%s\n' "$content" | "$GREP" -qE "$URL_RE"
       ;;
     ISSUEREF-OUT)
       # outside a block: a bare issue ref present is a flag
@@ -64,6 +76,21 @@ matches_class() {
         }
         END { exit (flag ? 0 : 1) }
       '
+      ;;
+    ISSUEREF-POS)
+      # TRUE positional test. The content column is "<refline>|<lineno>|<line text>";
+      # split on the first two '|' and feed (lineno, line text) + refline to the SHARED
+      # classifier (core/hooks/lib/positional-issueref.awk) — the exact file the hook and
+      # CI call. FLAG iff the classifier emits a verdict line for the record.
+      local _refline _lineno _linetext _verdict
+      _refline="${content%%|*}"                 # before first '|'
+      local _rest="${content#*|}"               # after first '|'
+      _lineno="${_rest%%|*}"                     # before second '|'
+      _linetext="${_rest#*|}"                    # after second '|' (may itself contain '|')
+      _verdict="$("$PRINTF" '%s\t%s\n' "$_lineno" "$_linetext" \
+        | "$AWK" -f "$POSITIONAL_LIB" \
+            -v issuere="$ISSUEREF_RE" -v refline="$_refline" -v minwords="$MIN_SELFDESCRIBE_WORDS")"
+      [ -n "$_verdict" ]   # non-empty verdict => match (FLAG); empty => CLEAN
       ;;
     *)
       return 1

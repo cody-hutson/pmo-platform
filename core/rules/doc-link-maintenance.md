@@ -33,31 +33,53 @@ python3 core/deploy/tools/check-doc-links.py \
 
 **Fail-loud on unresolved targets:** `--require-targets` treats a `--target-paths` glob entry that resolves to zero files as a path-resolution failure (exit 3) rather than a clean pass, so a relocated or typo'd scan surface cannot read GREEN. Check 14 passes this flag.
 
-**Path resolution:** both inline links (`[text]` followed by a parenthesized path) and reference-style links (`[text]` followed by a `[label]`) are parsed. Relative paths resolve from source-file directory; workspace-rooted-style paths get a workspace-root fallback (matches GitHub web rendering). The resolver carries both the live module-relative prefixes (`core/`, `release/`, `operations/`, `docs/`) and the legacy `pmo-platform/`/`.claude/` prefixes for backward-compat. Fenced code blocks excluded.
+**Path resolution:** both inline links (`[text]` followed by a parenthesized path) and reference-style links (`[text]` followed by a `[label]`) are parsed. Relative paths resolve from source-file directory; workspace-rooted-style paths get a workspace-root fallback (matches GitHub web rendering). The resolver carries both the live module-relative prefixes (`core/`, `release/`, `operations/`, `docs/`) and the legacy `pmo-platform/`/`.claude/` prefixes for backward-compat. Fenced code blocks excluded — including fences nested inside a blockquote (`> ` + fence), so a `>`-quoted worked example does not surface its illustrative links as findings.
+
+**Non-link target classes the primitive skips natively** (in `is_internal()`, so both deploy-time Check 14 and PR-time `link-check.yml` inherit them, and no allowlist upkeep is needed):
+
+| Target shape | Example | Why it is not a link |
+|---|---|---|
+| External scheme | `http://…`, `https://…`, `mailto:…`, `tel:…`, `ftp://…` | Off-repo target |
+| Pure anchor | `#section` | Same-page anchor, not a file |
+| Angle-bracket placeholder | `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`, `<sibling.md>`, `../x/<mover>.md` | Templated placeholder — `<`/`>` are not valid in committed paths |
+| Bareword meta-literal | `[text](path)`, `[#N](URL)` | No `/` and no `.` — link-SYNTAX illustration in prose, not a path |
+| Ellipsis placeholder | `[#N](...)` | A path portion of three-or-more dots is a markdown ellipsis (`.`/`..` are genuine relative refs and are NOT skipped) |
 
 ## Enforcement Surfaces
 
 | Check | Scope | Posture |
 |---|---|---|
-| **Check 14** | Governance + reference + rules + skill SKILL.md across the live modules (`core/governance/`, `core/disciplines/`, `core/schemas/`, `core/standards/`, `core/specs/`, `core/rules/`, `core/CLAUDE.md.template`, `release/governance/`, `release/references/`, `operations/OPERATIONS.md`, and `{core,operations,release}/skills/*/SKILL.md`) | warn-mode initial; logs to the deploy-check warn-log surface |
+| **Check 14** (deploy-time) | Governance + reference + rules + skill SKILL.md across the live modules (`core/governance/`, `core/disciplines/`, `core/schemas/`, `core/standards/`, `core/specs/`, `core/rules/`, `core/CLAUDE.md.template`, `release/governance/`, `release/references/`, `operations/OPERATIONS.md`, and `{core,operations,release}/skills/*/SKILL.md`) | warn-mode initial; logs to the deploy-check warn-log surface |
+| **`link-check.yml`** (PR-time) | Identical scope to Check 14 — the SAME primitive over the SAME `--target-paths`. The standing PR-gate companion to deploy-time Check 14: a broken outbound reference is caught when the PR opens, not only at the next deploy. | warn-mode initial; emits inline `::warning file=,line=::` annotations on the PR diff and passes. Flips to enforce (a broken ref fails the PR) via `WARN_MODE: 'false'` in the workflow per § Flip-to-Enforce |
 | **Check 15** | RETIRED in v2 — the release-corpus cross-link integrity check was removed; the release-corpus link surface is covered by the release-corpus link checker, and note-content is linted by Check 20 via `lint_release_corpus.py` | n/a (retired) |
 
-Check 14 calls the primitive with the live module-scoped `--target-paths`. Layer 2 (Operations) governance + references are in scope; project/operational content is excluded per CLAUDE.md domain boundary.
+Check 14 (deploy-time) and `link-check.yml` (PR-time) both call the primitive with the live module-scoped `--target-paths` — they are one engine on one source of truth, so the deploy-time and PR-time verdicts cannot drift. Layer 2 (Operations) governance + references are in scope; project/operational content is excluded per CLAUDE.md domain boundary.
+
+The PR-time gate runs on every pull request (no paths filter) so the status check always reports, and on push to `main` as a post-merge guard. A path-resolution failure (a `--target-paths` glob resolving to zero files, exit 3) is always hard-fail regardless of warn-mode — a relocated scan surface must never read green. The primitive's `--self-test` runs first as a precision probe: a parser/resolver/exclusion regression fails the PR independently of warn-mode.
 
 ## Allowlist
 
-`.claude/skip-doc-link-check.txt` — one pattern per line; trailing slash matches directories; `#` introduces comments.
+Two allowlist files, one per enforcement surface. Both use the same syntax: one pattern per line; trailing slash matches directories; `#` introduces comments.
 
-**Default entries (illustrative — the allowlist file itself is operator-instance):**
+| Allowlist | Consumed by | Tracked? | Role |
+|---|---|---|---|
+| `.claude/skip-doc-link-check.txt` | Check 14 (deploy-time) | No — operator-instance (absent from a fresh checkout) | Operator-specific suppressions on the operator's own machine |
+| `core/deploy/allowlists/skip-doc-link-check-ci.txt` | `link-check.yml` (PR-time) | **Yes** — tracked | Deterministic CI allowlist after `actions/checkout`, where the operator-instance file does not exist. Thin by design — the engine's native skips (above) do the heavy lifting, not this file |
+
+**Operator-instance default entries (illustrative — that file itself is operator-instance):**
 - `release/releases/archive/` — historical references by design
 - audit-evidence subtrees (e.g. `legacy-imp-audit-*/`, `cross-domain-drift-audit-*/`) — read-once analysis artifacts
 
-**Adding entries:** standard text editor + governance approval for non-trivial scope expansion. Allowlist additions document WHY the path is allowlisted, not WHY the operator wants to silence warnings.
+**Tracked CI allowlist entries:** archive/snapshot subtrees (`_archived/`, `_snapshots/`, `archive/`) as forward-protection — none currently exist inside the scoped corpora, so they protect future additions rather than suppressing anything today.
+
+**Adding entries:** standard text editor + governance approval for non-trivial scope expansion. Allowlist additions document WHY the path is allowlisted, not WHY the operator wants to silence warnings. Prefer a native engine skip (angle-bracket placeholder, etc.) over an allowlist entry where the target is genuinely a non-link — an allowlist is file-granular and would blind the gate to real drift in the rest of the file.
 
 ## When Scans Run
 
 | Trigger | Authority |
 |---|---|
+| **PR open / push to PR branch** | **Automatic via `link-check.yml` (the standing PR-time gate)** |
+| **Push to `main`** | **Automatic via `link-check.yml` (post-merge guard)** |
 | Post-reorg | Operator-initiated |
 | Post-PR-merge | Automatic via `./deploy.sh --check` |
 | Scheduled (deploy-time) | Every `./deploy.sh --check` invocation |
