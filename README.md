@@ -31,6 +31,8 @@ For prerequisites, the full step-by-step procedure, and troubleshooting, see [do
 
 After install, take the 5-minute taste: the first-task walkthrough at [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) exercises one real skill end-to-end — invoke it, read the output, change your workspace identity, and re-invoke to watch context flow through.
 
+For the whole-journey map — the ordered clone→working-install arc and where each host choice (repo, ticketing, KB, AI tool) plugs in — see [docs/ONBOARDING_JOURNEY.md](docs/ONBOARDING_JOURNEY.md).
+
 Then go further with **[docs/FIRST_STEPS.md](docs/FIRST_STEPS.md)**, which takes you from "I tried one skill" to running real work:
 
 1. **Explore** — the fastest way to learn the platform: open Claude Code in the repo and play Q&A with it ("explain the 13-stage pipeline", "what's a hub vs a spoke?"). The repo documents itself.
