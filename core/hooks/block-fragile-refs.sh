@@ -47,6 +47,10 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 # exemption-list pattern). This finds the allowlist in whichever checkout the hook runs
 # from — primary or worktree — which matters during engineering before deployment.
 readonly ALLOWLIST="${HOOK_DIR}/reference-durability-allowlist.txt"
+# Shared positional-issue-ref classifier (single source of the positional decision; the
+# fixture-runner and the reference-durability CI invoke this same file via `awk -f`, so
+# the positional logic cannot drift across the three surfaces). Resolves beside the hook.
+readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
 
 # --- THE FLAGGED-CLASS PATTERNS (validated against core/hooks/testdata/cutover-fixtures.txt) ---
 # Class L — markdown link sequence (fenced code blocks are stripped before scanning).
@@ -206,36 +210,27 @@ fi
 refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
 [ -z "$refblock_line" ] && refblock_line=0
 
-# Pass 2: walk each line; flag a bare issue ref that is (a) before the block / no block, or
-# (b) inside the block but not self-describing (too few non-reference words on the line).
-issueref_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$AWK" \
-  -v refline="$refblock_line" \
-  -v issuere="$ISSUEREF_RE" \
-  -v minwords="$MIN_SELFDESCRIBE_WORDS" '
-  BEGIN { infence = 0 }
-  {
-    line = $0
-    # skip blank lines
-    if (line ~ /^[[:space:]]*$/) next
-    # does this line carry a bare issue reference?
-    if (line !~ issuere) next
-    in_block = (refline > 0 && NR >= refline)
-    if (!in_block) {
-      printf "%d:OUTSIDE-BLOCK:%s\n", NR, line
-    } else {
-      # self-describing check: count words that are NOT the issue reference token
-      tmp = line
-      gsub(issuere, " ", tmp)        # remove the issue ref(s)
-      gsub(/^[#>*[:space:]-]+/, "", tmp)  # strip leading markdown/list punctuation
-      n = split(tmp, parts, /[[:space:]]+/)
-      words = 0
-      for (i = 1; i <= n; i++) { if (parts[i] ~ /[A-Za-z]/) words++ }
-      if (words < minwords) {
-        printf "%d:CONTENT-FREE-IN-BLOCK:%s\n", NR, line
-      }
-    }
-  }
-' || true)"
+# Pass 2: classify each line via the SHARED positional classifier
+# (core/hooks/lib/positional-issueref.awk — the same file the fixture-runner and the CI
+# invoke, so the positional logic is single-sourced and cannot drift). The hook has true
+# file lines already (NR over the stripped payload) and the refblock line from Pass 1; it
+# feeds the classifier "<NR>\t<line>" records and passes its own ISSUEREF_RE in so the
+# byte-identical-regex invariant is preserved. Output shape ("<lineno>:VERDICT:<line>") is
+# identical to the previous inline awk, so the downstream report wiring is unchanged.
+if [ -f "$POSITIONAL_LIB" ]; then
+  issueref_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$AWK" '{ printf "%d\t%s\n", NR, $0 }' \
+    | "$AWK" -f "$POSITIONAL_LIB" \
+        -v refline="$refblock_line" \
+        -v issuere="$ISSUEREF_RE" \
+        -v minwords="$MIN_SELFDESCRIBE_WORDS" || true)"
+else
+  # Fail-open for THIS detector only if the shared classifier is missing (a deployment
+  # defect — the lib ships in the same commit). Mirrors the hook's jq fail-open posture:
+  # a degraded positional check must not block all durable-corpus writes. The Class L and
+  # Class V detectors above are unaffected. Logged so the gap is visible.
+  log_error "DEPENDENCY-MISSING: positional classifier not found at $POSITIONAL_LIB (positional issue-ref check skipped this run)"
+  issueref_matches=""
+fi
 
 # --- AGGREGATE + REPORT ---
 have_findings=0

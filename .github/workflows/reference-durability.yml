@@ -51,6 +51,44 @@ jobs:
           REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
           ISSUEREF_RE='#\[?[0-9]+\]?'
           ALLOWLIST='core/hooks/reference-durability-allowlist.txt'
+          # Shared positional-issue-ref classifier (single source of the positional
+          # decision; the hook and the fixture-runner invoke this same file via `awk -f`).
+          # The CI was the surface that drifted (position-blind existence check); routing
+          # the decision through this lib is what fixes it and keeps it from re-drifting.
+          POSITIONAL_LIB='core/hooks/lib/positional-issueref.awk'
+
+          # map_added_lines — diff-hunk -> file-line mapper. Reads a `git diff` on stdin and
+          # emits "<TRUE_FILE_LINE>\t<CONTENT>" for each ADDED ('+') line, computing the line
+          # position in the NEW file from each `@@ -a,b +c,d @@` hunk header. This is the fix
+          # for the real bug: the previous CI compared an added-DELTA-line index (its awk NR)
+          # against a head-file line number (REFBLOCK_LINE) — two different coordinate spaces.
+          # The mapper puts added lines into true-file-line space so the comparison is valid.
+          # Lines inside fenced code blocks are NOT emitted (detectors must not fire on fenced
+          # example content) but still advance the counter (a fenced line occupies a file line),
+          # so positions stay aligned with the head-file REFBLOCK_LINE.
+          map_added_lines() {
+            awk '
+              /^@@/ {
+                m = $0
+                sub(/^@@ -[0-9]+(,[0-9]+)? \+/, "", m)
+                split(m, a, /[ ,]/)
+                newline = a[1] + 0
+                in_hunk = 1
+                fence = 0
+                next
+              }
+              in_hunk && /^\+\+\+/ { next }
+              in_hunk && /^\+/ {
+                content = substr($0, 2)
+                if (content ~ /^[[:space:]]*```/) { fence = !fence; newline++; next }
+                if (!fence) { printf "%d\t%s\n", newline, content }
+                newline++
+                next
+              }
+              in_hunk && /^-/ { next }
+              in_hunk && /^ /  { newline++; next }
+            '
+          }
 
           # Durable-corpus path predicate (mirrors the hook scope gate).
           is_durable() {
@@ -96,11 +134,13 @@ jobs:
             grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' "$f" && ALLOW_LINK=1
             grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' "$f" && ALLOW_VERSION=1
 
-            # Added lines for this file (strip the leading '+'); exclude fenced code blocks.
-            ADDED="$(git diff "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
-              | awk '/^\+\+\+/ {next} /^\+/ {print substr($0,2)}' \
-              | awk '/^[[:space:]]*```/ { fence=!fence; next } !fence { print }')"
-            [ -z "$ADDED" ] && continue
+            # Added lines for this file, mapped to TRUE file-line numbers ("<line>\t<content>"),
+            # fenced code excluded. ADDED_MAPPED carries the positions the positional rule needs;
+            # ADDED is the content-only projection the Class L / Class V grep detectors use (their
+            # behavior is unchanged — they never needed line numbers).
+            ADDED_MAPPED="$(git diff "$BASE_SHA"..."$HEAD_SHA" -- "$f" | map_added_lines)"
+            [ -z "$ADDED_MAPPED" ] && continue
+            ADDED="$(printf '%s\n' "$ADDED_MAPPED" | sed 's/^[0-9]*\t//')"
 
             # locate a reference-block header in the head file (block-relative positional rule)
             REFBLOCK_LINE="$(grep -nE "$REFBLOCK_RE" "$f" | head -1 | cut -d: -f1 || true)"
@@ -121,22 +161,17 @@ jobs:
               fi
             fi
 
-            # Positional issue-reference rule on added lines (outside-block always flags;
-            # inside-block flags only content-free lines).
-            IM="$(printf '%s\n' "$ADDED" | awk \
-              -v issuere="$ISSUEREF_RE" -v hasblock="$REFBLOCK_LINE" '
-              {
-                if ($0 ~ /^[[:space:]]*$/) next
-                if ($0 !~ issuere) next
-                tmp = $0
-                gsub(issuere, " ", tmp)
-                gsub(/^[#>*[:space:]-]+/, "", tmp)
-                n = split(tmp, parts, /[[:space:]]+/)
-                words = 0
-                for (i = 1; i <= n; i++) if (parts[i] ~ /[A-Za-z]/) words++
-                if (words < 3) { printf "content-free issue-ref: %s\n", $0 }
-                else if (hasblock == 0) { printf "issue-ref with no reference block in file: %s\n", $0 }
-              }' || true)"
+            # Positional issue-reference rule via the SHARED classifier (the exact file the
+            # hook and fixture-runner invoke). Feed the file-line-mapped added lines and the
+            # head-file REFBLOCK_LINE: a ref ABOVE the block (or with no block) flags
+            # OUTSIDE-BLOCK; a bare ref in-block flags CONTENT-FREE-IN-BLOCK; a self-describing
+            # ref BELOW the block stays clean. This replaces the previous position-blind
+            # existence check (`hasblock == 0`) — the divergence the hook caught and the CI
+            # missed — and routing through the lib guarantees hook⇄CI agreement going forward.
+            IM="$(printf '%s\n' "$ADDED_MAPPED" \
+              | awk -f "$POSITIONAL_LIB" \
+                  -v issuere="$ISSUEREF_RE" -v refline="$REFBLOCK_LINE" -v minwords=3 \
+              || true)"
             if [ -n "$IM" ]; then
               FOUND=1
               REPORT="${REPORT}### ${f} — issue-reference placement"$'\n''```'$'\n'"${IM}"$'\n''```'$'\n'
