@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # append-pipeline-event.sh — Pipeline event log writer
-# Appends one row to pmo-platform/engineering/evals/results/pipeline-event-log.md
-# per the schema at pmo-platform/reference/standards/pipeline-event-log-schema.md.
+# Appends one row to the operator-instance pipeline event log at
+# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
+# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/),
+# per the schema at release/references/standards/pipeline-event-log-schema.md.
 #
 # Per the pipeline-event spec (Stage 5).
 #
@@ -32,39 +34,134 @@ set -euo pipefail
 # Pin PATH to system tools per bypass-mode-readiness.md
 export PATH="/usr/bin:/bin"
 
-# ─── Repo-relative paths ─────────────────────────────────────────────────────
+# ─── Path resolution ─────────────────────────────────────────────────────────
+#
+# Repo root is TWO levels up from this script (release/tools/) — NOT three. The
+# prior `../../..` walked above the repo and, from a worktree at
+# .claude/worktrees/<name>/release/tools/, mis-anchored entirely (the extinct-path
+# log-writer bug).
+#
+# The event log is OPERATOR-INSTANCE content (gitignored, not in the repo tree):
+# it lives at <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md per the
+# schema doc + core/standards/depersonalization-spec.md §4. Resolution order
+# (mirrors the cleanup-orphan-state.sh / automated-closeout.sh WORKSPACE_ROOT
+# precedent): env override → operator.toml → canonical default
+# (${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/).
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "$SCRIPT_DIR/../../.." && pwd )"
-LOG_FILE="$REPO_ROOT/pmo-platform/engineering/evals/results/pipeline-event-log.md"
-WRITE_LOG="$REPO_ROOT/pmo-platform/engineering/evals/results/pipeline-event-log-write.log"
+REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+SCHEMA_FILE="$REPO_ROOT/release/references/standards/pipeline-event-log-schema.md"
 
-# ─── Enum definitions (must match pipeline-event-log-schema.md § 3) ──────────
+# Workspace root (env → operator.toml → default), per the cleanup-tool pattern.
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
+if [[ -z "$WORKSPACE_ROOT" ]]; then
+  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
+  if [[ -r "$_operator_toml" ]]; then
+    # `|| true`: an absent key makes grep exit non-zero, which would abort under
+    # set -e / pipefail — tolerate it and fall through to the default.
+    _wr=$( { grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
+  fi
+fi
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
 
-EVENT_TYPES=(
-  gate-outcome
-  decision
-  escalation
-  self-repair
-  iteration
-  scope-change
-  re-review
-  deployment-status
-  release-synthesis
-)
+# Operator-instance evals-results dir (env → operator.toml override → default).
+# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH> resolves verbatim when the operator.toml
+# override is set; otherwise to the ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/<stem>/
+# canonical default per depersonalization-spec.md §4.
+EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-}"
+if [[ -z "$EVALS_RESULTS_PATH" ]]; then
+  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
+  if [[ -r "$_operator_toml" ]]; then
+    # `|| true`: this key is absent on instances that use the canonical default;
+    # tolerate grep's non-zero exit under set -e / pipefail.
+    _er=$( { grep -E '^operator_instance_evals_results_path' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    [[ -n "$_er" ]] && EVALS_RESULTS_PATH="$_er"
+  fi
+fi
+EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/evals/results}"
 
-# Subtype enums, scoped per event_type
-SUBTYPES_gate_outcome="g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance"
-SUBTYPES_decision="d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding outcome-statement-authored"
-SUBTYPES_escalation="tier-0 tier-1 tier-2 tier-3"
-SUBTYPES_self_repair="retry escalate rollback"
-# Note: iteration subtypes use pattern `dt-eng-pass-N` or `qa-dt-pass-N` where N is
-# the post-increment pass count. Validated as starts-with prefix.
+LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
+WRITE_LOG="$EVALS_RESULTS_PATH/pipeline-event-log-write.log"
+
+# ─── Enum definitions (parsed from pipeline-event-log-schema.md § 3) ─────────
+#
+# The event-type enum and per-type literal subtypes are read DATA-DRIVEN from the
+# schema's § 3 table (the source of truth) so the validator cannot drift out of
+# sync with the doc. Only backtick-wrapped tokens are extracted, so parenthetical
+# prose in a cell (which may itself contain "/" — e.g. ALIGNED/DIVERGED/MISALIGNED)
+# never leaks into the enum. Falls back to a static mirror if the schema is
+# unreadable (e.g. invoked outside the repo tree). The `iteration` subtypes are a
+# PREFIX pattern (`dt-eng-pass-N` / `qa-dt-pass-N`), not literal enum members, so
+# they remain a hardcoded prefix list — validated by starts-with, below.
+
+# Parse the schema § 3 table → "type|subtype subtype …" lines on stdout.
+# Each data row: | `type` | description | `s1` / `s2` / … |
+# We extract col-1's backtick token as the type and col-3's backtick tokens as
+# the literal subtypes. The `iteration` row's subtypes are ignored here (prefix-
+# validated separately).
+parse_schema_enum() {
+  [[ -r "$SCHEMA_FILE" ]] || return 1
+  # Field map with FS="|" on a leading-pipe row "| col1 | col2 | col3 |":
+  #   $1="" (before leading pipe)  $2=col1 (type)  $3=col2 (description)
+  #   $4=col3 (subtypes)  $5="" (after trailing pipe)
+  # Taking col-3 ($4) ONLY means a backtick token in the description ($3) — e.g.
+  # a doc link — cannot leak into the subtype list.
+  awk -F'|' '
+    # Bound the scan to the "## 3." section ONLY, so other tables in the doc
+    # (the §11 mode table, the §11.3 field-rationale table, etc.) cannot leak
+    # bogus event types into the enum.
+    /^## 3\./        { in_s3 = 1; next }
+    in_s3 && /^## /  { in_s3 = 0 }
+    # Table rows whose col-1 is a backtick-quoted token. Token char class allows
+    # "." so subtypes like `phase-0.5-row` are captured whole.
+    in_s3 && $2 ~ /^ *`[a-z0-9.-]+` *$/ {
+      t = $2; sub(/^ *`/, "", t); sub(/` *$/, "", t)   # type from col-1
+      rest = $4                                          # subtypes from col-3 ONLY
+      subs = ""
+      while (match(rest, /`[a-z0-9.-]+`/)) {
+        tok = substr(rest, RSTART+1, RLENGTH-2)
+        subs = (subs == "" ? tok : subs " " tok)
+        rest = substr(rest, RSTART+RLENGTH)
+      }
+      print t "|" subs
+    }
+  ' "$SCHEMA_FILE"
+}
+
+# Build the enum from the schema (or static fallback). bash 3.2 (the macOS system
+# bash this corpus pins to via PATH=/usr/bin:/bin) has NO associative arrays, so
+# the map is held as two plain strings:
+#   EVENT_TYPES   — space-separated list of valid event types
+#   SUBTYPES_LINES — one "type<TAB>subtype subtype …" line per type (looked up by
+#                    validate_subtype via a tab-anchored grep)
+# `iteration` carries no literal subtype line — its subtypes are a PREFIX pattern.
+
+# Static fallback (used only when the schema file is unreadable, e.g. invoked
+# outside the repo tree); kept in lockstep with § 3.
+_FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
+  "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
+  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred outcome-statement-authored" \
+  "escalation	tier-0 tier-1 tier-2 tier-3" \
+  "self-repair	retry escalate rollback" \
+  "scope-change	tier-1-adjust tier-2-scope-change tier-3-plan-rejection redaction" \
+  "re-review	phase-a0-row phase-0.5-row" \
+  "deployment-status	deploy-skill deploy-harness deploy-package deploy-rules-mirror deploy-helper" \
+  "release-synthesis	learnings-triple qc4-05-result qc4-06-result" \
+  "test-run	suite-pass suite-fail suite-skip")"
+
+_schema_rows="$(parse_schema_enum 2>/dev/null || true)"
+if [[ -n "$_schema_rows" ]]; then
+  # parse_schema_enum emits "type|subtypes"; convert "|" → TAB for the lookup table.
+  SUBTYPES_LINES="$(printf '%s\n' "$_schema_rows" | sed 's/|/\t/')"
+else
+  SUBTYPES_LINES="$_FALLBACK_SUBTYPES_LINES"
+fi
+# EVENT_TYPES = the first field (the type) of every line, space-joined.
+EVENT_TYPES="$(printf '%s\n' "$SUBTYPES_LINES" | awk -F'\t' 'NF{print $1}' | tr '\n' ' ')"
+
+# `iteration` subtypes are a PREFIX pattern, not literal members (validated below).
 SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
-SUBTYPES_scope_change="tier-1-adjust tier-2-scope-change tier-3-plan-rejection redaction"
-SUBTYPES_re_review="phase-a0-row phase-0.5-row"
-SUBTYPES_deployment_status="deploy-skill deploy-harness deploy-package deploy-rules-mirror deploy-helper"
-SUBTYPES_release_synthesis="learnings-triple qc4-05-result qc4-06-result"
 
 REVERSIBILITY_VALUES="CHEAP MODERATE EXPENSIVE IRREVERSIBLE"
 OUTCOME_VALUES="resolved pending escalated superseded"
@@ -74,8 +171,37 @@ OUTCOME_VALUES="resolved pending escalated superseded"
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '4,21p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '10,25p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
+}
+
+# Seed the log + write-log if absent (first emit on a fresh operator instance).
+# The log gets the schema header row; the write-log starts empty. Parent dir is
+# created if missing (seed-if-absent with the schema header, so the first emit on
+# a fresh operator instance does not fail).
+seed_if_absent() {
+  /bin/mkdir -p "$EVALS_RESULTS_PATH" 2>/dev/null \
+    || die "cannot create evals-results dir: $EVALS_RESULTS_PATH" 2
+  if [[ ! -f "$LOG_FILE" ]]; then
+    {
+      printf '%s\n\n' "# Pipeline Event Log"
+      printf '%s\n\n' "Append-only structured audit rows per \`release/references/standards/pipeline-event-log-schema.md\`."
+      printf '%s\n' "| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+      printf '%s\n' "|---|---|---|---|---|---|---|---|---|---|"
+    } > "$LOG_FILE" || die "cannot seed log file: $LOG_FILE" 2
+  fi
+  [[ -f "$WRITE_LOG" ]] || : > "$WRITE_LOG" || die "cannot seed write-log: $WRITE_LOG" 2
+}
+
+# truncate_to_lines <file> <n> — keep the first <n> lines of <file>. Handles n=0
+# (BSD `head -n 0` is an error, so empty the file directly).
+truncate_to_lines() {
+  local f="$1" n="$2"
+  if [[ "$n" -le 0 ]]; then
+    : > "$f"
+  else
+    /usr/bin/head -n "$n" "$f" > "$f.tmp" && /bin/mv "$f.tmp" "$f"
+  fi
 }
 
 # is_in_list "value" "space-separated list" — exit 0 if value in list
@@ -104,18 +230,18 @@ starts_with_any() {
 validate_subtype() {
   local event_type="$1"
   local subtype="$2"
-  case "$event_type" in
-    gate-outcome) is_in_list "$subtype" "$SUBTYPES_gate_outcome" ;;
-    decision) is_in_list "$subtype" "$SUBTYPES_decision" ;;
-    escalation) is_in_list "$subtype" "$SUBTYPES_escalation" ;;
-    self-repair) is_in_list "$subtype" "$SUBTYPES_self_repair" ;;
-    iteration) starts_with_any "$subtype" "$SUBTYPES_iteration_prefixes" ;;
-    scope-change) is_in_list "$subtype" "$SUBTYPES_scope_change" ;;
-    re-review) is_in_list "$subtype" "$SUBTYPES_re_review" ;;
-    deployment-status) is_in_list "$subtype" "$SUBTYPES_deployment_status" ;;
-    release-synthesis) is_in_list "$subtype" "$SUBTYPES_release_synthesis" ;;
-    *) return 1 ;;
-  esac
+  # `iteration` is the one PREFIX-validated type (subtypes carry a trailing N).
+  if [[ "$event_type" == "iteration" ]]; then
+    starts_with_any "$subtype" "$SUBTYPES_iteration_prefixes"
+    return
+  fi
+  # All other types validate against the schema-derived literal subtype list.
+  # Look up the type's line in SUBTYPES_LINES (tab-anchored), strip the type +
+  # tab, and test membership. An unknown event_type matches no line → reject.
+  local _subs
+  _subs="$(printf '%s\n' "$SUBTYPES_LINES" | awk -F'\t' -v t="$event_type" '$1==t{print $2; exit}')"
+  [[ -n "$_subs" ]] || return 1
+  is_in_list "$subtype" "$_subs"
 }
 
 # Validate actor: hub | spoke:#N | operator | skill:NAME
@@ -169,9 +295,12 @@ done
 
 if [[ "$SELF_TEST" == "true" ]]; then
   # Validates schema enums; appends a test row then reverts.
-  if [[ ! -f "$LOG_FILE" ]]; then
-    die "Log file missing: $LOG_FILE" 2
-  fi
+  # Assert the resolved path's parent is reachable, then seed if absent.
+  [[ -d "$(dirname "$LOG_FILE")" ]] || /bin/mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null \
+    || die "self-test: resolved log parent dir not creatable: $(dirname "$LOG_FILE")" 2
+  seed_if_absent
+  echo "self-test: resolved LOG_FILE=$LOG_FILE"
+  echo "self-test: enum source=$([[ -n "$_schema_rows" ]] && echo schema-§3-data-driven || echo static-fallback) ($(printf '%s\n' $EVENT_TYPES | grep -c . ) event types)"
 
   # Snapshot
   PRE_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
@@ -183,6 +312,10 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_subtype "decision" "scope-lock" || die "self-test: subtype validation failed"
   validate_subtype "self-repair" "retry" || die "self-test: self-repair subtype check failed"
   validate_subtype "iteration" "dt-eng-pass-2" || die "self-test: iteration prefix check failed"
+  validate_subtype "test-run" "suite-pass" || die "self-test: test-run suite-pass subtype check failed"
+  validate_subtype "test-run" "suite-fail" || die "self-test: test-run suite-fail subtype check failed"
+  validate_subtype "test-run" "suite-skip" || die "self-test: test-run suite-skip subtype check failed"
+  is_in_list "test-run" "$EVENT_TYPES" || die "self-test: test-run missing from EVENT_TYPES enum"
   validate_actor "hub" || die "self-test: actor 'hub' check failed"
   validate_actor "spoke:#1" || die "self-test: actor 'spoke:#N' check failed"
   validate_actor "skill:release-planner" || die "self-test: actor 'skill:NAME' check failed"
@@ -193,6 +326,12 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # Negative tests
   if validate_subtype "decision" "bogus-subtype" 2>/dev/null; then
     die "self-test: subtype rejection check failed (bogus accepted)"
+  fi
+  if validate_subtype "test-run" "suite-bogus" 2>/dev/null; then
+    die "self-test: test-run subtype rejection check failed (suite-bogus accepted)"
+  fi
+  if validate_subtype "bogus-type" "anything" 2>/dev/null; then
+    die "self-test: unknown event_type rejection check failed (bogus-type accepted)"
   fi
   if validate_actor "bogus" 2>/dev/null; then
     die "self-test: actor rejection check failed (bogus accepted)"
@@ -208,14 +347,14 @@ if [[ "$SELF_TEST" == "true" ]]; then
   POST_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
   if [[ "$POST_LINES" -ne $((PRE_LINES + 1)) ]]; then
     # Cleanup attempt
-    /usr/bin/head -n "$PRE_LINES" "$LOG_FILE" > "$LOG_FILE.tmp" && /bin/mv "$LOG_FILE.tmp" "$LOG_FILE"
-    /usr/bin/head -n "$PRE_WRITE_LINES" "$WRITE_LOG" > "$WRITE_LOG.tmp" && /bin/mv "$WRITE_LOG.tmp" "$WRITE_LOG"
+    truncate_to_lines "$LOG_FILE" "$PRE_LINES"
+    truncate_to_lines "$WRITE_LOG" "$PRE_WRITE_LINES"
     die "self-test: append produced unexpected line count delta (expected +1, got $((POST_LINES - PRE_LINES)))"
   fi
 
   # Revert
-  /usr/bin/head -n "$PRE_LINES" "$LOG_FILE" > "$LOG_FILE.tmp" && /bin/mv "$LOG_FILE.tmp" "$LOG_FILE"
-  /usr/bin/head -n "$PRE_WRITE_LINES" "$WRITE_LOG" > "$WRITE_LOG.tmp" && /bin/mv "$WRITE_LOG.tmp" "$WRITE_LOG"
+  truncate_to_lines "$LOG_FILE" "$PRE_LINES"
+  truncate_to_lines "$WRITE_LOG" "$PRE_WRITE_LINES"
 
   # Confirm revert
   REVERT_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
@@ -247,7 +386,7 @@ fi
 [[ "$STAGE" =~ ^[0-9]+$ ]] || die "stage must be int: got '$STAGE'"
 [[ "$STAGE" -ge 1 && "$STAGE" -le 13 ]] || die "stage must be 1..13: got $STAGE"
 
-is_in_list "$EVENT_TYPE" "${EVENT_TYPES[*]}" || die "Invalid event_type: '$EVENT_TYPE' (allowed: ${EVENT_TYPES[*]})"
+is_in_list "$EVENT_TYPE" "$EVENT_TYPES" || die "Invalid event_type: '$EVENT_TYPE' (allowed: $EVENT_TYPES)"
 validate_subtype "$EVENT_TYPE" "$EVENT_SUBTYPE" || die "Invalid event_subtype '$EVENT_SUBTYPE' for event_type '$EVENT_TYPE' — see pipeline-event-log-schema.md § 3"
 validate_actor "$ACTOR" || die "Invalid actor: '$ACTOR' (allowed: hub, operator, spoke:#N, skill:NAME)"
 is_in_list "$REVERSIBILITY" "$REVERSIBILITY_VALUES" || die "Invalid reversibility: '$REVERSIBILITY' (allowed: $REVERSIBILITY_VALUES)"
@@ -277,8 +416,8 @@ fi
 
 # ─── Append + log ────────────────────────────────────────────────────────────
 
-[[ -f "$LOG_FILE" ]] || die "Log file missing: $LOG_FILE" 2
-[[ -f "$WRITE_LOG" ]] || die "Write-log missing: $WRITE_LOG" 2
+# Seed the log + write-log if this is the first emit on a fresh operator instance.
+seed_if_absent
 
 # Compute row SHA1 for write-log entry
 ROW_SHA1="$(printf '%s' "$ROW" | /usr/bin/shasum | /usr/bin/awk '{print $1}')"

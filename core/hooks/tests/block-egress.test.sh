@@ -58,6 +58,17 @@ test_case() {
   fi
 }
 
+# GitHub handle used in the gh-api "allowlisted path" cases. The deployed
+# egress-allowlist.txt resolves [OPERATOR_GITHUB] to a concrete handle at
+# install time, so a literal "[OPERATOR_GITHUB]" payload can never match (and
+# "[OPERATOR_GITHUB]" inside the allowlist pattern is a bash glob char-class
+# that cannot match itself either). The CI setup step (setup-ci-layout.sh)
+# resolves [OPERATOR_GITHUB] in the materialized allowlist to this same default
+# handle and exports PMO_TEST_GITHUB_HANDLE, so the allow-case payload and the
+# allowlist agree by construction. Override the env var to run against a
+# deployed install whose allowlist resolved to a different handle.
+GH_HANDLE="${PMO_TEST_GITHUB_HANDLE:-pmo-test-handle}"
+
 bash_payload() {
   /usr/bin/jq -n --arg cmd "$1" --arg cwd "${2:-/tmp}" \
     '{tool_name: "Bash", tool_input: {command: $cmd}, cwd: $cwd}'
@@ -195,11 +206,11 @@ echo "---"
 test_case "gh api -X POST /gists blocks (not allowlisted)" \
   "$(bash_payload 'gh api /gists -X POST -f description=foo')" 2 "BLOCK-EGRESS-007"
 
-test_case "gh api -X POST repos/[OPERATOR_GITHUB]/pmo-platform/issues allows (allowlisted)" \
-  "$(bash_payload 'gh api repos/[OPERATOR_GITHUB]/pmo-platform/issues -X POST -f title=foo')" 0
+test_case "gh api -X POST repos/<handle>/pmo-platform/issues allows (allowlisted)" \
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/issues -X POST -f title=foo")" 0
 
 test_case "gh api GET (no -X POST) allows" \
-  "$(bash_payload 'gh api repos/[OPERATOR_GITHUB]/pmo-platform/issues')" 0
+  "$(bash_payload "gh api repos/${GH_HANDLE}/pmo-platform/issues")" 0
 
 test_case "gh api -X DELETE /user blocks (not allowlisted)" \
   "$(bash_payload 'gh api /user -X DELETE')" 2 "BLOCK-EGRESS-007"

@@ -1,7 +1,9 @@
 name: Install tests
 
-# Runs the full deploy-test harness under core/deploy/tests/ against /tmp
-# sandboxes (no writes outside the sandbox roots):
+# Three jobs:
+#
+# shell-tests — runs the full deploy-test harness under core/deploy/tests/
+# against /tmp sandboxes (no writes outside the sandbox roots):
 #   - test_sandbox_roots.sh        --dry-run plumbing (CLI flag / env-var precedence)
 #   - test_install_end_to_end.sh   full real install + update flow (catches
 #                                  embedded-Python heredoc bugs the dry-run can't see)
@@ -15,8 +17,31 @@ name: Install tests
 #   - test_notify_version_skew.sh  SessionStart version-skew hook resolution
 #                                  (both layouts x skew/equal + reaches-compare proof)
 #
+# hook-tests — runs the 8 core/hooks/tests/*.test.sh bypass-mode hook tests +
+# their test-runner.sh against a sandbox that materializes the DEPLOYED hook
+# layout (hooks + token-resolved allowlists + .mode co-located) via
+# core/hooks/tests/setup-ci-layout.sh. The runner gates: any test-file FAIL
+# yields a non-zero exit → red CI.
+#
+# install-regression — runs the STANDING install/onboarding/update regression
+# suite (core/deploy/tests/run-install-regression.sh; #706 / epic #325 ticket
+# C8). The runner aggregates the install/onboarding/update deploy-test subset
+# PLUS the #319 hook-test floor (the same materialize-then-run contract) behind
+# one machine-greppable verdict (INSTALL-REGRESSION: <P> passed, <F> failed —
+# VERDICT <PASS|FAIL>) and exits non-zero on any failure → red CI. This is the
+# named standing gate the Stage 9 Phase A5 deployment-readiness checklist
+# consumes (Automation Tier 2 — CI fires it; the operator reads the verdict at
+# GO). A precision-probe step proves the gate goes RED on a deliberately-broken
+# fixture (gate-honesty against false negatives), modeled on
+# release-tooling-smoke.yml. The job overlaps shell-tests + hook-tests by design
+# (the suite IS its own regression floor); the duplication is cheap and keeps
+# the standing verdict attributable as a single check. The test-run event
+# emission is suppressed here (PMO_REGRESSION_EMIT=0) because CI has no
+# operator-instance event log; the CI job-exit is the authoritative gate.
+#
 # Platform: macOS (setup-workspace.sh hard-fails on non-Darwin per its
-# check_platform gate; the end-to-end test self-skips on Linux too).
+# check_platform gate; the end-to-end test self-skips on Linux too; the hook
+# tests use BSD-tool / macOS-path assumptions consistent with the hook layer).
 #
 # Security: this workflow does NOT consume any untrusted github.event.*
 # inputs (no issue titles, PR bodies, comment bodies, head refs, etc.).
@@ -91,3 +116,130 @@ jobs:
 
       - name: Run version-skew hook regression (test_notify_version_skew.sh)
         run: bash core/deploy/tests/test_notify_version_skew.sh
+
+  hook-tests:
+    name: Hook test harness (macOS)
+    # The 8 core/hooks/tests/*.test.sh files + their test-runner.sh exercise the
+    # bypass-mode PreToolUse hooks against the DEPLOYED runtime layout — the hooks
+    # resolve their allowlist + .mode from ${HOOK_DIR}/.. (co-located, token-
+    # resolved). A bare source checkout has no such layout, so this job
+    # materializes one in a sandbox via setup-ci-layout.sh, then runs the runner
+    # against it as the final gating step. A non-zero runner exit (any test file
+    # FAIL) fails this step → fails the job → red CI. Distinct job (not a step)
+    # so a hook failure is attributable separately from a deploy-test failure.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure jq
+        # jq is the hook dependency (bypass-mode-readiness.md Recovery § "Missing
+        # jq"); install defensively so the harness has a known baseline.
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            brew install jq
+          fi
+          jq --version
+
+      - name: Run hook test harness against materialized deployed layout — gating
+        # setup-ci-layout.sh materializes hooks + token-resolved allowlists +
+        # sandbox .mode + the test files under a /tmp sandbox .claude/hooks/
+        # (R-8: never touches the live ~/Claude/.claude/), and prints the
+        # sandbox tests dir on stdout. The runner is the final command, so its
+        # exit code gates the job.
+        run: |
+          TESTS_DIR="$(bash core/hooks/tests/setup-ci-layout.sh)"
+          echo "Materialized hook test layout at: ${TESTS_DIR}"
+          bash "${TESTS_DIR}/test-runner.sh"
+
+  install-regression:
+    name: Install/onboarding/update regression suite (macOS)
+    # The standing install/onboarding/update regression suite (#706 / epic #325
+    # ticket C8). run-install-regression.sh aggregates the install/onboarding/
+    # update deploy-test subset PLUS the #319 hook-test floor behind one verdict
+    # and exits non-zero on any failure → red CI. This is the named gate the
+    # Stage 9 Phase A5 deployment-readiness checklist reads. Distinct job (not a
+    # step in shell-tests/hook-tests) so the standing verdict is attributable as
+    # its own required check. Event emission is suppressed (no operator-instance
+    # log in CI); the job-exit is the authoritative gate.
+    #
+    # NOTE (deliberate, vs the Stage 5 spec's "add a paths: filter"): a
+    # workflow-level paths: filter would scope ALL jobs in this shared file,
+    # narrowing the unconditional shell-tests + hook-tests (#319) triggers — a
+    # behavior change to #319's wiring this change must not make. GitHub paths:
+    # is workflow-level only, and no per-job path-gate action is in this repo's
+    # approved posture, so the suite runs unconditionally on PR/push to main like
+    # its sibling jobs. The path-scoping optimization is intentionally deferred.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure jq
+        # Shared dependency of the install/deploy harness + the hook floor.
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            brew install jq
+          fi
+          jq --version
+
+      - name: Run standing install/onboarding/update regression suite — gating
+        # The aggregating entrypoint owns the member list (REGRESSION_MEMBERS +
+        # the hook floor), so this is a single step. Its non-zero exit on any
+        # member failure fails the job → red CI. PMO_REGRESSION_EMIT=0 disables
+        # the test-run event emission (CI has no operator-instance event log).
+        env:
+          PMO_REGRESSION_EMIT: '0'
+        run: bash core/deploy/tests/run-install-regression.sh
+
+      - name: Precision probe — a broken fixture MUST fail the suite
+        # Gate-honesty proof (modeled on release-tooling-smoke.yml): a deliberately
+        # FAILING member must make the runner exit non-zero. Built in a throwaway
+        # tree; the real checkout is never mutated. If a failing member stops
+        # reddening the gate, this step fails the PR.
+        env:
+          PMO_REGRESSION_EMIT: '0'
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/core/deploy/tests" "$tmp/core/hooks/tests"
+          echo "v0.0-probe" > "$tmp/.version"
+          # A single always-FAIL member.
+          cat > "$tmp/core/deploy/tests/test_broken_fixture.sh" <<'PROBE'
+          #!/usr/bin/env bash
+          printf '  FAIL: deliberately-broken fixture (precision probe)\n'
+          printf 'test_broken_fixture.sh: 0 passed, 1 failed (probe)\n'
+          exit 1
+          PROBE
+          chmod +x "$tmp/core/deploy/tests/test_broken_fixture.sh"
+          # A stub hook floor that PASSES, so the probe isolates the broken member.
+          cat > "$tmp/core/hooks/tests/setup-ci-layout.sh" <<'STUB'
+          #!/usr/bin/env bash
+          d="$(mktemp -d)"; mkdir -p "$d/.claude/hooks/tests"
+          cat > "$d/.claude/hooks/tests/test-runner.sh" <<'INNER'
+          #!/usr/bin/env bash
+          echo "AGGREGATE: PASS=1  FAIL=0"
+          exit 0
+          INNER
+          chmod +x "$d/.claude/hooks/tests/test-runner.sh"
+          echo "$d/.claude/hooks/tests"
+          STUB
+          chmod +x "$tmp/core/hooks/tests/setup-ci-layout.sh"
+          : > "$tmp/core/hooks/tests/test-runner.sh"
+          chmod +x "$tmp/core/hooks/tests/test-runner.sh"
+          # Probe runner: a copy whose manifest is ONLY the broken fixture.
+          sed -e 's#^REGRESSION_MEMBERS=(.*#REGRESSION_MEMBERS=(#' \
+              -e '/^REGRESSION_MEMBERS=($/a\
+            "test_broken_fixture.sh"
+          ' core/deploy/tests/run-install-regression.sh \
+            | sed '/^  "test_sandbox_roots.sh"/d;/^  "test_install_end_to_end.sh"/d;/^  "test_deploy_sandbox.sh"/d;/^  "test_upgrade_config_durability.sh"/d;/^  "test_install_exit_propagation.sh"/d;/^  "test_detect_install_path_spaces.sh"/d;/^  "test_lib_composition.sh"/d' \
+            > "$tmp/core/deploy/tests/run-install-regression.sh"
+          chmod +x "$tmp/core/deploy/tests/run-install-regression.sh"
+          set +e
+          PMO_REGRESSION_EMIT=0 bash "$tmp/core/deploy/tests/run-install-regression.sh" >/dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::run-install-regression.sh returned 0 with a deliberately-broken member; the regression gate is not detecting failures."
+            exit 1
+          fi
+          echo "Precision probe OK — broken fixture correctly failed the suite (exit $rc)."

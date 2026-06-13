@@ -233,7 +233,11 @@ echo "---"
 
 echo ""
 echo "================================"
-/usr/bin/printf 'Total: %d PASS, %d FAIL\n' "$PASS" "$FAIL"
+# Summary-line format MUST match test-runner.sh's parser regex
+# (^Total: N  PASS: N  FAIL: N — two-space, labeled). The canonical form used
+# by the other 7 hook test files; the runner counts this file's PASS/FAIL into
+# the aggregate only when the line conforms.
+/usr/bin/printf 'Total: %d  PASS: %d  FAIL: %d\n' $((PASS + FAIL)) "$PASS" "$FAIL"
 echo "================================"
 
 if [ "$FAIL" -gt 0 ]; then

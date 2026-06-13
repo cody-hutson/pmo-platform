@@ -64,11 +64,17 @@ assert_nonzero() {
   fi
 }
 
-# --- Test 1: real manifest produces a non-empty array when sourced through lib helper ---
-printf '\nTest 1: real manifest sourced via lib_compose_source_manifest exposes non-empty array\n'
+# --- Test 1: real manifest, sourced through the lib helper, exposes a non-empty
+#             array whose entry count matches the manifest's own declared rows ---
+# The expected count is DERIVED from the manifest file (its pipe-delimited entry
+# rows), not hardcoded, so a manifest that grows from 17 to 18 entries cannot
+# silently re-rot this assertion. The test still proves both that the array is
+# non-empty AND that the lib-sourced count equals the file's declared rows —
+# catching a partial-source regression — without embedding a literal.
+printf '\nTest 1: real manifest lib-sourced count matches manifest entry rows\n'
 test_real_manifest_via_lib() {
-  local entry_count
-  # Source lib + run lib_compose_source_manifest, then count entries via lib_compose_iterate.
+  local entry_count expected_count
+  # Source lib + run lib_compose_source_manifest, then count entries.
   entry_count=$(
     # shellcheck disable=SC1090
     source "${LIB_COMPOSITION}"
@@ -79,7 +85,10 @@ test_real_manifest_via_lib() {
       printf '0'
     fi
   )
-  assert_eq "Real manifest exposes 17 entries" "17" "${entry_count}"
+  # Expected count derived from the manifest's pipe-delimited entry rows
+  # ("<src>|<tier>|<flag>"), the single source of truth — never a literal.
+  expected_count=$(/usr/bin/grep -cE '^[[:space:]]*"[^"]+\|[^"]+\|[^"]+"' "${REAL_MANIFEST}")
+  assert_eq "lib-sourced count equals manifest entry rows" "${expected_count}" "${entry_count}"
 }
 test_real_manifest_via_lib
 

@@ -372,12 +372,17 @@ test_case "sh /tmp/evil.sh blocks" \
   "$(bash_payload 'sh /tmp/evil.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-test_case "bash $HOME/Claude/deploy.sh allows (allowlisted)" \
-  "$(bash_payload 'bash '"$HOME"'/Claude/deploy.sh')" \
+# The deploy script lives at core/deploy/deploy.sh post-modular-monolith (there
+# is no top-level $HOME/Claude/deploy.sh shim). The script-execution-allowlist
+# carries the token-free relative forms `core/deploy/deploy.sh` and
+# `./core/deploy/deploy.sh` verbatim, so these allow-cases match in both the
+# source tree (literal-token allowlist) and the CI-resolved sandbox.
+test_case "bash core/deploy/deploy.sh allows (allowlisted)" \
+  "$(bash_payload 'bash core/deploy/deploy.sh')" \
   0
 
-test_case "./deploy.sh allows (allowlisted)" \
-  "$(bash_payload ''"$HOME"'/Claude/deploy.sh --check')" \
+test_case "./core/deploy/deploy.sh allows (allowlisted)" \
+  "$(bash_payload './core/deploy/deploy.sh --check')" \
   0
 
 test_case "bash -c 'echo ok' allows (no script path)" \
