@@ -38,7 +38,7 @@ Does the file's body name AS PRIMARY consumers (per the "Primary consumer" or "P
 - `release/references/pipeline/stage-*.md` (any per-stage shard)
 - `release-planner` / `release-executor` / `pmo-qa-auditor` (release-class skills)
 - Release-class taxonomy entries (per `release/references/specs/release-class-taxonomy.md`)
-- Release Outcome Statement / RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / RELEASE_NOTES schema entries
+- Release Outcome Statement / RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / RELEASE_NOTES / CHANGELOG schema entries (the ref-permitted ledger surfaces — see §8)
 - Stage 5 / 9 / 12 / 13 gate criteria (per `core/schemas/gate-criteria-spec.md` G3/G5/G9/G12/G13)
 - Stage 3 Bundle / Stage 4 Planning / Stage 5 Solutioning / Stage 6 Engineering / Stage 7 Dev Testing / Stage 8 QA / Stage 9 Plan Review / Stage 12 Execute / Stage 13 Close as PRIMARY operational surface
 
@@ -151,7 +151,21 @@ Two files at `core/standards/` would route to `release/references/standards/` of
 
 Applies to files authored at or migrated to the new pmo-platform tree from the reorg forward. Pre-reorg placements are grandfathered per the reorg state (post-curation). Subsequent cleanups (per the full-population audit) align grandfathered placements with this rule where divergence surfaces; the two known divergences at §5 above are documented for follow-up file moves.
 
-## §8 See also
+## §8 Ref-Permitted Ledger Surfaces (the queryable enforcement input)
+
+The split rule routes a release-tracking ledger surface to the release side (Q1). A distinct property of those same surfaces is that they are **ref-permitted**: milestone and issue references, pull-request URLs, and merge SHAs are native provenance on a ledger and are NOT fragile-reference violations there. Every OTHER tracked file is ref-prohibited and must be self-contained per the reference-durability standard. This section is the single queryable enumeration of the five ref-permitted surfaces — the authoring lookup for "where may a release reference live?" and the named input the enforcement primitives realize. There is no second list: the reference-durability allowlist and the repository-integrity gate exemptions implement the table below; they do not define a parallel one.
+
+| # | Ledger surface | Canonical path | Ref-permission realized by (enforcement exemption) |
+|---|---|---|---|
+| 1 | RELEASE_LOG | `release/releases/RELEASE_LOG.md` | The `release/releases/*` exemption carried by the repository-integrity issue-reference and depersonalization gates; outside the reference-durability durable-corpus scope (not under a `core/` / `release/references/` durable glob). |
+| 2 | RELEASE_INDEX | `release/releases/RELEASE_INDEX.md` | Same `release/releases/*` exemption. |
+| 3 | RELEASE_DIGEST | `release/releases/RELEASE_DIGEST.md` | Same `release/releases/*` exemption. |
+| 4 | RELEASE_NOTES | `release/releases/notes/*.md` | Same `release/releases/*` exemption. |
+| 5 | CHANGELOG | `CHANGELOG.md` (repository top level) | The Class-U `is_ledger_exempt` case (top-level `CHANGELOG.md`). CHANGELOG is top-level, so it is already outside both the durable-corpus scan scope and the `release/releases/*` exemption; the explicit ledger-exempt case names it as a categorical ref-permitted surface rather than a per-file escape, keeping the seam closed by construction. |
+
+A reference that belongs on one of these surfaces is authored there directly. A reference that surfaces in any other tracked file is a self-containment violation: rewrite it as an inline summary at the durable rung, per the reference-durability standard.
+
+## §9 See also
 
 - [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) — orthogonal content-nature axis (UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE)
 - `knowledge-architecture.md` — K1-K5 tier taxonomy + parameterization seam (at `core/disciplines/knowledge-architecture.md`)

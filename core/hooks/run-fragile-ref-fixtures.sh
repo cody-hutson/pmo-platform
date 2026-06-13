@@ -28,6 +28,7 @@ fi
 # Detectors — byte-identical to block-fragile-refs.sh.
 LINK_RE='\]\('
 CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
 REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 ISSUEREF_RE='#\[?[0-9]+\]?'
 MIN_SELFDESCRIBE_WORDS=3
@@ -44,6 +45,14 @@ matches_class() {
       ;;
     VERSION)
       "$PRINTF" '%s\n' "$content" | "$GREP" -qE "$CUTOVER_RE"
+      ;;
+    URL)
+      # Class U: a raw github.com/<owner>/<repo>/{issues,pull,milestone} URL.
+      # Ledger-surface exemption is a path property evaluated by the hook/CI scope gate,
+      # not by this content-level regex — the fixture's CLEAN-URL cases that depend on the
+      # allow-url marker or ledger exemption are exercised at the hook/CI integration test,
+      # not here. This case asserts the regex's content-match precision only.
+      "$PRINTF" '%s\n' "$content" | "$GREP" -qE "$URL_RE"
       ;;
     ISSUEREF-OUT)
       # outside a block: a bare issue ref present is a flag
