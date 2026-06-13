@@ -1,5 +1,6 @@
 <!-- repo-integrity: allow-issue-ref -->
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
 ---
 version: cross-reference-integrity-ci
 date: 2026-06-12
