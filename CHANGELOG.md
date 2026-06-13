@@ -8,6 +8,19 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.11] - 2026-06-12
+
+### Added
+
+- **The workspace cleanup sweep can no longer delete the worktree it is running from.** Its own runtime worktree is classified as protected and survives every apply, including a forced one. *Why it matters:* a cleanup launched from inside a worktree can't destroy its own session mid-run. ([#333](https://github.com/cody-hutson/pmo-platform/issues/333))
+- **Worktrees held by any live process are off-limits to the sweep.** An all-process working-directory scan skips live-held worktrees, re-checks seconds before each removal, and blocks the affected removals rather than guessing when the scan is unavailable (decision record ADR-021). *Why it matters:* a concurrent session's workspace can't be deleted out from under it — the safety degrades toward refusal, never toward deletion. ([#326](https://github.com/cody-hutson/pmo-platform/issues/326))
+
+### Fixed
+
+- **One apply pass now reaches a clean workspace.** Branches freed by the same run's worktree removals are removed in that run through one bounded re-evaluation, instead of surviving for a second invocation. *Why it matters:* no more running the sweep twice. ([#53](https://github.com/cody-hutson/pmo-platform/issues/53))
+
+[Full notes](release/releases/notes/v1.11_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.11)
+
 ## [v1.10] - 2026-06-12
 
 Failure-mode coverage completes across the whole skill catalog: every one of the 23 skills now documents at least one domain-specific failure mode in each of the five categories — wrong-invocation, bad-input, skipped-step, output-shape, and handoff. 45 new entries (each written against the skill's real working surface and LLM-quality-graded before merge) close every remaining gap, with the biggest upgrades on the boundary behaviors: wrong-invocation coverage rose from roughly half the catalog to all of it, handoff coverage from two-thirds to all of it. Two high-volume skills gained reference checklists (project-setup scaffold verification; weekly roll-up input coverage), every modified skill carries a current version field — including three that previously had none — and all 22 deployed skills shipped with rebuilt packages. Additions-only: no existing entry, mode, or contract was changed.
