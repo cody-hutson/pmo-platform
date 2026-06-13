@@ -9,7 +9,10 @@ name: Reference durability
 # never touches a durable file), avoiding the shared-release-PR double-run that the
 # parser-clean workflow incurs. Enforces the reference-durability standard: Class L
 # (markdown links), Class V (version-cutover apparatus), and the positional
-# issue-reference rule.
+# issue-reference rule. Class U (raw github.com/.../{issues,pull,milestone} URLs) ships
+# WARN-MODE-INITIAL — it is reported in the run summary but does not fail the PR until
+# the operator's flip-to-enforce at a Stage 13 close (the ref-permitted ledger surfaces
+# are categorically exempt via is_ledger_exempt).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -48,6 +51,7 @@ jobs:
           # Detectors — byte-identical to core/hooks/block-fragile-refs.sh.
           LINK_RE='\]\('
           CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+          URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
           REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
           ISSUEREF_RE='#\[?[0-9]+\]?'
           ALLOWLIST='core/hooks/reference-durability-allowlist.txt'
@@ -102,6 +106,22 @@ jobs:
             esac
           }
 
+          # Ledger-surface exemption predicate (Class U scope guard). The ref-permitted
+          # ledger surfaces (the five named in the universal-vs-release-pipeline split
+          # rule) are categorically exempt from the raw-URL class — a ledger URL is native
+          # provenance there, exactly like the release/releases/* exemption the
+          # repo-integrity gates carry. is_durable() already excludes release/releases/*
+          # and top-level CHANGELOG.md (neither matches a durable glob), so at today's
+          # scope this predicate is defense-in-depth + self-documentation: it stays the
+          # active Class-U guard if raw-URL scanning is ever widened beyond is_durable().
+          is_ledger_exempt() {
+            case "$1" in
+              release/releases/*) return 0 ;;
+              CHANGELOG.md) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
           # Path-allowlist predicate (glob-per-line; trailing slash = directory).
           is_allowlisted() {
             local f="$1" g
@@ -122,6 +142,8 @@ jobs:
 
           FOUND=0
           REPORT=""
+          URL_FOUND=0      # Class U is warn-mode-initial — tracked separately from FOUND
+          URL_REPORT=""
 
           for f in "${CHANGED[@]}"; do
             [ -z "$f" ] && continue
@@ -130,9 +152,10 @@ jobs:
             [ -f "$f" ] || continue   # deleted file — nothing to scan
 
             # Per-file override markers (whole-file, on the head version).
-            ALLOW_LINK=0; ALLOW_VERSION=0
+            ALLOW_LINK=0; ALLOW_VERSION=0; ALLOW_URL=0
             grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' "$f" && ALLOW_LINK=1
             grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' "$f" && ALLOW_VERSION=1
+            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->' "$f" && ALLOW_URL=1
 
             # Added lines for this file, mapped to TRUE file-line numbers ("<line>\t<content>"),
             # fenced code excluded. ADDED_MAPPED carries the positions the positional rule needs;
@@ -161,6 +184,20 @@ jobs:
               fi
             fi
 
+            # Class U — raw ledger URL (WARN-MODE-INITIAL). Suppressed by the allow-url
+            # marker OR by ledger-surface exemption. Findings accumulate into a SEPARATE
+            # warn report and deliberately do NOT set FOUND=1 — Class U is reported in the
+            # run summary but does not fail the PR until the operator's flip-to-enforce.
+            # Uses the content-only ADDED projection (Class U needs no line numbers), so it
+            # composes unchanged with the shared-classifier positional rule below.
+            if [ "$ALLOW_URL" -eq 0 ] && ! is_ledger_exempt "$f"; then
+              UM="$(printf '%s\n' "$ADDED" | grep -nE "$URL_RE" || true)"
+              if [ -n "$UM" ]; then
+                URL_FOUND=1
+                URL_REPORT="${URL_REPORT}### ${f} — Class U (raw github.com/.../{issues,pull,milestone} URL)"$'\n''```'$'\n'"${UM}"$'\n''```'$'\n'
+              fi
+            fi
+
             # Positional issue-reference rule via the SHARED classifier (the exact file the
             # hook and fixture-runner invoke). Feed the file-line-mapped added lines and the
             # head-file REFBLOCK_LINE: a ref ABOVE the block (or with no block) flags
@@ -178,8 +215,31 @@ jobs:
             fi
           done
 
+          # Class U — raw ledger URL findings (WARN-MODE-INITIAL): reported in the run
+          # summary but NON-FAILING. Emitted regardless of FOUND so the warning surfaces
+          # even on a PR that otherwise passes the enforcing classes. Flip-to-enforce
+          # (move Class U into the FOUND/exit-1 path) follows the bypass-mode-readiness.md
+          # Shakedown -> Enforce ladder at an operator-signed Stage 13 close.
+          if [ "$URL_FOUND" -eq 1 ]; then
+            {
+              echo "## :warning: Reference durability — Class U (raw ledger URL) — WARN-MODE (not blocking)"
+              echo ""
+              echo "Net-new raw \`github.com/.../{issues,pull,milestone}\` URL(s) on added lines in durable-corpus files."
+              echo "A raw ledger URL is durability-ladder rung-6 — it rots on any repository move or migration."
+              echo ""
+              printf '%s\n' "$URL_REPORT"
+              echo "### Remediation"
+              echo ""
+              echo "- Summarize the referenced content inline (durability-ladder rung 1-2) rather than linking the URL."
+              echo "- The ref-permitted ledger surfaces (RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / RELEASE_NOTES / CHANGELOG) are categorically exempt."
+              echo "- Override for a durable file that genuinely needs a raw ledger URL: add \`<!-- reference-durability: allow-url -->\` anywhere in the file."
+              echo ""
+              echo "This class is warn-mode-initial — reported but not blocking until flip-to-enforce. See \`core/standards/reference-durability-standard.md\`."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [ "$FOUND" -eq 0 ]; then
-            echo ":white_check_mark: Reference durability — no net-new fragile references in durable corpus" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo ":white_check_mark: Reference durability — no net-new fragile references in durable corpus (enforcing classes L/V/issue-ref)" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -202,6 +262,6 @@ jobs:
             echo ""
             echo "Add an HTML-comment marker anywhere in the file:"
             echo ""
-            echo '`<!-- reference-durability: allow-link -->` or `<!-- reference-durability: allow-version-ref -->`'
+            echo '`<!-- reference-durability: allow-link -->`, `<!-- reference-durability: allow-version-ref -->`, or `<!-- reference-durability: allow-url -->`'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           exit 1

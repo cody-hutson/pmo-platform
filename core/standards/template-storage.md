@@ -38,6 +38,8 @@ The four skill-internal-standalone templates surfaced by Foundation Stage 5 — 
 
 The declarative source-of-truth for canonical-to-mirror propagation is the `TEMPLATE_SYNC_MAP` constant in [`deploy.sh`](../deploy/deploy.sh). Each entry is a colon-delimited 3-tuple: `<skill>:<canonical-filename>:<target-path-relative-to-skill-root>`. The deploy-sync hook reads this map at every `cmd_deploy()` invocation.
 
+The canonical source path for each entry is resolved by filename pattern in `resolve_template_sync_source()` (and its byte-aligned mirror `resolve_canonical_source()` in `build-skill-packages.sh`): `*-template.{md,csv}` → `operations/templates/`; `template-*.md` → `core/standards/`; and the explicit shared-standards-doc basenames `output-format.md` and `operational-artifacts.md` → `core/standards/`. The two explicit basenames are single-sourced shared references (consolidated from the former per-skill `references/` copies); they match neither the `template-*` nor the `*-template` pattern, so they are mapped by an explicit narrow basename rule rather than a broad "non-template → `core/standards/`" catch-all — a catch-all would silently re-home any future non-template basename. Single-sourcing a further shared standards doc means adding both its `TEMPLATE_SYNC_MAP` entries and an explicit basename to the resolver (and its package-builder mirror).
+
 ### §3.2 Hook implementation
 
 The function `sync_canonical_templates_to_source()` (defined in [`deploy.sh`](../deploy/deploy.sh)) is invoked from `cmd_deploy()` BEFORE the per-skill deploy loop. Algorithm:
@@ -75,7 +77,13 @@ skill-name/
 
 ### §3.5 Drift detection
 
-`./deploy.sh --check` Check 13 asserts every entry in `TEMPLATE_SYNC_MAP` has a source canonical AND a byte-identical mirror at the registered target. Always-enforce posture (matches Check 1 / Check 11 — structural, zero-FP profile). Failure remediation: `./deploy.sh --deploy <skill>` re-syncs.
+Two cooperating checks, blocking for registered files and collision-detected basenames:
+
+**Check 13 — registered-mirror drift (always-enforce).** `./deploy.sh --check` Check 13 asserts every entry in `TEMPLATE_SYNC_MAP` has a source canonical AND a byte-identical mirror at the registered runtime target. Always-enforce posture (matches Check 1 / Check 11 — structural, zero-FP profile): a registered mirror that diverges from canonical increments the issue count and makes `--check` (without `--warn`) exit non-zero. Failure remediation: `./deploy.sh --deploy <skill>` re-syncs. This is the enforcing freshness gate — registering a shared reference brings it under Check 13, so once `output-format.md` and `operational-artifacts.md` are registered (8 entries homed at `core/standards/` via the explicit-basename resolver rule), mutating any of their mirrors is caught here.
+
+**Check 13b — shared-reference collision (warn-mode initial).** Check 13 only sees REGISTERED files; an *unregistered* reference basename carried by two or more skills is invisible to it — the exact failure mode that let `output-format.md` exist as six independent copies held identical by discipline alone. Check 13b closes that gap: it enumerates every reference basename under `{operations,release,core}/skills/*/references/` and, for any basename carried by 2+ skills that does NOT resolve to a registered `TEMPLATE_SYNC_MAP` canonical, flags both prongs — (a) **byte-identical** copies (unregistered duplicated source that should be single-sourced and registered) and (b) **divergent** copies (same basename, different content — either intentionally per-skill, such as the four distinct per-module `README.md` files, or an unnoticed drift). Registered basenames are exempt (their byte-identity-vs-canonical is Check 13's job, and their source mirrors are deleted by single-source design). Check 13b ships warn-mode initial via the runtime `.claude/hooks/deploy-check.mode` machinery (the same `flag_warn_or_issue` / mode-resolution helper Checks 8–10 use): in warn-mode it logs a `WARN:` and appends to `deploy-check-warn-log.jsonl` without incrementing the issue count; in enforce-mode it increments the count and exits non-zero.
+
+**Flip-to-enforce path (Check 13b).** Per the [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist: (1) ≥3 days of warn-mode activity logged in `deploy-check-warn-log.jsonl`; (2) review every warn entry — each is either a true collision (single-source it + register, so it falls under Check 13) or an intentional per-skill duplicate (record it on the divergent-prong allowlist); (3) no critical false-positive patterns remaining; (4) operator confirms readiness by setting the runtime `.claude/hooks/deploy-check.mode` to `enforce`. The mode file is the RUNTIME `.claude/hooks/deploy-check.mode` (resolved by `cmd_check`); a mode file authored under `core/hooks/` is inert and does not flip the gate. The flip is an operator decision at a future Stage 13 close.
 
 ## §4 Anthropic Compatibility
 
@@ -120,12 +128,13 @@ Template Architecture (this initiative) and Project Data Architecture (abbreviat
 
 When a new template enters the canonical registry, OR a new skill consumes a canonical template or standards doc:
 
-1. Add the source file to its canonical home (`pmo-platform/reference/templates/<file>` for templates; `pmo-platform/reference/standards/template-<aspect>.md` for standards docs).
-2. Add a `TEMPLATE_SYNC_MAP` entry in [`deploy.sh`](../deploy/deploy.sh) — colon-delimited 3-tuple `<skill>:<canonical-filename>:<target-path-relative-to-skill-root>`. (No SKILL.md edit is required for the registration itself; this is a deploy.sh edit, not a skill-internal edit. SKILL.md modifications, when also needed, route through `pmo-skill-editor` per [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md).)
-3. Document the entry in §7 of this doc (Registered Mirrors).
-4. Run `./deploy.sh --deploy <skill>` to perform the initial sync.
-5. Run `./deploy.sh --check` to confirm Check 13 passes.
-6. Commit the canonical file + deploy.sh edit + this doc's §7 update in a single commit per the standard release flow ([`.claude/rules/git-workflow.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/git-workflow.md)).
+1. Add the source file to its canonical home (`operations/templates/<file>` for templates; `core/standards/template-<aspect>.md` for template-architecture standards docs; `core/standards/<file>` for a shared standards doc that is single-sourced across skills, e.g. `output-format.md`, `operational-artifacts.md`).
+2. Add a `TEMPLATE_SYNC_MAP` entry in [`deploy.sh`](../deploy/deploy.sh) — colon-delimited 3-tuple `<skill>:<canonical-filename>:<target-path-relative-to-skill-root>` — one entry per consumer skill. (No SKILL.md edit is required for the registration itself; this is a deploy.sh edit, not a skill-internal edit. SKILL.md modifications, when also needed, route through `pmo-skill-editor` per [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md).)
+3. **If the canonical filename matches neither the `*-template.{md,csv}` nor the `template-*.md` pattern** (the resolver's default routes anything else to `operations/templates/`), add an explicit basename to `resolve_template_sync_source()` in `deploy.sh` AND to its byte-aligned mirror `resolve_canonical_source()` in `build-skill-packages.sh`, mapping the basename to its canonical home. The narrow explicit-basename rule is deliberate — never a broad "non-template → `core/standards/`" catch-all.
+4. Document the entry in §7 of this doc (Registered Mirrors).
+5. Run `./deploy.sh --deploy <skill>` to perform the initial sync.
+6. Run `./deploy.sh --check` to confirm Check 13 passes (Check 13b reports no new collision once the basename is registered).
+7. Commit the canonical file + deploy.sh edit + this doc's §7 update in a single commit per the standard release flow ([`.claude/rules/git-workflow.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/git-workflow.md)).
 
 **Note on `template-protocol.md` (L4 deliverable):** `TEMPLATE_SYNC_MAP` entries that reference `template-protocol.md` are added in the L4 Stage 6 commit (after the canonical file exists at `pmo-platform/reference/standards/template-protocol.md`). Adding those entries before L4 Stage 6 lands would cause Check 13 to ENOENT-fail (canonical missing); the L3 Stage 6 commit deliberately defers them to maintain a green Check 13 across the L3→L4 commit window.
 
@@ -151,15 +160,24 @@ The authoritative list is the `TEMPLATE_SYNC_MAP` array in [`deploy.sh`](../depl
 | project-initiator | `project-md-template.md` (AC6) | `references/project-md-template.md` (top-level; preserves SKILL.md line 167 read path) |
 | pmo-process-designer | `requirements-template.md` (AC7) | `references/requirements-template.md` (top-level; preserves SKILL.md lines 156, 513 read paths) |
 
-### §7.2 Standards-doc mirrors (18 entries — 6 consumer skills × 3 standards docs, Option A)
+### §7.2 Template-architecture standards-doc mirrors (18 entries — 6 consumer skills × 3 standards docs, Option A)
 
-Per R-NEW1 Option A (approved at Collective Review 2026-05-10). 6 consumer skills × 3 standards docs = 18 entries. `template-taxonomy.md` + `template-storage.md` rows landed at L3 Stage 6; `template-protocol.md` row landed at L4 Stage 6  — all rows now LIVE in `TEMPLATE_SYNC_MAP`.
+Per R-NEW1 Option A (approved at Collective Review 2026-05-10). 6 consumer skills × 3 template-architecture standards docs = 18 entries. `template-taxonomy.md` + `template-storage.md` rows landed at L3 Stage 6; `template-protocol.md` row landed at L4 Stage 6  — all rows now LIVE in `TEMPLATE_SYNC_MAP`.
 
 | Standards doc | Consumer skills | Target path (under each skill root) | Status |
 |---|---|---|---|
 | `template-taxonomy.md` | pmo-skill-refiner, pmo-process-designer, project-initiator, delivery-engine, eval-writer, release-planner | `references/template-taxonomy.md` | LANDED — L3 Stage 6  |
 | `template-storage.md` | pmo-skill-refiner, pmo-process-designer, project-initiator, delivery-engine, eval-writer, release-planner | `references/template-storage.md` | LANDED — L3 Stage 6  |
 | `template-protocol.md` | pmo-skill-refiner, pmo-process-designer, project-initiator, delivery-engine, eval-writer, release-planner | `references/template-protocol.md` | LANDED — L4 Stage 6  |
+
+### §7.3 Shared standards-doc mirrors (8 entries — single-sourced shared references)
+
+Two shared standards docs — formerly carried as per-skill `references/` duplicate copies held identical by discipline alone — consolidated to single canonicals at `core/standards/` and registered in `TEMPLATE_SYNC_MAP` (the single-source-shared-references + enforced-rebuild work; provenance in §9). Consumer counts differ per doc (not a clean N×M product), so the entries are listed explicitly rather than as an arithmetic product. Total standards-doc mirror entries across §7.2 + §7.3 = 18 + 8 = 26; total map entries (template mirrors + standards-doc mirrors) = 13 + 26 = 39.
+
+| Standards doc | Consumer skills | Target path (under each skill root) | Status |
+|---|---|---|---|
+| `output-format.md` | comms-writer, change-management, delivery-engine, pmo-process-designer, pmo-technical-analyst, ppm-agent (6) | `references/output-format.md` | LANDED |
+| `operational-artifacts.md` | comms-writer, ppm-agent (2) | `references/operational-artifacts.md` | LANDED |
 
 ## §8 Dedup Direction
 
@@ -179,7 +197,8 @@ Active drift surfaced by Foundation Stage 5 audit (row 16): `executive-status-re
 - [`document-ecosystem-design.md` §6 Three-Layer Architecture](../disciplines/document-ecosystem-design.md) — Schema/Storage/Presentation separation that frames the PDA boundary in §5
 - [`decision-discipline.md` §2.1 Mechanism 1](../disciplines/decision-discipline.md) — Localization Check pattern applied to Anthropic compatibility verification
 - `anthropic-skills:skill-creator/SKILL.md` lines 78-84 — Per-skill self-contained model + `references/` Bundled-Resources spec (drift-checked 2026-05-10 against `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator/SKILL.md`)
-- [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md) — Mandatory tooling for skill edits (this protocol does not require pmo-skill-editor invocation; deploy.sh edits route through normal git-workflow, not the skill-editor gate)
+- [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md) — Mandatory tooling for skill edits (this protocol does not require pmo-skill-editor invocation; deploy.sh edits route through normal git-workflow, not the skill-editor gate); also carries the agent rebuild-on-canonical-edit rule for the §7.3 shared standards docs
+- Single-source shared references + enforced rebuild — the work that consolidated the six duplicate `output-format.md` copies and two `operational-artifacts.md` copies into the §7.3 canonicals, added the explicit-basename resolver rule, and shipped the Check 13b shared-reference collision detector (warn-mode initial)
 -  — Parent initiative (5-Layer Template Architecture)
 -  — L3 Storage sub-issue (this protocol's authoring scope)
 -  — L3 Storage Stage 5 Solutioning (DD-A function design; DD-C boundary text source; DD-D dedup-direction evidence)

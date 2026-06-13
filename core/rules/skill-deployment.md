@@ -38,7 +38,21 @@ The build script extracts `TEMPLATE_SYNC_MAP` from `deploy.sh` at runtime, stage
 
 **Check 13 (template-injection drift detection):**
 
-Verifies the RUNTIME mirrors (Cowork install + user-local) match canonical. If a runtime mirror is missing or differs from canonical, Check 13 reports DRIFT with `./deploy.sh --deploy <skill>` remediation. If the skill is not yet deployed at a given runtime path, Check 13 silently skips that target's verification (Check 12 separately verifies skill presence).
+Verifies the RUNTIME mirrors (Cowork install + user-local) match canonical. If a runtime mirror is missing or differs from canonical, Check 13 reports DRIFT with `./deploy.sh --deploy <skill>` remediation. If the skill is not yet deployed at a given runtime path, Check 13 silently skips that target's verification (Check 12 separately verifies skill presence). Check 13 is always-enforce — a divergent registered mirror makes `./deploy.sh --check` exit non-zero.
+
+**Check 13b (shared-reference collision detection):**
+
+Closes the "unregistered shared reference" failure mode at its root: Check 13 only sees REGISTERED files, so an unregistered reference basename carried by two or more skills (the original `output-format.md` six-copy gap) is invisible to it. Check 13b enumerates every reference basename under `{core,operations,release}/skills/*/references/` and, for any basename carried by 2+ skills that does NOT resolve to a registered `TEMPLATE_SYNC_MAP` canonical, flags both byte-IDENTICAL duplicates (single-source them and register) and DIVERGENT same-basename files (reconcile, or document as intentionally per-skill). Registered basenames are exempt — their byte-identity-vs-canonical is Check 13's job. Check 13b ships warn-mode initial via the runtime `.claude/hooks/deploy-check.mode` machinery; flip-to-enforce follows the `bypass-mode-readiness.md` Shakedown → Enforce Transition Checklist (codified in `core/standards/template-storage.md` §3.5).
+
+## Agent rebuild-on-canonical-edit
+
+Editing a canonical that is single-sourced into skill `references/` mirrors makes every dependent skill's runtime mirror and `.skill` package stale. The trigger is a path-class, not a fixed file list: **any canonical resolvable by `resolve_template_sync_source()`** — concretely `core/standards/output-format.md`, `core/standards/operational-artifacts.md`, the `template-*.md` standards docs (`template-taxonomy.md`, `template-storage.md`, `template-protocol.md`), and the `operations/templates/*` template files. After editing any such canonical, you MUST re-sync the dependents in the same change:
+
+1. Re-deploy the dependent skills — `./deploy.sh --deploy <skill> …` re-injects the canonical into each runtime mirror (Cowork install + user-local).
+2. Rebuild the dependent skills' `.skill` packages — `bash core/deploy/tools/build-skill-packages.sh <skill> …` re-injects the canonical from `TEMPLATE_SYNC_MAP` at build time (package-freshness is enforced by Check 7).
+3. Run `./deploy.sh --check` to confirm Check 13 (registered-mirror drift) and Check 13b (collision) are green.
+
+To find a canonical's dependent skills, read its `TEMPLATE_SYNC_MAP` entries in `deploy.sh` (each entry's `<skill>` field). This extends the same discipline as the "Rebuilding .skill packages after editing canonicals" block above to the registered shared standards docs — editing the canonical, not a per-skill mirror, is the only source-of-truth edit; mirrors are runtime-injected and regenerate from canonical.
 
 ## Tracked Skills
 
@@ -169,11 +183,12 @@ governance presence (Check 4), skill-roster drift (Check 5), canonical-structure
 (Check 6), package freshness (Check 7), canonical-session-path freshness (Check 8),
 rules-mirror sync (Check 9), editor audit-trail on migrated skills (Check 10),
 harness sync (Check 11), user-local skills mirror sync (Check 12), template-sync
-drift detection (Check 13), doc-link maintenance — governance + skill SKILL.md
+drift detection (Check 13) + shared-reference collision detection (Check 13b,
+warn-mode initial), doc-link maintenance — governance + skill SKILL.md
 scope (Check 14; the earlier release-corpus Check 15 was retired in v2),
 note-content lint — release-notes-standard.md §3.2 over the release notes
 (Check 20), framework-corpus version-anchor
 drift detection — catalog-registry scope (Check 18), RELEASE_LOG ↔ RELEASE_INDEX consistency (Check 23), universal-vs-localized-context authoring guardrail — DC1-DC4 signature scan over Layer-1 corpus (Check 25), doc-impact resolution at Stage 13 close — per-issue Documentation Impact declaration verified against release-branch commit range (Check 28), return-value-conformance for hub-spawned spokes — `.claude/agents/pmo-*.md` cross-reference scan (Check 29), and slash-command quoting lint — pmo-authored slash commands under `harness/*/commands/*.md` scanned for unquoted `$ARGUMENTS` in Bash-execution context (Check 30).
 Use `--check` (without `--warn`) to exit non-zero on any drift. Checks 6-7, 11-13 always-enforce;
-Checks 8-10, 14, 18, 20, 23, 25, 28, 29, and 30 default to warn-mode per `.claude/hooks/deploy-check.mode` during their
-respective shakedown windows. For structured output (Stage 13 evidence): `./deploy.sh --report`
+Checks 8-10, 13b, 14, 18, 20, 23, 25, 28, 29, and 30 default to warn-mode per `.claude/hooks/deploy-check.mode` during their
+respective shakedown windows (Check 13b is the shared-reference collision sub-assertion — its parent Check 13 stays always-enforce). For structured output (Stage 13 evidence): `./deploy.sh --report`

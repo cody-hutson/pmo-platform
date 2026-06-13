@@ -8,6 +8,7 @@ framework_version_anchor: ""
 reversibility: CHEAP / Confidence HIGH
 ---
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-url -->
 
 # Universal-Protocol vs. Localized-Context Standard
 

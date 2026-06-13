@@ -35,7 +35,7 @@ Removal, not demotion: when a reference fails the test, rewrite it as an inline 
 
 ## The flagged classes
 
-The detector flags two classes wholesale plus one positional rule. It deliberately does NOT attempt to classify an issue reference as inline-grammar versus provenance-footnote — that classification cannot be separated lexically with acceptable precision, so the detector never makes it.
+The detector flags three classes wholesale plus one positional rule. It deliberately does NOT attempt to classify an issue reference as inline-grammar versus provenance-footnote — that classification cannot be separated lexically with acceptable precision, so the detector never makes it.
 
 ### Class L — markdown links
 
@@ -53,6 +53,12 @@ Inside a reference block, an issue-reference line must additionally be self-desc
 
 This positional rule gives the durability discipline intrinsic coverage of the issue-reference class. It composes by position with any separate issue-reference-validity gate: the validity gate asks whether a reference resolves today; this rule asks whether a reference is placed and summarized so it survives a renumber. The two are disjoint properties and both run.
 
+### Class U — raw ledger URLs
+
+A raw GitHub issue, pull-request, or milestone URL — the `github.com/<owner>/<repo>/issues/<id>` form and its `pull` and `milestone` siblings — is the durability ladder's least-durable rung: a repository URL that breaks on any history rewrite or repository move. It is flagged on a net-new or modified line in a durable-corpus file. The detector keys on the `{issues,pull,milestone}` path-segment set after any owner and repository name, and anchors the segment so a bare repository URL with no third path segment does not match. The remediation is to summarize the referenced content inline (rung 1–2) rather than carry the URL, or, when an external reference is genuinely required, to declare the per-file override marker.
+
+The ref-permitted ledger surfaces — the five named in the universal-vs-release-pipeline split rule — are categorically exempt from this class: a ledger URL is native provenance on those surfaces, exactly as a bare issue reference is. The exemption is a path property, not a per-file marker, mirroring how the sibling validity gate exempts the release-tracking tree. Class U ships warn-mode-initial: a finding is reported but does not fail the gate until the operator's flip-to-enforce at a release close.
+
 ## The override-marker and allowlist mechanism
 
 Because the flagged classes are flagged wholesale, the escape valves are path-based and marker-based, NOT grammar-based.
@@ -64,9 +70,10 @@ A durable-corpus file that legitimately needs a flagged construct — for exampl
 ```
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->
+<!-- reference-durability: allow-url -->
 ```
 
-A present marker suppresses the corresponding class for that file: matches are still reported for visibility, but they do not fail the gate. This mirrors the parser-clean override pattern. A marker is a deliberate, auditable declaration that a specific file needs a specific class — it documents why the file carries the construct, not a wish to silence warnings.
+A present marker suppresses the corresponding class for that file: matches are still reported for visibility, but they do not fail the gate. The `allow-url` marker suppresses Class U; it is distinct from `allow-link` so a file that legitimately carries summarized links does not silently also suppress the raw-URL prohibition. This mirrors the parser-clean override pattern. A marker is a deliberate, auditable declaration that a specific file needs a specific class — it documents why the file carries the construct, not a wish to silence warnings.
 
 ### Path allowlist
 
