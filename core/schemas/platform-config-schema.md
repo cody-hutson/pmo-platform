@@ -56,7 +56,7 @@ The 5-rung resolver also resolves these, but their DEFAULT + SCHEMA live in [`op
 | Field | operator.toml path | Allowed values | Default | Canonical home |
 |---|---|---|---|---|
 | `default_delivery_approach` | `[methodology].default_delivery_approach` | the 8 archetypes `Scrum` / `Kanban` / `XP` / `Waterfall` / `PRINCE2` / `SAFe` / `Hybrid` / `Custom` — **referenced, not re-listed** | `"Scrum"` | enum + validation: [`project-schema.md`](project-schema.md) `delivery_approach`; archetype defs: [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md) |
-| `repo_host` / `ticketing` / `kb` / `ai_tool` | `[adapters].*` | per the `[adapters]` field comments in operator.toml | `github` / `github` / `markdown` / `claude-code` | [`operator.toml.template`](../config/operator.toml.template) `[adapters]`; the #703 onboarding seam |
+| `repo_host` / `ticketing` / `kb` / `ai_tool` | `[adapters].*` | per the `[adapters]` field comments in operator.toml | `github` / `github` / `markdown` / `claude-code` | [`operator.toml.template`](../config/operator.toml.template) `[adapters]` — the onboarding-umbrella seam (operator host-surface choices are written here at onboarding time) |
 
 ## 4. Resolution + fallback
 

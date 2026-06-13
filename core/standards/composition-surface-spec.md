@@ -6,6 +6,8 @@ composes_with: [universal-vs-localized-context.md, depersonalization-spec.md, kn
 reversibility: CHEAP / Confidence HIGH
 ---
 
+<!-- reference-durability: allow-link -->
+
 # Composition-Surface Spec
 
 ## Purpose
@@ -47,7 +49,7 @@ Recategorization is a breaking change — Stage 5 Solutioning gate.
 
 ### §1.2 Registered Composition-surface files (informative)
 
-The authoritative manifest is the `COMPOSITION_SURFACE_FILES` array in [`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh) (sourced by `setup-workspace.sh` and `update.sh`). The categories of file currently in this surface are the per-domain allowlists (`core/config/allowlists/*.txt`), the hub-state schema templates (`release/releases/hub-state/*.template`), and — as of the adapter-config-foundation release — the platform-behavior config surface [`core/config/platform-config.toml.template`](../config/platform-config.toml.template). The platform-config template ships its Layer-1 global defaults inside a §2.1 plain-text MANAGED SECTION fence; the operator extends the Layer-1 surface in its OPERATOR ADDITIONS section. Its per-tier *value* overrides are NOT carried in this surface — they live in separate Layer-2 surfaces (XDG config / `PORTFOLIO.md` / `program-config.toml` / `PROJECT.md`) per [`platform-config-schema.md`](../schemas/platform-config-schema.md).
+The authoritative manifest is the `COMPOSITION_SURFACE_FILES` array in [`core/deploy/composition-surface-manifest.sh`](../deploy/composition-surface-manifest.sh) (sourced by `setup-workspace.sh` and `update.sh`). The categories of file currently in this surface are the per-domain allowlists (`core/config/allowlists/*.txt`), the hub-state schema templates (`release/releases/hub-state/*.template`), and — as of the adapter-config-foundation release — the platform-behavior config surface [`core/config/platform-config.toml.template`](../config/platform-config.toml.template). Like every composition-surface source file, the platform-config template carries NO fences in source — install-time composition (§3.1) wraps its Layer-1 global defaults in the §2.1 plain-text MANAGED SECTION fence and appends the empty OPERATOR ADDITIONS section the operator then extends. Its per-tier *value* overrides are NOT carried in this surface — they live in separate Layer-2 surfaces (XDG config / `PORTFOLIO.md` / `program-config.toml` / `PROJECT.md`) per [`platform-config-schema.md`](../schemas/platform-config-schema.md).
 
 ---
 
