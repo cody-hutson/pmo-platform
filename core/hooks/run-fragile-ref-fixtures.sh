@@ -19,6 +19,9 @@ readonly AWK="/usr/bin/awk"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 FIXTURE="${1:-${SCRIPT_DIR}/testdata/cutover-fixtures.txt}"
+# Shared positional-issue-ref classifier (single source of the positional decision; the
+# hook and the reference-durability CI invoke this same file via `awk -f`).
+POSITIONAL_LIB="${SCRIPT_DIR}/lib/positional-issueref.awk"
 
 if [ ! -f "$FIXTURE" ]; then
   "$PRINTF" 'FAIL: fixture not found: %s\n' "$FIXTURE" >&2
@@ -64,6 +67,21 @@ matches_class() {
         }
         END { exit (flag ? 0 : 1) }
       '
+      ;;
+    ISSUEREF-POS)
+      # TRUE positional test. The content column is "<refline>|<lineno>|<line text>";
+      # split on the first two '|' and feed (lineno, line text) + refline to the SHARED
+      # classifier (core/hooks/lib/positional-issueref.awk) — the exact file the hook and
+      # CI call. FLAG iff the classifier emits a verdict line for the record.
+      local _refline _lineno _linetext _verdict
+      _refline="${content%%|*}"                 # before first '|'
+      local _rest="${content#*|}"               # after first '|'
+      _lineno="${_rest%%|*}"                     # before second '|'
+      _linetext="${_rest#*|}"                    # after second '|' (may itself contain '|')
+      _verdict="$("$PRINTF" '%s\t%s\n' "$_lineno" "$_linetext" \
+        | "$AWK" -f "$POSITIONAL_LIB" \
+            -v issuere="$ISSUEREF_RE" -v refline="$_refline" -v minwords="$MIN_SELFDESCRIBE_WORDS")"
+      [ -n "$_verdict" ]   # non-empty verdict => match (FLAG); empty => CLEAN
       ;;
     *)
       return 1

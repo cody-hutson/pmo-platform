@@ -15,8 +15,18 @@
 # where
 #   <EXPECT>  = FLAG  (the detector MUST match this line)
 #             | CLEAN (the detector MUST NOT match this line)
-#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN
+#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN | ISSUEREF-POS
 #   <content> = the literal line content presented to the detector
+#
+# The ISSUEREF-POS class is a TRUE positional test (the -OUT/-IN classes fake block
+# context with the class label; -POS carries the geometry explicitly). Its content
+# column is itself a pipe-delimited triple — "<refline>|<lineno>|<line text>" — where
+#   <refline> = the file line of the reference-block header (0 = no block in file)
+#   <lineno>  = the file line of the scanned content
+#   <line text> = the literal line presented to the shared positional classifier
+# The runner splits the content column on the first two '|' and feeds (lineno, refline,
+# line text) to core/hooks/lib/positional-issueref.awk — the same classifier the hook
+# and CI call — so the suite tests the real classifier, not a re-encoding of it.
 #
 # The harness self-test (run-fixtures embedded in the hook's companion check) asserts
 # every FLAG line matches its class detector and every CLEAN line does not.
@@ -65,3 +75,13 @@ CLEAN	ISSUEREF-IN	Sister repository-integrity gate composes by position with thi
 # violation that no other primitive enforces.
 FLAG	ISSUEREF-IN	#90001
 FLAG	ISSUEREF-IN	- #90002
+
+# ─── Positional issue-ref: block present but BELOW the ref line (the #314 divergence) ─
+# Synthetic placeholder numbers (high range; not real tracked issues). Refblock header at
+# file line 50; the body ref sits at line 20 — ABOVE the block → must FLAG OUTSIDE-BLOCK.
+# This is the exact case the position-blind CI passed and the position-aware hook caught:
+# the CI's existence-only `hasblock != 0` check sees a block somewhere in the file and lets
+# a self-describing body ref through, while the hook's `NR >= refline` flags it.
+FLAG	ISSUEREF-POS	50|20|This traces back to the original triage decision in #90002.
+# Same self-describing ref AFTER the block (line 60) → must stay CLEAN (sanctioned form).
+CLEAN	ISSUEREF-POS	50|60|Parent issue establishes the standard and enforcement spine #90002.

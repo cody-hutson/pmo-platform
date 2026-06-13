@@ -1,0 +1,27 @@
+# skip-doc-link-check-ci.txt — TRACKED CI allowlist for the PR-time link-check gate
+# (issue #169). Consumed by .github/workflows/link-check.yml via
+# `check-doc-links.py --allowlist`. One pattern per line; '#' starts a comment;
+# a trailing slash matches a directory prefix; bare patterns match by basename or
+# substring (per check-doc-links.py is_allowlisted semantics).
+#
+# DISTINCT from the operator-instance `.claude/skip-doc-link-check.txt` that
+# deploy.sh Check 14 reads: that file is operator-local (absent from a fresh
+# checkout) and carries operator-specific suppressions; THIS file is tracked and
+# minimal, so CI on `ubuntu-latest` after `actions/checkout` has a deterministic
+# allowlist. Keep it thin — the heavy lifting is done natively by the engine's
+# templated-placeholder and meta-doc-literal skips in is_internal(), NOT by this
+# file. Each entry documents WHY the path is allowlisted (per
+# doc-link-maintenance.md § Allowlist), not why warnings are silenced.
+#
+# As of issue #169 the scoped corpus is at a 0-real-residual baseline with NO
+# directory entries required (no _archived/, _snapshots/, or archive/ subtree
+# currently exists inside the scoped corpora). The directory entries below are
+# FORWARD-PROTECTION: if such a subtree is later added under the scope, its
+# historical/illustrative content must not fail the gate (per issue #169 Req 5).
+
+# ── Archive / snapshot subtrees (forward-protection; none exist in scope today)
+# Historical references inside these are intentionally frozen and must not be
+# re-resolved against the live tree.
+_archived/
+_snapshots/
+archive/
