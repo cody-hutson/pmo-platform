@@ -157,7 +157,7 @@ actions (merge duplicates, link dependencies, escalate blockers).
 tag referencing DoR or readiness.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the DoR criteria
+1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle).
 2. Evaluate each ticket against every DoR criterion
 3. For each failure:
    - Identify what's missing with specificity (not "needs AC" but "no testable
@@ -230,7 +230,7 @@ recommended adjustments, drafted escalations.
 any [DELIVERY] tag referencing DoD or release.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule. At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4.
+1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition — including the QA/Acceptance (Stage 9) → Plan Review (Stage 10) exit predicate that BLOCKS the move while a P1 defect is open (§5, the QA-gate AC; this stage exit predicate feeds the LG-6 `[LG-6-EX-2]` gate criterion). At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4.
 2. Evaluate deliverables against DoD criteria:
    - Code/config complete and committed
    - Peer review completed
@@ -629,6 +629,7 @@ Read these on first use, then as needed per mode:
 |----------|-------------|----------------|
 | `references/gate-checklists.md` | Mode C (DoR) or Mode F (DoD/Release) | Full DoR, DoD, and release readiness criteria |
 | `references/gate-definitions.md` | Mode F (gate transition), Mode G (gate decisions) | Project-lifecycle gate sequence (LG-0 Idea Screen → LG-10 Closure): per-gate entry/exit/authority/artifacts/escalation + the gate-transition BLOCK rule |
+| `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping, and the QA→Plan-Review P1-defect block |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
