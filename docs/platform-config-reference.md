@@ -54,7 +54,7 @@ This is only the global default + resolver fallback. The enum, validation, and C
 
 | Field | Status | Notes |
 |---|---|---|
-| `work_board` | **DEPRECATED ALIAS** | Superseded by `[adapters].ticketing`. Kept (not removed) because `deploy.sh`/hooks read it. New consumers should read `[adapters].ticketing`. |
+| `work_board` | **DEPRECATED ALIAS** | Kept as a deprecation alias (no current reader); superseded by `[adapters].ticketing`. It ships in the template and `setup-workspace.sh` generates it into operator configs, so it is deprecated-not-removed to preserve a clean migration path. New consumers should read `[adapters].ticketing`. |
 | `comms_platform` | active | Team-comms surface comms-writer defaults to. Values: `""` (none) · `slack` · `teams` · `email`. Default `""`. |
 
 ## 4. platform-config.toml fields (platform behavior)

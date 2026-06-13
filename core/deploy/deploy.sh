@@ -3702,7 +3702,7 @@ cmd_check() {
       # work_board alias preserved (reconciled by deprecation, NOT removed)
       if ! /usr/bin/grep -qE '^[[:space:]]*work_board[[:space:]]*=' "$c33_op" 2>/dev/null; then
         c33_findings=$((c33_findings + 1))
-        log "  detail: operator.toml.template [platform].work_board alias was removed (must be preserved for deploy.sh/hooks readers)"
+        log "  detail: operator.toml.template [platform].work_board alias was removed (must be preserved as a deprecation alias superseded by [adapters].ticketing (see ADR-021))"
       fi
     else
       flag_warn_or_issue "platform-config-surface" "$c33_op not found"
