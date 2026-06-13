@@ -1,7 +1,9 @@
 name: Install tests
 
-# Runs the full deploy-test harness under core/deploy/tests/ against /tmp
-# sandboxes (no writes outside the sandbox roots):
+# Two jobs:
+#
+# shell-tests — runs the full deploy-test harness under core/deploy/tests/
+# against /tmp sandboxes (no writes outside the sandbox roots):
 #   - test_sandbox_roots.sh        --dry-run plumbing (CLI flag / env-var precedence)
 #   - test_install_end_to_end.sh   full real install + update flow (catches
 #                                  embedded-Python heredoc bugs the dry-run can't see)
@@ -15,8 +17,15 @@ name: Install tests
 #   - test_notify_version_skew.sh  SessionStart version-skew hook resolution
 #                                  (both layouts x skew/equal + reaches-compare proof)
 #
+# hook-tests — runs the 8 core/hooks/tests/*.test.sh bypass-mode hook tests +
+# their test-runner.sh against a sandbox that materializes the DEPLOYED hook
+# layout (hooks + token-resolved allowlists + .mode co-located) via
+# core/hooks/tests/setup-ci-layout.sh. The runner gates: any test-file FAIL
+# yields a non-zero exit → red CI.
+#
 # Platform: macOS (setup-workspace.sh hard-fails on non-Darwin per its
-# check_platform gate; the end-to-end test self-skips on Linux too).
+# check_platform gate; the end-to-end test self-skips on Linux too; the hook
+# tests use BSD-tool / macOS-path assumptions consistent with the hook layer).
 #
 # Security: this workflow does NOT consume any untrusted github.event.*
 # inputs (no issue titles, PR bodies, comment bodies, head refs, etc.).
@@ -91,3 +100,37 @@ jobs:
 
       - name: Run version-skew hook regression (test_notify_version_skew.sh)
         run: bash core/deploy/tests/test_notify_version_skew.sh
+
+  hook-tests:
+    name: Hook test harness (macOS)
+    # The 8 core/hooks/tests/*.test.sh files + their test-runner.sh exercise the
+    # bypass-mode PreToolUse hooks against the DEPLOYED runtime layout — the hooks
+    # resolve their allowlist + .mode from ${HOOK_DIR}/.. (co-located, token-
+    # resolved). A bare source checkout has no such layout, so this job
+    # materializes one in a sandbox via setup-ci-layout.sh, then runs the runner
+    # against it as the final gating step. A non-zero runner exit (any test file
+    # FAIL) fails this step → fails the job → red CI. Distinct job (not a step)
+    # so a hook failure is attributable separately from a deploy-test failure.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure jq
+        # jq is the hook dependency (bypass-mode-readiness.md Recovery § "Missing
+        # jq"); install defensively so the harness has a known baseline.
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            brew install jq
+          fi
+          jq --version
+
+      - name: Run hook test harness against materialized deployed layout — gating
+        # setup-ci-layout.sh materializes hooks + token-resolved allowlists +
+        # sandbox .mode + the test files under a /tmp sandbox .claude/hooks/
+        # (R-8: never touches the live ~/Claude/.claude/), and prints the
+        # sandbox tests dir on stdout. The runner is the final command, so its
+        # exit code gates the job.
+        run: |
+          TESTS_DIR="$(bash core/hooks/tests/setup-ci-layout.sh)"
+          echo "Materialized hook test layout at: ${TESTS_DIR}"
+          bash "${TESTS_DIR}/test-runner.sh"
