@@ -1,4 +1,5 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- repo-integrity: allow-memory-ref -->
 <!-- reference-durability: allow-link -->
 # Release Plan — corpus-durability-enforcement
 

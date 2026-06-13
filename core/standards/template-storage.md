@@ -198,7 +198,7 @@ Active drift surfaced by Foundation Stage 5 audit (row 16): `executive-status-re
 - [`decision-discipline.md` §2.1 Mechanism 1](../disciplines/decision-discipline.md) — Localization Check pattern applied to Anthropic compatibility verification
 - `anthropic-skills:skill-creator/SKILL.md` lines 78-84 — Per-skill self-contained model + `references/` Bundled-Resources spec (drift-checked 2026-05-10 against `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator/SKILL.md`)
 - [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md) — Mandatory tooling for skill edits (this protocol does not require pmo-skill-editor invocation; deploy.sh edits route through normal git-workflow, not the skill-editor gate); also carries the agent rebuild-on-canonical-edit rule for the §7.3 shared standards docs
-- #316 — Single-source shared references + enforced rebuild: consolidated the six duplicate `output-format.md` copies and two `operational-artifacts.md` copies into §7.3 canonicals, added the explicit-basename resolver rule, and shipped the Check 13b shared-reference collision detector (warn-mode initial)
+- Single-source shared references + enforced rebuild — the work that consolidated the six duplicate `output-format.md` copies and two `operational-artifacts.md` copies into the §7.3 canonicals, added the explicit-basename resolver rule, and shipped the Check 13b shared-reference collision detector (warn-mode initial)
 -  — Parent initiative (5-Layer Template Architecture)
 -  — L3 Storage sub-issue (this protocol's authoring scope)
 -  — L3 Storage Stage 5 Solutioning (DD-A function design; DD-C boundary text source; DD-D dedup-direction evidence)
