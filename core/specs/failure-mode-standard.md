@@ -123,12 +123,50 @@ Every SKILL.md must enumerate at least three domain-specific anti-patterns using
 
 **Why three:** Three is the minimum that captures the input / process / output failure surface every skill has. Fewer leaves at least one axis undocumented. Scanning the current 22-skill platform:
 
-| Distribution bucket | Skills | Current Guardrails bullets | Recommended floor |
-|---|---|---|---|
-| High-complexity operational (ppm-agent, comms-writer, delivery-engine, change-management, pmo-process-designer, pmo-technical-analyst) | 6 | 11–14 | 3 (floor; these skills land 5+ naturally) |
-| Medium-complexity (artifact-generator, eval-writer, prompt-builder, pmo-skill-editor, pmo-qa-auditor) | 5 | 1–7 extended | 3 |
-| Low-complexity utility (tracker-manager, file-router, daily-status, project-initiator, weekly-status-rollup, release-executor, release-planner) | 7 | 0 | 3 |
-| Authoring/infra (build-reviewer, skill-creator, implementation-planner, implementer) | 4 | 0 | 3 |
+| Distribution bucket | Skills | Floor (G7-02) | Target range (audit-revised) | v11.01c observed |
+|---|---|---|---|---|
+| High-complexity operational (ppm-agent, comms-writer, delivery-engine, change-management, pmo-process-designer, pmo-technical-analyst) | 6 | 3 | **6–10** | 3–4 (all six at floor or one above; **0 reached 5**) |
+| Medium-complexity (artifact-generator, eval-writer, prompt-builder, pmo-skill-editor, pmo-qa-auditor) | 5 | 3 | **4–6** `[INFERRED]` | 3–4 |
+| Low-complexity utility (tracker-manager, file-router, daily-status, project-initiator, weekly-status-rollup, release-executor, release-planner) | 7 | 3 | **3–4** | 3–4 |
+| Authoring/infra (build-reviewer, skill-creator, implementation-planner, implementer) | 4 | 3 | **3–4** | 3–4 |
+
+*Floor column = the universal ≥ 3 G7-02 gate (unchanged for every bucket). Target-range column = audit-data-driven expectation per bucket; it is authoring guidance, not a gate. The high-complexity 6–10 band is lifted directly from the v11.01c audit SUMMARY §1 recommendation; the medium 4–6 upper bound is `[INFERRED]` (the audit measured medium/utility/authoring at 3–4 with no expected-vs-observed gap, so it grounds the high-complexity band directly but does not independently measure the medium band). `v11.01c observed` records what the 2026-05-02 audit measured — the gap between observed and target on the high-complexity row is precisely the floor-anchoring pattern this amendment exists to correct.*
+
+**Floor vs. target.** The ≥ 3 count is a **floor**, not a target. It is the
+minimum that makes a skill minimum-viable; it is **not** the number a
+well-specified complex skill should land at. The G7-02 gate enforces the floor
+( < 3 fails); the target-range guidance below tells authors where a skill's
+failure-mode count *should* land once its operational surface is fully
+enumerated. A skill that satisfies the floor and stops is **not** thereby
+well-specified — see the audit evidence below.
+
+**Target range (audit-data-driven).** Per the v11.01c failure-mode coverage
+audit (parent issue #902, audit dated 2026-05-02; audit folder:
+`failure-mode-coverage-audit-2026-05-02`, operator-instance analysis path),
+the **typical complex skill should document 6–10 (target band `6-10`)
+domain-specific failure modes** when its operational surface justifies the
+breadth. The audit quantified that **all 22 deployed skills landed at a count
+of 3 or 4, and zero exceeded 4** — including the six high-complexity
+operational skills the prior forecast expected to "land 5+ naturally." Four of
+those six landed at exactly 4; two landed at exactly 3. The observed reality
+contradicted the prediction at **100 % of high-complexity skills**:
+floor-anchored authoring, not surface-exhaustive authoring, was the norm. A
+high-complexity skill landing at the ≥ 3 floor is therefore **marginal by audit
+verdict** and should be expanded toward its bucket target before it is
+considered well-specified. The **6–10** value is **lifted directly from the
+v11.01c audit SUMMARY §1 recommendation** ("typical complex skill: 6–10
+domain-specific failure modes; ≥ 3 is floor for minimum-viable skill") — the
+audit is the evidence base this amendment exists to encode, not a number this
+standard invents. The target is **guidance for authors, not a new gate** — G7
+adds no count check above the floor; the `6-10` range is the rigor signal
+pmo-skill-editor Mode A and skill-creator surface at authoring time.
+
+**Applying the target to your skill.** Identify your skill's bucket above, then
+author toward that bucket's target range — not the universal floor. A utility
+skill at 3–4 is complete; a high-complexity operational skill at 3–4 is
+**under-specified** and should return to the Interview and Research phase
+(skill-creator) to surface the rest of its failure surface. The floor never
+moves; the target tells you whether you have stopped too early.
 
 **Why not a complexity-scaled floor:** Variable floors require judgment calls and a skill-complexity classifier. That is scope creep. Three is a defensible universal floor because it maps to the 3-axis failure space (input / process / output) every skill has.
 
