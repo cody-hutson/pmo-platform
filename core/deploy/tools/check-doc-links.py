@@ -76,14 +76,28 @@ INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 REF_LINK_RE = re.compile(r"\[([^\]]+)\]\[([^\]]*)\]")
 REF_DEF_RE = re.compile(r"^\[([^\]]+)\]:\s*(\S+)")
 FENCE_RE = re.compile(r"^(```|~~~)")
+# Leading blockquote markers (`>` optionally repeated, with surrounding
+# whitespace) preceding a fence — e.g. `> ```markdown`. A fenced code block
+# nested inside a blockquote (a worked example quoted via `>`) must still be
+# excluded from link extraction; without stripping the marker the fence opener
+# is not recognized and the example's illustrative links surface as findings.
+BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?:\s*>)+\s?")
 
 
 def strip_code_blocks(lines: list[str]) -> list[tuple[int, str]]:
-    """Return (1-indexed line number, content) pairs with fenced blocks blanked."""
+    """Return (1-indexed line number, content) pairs with fenced blocks blanked.
+
+    Recognizes both top-of-line fences (```` ``` ````/`~~~`) and fences nested
+    inside a blockquote (`> ```` ``` ````), so worked-example code quoted via `>`
+    is excluded from link extraction (issue #169).
+    """
     out: list[tuple[int, str]] = []
     in_fence = False
     for i, line in enumerate(lines, start=1):
-        if FENCE_RE.match(line.lstrip()):
+        # Strip any leading blockquote marker(s) before testing for a fence, so
+        # a `> ```...` opener inside a quoted example is detected.
+        defenced = BLOCKQUOTE_PREFIX_RE.sub("", line)
+        if FENCE_RE.match(defenced.lstrip()):
             in_fence = not in_fence
             out.append((i, ""))
             continue
@@ -123,6 +137,37 @@ def is_internal(target: str) -> bool:
     if target.startswith(("http://", "https://", "mailto:", "tel:", "ftp://")):
         return False
     if target.startswith("#"):
+        return False
+    # Strip the #anchor / ?query so the path-shape tests below see only the
+    # path portion (consistent with resolve_target's split at the call site).
+    path_part = target.split("?", 1)[0].split("#", 1)[0]
+    if not path_part:
+        return False
+    # Templated-placeholder skip (issue #169): a path portion that carries an
+    # angle-bracket segment (`<...>`) is a documentation placeholder, not a
+    # resolvable literal path — e.g. `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`,
+    # `../.../<mover>.md`, `<sibling.md>`. Literal `<`/`>` are not valid in
+    # committed repo file paths, so this can never false-exclude a real link.
+    # Same class as the http/mailto/# skips above; covers every `<...>` token
+    # in one rule and is self-maintaining (new token families need no upkeep).
+    if "<" in path_part and ">" in path_part:
+        return False
+    # Meta-doc-literal skip (issue #169): a path portion with NO path separator
+    # ('/') AND no filename extension ('.') cannot denote an internal markdown
+    # file — a real intra-repo link always carries a '/' (a path) or a '.' (a
+    # file extension). Bare barewords are link-SYNTAX illustration in prose —
+    # e.g. `[text](path)`, `[#N](URL)` in docs that EXPLAIN link forms.
+    # Verified against the #169 scope: of 109 such targets in the corpus, 0
+    # resolve, so this excludes only documentation literals, never a live link.
+    if "/" not in path_part and "." not in path_part:
+        return False
+    # Ellipsis-placeholder skip (issue #169): a path portion that is ONLY dots,
+    # three or more (`...`), is a markdown-syntax ellipsis placeholder (e.g. the
+    # `[#N](...)` link-shape literal in the release-notes standard), never a real
+    # path. Single '.' (current dir) and '..' (parent dir) are genuine relative
+    # references and are deliberately NOT skipped (verified: '.' resolves live in
+    # the corpus; only the `...` ellipsis is a placeholder).
+    if re.fullmatch(r"\.{3,}", path_part):
         return False
     return True
 
@@ -403,7 +448,7 @@ def emit_rewrite_map_markdown(entries: list[dict]) -> str:
 def run_self_test() -> int:
     """Sanity check: parser + resolver + rewrite-map mode + EMIT-ONLY enforcement.
 
-    7 fixtures:
+    8 fixtures:
       1. Existing: code-block exclusion + single broken ref.
       2. NEW: module-prefix-resolution (v2 prefix recognized via dual-prefix table).
       3. NEW: rewrite-map TSV output mode.
@@ -415,6 +460,12 @@ def run_self_test() -> int:
       7. NEW: --require-targets path-resolution-failure detection (zero-yield
               glob → flagged; populated scan-root → not flagged) — the #459
               fail-loud contract clause 2.
+      8. NEW (issue #169): templated-placeholder + meta-doc-literal exclusion is
+              PRECISE — `<OPERATOR_INSTANCE_*>` / `<sibling.md>` angle-bracket
+              tokens, bare barewords (`path`/`URL`), the `...` ellipsis, and a
+              blockquoted (`> ```...`) worked-example link are all skipped, WHILE
+              a real broken ref in the SAME doc still fires (the precision probe
+              that proves the exclusion is finding-removing, not gate-blinding).
     """
     import tempfile
 
@@ -554,7 +605,48 @@ def run_self_test() -> int:
         assert empty_yield == [str(empty_dir)], \
             f"fixture 7: dir with zero .md files not flagged (got {empty_yield})"
 
-    print("self-test OK (7 fixtures passed)")
+    # ─── Fixture 8: placeholder/meta-doc-literal exclusion PRECISION (issue #169)
+    # The token-class + meta-doc-literal skips must remove ONLY non-resolvable
+    # documentation placeholders, never a real broken ref in the same file —
+    # otherwise the PR gate would be blinded to genuine drift. Build one doc that
+    # mixes every excluded form with a single GENUINE broken ref and assert that
+    # exactly the genuine ref (and only it) survives extraction.
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        doc = td_path / "placeholder_precision.md"
+        doc.write_text(
+            # angle-bracket operator-instance token — skipped
+            "Operator log at [log](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>).\n"
+            # angle-bracket generic doc-illustration placeholder — skipped
+            "Move via [a sibling](<sibling.md>) or [mid-path](../x/<mover>.md).\n"
+            # bareword link-syntax literals (no '/' and no '.') — skipped
+            "Syntax shown as [text](path) and [issue](URL).\n"
+            # ellipsis placeholder — skipped
+            "Line shape `[#N](...)` rendered here: [n](...).\n"
+            # blockquoted worked-example fence — its inner link is skipped
+            "> ```markdown\n"
+            "> See [release note](release/releases/notes/v9.9_RELEASE_NOTES.md).\n"
+            "> ```\n"
+            # THE ONE GENUINE broken ref — must survive
+            "But this [real link](definitely-missing-target.md) is broken.\n"
+        )
+        findings = scan_file(doc, [])
+        assert len(findings) == 1, (
+            f"fixture 8: expected exactly 1 finding (the genuine broken ref), got "
+            f"{len(findings)}: {[f['target'] for f in findings]}"
+        )
+        assert findings[0]["target"] == "definitely-missing-target.md", (
+            f"fixture 8: surviving finding is not the genuine broken ref "
+            f"(got {findings[0]['target']!r})"
+        )
+        # Belt-and-suspenders: none of the excluded placeholder forms leaked in.
+        leaked = {f["target"] for f in findings} & {
+            "<OPERATOR_INSTANCE_RELEASE_LOG_PATH>", "<sibling.md>", "../x/<mover>.md",
+            "path", "URL", "...", "release/releases/notes/v9.9_RELEASE_NOTES.md",
+        }
+        assert not leaked, f"fixture 8: excluded placeholder(s) leaked as findings: {leaked}"
+
+    print("self-test OK (8 fixtures passed)")
     return 0
 
 
