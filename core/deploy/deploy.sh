@@ -155,7 +155,10 @@ HARNESS_OPERATOR_STATE=()
 #
 # NOTE: L4 Stage 6 (2026-05-10) landed the 6 template-protocol.md
 # entries below. The canonical file now exists at core/standards/template-
-# protocol.md; Check 13 verifies all 31 entries (was 25 at L3 Stage 6).
+# protocol.md. #316 (single-source shared refs) added 8 further entries —
+# output-format.md (×6 consumers) + operational-artifacts.md (×2) — homed at
+# core/standards/ via the explicit-basename resolver rule. Check 13 verifies
+# all 39 entries (was 31 after L4 Stage 6; 25 at L3 Stage 6).
 TEMPLATE_SYNC_MAP=(
   # ── Templates: project-initiator (12 entries — 11 mirror + 1 promotion AC6) ──
   "project-initiator:communications-tracker-template.md:references/templates/communications-tracker-template.md"
@@ -193,6 +196,19 @@ TEMPLATE_SYNC_MAP=(
   "delivery-engine:template-protocol.md:references/template-protocol.md"
   "eval-writer:template-protocol.md:references/template-protocol.md"
   "release-planner:template-protocol.md:references/template-protocol.md"
+  # ── Shared standards docs: output-format.md (6 consumers) + operational-
+  #    artifacts.md (2 consumers) = 8 entries (#316 single-source shared refs).
+  #    Canonical home core/standards/ (explicit-basename resolver rule). Single
+  #    path segment (references/<file>) so Check 1 exclusion + injected_ref_
+  #    basenames handle them; Check 13 enforces byte-identity vs canonical.
+  "comms-writer:output-format.md:references/output-format.md"
+  "change-management:output-format.md:references/output-format.md"
+  "delivery-engine:output-format.md:references/output-format.md"
+  "pmo-process-designer:output-format.md:references/output-format.md"
+  "pmo-technical-analyst:output-format.md:references/output-format.md"
+  "ppm-agent:output-format.md:references/output-format.md"
+  "comms-writer:operational-artifacts.md:references/operational-artifacts.md"
+  "ppm-agent:operational-artifacts.md:references/operational-artifacts.md"
 )
 
 # ─── Shared Functions ────────────────────────────────────────────────────────
@@ -400,22 +416,34 @@ should_full_roster() {
 resolve_template_sync_source() {
   # Resolve the source path for a TEMPLATE_SYNC_MAP canonical filename.
   # Convention:
-  #   *-template.{md,csv}       → operations/templates/<name>
+  #   output-format.md          → core/standards/<name>   (explicit; #316)
+  #   operational-artifacts.md  → core/standards/<name>   (explicit; #316)
   #   template-*.md             → core/standards/<name>
+  #   *-template.{md,csv}       → operations/templates/<name>
   # (templates → operations, template-* standards → core. The modular
   # canonical is operations/templates/ — the public-API surface per
   # docs/module-apis.md § Operations module § Public templates.)
   #
+  # The two explicit shared-standards-doc basenames (output-format.md,
+  # operational-artifacts.md) are single-sourced shared references homed in
+  # core/standards/ per template-storage.md §3 / §7.2. They match neither the
+  # template-*.md nor the *-template.{md,csv} pattern, so they are mapped by an
+  # explicit narrow basename rule rather than a broad "non-template →
+  # core/standards/" catch-all — a catch-all would silently re-home any future
+  # non-template basename and is deliberately avoided. Add a new explicit
+  # basename here when a further shared standards doc is single-sourced.
+  #
   # Args:
-  #   $1 — canonical filename (e.g., raid-log-template.csv, template-storage.md)
+  #   $1 — canonical filename (e.g., raid-log-template.csv, template-storage.md,
+  #        output-format.md)
   #
   # Echoes the resolved source path. Caller checks file existence.
   local name="$1"
-  if [[ "$name" == template-*.md ]]; then
-    echo "core/standards/$name"
-  else
-    echo "operations/templates/$name"
-  fi
+  case "$name" in
+    output-format.md|operational-artifacts.md) echo "core/standards/$name" ;;
+    template-*.md)                             echo "core/standards/$name" ;;
+    *)                                         echo "operations/templates/$name" ;;
+  esac
 }
 
 sync_canonical_templates_to_runtime() {
@@ -1867,6 +1895,73 @@ cmd_check() {
     fi
   done
   [[ "$c13_drift" == "false" ]] && log "  OK:    all ${#TEMPLATE_SYNC_MAP[@]} template-injection entries match canonical (at deployed targets)"
+
+  # ─── Check 13b: Shared-reference collision detector (warn-mode initial) ───
+  # Closes the "unregistered shared reference" failure mode at its root (#316):
+  # Check 13 only sees REGISTERED files; an unregistered reference basename
+  # carried by 2+ skills (the original output-format.md gap) is invisible to it.
+  # Check 13b enumerates every reference basename under {operations,release,
+  # core}/skills/*/references/ and, for any basename carried by 2+ skills that
+  # does NOT resolve to a registered TEMPLATE_SYNC_MAP canonical, flags BOTH
+  # prongs:
+  #   (a) byte-IDENTICAL across the copies   → unregistered duplicated source;
+  #       should be single-sourced + registered (the output-format.md pattern).
+  #   (b) DIVERGENT (same basename, content differs) → silent content drift
+  #       between copies that share a name; either intentionally per-skill
+  #       (e.g. README.md — 4 distinct copies) or an unnoticed divergence.
+  # Registered basenames are exempt: their mirrors are runtime-injected (deleted
+  # from source by single-source design) and their byte-identity-vs-canonical is
+  # Check 13's job. Warn-mode initial via flag_warn_or_issue / deploy-check.mode
+  # (per bypass-mode-readiness.md shakedown precedent); the divergent prong has a
+  # known per-skill README.md signal during shakedown — review the warn-log and
+  # add an allowlist entry (or single-source) before flip-to-enforce. Flip path:
+  # template-storage.md §3.5 + core/rules/skill-deployment.md.
+  log "Check 13b: Shared-reference collision detection"
+
+  # Registered-basename predicate: is this basename the canonical-filename of
+  # any TEMPLATE_SYNC_MAP entry? (Reuses the entry parse from Check 13.)
+  c13b_is_registered() {
+    local want="$1" entry e_rest e_canon
+    for entry in "${TEMPLATE_SYNC_MAP[@]}"; do
+      e_rest="${entry#*:}"
+      e_canon="${e_rest%%:*}"
+      [[ "$e_canon" == "$want" ]] && return 0
+    done
+    return 1
+  }
+
+  local c13b_collision=false
+  local c13b_basenames
+  # Distinct basenames carried by 2+ skill references/ trees (source only).
+  c13b_basenames=$(find operations release core -path '*/skills/*/references/*' -type f 2>/dev/null \
+    | xargs -n1 basename 2>/dev/null | sort | uniq -d)
+
+  local c13b_b
+  while IFS= read -r c13b_b; do
+    [[ -z "$c13b_b" ]] && continue
+    # Registered shared files are single-sourced — Check 13 owns them; skip.
+    if c13b_is_registered "$c13b_b"; then
+      continue
+    fi
+    # Collect every source copy of this basename + its md5.
+    local c13b_paths c13b_distinct_md5 c13b_copies
+    c13b_paths=$(find operations release core -path '*/skills/*/references/*' -type f -name "$c13b_b" 2>/dev/null | sort)
+    c13b_copies=$(printf '%s\n' "$c13b_paths" | grep -c .)
+    [[ "$c13b_copies" -lt 2 ]] && continue
+    c13b_distinct_md5=$(printf '%s\n' "$c13b_paths" | xargs md5 2>/dev/null | awk '{print $NF}' | sort -u | grep -c .)
+    c13b_collision=true
+    if [[ "$c13b_distinct_md5" -eq 1 ]]; then
+      # Prong (a): byte-identical unregistered duplicate.
+      flag_warn_or_issue "shared-reference-collision" \
+        "basename '$c13b_b' is carried byte-identical by $c13b_copies skills but is NOT registered in TEMPLATE_SYNC_MAP — single-source it to core/standards/ (or operations/templates/) + register (see template-storage.md §6). Copies: $(printf '%s ' $c13b_paths)"
+    else
+      # Prong (b): divergent same-basename across skills.
+      flag_warn_or_issue "shared-reference-divergence" \
+        "basename '$c13b_b' is carried by $c13b_copies skills with $c13b_distinct_md5 distinct contents (divergent same-basename) — either intentionally per-skill (allowlist) or an unnoticed drift; reconcile + single-source, or document as per-skill. Copies: $(printf '%s ' $c13b_paths)"
+    fi
+  done <<< "$c13b_basenames"
+
+  [[ "$c13b_collision" == "false" ]] && log "  OK:    no unregistered shared-reference collisions (all multi-skill basenames are registered or single-copy)"
 
   # ─── Check 14: Doc-link maintenance — governance + skill SKILL.md scope ───
   # Per Collective Review CR-D1 / CR-D2.
