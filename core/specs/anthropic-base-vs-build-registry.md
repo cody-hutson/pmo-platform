@@ -107,9 +107,10 @@ skills") literally while disclosing the canary's source-only status transparentl
 See [framework §3.3 Registry Update Protocol](../../release/references/protocols/platform-health-audit-framework.md)
 for the (a/b/c) trigger taxonomy:
 
-- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-022](../ADRs/ADR-022-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-022 holds the rule; this trigger cites it, it does not restate it.
+- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-021 holds the rule; this trigger cites it, it does not restate it.
 - (b) Anthropic releases new skill — registry walked for new overlap relationships
 - (c) Anthropic deprecates existing skill — affected `anthropic_overlap_status` re-classified
+- (d) Existing PMO skill changes its Anthropic sourcing relationship (adopts, drops, or alters an `extends` / `pass-through` runtime coupling) — re-observe the affected row: update `anthropic_overlap_status` + `anthropic_skill_ref` + `overlap_rationale` with the blast-radius × commodity-stability justification per [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md). ADR-021 holds the rule; this trigger cites it, it does not restate it.
 
 See [framework §3.5](../../release/references/protocols/platform-health-audit-framework.md) for the 5-trigger event
 taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
