@@ -12,6 +12,8 @@ source_observations:
   - "operator.toml is the depersonalization token-vocabulary source (chmod 600, security-sensitive, rarely-changed) per depersonalization-spec.md §1; bundling/release-class/relationship-mapping tuning is frequently-calibrated and PII-free — a different change cadence, audience, and governance weight."
 ---
 
+<!-- repo-integrity: allow-issue-ref -->
+
 # ADR-021 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior
 
 ## Status
