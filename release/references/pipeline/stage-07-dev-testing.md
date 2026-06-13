@@ -37,7 +37,7 @@ Contextual: `core/rules/`, `principal-standard-checklist.md`, `regression-checks
 Set at Stage 7: quality review scores (1-5 per dimension), finding list with severity, escape rate, overall verdict (PASS/CONDITIONAL PASS/FAIL).
 
 ## 5. Process
-**Phase A — Structural Review (Tier 1 Auto):** 7 deterministic checks — PR completeness (Blocker), layer boundary (Blocker), deployed copy sync (Blocker), sub-task completion (Warning), regression check (Warning), **deprecated-path scan for new-file deliverables (Blocker, conditional)**, **domain-practice provenance verification (Warning, conditional — per § Domain-Practice Provenance Verification Step below)**.
+**Phase A — Structural Review (Tier 1 Auto):** 7 always-on deterministic checks + 1 conditional (A8 runtime-suite gate) — PR completeness (Blocker), layer boundary (Blocker), deployed copy sync (Blocker), sub-task completion (Warning), regression check (Warning), **deprecated-path scan for new-file deliverables (Blocker, conditional)**, **domain-practice provenance verification (Warning, conditional — per § Domain-Practice Provenance Verification Step below)**, **A8 runtime-suite gate (Blocker, conditional — per § A8 Runtime-Suite Gate below)**.
 
 **Deprecated-path scan for new-file deliverables (Source: deprecated-path scan spec):** For each new file in the PR scope, execute a deterministic grep scan against the release's `Files Removed` list. The list is sourced from the release plan's explicit `Files Removed` section when present; otherwise derive via `git diff main..release/<milestone> --diff-filter=D --name-only`. For each match, classify as Tier 1 (Engineering re-author via `fix(dt):` commit per [DT↔Engineering Iteration Loop Protocol](#dtengineering-iteration-loop-protocol)) by default. **Exception:** matches where the PR body explicitly documents the reference as "intentional documentary reference to deprecated path with paired new-path fallback" are downgraded to Note severity (no routing). Tier escalation to Tier 2 (Scope Change) when re-author requires design revision; Tier 3 (Plan Rejection) when the removed path was load-bearing on the new file's premise.
 
@@ -69,6 +69,23 @@ grep -nE "domain_practice:.*\bdomain:[[:space:]]*[A-Za-z]" release/releases/plan
 | Label present, Mode B `UNSOURCED-DOMAIN` with no `rationale` sub-field | Warning | Tier 1 — Engineering adds rationale via `fix(dt):` commit |
 | Label present, Mode B `UNSOURCED-DOMAIN` with rationale — but rationale does not name the unresolved domain | Note | Logged; no routing (the explicit UNSOURCED-DOMAIN flag with any rationale satisfies the disclosure obligation) |
 | Label present, but the mandatory in-label `domain:` class field is absent (or placed as a separate top-level key rather than inside `domain_practice`) | Warning | Tier 1 — Engineering adds the in-label `domain:` class field via `fix(dt):` commit; the field is mandatory in every mode per Stage 4 §5.7 |
+
+**A8 Runtime-Suite Gate (Blocker, conditional):** When the PR touches a code path that maps to a runtime test suite per [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) (rows 1–4), Phase A runs the selected suite as a gate input and records the outcome as a `test-run` event. This is a Tier-1 deterministic check (a suite passes or fails — it is not an LLM-graded quality score, so it belongs in Phase A, not the Phase C scored dimensions). A doc/governance/spec-only PR matches the map's no-match row → A8 emits `test-run/suite-skip` and is a no-op gate (no ceremony).
+
+**Execution environment:** the selected runner executes in a **`HOME`-overridden `/tmp` sandbox** (`HOME=$(mktemp -d)` before invocation) — the suite mutates a real install path; unsandboxed it corrupts the operator's live `~/.claude/`. Two execution loci, same result surface: (1) **CI (authoritative)** — the deploy/hook suites run as discrete steps in `.github/workflows/install-tests.yml`; A8's preferred evidence is the CI run result (`projects_to:actions-run:<url>` in the event payload); (2) **Local DT fallback** — when CI evidence is unavailable at review time, the DT spoke runs the selected runner locally under the `/tmp` HOME-override and records the pass/fail counts.
+
+**Pass/fail → verdict mapping (the gate teeth):**
+
+| Suite result | A8 finding | Severity | Phase D verdict effect | `test-run` subtype emitted |
+|---|---|---|---|---|
+| All selected suites pass | A8 clean | — (no finding) | no effect | `suite-pass` |
+| Any selected suite fails | A8-FAIL | **Blocker** | FAIL (any Blocker → FAIL per Phase D) → routes to Engineering as Tier 1 `fix(dt):` when fixable-in-scope, else Tier 2/3 | `suite-fail` |
+| No path matches (map no-match row) | A8 not-applicable | — | no effect | `suite-skip` |
+| Suite selected but runner errors (infra) | A8-INFRA | Warning | logged; operator / CI investigates (not an Engineering code fix) | `suite-fail` with `reason:runner-error` |
+
+A failing runtime suite is the strongest possible "the code does not work" signal — stronger than any content-quality dimension — so it is a Blocker, consistent with Phase D's "any blocker → FAIL". The A8 outcome populates the **Test-results** field of the DT↔QA Handoff Payload (see § DT↔QA Handoff Protocol → Forward Handoff).
+
+**Cutover discipline:** Applies to all releases going forward.
 
 **Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning).
 
@@ -125,6 +142,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 | `gate-outcome` | `dt-pass` / `dt-conditional-pass` / `dt-return` | DT verdict rendered at end of Phase A review; ALSO captured in `calibration-data.md` — payload carries `projects_to: calibration-data.md:<row-anchor>` | `spoke:#N` (DT spoke) |
 | `iteration` | `dt-eng-pass-N` | DT↔Eng iteration counter post-increment per DT↔Engineering Iteration Loop Protocol below; ALSO captured in `iteration-log.md` — payload carries `projects_to: iteration-log.md:<row-anchor>` | `hub` |
 | `scope-change` | `tier-1-adjust` | Escape detected during deprecated-path scan or AC re-check; routed as Tier 1 finding to Engineering for `fix(dt):` commit | `spoke:#N` |
+| `test-run` | `suite-pass` / `suite-fail` / `suite-skip` | Phase A8 runs the selected runtime suite per [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md); `suite-fail` → Blocker → FAIL | `spoke:#N` (DT spoke) |
 
 Cutover discipline: Applies to all releases going forward — this stage emits these events for any release at Stage 7.
 
@@ -300,6 +318,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Escape summary | Table: `Origin stage · Count` | Phase D | Stage 7 escape count + calibration |
 | Downstream attention | List of F-IDs flagged for Stage 8 scrutiny (may be `None`) | Phase E | Focuses Stage 8 review |
 | Cross-issue notes | Markdown bullets (may be `None`) | Phase E | Release-level context |
+| Test-results | Table: `Suite · Selected-by (map row #) · Result (PASS / FAIL / SKIP) · Pass/Fail counts · Env · Evidence (Actions URL or local) · pipeline-event ts` (single line `NONE — no runtime code path changed` when the map's no-match row fired) | Phase A8 | Confirms the runtime-code gate ran; carries the machine-readable outcome QA / downstream reads without opening Actions logs |
 
 #### Format conventions
 
@@ -314,6 +333,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Severity vocabulary | `Blocker` / `Major` / `Minor` / `Cosmetic` / `Informational` | Matches persona and the routing protocol |
 | Routing tier values | `Tier 1` / `Tier 2` / `Tier 3` / `—` (Notes) | Per the inter-stage feedback protocol and the iteration-loop classification |
 | Origin stage | `S4` / `S5` / `S6` / `S7 (pass N)` / `S8 (return)` | Enables escape provenance |
+| Test-results table | Columns exactly `Suite · Selected-by · Result · Pass/Fail · Env · Evidence · Event ts`; `Result` ∈ `PASS` / `FAIL` / `SKIP`; one row per selected suite, or a single `NONE — …` line | Deterministic extraction of the runtime-gate outcome |
 
 **Severity vocabulary reconciliation (Phase D ↔ Findings table):** Phase D's `Blocker / Warning / Note` are verdict-severity buckets (3-bucket) used to render the overall pass/fail verdict. The Findings-table `Severity` column reports finding-level severity using the 5-bucket vocabulary (`Blocker / Major / Minor / Cosmetic / Informational`). DT skills emitting findings into the Handoff Payload MUST translate at report-assembly time as follows:
 
@@ -362,6 +382,18 @@ Phase D's verdict line continues to use the 3-bucket vocabulary; only the Findin
 **Downstream attention:** None — all findings are Cosmetic / Informational.
 
 **Cross-issue notes:** the DT-Eng iteration loop will specialize this protocol at DT↔Engineering; no blocking dependency.
+
+**Test-results:** NONE — no runtime code path changed (doc/governance change; selection-map no-match row → `test-run/suite-skip`).
+```
+
+When the PR touches a runtime code path, the Test-results block renders one row per selected suite instead of the `NONE` line:
+
+```markdown
+**Test-results:**
+| Suite | Selected-by | Result | Pass/Fail | Env | Evidence | Event ts |
+|---|---|---|---|---|---|---|
+| hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | 2026-06-13T14:00:00Z |
+| deploy-suite | map row 2 | PASS | 24/0 | sandbox-home-tmp | actions-run:<url> | 2026-06-13T14:00:01Z |
 ```
 
 #### Parse contract
@@ -423,7 +455,7 @@ When DT's post-return iteration reaches `PASS` or `CONDITIONAL PASS`, DT posts a
 | Additional findings surfaced | Count (may be 0) with F-ID list | QA attention flag for Pass M+1 |
 | DT iterations contributed | Integer | Composed-loop calibration input |
 
-The Verified Signal augments the original Forward Handoff (it does not replace it). Its `verdict` (enum: `PASS` / `CONDITIONAL PASS`), `DT iterations contributed` (integer), and `Origin` labels applied to newly surfaced findings follow the forward-handoff enum vocabulary so that QA Phase A can extract them with the same parser. QA Pass M+1 entry validation re-checks the original Handoff Payload (the 9 required handoff fields remain authoritative) plus the Verified Signal closures — it does NOT validate the Verified Signal as a standalone handoff payload. The Verified Signal's 6 fields above are the complete contract for the signal itself; the re-entry gate passes when (a) the original Handoff Payload still parses, (b) each listed QA finding ID is marked closed with a resolution commit, and (c) the DT re-review verdict is `PASS` or `CONDITIONAL PASS`.
+The Verified Signal augments the original Forward Handoff (it does not replace it). Its `verdict` (enum: `PASS` / `CONDITIONAL PASS`), `DT iterations contributed` (integer), and `Origin` labels applied to newly surfaced findings follow the forward-handoff enum vocabulary so that QA Phase A can extract them with the same parser. QA Pass M+1 entry validation re-checks the original Handoff Payload (the 10 required handoff fields remain authoritative) plus the Verified Signal closures — it does NOT validate the Verified Signal as a standalone handoff payload. The Verified Signal's 6 fields above are the complete contract for the signal itself; the re-entry gate passes when (a) the original Handoff Payload still parses, (b) each listed QA finding ID is marked closed with a resolution commit, and (c) the DT re-review verdict is `PASS` or `CONDITIONAL PASS`.
 
 #### Integration with DT-Eng iteration loop
 

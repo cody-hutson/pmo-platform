@@ -1,6 +1,6 @@
 ---
 title: Pipeline Event Log Schema
-purpose: Unified 10-field schema and 9 event-type enum for the additive append-only audit-trail capture surface at `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md`
+purpose: Unified 10-field schema and 10 event-type enum for the additive append-only audit-trail capture surface at `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md`
 applies_to: hub-spoke-bridge.md, release-personas.md (Stages 2-13), pipeline/stage-{02..09,12,13}.md §11, future skills release-planner / release-executor / principal-engineer
 parallel_to: gate-evaluation-spec.md (calibration-data surface), handoff-coordinator-spec.md (iteration-log surface), decision-discipline.md § 4 (observation surface)
 source: Stage 5 Solutioning + Collective Review scope-lock APPROVED 2026-05-16
@@ -49,7 +49,7 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | 9 | `outcome` | enum: `resolved` / `pending` / `escalated` / `superseded` | terminal state of the event | `resolved` |
 | 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or pipe-escaped key:value pairs; longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
 
-## 3. Event-Type Enum (9 values) with Subtypes
+## 3. Event-Type Enum (10 values) with Subtypes
 
 | `event_type` | Description | Allowed `event_subtype` values |
 |---|---|---|
@@ -62,8 +62,17 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | `re-review` | Phase A0 / Phase 0.5 re-review row appended to instrumentation log | `phase-a0-row` / `phase-0.5-row` |
 | `deployment-status` | Per-file or per-target deploy outcome at Stage 12 | `deploy-skill` / `deploy-harness` / `deploy-package` / `deploy-rules-mirror` / `deploy-helper` |
 | `release-synthesis` | Per-release Stage 13 row carrying learnings triple + QC4-05 verdict | `learnings-triple` / `qc4-05-result` / `qc4-06-result` (Stage 13 QC4-06 verdict ATTAINED/PARTIALLY-ATTAINED/NOT-ATTAINED; applies going forward) |
+| `test-run` | Runtime code-test suite execution at Stage 6 (author self-verification) or Stage 7 (DT gate); the suite is selected per [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) | `suite-pass` / `suite-fail` / `suite-skip` |
 
 Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` rejects unknown subtypes with non-zero exit. Adding a subtype requires a governance change per `release/governance/release-process.md` § Inter-Stage Feedback Protocol Tier 2 / Tier 3.
+
+**`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, pipe-free per § 4.3):
+
+```markdown
+| 2026-06-13T14:00:00Z | v1.12 | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
+| 2026-06-13T14:00:01Z | v1.12 | 7 | test-run | suite-fail | spoke:#N | #N | CHEAP | escalated | suite:deploy-suite; selected-by:glob-2; pass:24; fail:1; env:sandbox-home-tmp; sha:def5678 |
+| 2026-06-13T14:00:02Z | v1.12 | 6 | test-run | suite-skip | spoke:#N | #N | CHEAP | resolved | suite:NONE; selected-by:no-match; reason:doc-only-change; sha:9abcdef |
+```
 
 ## 4. Constraints
 
