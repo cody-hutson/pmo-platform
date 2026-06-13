@@ -26,7 +26,7 @@ The map is keyed on **path-glob, not version**, so it stays accurate without man
 
 ## 2. Selection table
 
-Selection is **deterministic**: evaluate rows top-to-bottom; the **most-specific glob wins** (a more-specific row above a broader row takes precedence). Row 5 is the explicit no-match fallback — a change that matches no runtime path is an honest `test-run/suite-skip`, not a silent gap.
+Selection is **deterministic**: evaluate rows top-to-bottom; the **most-specific glob wins** (a more-specific row above a broader row takes precedence). The last row is the explicit no-match fallback — a change that matches no runtime path is an honest `test-run/suite-skip`, not a silent gap.
 
 | # | Changed-path glob | Gating suite | Runner invocation | Sandbox | Notes |
 |---|---|---|---|---|---|
@@ -34,9 +34,10 @@ Selection is **deterministic**: evaluate rows top-to-bottom; the **most-specific
 | 2 | `core/deploy/**` (other) | deploy suite | the deploy `run:` steps in `.github/workflows/install-tests.yml` (sandbox / install / exit-propagation / version-skew) | HOME→/tmp | install/onboarding/update substrate |
 | 3 | `core/hooks/**` | hook suite | `bash core/hooks/tests/test-runner.sh` (aggregates the per-hook `*.test.sh`) | HOME→/tmp | security-hook regression |
 | 4 | `core/deploy/tools/check-doc-links.py` | doc-link primitive self-test | `python3 core/deploy/tools/check-doc-links.py --self-test` | none (read-only) | self-test path |
-| 5 | (no match) | NONE — emit `test-run/suite-skip` | n/a | n/a | doc / governance / spec change: no runtime suite (honest no-op, not a gap) |
+| 5 | `install.sh`, `update.sh`, `docs/scripts/**`, `core/CLAUDE.md.template`, `core/*.template`, `core/config/allowlists/**` | install/onboarding/update standing regression suite | `bash core/deploy/tests/run-install-regression.sh` | HOME→/tmp | the standing install/onboarding/update regression suite. Aggregates the install/onboarding/update deploy-test subset plus the hook-test floor; emits ONE `test-run` event for the whole suite (subject `suite:install-onboarding-update`). It is its own regression floor. |
+| 6 | (no match) | NONE — emit `test-run/suite-skip` | n/a | n/a | doc / governance / spec change: no runtime suite (honest no-op, not a gap) |
 
-When a change matches more than one row, the most-specific glob wins (e.g., a change to `core/deploy/compose.py` selects row 1, not the broader row 2). A change spanning multiple rows runs each selected suite and emits one `test-run` event per suite.
+When a change matches more than one row, the most-specific glob wins (e.g., a change to `core/deploy/compose.py` selects row 1, not the broader row 2). A change spanning multiple rows runs each selected suite and emits one `test-run` event per suite. Row 5 (the standing install/onboarding/update regression suite) is the install-substrate-wide gate; a change to the install/update entrypoints, the workspace-setup scripts, the CLAUDE.md/composition-surface templates, or the managed-section allowlist sources selects it and the suite emits a single `test-run` event for the aggregate verdict.
 
 ## 3. Sandbox requirement
 
@@ -55,7 +56,7 @@ The selection outcome maps to a `test-run` event (per `pipeline-event-log-schema
 |---|---|---|---|
 | All selected suites pass | — (no finding) | no effect | `suite-pass` |
 | Any selected suite fails | **Blocker** | FAIL (any Blocker → FAIL); routes to Engineering as Tier 1 `fix(dt):` when fixable-in-scope, else Tier 2/3 | `suite-fail` |
-| No path matches (row 5) | — (not applicable) | no effect | `suite-skip` |
+| No path matches (row 6) | — (not applicable) | no effect | `suite-skip` |
 | Suite selected but runner errors (infra) | Warning | logged; operator / CI investigates (not an Engineering code fix) | `suite-fail` with `reason:runner-error` |
 
 A failing runtime suite is the strongest possible "the code does not work" signal — stronger than any content-quality dimension — so it is a Blocker, consistent with Stage 7 Phase D's "any blocker → FAIL".
