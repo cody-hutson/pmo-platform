@@ -33,7 +33,7 @@
 # (the macOS system bash), `declare -a` inside a function — or inside a script
 # sourced from a function — makes the array function-local; the caller never
 # sees it. The lib_compose_source_manifest helper IS a function, so any
-# `declare -a` here would silently break all 17 composition-surface installs.
+# `declare -a` here would silently break all 18 composition-surface installs.
 # Plain assignment is global by default in bash 3.2, which is what we need.
 # (Verified: bash 3.2.57(1)-release on Darwin 25.x.)
 

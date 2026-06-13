@@ -79,7 +79,7 @@ test_real_manifest_via_lib() {
       printf '0'
     fi
   )
-  assert_eq "Real manifest exposes 17 entries" "17" "${entry_count}"
+  assert_eq "Real manifest exposes 18 entries" "18" "${entry_count}"
 }
 test_real_manifest_via_lib
 
