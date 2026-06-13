@@ -230,7 +230,7 @@ recommended adjustments, drafted escalations.
 any [DELIVERY] tag referencing DoD or release.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for DoD and release readiness criteria
+1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule. At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4.
 2. Evaluate deliverables against DoD criteria:
    - Code/config complete and committed
    - Peer review completed
@@ -262,7 +262,7 @@ recommendation, remediation plan for failures, risk entries for any conditional 
 any [DELIVERY] tag referencing RAID, decisions, or milestones.
 
 **What you do**:
-1. Read `references/raid-templates.md` for the artifact templates
+1. Read `references/raid-templates.md` for the artifact templates. When the update logs a gate decision (a go/kill/hold/recycle or pass/fail rendered at a lifecycle gate), also read `references/gate-definitions.md` to attribute the decision to the correct lifecycle gate (LG-N) and authority holder.
 2. Process the input (new information, transcript extract, status change)
 3. Produce the updated artifact with:
    - New entries fully populated (all fields, evidence-tagged)
@@ -628,6 +628,7 @@ Read these on first use, then as needed per mode:
 | Document | When to read | What it covers |
 |----------|-------------|----------------|
 | `references/gate-checklists.md` | Mode C (DoR) or Mode F (DoD/Release) | Full DoR, DoD, and release readiness criteria |
+| `references/gate-definitions.md` | Mode F (gate transition), Mode G (gate decisions) | Project-lifecycle gate sequence (LG-0 Idea Screen → LG-10 Closure): per-gate entry/exit/authority/artifacts/escalation + the gate-transition BLOCK rule |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
