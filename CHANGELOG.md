@@ -8,6 +8,19 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.12] - 2026-06-13
+
+### Added
+
+- **A reintroduced duplicate of a shared reference is now caught at deploy time.** The deploy self-check fails if the same shared reference is found copied back into a skill, whether the copy is identical or has been edited to differ. *Why it matters:* the single-source guarantee is enforced mechanically instead of relying on memory. ([#316](https://github.com/cody-hutson/pmo-platform/issues/316))
+- **Raw GitHub issue, pull-request, and milestone URLs are flagged outside the release ledger.** A new check flags a raw `github.com/.../issues`, `/pull`, or `/milestone` URL in any tracked file except the release-tracking files where such references belong. *Why it matters:* those URLs break on a renumber or a repository move, so keeping them out of durable docs keeps those docs readable years later. Logged as a warning for now. ([#311](https://github.com/cody-hutson/pmo-platform/issues/311))
+
+### Changed
+
+- **Shared reference content now has one canonical source.** The two reference files that several skills each carried their own identical copy of now live once under the shared standards area and are injected into every consuming skill at deploy time. *Why it matters:* the copies can no longer silently fall out of sync — a fix made once reaches every skill. ([#316](https://github.com/cody-hutson/pmo-platform/issues/316))
+
+[Full notes](release/releases/notes/v1.12_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.12)
+
 ## [cross-reference-integrity-ci] - 2026-06-13
 
 Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release). The reference-integrity rules the pre-commit hook applies locally now also run as warn-mode checks when a pull request opens.
