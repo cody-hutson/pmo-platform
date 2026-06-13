@@ -58,6 +58,12 @@ COMPOSITION_SURFACE_FILES=(
   "core/config/allowlists/skip-doc-link-check.txt|instance|raw"
   "core/config/allowlists/agents-model-overrides.txt|instance|raw"
   "core/config/allowlists/status-label-invariant-exemption-list.txt|instance|raw"
+  # Platform-behavior config surface (adapter-config-foundation, #22). Ships
+  # Layer-1 global DEFAULTS + the managed-section fence; the operator extends
+  # the Layer-1 surface in the OPERATOR ADDITIONS section. Per-tier VALUE
+  # overrides live in separate Layer-2 surfaces (XDG config / PORTFOLIO.md /
+  # program-config.toml / PROJECT.md) — NOT this seed. Token-free.
+  "core/config/platform-config.toml.template|instance|raw"
 
   # Hub-state-tier (operator-scoped, ~/Claude/personal/pmo-instance/hub-state/<basename>)
   # Schema templates for hub-state Surfaces A, C + action-items ledger. Hub
