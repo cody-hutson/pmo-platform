@@ -3,11 +3,15 @@
 #
 # Reference-durability issue (v3.18-corpus-integrity-enforcement):
 # Flags fragile references on net-new/modified content destined for durable-corpus
-# paths, per core/standards/reference-durability-standard.md. Three detectors:
+# paths, per core/standards/reference-durability-standard.md. Four detectors:
 #   - Class L (BLOCK-FRAGILE-REF-001): markdown link sequences  ]( on a content line
 #   - Class V (BLOCK-FRAGILE-REF-002): version-cutover apparatus (idiom + version token)
 #   - Positional issue-reference (BLOCK-FRAGILE-REF-003): a bare #N outside a designated
 #     reference block, OR a content-free #N inside one (rung-5 "summarize inline" guard)
+#   - Class U (BLOCK-FRAGILE-REF-004): a raw github.com/<owner>/<repo>/{issues,pull,milestone}
+#     URL (durability-ladder rung-6 — rots on any repository move); the ref-permitted
+#     ledger surfaces are categorically exempt (is_ledger_exempt), all other durable
+#     corpus is flagged unless the file declares the allow-url override marker
 #
 # Matcher scope: Write, Edit
 #
@@ -63,6 +67,12 @@ readonly LINK_RE='\]\('
 #   (d) the "reflexive-pipeline-loop" cutover idiom
 # A bare version label naming the current line ("v2.1 is now current") does NOT match.
 readonly CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+# Class U — raw github.com/<owner>/<repo>/{issues,pull,milestone} URL. A rung-6 reference
+# that rots on any repository move/migration. Owner/repo-agnostic so it survives the repo's
+# own rename. The terminal anchor ([/#?]|$) is the over-match guard: it matches .../issues/333,
+# .../pull/682, .../milestone/3, and the bare .../issues index, but NOT the bare repo URL
+# github.com/<owner>/<repo> (no 3rd path segment) and NOT a word like "pullrequest".
+readonly URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
 # Reference-block header (reuses the parser-clean anchor-regex shape; H1-H6, lenient colon).
 readonly REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 # A bare issue reference: a # followed by digits, optionally bracketed (matches #42, #[42]).
@@ -168,12 +178,29 @@ CONTENT="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.content // .tool_inpu
 # --- PER-FILE OVERRIDE MARKERS (suppress a class for this file; matches still reported) ---
 ALLOW_LINK=0
 ALLOW_VERSION=0
+ALLOW_URL=0
 if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
   ALLOW_LINK=1
 fi
 if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
   ALLOW_VERSION=1
 fi
+if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
+  ALLOW_URL=1
+fi
+
+# --- LEDGER-SURFACE EXEMPTION (Class U scope; mirrors the CI is_ledger_exempt predicate) ---
+# The ref-permitted ledger surfaces (the five named in the universal-vs-release-pipeline
+# split rule) are categorically exempt from the raw-URL class — a ledger URL is native
+# provenance there. The hook's durable-corpus scope gate above already excludes
+# release/releases/* and top-level CHANGELOG.md (neither matches a durable glob), so this
+# is defense-in-depth + self-documentation: if the scope gate ever widens, this stays the
+# Class-U guard. Class L / Class V / positional issue-ref are unaffected by this flag.
+LEDGER_EXEMPT=0
+case "$FILE_PATH" in
+  */release/releases/*|release/releases/*) LEDGER_EXEMPT=1 ;;
+  */CHANGELOG.md|CHANGELOG.md) LEDGER_EXEMPT=1 ;;
+esac
 
 # --- MODE check (shared harness .mode; warn|enforce|off) ---
 MODE="warn"
@@ -197,12 +224,17 @@ STRIPPED="$("$PRINTF" '%s\n' "$CONTENT" | "$AWK" '
 link_matches=""
 version_matches=""
 issueref_matches=""
+url_matches=""
 
 if [ "$ALLOW_LINK" -eq 0 ]; then
   link_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$LINK_RE" || true)"
 fi
 if [ "$ALLOW_VERSION" -eq 0 ]; then
   version_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$CUTOVER_RE" || true)"
+fi
+# Class U — raw ledger URL. Suppressed by the allow-url marker OR by ledger-surface exemption.
+if [ "$ALLOW_URL" -eq 0 ] && [ "$LEDGER_EXEMPT" -eq 0 ]; then
+  url_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$URL_RE" || true)"
 fi
 
 # Positional issue-reference detector (always on; not governed by the link/version markers).
@@ -237,6 +269,7 @@ have_findings=0
 [ -n "$link_matches" ] && have_findings=1
 [ -n "$version_matches" ] && have_findings=1
 [ -n "$issueref_matches" ] && have_findings=1
+[ -n "$url_matches" ] && have_findings=1
 
 [ "$have_findings" -eq 0 ] && exit 0
 
@@ -272,15 +305,19 @@ build_report() {
   if [ -n "$issueref_matches" ]; then
     "$PRINTF" '  [BLOCK-FRAGILE-REF-003] issue-reference placement on:\n%s\n' "$issueref_matches"
   fi
+  if [ -n "$url_matches" ]; then
+    "$PRINTF" '  [BLOCK-FRAGILE-REF-004] Class U (raw github.com/.../{issues,pull,milestone} URL) on:\n%s\n' "$url_matches"
+  fi
 }
 
 REPORT="$(build_report)"
-readonly TEACH="Rewrite as an inline summary (durability-ladder rung 1-2), or confine an unavoidable issue reference to a designated reference block with a summary noun phrase. Per-file escape: add an HTML comment '<!-- reference-durability: allow-link -->' or '<!-- reference-durability: allow-version-ref -->'. See core/standards/reference-durability-standard.md."
+readonly TEACH="Rewrite as an inline summary (durability-ladder rung 1-2), or confine an unavoidable issue reference to a designated reference block with a summary noun phrase. A raw github.com/.../{issues,pull,milestone} URL (Class U) is rung-6 — summarize inline rather than link, except in the ref-permitted ledger surfaces. Per-file escape: add an HTML comment '<!-- reference-durability: allow-link -->', '<!-- reference-durability: allow-version-ref -->', or '<!-- reference-durability: allow-url -->'. See core/standards/reference-durability-standard.md."
 
 if [ "$MODE" = "warn" ]; then
   [ -n "$link_matches" ]     && log_warn "BLOCK-FRAGILE-REF-001" "Class L markdown link in $FILE_PATH"
   [ -n "$version_matches" ]  && log_warn "BLOCK-FRAGILE-REF-002" "Class V version-cutover apparatus in $FILE_PATH"
   [ -n "$issueref_matches" ] && log_warn "BLOCK-FRAGILE-REF-003" "issue-reference placement in $FILE_PATH"
+  [ -n "$url_matches" ]      && log_warn "BLOCK-FRAGILE-REF-004" "Class U raw ledger URL in $FILE_PATH"
   "$PRINTF" '[CLAUDE-HOOK:%s:RULE:WARN] fragile reference(s) in %s (warn-mode active — not blocking; would block in enforce-mode):\n%s\n%s\n' \
     "$HOOK_NAME" "$FILE_PATH" "$REPORT" "$TEACH" >&2
   exit 0
@@ -290,6 +327,7 @@ fi
 [ -n "$link_matches" ]     && log_block "BLOCK-FRAGILE-REF-001"
 [ -n "$version_matches" ]  && log_block "BLOCK-FRAGILE-REF-002"
 [ -n "$issueref_matches" ] && log_block "BLOCK-FRAGILE-REF-003"
+[ -n "$url_matches" ]      && log_block "BLOCK-FRAGILE-REF-004"
 "$PRINTF" '[CLAUDE-HOOK:%s:RULE] BLOCKED: fragile reference(s) in %s:\n%s\nOverride: %s\n' \
   "$HOOK_NAME" "$FILE_PATH" "$REPORT" "$TEACH" >&2
 exit 2

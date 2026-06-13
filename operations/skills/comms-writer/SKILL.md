@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v1.10
+version: v1.12
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -261,7 +261,7 @@ or when a full email is overkill.
 
 When producing drafts that will be tracked in the Communications Tracker (MSG-##
 entries), format the entry using the standard metadata table + message content +
-response field structure defined in `ppm-agent/references/operational-artifacts.md`.
+response field structure defined in `references/operational-artifacts.md`.
 New entries are created in the ACTIVE tier. Lifecycle tier assignment and transitions
 are managed by PPM Agent — CW does not apply transitions, but must use the standard
 MSG-## template so PPM can manage the entry downstream.

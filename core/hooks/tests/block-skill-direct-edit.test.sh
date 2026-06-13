@@ -31,6 +31,16 @@ echo "Hook mode: $CURRENT_MODE (block-cases expect exit=$BLOCK_EXIT)"
 SBX="$(/usr/bin/mktemp -d)"
 trap '/bin/rm -rf "$SBX"' EXIT
 
+# The hook resolves the migration marker via cwd-relative
+# `pmo-platform/skills/<skill>/SKILL.md` with an absolute fallback of
+# `PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"`. The test builds its
+# synthetic skills under ${SBX}/pmo-platform/skills/... and sets payload cwd to
+# $SBX, but the hook's fallback otherwise resolves against the real workspace
+# (where these synthetic skills do not exist), so the marker check is skipped
+# and block-cases wrongly pass through. Point PRIMARY_ROOT at the sandbox so the
+# hook resolves THIS test's skills tree regardless of the runner's real $HOME.
+export CLAUDE_WORKSPACE_ROOT="$SBX"
+
 MIGRATED_SKILL_DIR="${SBX}/pmo-platform/skills/test-migrated"
 UNMIGRATED_SKILL_DIR="${SBX}/pmo-platform/skills/test-unmigrated"
 CANARY_SKILL_DIR="${SBX}/pmo-platform/skills/pmo-skill-refiner-selftest-canary"

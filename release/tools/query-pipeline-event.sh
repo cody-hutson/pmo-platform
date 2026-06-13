@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # query-pipeline-event.sh — Pipeline event log reader with pre-canned queries
-# Reads pmo-platform/engineering/evals/results/pipeline-event-log.md
-# per the schema at pmo-platform/reference/standards/pipeline-event-log-schema.md.
+# Reads the operator-instance pipeline event log at
+# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
+# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/),
+# per the schema at release/references/standards/pipeline-event-log-schema.md.
+# Resolves the SAME log location as append-pipeline-event.sh (writer↔reader parity).
 #
 # Per the pipeline-event spec (Stage 5).
 #
@@ -17,22 +20,76 @@
 # Flags can compose:
 #   ./query-pipeline-event.sh --version v2.07a --event-type decision --r-class
 #
-# Cross-surface JOIN pattern (run manually after this script):
-#   grep -h '#N' pmo-platform/engineering/evals/results/{pipeline-event-log,calibration-data,iteration-log}.md
+# Cross-surface JOIN pattern (run manually after this script; <RESULTS> is the
+# resolved <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>, default
+# ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results):
+#   grep -h '#N' <RESULTS>/{pipeline-event-log,calibration-data,iteration-log}.md
 #
 # Exit codes: 0 = success (rows may be 0), 1 = file missing / invalid args
 
 set -euo pipefail
 export PATH="/usr/bin:/bin"
 
+# ─── Path resolution ─────────────────────────────────────────────────────────
+#
+# MUST resolve to the SAME log location as append-pipeline-event.sh, so a row
+# written by the append CLI is read back by this query CLI. Resolution mirrors
+# the writer verbatim.
+#
+# Repo root is TWO levels up from this script (release/tools/) — NOT three. The
+# prior `../../..` walked above the repo and, from a worktree at
+# .claude/worktrees/<name>/release/tools/, mis-anchored entirely (the extinct-path
+# reader bug, sibling to the writer's #590/#591/#679).
+#
+# The event log is OPERATOR-INSTANCE content (gitignored, not in the repo tree):
+# it lives at <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md per the
+# schema doc + core/standards/depersonalization-spec.md §4. Resolution order
+# (mirrors append-pipeline-event.sh / cleanup-orphan-state.sh / automated-closeout.sh):
+# env override → operator.toml → canonical default
+# (${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/).
+
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "$SCRIPT_DIR/../../.." && pwd )"
-LOG_FILE="$REPO_ROOT/pmo-platform/engineering/evals/results/pipeline-event-log.md"
+# REPO_ROOT retained verbatim from append-pipeline-event.sh for resolution-block
+# parity (the writer uses it for SCHEMA_FILE; the reader has no schema dependency,
+# so it is unused here). Two levels up — NOT three; see header note above.
+# shellcheck disable=SC2034
+REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+
+# Workspace root (env → operator.toml → default), per the cleanup-tool pattern.
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
+if [[ -z "$WORKSPACE_ROOT" ]]; then
+  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
+  if [[ -r "$_operator_toml" ]]; then
+    # `|| true`: an absent key makes grep exit non-zero, which would abort under
+    # set -e / pipefail — tolerate it and fall through to the default.
+    _wr=$( { grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
+  fi
+fi
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
+
+# Operator-instance evals-results dir (env → operator.toml override → default).
+# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH> resolves verbatim when the operator.toml
+# override is set; otherwise to the ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/<stem>/
+# canonical default per depersonalization-spec.md §4.
+EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-}"
+if [[ -z "$EVALS_RESULTS_PATH" ]]; then
+  _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
+  if [[ -r "$_operator_toml" ]]; then
+    # `|| true`: this key is absent on instances that use the canonical default;
+    # tolerate grep's non-zero exit under set -e / pipefail.
+    _er=$( { grep -E '^operator_instance_evals_results_path' "$_operator_toml" 2>/dev/null || true; } | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    [[ -n "$_er" ]] && EVALS_RESULTS_PATH="$_er"
+  fi
+fi
+EVALS_RESULTS_PATH="${EVALS_RESULTS_PATH:-${WORKSPACE_ROOT}/personal/pmo-instance/evals/results}"
+
+LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 usage() {
-  /usr/bin/sed -n '4,23p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '11,26p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 

@@ -15,7 +15,7 @@
 # where
 #   <EXPECT>  = FLAG  (the detector MUST match this line)
 #             | CLEAN (the detector MUST NOT match this line)
-#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN | ISSUEREF-POS
+#   <CLASS>   = LINK | VERSION | ISSUEREF-OUT | ISSUEREF-IN | ISSUEREF-POS | URL
 #   <content> = the literal line content presented to the detector
 #
 # The ISSUEREF-POS class is a TRUE positional test (the -OUT/-IN classes fake block
@@ -85,3 +85,22 @@ FLAG	ISSUEREF-IN	- #90002
 FLAG	ISSUEREF-POS	50|20|This traces back to the original triage decision in #90002.
 # Same self-describing ref AFTER the block (line 60) → must stay CLEAN (sanctioned form).
 CLEAN	ISSUEREF-POS	50|60|Parent issue establishes the standard and enforcement spine #90002.
+
+# ─── Class U (raw github.com/.../{issues,pull,milestone} URL) ────────────────
+# A raw GitHub issue/PR/milestone URL is durability-ladder rung-6 — it rots on any
+# repository move/migration. The URL class asserts the regex's CONTENT-match precision
+# only; the ledger-surface exemption (release/releases/*, top-level CHANGELOG.md) and the
+# allow-url marker are PATH/file-level properties evaluated by the hook + CI scope gate,
+# exercised at the hook/CI integration test, not by this content-level fixture. Synthetic
+# placeholder numbers/owners — test data for the URL-shape detector, NOT real references.
+# Positive (the regex MUST match — issues/pull/milestone with a 3rd path segment):
+FLAG	URL	See https://github.com/owner/repo/issues/333 for context.
+FLAG	URL	The fix landed in https://github.com/owner/repo/pull/682 last cycle.
+FLAG	URL	Milestone tracker: github.com/owner/repo/milestone/3 holds the slice.
+FLAG	URL	The Anthropic example github.com/anthropics/claude-code/issues/42 is rung-6 too.
+# Negative (the regex MUST NOT match — bare repo URL has no 3rd path segment; a word that
+# merely contains "pull"; an install URL):
+CLEAN	URL	Clone the repo: github.com/owner/repo then run install.
+CLEAN	URL	The install URL https://github.com/owner/repo is documentation-exempt.
+CLEAN	URL	The pullrequest workflow guide at github.com/owner/repo/pulls-guide is fine.
+CLEAN	URL	State the rule unconditionally and summarize the referenced content inline.
