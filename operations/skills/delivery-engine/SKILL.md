@@ -176,7 +176,7 @@ gate verdict, recommended actions for any FAIL items.
 discussion, any [DELIVERY] tag referencing sprint planning.
 
 **What you do**:
-1. Read `references/sprint-defaults.md` for planning parameters
+1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters and `references/estimation-standards.md` for the focus-factor table, Cone-of-Uncertainty range widths, planning-horizon commitment rules, and the buffer three-zone model
 2. Assess inputs: refined backlog (DoR-passed items), team capacity, velocity history,
    carryover from prior sprint, priority guidance
 3. Produce a sprint plan:
@@ -220,6 +220,7 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
    recommendation must include the drafted escalation message (3–5 sentences: context,
    specific ask, deadline). Recommendations without drafts violate push-to-resolve.
 5. Recommend adjustments: re-scope, re-assign, escalate, or accept risk
+6. When reporting velocity or capacity, apply `references/estimation-standards.md` velocity-as-range enforcement (§5) — express velocity and any derived figure as a range, never a point value
 
 **Output**: Sprint health snapshot, item-level status, risk items, scope changes,
 recommended adjustments, drafted escalations.
@@ -632,6 +633,7 @@ Read these on first use, then as needed per mode:
 | `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping, and the QA→Plan-Review P1-defect block |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
+| `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, velocity-as-range enforcement, contingency vs. management reserve |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
 | `references/dependency-rules.md` | Any mode with cross-item dependencies | Dependency types, escalation triggers, tracking format |
