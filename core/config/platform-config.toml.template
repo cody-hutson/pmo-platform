@@ -9,7 +9,7 @@
 # IDENTITY surface (identity, paths, [adapters] host-selectors, methodology
 # default — ADR-017 §S2; chmod 600; depersonalization token vocabulary). This
 # file is the platform-BEHAVIOR surface (frequently-calibrated tuning, no PII).
-# The split is documented in core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md
+# The split is documented in core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md
 # (refines/extends ADR-017 S2 — relocates nothing).
 #
 # Canonical location (Layer 1 — global DEFAULTS, this file, git-tracked):

@@ -11,7 +11,7 @@
 
 - [`composition-surface-spec.md`](../standards/composition-surface-spec.md) — durability contract (managed-section / operator-additions fences, regeneration, tamper detection) the template carries
 - [`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`](../governance/OPERATIONS.md) — the 5-rung resolver, 3-level default-fallback, and Track A/B update governance
-- [`core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md`](../ADRs/ADR-021-platform-config-vs-operator-toml-split.md) — the operator.toml (environment/identity) vs platform-config.toml (behavior) split decision
+- [`core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md`](../ADRs/ADR-022-platform-config-vs-operator-toml-split.md) — the operator.toml (environment/identity) vs platform-config.toml (behavior) split decision
 - [`release/references/specs/release-class-taxonomy.md`](../../release/references/specs/release-class-taxonomy.md) — the CLOSED 4-value Release Class enum (referenced, not re-listed, by `[release_class].default_release_class`)
 - [`release/references/specs/methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md) + [`project-schema.md`](project-schema.md) — the 8-archetype methodology enum (the `default_delivery_approach` DEFAULT lives in `operator.toml [methodology]`, not here, per ADR-017 §S2; this schema references it for resolver completeness)
 - [`release/references/standards/bundle-composition-doctrine.md`](../../release/references/standards/bundle-composition-doctrine.md) — the bundle-composition frame catalog (referenced, not re-listed, by `[bundling].bundle_doctrine_frame`)
@@ -22,7 +22,7 @@
 
 `platform-config.toml` is the platform-BEHAVIOR configuration surface — the parameterized, frequently-calibrated platform-behavior choices the pipeline tunes over time (bundling frame, release-size target, release-class default, relationship-mapping tuning). This schema is the canonical specification of its shape: what fields exist, their types, allowed values, defaults, calibration policy, consuming surfaces, and the cutover SHA recorded when a field's default changes.
 
-It is DISTINCT from [`operator.toml`](../config/operator.toml.template), the operator-ENVIRONMENT / IDENTITY surface (identity, paths, `[adapters]` host-selectors, `[methodology].default_delivery_approach` — all named by ADR-017 §S2 as operator.toml concerns; `chmod 600`; depersonalization token vocabulary). The split rationale is recorded in [ADR-021](../ADRs/ADR-021-platform-config-vs-operator-toml-split.md). This schema relocates nothing from operator.toml — the categories below are NEW platform-behavior categories ADR-017 §S2 did not enumerate.
+It is DISTINCT from [`operator.toml`](../config/operator.toml.template), the operator-ENVIRONMENT / IDENTITY surface (identity, paths, `[adapters]` host-selectors, `[methodology].default_delivery_approach` — all named by ADR-017 §S2 as operator.toml concerns; `chmod 600`; depersonalization token vocabulary). The split rationale is recorded in [ADR-022](../ADRs/ADR-022-platform-config-vs-operator-toml-split.md). This schema relocates nothing from operator.toml — the categories below are NEW platform-behavior categories ADR-017 §S2 did not enumerate.
 
 ## 2. Layer model
 

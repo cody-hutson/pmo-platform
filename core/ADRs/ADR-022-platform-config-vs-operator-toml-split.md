@@ -1,5 +1,5 @@
 ---
-title: "ADR-021 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior"
+title: "ADR-022 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior"
 status: Accepted
 date: 2026-06-13
 release: adapter-config-foundation
@@ -14,7 +14,7 @@ source_observations:
 
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-021 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior
+# ADR-022 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior
 
 ## Status
 

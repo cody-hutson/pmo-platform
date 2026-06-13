@@ -346,7 +346,7 @@ Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST
 
 Platform configuration is split across two surfaces by concern and resolved by a single cascading resolver. This protocol defines the resolution order, the default-fallback, and the two-track update governance. It **composes with** the Methodology Awareness Protocol above — `default_delivery_approach` is a hierarchy-resolvable field whose resolution this protocol governs, while the `delivery_approach` enum + validation + Custom-block handling stay canonical in the Methodology Awareness Protocol and its cross-referenced schema. This protocol does NOT duplicate the methodology vocabulary.
 
-**Two surfaces (per [`core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md`](../ADRs/ADR-021-platform-config-vs-operator-toml-split.md)):**
+**Two surfaces (per [`core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md`](../ADRs/ADR-022-platform-config-vs-operator-toml-split.md)):**
 
 - [`core/config/operator.toml.template`](../config/operator.toml.template) — operator-ENVIRONMENT / IDENTITY: identity, paths, `[adapters]` host-selectors (`repo_host`/`ticketing`/`kb`/`ai_tool` — the onboarding seam), `[methodology].default_delivery_approach`. Security-sensitive (`chmod 600`; depersonalization token vocabulary).
 - [`core/config/platform-config.toml.template`](../config/platform-config.toml.template) — platform-BEHAVIOR: `[bundling]` (`bundle_doctrine_frame`, `release_size_target_pts`), `[release_class].default_release_class`, `[relationship_mapping]`, `[calibration]`. Freely tunable; no PII. Field schema: [`schemas/platform-config-schema.md`](../schemas/platform-config-schema.md).

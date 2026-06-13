@@ -7,7 +7,7 @@
 ## 1. About this document
 
 - **Audience:** Operators tuning platform behavior; anyone asking "what config knobs does the platform have, and where do I set them?"
-- **Two surfaces, one resolver.** Platform configuration lives in two files split by concern (per [ADR-021](../core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md)):
+- **Two surfaces, one resolver.** Platform configuration lives in two files split by concern (per [ADR-022](../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md)):
   - **`operator.toml`** — operator-ENVIRONMENT / IDENTITY: identity, paths, host-adapter selectors, methodology default. Security-sensitive (`chmod 600`).
   - **`platform-config.toml`** — platform-BEHAVIOR: bundling frame, release-size target, release-class default, relationship-mapping tuning. Freely tunable; no PII.
 - **How a value is resolved.** Both surfaces feed one **5-rung resolver** (global default → portfolio → program → project → individual; most-specific wins). The full resolver, the 3-level fallback, and the two-track update governance are in [`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`](../core/governance/OPERATIONS.md).
@@ -100,5 +100,5 @@ Three wired examples ship with the adapter-config-foundation release:
 
 - [`core/schemas/platform-config-schema.md`](../core/schemas/platform-config-schema.md) — canonical field schema (type / allowed-values / default / calibration / consuming-surface / cutover-SHA).
 - [`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`](../core/governance/OPERATIONS.md) — the 5-rung resolver, fallback, and Track A/B governance.
-- [`core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md`](../core/ADRs/ADR-021-platform-config-vs-operator-toml-split.md) — the operator.toml vs platform-config.toml split decision.
+- [`core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md`](../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md) — the operator.toml vs platform-config.toml split decision.
 - [`core/config/operator.toml.template`](../core/config/operator.toml.template) · [`core/config/platform-config.toml.template`](../core/config/platform-config.toml.template) — the two surfaces themselves.
