@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v1.12
+version: v1.15
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -85,7 +85,7 @@ for direct user invocation.
 
 ## Mode Selection
 
-This skill has 8 communication types (implicit modes by output format). **Trigger-match heuristic auto-routes when the audience and channel are clearly stated; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "write the exec brief", "draft the agenda") are unambiguous; ambiguity arises for generic phrases like "draft an update" or "put together a message" where audience and channel are not specified.
+This skill produces **6 primary PMO-unique communication types** (below). Two further types — executive brief and stakeholder email — are **owned-generation** types governed by the own-with-harvest sourcing posture (see [§ Owned-generation types](#owned-generation-types-own-with-harvest)); the 5 PMO-critical rules below bind those too. **Trigger-match heuristic auto-routes when the audience and channel are clearly stated; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "write the exec brief", "draft the agenda") are unambiguous; ambiguity arises for generic phrases like "draft an update" or "put together a message" where audience and channel are not specified.
 
 **Tier classification:** Ask-when-ambiguous (per [OPERATIONS.md § Mode Selection Protocol](../../OPERATIONS.md)). Trigger-heuristic first; AUQ as fallback.
 
@@ -101,14 +101,14 @@ Map the user's request to a communication type using the trigger-match table bel
 
 | Trigger phrase / context signal | Route to type |
 |---|---|
-| "draft the email", "write the update for [person]", email audience + channel named, any [COMMS] tag for email | Type 1 — Stakeholder email |
-| "meeting agenda", "prepare the agenda", "agenda for [meeting]" | Type 2 — Meeting agenda |
-| "meeting recap", "recap from [meeting]", post-meeting summary | Type 3 — Meeting recap |
-| "executive brief", "exec summary", "status update for leadership", "executive update" | Type 4 — Executive brief / status update |
-| "escalation", "draft the escalation", "escalate to [person]", escalation ask in context | Type 5 — Escalation communication |
-| "org-wide announcement", "company announcement", broadcast-style message | Type 6 — Org-wide announcement |
-| "Confluence page", "documentation update", "update the wiki", static-doc ask | Type 7 — Confluence / documentation update |
-| "Teams message", "post to Teams", "Teams post", chat-channel message | Type 8 — Teams message |
+| "draft the email", "write the update for [person]", email audience + channel named, any [COMMS] tag for email | Stakeholder email (owned-generation) |
+| "meeting agenda", "prepare the agenda", "agenda for [meeting]" | Meeting agenda |
+| "meeting recap", "recap from [meeting]", post-meeting summary | Meeting recap |
+| "executive brief", "exec summary", "status update for leadership", "executive update" | Executive brief / status update (owned-generation) |
+| "escalation", "draft the escalation", "escalate to [person]", escalation ask in context | Escalation |
+| "org-wide announcement", "company announcement", broadcast-style message | Announcement |
+| "Confluence page", "documentation update", "update the wiki", static-doc ask | Confluence documentation |
+| "Teams message", "post to Teams", "Teams post", chat-channel message | Teams message |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -126,7 +126,7 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Executive-level status update — trajectory, risks, asks, no narrative filler."
   - option: "Escalation communication"
     description: "Escalation message with specific ask, impact statement, and deadline."
-  - option: "Org-wide announcement"
+  - option: "Announcement"
     description: "Broad-audience announcement — launch, policy change, org update."
   - option: "Confluence / documentation update"
     description: "Documentation page or update — reference-style content for wiki/Confluence."
@@ -144,20 +144,7 @@ Proceed to the corresponding type section below. Do not proceed until Step 1, 2,
 Detect the communication type from context. The TPM rarely names the type explicitly.
 When multiple types apply (e.g., a recap that includes a status update), combine them.
 
-### Type 1: Stakeholder email
-
-**Trigger**: "Draft the email to [audience]", "write the update for [person]",
-any [COMMS] tag for email communication, or when context clearly calls for email.
-
-**What you produce**:
-1. Subject line — specific and scannable. Use prefixes where appropriate:
-   `[RECAP]`, `[ACTION REQUIRED]`, `[FYI]`, `[DECISION NEEDED]`.
-2. Recipients (To, CC, BCC) — with rationale for each if not specified.
-3. Body — audience-calibrated, following the voice guide.
-4. Embedded action items — with owners and dates, bolded.
-5. Signature block — `[OPERATOR_NAME], Senior Program Manager • [OPERATOR_PHONE]`
-
-### Type 2: Meeting agenda
+### Meeting agenda
 
 **Trigger**: "Set up the agenda for [meeting]", "prepare the [meeting] invite",
 any [COMMS] tag for meeting preparation, or when PPM identifies a meeting need.
@@ -175,7 +162,7 @@ Calibrate formality to the meeting type: a cross-functional technical session
 uses structured numbered items with tagged owners; a quick internal sync uses
 brief discussion points; a refinement session uses a detailed loop structure.
 
-### Type 3: Meeting recap
+### Meeting recap
 
 **Trigger**: "Write the recap for [meeting]", any [COMMS] tag for recap,
 or when processing a transcript that needs a recap communication.
@@ -190,22 +177,7 @@ or when processing a transcript that needs a recap communication.
    - **Notes**: Supporting context, technical constraints, open questions.
    - **Key Roadblocks** (if applicable): What's blocking progress.
 
-### Type 4: Executive brief / status update
-
-**Trigger**: "Prepare the status for [leader]", "write the exec brief",
-SteerCo preparation, any [COMMS] tag for status reporting.
-
-**What you produce**:
-1. Audience-specific framing (see audience profiles).
-2. For IT leadership ([COLLEAGUE_A]): concise, decision-focused, 1 page max.
-3. For COO/SPM ([COLLEAGUE_G], [COLLEAGUE_F]): milestone-level, waterfall framing, risks
-   and decisions surfaced, timeline-centric.
-4. For SteerCo: structured with health indicators, key decisions, risks,
-   timeline, and specific asks.
-5. SPM bridge: when PROJECT.md includes `spm_comanaged: true`, produce both agile and
-   waterfall versions from the same underlying data.
-
-### Type 5: Escalation communication
+### Escalation
 
 **Trigger**: "Escalate [issue] to [person]", any [COMMS] tag for escalation,
 or when PPM identifies an escalation need.
@@ -220,7 +192,7 @@ or when PPM identifies an escalation need.
    - **Options** (if applicable): What choices exist, with tradeoffs.
 4. Tone: factual, not emotional. Urgent without being alarmist.
 
-### Type 6: Org-wide announcement
+### Announcement
 
 **Trigger**: "Send the announcement to [broad audience]", system upgrade
 notifications, process change announcements, any communication to a
@@ -237,7 +209,7 @@ non-technical audience.
 3. No jargon. Technical details translated to business impact.
 4. Tables for timelines. Bold for key dates.
 
-### Type 7: Confluence / documentation update
+### Confluence documentation
 
 **Trigger**: "Update the Confluence page", any [COMMS] tag for documentation,
 or when an artifact update needs to be formatted for Confluence.
@@ -247,7 +219,7 @@ or when an artifact update needs to be formatted for Confluence.
 2. Copy/paste block — formatted for Confluence (markdown with tables).
 3. Change summary: what changed, why, source, stakeholder doc impact.
 
-### Type 8: Teams message
+### Teams message
 
 **Trigger**: "Send a Teams message to [person/channel]", quick coordination,
 or when a full email is overkill.
@@ -257,6 +229,55 @@ or when a full email is overkill.
 2. No formal structure — reads like a human typed it in Teams.
 3. Specific ask with deadline if applicable.
 
+### Owned-generation types (own-with-harvest)
+
+comms-writer **owns** the generation of these two types — stakeholder email and
+executive brief — first-party. There is **no runtime Anthropic dependency**: the draft
+is produced in-skill, applying `references/voice-guide.md` + `references/audience-profiles.md`
++ the [5 PMO-critical rules](#pmo-critical-rules-bind-all-output--primary-and-owned-generation)
+**at generation time**. The structure and phrasing patterns were **harvested at design
+time** from Anthropic's `product-management/stakeholder-comms` — a recorded divergence with
+a drift-check cadence, not a runtime call. The harvest is catalogued in
+`core/standards/upstream-reference-catalog.md` (entry `stakeholder-comms-structure`).
+Stakeholder email and executive brief are the highest-blast-radius surfaces this skill
+produces; owning them first-party keeps an executive's briefing deterministic — it cannot
+silently change because an upstream skill shipped a new version.
+
+> **Sourcing posture (reference).** The governing record is the skill-sourcing-coupling
+> posture ADR (**ADR-021**): own-with-harvested-learnings is the default; a runtime
+> Anthropic dependency is the guarded exception, permitted only for commodity-stable,
+> low-blast-radius, drift-guarded couplings — and **barred entirely for stakeholder-facing
+> generation**. The bare ADR number is provenance; the self-describing role above carries
+> the meaning if the number ever moves.
+
+#### Stakeholder email
+
+**Trigger**: "Draft the email to [audience]", "write the update for [person]",
+any [COMMS] tag for email communication, or when context clearly calls for email.
+
+**What you produce**:
+1. Subject line — specific and scannable. Use prefixes where appropriate:
+   `[RECAP]`, `[ACTION REQUIRED]`, `[FYI]`, `[DECISION NEEDED]`.
+2. Recipients (To, CC, BCC) — with rationale for each if not specified.
+3. Body — audience-calibrated, following the voice guide.
+4. Embedded action items — with owners and dates, bolded.
+5. Signature block — `[OPERATOR_NAME], Senior Program Manager • [OPERATOR_PHONE]`
+
+#### Executive brief / status update
+
+**Trigger**: "Prepare the status for [leader]", "write the exec brief",
+SteerCo preparation, any [COMMS] tag for status reporting.
+
+**What you produce**:
+1. Audience-specific framing (see audience profiles).
+2. For IT leadership ([COLLEAGUE_A]): concise, decision-focused, 1 page max.
+3. For COO/SPM ([COLLEAGUE_G], [COLLEAGUE_F]): milestone-level, waterfall framing, risks
+   and decisions surfaced, timeline-centric.
+4. For SteerCo: structured with health indicators, key decisions, risks,
+   timeline, and specific asks.
+5. SPM bridge: when PROJECT.md includes `spm_comanaged: true`, produce both agile and
+   waterfall versions from the same underlying data.
+
 ### Communications Tracker integration
 
 When producing drafts that will be tracked in the Communications Tracker (MSG-##
@@ -265,6 +286,31 @@ response field structure defined in `references/operational-artifacts.md`.
 New entries are created in the ACTIVE tier. Lifecycle tier assignment and transitions
 are managed by PPM Agent — CW does not apply transitions, but must use the standard
 MSG-## template so PPM can manage the entry downstream.
+
+## PMO-Critical Rules (bind ALL output — primary and owned-generation)
+
+These five rules bind **every** communication this skill produces — all 6 primary types
+AND the 2 owned-generation types (stakeholder email, executive brief). They are applied
+at generation time, including to the first-party owned-generation drafts; the readiness
+verdict is not declared until all five are satisfied.
+
+1. **No internal IDs.** Strip internal tracking IDs (MTG-##, MSG-##, TR-###, RI-##, and
+   RAID prefixes like R-PPM-###) from all stakeholder-facing output — primary and
+   owned-generation alike. Substitute descriptive names (the meeting name, the message
+   subject, the risk description). Internal IDs are retained only in working documents
+   and tracker references the recipient never sees.
+2. **Evidence labels.** Every factual claim carries one of `[SOURCE]` / `[INFERRED]` /
+   `[ASSUMPTION – CONFIRM]` / `[CONTEXT]` / `[RECOMMENDED]` in the skill's internal
+   reasoning. A material `[ASSUMPTION – CONFIRM]` in the body forces NOT READY.
+3. **Readiness gate.** Every output declares **READY FOR SEND** or **NOT READY** with
+   specific gap labels. This binds the owned-generation exec brief and stakeholder email
+   identically to the primary types — there is no relaxed gate for owned generation.
+4. **SPM Bridge.** When PROJECT.md carries `spm_comanaged: true`, produce dual Agile +
+   Waterfall framings from the same underlying data. Applies to announcements, executive
+   briefs, and any milestone-touching output. (Mechanics in [§ SPM bridge (conditional)](#spm-bridge-conditional) below.)
+5. **Project-context awareness.** Read PROJECT.md and the operational trackers for dates,
+   owners, and statuses before drafting; never invent; surface source conflicts as drift
+   rather than silently resolving or generalizing them.
 
 ## Output format
 
@@ -401,12 +447,12 @@ level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
 - Section 3 (The draft) — the complete communication is a proposal; the act of sending it is the decision the user executes on this skill's recommendation.
 - Section 5 (Audience notes) — recommendations about audience-specific adjustments.
 - Section 6 (Alternative versions) — recommendations about how to route the same information to different audiences.
-- Type 1 / Type 4 stakeholder emails and executive briefs — recipient selection (To / CC / BCC), framing decisions.
-- Type 2 meeting agendas — attendee selection (required / optional), agenda-item selection, time allocation.
-- Type 3 meeting recaps — action items with owners and deadlines, attributed decisions.
-- Type 5 escalations — the specific ask with deadline, option framing with tradeoffs, recipient + CC selection.
-- Type 6 org-wide announcements — user-impact framing, "What You Need to Do" action list.
-- Type 7 Confluence / documentation updates — section-mapping recommendation.
+- Stakeholder email / executive brief (owned-generation) — recipient selection (To / CC / BCC), framing decisions.
+- Meeting agendas — attendee selection (required / optional), agenda-item selection, time allocation.
+- Meeting recaps — action items with owners and deadlines, attributed decisions.
+- Escalations — the specific ask with deadline, option framing with tradeoffs, recipient + CC selection.
+- Announcements — user-impact framing, "What You Need to Do" action list.
+- Confluence documentation updates — section-mapping recommendation.
 
 **Tier vocabulary (undo threshold + stakeholder impact):**
 
@@ -507,8 +553,8 @@ structural conformance and content quality.
 ### Tone register mismatched to the target channel — PROC
 
 - **Signature (observable signal):** A draft sent to a channel mismatches the channel's
-  tone register — formal subject line and salutation in a Type 8 Teams message; "Hi
-  team!" casual opening on a Type 4 executive brief; a Type 1 stakeholder email opening
+  tone register — formal subject line and salutation in a Teams message; "Hi
+  team!" casual opening on an executive brief; a stakeholder email opening
   with "I hope you're doing well."
 - **Conditional:** do NOT use a tone register that mismatches the target channel when the channel and audience are explicitly named in the input, because tone mismatch undermines the credibility of the content — exec readers ignore casual exec briefs; Teams recipients ignore formal Teams messages.
 - **Root cause:** The voice-guide is read once and the agent defaults to a baseline
@@ -516,8 +562,8 @@ structural conformance and content quality.
   that's easy to skip under output pressure, especially when the user did not
   explicitly say "match the channel tone."
 - **Mitigation:** Before drafting, confirm channel + audience and load the relevant
-  section of `references/voice-guide.md`. Type 1 (stakeholder email) ≠ Type 4 (exec
-  brief) ≠ Type 8 (Teams message) — each has a distinct tone register. The
+  section of `references/voice-guide.md`. Stakeholder email ≠ executive brief ≠ Teams
+  message — each has a distinct tone register. The
   communication-metadata header should name the channel and audience explicitly so the
   tone match can be audited at readiness check.
 - **Principal response vs. junior response:** Principal calibrates tone to the channel-
@@ -527,8 +573,8 @@ structural conformance and content quality.
 
 ### Internal tracking IDs leaked into stakeholder draft — OUT
 
-- **Signature (observable signal):** A draft sent externally (Type 1 stakeholder email,
-  Type 4 exec brief, Type 6 org-wide announcement) contains internal tracking IDs
+- **Signature (observable signal):** A draft sent externally (stakeholder email,
+  exec brief, announcement) contains internal tracking IDs
   (MTG-##, MSG-##, TR-###, RAID prefixes like R-PPM-###) in the body where descriptive
   names are available.
 - **Conditional:** do NOT include internal tracking IDs in the body of a draft to a non-PMO recipient when descriptive names are available in the source artifact, because internal IDs mean nothing to recipients and signal a lack of audience calibration to the receiving stakeholder.
@@ -546,9 +592,9 @@ structural conformance and content quality.
   recipient asks "what is MTG-01?" — or worse, ignores the message because it looks
   like internal noise.
 
-### Passive-voice ask in a Type 5 escalation draft — OUT
+### Passive-voice ask in an escalation draft — OUT
 
-- **Signature (observable signal):** A Type 5 escalation communication contains "it
+- **Signature (observable signal):** An escalation communication contains "it
   would be great if you could..." or "please consider..." or "when you have a chance"
   instead of a specific action with a deadline.
 - **Conditional:** do NOT use passive-voice asks in an escalation draft when the
@@ -558,7 +604,7 @@ structural conformance and content quality.
 - **Root cause:** Passive-voice asks feel polite and de-escalating; under perceived
   diplomatic pressure the agent softens the ask, which removes the escalation's force
   and converts it to a low-priority informational note in the recipient's inbox.
-- **Mitigation:** Type 5 escalations always end with "Please [specific action] by
+- **Mitigation:** Escalations always end with "Please [specific action] by
   [date]" or "Need decision on [X] by [date]." Polite framing is appropriate in the
   Situation/Impact body; it does not belong in the Ask. The Ask is the load-bearing
   sentence and must read as a request for action with a deadline, not a hint.
@@ -567,61 +613,62 @@ structural conformance and content quality.
   "It would be helpful to have your thoughts on the scope change when you have a
   chance" — and the escalation does not get acted on until the deadline has passed.
 
-### Framework-governed status update drafted as a freeform Type 4 brief — TRIG
+### Framework-governed status update drafted as a freeform executive brief — TRIG
 
 - **Signature (observable signal):** A "status update" request that matches
   daily-status's surface (AM/PM/EOD update, daily connect, post-testing status)
   or weekly-status-rollup's surface (weekly roll-up, SteerCo, portfolio health)
-  is drafted as a comms-writer Type 4 brief — composed from conversation context,
+  is drafted as a comms-writer executive brief — composed from conversation context,
   without the carry-forward-tracker derivation or PORTFOLIO.md write-back the
   owning skill performs.
 - **Conditional:** do NOT draft a daily AM/PM update or weekly portfolio roll-up
-  as a Type 4 executive brief when the request matches the daily-status or
+  as an executive brief when the request matches the daily-status or
   weekly-status-rollup trigger surface, because those skills derive status
   content from carry-forward trackers and the Daily Status Update Framework and
-  (for the roll-up) write health state back to PORTFOLIO.md — a freeform Type 4
-  substitute produces unsourced status theater and silently skips the tracker
-  write-backs the platform depends on.
-- **Root cause:** "Status update" is shared vocabulary across three skills; Type
-  4's own trigger list includes "status update for leadership" and SteerCo
+  (for the roll-up) write health state back to PORTFOLIO.md — a freeform
+  executive-brief substitute produces unsourced status theater and silently skips
+  the tracker write-backs the platform depends on.
+- **Root cause:** "Status update" is shared vocabulary across three skills; the
+  executive-brief trigger list includes "status update for leadership" and SteerCo
   preparation, so the request lands here on phrasing alone — and drafting from
   conversational context is faster than routing to the skill that must read five
   tracker files first.
 - **Mitigation:** Before drafting any status communication, classify cadence and
   derivation: daily / AM/PM / team-channel → daily-status owns it; weekly /
   portfolio / SteerCo document → weekly-status-rollup owns it; a one-off
-  audience-calibrated brief built FROM already-derived status → Type 4 proceeds.
+  audience-calibrated brief built FROM already-derived status → the executive-brief
+  owned-generation type proceeds.
   When the framing is comms but the content is framework-derived, request the
   owning skill's output as input rather than re-deriving it.
 - **Principal response vs. junior response:** Principal routes the AM update to
   daily-status and offers to calibrate the result for a different audience
-  afterward. Junior drafts a plausible Type 4 "morning status" from chat memory;
+  afterward. Junior drafts a plausible "morning status" executive brief from chat memory;
   it contradicts the carry-forward tracker, the Daily Status Log never gets
   appended, and the team's trust in the channel update erodes.
 
-### Governed project artifact produced as a Type 7 documentation update — TRIG
+### Governed project artifact produced as a Confluence-documentation update — TRIG
 
 - **Signature (observable signal):** A request phrased as "draft / write / put
   together [artifact]" where the artifact is a governed project deliverable with
   a defined Document Tier and template — RAID Log, Project Plan, Test Plan,
-  Training Plan, FDD — is fulfilled as a Type 7 Confluence/documentation output
+  Training Plan, FDD — is fulfilled as a Confluence-documentation output
   instead of routing to artifact-generator's staged 08-Generated/ flow.
-- **Conditional:** do NOT produce a governed project artifact through the Type 7
-  documentation path when the request names a deliverable with a defined
+- **Conditional:** do NOT produce a governed project artifact through the
+  Confluence-documentation path when the request names a deliverable with a defined
   Document Tier and template, because artifact-generator owns artifact
   scaffolding — staging in 08-Generated/ with metadata and the Tier 1 approval
   gate — and a comms-formatted artifact bypasses the staging and approval
   lifecycle that stakeholder-facing documents require.
 - **Root cause:** "Draft a" / "write the" verbs lead both skills' trigger sets,
-  and Type 7's "documentation update" reads as a catch-all for any
+  and the Confluence-documentation type reads as a catch-all for any
   document-shaped output; the push-to-resolve bias completes the draft rather
   than questioning whether the output is a communication at all.
 - **Mitigation:** At type detection, ask of the deliverable: is the output a
   message ABOUT project state (a communication — proceed), or IS it project
   state (an artifact — route to artifact-generator)? Artifacts have a home
   folder in the 01–08 structure and an approval tier; communications have a
-  recipient. Type 7 stays for formatting an update to existing documentation,
-  not for originating governed artifacts.
+  recipient. The Confluence-documentation type stays for formatting an update to
+  existing documentation, not for originating governed artifacts.
 - **Principal response vs. junior response:** Principal routes "draft the
   training plan" to artifact-generator and offers the announcement comm as the
   companion piece comms-writer legitimately owns. Junior writes a training plan
@@ -703,6 +750,62 @@ structural conformance and content quality.
   was actually sent, the user reads the summary as a completed action, and the
   escalation everyone believes is on the leadership record never reaches a recipient
   until the deadline it was escalating has already passed.
+
+### Owned-generation type drafted via a runtime Anthropic call or off the owned path — PROC
+
+- **Signature (observable signal):** A request for an executive brief or a stakeholder
+  email is fulfilled by narrating or invoking a runtime Anthropic skill call, OR is
+  drafted off a primary type's path (announcement / Confluence documentation) so it skips
+  the design-time-harvested voice-fidelity + audience-profile + 5-rule application the
+  owned-generation contract requires.
+- **Conditional:** do NOT generate an executive brief or stakeholder email through any
+  runtime Anthropic dependency, or off the primary-type drafting path, when the request
+  targets one of the two owned-generation types, because those two types are owned
+  first-party (own-with-harvest per the skill-sourcing-coupling posture ADR) and a runtime
+  dependency on this highest-blast-radius stakeholder-facing surface is exactly what that
+  ADR forbids — a silent upstream change would alter an executive's briefing with no signal.
+- **Root cause:** The harvested-at-design-time, generated-first-party distinction is
+  invisible at draft time; under output pressure the agent reaches for the nearest familiar
+  path or assumes the upstream `product-management/stakeholder-comms` skill is a runtime
+  dependency, because the original issue framing historically described a "wrapper."
+- **Mitigation:** Generate both owned-generation types in-skill, applying
+  `references/voice-guide.md` + `references/audience-profiles.md` + the 5 PMO-critical rules
+  at generation. Never route them to a runtime Anthropic call. The upstream
+  `product-management/stakeholder-comms` is a design-time harvest reference only (catalogued
+  in `core/standards/upstream-reference-catalog.md`); consult it when authoring the skill,
+  never at runtime.
+- **Principal response vs. junior response:** Principal generates the exec brief first-party
+  with the harvested structure and declares the readiness gate. Junior narrates a runtime
+  Anthropic hand-off (or drafts off the announcement template) — the output misses the PMO
+  voice contract, and on a stakeholder-facing surface that is the exact silent-drift failure
+  the posture ADR exists to prevent.
+
+### Narrowed-out type drafted as a primary PMO-unique output — TRIG
+
+- **Signature (observable signal):** An executive brief or stakeholder email is fulfilled
+  from the primary 6-type catalog's general drafting path, bypassing the
+  [§ Owned-generation types](#owned-generation-types-own-with-harvest) subsection — the draft
+  skips the design-time-harvested voice-fidelity + audience-profile application the
+  owned-generation path applies to those two types.
+- **Conditional:** do NOT draft an executive brief or a stakeholder email through the
+  primary 6-type path when the request targets one of the two owned-generation types,
+  because after the catalog narrowing those two types are owned first-party with
+  design-time-harvested structure (own-with-harvest per the skill-sourcing-coupling posture
+  ADR) and drafting them off the primary path skips the voice-fidelity + audience-profile +
+  PMO-rule application their owned-generation contract requires.
+- **Root cause:** After the narrowing, exec brief and stakeholder email no longer carry a
+  primary named heading in the catalog index; under output pressure the agent reaches for
+  the nearest primary drafting path (announcement / Confluence documentation) rather than
+  the owned-generation subsection.
+- **Mitigation:** At type detection, classify the request against BOTH the 6 primary types
+  AND the 2 owned-generation types. Exec brief / stakeholder email route to the
+  §Owned-generation types subsection (first-party generation applying voice-fidelity +
+  audience-profiles + the 5 PMO-critical rules at generation). Confirm the 5 PMO-critical
+  rules are applied identically to owned-generation output.
+- **Principal response vs. junior response:** Principal routes "write the exec brief" to the
+  owned-generation path, applies the harvested structure first-party, and declares the
+  readiness gate. Junior drafts it off the announcement template — the output misses the PMO
+  voice contract the two owned types require.
 
 ## Shared Behavioral Rules
 

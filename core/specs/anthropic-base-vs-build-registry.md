@@ -168,7 +168,7 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
 | `overlap_rationale` | Produces audience-calibrated stakeholder communications (email, Teams, Confluence, exec briefs, agendas). No Anthropic counterpart observed in Hybrid baseline. |
-| `overlap_notes` | `null` |
+| `overlap_notes` | Design-time harvest relationship recorded: comms-writer owns exec-brief + stakeholder-email generation first-party and harvests structure/phrasing from `product-management/stakeholder-comms` at design time (own-with-harvest per ADR-021). Catalogued in `../standards/upstream-reference-catalog.md` (entry `stakeholder-comms-structure`); no runtime coupling. Observation, not a constraint. |
 | `build_buy_observation` | PMO custom skill for stakeholder communication authoring; no Anthropic equivalent observed in Hybrid baseline. |
 
 ### Row 5 — daily-status
