@@ -81,10 +81,43 @@ IMP_RE = re.compile(r"[Ii][Mm][Pp]-[0-9]+")
 # deploy.sh Check 5 scope). A changed file matches if its POSIX path matches.
 SKILL_SPEC_RE = re.compile(r"^(?:core|operations|release)/skills/[^/]+/SKILL\.md$")
 
-# Roster-TOTAL claim shapes. A totalizing qualifier is REQUIRED so that bare
-# "N skills" subtotals / module-counts / other-population counts are not matched.
-# Each alternative captures the integer in one group; _claimed_int() returns the
-# first non-empty group. Ordered most-specific first.
+# ---------------------------------------------------------------------------
+# Count-detector recall surface (issue #130 DT F3 — intentional + documented).
+#
+# The count detector trades recall for precision: a totalizing qualifier is
+# REQUIRED so that bare "N skills" subtotals / module-counts / other-population
+# counts (which the corpus uses pervasively and legitimately) are never flagged.
+# This makes the recall boundary a deliberate design choice, enumerated here so
+# it is visible and intentional rather than accidental.
+#
+# IS caught (a WRONG roster total in any of these totalizing forms fires):
+#   - "all [of the] N skills"                 e.g. "all 20 PMO skills"
+#   - "every one of the N skills"             e.g. "every one of the 25 skills"
+#   - "N PMO skills" / "N platform skills"    (the qualifier itself totalizes)
+#   - "N skills total" / "N skills in total"
+#   - "total of N skills"
+#   - "the platform's N skills" / "the platform has N skills"   (F3)
+#   - "the N-skill suite|roster|set|platform|catalog"           (F3)
+#   - "the full|complete|entire|whole roster|set|suite|... of N skills"  (F3)
+#   - "N skills in the suite|roster|set|platform|catalog"       (F3)
+#
+# Is NOT caught (deliberate boundaries — flagging these would risk a
+# false-positive on a legitimate non-roster mention, so they are left to the
+# `allow-count` override or a corrected number, not forced into the matcher):
+#   - bare "N skills" with no totalizer        — pervasive subtotal/module form
+#                                                 ("6 skills", "13 skills consume
+#                                                 PROJECT.md", "9 skills" for a pack)
+#   - "N custom skills" with no other totalizer — "custom" alone is treated as a
+#                                                 scoped subset, not a roster total
+#   - "N skills" inside a fenced code block      — excluded structurally
+#   - any before/after example with an arrow     — EXAMPLE_ARROW_RE (either order)
+#   - a number written as words ("nineteen skills") — out of scope by design
+# A roster total phrased outside these shapes can still be guarded explicitly
+# with `<!-- skill-count-imp: allow-count -->` if a future author needs it.
+# ---------------------------------------------------------------------------
+#
+# Roster-TOTAL claim shapes. Each alternative captures the integer in one group;
+# _claimed_int() returns the first non-empty group. Ordered most-specific first.
 _COUNT_CLAIM_PATTERNS = (
     # "all [of the] N [PMO|platform|custom] skills"
     r"\ball\s+(?:of\s+the\s+)?([0-9]{1,3})\s+(?:PMO\s+|platform\s+|custom\s+)?skills?\b",
@@ -96,14 +129,36 @@ _COUNT_CLAIM_PATTERNS = (
     r"\b([0-9]{1,3})\s+skills?\s+(?:in\s+)?total\b",
     # "total of N [PMO|platform|custom] skills"
     r"\btotal\s+of\s+([0-9]{1,3})\s+(?:PMO\s+|platform\s+|custom\s+)?skills?\b",
+    # (F3) "the platform's N skills" / "the platform has N skills"
+    r"\bthe\s+platform(?:'s|\s+has)\s+([0-9]{1,3})\s+(?:PMO\s+|platform\s+|custom\s+)?skills?\b",
+    # (F3) "the N-skill suite|roster|set|platform|catalog[ue]"
+    r"\bthe\s+([0-9]{1,3})-skill\s+(?:suite|roster|set|platform|catalog(?:ue)?)\b",
+    # (F3) "the full|complete|entire|whole roster|set|suite|collection|catalog|lineup of N skills"
+    r"\bthe\s+(?:full|complete|entire|whole)\s+(?:roster|set|suite|collection|catalog(?:ue)?|lineup|line-up)\s+of\s+([0-9]{1,3})\s+(?:PMO\s+|platform\s+|custom\s+)?skills?\b",
+    # (F3) "N skills in the suite|roster|set|platform|catalog[ue]"
+    r"\b([0-9]{1,3})\s+skills?\s+in\s+the\s+(?:suite|roster|set|platform|catalog(?:ue)?)\b",
 )
 COUNT_CLAIM_RE = re.compile("(?:%s)" % "|".join(_COUNT_CLAIM_PATTERNS), re.IGNORECASE)
 
 # Before/after example form: an arrow (->, →, –, —, en/em dash) joining two
-# numbers near "skills" denotes a documented cardinality-change example
-# (e.g. "20 custom skills -> 19") and is NOT a current-state claim.
+# numbers near "skills" denotes a documented cardinality-change example and is
+# NOT a current-state claim. The example may be written in EITHER ordering and
+# both must be recognized (issue #130 DT F1):
+#   skills AFTER the arrow:  "20 -> 19 skills"
+#   skills BEFORE the arrow: "all 20 PMO skills -> 19" / "20 custom skills -> 19"
+# Without the skills-before-arrow arm, a legitimate totalizer-form before/after
+# example ("all 20 PMO skills -> 19") matched COUNT_CLAIM_RE (the totalizer
+# fires) but escaped the guard, producing a false-positive. An arrow MUST be
+# present for the guard to apply, so a real current-state drift claim with no
+# arrow ("all 19 PMO skills") still fires.
 EXAMPLE_ARROW_RE = re.compile(
-    r"[0-9]+\s*(?:->|→|–|—)\s*[0-9]+\s*(?:custom\s+|PMO\s+|platform\s+)?skills?",
+    r"(?:"
+    # skills AFTER the arrow
+    r"[0-9]+\s*(?:->|→|–|—)\s*[0-9]+\s*(?:custom\s+|PMO\s+|platform\s+)?skills?"
+    r"|"
+    # skills BEFORE the arrow (totalizer or bare-qualifier form)
+    r"[0-9]+\s+(?:custom\s+|PMO\s+|platform\s+)?skills?\s*(?:->|→|–|—)\s*[0-9]+"
+    r")",
     re.IGNORECASE,
 )
 
@@ -286,7 +341,10 @@ def run_self_test():
     else:
         failures.append("(d5) 'all 6 skills' (totalizer, out-of-authority) should flag")
 
-    # (e) before/after example "20 custom skills -> 19" does NOT flag.
+    # (e) before/after example "20 custom skills -> 19" does NOT flag. This
+    #     string is suppressed by the count-shape (no totalizer matches bare
+    #     "N custom skills"), NOT by the arrow-guard — so (e) alone does not
+    #     exercise EXAMPLE_ARROW_RE. (e3) below covers the guard genuinely.
     if scan_count("e.g. 20 custom skills -> 19 in the header", valid):
         failures.append("(e) example form '20 custom skills -> 19' should NOT flag")
 
@@ -294,13 +352,47 @@ def run_self_test():
     if scan_count("<!-- skill-count-imp: allow-count -->\nAll 8 skills defined.", valid):
         failures.append("(e2) allow-count override should suppress the count finding")
 
+    # (e3) ARROW-GUARD EXERCISE (issue #130 DT F1/F2). A totalizer-form
+    #      before/after example with skills BEFORE the arrow ("all 20 PMO skills
+    #      -> 19") DOES match COUNT_CLAIM_RE (the 'all N PMO skills' totalizer
+    #      fires) — so it would be a false-positive unless EXAMPLE_ARROW_RE
+    #      suppresses it. This case therefore genuinely tests the arrow-guard
+    #      (unlike (e), where the count-shape never matched in the first place).
+    if not COUNT_CLAIM_RE.search("Historically all 20 PMO skills -> 19 after the split."):
+        failures.append(
+            "(e3-pre) precondition broken: 'all 20 PMO skills -> 19' must match "
+            "COUNT_CLAIM_RE so the arrow-guard is what suppresses it"
+        )
+    if scan_count("Historically all 20 PMO skills -> 19 after the split.", valid):
+        failures.append(
+            "(e3) totalizer-before-arrow example 'all 20 PMO skills -> 19' should "
+            "NOT flag (arrow-guard must recognize skills-before-arrow ordering)"
+        )
+
+    # (e4) F3 RECALL-SURFACE EXERCISE (issue #130 DT F3). A WRONG roster total in
+    #      a totalizing framing added under F3 ("the platform's N skills") must
+    #      fire; the same framing with a CORRECT total must pass. This protects
+    #      the broadened recall surface against silent regression.
+    if not scan_count("Today the platform's 19 skills are deployed.", valid):
+        failures.append(
+            "(e4a) F3 framing \"the platform's 19 skills\" should flag (19 not in authority)"
+        )
+    if scan_count("Today the platform's 22 skills are deployed.", valid):
+        failures.append(
+            "(e4b) F3 framing \"the platform's 22 skills\" should pass (22 in authority)"
+        )
+    if not scan_count("The full roster of 19 skills shipped.", valid):
+        failures.append(
+            "(e4c) F3 framing 'the full roster of 19 skills' should flag (19 not in authority)"
+        )
+
     if failures:
         sys.stderr.write("self-test FAILED:\n")
         for f in failures:
             sys.stderr.write("  - %s\n" % f)
         return 1
 
-    sys.stdout.write("self-test OK (10 invariants passed)\n")
+    sys.stdout.write("self-test OK (16 invariants passed)\n")
     return 0
 
 
