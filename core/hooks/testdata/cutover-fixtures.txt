@@ -94,13 +94,13 @@ CLEAN	ISSUEREF-POS	50|60|Parent issue establishes the standard and enforcement s
 # exercised at the hook/CI integration test, not by this content-level fixture. Synthetic
 # placeholder numbers/owners — test data for the URL-shape detector, NOT real references.
 # Positive (the regex MUST match — issues/pull/milestone with a 3rd path segment):
-FLAG	URL	See https://github.com/cody-hutson/pmo-platform/issues/333 for context.
-FLAG	URL	The fix landed in https://github.com/cody-hutson/pmo-platform/pull/682 last cycle.
+FLAG	URL	See https://github.com/owner/repo/issues/333 for context.
+FLAG	URL	The fix landed in https://github.com/owner/repo/pull/682 last cycle.
 FLAG	URL	Milestone tracker: github.com/owner/repo/milestone/3 holds the slice.
 FLAG	URL	The Anthropic example github.com/anthropics/claude-code/issues/42 is rung-6 too.
 # Negative (the regex MUST NOT match — bare repo URL has no 3rd path segment; a word that
 # merely contains "pull"; an install URL):
-CLEAN	URL	Clone the repo: github.com/cody-hutson/pmo-platform then run install.
-CLEAN	URL	The install URL https://github.com/cody-hutson/pmo-platform is documentation-exempt.
+CLEAN	URL	Clone the repo: github.com/owner/repo then run install.
+CLEAN	URL	The install URL https://github.com/owner/repo is documentation-exempt.
 CLEAN	URL	The pullrequest workflow guide at github.com/owner/repo/pulls-guide is fine.
 CLEAN	URL	State the rule unconditionally and summarize the referenced content inline.
