@@ -1,6 +1,5 @@
 <!-- repo-integrity: allow-issue-ref -->
 <!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-memory-ref -->
 ---
 version: cross-reference-integrity-ci
 date: 2026-06-12
@@ -144,7 +143,7 @@ release/releases/plans/cross-reference-integrity-ci_RELEASE_PLAN.md   add   [rel
 | ID | Risk | Mitigation |
 |---|---|---|
 | RL-1 | **All three are warn-mode-initial CI.** A warn-log is blind to false negatives. Shipping three new/changed enforcement surfaces simultaneously risks a coordinated calibration gap. | Each issue's DT must include a positive-detection test (the gate actually fires on a known-bad input), not just "workflow runs". #314 already has the fixture discipline (extend it); #169/#130 must add equivalent fixture/positive-case tests. [SOURCE: reference-durability.yml fixture self-test precedent, lines 29–39.] |
-| RL-2 | **Stale-input class across the milestone.** #169 (~50 baseline) and #130 (TSV) both rest on point-in-time artifacts that have since diverged. Pattern Cache Scan (M3) flags this as the `audit-baseline-when-target-population-is-empty` / stale-snapshot class. | Re-baseline #169 at the release-branch SHA + document in the plan; re-scope #130 off the dead artifact. Cite the v11.01b Hybrid-baseline precedent. [SOURCE: confirmed pattern `feedback_release_ops_audit_baseline_when_target_population_is_empty`.] |
+| RL-2 | **Stale-input class across the milestone.** #169 (~50 baseline) and #130 (TSV) both rest on point-in-time artifacts that have since diverged. Pattern Cache Scan (M3) flags this as the `audit-baseline-when-target-population-is-empty` / stale-snapshot class. | Re-baseline #169 at the release-branch SHA + document in the plan; re-scope #130 off the dead artifact. Cite the v11.01b Hybrid-baseline precedent. [SOURCE: confirmed pattern — audit-baseline-when-target-population-is-empty / stale-snapshot class.] |
 | RL-3 | Rollback complexity: LOW across the board. All deliverables are additive CI/tooling; `git revert` restores prior state; warn-mode means no PR is hard-blocked during shakedown. | Standard `git revert` per file; no data migration, no governance-file mutation. |
 
 ---
