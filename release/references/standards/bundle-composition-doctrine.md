@@ -29,13 +29,13 @@ last-updated: 2026-05-25
 
 The doctrine codifies the **bundle-composition frame** the platform applies when deciding what coheres as a single shippable release.
 
-**Current default per platform config: F1 — SAFe Feature-Slicing + Vertical Slice methodology.** This frame anchors all 7 steps below and matches PMO's existing release practice (18+ milestones already use AFTER/BEFORE outcome framing; the 2026-04-24 reorg was an empirical instance of the methodology). The frame is **config-driven** — per the unified pmo-platform global config mechanism (filed for a future release), the frame is swappable on milestone-creation and milestone-update without rewriting this doctrine's structure. Replacing the frame swaps the prose anchor of § 1 + reorients § 2 step-wise terminology; § 3-§ 9 structural rules (sizing, sequencing, naming, tight-merge) remain frame-independent.
+**Current default per platform config: F1 — SAFe Feature-Slicing + Vertical Slice methodology.** This frame anchors all 7 steps below and matches PMO's existing release practice (18+ milestones already use AFTER/BEFORE outcome framing; the 2026-04-24 reorg was an empirical instance of the methodology). The frame is **config-driven** — the live `[bundling].bundle_doctrine_frame` field in `core/config/platform-config.toml.template` (default `"F1"`; schema at `core/schemas/platform-config-schema.md`) selects the frame, resolved per `core/governance/OPERATIONS.md § Platform-Config Resolution Protocol` (5-rung cascade) on milestone-creation and milestone-update without rewriting this doctrine's structure. Replacing the frame swaps the prose anchor of § 1 + reorients § 2 step-wise terminology; § 3-§ 9 structural rules (sizing, sequencing, naming, tight-merge) remain frame-independent.
 
 **Frame-pluggability discipline (per operator clarification 2026-05-24, recorded in the Collective Review issue comment):**
 
 > *"For now we can default to the agile version. Enhancement would need to set this config on creation and update."* — operator-rendered at Collective Review 2026-05-25.
 
-Read this doctrine as "the platform currently defaults to F1 per platform config" — NOT as "F1 is the only valid bundle-composition frame." Future agents and operators consulting this doctrine should consult the unified config surface per the future unified config surface once that mechanism ships; the doctrine prose stays frame-replaceable.
+Read this doctrine as "the platform currently defaults to F1 per platform config" — NOT as "F1 is the only valid bundle-composition frame." Agents and operators consulting this doctrine resolve the active frame from the live `[bundling].bundle_doctrine_frame` field (`core/config/platform-config.toml.template`) per the 5-rung resolver; the doctrine prose stays frame-replaceable.
 
 ### 1.1 F1 — SAFe Feature-Slicing + Vertical Slice methodology (current default)
 
@@ -66,7 +66,7 @@ For doctrine readers evaluating whether F1 remains the right default for their c
 - **F2 — Continuous Delivery deployment-pipeline batching** — *Continuous Delivery* (Jez Humble + David Farley, Addison-Wesley Signature Series, Pearson, 2010; ISBN 978-0-321-60191-9; 2011 Jolt Excellence Award). Anchors steps 5-7 (sizing, sequence, external-dep targets). Strongest fit when release cadence is high-frequency continuous deploy rather than milestone-batch. Foundational CD/CI text.
 - **F3 — Lean Startup MVP + Build-Measure-Learn** — *The Lean Startup* (Eric Ries, Crown Business, 2011; ISBN 978-0-307-88789-4). Anchors step 1 only (capability framing). Weakest direct fit (product-development context vs. release-engineering context); surfaced for completeness.
 
-The frame-pluggability discipline allows the platform to switch to F2, F3, a hybrid (e.g., F1 + F2 sub-step 6 citation), or a custom-defined frame via the future unified config surface without rewriting this doctrine.
+The frame-pluggability discipline allows the platform to switch to F2, F3, a hybrid (e.g., F1 + F2 sub-step 6 citation), or a custom-defined frame via the live `[bundling].bundle_doctrine_frame` config field without rewriting this doctrine.
 
 ## 2. Purpose and Scope
 
@@ -335,7 +335,7 @@ Within a bundled release, the **execution sequence** of issues follows:
 
 **Grandfathered milestones** continue under operator-judgment composition. The doctrine applies prospectively to milestone creation; the doctrine does NOT retroactively amend grandfathered milestone descriptions.
 
-**Frame-pluggability cutover.** When the unified config mechanism ships, the bundle-composition frame becomes config-driven. Existing milestones (under F1 default) continue under F1; new milestones created after the config mechanism may select an alternative frame per the config surface. The doctrine prose at § 1 remains; only the `current default per platform config` declaration updates.
+**Frame-pluggability cutover.** The bundle-composition frame is config-driven via the live `[bundling].bundle_doctrine_frame` field (`core/config/platform-config.toml.template`, default `"F1"`). Existing milestones (under the F1 default) continue under F1; new milestones may select an alternative frame per the config surface, resolved by the 5-rung resolver (`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`). The doctrine prose at § 1 remains; only the resolved frame value changes.
 
 ## 11. Composition with Sibling Standards
 
@@ -463,7 +463,7 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 
 **Future-state config mechanism:**
 
-- Unified pmo-platform global config mechanism (Enhancement) — once shipped, makes the § 1 frame swappable on milestone-creation and milestone-update without doctrine prose rewrite
+- Unified pmo-platform config mechanism (adapter-config-foundation) — SHIPPED; the live `[bundling].bundle_doctrine_frame` field (`core/config/platform-config.toml.template`) makes the § 1 frame swappable on milestone-creation and milestone-update without doctrine prose rewrite, resolved per `core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`
 
 ## 13. Version History
 

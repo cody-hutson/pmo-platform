@@ -33,7 +33,7 @@
 # (the macOS system bash), `declare -a` inside a function — or inside a script
 # sourced from a function — makes the array function-local; the caller never
 # sees it. The lib_compose_source_manifest helper IS a function, so any
-# `declare -a` here would silently break all 17 composition-surface installs.
+# `declare -a` here would silently break all 18 composition-surface installs.
 # Plain assignment is global by default in bash 3.2, which is what we need.
 # (Verified: bash 3.2.57(1)-release on Darwin 25.x.)
 
@@ -58,6 +58,12 @@ COMPOSITION_SURFACE_FILES=(
   "core/config/allowlists/skip-doc-link-check.txt|instance|raw"
   "core/config/allowlists/agents-model-overrides.txt|instance|raw"
   "core/config/allowlists/status-label-invariant-exemption-list.txt|instance|raw"
+  # Platform-behavior config surface (adapter-config-foundation, #22). Ships
+  # Layer-1 global DEFAULTS + the managed-section fence; the operator extends
+  # the Layer-1 surface in the OPERATOR ADDITIONS section. Per-tier VALUE
+  # overrides live in separate Layer-2 surfaces (XDG config / PORTFOLIO.md /
+  # program-config.toml / PROJECT.md) — NOT this seed. Token-free.
+  "core/config/platform-config.toml.template|instance|raw"
 
   # Hub-state-tier (operator-scoped, ~/Claude/personal/pmo-instance/hub-state/<basename>)
   # Schema templates for hub-state Surfaces A, C + action-items ledger. Hub

@@ -98,12 +98,58 @@ operator_instance_hub_state_path = ""
 # core/standards/initiative-roadmap-framework.md.
 operator_instance_roadmaps_path = ""
 
+[adapters]
+# Host-adapter selectors — the four external surfaces the platform integrates
+# with (ADR-017 §S2 names operator.toml as the home for "identity, paths,
+# methodology, adapters"). This is the canonical onboarding seam: onboarding-time
+# operator choices about which host surfaces to use are written here.
+# Each selector ships a v1 default so a fresh install runs end-to-end with no
+# operator action. These are install-level / individual-tier choices; finer-
+# grained per-project relationship-mapping tuning lives in platform-config.toml
+# [relationship_mapping] (see core/config/platform-config.toml.template).
+
+# Repository-host adapter — where the platform's git surface and code review live.
+# v1 ships GitHub via the `gh` CLI.
+# Valid: "github" (GitHub via gh) — additional hosts gated on their adapter tickets.
+# Default: "github"
+repo_host = "github"
+
+# Ticketing adapter — the work-tracking surface (issues / milestones / board)
+# the pipeline reads and writes. SUPERSEDES the legacy [platform].work_board
+# field below (kept as a deprecated alias for backward-compat — see [platform]).
+# v1 ships GitHub Projects (issues + milestones + a Projects v2 board).
+# Valid: "github" (GitHub issues + Projects) | "jira+github" | "gitlab+jira"
+# Default: "github"
+ticketing = "github"
+
+# Knowledge-base adapter — where reference / documentation content is authored
+# and read. v1 ships a generic Markdown KB (the repo's own docs/ + reference tree).
+# Valid: "markdown" (generic Markdown KB) — Confluence/Notion gated on their tickets.
+# Default: "markdown"
+kb = "markdown"
+
+# AI-tool adapter — the agent runtime the platform's skills and hub run on.
+# v1 ships Claude Code (CLI or Desktop).
+# Valid: "claude-code" (Claude Code CLI/Desktop) — other runtimes gated on their tickets.
+# Default: "claude-code"
+ai_tool = "claude-code"
+
 [platform]
 # Work-board adapter. Selects which work-tracking surface the platform
 # integrates with. Reserved field per pmo-platform repo-adapter
 # parameterization (operator decision tracked in milestone final-consolidation).
 # Valid: "github" | "jira+github" | "gitlab+jira"
 # Default: "github"
+#
+# DEPRECATED ALIAS (adapter-config-foundation): superseded by
+# [adapters].ticketing above. Retained — NOT removed. It has no current
+# internal reader, but it ships here in the template and setup-workspace.sh
+# generates it into operator configs, so it is deprecated-not-removed to
+# preserve a clean migration path and avoid breaking any operator/external
+# config that references it. New consumers SHOULD read [adapters].ticketing.
+# When both are set and differ, [adapters].ticketing is authoritative; a future
+# Track A governed change may fold this alias once it is confirmed unused
+# everywhere.
 work_board = "github"
 
 # Comms platform adapter. Selects the team-comms surface comms-writer
@@ -111,3 +157,24 @@ work_board = "github"
 # Valid: "" (none) | "slack" | "teams" | "email"
 # Default: "" (no platform-specific formatting)
 comms_platform = ""
+
+[methodology]
+# Global default delivery approach — the methodology archetype an install
+# starts from when a project does NOT set its own `delivery_approach`.
+# ADR-017 §S2 names methodology as an operator.toml concern (alongside
+# identity / paths / adapters), so the DEFAULT lives here, not in
+# platform-config.toml.
+#
+# This is ONLY the global default + the resolver fallback. The enum, its
+# validation (V1-V12), and the Custom block stay canonical in
+# core/schemas/project-schema.md and
+# release/references/specs/methodology-parameterization-v1.md — this field
+# does NOT re-list or re-validate them. A project's own
+# `delivery_approach: <value>` in PROJECT.md frontmatter overrides this default
+# (the 5-rung resolver's project rung beats the global rung).
+#
+# Valid: one of the 8 archetypes — Scrum | Kanban | XP | Waterfall | PRINCE2 |
+#        SAFe | Hybrid | Custom (per project-schema.md `delivery_approach` enum).
+# Default: "Scrum" (the prior implicit "sprint-centric Agile" default made
+#          explicit, per the methodology-parameterization keystone).
+default_delivery_approach = "Scrum"
