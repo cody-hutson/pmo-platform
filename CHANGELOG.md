@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.14] - 2026-06-13
+
+The platform's operator-configurable choices now resolve from one declared surface with a documented precedence order and a catalog of every field, and a new onboarding map lays out the whole clone-to-working-install journey and where each host choice plugs in. This is the adapter-config foundation the host adapters compose into.
+
+### Added
+
+- **Every platform configuration field is now discoverable in one place.** A single catalog lists each configurable field — what it does, its default, and where to set it — and a resolver decides the effective value from a clear precedence order (a per-project setting wins over a global default; an individual override wins over a project setting). *Why it matters:* you can see and change what is configurable without reading every governance file. ([#22](https://github.com/cody-hutson/pmo-platform/issues/22))
+- **A whole-journey onboarding map is now available.** A new map orders the path from cloning the repository to a working install and names four uniform extension points where each host choice — code repository, ticketing, knowledge base, and AI tool — plugs in. *Why it matters:* a new user has one place that shows the full arc and exactly where their own systems attach. ([#703](https://github.com/cody-hutson/pmo-platform/issues/703))
+
+### Changed
+
+- **Configuration is split into two surfaces by concern.** Your environment and identity live on one surface; tunable platform behavior lives on another. *Why it matters:* the security-sensitive identity settings stay separate from the freely-tunable behavior settings, so the two are governed and changed independently. ([#22](https://github.com/cody-hutson/pmo-platform/issues/22))
+
+[Full notes](release/releases/notes/v1.14_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.14)
+
 ## [v1.13] - 2026-06-13
 
 Re-versioned from v1.12: this release was planned and built as `v1.12`, but the concurrent `corpus-durability-enforcement` release claimed v1.12 first, so the canonical version is v1.13 (the signed v1.13 tag points at this release's merge commit). Runtime code tests now run in CI and gate releases, test results are machine-readable in the pipeline, and the platform gains its first standing install/onboarding/update regression suite.
