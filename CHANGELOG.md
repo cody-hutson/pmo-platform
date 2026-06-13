@@ -8,6 +8,25 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.13] - 2026-06-13
+
+Re-versioned from v1.12: this release was planned and built as `v1.12`, but the concurrent `corpus-durability-enforcement` release claimed v1.12 first, so the canonical version is v1.13 (the signed v1.13 tag points at this release's merge commit). Runtime code tests now run in CI and gate releases, test results are machine-readable in the pipeline, and the platform gains its first standing install/onboarding/update regression suite.
+
+### Added
+
+- **A standing install, onboarding, and update regression suite now runs at release time.** A new sandboxed suite performs a fresh install, checks no configuration placeholders are left unresolved, verifies file links and references in the deployed tree, confirms a two-phase deploy, and checks user configuration survives a simulated version upgrade. *Why it matters:* install and onboarding breakage that only shows up on a clean machine is caught by a repeatable suite before a release ships. ([#706](https://github.com/cody-hutson/pmo-platform/issues/706))
+- **Runtime test results are now machine-readable in the pipeline.** Test outcomes are recorded as a structured `test-run` entry in the pipeline event log and carried in the Dev-Testing-to-QA handoff, instead of living only in raw CI logs. *Why it matters:* downstream reviewers and agents can see whether a release's code tests passed without digging through Actions output. ([#430](https://github.com/cody-hutson/pmo-platform/issues/430))
+
+### Fixed
+
+- **The platform's runtime code tests now run in CI and gate pull requests.** The committed deploy-layer and hook-layer test suites, which previously ran in no automated workflow, now run on every pull request and fail it if a test breaks, regardless of where the repository is checked out; a manifest-count assertion that could silently re-rot is now derived from the manifest. *Why it matters:* a change that breaks the deploy or hook behavior is caught on the pull request instead of slipping through to a release. ([#319](https://github.com/cody-hutson/pmo-platform/issues/319))
+
+### Changed
+
+- **A changed code path now maps to the test suite that gates it.** Dev Testing has a documented rule connecting a changed runtime code area to the suite that must run for it, plus a step that runs it. *Why it matters:* there is no longer a guessing game about which tests cover a given code change — the gating suite is named and run. ([#430](https://github.com/cody-hutson/pmo-platform/issues/430))
+
+[Full notes](release/releases/notes/v1.13_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.13)
+
 ## [v1.12] - 2026-06-13
 
 ### Added
