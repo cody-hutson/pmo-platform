@@ -41,6 +41,7 @@ These are parallel — each governs a distinct activity-class at a distinct temp
 | [discovery-discipline.md](discovery-discipline.md) | Discovery | "What should this be? What don't we know?" | Before the artifact exists |
 | [decision-discipline.md](decision-discipline.md) | Decision | "What should we choose?" | At the recommendation point |
 | [review-discipline-principles.md](review-discipline-principles.md) | Review | "Is this correct?" | After the artifact exists |
+| [root-cause-analysis.md](root-cause-analysis.md) | RCA | "Why did this fail?" | After a defect/failure surfaces (activity-exit) |
 | [autonomous-execution-model.md](autonomous-execution-model.md) | Self-repair | "What can be retried, escalated, rolled back?" | During pipeline execution between gates |
 | [three-gulfs-methodology.md](three-gulfs-methodology.md) | Diagnosis | "Intent / Execution / Evaluation — where is the gap?" | At skill creation, improvement, eval design |
 | [diataxis-framework.md](diataxis-framework.md) | Documentation classification | "What kind of doc am I writing?" | When authoring or filing a documentation artifact |
