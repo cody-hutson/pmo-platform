@@ -2471,7 +2471,7 @@ cmd_check() {
 
       # 19c — header preserved (1st column header must be 'ts_iso')
       local c19_header_ok
-      c19_header_ok=$(/usr/bin/grep -c '^| ts_iso |' "$c19_log" 2>/dev/null || echo 0)
+      c19_header_ok=$(/usr/bin/grep -c '^| ts_iso |' "$c19_log" 2>/dev/null || true); c19_header_ok=${c19_header_ok:-0}
       if [[ "$c19_header_ok" -lt 1 ]]; then
         flag_warn_or_issue "pipeline-event-log-integrity" \
           "header row missing or malformed in $c19_log (expected '| ts_iso | …')"
