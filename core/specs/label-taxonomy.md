@@ -110,7 +110,7 @@ The following default GitHub labels were removed as not applicable to a single-o
 3. **One cluster label** per issue (assigned during triage Run 1)
 4. **Triage flags** are temporary — removed after triage decisions are executed
 5. **Status labels track lifecycle, not priority.** Priority is tracked in the issue body per intake schema.
-6. **`sub-task` is both category and lifecycle marker.** Sub-tasks are created during Engineering (Stage 6) and inherit the parent issue's status progression.
+6. **`sub-task` is both category and lifecycle marker.** Sub-tasks are created during Engineering (Stage 6) and inherit the parent issue's status: at creation, the Stage-6 scaffolding stamps the parent's current `status:` label onto the new sub-task (mirroring the parent's lifecycle position for board/query hygiene). Sub-tasks are **out of scope for the Check 16 status-label invariant** (`deploy.sh` Check 16 scans `--label improvement` issues only); the mirrored sub-task label is a hygiene convenience, not an invariant-enforced field. A sub-task's label is a point-in-time mirror taken at creation and is not auto-resynced on later parent transitions.
 
 ## Methodology Variation
 
