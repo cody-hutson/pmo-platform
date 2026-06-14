@@ -68,8 +68,8 @@ Is a formal record required (audit, compliance, decision documentation)?
 | Escalation Target | Channel | Format |
 |-------------------|---------|--------|
 | Peer PM / Tech Lead | Teams first, then email if >1 exchange | Conversational with specific ask |
-| Program Manager / RTE | Email with CC to PM | SIOR structure (Situation, Impact, Options, Recommendation) |
-| Steering Committee / Sponsor | Email with formal structure | Escalation communication format (see comms-writer Type 5) |
+| Program Manager / RTE | Email with CC to PM | SIOR structure per [sior-escalation-protocol.md](../../../../core/standards/sior-escalation-protocol.md) |
+| Steering Committee / Sponsor | Email with formal structure | Escalation (SIOR) format — see [sior-escalation-protocol.md](../../../../core/standards/sior-escalation-protocol.md) and the comms-writer Escalation type |
 | Vendor | Email (contractual record) | Professional, precise, deliverable-referenced |
 
 ---
