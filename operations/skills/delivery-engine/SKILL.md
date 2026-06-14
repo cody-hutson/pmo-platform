@@ -162,7 +162,7 @@ actions (merge duplicates, link dependencies, escalate blockers).
 tag referencing DoR or readiness.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the DoR criteria
+1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle).
 2. Evaluate each ticket against every DoR criterion
 3. For each failure:
    - Identify what's missing with specificity (not "needs AC" but "no testable
@@ -181,7 +181,7 @@ gate verdict, recommended actions for any FAIL items.
 discussion, any [DELIVERY] tag referencing sprint planning.
 
 **What you do**:
-1. Read `references/sprint-defaults.md` for planning parameters
+1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table, Cone-of-Uncertainty range widths, planning-horizon commitment rules, and the buffer three-zone model, and `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds
 2. Assess inputs: refined backlog (DoR-passed items), team capacity, velocity history,
    carryover from prior sprint, priority guidance
 3. Produce a sprint plan:
@@ -229,6 +229,8 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
    recommendation must include the drafted escalation message (3–5 sentences: context,
    specific ask, deadline). Recommendations without drafts violate push-to-resolve.
 5. Recommend adjustments: re-scope, re-assign, escalate, or accept risk
+6. When reporting velocity or capacity, apply `references/estimation-standards.md` velocity-as-range enforcement (§5) — express velocity and any derived figure as a range, never a point value
+7. Read `references/capacity-model.md` §9 Demand-Supply Gap RAG Thresholds when an at-risk assessment hinges on whether committed demand exceeds effective supply — a Red reading (ratio > 1.00) is a forcing function to surface a de-commit / re-scope / re-baseline decision, not a status note
 
 **Output**: Sprint health snapshot, item-level status, risk items, scope changes,
 recommended adjustments, drafted escalations.
@@ -239,7 +241,7 @@ recommended adjustments, drafted escalations.
 any [DELIVERY] tag referencing DoD or release.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for DoD and release readiness criteria
+1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition — including the QA/Acceptance (Stage 9) → Plan Review (Stage 10) exit predicate that BLOCKS the move while a P1 defect is open (§5, the QA-gate AC; this stage exit predicate feeds the LG-6 `[LG-6-EX-2]` gate criterion). At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4.
 2. Evaluate deliverables against DoD criteria:
    - Code/config complete and committed
    - Peer review completed
@@ -271,7 +273,7 @@ recommendation, remediation plan for failures, risk entries for any conditional 
 any [DELIVERY] tag referencing RAID, decisions, or milestones.
 
 **What you do**:
-1. Read `references/raid-templates.md` for the artifact templates
+1. Read `references/raid-templates.md` for the artifact templates. When the update logs a gate decision (a go/kill/hold/recycle or pass/fail rendered at a lifecycle gate), also read `references/gate-definitions.md` to attribute the decision to the correct lifecycle gate (LG-N) and authority holder.
 2. Process the input (new information, transcript extract, status change)
 3. Produce the updated artifact with:
    - New entries fully populated (all fields, evidence-tagged)
@@ -637,8 +639,12 @@ Read these on first use, then as needed per mode:
 | Document | When to read | What it covers |
 |----------|-------------|----------------|
 | `references/gate-checklists.md` | Mode C (DoR) or Mode F (DoD/Release) | Full DoR, DoD, and release readiness criteria |
+| `references/gate-definitions.md` | Mode F (gate transition), Mode G (gate decisions) | Project-lifecycle gate sequence (LG-0 Idea Screen → LG-10 Closure): per-gate entry/exit/authority/artifacts/escalation + the gate-transition BLOCK rule |
+| `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping, and the QA→Plan-Review P1-defect block |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
+| `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, velocity-as-range enforcement, contingency vs. management reserve |
+| `references/capacity-model.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Effective-capacity formula (focus-factor × context-switch × allocation), context-switching penalties, Brooks's-Law thresholds, 60/20/20 effort split, team-stability + vendor-ramp + bus-factor (managed-team lens) + demand-supply gap RAG |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
 | `references/dependency-rules.md` | Any mode with cross-item dependencies | Dependency types, escalation triggers, tracking format |

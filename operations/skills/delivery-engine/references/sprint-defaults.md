@@ -33,7 +33,7 @@ Default parameters for sprint-based and flow-based delivery, including iteration
 | Parameter | Default | Range | Source |
 |-----------|---------|-------|--------|
 | **Planned utilization** | 75% | 70-85% | C03 universal; C06 portfolio guidance |
-| **Focus Factor** | 0.65 | 0.60-0.75 | Accounts for meetings, email, context switching |
+| **Focus Factor** | *see canonical table* | *see canonical table* | Defined in the estimation-standards reference doc (this skill's references/ set); not restated here to avoid divergence |
 | **Unplanned work reserve** | 20% | 15-30% | Buffer for interrupts, production issues, discoveries |
 | **Technical debt allocation** | 15% | 15-20% | Non-negotiable minimum; prevents debt accumulation |
 
@@ -51,6 +51,8 @@ Feature capacity = Sprint capacity x (1 - Tech debt allocation)
 - Planned capacity: 400 x 0.65 = 260 hours
 - Sprint capacity: 260 x 0.80 = 208 hours
 - Feature capacity: 208 x 0.85 = 177 hours (remaining 31 hours for tech debt)
+
+(0.65 = the canonical default from the estimation-standards focus-factor table, shown here for the worked calculation; the table — default and valid range — is owned by the estimation-standards reference doc, not by this doc.)
 
 **Critical rule:** Never plan at 100% utilization. SAFe teams planned at 100% achieve only ~50% of planned business value. Context switching at 5+ concurrent projects reduces effective productivity to 5-20% per project.
 
