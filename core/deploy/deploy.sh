@@ -2456,9 +2456,9 @@ cmd_check() {
       # Data rows start with '| YYYY-' (ISO timestamp begins with a digit).
       # Header + separator do NOT match this pattern; only data rows do.
       local c19_log_rows c19_write_lines
-      c19_log_rows=$(/usr/bin/grep -cE '^\| [0-9]{4}-' "$c19_log" 2>/dev/null || echo 0)
+      c19_log_rows=$(/usr/bin/grep -cE '^\| [0-9]{4}-' "$c19_log" 2>/dev/null || true); c19_log_rows=${c19_log_rows:-0}
       # Write-log: non-blank, non-comment lines.
-      c19_write_lines=$(/usr/bin/grep -cE '^[^#[:space:]]' "$c19_write_log" 2>/dev/null || echo 0)
+      c19_write_lines=$(/usr/bin/grep -cE '^[^#[:space:]]' "$c19_write_log" 2>/dev/null || true); c19_write_lines=${c19_write_lines:-0}
 
       if [[ "$c19_log_rows" -ne "$c19_write_lines" ]]; then
         flag_warn_or_issue "pipeline-event-log-integrity" \
