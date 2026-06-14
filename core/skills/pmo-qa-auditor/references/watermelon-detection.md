@@ -122,7 +122,7 @@ rule below.
   [registry band: <🟢|🟡|🔴>]: <IDs>`; cite each RAID ID + its due-date + days-overdue +
   the registry Overdue-RAID-Count band the count falls in, as the evidence; route to the
   status author for a corrected (non-green) health or a documented reschedule.
-  **This is the #270 AC path.**
+  **This is the headline watermelon-AC path.**
 
 ### W4 — Velocity spike beyond credible band  · Severity: WEAK
 
@@ -203,7 +203,7 @@ by **severity tier** — NOT by any-1-fires (which over-flags) and NOT by a weig
 registry):
 
 - **WATERMELON-FLAG (Tier 1)** — **≥1 STRONG signal** (W1, W2, or W3) survives its FP filters.
-  A single strong contradiction of green is sufficient. (The #270 AC case: W3 fires → Tier 1.)
+  A single strong contradiction of green is sufficient. (The headline AC case: W3 fires → Tier 1.)
 - **WATERMELON-FLAG (Tier 2)** — **≥2 independent WEAK signals** (from W4–W8) survive on the
   **same project / reporting window**. Soft indicators must corroborate.
 - **INDETERMINATE / EVIDENCE-GAP** — **≥1 signal is un-evaluable** because the output omits the
