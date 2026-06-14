@@ -22,7 +22,7 @@ Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel
 
 - **The constraint is named correctly — a usage window, not a rate limit.** An overrun is routed to the mitigations that address a cumulative usage limit (run serially, defer, or reduce scope); in-prompt staggering is documented as a rate-limit-only defense, not the usage-window fix. *Why it matters:* the fix you are offered matches the real problem, rather than a timing tweak that does not move a cumulative-usage limit. ([#24](https://github.com/cody-hutson/pmo-platform/issues/24))
 
-[Full notes](release/releases/notes/parallel-launch-quota-budget-gate_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/parallel-launch-quota-budget-gate)
+[Full notes](release/releases/notes/parallel-launch-quota-budget-gate_RELEASE_NOTES.md)
 
 ## [v1.20] - 2026-06-14
 
