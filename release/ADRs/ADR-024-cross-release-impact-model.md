@@ -4,7 +4,7 @@ title: "ADR-024 — Cross-release impact model (structural-blast-radius axis via
 status: Accepted
 date: 2026-06-14
 release: cross-release-impact-model
-deciders: "cody-hutson (operator) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment), scope-locked at Collective Review"
+deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + operator at Collective Review scope-lock"
 tags: [release-ops, cross-release, contention-scoring, blast-radius, ref-forms, gate-criteria, parallelization]
 source_observations:
   - "2026-05-16 four-milestone parallel-run retro (four concurrent milestones): a prior parallelization assessment classified them runnable 'with no impact' using a ticket-dependency-edge + same-path classifier, structurally blind to the mover axis. A file-mover release's reorg merge VOIDed a sibling's Stage-9 GO basis (a rename/modify on a referenced pipeline reference doc, ~90% similar) with zero ticket-dependency edge between the two; ~9h unplanned re-baseline rework. A third concurrent release survived only because its targets were net-new files in a subtree the reorg left untouched — detection did not catch it, luck did."

@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-version-ref -->
 # Release Process — Git Workflow
 
 ## Lifecycle (Git-Native) — 13-Stage Pipeline

@@ -1,6 +1,8 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- repo-integrity: allow-memory-ref -->
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-issue-ref -->
+<!-- reference-durability: allow-version-ref -->
 # Release Plan — cross-release-impact-model
 
 > Stage 4 release plan of record. Authored at Stage 4 Planning; copied to this committed plan file at Stage 6 Engineering Commit 0 (SINGLE-branch topology). Source: parent #87, Milestone cross-release-impact-model. Operator B1 planning-gate decision record + Stage 5 scope-lock are recorded on the parent/sub-task issues; this file is the durable plan-of-record.
