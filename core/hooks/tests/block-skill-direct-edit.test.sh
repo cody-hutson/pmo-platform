@@ -89,6 +89,22 @@ EOF
 singular reference content
 EOF
 
+# Multi-root coverage: a migrated skill under operations/skills/ (the real source layout)
+OPS_MIGRATED_DIR="${SBX}/operations/skills/test-migrated-ops"
+/bin/mkdir -p "${OPS_MIGRATED_DIR}/references"
+/bin/cat > "${OPS_MIGRATED_DIR}/SKILL.md" <<'EOF'
+---
+name: test-migrated-ops
+description: test
+version: v10.2
+skill_discipline_migrated_v10_2: true
+---
+body
+EOF
+/bin/cat > "${OPS_MIGRATED_DIR}/references/existing.md" <<'EOF'
+ops reference content
+EOF
+
 PASS=0
 FAIL=0
 
@@ -173,6 +189,18 @@ if [ "$actual_exit" = "0" ]; then
 else
   echo "FAIL: Test 9: CLAUDE_HOOK_BYPASS=1 permits edit (exit=$actual_exit expected=0)"; FAIL=$((FAIL + 1))
 fi
+
+# Test 10: migrated skill under operations/skills/ (multi-root) SKILL.md → BLOCK-SKILL-EDIT-001
+test_case "Test 10: migrated skill under operations/skills/ SKILL.md → BLOCK-SKILL-EDIT-001" \
+  "$(payload Edit "${OPS_MIGRATED_DIR}/SKILL.md")" "$BLOCK_EXIT" "BLOCK-SKILL-EDIT-001"
+
+# Test 11: migrated skill under operations/skills/ references/*.md → BLOCK-SKILL-EDIT-002
+test_case "Test 11: migrated skill under operations/skills/ references/*.md → BLOCK-SKILL-EDIT-002" \
+  "$(payload Edit "${OPS_MIGRATED_DIR}/references/existing.md")" "$BLOCK_EXIT" "BLOCK-SKILL-EDIT-002"
+
+# Test 12: deploy-target path (.claude/skills/) is NOT gated → pass-through
+test_case "Test 12: .claude/skills/ deploy target → pass-through (not a source root)" \
+  "$(payload Edit "${SBX}/.claude/skills/test-migrated-ops/SKILL.md")" 0
 
 # Summary
 echo ""
