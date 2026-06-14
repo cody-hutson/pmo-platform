@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.24] - 2026-06-14
+
+The triage assistant's automated backlog-hygiene checks — finding issues with an orphaned (rejected or missing) dependency, and finding P1 work blocked by lower-priority work — were silently returning nothing because of a shell-parsing bug, so those problems went unsurfaced even when present. The bug is fixed and the checks now return correct results. A stale cross-reference in the release-process documentation was also corrected.
+
+### Fixed
+
+- Triage's orphaned-dependency check (Pattern 1b) was silently returning nothing; it now reads each issue's dependency list correctly and flags issues waiting on a rejected or missing dependency. ([#309](https://github.com/cody-hutson/pmo-platform/issues/309))
+- Triage's P1-blocked-by-lower escalation check (Pattern 2a) hit the same parsing bug and returned nothing; it now extracts each issue's priority correctly and flags a Critical (P1) item blocked by lower-priority work. ([#309](https://github.com/cody-hutson/pmo-platform/issues/309))
+- A stale cross-reference in `release-process.md` named the wrong section of the triage spec for the "stale issues" check; it now points to the correct `Phase A6.5 Pattern (1a)`. ([#309](https://github.com/cody-hutson/pmo-platform/issues/309))
+
+[Full notes](release/releases/notes/v1.24_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.24)
+
 ## [v1.23] - 2026-06-14
 
 The change-management skill becomes a pluggable toolkit of five change methodologies — ADKAR, Kotter's 8-Step, Lewin's 3-Stage, the Bridges Transition Model, and McKinsey 7-S — with a selection step that picks the right one (or combination) for a given change. ADKAR's scale, previously defined twice, is consolidated to one source of truth. An intake-governance standard (tiering, WSJF, SLAs, demand taxonomy) ships for the intake desk, and a cross-pipeline sub-task methodology reference documents how sub-tasks are used across the pipeline.
