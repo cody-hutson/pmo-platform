@@ -2285,7 +2285,7 @@ cmd_check() {
   # warn-mode for ≥3-day shakedown per bypass-mode-readiness.md §Shakedown.
   # Per-issue age computed via jq's `now - (.createdAt | fromdate)` builtin —
   # avoids BSD-vs-GNU date arithmetic divergence on macOS.
-  # Override hooks (testing-only): C15_THRESHOLD_OVERRIDE_FILE points at a
+  # Override hooks (testing-only): C17_THRESHOLD_OVERRIDE_FILE points at a
   # space-separated single-line "WARN ESCALATE CRITICAL" file (e.g. "0 0 0" to force all
   # extant proposed issues into critical band for synthetic threshold testing).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
@@ -2293,8 +2293,8 @@ cmd_check() {
     local THRESHOLD_WARN_DAYS=14
     local THRESHOLD_ESCALATE_DAYS=30
     local THRESHOLD_CRITICAL_DAYS=45
-    if [[ -n "${C15_THRESHOLD_OVERRIDE_FILE:-}" ]] && [[ -f "$C15_THRESHOLD_OVERRIDE_FILE" ]]; then
-      read -r THRESHOLD_WARN_DAYS THRESHOLD_ESCALATE_DAYS THRESHOLD_CRITICAL_DAYS < "$C15_THRESHOLD_OVERRIDE_FILE"
+    if [[ -n "${C17_THRESHOLD_OVERRIDE_FILE:-}" ]] && [[ -f "$C17_THRESHOLD_OVERRIDE_FILE" ]]; then
+      read -r THRESHOLD_WARN_DAYS THRESHOLD_ESCALATE_DAYS THRESHOLD_CRITICAL_DAYS < "$C17_THRESHOLD_OVERRIDE_FILE"
       log "  TEST:  threshold override active (warn=${THRESHOLD_WARN_DAYS} escalate=${THRESHOLD_ESCALATE_DAYS} critical=${THRESHOLD_CRITICAL_DAYS})"
     fi
 
