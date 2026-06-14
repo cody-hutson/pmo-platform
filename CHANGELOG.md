@@ -8,6 +8,20 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.18] - 2026-06-14
+
+The release pipeline used to plan and approve each release on its own. It now holds a model of every release in flight or planned and checks each new one against that set, so two releases that would move or rename the same files are caught up front and run one-at-a-time instead of colliding partway through. This is a foundation change inside the pipeline; nothing changes in how you use the platform.
+
+### Added
+
+- **Releases that would clash are now caught before they break each other.** When one release moves or renames files another release depends on, the pipeline detects the clash up front and runs the two in order rather than in parallel. *Why it matters:* a release no longer fails partway through because a sibling release quietly moved the ground under it — the conflict surfaces at planning time, not as a broken merge late in the process. ([#87](https://github.com/cody-hutson/pmo-platform/issues/87))
+
+### Changed
+
+- **An approval to ship is re-checked if the ground shifts before it ships.** A go-ahead to release is recorded against the exact state it was approved against and re-checked if another release lands first. *Why it matters:* a release is only shipped against the state it was actually reviewed on, so an approval that has gone stale is caught instead of acted on as if still valid. ([#87](https://github.com/cody-hutson/pmo-platform/issues/87))
+
+[Full notes](release/releases/notes/v1.18_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.18)
+
 ## [v1.17] - 2026-06-14
 
 The two skills that draft your communications and project artifacts are refocused on PMO-unique work, and the commodity drafting an Anthropic skill does well is handed off to it at design time so the PMO skills carry no live dependency on it. The comms skill now owns executive briefs and stakeholder emails directly, the artifact skill has a tighter catalog plus a routing tree, and a duplicate architecture-decision record is renumbered.
