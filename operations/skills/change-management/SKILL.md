@@ -2,7 +2,7 @@
 name: change-management
 description: >
   Plans and tracks organizational change for go-lives and system transitions. Modes: Impact assessment · Training plan · Readiness checklist · Hypercare plan · Adoption tracking · Change matrix review. Ensures no deployment proceeds without impact assessment, training, and readiness validation. Triggers: "change impact assessment", "training plan", "readiness checklist", "hypercare plan", "adoption plan", "are we ready for go-live", "post-go-live support."
-version: v1.22
+version: v1.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
