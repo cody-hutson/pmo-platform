@@ -59,11 +59,19 @@ WORKSPACE_ROOT_EXPLICIT=0
 REGENERATED_COUNT=0
 
 # --- Phase 5 result (read by main to select the exit code; see EX_NOCHANGE) ---
-# Set to 1 by redeploy_skills when it actually performs a skill redeploy that
-# deploys/refreshes the roster (#331 F1). A skills-only update (new skill
-# versions, no composition-template change) regenerates 0 managed sections yet
-# DOES redeploy — without this signal main would mislabel that run "no change"
-# and exit EX_NOCHANGE despite Phase 5 having deployed.
+# Set to 1 by redeploy_skills ONLY when Phase 5 actually deployed >=1 new/changed
+# SKILL (#331 F1) — keyed off the N (skills) field of deploy.sh's own
+# "Deployed: N skills, M packages, K harness artifacts" summary, NOT off
+# phase_deploy_skills merely returning 0 (a true no-op also exits 0 via
+# deploy.sh's E-02 short-circuit). The skills field — not the N+M+K total — is
+# the signal because deploy.sh's tag-diff change detection re-copies every
+# artifact changed since the last RELEASE TAG on every run (stateless, no
+# content-hash skip), so a package-only tag delta re-deploys packages on an
+# otherwise-no-op run; only the CHANGED-SKILLS count reflects the "new skill
+# versions" F1 names. A skills-only update that ships new skill versions
+# regenerates 0 managed sections yet deploys >=1 skill, so it sets this to 1 and
+# main returns EX_OK; a genuine no-op deploys 0 skills, leaves this at 0, and
+# main returns EX_NOCHANGE. (See redeploy_skills for the full rationale.)
 PHASE5_DEPLOYED=0
 
 # --- Logging ---
@@ -346,19 +354,68 @@ redeploy_skills() {
   fi
   # shellcheck disable=SC1090
   source "${orchestrate_lib}"
-  # Capture the deploy result so the exit-code decision can see that Phase 5
-  # redeployed even when Phase 3 regenerated nothing (#331 F1). A successful
-  # phase_deploy_skills runs deploy.sh --deploy, which refreshes the roster, so
-  # success here means skills WERE (re)deployed. `|| rc=$?` keeps the non-zero
-  # path visible under set -e (the corrected capture pattern). A deploy failure
-  # is surfaced by phase_deploy_skills' own logging; we do not flip the flag,
-  # and propagate the failure so the operator sees a non-OK exit.
+  # Decide PHASE5_DEPLOYED from what deploy.sh ACTUALLY (re)deployed, not merely
+  # from phase_deploy_skills returning 0 (#331 F1, corrected).
+  #
+  # Why F1's original "success ⇒ deployed" was wrong: deploy.sh --deploy exits 0
+  # in BOTH a real deploy AND a no-op. So `phase_deploy_skills || rc=$?; flag=1
+  # on rc==0` set the flag to 1 even when nothing changed, making EX_NOCHANGE
+  # unreachable — a true no-op wrongly exited 0 (Suite F of
+  # test_upgrade_config_durability.sh).
+  #
+  # The signal we key off is deploy.sh's own end-of-run summary, emitted on stdout
+  # (its log() stream) ONLY on the deploy path (its E-02 "Nothing to deploy"
+  # no-op branch exits before printing it):
+  #   "Deployed: <N> skills, <M> packages, <K> harness artifacts"
+  # We set PHASE5_DEPLOYED=1 only when N (CHANGED SKILLS) >= 1 — the precise
+  # "new skill versions" signal #331 F1 names ("a skills-only update [with] new
+  # skill versions … should not exit 64").
+  #
+  # Why the SKILLS count, not the N+M+K total: deploy.sh's change detection is
+  # tag-diff based (detect_changed_skills diffs the last tag..HEAD) and STATELESS
+  # across consecutive runs — it re-reports, and unconditionally re-copies (no
+  # content-hash skip), every artifact that changed since the last RELEASE TAG on
+  # EVERY invocation, regardless of whether the immediately-prior run already
+  # deployed it. In a release that shipped package-only deltas since the tag
+  # (e.g. v1.20..HEAD here changed 3 .skill packages but 0 skill SOURCES), a
+  # second, genuinely-no-op update still re-copies those 3 packages and prints
+  # "Deployed: 0 skills, 3 packages, …". Counting packages/harness in the signal
+  # would make that re-copy flip the flag → the "no managed-section delta since
+  # the last run ⇒ EX_NOCHANGE" contract (Suite F; and test_install_end_to_end
+  # Stage 3's post-install no-op) would be unsatisfiable. The CHANGED-SKILLS
+  # count is the field that (a) matches F1's stated "new skill versions" intent
+  # and (b) is 0 on a true no-op in this scenario. A package is rebuilt from its
+  # skill source at release-cut, so a real skill-version change lands in N>=1.
+  #
+  # orchestrate.sh's own INFO/WARN/ERR lines go to stderr (>&2) and flow to the
+  # operator live; we capture only deploy.sh's stdout to a temp file, parse it,
+  # then re-emit it so nothing is swallowed.
+  local deploy_out; deploy_out="$(mktemp -t update-phase5.XXXXXX)"
   local rc=0
-  phase_deploy_skills || rc=$?
-  if [ "${rc}" -eq 0 ]; then
-    PHASE5_DEPLOYED=1
-  else
+  phase_deploy_skills >"${deploy_out}" || rc=$?
+  # Re-emit the captured deploy log so the operator still sees it (stdout).
+  cat "${deploy_out}"
+  if [ "${rc}" -ne 0 ]; then
+    # Deploy failure: surfaced by phase_deploy_skills' own logging. Do NOT flip
+    # the flag; propagate the failure so the operator sees a non-OK exit.
+    rm -f "${deploy_out}"
     return "${rc}"
+  fi
+  # Parse the CHANGED-SKILLS count (N) from the deploy summary. `grep || true`
+  # guards the no-summary (E-02 no-op) case under set -e; N>=1 means >=1 skill
+  # was actually (re)deployed. Default to 0 and require a pure-integer match
+  # before the arithmetic test so a missing/malformed summary can never abort
+  # under set -e.
+  local skills_deployed=0
+  skills_deployed="$(grep -E 'Deployed: [0-9]+ skills, [0-9]+ packages, [0-9]+ harness artifacts' "${deploy_out}" \
+    | tail -1 \
+    | sed -E 's/.*Deployed: ([0-9]+) skills,.*/\1/' || true)"
+  rm -f "${deploy_out}"
+  case "${skills_deployed}" in
+    ''|*[!0-9]*) skills_deployed=0 ;;
+  esac
+  if [ "${skills_deployed}" -ge 1 ]; then
+    PHASE5_DEPLOYED=1
   fi
 }
 
@@ -397,9 +454,11 @@ write_last_update
 # Exit code (#613): a no-op run returns EX_NOCHANGE so callers can distinguish
 # "nothing to do" from a successful update that applied changes. A tamper-
 # triggered regeneration (#612) counts as a regeneration, so it returns EX_OK.
-# EX_NOCHANGE now requires BOTH no Phase-3 regeneration AND no Phase-5 redeploy
-# (#331 F1): a skills-only update regenerates 0 managed sections but DOES
-# redeploy the roster, so it is a real change and must return EX_OK, not 64.
+# EX_NOCHANGE requires BOTH no Phase-3 regeneration AND no Phase-5 deploy (#331
+# F1): a skills-only update regenerates 0 managed sections but, if it ships new
+# skill versions, DOES deploy >=1 skill (PHASE5_DEPLOYED=1), so it is a real
+# change and must return EX_OK, not 64. A genuine no-op deploys nothing
+# (PHASE5_DEPLOYED stays 0) and correctly returns EX_NOCHANGE.
 if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ]; then
   info "Update complete (no changes — composition surface already current)."
   exit "${EX_NOCHANGE}"
