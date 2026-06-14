@@ -1,6 +1,6 @@
 ---
 title: Pipeline Event Log Schema
-purpose: Unified 10-field schema and 10 event-type enum for the additive append-only audit-trail capture surface at `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md`
+purpose: Unified 10-field schema and 11 event-type enum for the additive append-only audit-trail capture surface at `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md`
 applies_to: hub-spoke-bridge.md, release-personas.md (Stages 2-13), pipeline/stage-{02..09,12,13}.md §11, future skills release-planner / release-executor / principal-engineer
 parallel_to: gate-evaluation-spec.md (calibration-data surface), handoff-coordinator-spec.md (iteration-log surface), decision-discipline.md § 4 (observation surface)
 source: Stage 5 Solutioning + Collective Review scope-lock APPROVED 2026-05-16
@@ -49,7 +49,7 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | 9 | `outcome` | enum: `resolved` / `pending` / `escalated` / `superseded` | terminal state of the event | `resolved` |
 | 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or pipe-escaped key:value pairs; longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
 
-## 3. Event-Type Enum (10 values) with Subtypes
+## 3. Event-Type Enum (11 values) with Subtypes
 
 | `event_type` | Description | Allowed `event_subtype` values |
 |---|---|---|
@@ -63,6 +63,7 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | `deployment-status` | Per-file or per-target deploy outcome at Stage 12 | `deploy-skill` / `deploy-harness` / `deploy-package` / `deploy-rules-mirror` / `deploy-helper` |
 | `release-synthesis` | Per-release Stage 13 row carrying learnings triple + QC4-05 verdict | `learnings-triple` / `qc4-05-result` / `qc4-06-result` (Stage 13 QC4-06 verdict ATTAINED/PARTIALLY-ATTAINED/NOT-ATTAINED; applies going forward) |
 | `test-run` | Runtime code-test suite execution at Stage 6 (author self-verification) or Stage 7 (DT gate); the suite is selected per [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) | `suite-pass` / `suite-fail` / `suite-skip` |
+| `spoke-launch` | Per-spoke startup-token reservation telemetry consumed by the quota-budget gate ([`quota-budget-protocol.md`](quota-budget-protocol.md) Checkpoint B); fired at spoke-launch time (Stage 5 / 7 / 8 parallel waves); `tokens_used:` rides the payload | `quota-reservation` |
 
 Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` rejects unknown subtypes with non-zero exit. Adding a subtype requires a governance change per `release/governance/release-process.md` § Inter-Stage Feedback Protocol Tier 2 / Tier 3.
 
