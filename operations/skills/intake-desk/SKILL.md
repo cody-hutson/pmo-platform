@@ -15,7 +15,7 @@ description: >
   issue", "turn this into a work item", "log this idea", "what type of work item
   is this", "scope this idea for intake", "is this intake-ready", or "help me write
   up this bug/story/initiative".
-version: v1.10
+version: v1.21
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -154,6 +154,7 @@ auto-filed.
 | `references/type-map.md` | Every invocation — the type registry, the field-derivation-from-`.yml` contract, and the altitude → type-emphasis table |
 | `references/technique-library.md` | When choosing how to elicit — the BABOK technique cards and the domain-adaptive (domain × topic × altitude) selector |
 | `references/output-contract.md` | At emit time — the tool-agnostic emit process, the AskUserQuestion confirm gate, the GitHub MVP mechanics, and the fallbacks |
+| `references/intake-governance.md` | When an intake item is a fundable demand unit (project/initiative) needing a business-case tier, a WSJF estimate, or a triage SLA — the tiering partition, the WSJF formula, the tier→SLA table, the 6-type demand-source taxonomy, the intake rubber-stamp signal, and the Cost-of-Delay elicitation prompts |
 
 ## Guardrails (Platform)
 

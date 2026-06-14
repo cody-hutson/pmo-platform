@@ -48,7 +48,7 @@ Authoritative registry of every named framework, methodology, or standard the pl
 | Nonaka SECI | EXTERNAL | Nonaka SECI (1995) | — | v11.12 | knowledge-architecture / corpus curation | stable | 36mo | 2026-05-15 | 2029-05-15 | Workspace owner ([OPERATOR_NAME]) |
 | Diátaxis | EXTERNAL | Diátaxis (current/rolling) | — | v11.12 | documentation taxonomy | evolving | 12mo | 2026-05-15 | 2027-05-15 | Workspace owner ([OPERATOR_NAME]) |
 | ADKAR | EXTERNAL | ADKAR (Prosci, current ed.) | — | v11.12 | change-management skill | evolving | 12mo | 2026-05-15 | 2027-05-15 | Workspace owner ([OPERATOR_NAME]) |
-| Cost of Delay | EXTERNAL | Cost of Delay (Reinertsen 2009) | — | v11.12 | prioritization / WSJF | stable | 36mo | 2026-05-15 | 2029-05-15 | Workspace owner ([OPERATOR_NAME]) |
+| Cost of Delay | EXTERNAL | Cost of Delay (Reinertsen 2009) | operations/skills/intake-desk/references/intake-governance.md | v11.12 | prioritization / WSJF | stable | 36mo | 2026-05-15 | 2029-05-15 | Workspace owner ([OPERATOR_NAME]) |
 | three-gulfs-methodology | INTERNAL | v11 | pmo-platform/reference/explanation/three-gulfs-methodology.md | v11 | eval design / failure analysis | stable | 36mo | 2026-05-15 | 2029-05-15 | Workspace owner ([OPERATOR_NAME]) |
 | failure-mode-standard | INTERNAL | v9.0 | pmo-platform/reference/specs/failure-mode-standard.md | v9.0 | skill authoring (failure-mode discipline) | stable | 36mo | 2026-05-15 | 2029-05-15 | Workspace owner ([OPERATOR_NAME]) |
 | review-discipline-principles | INTERNAL | v10.2 | pmo-platform/reference/explanation/review-discipline-principles.md | v10.2 | review-class skills | stable | 36mo | 2026-05-15 | 2029-05-15 | Workspace owner ([OPERATOR_NAME]) |
