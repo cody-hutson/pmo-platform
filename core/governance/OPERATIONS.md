@@ -261,6 +261,35 @@ Platform changes follow the release lifecycle defined in `Projects/_governance/R
 
 See `_governance/RELEASE_PROTOCOL.md` for the full protocol. Do not duplicate release process rules in this file.
 
+### Stale-RAID Auto-Escalation Protocol
+
+Open RAID items age. This protocol defines age-based auto-escalation so a stale risk or issue surfaces a recommended escalation action instead of silently sitting open. It is cross-skill: PPM Agent owns the RAID weekly review and `[RISK]` / DECISION escalation; Delivery Engine owns RAID updates for delivery blockers. Both apply the same age thresholds; the action they emit differs by skill role.
+
+**Doc-of-record.** The risk-scoring matrix (probability × impact = score 1–25), the tier-routing rules, and the canonical age-threshold table live in [`escalation-thresholds.md`](../../operations/skills/ppm-agent/references/escalation-thresholds.md) (the PPM Agent reference doc). That doc is authoritative for threshold values and routing; this protocol states the operational trigger (when the check runs, who acts, what action results) and does not re-derive the scoring matrix. Where `raid-templates.md §9`'s generic ">30 days = auto-escalate" note overlaps, this typed table is authoritative for RAID age-escalation; reconciling `raid-templates.md §9` to the type-split is tracked as a deferred follow-up.
+
+**Age thresholds (days open since the RAID entry's open/created date).** A RAID item's age is `today − open-date`, validated against the RAID Log `[Project]_RAID_Log.csv` (Document Tier 1, PPM-owned). Two warning/escalate bands, by RAID type:
+
+| RAID type | Warning at | Escalate at |
+|---|---|---|
+| Issue (`I-*`) | age > 14 days | age > 30 days |
+| Risk (`R-*`) | age > 30 days | age > 60 days |
+
+Assumptions and Dependencies are not age-escalated by this protocol (no threshold defined); they age per their own closure rules in the RAID Log.
+
+**Action by band (the warning → escalate ladder).**
+
+| Band | Condition | Agent action |
+|---|---|---|
+| **Nominal** | age ≤ warning threshold | No escalation. Item carries forward normally. |
+| **Warning** | warning < age ≤ escalate | Flag the item in the RAID review output with a `[RECOMMENDED]` nudge to the owner ("R-PPM-007 open 38 days — past the 30-day risk-warning threshold; confirm mitigation status"). PPM Agent: surface under "what needs your attention". Delivery Engine (RAID Update mode): include in the carry-forward ticker with the warning flag. No tier change. |
+| **Escalate** | age > escalate | Flag with an **escalation action**, naming the owner, the breached threshold, and the routed tier per `escalation-thresholds.md`. PPM Agent: raise as a `[RISK]` / `[DECISION]` escalation (per Follow-Up Tag Routing) and route to the tier the doc-of-record assigns to the item's score. Delivery Engine: emit the escalation in the RAID Update output and hand the tag back to PPM Agent for routing (no self-routing — Routing Constraint, max-depth-2 from PPM). |
+
+**Reversibility.** Each escalation is a CHEAP, recommend-tier action (a flag + routed tag the operator reviews) — the protocol recommends; it never auto-closes, auto-reassigns, or mutates the RAID Log without the normal Document Tier 1 approval gate.
+
+**Worked example (AC).** A RAID Log issue (`I-PPM-012`) opened 35 days ago: age 35 > 30 (issue-escalate threshold) → **Escalate** band → agent flags `I-PPM-012` with an escalation action naming the owner and the breached 30-day threshold, and routes per `escalation-thresholds.md` tier rules.
+
+**Evidence labels.** Age computations carry `[INFERRED: today − open-date]`; threshold-breach claims cite the RAID Log row `[SOURCE: <RAID_ID>, open-date]`. See § Evidence Quality Labeling above.
+
 ---
 
 ## Methodology Awareness Protocol

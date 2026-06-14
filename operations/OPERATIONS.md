@@ -261,6 +261,35 @@ Platform changes follow the release lifecycle defined in `Projects/_governance/R
 
 See `_governance/RELEASE_PROTOCOL.md` for the full protocol. Do not duplicate release process rules in this file.
 
+### Stale-RAID Auto-Escalation Protocol
+
+Open RAID items age. This protocol defines age-based auto-escalation so a stale risk or issue surfaces a recommended escalation action instead of silently sitting open. It is cross-skill: PPM Agent owns the RAID weekly review and `[RISK]` / DECISION escalation; Delivery Engine owns RAID updates for delivery blockers. Both apply the same age thresholds; the action they emit differs by skill role.
+
+**Doc-of-record.** The risk-scoring matrix (probability × impact = score 1–25), the tier-routing rules, and the canonical age-threshold table live in [`escalation-thresholds.md`](skills/ppm-agent/references/escalation-thresholds.md) (the PPM Agent reference doc). That doc is authoritative for threshold values and routing; this protocol states the operational trigger (when the check runs, who acts, what action results) and does not re-derive the scoring matrix. Where `raid-templates.md §9`'s generic ">30 days = auto-escalate" note overlaps, this typed table is authoritative for RAID age-escalation; reconciling `raid-templates.md §9` to the type-split is tracked as a deferred follow-up.
+
+**Age thresholds (days open since the RAID entry's open/created date).** A RAID item's age is `today − open-date`, validated against the RAID Log `[Project]_RAID_Log.csv` (Document Tier 1, PPM-owned). Two warning/escalate bands, by RAID type:
+
+| RAID type | Warning at | Escalate at |
+|---|---|---|
+| Issue (`I-*`) | age > 14 days | age > 30 days |
+| Risk (`R-*`) | age > 30 days | age > 60 days |
+
+Assumptions and Dependencies are not age-escalated by this protocol (no threshold defined); they age per their own closure rules in the RAID Log.
+
+**Action by band (the warning → escalate ladder).**
+
+| Band | Condition | Agent action |
+|---|---|---|
+| **Nominal** | age ≤ warning threshold | No escalation. Item carries forward normally. |
+| **Warning** | warning < age ≤ escalate | Flag the item in the RAID review output with a `[RECOMMENDED]` nudge to the owner ("R-PPM-007 open 38 days — past the 30-day risk-warning threshold; confirm mitigation status"). PPM Agent: surface under "what needs your attention". Delivery Engine (RAID Update mode): include in the carry-forward ticker with the warning flag. No tier change. |
+| **Escalate** | age > escalate | Flag with an **escalation action**, naming the owner, the breached threshold, and the routed tier per `escalation-thresholds.md`. PPM Agent: raise as a `[RISK]` / `[DECISION]` escalation (per Follow-Up Tag Routing) and route to the tier the doc-of-record assigns to the item's score. Delivery Engine: emit the escalation in the RAID Update output and hand the tag back to PPM Agent for routing (no self-routing — Routing Constraint, max-depth-2 from PPM). |
+
+**Reversibility.** Each escalation is a CHEAP, recommend-tier action (a flag + routed tag the operator reviews) — the protocol recommends; it never auto-closes, auto-reassigns, or mutates the RAID Log without the normal Document Tier 1 approval gate.
+
+**Worked example (AC).** A RAID Log issue (`I-PPM-012`) opened 35 days ago: age 35 > 30 (issue-escalate threshold) → **Escalate** band → agent flags `I-PPM-012` with an escalation action naming the owner and the breached 30-day threshold, and routes per `escalation-thresholds.md` tier rules.
+
+**Evidence labels.** Age computations carry `[INFERRED: today − open-date]`; threshold-breach claims cite the RAID Log row `[SOURCE: <RAID_ID>, open-date]`. See § Evidence Quality Labeling above.
+
 ---
 
 ## Methodology Awareness Protocol
@@ -339,6 +368,65 @@ Canonical valid combinations:
 | Non-Hybrid | `false` | Single-methodology project — no dual-framing |
 
 Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `spm_comanaged` before producing output. Future deprecation of `spm_comanaged` in favor of `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE. See [`methodology-parameterization-v1.md § 7 Relationship to SPM Bridge`](../release/references/specs/methodology-parameterization-v1.md) + [`schemas/project-schema.md § 7 Migration Notes`](../core/schemas/project-schema.md) for the posture.
+
+---
+
+## Platform-Config Resolution Protocol
+
+Platform configuration is split across two surfaces by concern and resolved by a single cascading resolver. This protocol defines the resolution order, the default-fallback, and the two-track update governance. It **composes with** the Methodology Awareness Protocol above — `default_delivery_approach` is a hierarchy-resolvable field whose resolution this protocol governs, while the `delivery_approach` enum + validation + Custom-block handling stay canonical in the Methodology Awareness Protocol and its cross-referenced schema. This protocol does NOT duplicate the methodology vocabulary.
+
+**Two surfaces (per [`core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md`](../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md)):**
+
+- [`core/config/operator.toml.template`](../core/config/operator.toml.template) — operator-ENVIRONMENT / IDENTITY: identity, paths, `[adapters]` host-selectors (`repo_host`/`ticketing`/`kb`/`ai_tool` — the onboarding seam), `[methodology].default_delivery_approach`. Security-sensitive (`chmod 600`; depersonalization token vocabulary).
+- [`core/config/platform-config.toml.template`](../core/config/platform-config.toml.template) — platform-BEHAVIOR: `[bundling]` (`bundle_doctrine_frame`, `release_size_target_pts`), `[release_class].default_release_class`, `[relationship_mapping]`, `[calibration]`. Freely tunable; no PII. Field schema: [`schemas/platform-config-schema.md`](../core/schemas/platform-config-schema.md).
+
+**Cross-references:**
+
+- [`schemas/platform-config-schema.md`](../core/schemas/platform-config-schema.md) — field / type / allowed-values / default / calibration-policy / consuming-surface / cutover-SHA
+- [`config/platform-config.toml.template`](../core/config/platform-config.toml.template) + [`config/operator.toml.template`](../core/config/operator.toml.template) — the two surfaces (Layer-1 defaults)
+- [`standards/composition-surface-spec.md`](../core/standards/composition-surface-spec.md) — the durability contract platform-config.toml carries
+- [`docs/platform-config-reference.md`](../docs/platform-config-reference.md) — the human-readable catalog
+
+### Rule 1 — Resolve the effective value via the 5-rung cascade
+
+A consumer asking "what is the effective value of field `F` for scope `S`?" resolves by precedence — **most-specific overrides least-specific**:
+
+| Rung | Precedence | Surface | Layer |
+|---|---|---|---|
+| 1 | lowest | global default — `platform-config.toml.template` / `operator.toml.template` | Layer 1 (always present) |
+| 2 | ↑ | portfolio override — `projects/_config/PORTFOLIO.md` frontmatter `platform_config: {...}` | Layer 2 (optional) |
+| 3 | ↑ | program override — `projects/<Program>/_config/program-config.toml` | Layer 2 (optional) |
+| 4 | ↑ | project override — `projects/<Project>/PROJECT.md` frontmatter `platform_config: {...}` | Layer 2 (optional) |
+| 5 | **highest** | individual override — `~/.config/pmo-platform/platform-config.toml` `[overrides]` (and `operator.toml` for identity/adapters) | Layer 2 (optional) |
+
+`effective(F, S)` = the value of `F` at the **highest-precedence rung that SETS `F`**; fall through to rung 1 (global default) if no higher rung sets it.
+
+**Individual is highest precedence** deliberately: an individual operator's explicit override is the most-specific intent and wins even over a project setting. This matches git's `--local > --global` *specificity* logic and the existing `operator.local.toml > operator.toml` precedent. (This is the one genuinely-designed ordering choice; CHEAP to flip to individual-as-base if the operator later intends that.)
+
+**No per-tier operator value ever lands in a tracked Layer-1 file.** The Layer-1 templates ship defaults + schema; per-tier values live in the Layer-2 surfaces above. This mirrors the `delivery_approach` precedent exactly (enum Layer-1 / value Layer-2).
+
+### Rule 2 — Apply the 3-level default-fallback (never hard-fail)
+
+1. Field set at ≥1 rung → resolve per Rule 1.
+2. Field set ONLY at rung 1 (global default) → use the default. **Common case** — and the reason the Layer-1 templates ship a value for every field.
+3. Field absent even from rung 1 (operator deleted it, or a consumer references a not-yet-added field) → the consumer uses its **own documented hardcoded fallback** and logs `[platform-config: field <F> unresolved; using consumer default <V>]`. A consumer MUST declare its fallback so an absent/corrupt config never hard-fails a release. (Mirrors the methodology-parameterization CASE-3 "emit WITH caveat — never silently default" discipline.)
+
+### Rule 3 — Single resolution at the hub; spokes read injected values
+
+To avoid hub-vs-spoke divergence, config is resolved ONCE at the hub (release-pipeline Procedure 0) and the resolved values are injected into each spoke's chip prompt. **Spokes do NOT re-resolve** — they read the value the hub injected. `release-planner` (Mode A) and `release-executor` (Mode A) resolve their named fields at session start. `deploy.sh` / hooks extend the existing `operator.toml` rung-reader idiom to also read `platform-config.toml` (`resolve_platform_config`).
+
+### Rule 4 — Two-track update governance (split on the Layer boundary)
+
+| Track | What changes | Governance weight |
+|---|---|---|
+| **Track A — schema / default change (Layer 1)** | edit a default in a template, add/remove a field, change an allowed-values set, edit `platform-config-schema.md` | **Full governed PR** — GitHub Issue (`improvement.yml`) + plan + PR review per CLAUDE.md "No ungoverned changes." These are governance files (a default changes behavior for every install that has not overridden — same blast radius as a governance-rule change). The PR diff IS the dry-run. |
+| **Track B — per-tier value set (Layer 2)** | operator sets a field for their own portfolio / program / project / individual scope | **No PR — operator-instance write.** Same as setting `delivery_approach: Kanban` in a PROJECT.md. Layer 2 is git-ignored + Cowork-owned; it never enters the release PR. The operator's own instance history is their audit trail. |
+
+The AC "audit trail: git history of config field changes is the canonical change record" applies to **Track A** (the tracked templates + schema); Layer-2 value sets are audited by the operator's own instance history, not the platform repo.
+
+### Rule 5 — Cutover
+
+This resolution protocol applies to releases entering the pipeline **after this release's merge SHA**; **this release (adapter-config-foundation) itself is exempt** (reflexive-pipeline-loop discipline). Engineering anchors the SHA at Stage 12. Merge SHA: `71047a527eed34d24a0bf059acfc73c20b7ec6b5` (adapter-config-foundation, v1.14).
 
 ---
 
@@ -474,6 +562,72 @@ optional_fields:
 **Emission location.** Stage 13 Close emits this event row to `<OPERATOR_INSTANCE_PIPELINE_EVENT_LOG>` (resolved per OPERATOR_INSTANCE_PIPELINE_EVENT_LOG variable — operator-instance path). For runs where Mode G fired (PROMOTE verdicts rendered), Mode G ALSO emits the same event row at its Step 5 (the duplicate emission is intentional — Mode G's emission captures the post-execution state; Stage 13's emission captures the cadence audit-trail; both are reconcilable via shared `timestamp` field). If a `pipeline-event-log-schema.md` is authored in a future release, the schema migrates there with a back-reference from this section.
 
 **Cutover discipline:** Applies to all releases entering Stage 12 going forward.
+
+---
+
+## Platform Health Audit Protocol
+
+The platform catalogs every PMO source-roster skill against the Anthropic skill catalog in the
+[`anthropic-base-vs-build-registry.md`](../core/specs/anthropic-base-vs-build-registry.md) instance.
+This section owns the **operational cadence** (trigger, responsible party, escalation, audit-trail)
+for re-auditing that instance; the **methodology** is owned by
+[`platform-health-audit-framework.md`](../release/references/protocols/platform-health-audit-framework.md)
+(cite-not-duplicate per `duplicate-source-discipline.md`). The executor is **pmo-qa-auditor Mode E —
+Platform Health Audit** (see [`../skills/pmo-qa-auditor/SKILL.md`](../core/skills/pmo-qa-auditor/SKILL.md)
+§Modes), an **OBSERVE-only** producer mode.
+
+### Rule 1 — Trigger (event-bound + quarterly fallback)
+
+Platform Health Audit fires on a quarterly cadence plus reactive drift signals. There is **no
+"audit the platform every week" full-audit calendar** — the full audit is quarterly; a lightweight
+weekly sentinel watches for drift only.
+
+| Trigger | Detection mechanism |
+|---|---|
+| T-quarterly | The `platform-health-quarterly-audit` scheduled task (cron `0 9 1 1,4,7,10 *` — 09:00 on the 1st of Jan/Apr/Jul/Oct, LOCAL timezone) spawns a session that invokes Mode E. |
+| T-drift-watch | The `platform-health-drift-watch` scheduled task (weekly) runs ONLY the framework §3.5 T1–T5 drift detection; any drift self-routes to a single observation issue-draft. |
+| T-reactive | A §3.5 drift signal observed out-of-band (a new plugin pack, a new `anthropic-skills:*` skill, a new PMO skill) per the framework §3.5 trigger taxonomy. |
+| T-operator | Operator invokes pmo-qa-auditor Mode E directly. Always available. |
+
+Quarterly is chosen over a tighter full-audit cadence because the Anthropic-catalog surface changes
+slowly (the registry baseline held 41 days to the first observed T5 drift). Scheduled tasks run only
+while the app is open (deferred-to-launch otherwise — see Rule 4). Schedule is evaluated in LOCAL
+timezone; the audit-folder date stamp uses UTC (`date -u`) — intentional, do not unify.
+
+### Rule 2 — What a triggered audit checks
+
+When the audit fires, the pmo-qa-auditor Mode E execution:
+
+1. **Loads** the registry instance + the framework methodology; extracts the recorded `audit_baseline_sha` + `audit_baseline_date` from the registry header.
+2. **Re-enumerates** the Anthropic catalog per framework §3.1 Hybrid baseline (Source A plugin-cache ∪ Source B `anthropic-skills:*` namespace, deduped).
+3. **Re-enumerates** the PMO source roster (`ls -1d {core,operations,release}/skills/*/`) and diffs it against the registry's row set (the §3.5 **T5** check); diffs the re-enumerated Anthropic catalog against the recorded baseline (the §3.5 **T1–T4** checks).
+4. **Classifies drift** per the §3.5 trigger table → each item maps to a §3.3 (a/b/c) update path; applies the registry-header Overlap Detection Rubric and Scorecard Weighting.
+5. **Emits** the audit folder (`<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/` — operator-instance, git-ignored): SUMMARY.md, findings-register.md, base-build-deltas.md, and ≥3 `issue-drafts/NNN-*.md` in observation format.
+6. **Observational self-check** — scans output for prescriptive verbs (`recommend`, `migrate`, `consolidate`, `should`) per the audit-class output discipline; rewrites any to observational form.
+
+### Rule 3 — Drift disposition (observe → observation-issue)
+
+Mode E **observes** drift and emits `issue-drafts/` in observation format (`observation.yml` 3-field
+schema). The operator triages each on GitHub (PROMOTE to a Proposal / DEFER / CLOSE) — the same
+draft→operator-verdict split as the Pattern Review Cadence Protocol. The registry §3.3 row write is a
+**separate human-gated change** ("No ungoverned changes"); Mode E never mutates the registry. Authority:
+framework **§3.3(a)** assigns the registry row-add to the skill author's creation PR, structurally
+distinct from an audit mode.
+
+### Rule 4 — Escalation when overdue
+
+If the quarterly job has not run for **2 consecutive quarters** (app-closed accumulation — scheduled
+tasks only run while the app is open), the operator runs Mode E manually. Mirrors the Framework Review
+Check-18c aging-signal posture: a persistently un-run audit is itself a reviewable signal that the
+catalog is not being maintained.
+
+### Rule 5 — Responsible party + audit-trail
+
+The workspace owner ([OPERATOR_NAME]) is accountable for triaging Mode E findings at the PROMOTE /
+DEFER / CLOSE point per Rule 3. Each audit folder is the durable audit-trail; the audit-folder date
+is the cadence anchor. The two scheduled-task registrations are non-git MCP state (install-root); their
+registration is recorded as a Stage 12 deploy-log line item, and rollback is deregistration (`enabled:false`
+or task delete), NOT `git revert`.
 
 ---
 
