@@ -479,6 +479,27 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 
    **Release-scoped stages omitted from the table by design:** Stage 4 (Planning), Stage 9 (Plan Review — gate, no spoke), Stage 12 (Execute) each run as a single per-release spoke/gate; there is no cross-issue parallelism axis at these stages, so they do not need an explicit rule. The table covers the per-issue stages (5/6/7/8) plus Close (release-scoped but with internal-mutation serialization concerns).
 
+   **Parallel-safe is coordination semantics, not usage-window semantics (orthogonality note).** "Parallel-safe" in the table above is a *coordination*/file-contention property — it means the stage's output channel has no shared write surface, so concurrent spokes do not race on a commit or file. It is **orthogonal** to the per-account 5-hour usage-window envelope: concurrent Agent-tool spokes still draw *cumulatively* against the shared usage window even when they have no file-contention surface (see § Per-Account Usage Window Constraint). The two gates compose — a stage marked parallel-safe here may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate (Step 5.5 below). Do not read "parallel-safe" as "usage-window-free."
+
+   #### Step 5.5: Quota check before parallel launch
+
+   Before issuing N parallel Agent invocations in the same hub response (the parallel-safe stages 5 / 7 / 8 above), the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every* parallel wave, not once at Stage 4, because each wave (Stage 5 batch / Stage 7 batch / Stage 8 batch) faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline).
+
+   The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
+
+   | Verdict | Hub action |
+   |---|---|
+   | **PROCEED** | Launch all N in parallel (existing behavior) |
+   | **SERIALIZE** | Launch one spoke at a time, halt on first usage-limit failure (reduces simultaneous-draw count) |
+   | **DEFER** | Hold the batch for the next window; surface a reset-time estimate (reduces cumulative draw entirely) |
+   | **REDUCE-scope** | Launch with a smaller per-wave footprint — compact prompts, narrower scope, fewer canonical reads (reduces per-wave consumption) |
+
+   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
+
+   On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
+
+   **Ongoing-gate discipline.** This check is a standing pre-launch step for every parallel wave, not a one-time Stage 4 estimate — running it once and treating the batch as cleared for the whole release is the failure mode the runtime checkpoint exists to prevent. **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch a batch; it does not reclassify the parallel-safe stages' Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (reflexive-pipeline-loop discipline).
+
    #### File-contention boundary rules
 
    The blocker boundary depends on the D-C topology selected by Stage 4:
@@ -1442,7 +1463,14 @@ Procedure 2 Step 5 (Stage 5/7/8 parallel-safe; Stage 6/13
 write-serialized). For the per-account 5-hour usage-window
 constraint on these parallel launches and the quota-budgeting /
 window-aware-timing / serialize-on-failure mitigations, see
-§ Per-Account Usage Window Constraint below.
+§ Per-Account Usage Window Constraint below. Before issuing the
+batch, the hub runs Checkpoint B of the quota-budget gate
+(Procedure 2 Step 5.5 / [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md))
+and acts on its verdict — PROCEED launches all N; SERIALIZE
+launches one at a time; DEFER holds the batch for the next
+window (with an operator override-to-PROCEED exit); REDUCE-scope
+launches with a smaller per-wave footprint. STAGGER is a
+secondary rate-limit-only defense, not a usage-window mitigation.
 
 **Composition with  Agent Handoff Framework:** 's
 9-field handoff manifest defines the contract layer; the Agent
