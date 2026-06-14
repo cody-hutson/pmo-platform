@@ -1,6 +1,6 @@
 ---
 title: ADR-018 — Work-Item Type Layer (WITL) — thin generic Work Item entity + declarative type layer
-status: Proposed
+status: Accepted
 date: 2026-06-07
 release: declarative-workitem-type-model
 deciders: "operator (D1/D2/D4 ratified 2026-06-07) + Stage 5 Solutioning + Collective Review scope-lock"
@@ -16,8 +16,8 @@ source_observations:
 
 ## Status
 
-Proposed. This decision flips to Accepted at the declarative-workitem-type-model
-Stage 9 GO — that operator GO renders the **Tier-2 SCOPE CHANGE** authorization
+Accepted (2026-06-07). This decision was ratified at the declarative-workitem-type-model
+Stage 9 GO — that operator GO rendered the **Tier-2 SCOPE CHANGE** authorization
 required by the FROZEN-roster clause of
 [`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-18)
 ("any change requires reopening the establishing issue via a Tier-2 SCOPE CHANGE").

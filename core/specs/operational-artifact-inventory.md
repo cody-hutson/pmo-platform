@@ -6,7 +6,7 @@
 **Introduced:** project-data-foundation initiative (2026-05-16) — project-data-architecture initiative, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
 **Establishing scope:** N1 — first-pass operational-artifact inventory, W1 work-stream
 **Architectural basis:** the Two-Axis Entity Lifecycle ADR (**RATIFIED** at Collective Review, 2026-05-16)
-**Source-entity authority:** [`project-entity-model.md`](../disciplines/project-entity-model.md) (17-entity roster + owning-agent matrix, FROZEN)
+**Source-entity authority:** [`project-entity-model.md`](../disciplines/project-entity-model.md) (18-entity roster + owning-agent matrix, FROZEN)
 **Consumers (downstream):** N2 (template standard — consumes this inventory to scope entity-derived templatization) · N3 (templatization harness — consumes the `⚠ FINDING-3` set as its known-exception register)
 **Cross-references:** see [§7](#7-cross-references).
 
@@ -66,15 +66,15 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 
 ## 4. Source-Entity Derivation Rule
 
-**Primary rule:** `source_entity` = the entity (per [`project-entity-model.md`](../disciplines/project-entity-model.md) §4, 17-roster) whose **record the artifact primarily persists or aggregates**, cross-validated by the owning-agent matrix (the artifact's owning skill should be that entity's Create/Maintain agent — per project-entity-model §6).
+**Primary rule:** `source_entity` = the entity (per [`project-entity-model.md`](../disciplines/project-entity-model.md) §4, 18-roster) whose **record the artifact primarily persists or aggregates**, cross-validated by the owning-agent matrix (the artifact's owning skill should be that entity's Create/Maintain agent — per project-entity-model §6).
 
 **Three sub-rules (all FROZEN):**
 
 - **(a) Aggregator/composite artifacts** (e.g., Daily Status Log carries Blockers≈RAID Item + Decisions≈Decision + Actions + Meetings): `source_entity` = the dominant record-type entity; `reconciliation_flag = composite-multi-entity`; the row Notes enumerate the secondary entities. Do **not** force a single clean entity onto a genuinely multi-entity aggregator.
 - **(b) OOS-3 Artifact-seam** (per §4 entity #9): generated artifacts that are *themselves* "Artifacts" (reports, packages, transcripts-as-files) → `source_entity = #9 Artifact`; the row Notes record `content_lifecycle = inherits-per-file (A/B/C)` — the reconciliation seam to `frontmatter-schema.md`. G3/G4 physicalizes; **noted, not resolved here**.
-- **(c) No-entity-home** (the Finding-3 macro case): if no roster entity primarily persists the artifact's records (the artifact tracks a concept absent from the frozen 17-roster), `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)`. Do **NOT** add an entity (redefining the frozen surface is forbidden — Tier-2 SCOPE CHANGE territory, not a spoke action). Flag the row; downstream triage (N2/N3 or a future roster reopen) decides disposition.
+- **(c) No-entity-home** (the Finding-3 macro case): if no roster entity primarily persists the artifact's records (the artifact tracks a concept absent from the frozen 18-roster), `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)`. Do **NOT** add an entity (redefining the frozen surface is forbidden — Tier-2 SCOPE CHANGE territory, not a spoke action). Flag the row; downstream triage (N2/N3 or a future roster reopen) decides disposition.
 
-**Ratified Communications-Tracker policy (Collective Review 2026-05-16, decision item 4):** the Communications Tracker has no entity home in the frozen 17-roster — recorded as `source_entity: ⚠ NO-ENTITY-HOME (FINDING-3)`, `reconciliation_flag: ⚠ FINDING-3`, **flag + carry as `out-of-standard-until-reconciled` known-exception**. Entity-roster expansion (adding a Communication entity) is a SEPARATE downstream decision (future roster reopen / later milestone) — **NOT in scope**. The flagged row *is* the deliverable; it routes the gap to downstream triage.
+**Ratified Communications-Tracker policy (Collective Review 2026-05-16, decision item 4):** the Communications Tracker has no entity home in the frozen 17-roster [18-roster since ADR-018, 2026-06-07 — no Communication entity added] — recorded as `source_entity: ⚠ NO-ENTITY-HOME (FINDING-3)`, `reconciliation_flag: ⚠ FINDING-3`, **flag + carry as `out-of-standard-until-reconciled` known-exception**. Entity-roster expansion (adding a Communication entity) is a SEPARATE downstream decision (future roster reopen / later milestone) — **NOT in scope**. The flagged row *is* the deliverable; it routes the gap to downstream triage.
 
 ## 5. The Inventory
 
@@ -85,7 +85,7 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
 | `[Project]_Daily_Status_Log.md` | core-tracker | entity 6 RAID Item | .md | `operations/templates/daily-status-log-template.md` | prose-only | tracker-manager | composite-multi-entity | Aggregator (D4a): dominant=entity 6 RAID Item; secondaries entity 5 Decision, entity 7 Meeting, entity 10 Person. Operational producer cross-check: `daily-status` |
-| `[Project]_Communications_Tracker.md` | core-tracker | ⚠ NO-ENTITY-HOME (FINDING-3) | .md | `operations/templates/communications-tracker-template.md` | prose-only | unknown | ⚠ FINDING-3 (artifact-element-no-entity-home) | **RATIFIED decision item 4** — no Communication entity in frozen 17-roster; out-of-standard-until-reconciled known-exception; flag + carry; entity-roster expansion NOT in scope; do **NOT** add an entity |
+| `[Project]_Communications_Tracker.md` | core-tracker | ⚠ NO-ENTITY-HOME (FINDING-3) | .md | `operations/templates/communications-tracker-template.md` | prose-only | unknown | ⚠ FINDING-3 (artifact-element-no-entity-home) | **RATIFIED decision item 4** — no Communication entity in frozen 18-roster; out-of-standard-until-reconciled known-exception; flag + carry; entity-roster expansion NOT in scope; do **NOT** add an entity |
 | `[Project]_Open_Meetings_Tracker.md` | core-tracker | entity 7 Meeting | .md | `operations/templates/open-meetings-tracker-template.md` | prose-only | ppm-agent | clean | Owning-agent cross-check: file-router creates, ppm-agent maintains ( §6) |
 | `[Project]_Transcript_Register.md` | core-tracker | #9 Artifact `[ASSUMPTION – CONFIRM]` | .md | `operations/templates/transcript-register-template.md` | prose-only | ppm-agent (route: file-router) | context-implicit | Passive search/reference index of transcript-Artifacts; `project_id` filename-implicit; "index not tracker" behavioral nuance (tracker-schemas.md Tracker 4 note) flagged, not forced |
 | `[Project]_RAID_Log.csv` | core-tracker | entity 6 RAID Item | .csv (+Confluence dual) | `operations/templates/raid-log-template.csv` | entity-derived | tracker-manager | clean | **EAD pilot proven** ([`raid-log.schema.json`](../schemas/raid-log.schema.json)) — the **only** first-pass `entity-derived` artifact; `impact`/`action_plan` re-frozen first-class per the Stage 5 Option-A spec |
@@ -181,7 +181,7 @@ This returns every artifact whose `source_entity`/`reconciliation_flag` is `⚠ 
 
 | Reference | Role relative to this inventory |
 |---|---|
-| [`project-entity-model.md`](../disciplines/project-entity-model.md) | **Source-entity + owning-skill authority.** §4 17-entity roster → `source_entity` col 3; §6 owning-agent matrix (Maintains) → `owning_skill` col 7. FROZEN derivation surface. |
+| [`project-entity-model.md`](../disciplines/project-entity-model.md) | **Source-entity + owning-skill authority.** §4 18-entity roster → `source_entity` col 3; §6 owning-agent matrix (Maintains) → `owning_skill` col 7. FROZEN derivation surface. |
 | [`schemas/entity-field-schemas.md`](../schemas/entity-field-schemas.md) | Per-entity field/validation schemas — the `schema_status` tri-state alignment authority (entity-derived vs prose-only). |
 | [`schemas/raid-log.schema.json`](../schemas/raid-log.schema.json) | The one first-pass `entity-derived` exemplar — EAD machine-schema for the RAID Log, derived from the RAID Item entity. |
 | [`schemas/tracker-schemas.md`](../schemas/tracker-schemas.md) | Seed for the 5 `core-tracker` rows (Trackers 1–5) + the 21 `methodology-variant-tracker` rows (§Methodology Variation matrix). Carries the additive §Purpose pointer back to this inventory (AC-4). |

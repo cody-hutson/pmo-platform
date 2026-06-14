@@ -38,7 +38,7 @@ This standard defines what makes an operational-artifact template **"highly mach
 
 - §4 — the **Entity-Derivation Rule** (every template field maps to an entity-field schema entry OR is marked `template-local` with rationale).
 - §5 — the **Machine-Schema-Companion convention** (a template declares the four EAD inputs so its validatable schema is mechanically derivable).
-- §6 — the **FINDING-3 known-exception path** (the conformance tri-state for artifacts with no entity home in the frozen 17-roster).
+- §6 — the **FINDING-3 known-exception path** (the conformance tri-state for artifacts with no entity home in the frozen 18-roster).
 
 Citing the future/authoritative home rather than restating it is the consolidation discipline `duplicate-source-discipline.md` mandates — a standard that re-stated L4 provenance / L1 taxonomy / L3 PDA-boundary would create a second drift-prone source for already-frozen template-architecture governance.
 
@@ -125,7 +125,7 @@ The rule is stated as numbered **T-rules** (T = Template-conformance; parallel t
 | **T4** | Each bound row declares an `ead_class` ∈ the EAD 7-class taxonomy `{exact-map · rename-map · type-lift · dialect-projection · computed · transition-metadata · context-implicit}` | schema parse | structural (auto) |
 | **T5** | Each bound row declares an enforcement `level` ∈ `{L1 · L2 · L3}` (structural / referential / judgment) | schema parse | structural (auto) |
 | **T6** | A field that is neither bound nor `template-local`-with-rationale is a **standard violation** (the template is non-conformant) | conformance gate | structural (auto) |
-| **T7** | The template declares a `source_entity` (Element E) resolving to a PDA 17-roster entity **OR** the `⚠ NO-ENTITY-HOME (FINDING-3)` sentinel from the PDA inventory col 3 | conformance gate | structural (auto) |
+| **T7** | The template declares a `source_entity` (Element E) resolving to a PDA 18-roster entity **OR** the `⚠ NO-ENTITY-HOME (FINDING-3)` sentinel from the PDA inventory col 3 | conformance gate | structural (auto) |
 | **T8** | `template-local` MUST NOT be used to bypass a field that DOES have an entity home (escape hatch is for genuine dialect/computed/no-home fields only) | conformance (judgment) | judgment (recommend) |
 
 **Entity-derivation reference is to (`entity-field-schemas.md`)** — explicitly cited in T2 above. A bound row's `entity_binding` resolves to a field defined in `core/schemas/entity-field-schemas.md` (the PDA frozen surface). This satisfies AC-3's "referencing the entity-field schema" requirement.
@@ -178,15 +178,15 @@ The standard's job is the **declaration contract**; the EAD derivation proves it
 
 ## §6 FINDING-3 Known-Exception Path
 
-**Problem.** PDA froze `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)` for artifacts whose records no PDA entity persists (canonical macro case: **Communications Tracker** — no "Communication" entity in the frozen 17-roster; Transcript Register `[ASSUMPTION – CONFIRM]`). These **cannot** satisfy the entity-derivation rule (T7 has no entity to resolve to). PDA D4(c) explicitly states the disposition decision *"(N2/N3 or a future PDA reopen) decides disposition"* — **N2 (this standard) is the named owner of that disposition.** A silent failure here (templatizing as if entity-derived, force-fitting a wrong entity, or omitting the artifact) is the precise anti-pattern the capability forbids.
+**Problem.** PDA froze `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)` for artifacts whose records no PDA entity persists (canonical macro case: **Communications Tracker** — no "Communication" entity in the frozen 18-roster; Transcript Register `[ASSUMPTION – CONFIRM]`). These **cannot** satisfy the entity-derivation rule (T7 has no entity to resolve to). PDA D4(c) explicitly states the disposition decision *"(N2/N3 or a future PDA reopen) decides disposition"* — **N2 (this standard) is the named owner of that disposition.** A silent failure here (templatizing as if entity-derived, force-fitting a wrong entity, or omitting the artifact) is the precise anti-pattern the capability forbids.
 
 ### Resolution — the conformance tri-state (FROZEN)
 
 | `standard_conformance` | Trigger | Meaning | N3 harness contract |
 |---|---|---|---|
-| `entity-derived` | T1–T7 all PASS; every field bound; `source_entity` resolves to a 17-roster entity | Full conformance; EAD machine-schema derivable | `canonical-enforce` eligible — born compliant |
+| `entity-derived` | T1–T7 all PASS; every field bound; `source_entity` resolves to an 18-roster entity | Full conformance; EAD machine-schema derivable | `canonical-enforce` eligible — born compliant |
 | `template-local-annotated` | T1–T7 PASS but ≥1 field is `template-local` (genuine dialect/computed/no-home **field**, e.g. `RAID_ID` projection) with rationale; `source_entity` still resolves to an entity | Conformant — every field is *accounted for* (bound OR explicitly local-with-rationale); the artifact HAS an entity home | `canonical-enforce` eligible; `template-local` fields excluded from entity-canonical enforcement |
-| `out-of-standard-until-reconciled` | `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)` — the **artifact-level** macro case; T7 cannot resolve | The artifact has **NO** entity home in the frozen 17-roster; entity-derivation is *structurally impossible*, not merely incomplete | **Declared, tracked known-exception** — EXEMPT from `canonical-enforce` until reconciled; harness MUST NOT block, MUST NOT silent-pass; records `reconciliation_blocker:` pointer to the PDA inventory row + opens/links the reopen path |
+| `out-of-standard-until-reconciled` | `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)` — the **artifact-level** macro case; T7 cannot resolve | The artifact has **NO** entity home in the frozen 18-roster; entity-derivation is *structurally impossible*, not merely incomplete | **Declared, tracked known-exception** — EXEMPT from `canonical-enforce` until reconciled; harness MUST NOT block, MUST NOT silent-pass; records `reconciliation_blocker:` pointer to the PDA inventory row + opens/links the reopen path |
 
 ### Field-level vs artifact-level distinction (FROZEN — do not conflate)
 
@@ -200,7 +200,7 @@ An `out-of-standard-until-reconciled` template carries:
 ```
 reconciliation_blocker:
   inventory_row: <operational-artifact-inventory.md row ref>
-  gap: "<entity absent from frozen 17-roster>"
+  gap: "<entity absent from frozen 18-roster>"
   reopen_owner: "future PDA entity-roster expansion OR operator decision"
 ```
 
@@ -251,13 +251,13 @@ schema_mode:          dialect-enforce      # pilot validates the live legacy CSV
 
 **Context-implicit callout (not a row column):** `#6 RAID Item.project_id` (`references: Project.id`, L2, on-unresolved BLOCK-WRITE) is serialized **out-of-band** as the `[Project]` filename token in `[Project]_RAID_Log.csv` (`x-pmo-context-implicit`, "F-1 — entity-required field serialized out-of-band, not a row column; file-level harness assertion"). This illustrates the `context-implicit` member of the EAD 7-class taxonomy: an entity-bound field that is genuinely entity-derived but physicalized as a file-level token, asserted by the harness, not a template body column.
 
-**Conformance verdict: `entity-derived`.** 12 entity-bound fields + 2 `template-local`-with-rationale (`Tags` dialect, `Section` computed) + 1 `context-implicit` (`project_id`, file-level). Every field is accounted for; `source_entity = #6 RAID Item` resolves to the frozen 17-roster (per `entity-field-schemas.md` §3.6). T1–T7 PASS; T8 judgment: the two locals are genuine dialect / computed projections, not entity-home bypass.
+**Conformance verdict: `entity-derived`.** 12 entity-bound fields + 2 `template-local`-with-rationale (`Tags` dialect, `Section` computed) + 1 `context-implicit` (`project_id`, file-level). Every field is accounted for; `source_entity = entity 6 RAID Item` resolves to the frozen 18-roster (per `entity-field-schemas.md` §3.6). T1–T7 PASS; T8 judgment: the two locals are genuine dialect / computed projections, not entity-home bypass.
 
 **Machine-schema companion:** `S = EAD(#6 RAID Item, <this table>, csv, dialect-enforce)` derives `core/schemas/raid-log.schema.json` exactly as the RAID-log pilot already proved. This worked example **points at** the frozen schema as the EAD output proof — it does not re-author it.
 
 ### §7.1 Contrast — Communications Tracker (`out-of-standard-until-reconciled`)
 
-The *negative* case proving the §6 non-silent-failure path end-to-end. The Communications Tracker (`[Project]_Communications_Tracker.md`, a `core-tracker` in the N1 inventory) tracks a concept — communications — that has **no entity** in the frozen 17-roster.
+The *negative* case proving the §6 non-silent-failure path end-to-end. The Communications Tracker (`[Project]_Communications_Tracker.md`, a `core-tracker` in the N1 inventory) tracks a concept — communications — that has **no entity** in the frozen 18-roster.
 
 ```
 source_entity:        ⚠ NO-ENTITY-HOME (FINDING-3)
@@ -267,11 +267,11 @@ schema_mode:          n/a (entity-derivation structurally impossible)
 standard_conformance: out-of-standard-until-reconciled
 reconciliation_blocker:
   inventory_row: operational-artifact-inventory.md → [Project]_Communications_Tracker.md row
-  gap: "no Communication entity in frozen 17-roster"
+  gap: "no Communication entity in frozen 18-roster"
   reopen_owner: "future PDA entity-roster expansion OR operator decision"
 ```
 
-**Ratified policy (Collective Review 2026-05-16, decision item 4 — verbatim):** the Communications Tracker has no entity home in the frozen 17-roster — recorded as `source_entity: ⚠ NO-ENTITY-HOME (FINDING-3)`, `reconciliation_flag: ⚠ FINDING-3`, **flag + carry as `out-of-standard-until-reconciled` known-exception**. Entity-roster expansion (adding a Communication entity) is a SEPARATE downstream decision (future PDA reopen / later milestone) — **NOT in scope**. The flagged row *is* the deliverable; it routes the gap to downstream triage.
+**Ratified policy (Collective Review 2026-05-16, decision item 4 — verbatim):** the Communications Tracker has no entity home in the frozen 17-roster [18-roster since ADR-018, 2026-06-07 — no Communication entity added] — recorded as `source_entity: ⚠ NO-ENTITY-HOME (FINDING-3)`, `reconciliation_flag: ⚠ FINDING-3`, **flag + carry as `out-of-standard-until-reconciled` known-exception**. Entity-roster expansion (adding a Communication entity) is a SEPARATE downstream decision (future PDA reopen / later milestone) — **NOT in scope**. The flagged row *is* the deliverable; it routes the gap to downstream triage.
 
 No Entity-Derivation Table is possible (T7 cannot resolve). The N3 harness treats this as a **declared, tracked, enumerable known-exception** — exempt from `canonical-enforce` until reconciled, **NOT** a compliance failure and **NOT** a silent pass. This is the load-bearing contribution of this standard: a no-entity-home artifact is neither force-fit to a wrong entity nor silently omitted — it is explicitly out-of-standard with a named reopen path.
 
@@ -301,7 +301,7 @@ AC-checkable assertions (mirrors `project-schema.md` §5 / `template-protocol.md
 | L3 `core/standards/template-storage.md` §5 | PDA boundary — the load-bearing placement evidence (REFERENCED, not modified) |
 | `core/schemas/frontmatter-schema.md` | Instance-frontmatter Category 1–7 + 7 MVP rels + Domain A/B/C (REFERENCED) |
 | `core/schemas/project-schema.md` §5–§6 | V-style validation-rule structural pattern (MIRRORED) |
-| `core/disciplines/project-entity-model.md` | The 17-entity canonical roster (`source_entity` resolution target) |
+| `core/disciplines/project-entity-model.md` | The 18-entity canonical roster (`source_entity` resolution target) |
 | `core/schemas/entity-field-schemas.md` | Per-entity field schemas — **the entity-derivation target cited by T2** |
 | `core/schemas/raid-log.schema.json` | EAD pilot + §7 worked-example frozen authority (`S=EAD` output proof) |
 | `core/specs/operational-artifact-inventory.md` | N1 inventory — the `reconciliation_blocker` inventory-row target; FINDING-3 register |

@@ -3,7 +3,7 @@
 **Status:** Canonical
 **Owner:** `../disciplines/project-entity-model.md`
 **Introduced:** project-data-foundation (2026-05-16) — initiative project-data-architecture, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
-**Establishing issue:** G1 — 17-entity canonical model
+**Establishing issue:** G1 — 17-entity canonical model (roster re-frozen at 18 via ADR-018, 2026-06-07)
 **Architectural basis:** the Two-Axis Entity Lifecycle ADR (**RATIFIED** at Collective Review, 2026-05-16)
 **Consumers (downstream G2–G10):** G2 (per-entity field schemas), G3-pilot (RAID-Log machine-schema pilot), G4 (operational-artifact inventory), G5 (template standard), G6 (templatization harness), G3–G10 (later milestones)
 **Cross-references:** see [§9](#9-cross-references).
@@ -16,7 +16,7 @@ This doc satisfies the seven acceptance criteria of the establishing issue. Each
 
 | AC | Requirement | Satisfied by | Frozen source |
 |---|---|---|---|
-| **AC-1** | All 17 entities defined with single-paragraph rationale + first-class justification | [§4](#4-entity-definitions-18) — per-entity *Rationale & first-class justification* | Frozen Artifact 1 (roster + tier) |
+| **AC-1** | All 17 entities defined with single-paragraph rationale + first-class justification | [§4](#4-entity-definitions-18) — per-entity *Rationale & first-class justification* | Frozen Artifact 1 (roster + tier; +Work Item entity 18 via ADR-018) |
 | **AC-2** | Field list per entity (≥3 required fields each) | [§3](#3-entity-core-schema) (6 required core) + [§4](#4-entity-definitions-18) per-entity (≥3 required entity-specific) | Frozen Artifacts 2, 3 |
 | **AC-3** | Relationship matrix (entity-pair × MVP type) for ≥10 common chains | [§5](#5-relationship-matrix) — 17 directed chains + adjacency grid | Frozen Artifact 4 (16 chains + the ADR-018 rollup edge) |
 | **AC-4** | Lifecycle state machine per entity (DOMAIN A/B/C inheritance from `frontmatter-schema.md`) | [§3](#3-entity-core-schema) two-axis model + [§4](#4-entity-definitions-18) per-entity Axis-1 machines + Axis-2 pattern | the Two-Axis Entity Lifecycle ADR + Frozen Artifacts 1, 3 |
