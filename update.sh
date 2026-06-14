@@ -58,6 +58,14 @@ WORKSPACE_ROOT_EXPLICIT=0
 # --- Phase 3 result (read by main to select the exit code; see EX_NOCHANGE) ---
 REGENERATED_COUNT=0
 
+# --- Phase 5 result (read by main to select the exit code; see EX_NOCHANGE) ---
+# Set to 1 by redeploy_skills when it actually performs a skill redeploy that
+# deploys/refreshes the roster (#331 F1). A skills-only update (new skill
+# versions, no composition-template change) regenerates 0 managed sections yet
+# DOES redeploy — without this signal main would mislabel that run "no change"
+# and exit EX_NOCHANGE despite Phase 5 having deployed.
+PHASE5_DEPLOYED=0
+
 # --- Logging ---
 log()  { printf '%s\n' "$*" >&2; }
 info() { printf 'INFO: %s\n' "$*" >&2; }
@@ -87,8 +95,8 @@ Options:
   --help                Show this help
 
 Exit codes:
-  0    Update applied successfully
-  64   No update needed (source unchanged since last invocation)
+  0    Update applied successfully (managed sections regenerated and/or skills redeployed)
+  64   No update needed (no managed-section regeneration AND no skill redeploy)
   65   operator.toml missing or malformed
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
@@ -338,7 +346,20 @@ redeploy_skills() {
   fi
   # shellcheck disable=SC1090
   source "${orchestrate_lib}"
-  phase_deploy_skills
+  # Capture the deploy result so the exit-code decision can see that Phase 5
+  # redeployed even when Phase 3 regenerated nothing (#331 F1). A successful
+  # phase_deploy_skills runs deploy.sh --deploy, which refreshes the roster, so
+  # success here means skills WERE (re)deployed. `|| rc=$?` keeps the non-zero
+  # path visible under set -e (the corrected capture pattern). A deploy failure
+  # is surfaced by phase_deploy_skills' own logging; we do not flip the flag,
+  # and propagate the failure so the operator sees a non-OK exit.
+  local rc=0
+  phase_deploy_skills || rc=$?
+  if [ "${rc}" -eq 0 ]; then
+    PHASE5_DEPLOYED=1
+  else
+    return "${rc}"
+  fi
 }
 
 # --- Phase 5b: Refresh .version snapshot ---
@@ -373,11 +394,13 @@ redeploy_skills
 refresh_version_snapshot
 write_last_update
 
-# Exit code (#613): a no-op run (0 composition-surface files regenerated) returns
-# EX_NOCHANGE so callers can distinguish "nothing to do" from a successful update
-# that applied changes. A tamper-triggered regeneration (#612) counts as a
-# regeneration, so it returns EX_OK (it is not "no change").
-if [ "${REGENERATED_COUNT}" -eq 0 ]; then
+# Exit code (#613): a no-op run returns EX_NOCHANGE so callers can distinguish
+# "nothing to do" from a successful update that applied changes. A tamper-
+# triggered regeneration (#612) counts as a regeneration, so it returns EX_OK.
+# EX_NOCHANGE now requires BOTH no Phase-3 regeneration AND no Phase-5 redeploy
+# (#331 F1): a skills-only update regenerates 0 managed sections but DOES
+# redeploy the roster, so it is a real change and must return EX_OK, not 64.
+if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ]; then
   info "Update complete (no changes — composition surface already current)."
   exit "${EX_NOCHANGE}"
 fi
