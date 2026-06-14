@@ -2,12 +2,13 @@
 title: Platform Health Audit Framework
 purpose: Anthropic Base-vs-Build observation methodology + audit cadence policy
 type: protocol
-related: anthropic-base-vs-build-registry.md (instance), successor (mode integration)
+related: anthropic-base-vs-build-registry.md (instance), pmo-qa-auditor Mode E (mode integration — §4)
 audit_baseline_sha: 4a943131c9e0323d5811f92704914657d7f7c314
 audit_baseline_date: 2026-05-03
 baseline_policy_reference: audit-baseline-when-target-population-is-empty discipline
 adr: governing ADR (in the release plan)
 ---
+<!-- reference-durability: allow-link -->
 
 # Platform Health Audit Framework
 
@@ -22,9 +23,8 @@ build-vs-buy actions (per the audit-framework charter body AC3 and the audit-cla
 
 The framework ships alongside the
 [anthropic-base-vs-build-registry.md](../../../core/specs/anthropic-base-vs-build-registry.md) instance.
-Successor work integrates the framework into pmo-qa-auditor as a
-`platform-health` mode (deferred per the Strict scope of this release — see release plan §Stage 13
-Obligations).
+The framework is integrated into pmo-qa-auditor as **Mode E — Platform Health Audit** (§4) —
+operationalized at this release.
 
 ---
 
@@ -42,8 +42,8 @@ intentional differentiation. Consumed by:
   role-skill authoring (HARD outbound handoff per the milestone description).
 - release-planner (future) — registry MAY inform cross-Anthropic-overlap capacity heuristics
   at Stage 3 Bundle (soft outbound; no skill modification in this release).
-- Successor release — registry input to pmo-qa-auditor `platform-health` mode (HARD outbound;
-  mode integration deferred per Strict scope).
+- pmo-qa-auditor Mode E — Platform Health Audit — registry is the instance Mode E audits (HARD
+  outbound; mode integration operationalized at this release per §4).
 
 ### Instance file
 
@@ -77,10 +77,11 @@ audit-baseline-when-target-population-is-empty discipline
 
 ## §2 Audit Cadence
 
-> **Strict scope note:** This section describes the cadence *policy*. Operationalization via
-> `mcp__scheduled-tasks` cadence registration is **deferred to a successor release**. This release
-> ships the framework + registry only; the successor wires the cadence task and integrates
-> pmo-qa-auditor `platform-health` mode.
+> **Scope note:** This section describes the cadence *policy*. The operational cadence (responsible
+> party, escalation, audit-trail) is owned by [OPERATIONS.md § Platform Health Audit Protocol](../../../core/governance/OPERATIONS.md);
+> the `mcp__scheduled-tasks` cadence registration (`platform-health-quarterly-audit` +
+> `platform-health-drift-watch`) and the pmo-qa-auditor Mode E integration (§4) are
+> **operationalized at this release**.
 
 ### Quarterly cadence
 
@@ -100,23 +101,16 @@ Re-audit triggers fire when any of the following signals occur (event taxonomy p
 - (d) PMO ships a new skill (entry added to `operations/skills/`) that may introduce a new
   overlap relationship with an existing Anthropic skill
 
-### Operationalization (deferred to successor)
+### Operationalization (this release)
 
-Cadence task registration via `mcp__scheduled-tasks` is **out of scope for this release (Strict scope)**.
-The successor issue (filed at Stage 13 — see release plan §Stage 13 Obligations)
-covers:
+The cadence operationalization layer is live at this release:
 
-- `mcp__scheduled-tasks` quarterly registration with the §3.5 drift trigger conditions
-- pmo-qa-auditor `platform-health` mode integration (§4 placeholder cross-ref)
-- Inaugural audit folder (`pmo-platform/analysis/platform-health-2026-XX-XX/`)
-- OPERATIONS.md Platform Health Audit Protocol section
-- Drift detection demonstration (§3.5 trigger types exercised in inaugural audit)
-- Owner-authored Overlap Detection Rubric + Scorecard Weighting (registry header)
-
-### Cross-reference
-
-The successor issue at Stage 13 close per this release plan completes the cadence
-operationalization layer.
+- `mcp__scheduled-tasks` registrations (`platform-health-quarterly-audit` cron `0 9 1 1,4,7,10 *` + `platform-health-drift-watch` weekly) carry the §3.5 drift trigger conditions. **Note:** the schedule is evaluated in the user's LOCAL timezone, while the audit-folder date stamp uses UTC (`date -u`) — this LOCAL-schedule / UTC-folder split is intentional; do not unify. The tool's completion notification is **per-run** (`notifyOnCompletion`), not conditional, so the drift-watch self-routes any drift to an observation issue-draft rather than relying on a conditional ping.
+- pmo-qa-auditor Mode E integration (§4).
+- The inaugural audit folder is a Mode E runtime output at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/` (operator-instance, git-ignored).
+- [OPERATIONS.md § Platform Health Audit Protocol](../../../core/governance/OPERATIONS.md) (responsible party + escalation + audit-trail).
+- Drift detection demonstration (§3.5 trigger types exercised in the inaugural audit).
+- Overlap Detection Rubric + Scorecard Weighting (registry header — operator-ratified values).
 
 ---
 
@@ -280,7 +274,7 @@ this release's Stage 4 close (2026-05-03) per the N=2 emergence threshold in
 
 ### §3.5 Drift Trigger Conditions (event taxonomy)
 
-Drift triggers documented for the successor's `mcp__scheduled-tasks` registration:
+Drift triggers consumed by the `mcp__scheduled-tasks` registrations (§4.2) and by Mode E:
 
 | Trigger ID | Surface | Detection signal | Update path |
 |---|---|---|---|
@@ -294,21 +288,49 @@ Drift triggers documented for the successor's `mcp__scheduled-tasks` registratio
 
 ## §4 Integration with pmo-qa-auditor
 
-> **DEFERRED to a successor issue.** The pmo-qa-auditor `platform-health` mode will
-> consume this registry as input to its observational audit output. Mode integration is out
-> of scope for this release (Strict scope); see successor issue filed at Stage 13 (per the
-> milestone description scope-partition + this release plan's §Stage 13 Obligations).
+This framework is operationalized as **pmo-qa-auditor Mode E — Platform Health Audit** (see
+[`../../../core/skills/pmo-qa-auditor/SKILL.md`](../../../core/skills/pmo-qa-auditor/SKILL.md)
+§Modes). Mode E is an **OBSERVE-only** producer mode: it consumes this methodology + the
+[registry instance](../../../core/specs/anthropic-base-vs-build-registry.md), re-enumerates the
+Anthropic catalog (§3.1) and the PMO source roster, classifies drift (§3.5), and emits a dated
+audit folder. It **does not mutate the registry**.
 
-Cross-reference for the successor implementer:
+### §4.1 Mode binding
 
-- This framework doc + the [registry instance](../../../core/specs/anthropic-base-vs-build-registry.md) are
-  the inputs to `platform-health` mode.
-- Mode integration includes: registry consumption, observational discipline enforcement
-  (cross-ref [review-discipline-principles.md](../../../core/disciplines/review-discipline-principles.md)), drift
-  detection demonstration (per §3.5), and inaugural audit folder creation under
-  `pmo-platform/analysis/platform-health-YYYY-MM-DD/`.
-- Owner-authored content (Overlap Detection Rubric + Scorecard Weighting) populates the
-  registry header at the successor release (per the audit-framework charter body AC6 + AC7).
+| Contract dimension | Value |
+|---|---|
+| Consumer | `pmo-qa-auditor` Mode E — Platform Health Audit |
+| Input | this framework (methodology) + the registry instance (the catalog Mode E audits) |
+| Output | the §4.3 audit-folder shape + an in-chat SUMMARY echo |
+| Output discipline | observational only — inherits the audit-class output discipline ([review-discipline-principles.md](../../../core/disciplines/review-discipline-principles.md)); prescriptive verbs (`recommend`, `migrate`, `consolidate`, `should`) are out-of-bounds |
+| Mutation posture | **OBSERVE-only.** Authority: **§3.3(a)** assigns the registry row-add to "the skill author … commit alongside the new SKILL.md in the same PR" — a human-authored, PR-gated write tied to skill *creation*, structurally distinct from an audit *mode*. Mode E observes drift and drafts observation issues; the §3.3 registry write stays a separate human-gated change. |
+
+### §4.2 Invocation surfaces
+
+1. **Operator-explicit** — the Mode E trigger phrases ("platform health audit", "base-vs-build audit", "drift check the registry") route to Mode E via the skill's Mode Selection.
+2. **Quarterly cadence** — the `platform-health-quarterly-audit` scheduled task (per the cadence registration; see [OPERATIONS.md § Platform Health Audit Protocol](../../../core/governance/OPERATIONS.md)) spawns a session that invokes Mode E.
+3. **Reactive** — a weekly drift-watch sentinel (the `platform-health-drift-watch` task) runs the §3.5 T1–T5 drift detection only; any drift routes to a single observation issue-draft.
+
+### §4.3 Audit-folder output contract
+
+Mode E emits the audit folder at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/`
+(operator-instance, **git-ignored** per the CLAUDE.md analysis-folder convention;
+`${AUDIT_DATE_UTC}` resolves at the Mode E run via `date -u +%Y-%m-%d`). Contents (≥4 files):
+
+- `SUMMARY.md` — top-level report; header carries the Scorecard Weighting (single-sourced from the registry header; SUMMARY cites it); records baseline SHA + audit date; observational posture only.
+- `findings-register.md` — one row per drift item (T1–T5 classification, §3.3 update-path, Overlap Detection Rubric score).
+- `base-build-deltas.md` — the Anthropic-catalog-vs-baseline + roster-vs-registry raw enumeration deltas.
+- `issue-drafts/NNN-kebab-name.md` — ≥3 drafts in **observation format** (`observation.yml` 3-field schema — drift findings are observations until the operator triages them).
+
+Because this folder is operator-instance/git-ignored, it is **produced by a Mode E run at runtime** (cadence or operator invocation), NOT authored as tracked corpus.
+
+### §4.4 Drift → update-path mapping
+
+Mode E maps each observed drift item to a §3.3 (a/b/c) update path but **does not itself perform
+the §3.3 registry write** (per the §4.1 OBSERVE-only mutation posture). Cross-references §3.5
+(trigger taxonomy) and §3.3 (update protocol). The disposition split — Mode E drafts; the operator
+triages on GitHub; the registry row write is a separate human-gated §3.3 change — mirrors the Pattern
+Review draft→operator-verdict split (see [OPERATIONS.md § Pattern Review Cadence Protocol](../../../core/governance/OPERATIONS.md)).
 
 ---
 

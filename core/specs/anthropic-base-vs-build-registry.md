@@ -71,6 +71,56 @@ Each row carries 8 columns:
 
 ---
 
+## §Overlap Detection Rubric
+
+> **Operator-ratified.** The STRUCTURE (D1–D5 dimensions) below is authored at this release;
+> the **scoring-input enum wording**, the **derived-vs-descriptive posture question**, and **whether
+> the rubric is advisory or a §3.3(a) registry-row-required field** were operator-owned and are now
+> ratified (see the ratified-fields notes after the table).
+
+The scoring instrument that pmo-qa-auditor Mode E applies when classifying an overlap relationship
+(per [framework §4](../../release/references/protocols/platform-health-audit-framework.md) and §3.5
+drift). The rubric is the *scoring instrument*; [ADR-022](../ADRs/ADR-022-skill-sourcing-coupling-posture.md)
+holds the *rule* it operationalizes. **ADR-022 is a draft alignment reference (status: Proposed;
+ratifies at a different release) — rubric dimensions D3–D5 are provisional pending ADR-022 Acceptance;
+re-confirm the three-condition wording at the ADR-022 flip.**
+
+| Dimension | Question the auditor asks | Scoring input |
+|---|---|---|
+| D1 — Functional surface overlap | Does an Anthropic skill occupy the same task surface? | `none` / `partial` / `full` |
+| D2 — Coupling intensity | Is the relationship explicit-wrap, functional-overlap, or namespace-collision? | maps to the §Schema enum: `extends` / `replaces` / `independent` / `pass-through` |
+| D3 — Commodity-stability (ADR-022 cond. 1) | Is the upstream contract commodity-stable (format engine) or a drifting judgment surface? | `stable` / `drifting` |
+| D4 — Blast radius (ADR-022 cond. 2) | Would a silent upstream change hit a stakeholder-facing / governance-binding surface? | `low` / `high` |
+| D5 — Guard posture (ADR-022 cond. 3) | Is any runtime coupling drift-canary-guarded? | `guarded` / `unguarded` / `n-a` |
+
+**Ratified fields (operator decision):**
+- **(a) Derived-vs-descriptive** — **descriptive.** D3+D4+D5 stay purely descriptive; they do NOT produce a *derived* ADR-022 posture-conformance flag. A derived conformance flag would be evaluative, which would breach the §Observational discipline — the descriptive reading preserves it.
+- **(b) Scoring-input enum wording** — **ratified as drafted.** The D1–D5 value labels above are final: D1 `none` / `partial` / `full`; D2 maps to the §Schema enum; D3 `stable` / `drifting`; D4 `low` / `high`; D5 `guarded` / `unguarded` / `n-a`.
+- **(c) Advisory-vs-required** — **advisory.** The rubric is observational, not a gate; it is NOT a §3.3(a) registry-row-required field at skill creation. Making a registry-row field required at skill creation would be a §3.3 change out of this release's scope.
+
+---
+
+## §Scorecard Weighting
+
+The SUMMARY health-posture roll-up Mode E applies (single-sourced here; the inaugural SUMMARY header *cites* this section rather than duplicating it, per [duplicate-source-discipline.md](../standards/duplicate-source-discipline.md)).
+
+**Form (toolkit-aligned).** Signals are weighted by **ordinal priority**, not cardinal coefficients — per the platform scoring convention: [`AUDIT_FRAMEWORK.md`](../standards/AUDIT_FRAMEWORK.md) expresses dimension weighting as qualitative emphasis ("weights X primary"); [`gate-evaluation-spec.md`](../schemas/gate-evaluation-spec.md) / [`review-composition-framework.md`](../standards/review-composition-framework.md) express scorecard output as PASS / PARTIAL / FAIL (1–5); and [`eval-writer` rubric-templates](../skills/eval-writer/references/rubric-templates.md) deliberately avoid high-precision numeric scales. A cardinal weighted-sum-to-0–100 would also canonicalize invented numeric thresholds, which the §Observational discipline + evidence-grounding anti-pattern prohibit.
+
+| Priority | Health signal | What it measures |
+|---|---|---|
+| **Primary** | Roster-coverage delta (T5) | tree skill dirs vs. registry rows — the foundational completeness gate; an uncatalogued skill is the most-blinding drift (the registry cannot characterize what it does not list). |
+| **Secondary** | Catalog-currency delta (T1–T4) | Anthropic-catalog drift vs. the recorded baseline. |
+| **Tertiary** | Posture-conformance | skills whose observed posture diverges from ADR-022's three-condition test. |
+
+**Roll-up — primary-gated, worst-signal-dominates (PASS / PARTIAL / FAIL):**
+- **PASS** — all three signals observe no drift.
+- **PARTIAL** — secondary and/or tertiary drift observed; roster-coverage complete.
+- **FAIL** — roster-coverage observes ≥1 uncatalogued skill (the primary gate), OR any signal observes severe drift.
+
+The posture is the worst per-signal verdict, gated by the primary signal — roster-coverage caps the posture; secondary/tertiary can only lower it. There is no cardinal weighted sum: the verdict describes observed drift, consistent with the §Observational discipline.
+
+---
+
 ## §Observational discipline
 
 All registry content uses observational language only — describes the observed state of
@@ -107,7 +157,7 @@ skills") literally while disclosing the canary's source-only status transparentl
 See [framework §3.3 Registry Update Protocol](../../release/references/protocols/platform-health-audit-framework.md)
 for the (a/b/c) trigger taxonomy:
 
-- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-022](../ADRs/ADR-022-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-022 holds the rule; this trigger cites it, it does not restate it.
+- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-022](../ADRs/ADR-022-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-022 holds the rule; this trigger cites it, it does not restate it. (ADR-022 is a **draft alignment reference** — status: Proposed; it ratifies at a different release.)
 - (b) Anthropic releases new skill — registry walked for new overlap relationships
 - (c) Anthropic deprecates existing skill — affected `anthropic_overlap_status` re-classified
 
