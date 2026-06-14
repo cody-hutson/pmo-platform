@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Mixed-Release Solutioning Routing Protocol
 
 > **Source:** Sub-slice 1 — Stage 5 Solutioning support.

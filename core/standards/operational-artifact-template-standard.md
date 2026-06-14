@@ -253,7 +253,7 @@ schema_mode:          dialect-enforce      # pilot validates the live legacy CSV
 
 **Conformance verdict: `entity-derived`.** 12 entity-bound fields + 2 `template-local`-with-rationale (`Tags` dialect, `Section` computed) + 1 `context-implicit` (`project_id`, file-level). Every field is accounted for; `source_entity = entity 6 RAID Item` resolves to the frozen 18-roster (per `entity-field-schemas.md` §3.6). T1–T7 PASS; T8 judgment: the two locals are genuine dialect / computed projections, not entity-home bypass.
 
-**Machine-schema companion:** `S = EAD(#6 RAID Item, <this table>, csv, dialect-enforce)` derives `core/schemas/raid-log.schema.json` exactly as the RAID-log pilot already proved. This worked example **points at** the frozen schema as the EAD output proof — it does not re-author it.
+**Machine-schema companion:** `S = EAD(entity 6 RAID Item, <this table>, csv, dialect-enforce)` derives `core/schemas/raid-log.schema.json` exactly as the RAID-log pilot already proved. This worked example **points at** the frozen schema as the EAD output proof — it does not re-author it.
 
 ### §7.1 Contrast — Communications Tracker (`out-of-standard-until-reconciled`)
 
