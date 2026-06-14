@@ -649,12 +649,19 @@ check_a8_deploy_check() {
 
 check_a9_skill_roster() {
   # The user-local skills mirror is the predictable deploy target. deploy.sh
-  # installs it to $HOME/.claude/skills (USER_LOCAL_SKILLS_PATH in
+  # installs it to $DEPLOY_ROOT/.claude/skills (USER_LOCAL_SKILLS_PATH in
   # core/deploy/deploy.sh), which is NOT ${WORKSPACE_ROOT}/.claude/skills
   # (~/Claude/.claude/skills). Check the real mirror so a correct install
   # passes. (deploy.sh's other target, INSTALL_PATH, is a Cowork-internal
   # auto-detected path this validator cannot reliably predict.)
-  local skills_dir="${HOME}/.claude/skills"
+  #
+  # Honor the same deploy-root override deploy.sh uses (#331 F2): deploy.sh
+  # resolves DEPLOY_ROOT="${PMO_PLATFORM_DEPLOY_ROOT:-$HOME}". In a real
+  # operator install the var is unset so DEPLOY_ROOT==$HOME and A9 is unchanged;
+  # under sandboxed validation (override set) A9 must follow the redirected
+  # mirror or it would check the live ~ and false-fail.
+  local deploy_root="${PMO_PLATFORM_DEPLOY_ROOT:-${HOME}}"
+  local skills_dir="${deploy_root}/.claude/skills"
   if ! assert_dir_exists "${skills_dir}"; then
     emit_fail "A9" "INSTALL-SKILL-ROSTER" "skills dir missing: ${skills_dir}" \
       "run \`${SOURCE_REPO}/core/deploy/deploy.sh --deploy\` to populate skills mirror" "A"
