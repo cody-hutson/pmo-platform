@@ -8,6 +8,22 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [parallel-launch-quota-budget-gate] - 2026-06-14
+
+Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel-launch-quota-budget-gate`, which is also the signed git tag and the GitHub Release tag). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.
+
+### Added
+
+- **A usage-window check before parallel work launches.** Before firing a batch of parallel tasks, the pipeline estimates its cost against the remaining usage window and either proceeds, runs the tasks serially, holds the batch for the next window, or trims per-task cost. *Why it matters:* a batch no longer half-completes and then fails on a depleted window — you get a recommended course of action up front instead of started-but-failed work to recover. ([#23](https://github.com/cody-hutson/pmo-platform/issues/23))
+- **The check runs before every wave, not just at planning.** The budget is estimated once at release planning and re-validated before each parallel wave, accounting for work done in between and elapsed window time. *Why it matters:* a window that was fine at planning but has since been drawn down is caught before the next batch launches, not after it fails. ([#23](https://github.com/cody-hutson/pmo-platform/issues/23))
+- **A record of what each launch reserved.** Parallel launches can record an entry noting the estimated cost reserved against the window. *Why it matters:* budget estimates get more accurate over time as real launch costs accumulate, grounding future checks in observed cost rather than a fixed guess. ([#24](https://github.com/cody-hutson/pmo-platform/issues/24))
+
+### Changed
+
+- **The constraint is named correctly — a usage window, not a rate limit.** An overrun is routed to the mitigations that address a cumulative usage limit (run serially, defer, or reduce scope); in-prompt staggering is documented as a rate-limit-only defense, not the usage-window fix. *Why it matters:* the fix you are offered matches the real problem, rather than a timing tweak that does not move a cumulative-usage limit. ([#24](https://github.com/cody-hutson/pmo-platform/issues/24))
+
+[Full notes](release/releases/notes/parallel-launch-quota-budget-gate_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/parallel-launch-quota-budget-gate)
+
 ## [v1.20] - 2026-06-14
 
 Health colors and RAID escalations used to depend on which skill produced them and how each one decided where the lines were. This release writes those lines down once — the thresholds that turn a metric green, yellow, or red, and the ages at which an open risk or issue is warned and then escalated — and has every skill read from the same place, so the same project situation produces the same color and the same escalation no matter which part of the platform reports it.
