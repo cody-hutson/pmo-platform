@@ -18,6 +18,7 @@ description: >
 version: v1.10
 license: BUSL-1.1
 ---
+<!-- reference-durability: allow-link -->
 
 # Intake Desk
 
