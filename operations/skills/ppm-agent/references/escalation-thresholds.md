@@ -127,4 +127,4 @@ This section makes the cross-skill dependencies visible at deploy time, per the 
 ## Provenance
 
 - **Doc-of-record relationship:** the OPERATIONS.md Stale-RAID Auto-Escalation Protocol consumes the age thresholds (Section 3) and routing (Section 2) defined here as their canonical source. This file is authored ahead of that protocol so the protocol references an existing table rather than restating the numbers.
-- **Origin:** this reference was created to canonicalize the risk-scoring matrix, tier routing, and age-based auto-escalation thresholds the PPM Agent had no codified home for (PMO Upscale gap analysis, Domain 1 — escalation determinism; decomposed from the IMP-092 / IMP-109 improvement line).
+- **Origin:** this reference was created to canonicalize the risk-scoring matrix, tier routing, and age-based auto-escalation thresholds the PPM Agent had no codified home for (PMO Upscale gap analysis, Domain 1 — escalation determinism; decomposed from the escalation-determinism improvement line (tracked as #269)).

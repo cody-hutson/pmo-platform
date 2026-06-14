@@ -382,5 +382,5 @@ signals, which describe the *project's* reporting failure). Per
 ### Provenance
 
 - Reference doc created per the health-and-raid-determinism milestone (v1.19), tracking item
-  **#270** (IMP-108). Consumes the metric registry from tracking item **#271** (IMP-107) and
-  the RAID-age escalation owner **#269** (IMP-109).
+  **#270**. Consumes the metric registry from tracking item **#271** and
+  the RAID-age escalation owner **#269**.

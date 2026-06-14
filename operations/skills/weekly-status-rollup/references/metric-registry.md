@@ -12,7 +12,7 @@ This registry is the canonical **cross-level index** for metric → RAG-threshol
 - Project schedule / budget / risk / scope bands → [`comms-writer/references/channel-formats.md`](../../comms-writer/references/channel-formats.md) § RAG Threshold Standards.
 - Team capacity-utilization band → [`delivery-engine/references/capacity-model.md`](../../delivery-engine/references/capacity-model.md).
 - Portfolio health / dependency-ratio cut-points → [`delivery-engine/references/backlog-health.md`](../../delivery-engine/references/backlog-health.md).
-- RAID-AGE escalation timing → `escalation-thresholds.md` (IMP-109; owned by the ppm-agent skill — see References). *Named-but-unlinked while that doc is unshipped; the link hardens when it lands.*
+- RAID-AGE escalation timing → `escalation-thresholds.md` (owned by the ppm-agent skill — see References). *Named-but-unlinked while that doc is unshipped; the link hardens when it lands.*
 
 This registry **OWNS** only the metrics that exist nowhere else: **Overdue RAID Count** and the cross-level roll-ups. Consumers — the watermelon-detection reference (see References) and the stale-RAID protocol (see References) and any sibling-class consumer — **REFERENCE** the rows here; they do not re-derive them.
 
@@ -65,7 +65,7 @@ The AC-bearing level. Each band cell for a REFERENCED row says "see `<doc:line>`
 | **Scope** | approved CRs impacting baseline (qualitative bands per source) | `PROJECT.md` + change log | see `channel-formats.md:242` | see `channel-formats.md:242` | see `channel-formats.md:242` | `referenced:channel-formats.md:242` | `WHEN major baseline-impacting CR THEN 🔴 RED → gate change-control.` |
 | **Risk** | open high / critical risk profile (qualitative bands per source) | RAID Log | see `channel-formats.md:241` | see `channel-formats.md:241` | see `channel-formats.md:241` | `referenced:channel-formats.md:241` | `WHEN any critical risk unmitigated OR ≥3 high risks THEN 🔴 RED → escalate.` |
 | **Integration Risk** | cross-system integration health (the 5th `weekly-status-rollup` dimension; qualitative) | `PROJECT.md` Health Indicators + technical-analyst findings | `no open integration blockers` | `integration risk identified, mitigation in progress` | `integration blocker with confirmed timeline impact` | `UNSOURCED-DOMAIN` | `WHEN integration risk active w/ mitigation THEN 🟡 YELLOW → watch. WHEN blocker w/ timeline impact THEN 🔴 RED → escalate.` |
-| **Overdue RAID Count** | `count of RAID items past due / review date` | RAID Log | `0` | `1 ≤ count < 3` | `count ≥ 3` | `audited:raid-templates.md:89 (lifecycle); count-band registry-owned` | `WHEN 1 ≤ count < 3 THEN 🟡 YELLOW → watch; clear at next cadence. WHEN count ≥ 3 THEN 🔴 RED → escalate.` (Per-item AGE escalation timing per `escalation-thresholds.md` — IMP-109, not yet shipped; referenced, not restated. Per-item lifecycle escalation per `raid-templates.md §3.2 item 4`.) |
+| **Overdue RAID Count** | `count of RAID items past due / review date` | RAID Log | `0` | `1 ≤ count < 3` | `count ≥ 3` | `audited:raid-templates.md:89 (lifecycle); count-band registry-owned` | `WHEN 1 ≤ count < 3 THEN 🟡 YELLOW → watch; clear at next cadence. WHEN count ≥ 3 THEN 🔴 RED → escalate.` (Per-item AGE escalation timing per `escalation-thresholds.md` — not yet shipped; referenced, not restated. Per-item lifecycle escalation per `raid-templates.md §3.2 item 4`.) |
 
 The five non-RAID Project rows give the registry a strict **superset** of `weekly-status-rollup`'s five Health-Indicator dimensions — Schedule (SPI) / Scope / Quality (via Risk + Integration) / Stakeholders (see note) / Integration Risk — closing the consumer's coverage. An explicit **Stakeholder Engagement** row is optional: `UNSOURCED-DOMAIN`, bands `0 / 1 / ≥2` overdue executive items, lower-is-better.
 
@@ -135,7 +135,7 @@ Consumers cite these rows verbatim; they do not re-derive thresholds (duplicate-
 ## References
 
 - **Overdue RAID Count** lifecycle anchor — `raid-templates.md §3.2 item 4` ("Overdue actions auto-escalate … to PM within 1 business day"): the per-item lifecycle escalation this registry's count→RAG band sits alongside.
-- **RAID-age escalation owner** — `escalation-thresholds.md` (IMP-109), owned by the ppm-agent skill; named-but-unlinked while unshipped. GitHub issue **#269**.
-- **watermelon-detection** consumer — `watermelon-detection.md` (IMP-108), owned by the pmo-qa-auditor skill. GitHub issue **#270**.
+- **RAID-age escalation owner** — `escalation-thresholds.md`, owned by the ppm-agent skill; named-but-unlinked while unshipped. GitHub issue **#269**.
+- **watermelon-detection** consumer — `watermelon-detection.md`, owned by the pmo-qa-auditor skill. GitHub issue **#270**.
 - **stale-RAID protocol** consumer — the Stale-RAID Auto-Escalation Protocol in the `OPERATIONS.md` Cross-Skill Protocols. GitHub issue **#261**.
-- This registry's tracking item — IMP-107. GitHub issue **#271**.
+- This registry's tracking item — GitHub issue **#271**.
