@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Dependency Rules
 
 ## Purpose
@@ -108,14 +109,33 @@ Identified --> Assessed --> Assigned --> Tracked --> Resolved/Escalated
 
 ### 4.2 Escalation Communication Format (SIOR)
 
-Every dependency escalation must follow the SIOR framework:
+Every dependency escalation is emitted as a **SIOR** block — **S**ituation / **I**mpact /
+**O**ptions / **R**ecommendation — per the canonical
+[SIOR Escalation Protocol](../../../../core/standards/sior-escalation-protocol.md). That
+doc is the single source for the four-component format, the Recommendation≠Ask rule, the
+confidence-level requirement on the Recommendation, and the severity-threshold policy
+(CRITICAL always / HIGH with authority check / MEDIUM conditional-on-blocks-downstream).
+Dependency escalations populate the four components with dependency-scoped content:
 
-| Component | Content | Example |
-|-----------|---------|---------|
-| **S -- Situation** | What dependency, between whom, current state | "Cross-team dependency: Team Alpha's user auth module depends on Team Beta's API gateway, which was due Sprint 14 and is now at risk for Sprint 15." |
-| **I -- Impact** | Quantified impact across schedule, cost, scope, quality | "If delayed beyond Sprint 15: 3 dependent stories blocked, Sprint Goal at risk, Feature delivery pushed to next PI, customer demo date missed." |
-| **O -- Options** | What was tried + 2-3 alternatives with trade-offs | "1) Swarm Beta's API work (adds 2 devs, compresses to 3 days). 2) Alpha builds mock service (1 sprint rework later). 3) Descope dependent stories from this PI." |
-| **R -- Recommendation** | Preferred course with rationale and decision deadline | "Recommend Option 1: swarm. Requires Beta PM approval by end of day Wednesday to preserve Sprint 15 commitment." |
+- **S — Situation:** the dependency, the teams/owners on each side, its current lifecycle
+  state, and what has already been tried.
+- **I — Impact:** what the unresolved dependency blocks and by when, quantified where the
+  data exists (downstream items blocked, sprint goal / PI / milestone at risk).
+- **O — Options:** 2–3 dependency-resolution courses (e.g., swarm the provider, build a
+  mock to decouple, descope the dependent items), each with its pro / con / cost.
+- **R — Recommendation:** the preferred resolution with rationale, an explicit confidence
+  level, and the decision deadline carried as the accompanying Ask.
+
+**Worked example (cross-team dependency):**
+- **S:** Team Alpha's user-auth module depends on Team Beta's API gateway, which was due
+  Sprint 14 and is now at risk for Sprint 15.
+- **I:** If delayed beyond Sprint 15: 3 dependent stories blocked, Sprint Goal at risk,
+  Feature delivery pushed to the next PI, customer demo date missed.
+- **O:** (1) Swarm Beta's API work — adds 2 devs, compresses to ~3 days. (2) Alpha builds a
+  mock service — decouples now, ~1 sprint of rework later. (3) Descope the dependent stories
+  from this PI.
+- **R:** Recommend Option 1 (swarm). Confidence: MEDIUM — depends on the two devs' gateway
+  familiarity. Ask: Beta PM approval by end of day Wednesday to preserve the Sprint 15 commitment.
 
 ---
 

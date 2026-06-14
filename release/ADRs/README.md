@@ -8,7 +8,7 @@ ADRs follow the format established by [ADR-005](ADR-005-append-pattern-aware-cro
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021. Future release-scoped ADRs continue the global sequence.
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-025. Future release-scoped ADRs continue the global sequence.
 
 ## Release-scoped ADRs
 
@@ -19,8 +19,9 @@ ADRs follow the format established by [ADR-005](ADR-005-append-pattern-aware-cro
 | [ADR-005](ADR-005-append-pattern-aware-cross-pr-contention-scoring.md) | Append-pattern aware cross-PR contention scoring (extends ADR-001) | Accepted | 2026-05-17 | stage-execution-and-process-discipline |
 | [ADR-011](ADR-011-analysis-class-methodology-design-treatment.md) | Analysis-class methodology-design treatment: Stage 5 persona variant (not a new stage) | Proposed | 2026-06-02 | v1.04-planning |
 | [ADR-021](ADR-021-liveness-oracle-selection.md) | Liveness oracle: all-process lsof cwd snapshot, fail-closed | Accepted | 2026-06-11 | v1.11-cleanup-orphan-state-reliability |
+| [ADR-025](ADR-025-sior-escalation-canonicalization.md) | SIOR escalation canonicalization: single-source protocol doc + link-reference consumption | Accepted | 2026-06-13 | sior-escalation-discipline-across-the-comms-triage-technical |
 
-ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011 and ADR-021 are authored natively in the modular-monolith layout.
+ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, and ADR-025 are authored natively in the modular-monolith layout.
 
 ## Scope
 
@@ -55,8 +56,9 @@ ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + ope
 | ADR-009 | core | authored (2026-05-27); implementation follow-on |
 | ADR-011 | release | authored at Stage 6 (2026-06-02) |
 | ADR-021 | release | authored at Stage 6 (2026-06-11) |
+| ADR-025 | release | authored at Stage 6 (2026-06-13) |
 
-> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them.
+> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope; ADR-024 is claimed by a separate in-flight release; ADR-025 resumes the release-scoped thread here.
 
 ## Authoring new ADRs
 

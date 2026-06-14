@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # RAID Templates
 
 ## Purpose
@@ -211,53 +212,58 @@ Is the risk acceptable as-is (low exposure, low cost of occurrence)?
 
 ## 7. SIOR Escalation Format
 
-### 7.1 Template
+A RAID escalation is emitted as a **SIOR** block — **S**ituation / **I**mpact / **O**ptions /
+**R**ecommendation — per the canonical
+[SIOR Escalation Protocol](../../../../core/standards/sior-escalation-protocol.md). That doc
+is the single source for the four-component format, the Recommendation≠Ask rule, the
+confidence-level requirement, and the severity-threshold policy. This section specifies the
+**RAID-escalation envelope and rendering** that wraps the canonical SIOR body — the
+delivery-engine domain extension for Risk/Issue escalation.
+
+### 7.1 RAID Escalation Envelope + Rendering
+
+The RAID escalation carries an identifying header (the envelope), then the SIOR body rendered
+with RAID's five Impact axes and pro/con/cost Options:
 
 ```
 ESCALATION: [Risk/Issue ID] -- [Title]
-Escalated by: [Name, Role]
-Escalated to: [Name/Body, Role]
-Date: [Date]  |  Decision needed by: [Deadline]
+Escalated by:  [Name, Role]
+Escalated to:  [Name/Body, Role]
+Date: [Date]  |  Decision needed by: [Deadline]   <- this is the SIOR Ask
 
-SITUATION
-[Clear problem statement. What is happening. When it was discovered.
-Current state of the risk/issue. What has been tried.]
+SITUATION   (SIOR S)
+[What is happening, between whom, current state, what has been tried.]
 
-IMPACT
-- Schedule: [Specific impact with dates/durations]
-- Budget:   [Specific impact with amounts]
-- Scope:    [What deliverables/features are affected]
-- Quality:  [What quality criteria are at risk]
-- Strategic: [How this affects strategic objectives]
+IMPACT      (SIOR I -- rendered across RAID's five axes; quantify where data exists,
+             qualify where it does not)
+- Schedule:  [impact with dates/durations]
+- Budget:    [impact with amounts]
+- Scope:     [deliverables/features affected]
+- Quality:   [quality criteria at risk]
+- Strategic: [strategic-objective impact]
 
-OPTIONS
-1. [Option A]: [Description]
-   - Pro: [Benefits]
-   - Con: [Costs/risks]
-   - Cost: [Time/money/resource required]
+OPTIONS     (SIOR O -- 2-3, each with its trade-off)
+1. [Option A]: [description]  | Pro: [...]  Con: [...]  Cost: [...]
+2. [Option B]: [description]  | Pro: [...]  Con: [...]  Cost: [...]
 
-2. [Option B]: [Description]
-   - Pro: [Benefits]
-   - Con: [Costs/risks]
-   - Cost: [Time/money/resource required]
-
-3. [Option C]: [Description]
-   - Pro: [Benefits]
-   - Con: [Costs/risks]
-   - Cost: [Time/money/resource required]
-
-RECOMMENDATION
-[Preferred option with explicit rationale. Why this option
-over the alternatives. What decision is needed and by when.]
+RECOMMENDATION  (SIOR R -- preferred option + rationale + explicit confidence level)
+[Preferred option, why over the alternatives, confidence: HIGH/MEDIUM/LOW.
+ The decision deadline is the accompanying Ask, not the Recommendation itself.]
 ```
 
-### 7.2 Escalation Quality Rules
+### 7.2 Escalation Quality Rules (RAID domain extension)
 
-1. **Never escalate a problem without options.** Minimum 2 alternatives with trade-offs.
-2. **Always include a recommendation.** Escalation enables decision, not just awareness.
-3. **Quantify impact across dimensions.** "It's a big risk" is not an escalation; "2-week schedule delay affecting 3 downstream features and $50K in additional vendor cost" is.
-4. **Include a decision deadline.** "When convenient" is not a deadline.
-5. **Pre-notify the person being escalated to.** Surprise escalations damage trust.
+The canonical protocol already mandates the SIOR content rules — minimum 2 Options, a mandatory
+Recommendation with confidence, quantified-or-qualified Impact, and the Recommendation≠Ask
+distinction (the decision deadline is the Ask). The following are the **RAID-specific operational
+rules** delivery-engine adds on top:
+
+1. **Pre-notify the person being escalated to.** Surprise escalations damage trust — give the
+   escalation target a heads-up before the formal SIOR block lands. *(delivery-engine domain rule;
+   not part of the canonical SIOR content spec.)*
+2. **Carry the RAID item ID in the envelope.** Every RAID escalation traces back to its source
+   Risk/Issue (the `[Risk/Issue ID]` in the ESCALATION header), so the escalation is reconcilable
+   against the RAID log.
 
 ---
 

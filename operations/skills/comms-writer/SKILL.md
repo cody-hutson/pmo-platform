@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v1.17
+version: v1.19
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -185,12 +185,16 @@ or when PPM identifies an escalation need.
 **What you produce**:
 1. Subject line — clear escalation signal without alarm language.
 2. Recipient — the escalation target, with CC to relevant stakeholders.
-3. Body structured as:
-   - **Situation**: What's happening (2–3 sentences, factual).
-   - **Impact**: What this blocks and by when.
-   - **Ask**: The specific decision or action needed, with deadline.
-   - **Options** (if applicable): What choices exist, with tradeoffs.
-4. Tone: factual, not emotional. Urgent without being alarmist.
+3. Body structured as a SIOR block (per [`sior-escalation-protocol.md`](../../../core/standards/sior-escalation-protocol.md)):
+   - **Situation**: What's happening — 1–2 sentences, factual.
+   - **Impact**: What this blocks and by when — quantified where data exists, qualified where it does not.
+   - **Options**: 2–3 viable courses of action, each with its trade-off (pro / con / cost).
+   - **Recommendation**: The preferred option with rationale and an explicit **confidence level**
+     (HIGH / MEDIUM / LOW). The Recommendation is mandatory — never omit it.
+4. The **Ask** (the deadline-bearing call to action — "Please approve Option 2 by [date]") accompanies
+   the SIOR block as the closing action line; it does NOT replace the Recommendation. See the
+   Recommendation ≠ Ask rule in the protocol.
+5. Tone: factual, not emotional. Urgent without being alarmist.
 
 ### Announcement
 
@@ -525,6 +529,32 @@ guardrails) and `## Reversibility Discipline` (decision-class output discipline)
 entry uses the 5-field conditional template per
 `pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
+
+### Escalation output emitted without a SIOR Recommendation + confidence level — OUT
+
+- **Signature (observable signal):** An escalation draft ships with Situation and Impact (and
+  sometimes Options) but no explicit **Recommendation**, or with an **Ask** ("please decide X")
+  standing in for the Recommendation, or with a Recommendation that carries no **confidence level**
+  (HIGH / MEDIUM / LOW).
+- **Conditional:** do NOT issue escalation output without an explicit SIOR Recommendation and a
+  confidence level when the communication type is Escalation, because an escalation that names a
+  problem without recommending a course of action is a naked escalation — it transfers the analytic
+  burden back to the decision-maker, and an Ask is a request to decide, not the agent's judgment of
+  the right decision.
+- **Root cause:** Stating a Recommendation feels like overstepping ("that's the decision-maker's call"),
+  so under deference pressure the agent softens the Recommendation into an Ask or drops it entirely and
+  presents only Situation + Impact + a question. The Recommendation ≠ Ask distinction is invisible at the
+  text layer — both can read as the closing line — so the Ask silently substitutes for the Recommendation.
+- **Mitigation:** Apply the SIOR Format Spec strictly (per
+  [`sior-escalation-protocol.md`](../../../core/standards/sior-escalation-protocol.md)):
+  every escalation carries all four components, and the Recommendation states the preferred option with
+  rationale **and** an explicit confidence level. The deadline-bearing Ask may follow the SIOR block as
+  the call-to-action; it never replaces the Recommendation. Pair the Recommendation with a reversibility
+  tier when the recommended action is decision-class.
+- **Principal response vs. junior response:** Principal writes "Recommend Option 2 (fast-follow
+  multi-currency) — preserves the committed go-live; confidence: HIGH," then a separate Ask line
+  ("Please confirm by EOD Thursday"). Junior writes "Here's the situation and impact — how would you
+  like to proceed?" and the decision-maker has to do the analysis the agent was supposed to carry.
 
 ### Draft marked READY when material claim is unconfirmed — INPUT
 
