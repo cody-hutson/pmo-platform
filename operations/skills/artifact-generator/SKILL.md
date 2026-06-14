@@ -98,15 +98,78 @@ Management, Cutover/Deployment, Operations/Status, Waterfall Governance, and
 Comms-adjacent. See `references/artifact-catalog.md` for the complete catalog:
 artifact types, target folders, and specialist-skill mappings per category.
 
+For which-skill-to-call guidance across the whole platform (not just this skill), see
+the [artifact-skill routing decision tree](../../../core/standards/artifact-skill-routing.md).
+
 **Offload boundary.** Technical-documentation artifacts (API docs, README,
 architecture docs, runbooks, onboarding guides, technical reference) and
 PRD/feature-spec artifacts (PRDs, new-feature user stories, acceptance-criteria,
 success-metric definitions) are **out of catalog scope** — they route to the
 purpose-built Anthropic skills (`engineering/documentation` and
-`product-management/feature-spec`) per `references/tech-doc-routing.md` and
-`references/prd-routing.md`. Wrapper Mode re-ingests the Anthropic-produced output
-under PMO metadata staging rather than self-producing a near-miss from a PMO
-template.
+`product-management/feature-spec`) per [`references/tech-doc-routing.md`](references/tech-doc-routing.md)
+and [`references/prd-routing.md`](references/prd-routing.md). Wrapper Mode re-ingests
+the Anthropic-produced output under PMO metadata staging rather than self-producing a
+near-miss from a PMO template.
+
+## Wrapper Mode
+
+This skill has two modes. **Generate Mode** (the default, everything below in §Execution
+Flow) produces an artifact *from scratch* from a trigger. **Wrapper Mode** ingests an
+*already-produced external* artifact — an Anthropic-skill output (per the
+[artifact-skill routing decision tree](../../../core/standards/artifact-skill-routing.md)),
+or a user upload — and runs only the PMO orchestration tail: prepend a metadata header,
+stage in 08-Generated/, present for review. **Wrapper Mode makes no runtime Anthropic
+call** — the Anthropic skill ran separately, before; the wrapper touches inert content.
+This is categorically distinct from a runtime `extends` coupling; the sourcing posture
+stays `independent` per [ADR-021](../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md).
+
+**Mode selection is content-driven and automatic** — inferred from whether an
+artifact-to-wrap is present, exactly as Step 1 infers artifact *type* from the trigger.
+There is **no `mode=` flag and no new slash-command**; the discriminator is semantic.
+
+| Discriminator | Mode | Behavior |
+|---|---|---|
+| Request names **no** existing artifact to wrap ("draft an exec status report") | **Generate Mode** | Full Execution Flow Steps 1–6 |
+| Request supplies an **existing artifact** to wrap (file path, pasted content, upstream Anthropic-skill output) — verbs: "wrap", "stage this", "bring this into the project", "add a PMO header to", "ingest this runbook/PRD" | **Wrapper Mode** | Skips content production; runs Steps 5–6 plus the Step 4-W intake |
+
+**Step 4-W — Wrapper intake** (replaces content-production Step 4 in Wrapper Mode): read
+the supplied artifact in full; **never mutate the body**; run the inert-content gates
+(no-internal-IDs scan, evidence-label presence check, `[INSERT]`/`[TBD]` placeholder
+scan — flag, do not fabricate or auto-fill); set `confidence` from the wrap context; apply
+the SPM Bridge as a dual-framing addendum when the type is dual-framed AND
+`spm_comanaged: true`. Full gate-by-gate procedure: [`references/wrapper-mode.md`](references/wrapper-mode.md).
+
+**Metadata-header schema (Wrapper Mode).** The same Step-5 frontmatter block, extended by
+**one new field-value (`source: external`)** and **one new field (`source_origin`)** — all
+other fields unchanged, so the header round-trips through every existing consumer
+(Promotion Workflow, Artifact Health scan, auto-archive):
+
+```markdown
+---
+artifact_type: <catalog entry name>          # SAME field; resolved at intake (Step 4-W)
+target_folder: <destination path>            # SAME field
+confidence: HIGH | MEDIUM | LOW              # SAME field
+created: <YYYY-MM-DD>                         # SAME field
+source: external                             # NEW VALUE on the existing `source` field — the wrapper discriminant
+source_origin: <e.g. "Anthropic engineering/documentation" | "user upload: runbook.md">  # NEW field — provenance of the external content
+dependencies: <source artifact + related project artifacts>   # SAME field; carries the external source ref (non-empty)
+reversibility: CHEAP | MODERATE | EXPENSIVE | IRREVERSIBLE     # SAME field (already required by SG-3)
+status: PENDING_REVIEW                        # SAME field; Wrapper Mode is NEVER promoted on ingest
+---
+```
+
+`source: external` is the load-bearing discriminant a downstream reader greps to know the
+content was produced outside the PMO generator and wrapped — distinct from the existing
+free-text `source:` values (`user request`, `ARTIFACT_GAP tag`, `transcript processing`).
+**Domain-C forward-map:** when the `agent-processing-contracts.md` Domain-C YAML migration
+lands, `source: external` maps to `trigger_source: external` and `source_origin` maps into
+`synthesis_scope` (the external artifact is the synthesis source — satisfies the
+`synthesis_scope` non-empty validation), so the wrapper header is forward-compatible with
+that superset by construction.
+
+**Chained-path boundary.** The Chained Invocation Contract (`chained=true` from ppm-agent
+`[ARTIFACT_GAP]`) is **Generate-Mode-only** and unchanged. Wrapper Mode is not
+auto-cascaded — external-artifact wrap is human-invoked only.
 
 ## Execution Flow
 
@@ -187,6 +250,7 @@ After staging, present a summary to the user:
 
 ```
 ARTIFACT STAGED: [artifact name]
+  Mode: WRAPPER (external artifact ingested) | GENERATE (produced from [trigger])
   Type: [catalog entry]
   Location: 08-Generated/[filename]
   Target: [destination folder]
@@ -265,8 +329,12 @@ Produce a summary table:
   and product-requirement artifacts (PRDs, new-feature user stories, acceptance-criteria,
   success-metric definitions) are out of catalog scope. It routes them to the purpose-built
   Anthropic skills (`engineering/documentation`, `product-management/feature-spec`) per
-  `references/tech-doc-routing.md` / `references/prd-routing.md` and re-ingests the result
+  [`references/tech-doc-routing.md`](references/tech-doc-routing.md) /
+  [`references/prd-routing.md`](references/prd-routing.md) and re-ingests the result
   via Wrapper Mode — it does not self-produce a near-miss from a PMO template.
+- **Does not mutate wrapped content in Wrapper Mode.** Wrapper Mode is a metadata-prepend
+  + stage of an externally-produced artifact; it never rewrites the artifact body. If the
+  user wants the content changed (not just staged), that is Generate / Revise — not Wrapper.
 
 ## Reversibility Discipline
 
@@ -485,3 +553,29 @@ structural conformance and content quality.
   artifact-generator scoped to PMO-unique governance. Junior finds the closest PMO template,
   produces a structurally-plausible but non-authoritative tech-doc, and the offload boundary
   the milestone established silently erodes.
+
+### External artifact staged without PMO metadata header via Wrapper Mode — PROC
+
+- **Signature (observable signal):** An externally-produced artifact (Anthropic-skill
+  output, user upload) is written into `08-Generated/` (or, worse, a target folder)
+  **without** the Wrapper-Mode metadata header — missing `source: external`, missing
+  `source_origin`, or missing the full frontmatter block — so it is indistinguishable from
+  PMO-generated content and untracked by the Promotion / Health / auto-archive workflow.
+- **Conditional:** do NOT stage an external artifact in `08-Generated/` without running
+  Wrapper Mode's metadata-prepend (`source: external` + `source_origin` + the full header
+  with `status: PENDING_REVIEW`), because the header is the provenance and lifecycle
+  contract — without `source: external` a reviewer cannot tell the content was produced
+  outside the PMO generator (and may over-trust it), and without the full header the Health
+  scan and auto-archive cannot track it.
+- **Root cause:** The external artifact already looks finished; prepending a header feels
+  like bookkeeping, and "just drop it in 08-Generated/" is faster than running the wrap
+  step. Under one-shot pressure the agent copies the file in and skips the header.
+- **Mitigation:** On any request to bring external content into the project, enter Wrapper
+  Mode (the §Wrapper Mode discriminator); run Step 4-W intake (read, gate-scan, set
+  confidence); write the full header with `source: external` + `source_origin` populated
+  before the file lands; verify `source: external` is present before the Step-6 summary.
+- **Principal response vs. junior response:** Principal runs Wrapper Mode, stamps
+  `source: external` + provenance, surfaces the `Mode: WRAPPER` summary, waits for PROMOTE.
+  Junior copies the Anthropic runbook straight into `08-Generated/` (or a target folder),
+  it carries no provenance, and three weeks later a reviewer treats an unvetted external
+  doc as a reviewed PMO artifact.
