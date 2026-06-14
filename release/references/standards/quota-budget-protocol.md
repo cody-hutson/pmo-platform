@@ -1,3 +1,5 @@
+<!-- reference-durability: allow-version-ref -->
+<!-- reference-durability: allow-link -->
 # Quota-Budget Protocol — Dual-Checkpoint Parallel-Launch Gate
 
 > **Part of:** the hub-and-spoke release bridge ([`../how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md)) and the Stage 4 planning spec ([`../pipeline/stage-04-planning.md`](../pipeline/stage-04-planning.md)).
