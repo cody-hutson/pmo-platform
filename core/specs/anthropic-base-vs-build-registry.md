@@ -80,21 +80,21 @@ Each row carries 8 columns:
 
 The scoring instrument that pmo-qa-auditor Mode E applies when classifying an overlap relationship
 (per [framework §4](../../release/references/protocols/platform-health-audit-framework.md) and §3.5
-drift). The rubric is the *scoring instrument*; [ADR-022](../ADRs/ADR-022-skill-sourcing-coupling-posture.md)
-holds the *rule* it operationalizes. **ADR-022 is a draft alignment reference (status: Proposed;
-ratifies at a different release) — rubric dimensions D3–D5 are provisional pending ADR-022 Acceptance;
-re-confirm the three-condition wording at the ADR-022 flip.**
+drift). The rubric is the *scoring instrument*; [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md)
+holds the *rule* it operationalizes. **ADR-023 is a draft alignment reference (status: Proposed;
+ratifies at a different release) — rubric dimensions D3–D5 are provisional pending ADR-023 Acceptance;
+re-confirm the three-condition wording at the ADR-023 flip.**
 
 | Dimension | Question the auditor asks | Scoring input |
 |---|---|---|
 | D1 — Functional surface overlap | Does an Anthropic skill occupy the same task surface? | `none` / `partial` / `full` |
 | D2 — Coupling intensity | Is the relationship explicit-wrap, functional-overlap, or namespace-collision? | maps to the §Schema enum: `extends` / `replaces` / `independent` / `pass-through` |
-| D3 — Commodity-stability (ADR-022 cond. 1) | Is the upstream contract commodity-stable (format engine) or a drifting judgment surface? | `stable` / `drifting` |
-| D4 — Blast radius (ADR-022 cond. 2) | Would a silent upstream change hit a stakeholder-facing / governance-binding surface? | `low` / `high` |
-| D5 — Guard posture (ADR-022 cond. 3) | Is any runtime coupling drift-canary-guarded? | `guarded` / `unguarded` / `n-a` |
+| D3 — Commodity-stability (ADR-023 cond. 1) | Is the upstream contract commodity-stable (format engine) or a drifting judgment surface? | `stable` / `drifting` |
+| D4 — Blast radius (ADR-023 cond. 2) | Would a silent upstream change hit a stakeholder-facing / governance-binding surface? | `low` / `high` |
+| D5 — Guard posture (ADR-023 cond. 3) | Is any runtime coupling drift-canary-guarded? | `guarded` / `unguarded` / `n-a` |
 
 **Ratified fields (operator decision):**
-- **(a) Derived-vs-descriptive** — **descriptive.** D3+D4+D5 stay purely descriptive; they do NOT produce a *derived* ADR-022 posture-conformance flag. A derived conformance flag would be evaluative, which would breach the §Observational discipline — the descriptive reading preserves it.
+- **(a) Derived-vs-descriptive** — **descriptive.** D3+D4+D5 stay purely descriptive; they do NOT produce a *derived* ADR-023 posture-conformance flag. A derived conformance flag would be evaluative, which would breach the §Observational discipline — the descriptive reading preserves it.
 - **(b) Scoring-input enum wording** — **ratified as drafted.** The D1–D5 value labels above are final: D1 `none` / `partial` / `full`; D2 maps to the §Schema enum; D3 `stable` / `drifting`; D4 `low` / `high`; D5 `guarded` / `unguarded` / `n-a`.
 - **(c) Advisory-vs-required** — **advisory.** The rubric is observational, not a gate; it is NOT a §3.3(a) registry-row-required field at skill creation. Making a registry-row field required at skill creation would be a §3.3 change out of this release's scope.
 
@@ -110,7 +110,7 @@ The SUMMARY health-posture roll-up Mode E applies (single-sourced here; the inau
 |---|---|---|
 | **Primary** | Roster-coverage delta (T5) | tree skill dirs vs. registry rows — the foundational completeness gate; an uncatalogued skill is the most-blinding drift (the registry cannot characterize what it does not list). |
 | **Secondary** | Catalog-currency delta (T1–T4) | Anthropic-catalog drift vs. the recorded baseline. |
-| **Tertiary** | Posture-conformance | skills whose observed posture diverges from ADR-022's three-condition test. |
+| **Tertiary** | Posture-conformance | skills whose observed posture diverges from ADR-023's three-condition test. |
 
 **Roll-up — primary-gated, worst-signal-dominates (PASS / PARTIAL / FAIL):**
 - **PASS** — all three signals observe no drift.
@@ -154,12 +154,15 @@ skills") literally while disclosing the canary's source-only status transparentl
 
 ## §Update triggers
 
-See [framework §3.3 Registry Update Protocol](../../release/references/protocols/platform-health-audit-framework.md)
-for the (a/b/c) trigger taxonomy:
+[Framework §3.3 Registry Update Protocol](../../release/references/protocols/platform-health-audit-framework.md)
+defines triggers (a/b/c); trigger (d) is a registry-local extension (not in framework §3.3) added by
+the skill-sourcing-coupling posture work to cover a changed skill's Anthropic coupling. The full (a/b/c/d)
+trigger taxonomy:
 
-- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-022](../ADRs/ADR-022-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-022 holds the rule; this trigger cites it, it does not restate it. (ADR-022 is a **draft alignment reference** — status: Proposed; it ratifies at a different release.)
+- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-023 holds the rule; this trigger cites it, it does not restate it. (ADR-023 is a **draft alignment reference** — status: Proposed; it ratifies at a different release.)
 - (b) Anthropic releases new skill — registry walked for new overlap relationships
 - (c) Anthropic deprecates existing skill — affected `anthropic_overlap_status` re-classified
+- (d) Existing PMO skill changes its Anthropic sourcing relationship (adopts, drops, or alters an `extends` / `pass-through` runtime coupling) — re-observe the affected row: update `anthropic_overlap_status` + `anthropic_skill_ref` + `overlap_rationale` with the blast-radius × commodity-stability justification per [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md). ADR-023 holds the rule; this trigger cites it, it does not restate it.
 
 See [framework §3.5](../../release/references/protocols/platform-health-audit-framework.md) for the 5-trigger event
 taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
@@ -177,9 +180,9 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_overlap_status` | `independent` |
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
-| `overlap_rationale` | Produces or updates project artifacts (FRDs, RAID logs, project plans, agendas). No Anthropic counterpart observed in Hybrid baseline. |
-| `overlap_notes` | `null` |
-| `build_buy_observation` | PMO custom skill targeting project artifact generation; no Anthropic equivalent observed in Hybrid baseline. |
+| `overlap_rationale` | Produces or updates PMO-unique project artifacts (governance, change, cutover, operations/status, Waterfall governance, comms-adjacent) and owns the 08-Generated/ staging + promotion orchestration. Post-narrowing, deliberately routes-OUT tech-docs (→ Anthropic `engineering/documentation`) and PRDs (→ Anthropic `product-management/feature-spec`) as design-time user-routing guidance with no runtime dependency; a Wrapper Mode ingests externally-produced artifacts and prepends PMO metadata (`source: external`) for staging. Remains `independent` per ADR-023 (routing + wrap-and-stage are not runtime coupling). No Anthropic counterpart observed for the retained PMO-unique catalog in Hybrid baseline. |
+| `overlap_notes` | Catalog deliberately scoped to PMO-unique artifacts; technical-documentation and PRD/feature-spec generation are routed out as design-time guidance to Anthropic `engineering/documentation` and `product-management/feature-spec` respectively (no runtime dependency — posture remains own-with-harvest per ADR-023). The external-artifact Wrapper Mode re-ingests Anthropic-produced content under PMO metadata staging; the wrapper is a one-way design-time ingestion path, not a runtime skill binding. See `core/standards/artifact-skill-routing.md` and `references/{tech-doc,prd}-routing.md`. No `extends`/`pass-through` coupling introduced. |
+| `build_buy_observation` | PMO custom skill targeting PMO-unique project artifact generation; no Anthropic equivalent observed in Hybrid baseline. |
 
 ### Row 2 — build-reviewer
 
@@ -217,7 +220,7 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
 | `overlap_rationale` | Produces audience-calibrated stakeholder communications (email, Teams, Confluence, exec briefs, agendas). No Anthropic counterpart observed in Hybrid baseline. |
-| `overlap_notes` | `null` |
+| `overlap_notes` | Design-time harvest relationship recorded: comms-writer owns exec-brief + stakeholder-email generation first-party and harvests structure/phrasing from `product-management/stakeholder-comms` at design time (own-with-harvest per ADR-023). Catalogued in `../standards/upstream-reference-catalog.md` (entry `stakeholder-comms-structure`); no runtime coupling. Observation, not a constraint. |
 | `build_buy_observation` | PMO custom skill for stakeholder communication authoring; no Anthropic equivalent observed in Hybrid baseline. |
 
 ### Row 5 — daily-status

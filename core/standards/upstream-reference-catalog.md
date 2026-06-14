@@ -140,6 +140,29 @@ This entry codifies GitHub's native issue dependencies API (GA August 2025). PMO
    - `N/A` — D-decision does not touch dependency-tracking surface
 3. Collective Review Protocol bullet 5 cross-D scan aggregates with other D-decisions' Upstream Compatibility findings.
 
+### Entry: stakeholder-comms-structure
+
+This entry is the **first non-skill-creator upstream** and the worked example for the
+skill-sourcing-coupling posture ADR (own-with-harvest). comms-writer **owns** stakeholder-email
++ executive-brief generation first-party; Anthropic's `product-management/stakeholder-comms` is a
+**design-time** harvest reference (structure/phrasing patterns), never a runtime call. The
+posture is governed by [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md)
+(skill-sourcing-coupling: own-with-harvest default; stakeholder-facing generation never takes a
+runtime Anthropic dependency). Source: Stage 5 design.
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `stakeholder-comms-structure` |
+| `upstream_source` | `anthropic-skills:product-management/stakeholder-comms` (or plugin-cache equivalent) |
+| `upstream_citation` | Not locally installed at 2026-06-13 (the installed plugin-cache holds `skill-creator` only; the `product-management` pack is absent); harvest from the published Anthropic skill catalog. Re-pin to the installed `stakeholder-comms` SKILL.md path:line on the first release where the pack is locally present. |
+| `upstream_required` | (harvest reference — comms-writer owns generation; the upstream marks no field REQUIRED on PMO output) |
+| `upstream_optional` | stakeholder-comms structural patterns: audience framing, decision-forward ordering, ask-with-deadline close |
+| `pmo_extensions` | `[{field: "PMO-critical rules at generation", governing: "comms-writer/SKILL.md § PMO-Critical Rules + § Domain-Specific Failure Modes", rationale: "no internal IDs / evidence labels / readiness gate / SPM Bridge / project-context applied first-party at generation, not portable via upstream prompting"}, {field: "voice-guide.md + audience-profiles.md", governing: "comms-writer/references/", rationale: "PMO voice + named audience profiles are first-party assets; upstream provides generic structure only"}]` |
+| `pmo_restrictions` | `[{restriction: "No runtime Anthropic invocation for stakeholder-facing generation", governing: "ADR-023 (skill-sourcing-coupling posture)", rationale: "stakeholder-facing = highest blast radius; never runtime-coupled — silent upstream drift must not change an executive briefing"}]` |
+| `drift_check_protocol` | "Harvest reference only — drift does not alter runtime behavior (comms-writer owns generation). Re-read upstream `stakeholder-comms` SKILL.md per minor PMO release per ADR-023 §Consequences harvest cadence; on observed structural drift, surface as Tier 2 [SCOPE CHANGE] for a next-release harvest refresh. Bump `last_verified_date` + `last_verified_commit` on each re-verification." |
+| `last_verified_date` | `2026-06-13` |
+| `last_verified_commit` | `9409bdb` |
+
 [+ additional entries as future spokes discover them; catalog is extensible — new entries follow the same schema and reference patterns]
 
 ## Drift-check protocol (catalog hygiene)
@@ -162,6 +185,7 @@ The catalog itself is subject to upstream drift. Mitigation:
 | Evidence-Grounding standard | [`evidence-grounding-standard.md`](evidence-grounding-standard.md) | Upstream-reference is one of three justification categories |
 | Version-field-semantics | [`version-field-semantics.md`](version-field-semantics.md) | D-Version case study governance doc; cited in `skill-md-frontmatter` entry |
 | Canonical skill structure | [`canonical-skill-structure.md`](canonical-skill-structure.md) | Skill structure governance; cited in `skill-references-directory` + `skill-md-body-anatomy` entries |
+| Skill-sourcing-coupling posture | [`ADR-023`](../ADRs/ADR-023-skill-sourcing-coupling-posture.md) | Own-with-harvest sourcing posture; governs the `stakeholder-comms-structure` entry (first non-skill-creator upstream) |
 
 ## Cutover
 

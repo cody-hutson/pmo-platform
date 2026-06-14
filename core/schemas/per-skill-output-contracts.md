@@ -161,18 +161,25 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ## Skill 3: Comms Writer (Tier 1 — Voice of PMO)
 
-### Communication Types (8 Total)
+### Communication Types (6 primary + 2 owned-generation)
 
-| Type | Audience | Channel | Typical Context |
-|------|----------|---------|-----------------|
-| Stakeholder Email | Executive, sponsor, cross-functional lead | Email | Ad-hoc decisions, status updates, escalations |
-| Meeting Agenda | Meeting attendees (known group) | Email / Confluence | Pre-meeting prep |
-| Meeting Recap | Meeting attendees + distribution list | Email / Confluence | Post-meeting documentation |
-| Executive Brief | Executive team, C-suite | Email / Confluence / PDF | Strategic summary, quarterly health, major changes |
-| Escalation | Sponsor, steering committee, executive leadership | Email / Confluence | Risk materialization, blocker, change in scope |
-| Org-Wide Announcement | All-hands or department | Email / Confluence / Teams | Go-live, phase transition, policy change |
-| Confluence / Doc Update | Knowledge base users, project team | Confluence | SOP update, reference material, playbook |
-| Teams Message | Real-time collaboration (team or channel) | Teams | Quick coordination, hypercare alert, standup supplement |
+The catalog is **name-keyed** (no `Type N` ordinals — renumber-proof). The **6 primary
+PMO-unique types** are the dispatch catalog; **executive brief** and **stakeholder email**
+are **owned-generation** types — comms-writer owns their generation first-party (own-with-harvest;
+first-party, no runtime Anthropic dependency), with structure harvested at design time
+from `product-management/stakeholder-comms` (catalogued in `../standards/upstream-reference-catalog.md`,
+entry `stakeholder-comms-structure`).
+
+| Type | Class | Audience | Channel | Typical Context |
+|------|-------|----------|---------|-----------------|
+| Meeting Agenda | primary | Meeting attendees (known group) | Email / Confluence | Pre-meeting prep |
+| Meeting Recap | primary | Meeting attendees + distribution list | Email / Confluence | Post-meeting documentation |
+| Escalation | primary | Sponsor, steering committee, executive leadership | Email / Confluence | Risk materialization, blocker, change in scope |
+| Announcement | primary | All-hands or department | Email / Confluence / Teams | Go-live, phase transition, policy change |
+| Confluence Documentation | primary | Knowledge base users, project team | Confluence | SOP update, reference material, playbook |
+| Teams Message | primary | Real-time collaboration (team or channel) | Teams | Quick coordination, hypercare alert, standup supplement |
+| Stakeholder Email | owned-generation (own-with-harvest; first-party, no runtime Anthropic dependency) | Executive, sponsor, cross-functional lead | Email | Ad-hoc decisions, status updates, escalations |
+| Executive Brief | owned-generation (own-with-harvest; first-party, no runtime Anthropic dependency) | Executive team, C-suite | Email / Confluence / PDF | Strategic summary, quarterly health, major changes |
 
 ### Output Contract (6 Required Sections)
 

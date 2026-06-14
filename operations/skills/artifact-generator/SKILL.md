@@ -2,7 +2,7 @@
 name: artifact-generator
 description: >
   Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in 08-Generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
-version: v1.10
+version: v1.17
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -93,10 +93,83 @@ the protocol implements the mode behavior.
 
 ## Artifact Catalog
 
-This skill produces artifacts across 8 categories — Governance, Design, Testing,
-Operations, Communications, Change Management, and methodology-specific (Agile,
-Waterfall). See `references/artifact-catalog.md` for the complete catalog:
+This skill produces artifacts across 6 PMO categories — Project Governance, Change
+Management, Cutover/Deployment, Operations/Status, Waterfall Governance, and
+Comms-adjacent. See `references/artifact-catalog.md` for the complete catalog:
 artifact types, target folders, and specialist-skill mappings per category.
+
+For which-skill-to-call guidance across the whole platform (not just this skill), see
+the [artifact-skill routing decision tree](../../../core/standards/artifact-skill-routing.md).
+
+**Offload boundary.** Technical-documentation artifacts (API docs, README,
+architecture docs, runbooks, onboarding guides, technical reference) and
+PRD/feature-spec artifacts (PRDs, new-feature user stories, acceptance-criteria,
+success-metric definitions) are **out of catalog scope** — they route to the
+purpose-built Anthropic skills (`engineering/documentation` and
+`product-management/feature-spec`) per [`references/tech-doc-routing.md`](references/tech-doc-routing.md)
+and [`references/prd-routing.md`](references/prd-routing.md). Wrapper Mode re-ingests
+the Anthropic-produced output under PMO metadata staging rather than self-producing a
+near-miss from a PMO template.
+
+## Wrapper Mode
+
+This skill has two modes. **Generate Mode** (the default, everything below in §Execution
+Flow) produces an artifact *from scratch* from a trigger. **Wrapper Mode** ingests an
+*already-produced external* artifact — an Anthropic-skill output (per the
+[artifact-skill routing decision tree](../../../core/standards/artifact-skill-routing.md)),
+or a user upload — and runs only the PMO orchestration tail: prepend a metadata header,
+stage in 08-Generated/, present for review. **Wrapper Mode makes no runtime Anthropic
+call** — the Anthropic skill ran separately, before; the wrapper touches inert content.
+This is categorically distinct from a runtime `extends` coupling; the sourcing posture
+stays `independent` per [ADR-023](../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md).
+
+**Mode selection is content-driven and automatic** — inferred from whether an
+artifact-to-wrap is present, exactly as Step 1 infers artifact *type* from the trigger.
+There is **no `mode=` flag and no new slash-command**; the discriminator is semantic.
+
+| Discriminator | Mode | Behavior |
+|---|---|---|
+| Request names **no** existing artifact to wrap ("draft an exec status report") | **Generate Mode** | Full Execution Flow Steps 1–6 |
+| Request supplies an **existing artifact** to wrap (file path, pasted content, upstream Anthropic-skill output) — verbs: "wrap", "stage this", "bring this into the project", "add a PMO header to", "ingest this runbook/PRD" | **Wrapper Mode** | Skips content production; runs Steps 5–6 plus the Step 4-W intake |
+
+**Step 4-W — Wrapper intake** (replaces content-production Step 4 in Wrapper Mode): read
+the supplied artifact in full; **never mutate the body**; run the inert-content gates
+(no-internal-IDs scan, evidence-label presence check, `[INSERT]`/`[TBD]` placeholder
+scan — flag, do not fabricate or auto-fill); set `confidence` from the wrap context; apply
+the SPM Bridge as a dual-framing addendum when the type is dual-framed AND
+`spm_comanaged: true`. Full gate-by-gate procedure: [`references/wrapper-mode.md`](references/wrapper-mode.md).
+
+**Metadata-header schema (Wrapper Mode).** The same Step-5 frontmatter block, extended by
+**one new field-value (`source: external`)** and **one new field (`source_origin`)** — all
+other fields unchanged, so the header round-trips through every existing consumer
+(Promotion Workflow, Artifact Health scan, auto-archive):
+
+```markdown
+---
+artifact_type: <catalog entry name>          # SAME field; resolved at intake (Step 4-W)
+target_folder: <destination path>            # SAME field
+confidence: HIGH | MEDIUM | LOW              # SAME field
+created: <YYYY-MM-DD>                         # SAME field
+source: external                             # NEW VALUE on the existing `source` field — the wrapper discriminant
+source_origin: <e.g. "Anthropic engineering/documentation" | "user upload: runbook.md">  # NEW field — provenance of the external content
+dependencies: <source artifact + related project artifacts>   # SAME field; carries the external source ref (non-empty)
+reversibility: CHEAP | MODERATE | EXPENSIVE | IRREVERSIBLE     # SAME field (already required by SG-3)
+status: PENDING_REVIEW                        # SAME field; Wrapper Mode is NEVER promoted on ingest
+---
+```
+
+`source: external` is the load-bearing discriminant a downstream reader greps to know the
+content was produced outside the PMO generator and wrapped — distinct from the existing
+free-text `source:` values (`user request`, `ARTIFACT_GAP tag`, `transcript processing`).
+**Domain-C forward-map:** when the `agent-processing-contracts.md` Domain-C YAML migration
+lands, `source: external` maps to `trigger_source: external` and `source_origin` maps into
+`synthesis_scope` (the external artifact is the synthesis source — satisfies the
+`synthesis_scope` non-empty validation), so the wrapper header is forward-compatible with
+that superset by construction.
+
+**Chained-path boundary.** The Chained Invocation Contract (`chained=true` from ppm-agent
+`[ARTIFACT_GAP]`) is **Generate-Mode-only** and unchanged. Wrapper Mode is not
+auto-cascaded — external-artifact wrap is human-invoked only.
 
 ## Execution Flow
 
@@ -177,6 +250,7 @@ After staging, present a summary to the user:
 
 ```
 ARTIFACT STAGED: [artifact name]
+  Mode: WRAPPER (external artifact ingested) | GENERATE (produced from [trigger])
   Type: [catalog entry]
   Location: 08-Generated/[filename]
   Target: [destination folder]
@@ -250,6 +324,17 @@ Produce a summary table:
   are not available, it asks the user to provide project context before proceeding.
 - **Does not fabricate data.** If data is missing, it labels assumptions and proposes
   values — it does not invent metrics, dates, or attribution.
+- **Does not produce technical-documentation or PRD/feature-spec artifacts.** Tech-docs
+  (API docs, README, architecture docs, runbooks, onboarding guides, technical reference)
+  and product-requirement artifacts (PRDs, new-feature user stories, acceptance-criteria,
+  success-metric definitions) are out of catalog scope. It routes them to the purpose-built
+  Anthropic skills (`engineering/documentation`, `product-management/feature-spec`) per
+  [`references/tech-doc-routing.md`](references/tech-doc-routing.md) /
+  [`references/prd-routing.md`](references/prd-routing.md) and re-ingests the result
+  via Wrapper Mode — it does not self-produce a near-miss from a PMO template.
+- **Does not mutate wrapped content in Wrapper Mode.** Wrapper Mode is a metadata-prepend
+  + stage of an externally-produced artifact; it never rewrites the artifact body. If the
+  user wants the content changed (not just staged), that is Generate / Revise — not Wrapper.
 
 ## Reversibility Discipline
 
@@ -257,7 +342,7 @@ This skill produces **decision-class outputs** — drafted project artifacts sta
 user review, promotion recommendations, artifact-health-check Action Needed items,
 specialist-routing selections, and new-type flags. Every decision-class item must carry a
 **reversibility tier** paired with a **confidence level** per
-`pmo-platform/reference/specs/reversibility-protocol.md`.
+`core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -292,20 +377,20 @@ immediately.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — including artifact-staging
 summaries, promotion recommendations, health-check Action Needed items, and specialist-
-routing selections. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full
+routing selections. See `core/specs/reversibility-protocol.md` for the full
 protocol, worked examples, and G4 gate algorithm.
 
 ## Guardrails
 
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
-- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — drafted artifact staged for review, promotion recommendation, health-check Action Needed item, specialist-routing selection, NEW_TYPE proposal — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — drafted artifact staged for review, promotion recommendation, health-check Action Needed item, specialist-routing selection, NEW_TYPE proposal — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Direct write to target folder bypassing 08-Generated/ — PROC
@@ -335,12 +420,12 @@ structural conformance and content quality.
 
 - **Signature (observable signal):** An artifact type listed in the catalog with a
   specialist skill in the Specialist Skill column (e.g., Cutover Plan → Delivery Engine,
-  Change Impact Assessment → Change Management, FDD Review Summary → Technical Analyst)
+  Change Impact Assessment → Change Management, RAID Log → Delivery Engine)
   is self-produced by artifact-generator without routing to the specialist.
 - **Conditional:** do NOT self-produce an artifact when the catalog lists a specialist
   skill for that artifact type, because the specialist embeds domain depth the generator
-  cannot reproduce — Delivery Engine's gate criteria, Change Management's impact-role
-  matrix, Technical Analyst's six-dimension review — and self-produced artifacts in
+  cannot reproduce — Delivery Engine's gate criteria and RAID rigor, Change Management's
+  impact-role matrix — and self-produced artifacts in
   specialist-owned domains routinely miss the specific quality dimensions the specialist
   applies.
 - **Root cause:** Routing to a specialist adds an extra invocation; self-production feels
@@ -437,3 +522,60 @@ structural conformance and content quality.
   with no current source as labeled assumptions. Junior adapts the populated
   example wholesale — last quarter's go-live date and a rolled-off stakeholder's
   name ship in a stakeholder-ready artifact staged for promotion.
+
+### Routing a tech-doc or PRD/feature-spec request through artifact-generator's own catalog — TRIG
+
+- **Signature (observable signal):** A request for a technical-documentation artifact
+  (API doc, README, architecture doc, runbook, onboarding guide, technical reference) or
+  a PRD / new-feature user-story / acceptance-criteria / success-metric artifact is
+  matched to an artifact-generator catalog entry and self-produced (or specialist-routed
+  within PMO), rather than routed out to the Anthropic skill via the routing decision tree.
+- **Conditional:** do NOT produce a technical-documentation or PRD/feature-spec artifact
+  from artifact-generator's catalog when the request is for tech-docs or product-requirement
+  content, because that content was deliberately offloaded to Anthropic
+  `engineering/documentation` (tech-docs) and `product-management/feature-spec` (PRDs) at
+  the catalog-narrowing — artifact-generator no longer carries those entries, and producing
+  a near-miss from a PMO structural template yields a non-authoritative document while the
+  purpose-built Anthropic skill exists.
+- **Root cause:** The narrowed catalog still pattern-matches loosely — a "draft the
+  architecture doc" request superficially resembles a governance-doc request, and
+  self-producing feels faster than directing the user to a different skill plus the wrapper
+  round-trip.
+- **Mitigation:** On request intake, classify against the offload boundary first: tech-doc
+  class → `references/tech-doc-routing.md` (Anthropic `engineering/documentation`, then
+  re-ingest via the external-artifact Wrapper Mode); PRD/feature-spec class →
+  `references/prd-routing.md` (Anthropic `product-management/feature-spec`, then wrap). Only
+  after confirming the request is NOT in the offload classes, match it to the 27-entry PMO
+  catalog. Under `chained=true`, if the `[ARTIFACT_GAP]` tag names a tech-doc/PRD type, flag
+  `confidence: LOW` with an offload note rather than self-producing.
+- **Principal response vs. junior response:** Principal recognizes "runbook" / "PRD" as
+  out-of-catalog, points the user to the Anthropic skill plus wrapper, and keeps
+  artifact-generator scoped to PMO-unique governance. Junior finds the closest PMO template,
+  produces a structurally-plausible but non-authoritative tech-doc, and the offload boundary
+  the milestone established silently erodes.
+
+### External artifact staged without PMO metadata header via Wrapper Mode — PROC
+
+- **Signature (observable signal):** An externally-produced artifact (Anthropic-skill
+  output, user upload) is written into `08-Generated/` (or, worse, a target folder)
+  **without** the Wrapper-Mode metadata header — missing `source: external`, missing
+  `source_origin`, or missing the full frontmatter block — so it is indistinguishable from
+  PMO-generated content and untracked by the Promotion / Health / auto-archive workflow.
+- **Conditional:** do NOT stage an external artifact in `08-Generated/` without running
+  Wrapper Mode's metadata-prepend (`source: external` + `source_origin` + the full header
+  with `status: PENDING_REVIEW`), because the header is the provenance and lifecycle
+  contract — without `source: external` a reviewer cannot tell the content was produced
+  outside the PMO generator (and may over-trust it), and without the full header the Health
+  scan and auto-archive cannot track it.
+- **Root cause:** The external artifact already looks finished; prepending a header feels
+  like bookkeeping, and "just drop it in 08-Generated/" is faster than running the wrap
+  step. Under one-shot pressure the agent copies the file in and skips the header.
+- **Mitigation:** On any request to bring external content into the project, enter Wrapper
+  Mode (the §Wrapper Mode discriminator); run Step 4-W intake (read, gate-scan, set
+  confidence); write the full header with `source: external` + `source_origin` populated
+  before the file lands; verify `source: external` is present before the Step-6 summary.
+- **Principal response vs. junior response:** Principal runs Wrapper Mode, stamps
+  `source: external` + provenance, surfaces the `Mode: WRAPPER` summary, waits for PROMOTE.
+  Junior copies the Anthropic runbook straight into `08-Generated/` (or a target folder),
+  it carries no provenance, and three weeks later a reviewer treats an unvetted external
+  doc as a reviewed PMO artifact.
