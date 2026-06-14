@@ -67,6 +67,13 @@ rule plus the WHAT/HOW boundary; the loop and the rule are in
   <what resolves it>`) for progressive downstream closure. Never invent a confident
   answer and never silently drop the unknown. The skill emits owned assumptions; it
   does not investigate-and-close them (that is a separate downstream convention).
+  Two named hand-off methods this desk **captures for and hands off to, never
+  performs inline** (per [ADR-016 §3](../../../core/ADRs/ADR-016-intake-front-door-architectural-boundary.md)):
+  for a **defect whose root cause is unknown**, emit `owner: root-cause` and cite the
+  RCA method (`core/disciplines/root-cause-analysis.md`) — the causal walk needs
+  processing context intake does not gather; for **migration-type work**, the
+  migration playbook (`core/references/how-to/migration-playbook.md`) is **elicitation
+  context** that grounds the conversation, not a step the desk executes.
 - **The human confirms what gets logged.** This skill is Autonomy Tier 1 — it
   renders and proposes; the user approves the body via an explicit binary
   AskUserQuestion before anything is filed.
@@ -320,7 +327,9 @@ handling.
   to close: <evidence/decision>` in the body, and for an unresolved altitude carry it
   as a triage-owned assumption. Never fabricate; never silently drop. Do not attempt
   to investigate-and-close — that is a downstream convention, out of this skill's
-  scope.
+  scope. For an unknown root cause specifically, emit `owner: root-cause — to close:
+  RCA per core/disciplines/root-cause-analysis.md` and stop; that method is invoked by
+  the downstream processing surface (delivery-engine), not inside this interview.
 - **Principal response vs. junior response:** Principal emits a clean, stage-owned
   assumption the right agent later closes. Junior either invents a plausible value
   (planting a false premise) or omits the unknown (losing it), forcing rework when
