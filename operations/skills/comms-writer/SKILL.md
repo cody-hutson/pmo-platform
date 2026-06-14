@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v1.15
+version: v1.17
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
