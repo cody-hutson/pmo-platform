@@ -2,7 +2,7 @@
 name: artifact-generator
 description: >
   Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in 08-Generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
-version: v1.10
+version: v1.15
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -93,10 +93,20 @@ the protocol implements the mode behavior.
 
 ## Artifact Catalog
 
-This skill produces artifacts across 8 categories — Governance, Design, Testing,
-Operations, Communications, Change Management, and methodology-specific (Agile,
-Waterfall). See `references/artifact-catalog.md` for the complete catalog:
+This skill produces artifacts across 6 PMO categories — Project Governance, Change
+Management, Cutover/Deployment, Operations/Status, Waterfall Governance, and
+Comms-adjacent. See `references/artifact-catalog.md` for the complete catalog:
 artifact types, target folders, and specialist-skill mappings per category.
+
+**Offload boundary.** Technical-documentation artifacts (API docs, README,
+architecture docs, runbooks, onboarding guides, technical reference) and
+PRD/feature-spec artifacts (PRDs, new-feature user stories, acceptance-criteria,
+success-metric definitions) are **out of catalog scope** — they route to the
+purpose-built Anthropic skills (`engineering/documentation` and
+`product-management/feature-spec`) per `references/tech-doc-routing.md` and
+`references/prd-routing.md`. Wrapper Mode re-ingests the Anthropic-produced output
+under PMO metadata staging rather than self-producing a near-miss from a PMO
+template.
 
 ## Execution Flow
 
@@ -250,6 +260,13 @@ Produce a summary table:
   are not available, it asks the user to provide project context before proceeding.
 - **Does not fabricate data.** If data is missing, it labels assumptions and proposes
   values — it does not invent metrics, dates, or attribution.
+- **Does not produce technical-documentation or PRD/feature-spec artifacts.** Tech-docs
+  (API docs, README, architecture docs, runbooks, onboarding guides, technical reference)
+  and product-requirement artifacts (PRDs, new-feature user stories, acceptance-criteria,
+  success-metric definitions) are out of catalog scope. It routes them to the purpose-built
+  Anthropic skills (`engineering/documentation`, `product-management/feature-spec`) per
+  `references/tech-doc-routing.md` / `references/prd-routing.md` and re-ingests the result
+  via Wrapper Mode — it does not self-produce a near-miss from a PMO template.
 
 ## Reversibility Discipline
 
@@ -257,7 +274,7 @@ This skill produces **decision-class outputs** — drafted project artifacts sta
 user review, promotion recommendations, artifact-health-check Action Needed items,
 specialist-routing selections, and new-type flags. Every decision-class item must carry a
 **reversibility tier** paired with a **confidence level** per
-`pmo-platform/reference/specs/reversibility-protocol.md`.
+`core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -292,20 +309,20 @@ immediately.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — including artifact-staging
 summaries, promotion recommendations, health-check Action Needed items, and specialist-
-routing selections. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full
+routing selections. See `core/specs/reversibility-protocol.md` for the full
 protocol, worked examples, and G4 gate algorithm.
 
 ## Guardrails
 
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
-- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — drafted artifact staged for review, promotion recommendation, health-check Action Needed item, specialist-routing selection, NEW_TYPE proposal — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — drafted artifact staged for review, promotion recommendation, health-check Action Needed item, specialist-routing selection, NEW_TYPE proposal — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Direct write to target folder bypassing 08-Generated/ — PROC
@@ -335,12 +352,12 @@ structural conformance and content quality.
 
 - **Signature (observable signal):** An artifact type listed in the catalog with a
   specialist skill in the Specialist Skill column (e.g., Cutover Plan → Delivery Engine,
-  Change Impact Assessment → Change Management, FDD Review Summary → Technical Analyst)
+  Change Impact Assessment → Change Management, RAID Log → Delivery Engine)
   is self-produced by artifact-generator without routing to the specialist.
 - **Conditional:** do NOT self-produce an artifact when the catalog lists a specialist
   skill for that artifact type, because the specialist embeds domain depth the generator
-  cannot reproduce — Delivery Engine's gate criteria, Change Management's impact-role
-  matrix, Technical Analyst's six-dimension review — and self-produced artifacts in
+  cannot reproduce — Delivery Engine's gate criteria and RAID rigor, Change Management's
+  impact-role matrix — and self-produced artifacts in
   specialist-owned domains routinely miss the specific quality dimensions the specialist
   applies.
 - **Root cause:** Routing to a specialist adds an extra invocation; self-production feels
@@ -437,3 +454,34 @@ structural conformance and content quality.
   with no current source as labeled assumptions. Junior adapts the populated
   example wholesale — last quarter's go-live date and a rolled-off stakeholder's
   name ship in a stakeholder-ready artifact staged for promotion.
+
+### Routing a tech-doc or PRD/feature-spec request through artifact-generator's own catalog — TRIG
+
+- **Signature (observable signal):** A request for a technical-documentation artifact
+  (API doc, README, architecture doc, runbook, onboarding guide, technical reference) or
+  a PRD / new-feature user-story / acceptance-criteria / success-metric artifact is
+  matched to an artifact-generator catalog entry and self-produced (or specialist-routed
+  within PMO), rather than routed out to the Anthropic skill via the routing decision tree.
+- **Conditional:** do NOT produce a technical-documentation or PRD/feature-spec artifact
+  from artifact-generator's catalog when the request is for tech-docs or product-requirement
+  content, because that content was deliberately offloaded to Anthropic
+  `engineering/documentation` (tech-docs) and `product-management/feature-spec` (PRDs) at
+  the catalog-narrowing — artifact-generator no longer carries those entries, and producing
+  a near-miss from a PMO structural template yields a non-authoritative document while the
+  purpose-built Anthropic skill exists.
+- **Root cause:** The narrowed catalog still pattern-matches loosely — a "draft the
+  architecture doc" request superficially resembles a governance-doc request, and
+  self-producing feels faster than directing the user to a different skill plus the wrapper
+  round-trip.
+- **Mitigation:** On request intake, classify against the offload boundary first: tech-doc
+  class → `references/tech-doc-routing.md` (Anthropic `engineering/documentation`, then
+  re-ingest via the external-artifact Wrapper Mode); PRD/feature-spec class →
+  `references/prd-routing.md` (Anthropic `product-management/feature-spec`, then wrap). Only
+  after confirming the request is NOT in the offload classes, match it to the 27-entry PMO
+  catalog. Under `chained=true`, if the `[ARTIFACT_GAP]` tag names a tech-doc/PRD type, flag
+  `confidence: LOW` with an offload note rather than self-producing.
+- **Principal response vs. junior response:** Principal recognizes "runbook" / "PRD" as
+  out-of-catalog, points the user to the Anthropic skill plus wrapper, and keeps
+  artifact-generator scoped to PMO-unique governance. Junior finds the closest PMO template,
+  produces a structurally-plausible but non-authoritative tech-doc, and the offload boundary
+  the milestone established silently erodes.

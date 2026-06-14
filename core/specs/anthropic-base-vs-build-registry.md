@@ -128,9 +128,9 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_overlap_status` | `independent` |
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
-| `overlap_rationale` | Produces or updates project artifacts (FRDs, RAID logs, project plans, agendas). No Anthropic counterpart observed in Hybrid baseline. |
-| `overlap_notes` | `null` |
-| `build_buy_observation` | PMO custom skill targeting project artifact generation; no Anthropic equivalent observed in Hybrid baseline. |
+| `overlap_rationale` | Produces or updates PMO-unique project artifacts (governance, change, cutover, operations/status, Waterfall governance, comms-adjacent) and owns the 08-Generated/ staging + promotion orchestration. Post-narrowing, deliberately routes-OUT tech-docs (→ Anthropic `engineering/documentation`) and PRDs (→ Anthropic `product-management/feature-spec`) as design-time user-routing guidance with no runtime dependency; a Wrapper Mode ingests externally-produced artifacts and prepends PMO metadata (`source: external`) for staging. Remains `independent` per ADR-021 (routing + wrap-and-stage are not runtime coupling). No Anthropic counterpart observed for the retained PMO-unique catalog in Hybrid baseline. |
+| `overlap_notes` | Catalog deliberately scoped to PMO-unique artifacts; technical-documentation and PRD/feature-spec generation are routed out as design-time guidance to Anthropic `engineering/documentation` and `product-management/feature-spec` respectively (no runtime dependency — posture remains own-with-harvest per ADR-021). The external-artifact Wrapper Mode re-ingests Anthropic-produced content under PMO metadata staging; the wrapper is a one-way design-time ingestion path, not a runtime skill binding. See `core/standards/artifact-skill-routing.md` and `references/{tech-doc,prd}-routing.md`. No `extends`/`pass-through` coupling introduced. |
+| `build_buy_observation` | PMO custom skill targeting PMO-unique project artifact generation; no Anthropic equivalent observed in Hybrid baseline. |
 
 ### Row 2 — build-reviewer
 
