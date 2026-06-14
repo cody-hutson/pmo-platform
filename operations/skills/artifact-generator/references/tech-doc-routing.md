@@ -1,5 +1,7 @@
 # Technical-Documentation Routing — artifact-generator
 
+<!-- reference-durability: allow-link -->
+
 **Type:** design-time routing reference (consumed by the agent when a user asks for a technical-documentation artifact).
 
 This reference is the per-target routing detail for the **technical-documentation** branch of the artifact-skill routing decision tree. The user-facing "which artifact skill to call" tree lives in [`core/standards/artifact-skill-routing.md`](../../../../core/standards/artifact-skill-routing.md); this file holds the detail for one branch of it. The sibling branch for product-requirement artifacts is [`prd-routing.md`](prd-routing.md).

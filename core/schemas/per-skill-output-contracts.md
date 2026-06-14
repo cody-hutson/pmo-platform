@@ -165,8 +165,8 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 The catalog is **name-keyed** (no `Type N` ordinals — renumber-proof). The **6 primary
 PMO-unique types** are the dispatch catalog; **executive brief** and **stakeholder email**
-are **owned-generation** types — comms-writer owns their generation first-party (own-with-harvest
-per #173; first-party, no runtime Anthropic dependency), with structure harvested at design time
+are **owned-generation** types — comms-writer owns their generation first-party (own-with-harvest;
+first-party, no runtime Anthropic dependency), with structure harvested at design time
 from `product-management/stakeholder-comms` (catalogued in `../standards/upstream-reference-catalog.md`,
 entry `stakeholder-comms-structure`).
 
@@ -178,8 +178,8 @@ entry `stakeholder-comms-structure`).
 | Announcement | primary | All-hands or department | Email / Confluence / Teams | Go-live, phase transition, policy change |
 | Confluence Documentation | primary | Knowledge base users, project team | Confluence | SOP update, reference material, playbook |
 | Teams Message | primary | Real-time collaboration (team or channel) | Teams | Quick coordination, hypercare alert, standup supplement |
-| Stakeholder Email | owned-generation (own-with-harvest per #173; first-party, no runtime Anthropic dependency) | Executive, sponsor, cross-functional lead | Email | Ad-hoc decisions, status updates, escalations |
-| Executive Brief | owned-generation (own-with-harvest per #173; first-party, no runtime Anthropic dependency) | Executive team, C-suite | Email / Confluence / PDF | Strategic summary, quarterly health, major changes |
+| Stakeholder Email | owned-generation (own-with-harvest; first-party, no runtime Anthropic dependency) | Executive, sponsor, cross-functional lead | Email | Ad-hoc decisions, status updates, escalations |
+| Executive Brief | owned-generation (own-with-harvest; first-party, no runtime Anthropic dependency) | Executive team, C-suite | Email / Confluence / PDF | Strategic summary, quarterly health, major changes |
 
 ### Output Contract (6 Required Sections)
 
