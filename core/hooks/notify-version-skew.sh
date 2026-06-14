@@ -7,8 +7,11 @@
 #   when ready.
 #
 # Spec:
-#   - Composition-surface durability layer: core/standards/composition-surface-spec.md §6
-#   - Operator-facing update path:           docs/UPDATE.md
+#   - Operator-facing update path: docs/UPDATE.md
+# This is a SessionStart advisory only — it surfaces version skew and points the
+# operator at ./update.sh; it is not a composition-surface durability concern.
+# (Prior docstring cited composition-surface-spec.md §6, but §6 is "Industry
+# precedent", not a durability layer — #331 F3, dangling cross-reference removed.)
 #
 # Behavior:
 #   1. Read local .version file at repo root.
