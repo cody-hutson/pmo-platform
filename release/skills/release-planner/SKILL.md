@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
-version: v1.14
+version: v1.18
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -114,32 +114,7 @@ Proceed to the corresponding mode section below (Mode A Backlog Analysis, Mode B
 
 For each suggested bundle, run the G3-07 check per `core/schemas/gate-criteria-spec.md` § Gate 3. Construct the milestone-position map per the Milestone-Position Resolution algorithm (`position:` override → `due_on` ascending → milestone `number` ascending). For each candidate bundle, enumerate all dependency edges owned by in-bundle issues; compute violations; render the G3-07 result. **Always emit the `### G3-07` section under each bundle entry when the bundle has ≥1 dependency edge (any type — same-milestone, cross-milestone resolved, cross-milestone exception-registered, or cross-milestone violation). Emit `G3-07 Status: PASS — N dependency edge(s) checked, 0 cross-milestone violations` body when the bundle has dep edges but zero unresolved cross-milestone violations — explicit positive signal that the gate ran, analogous to the File Contention Map `No file contention detected` empty-state. Suppress the section entirely only when the bundle has zero dependency edges (no check possible).** Edges registered in the candidate milestone's `## Dependency Exceptions` block PASS as governed exceptions.
 
-5. Present a prioritized view with rationale. Format:
-
-```
-## Backlog Analysis — [date]
-
-### Dependency Graph
-[Topo-sort sequence with priority annotations; optional Mermaid block when > 5 nodes]
-
-### Suggested Bundles
-**Bundle 1 (recommended next):** #X, #Y, #Z
-- Theme: [description]
-- Rationale: [why these together, why now]
-- Estimated scope: [file count, change type]
-- Version suggestion: [major/minor/patch with rationale]
-- G3-07 Status: PASS | PASS-WITH-EXCEPTIONS (N registered) | FAIL (N unresolved)
-
-### File Contention Map
-| File | Issues | Intent Mix | Severity | Recommendation |
-|---|---|---|---|---|
-| <path> | #N, #M, ... | edit×K, add×J, delete×L | NONE \| BINARY \| MULTI-WAY \| CONFLICT | <operator hint per severity> |
-
-**Parse-quality:** <N> issues parsed cleanly · <M> deferred (excluded) · <K> parse-failed (BLOCKING) — denominator = conformant-bundleable only (per Step 1.5)
-**Pre-filter (Step 1.5):** <T> type-excluded (sub-task/observation/adr/[Initiative]/umbrella) · <R> needs-body-repair (improvement|bug, no Affected Files heading — surfaced to operator, excluded from denominator)
-
-**Bundle 2:** ...
-```
+5. Present a prioritized view with rationale. See [`references/output-templates.md` § Mode A — Backlog Analysis output](references/output-templates.md) for the output-format example.
 
 Emit the G3-07 section under each bundle entry (when bundle has ≥1 dependency edge) with the status line `G3-07 Status: PASS | PASS-WITH-EXCEPTIONS (N registered) | FAIL (N unresolved)`. Include the violation table when status is FAIL; include the registered-exception list when PASS-WITH-EXCEPTIONS; include only the counted status line (`PASS — N dependency edge(s) checked, 0 cross-milestone violations`) when PASS — the status line is the load-bearing positive-signal artifact when bundle has dep edges but zero violations. When the bundle has ≥2 issues, always emit the File Contention Map (with explicit `No file contention detected` body when severity_map is all-NONE).
 
@@ -261,92 +236,9 @@ Sub-section anchors `### File Contention Map` (when used inline within Mode A bu
 
 5. **Draft graduation candidates** — for each cluster, draft the literal Proposal-tier issue body per the 9-field mapping in `core/governance/OPERATIONS.md` § Pattern Review Cadence Protocol Rule 3 (verbatim quoted-block preservation of source observation bodies as Description sub-content). The drafted body is what `gh issue create -F <body>` will literally receive at Mode G execution time. Persist each cluster's draft body to a file for handoff to Mode G.
 
-6. **Present Decision Briefing** — emit structured output AS THE LITERAL PROPOSAL BODIES INLINE (the operator approves the verbatim body, not just the verdict abstraction):
+6. **Present Decision Briefing** — emit structured output AS THE LITERAL PROPOSAL BODIES INLINE (the operator approves the verbatim body, not just the verdict abstraction). See [`references/output-templates.md` § Mode D — Pattern Review Decision Briefing output](references/output-templates.md) for the verbatim Decision Briefing format the operator approves literally.
 
-```
-## Pattern Review — YYYY-MM-DD (release-planner Mode D — DRAFT only)
-
-### Open Observations Scanned
-N total · grouped by (domain, Pass-2 broadened theme) tuple
-Pass-1 narrow tags surfaced for operator reference
-
-### Uncategorized Observations Requiring Operator Theme Assignment (if any)
-- #<obs_n> — title — <reason Pass-2 produced unknown-mechanism>
-  [HALT: awaits operator theme assignment before clustering]
-
-### Candidate Clusters (count ≥ 2 within 180 days)
-**Cluster 1:** (release-ops, drift-detection) — N=3 observations
-- #<obs1> — <one-line title> — Pass-1 narrow: `dim-drift`
-- #<obs2> — <one-line title> — Pass-1 narrow: `drift-check-enumeration`
-- #<obs3> — <one-line title> — Pass-1 narrow: `pre-merge-spec-vs-reality`
-
-**Proposed Proposal (verbatim — operator approves this body literally):**
-
-    ### Priority
-    P3 - Medium
-
-    ### Category
-    protocol
-
-    ### Description
-    [2-3 sentence emergent-theme summary.]
-
-    > #<obs1> (filed YYYY-MM-DD by operator):
-    > [verbatim quoted body of observation #<obs1>]
-
-    > #<obs2> (filed YYYY-MM-DD by operator):
-    > [verbatim quoted body of observation #<obs2>]
-
-    > #<obs3> (filed YYYY-MM-DD by operator):
-    > [verbatim quoted body of observation #<obs3>]
-
-    ### Evidence
-    [SOURCE: #<obs1>] — <one-line summary>
-    [SOURCE: #<obs2>] — <one-line summary>
-    [SOURCE: #<obs3>] — <one-line summary>
-
-    ### Affected Files
-    <union of source observation affected-files; dedup>
-
-    ### Acceptance Criteria
-    [Draft 2-4 AC per § 9-field map; operator refines at Triage]
-
-    ### Origin
-    Promoted from Observation tier via Pattern Review on YYYY-MM-DD per OPERATIONS.md § Pattern Review Cadence Protocol. Source observations: #<obs1>, #<obs2>, #<obs3>.
-
-    ### Dependencies
-    None
-
-**Verdict requested:** PROMOTE / DEFER / CLOSE
-
-**Cluster 2:** ...
-
-### Singleton Observations (count = 1)
-N observations not yet eligible; listed for operator awareness
-
-### Reversibility-tier (per decision-discipline.md):
-- PROMOTE verdict on Cluster N: MODERATE · confidence: <HIGH/MED/LOW>
-- DEFER verdict: CHEAP
-- CLOSE verdict: MODERATE (close-as-not-planned reversible by re-open)
-
-### Adoption Counter (per § decision-discipline.md G5)
-- Last Pattern Review: YYYY-MM-DD
-- Clusters surfaced this cycle: N
-- Draft Proposals presented: N
-```
-
-7. **Await operator verdict per candidate.** On any PROMOTE verdict, present operator with handoff option:
-
-```
-## Operator-Explicit Handoff to release-executor Mode G
-
-PROMOTE verdicts on N clusters require write-execution. Invoke release-executor Mode G — Pattern Review Execute with the following manifest:
-
-- Cluster 1: PROMOTE — approved body file `<path to literal body draft persisted by Mode D Step 5>`
-- Cluster 2: ...
-
-The release-executor Mode G invocation is operator-explicit (NOT a chained=true cascade — release-executor is not on the 4-skill cascade allowlist per its SKILL.md Dormant-branch note; operator invokes Mode G directly with the approved manifest).
-```
+7. **Await operator verdict per candidate.** On any PROMOTE verdict, present operator with handoff option per [`references/output-templates.md` § Mode D — Operator-Explicit Handoff to release-executor Mode G](references/output-templates.md).
 
    Mode D HALTS here. No file writes, no GitHub state mutation occur in Mode D. The operator-explicit handoff is the seam; release-executor Mode G executes the writes.
 
@@ -645,4 +537,5 @@ Read these on first use:
 - `references/release-plan-template.md` — Template for release plan files
 - `references/dependency-analysis.md` — Dependency mapping methodology
 - `references/diff-format.md` — Dry-run diff production format
+- `references/output-templates.md` — Output-format examples for Mode A (Backlog Analysis), Mode D (Pattern Review Decision Briefing + Operator-Explicit Handoff)
 - [`release/references/standards/bundle-composition-doctrine.md`](../../references/standards/bundle-composition-doctrine.md) — Bundle composition doctrine: 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + 6 worked-example shapes; current default frame F1 SAFe Feature-Slicing + Vertical Slice (resolved from the live `[bundling].bundle_doctrine_frame` config field per the 5-rung resolver — see [`OPERATIONS.md § Platform-Config Resolution Protocol`](../../../core/governance/OPERATIONS.md)); Mode A consults at Step 4; Mode B persists doctrine-derived fields per § 7 (cutover applies to all bundles going forward)
