@@ -84,7 +84,7 @@ Reserve is held at three distinct zones, each covering a different class of unce
 **Worked agent-behavior example.**
 
 > **Input:** "5 story points."
-> **Response:** REJECT — a point estimate is not accepted. Returned as a range: **"5 – 7 story points"** (Design-complete phase; the 0.8× – 1.25× cone band applied to the 5-point figure gives 4 – 6.25, widened to the nearest whole-point credible range of 5 – 7). State the phase and the band that produced the width.
+> **Response:** REJECT — a point estimate is not accepted. Returned as a range (here, **"5 – 7 story points"**) rather than a single figure. The returned range is set **no tighter than the item's Cone-of-Uncertainty band for its current phase (§1)** — §1 defines how the band sets the width (e.g., 100 → 80 – 125; 10 → 8 – 13 at Design-complete). State the phase and the band that produced the width.
 
 The range is never tighter than the phase band: at an earlier phase the same 5-point figure returns a wider range (at Requirements-defined, the 0.67× – 1.5× band gives ~3 – 8); at Build-underway it may return a tighter one (0.9× – 1.1× gives ~5 – 6). The phase, not the convenience of a round number, sets the width.
 

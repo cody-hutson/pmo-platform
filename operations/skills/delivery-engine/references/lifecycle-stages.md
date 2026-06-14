@@ -75,6 +75,8 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 
 ### 2.3 Classify & Prioritize
 
+`UNSOURCED-DOMAIN` — reconstructed from PMBOK Planning process group + standard backlog-triage practice; the Part-6 source prose is absent from the repo.
+
 **Phase:** Prepare
 **Intent:** Assign type, size band, and priority; confirm the item is worth advancing.
 
@@ -111,6 +113,8 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 
 ### 2.5 Plan & Sequence
 
+`UNSOURCED-DOMAIN` — reconstructed from PMBOK Planning process group + standard capacity-and-dependency planning practice; the Part-6 source prose is absent from the repo.
+
 **Phase:** Prepare
 **Intent:** Commit capacity, establish a timeline, and map dependencies.
 
@@ -128,6 +132,8 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 **Gate at exit:** LG-3 (Plan Baseline / Readiness) for project-altitude work — the plan is baselined and execution is authorized here (see §3).
 
 ### 2.6 Design / Solution
+
+`UNSOURCED-DOMAIN` — reconstructed from PMBOK Planning process group + standard SDLC design practice; the Part-6 source prose is absent from the repo.
 
 **Phase:** Prepare
 **Intent:** Resolve design decisions and produce implementation-ready specifications; validate feasibility.
@@ -199,6 +205,8 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 **Gate at exit:** LG-6 (QA Gate) sits at the **Stage 9 (QA/Acceptance) → Stage 10 (Plan Review/Authorize)** boundary; LG-6's exit criterion `[LG-6-EX-2]` ("zero open critical or high-severity defects") is the gate-side predicate this stage's P1 exit criterion feeds (see §3 and §5).
 
 ### 2.10 Plan Review / Authorize
+
+`UNSOURCED-DOMAIN` — reconstructed from PMBOK Monitoring & Controlling process group + standard release-authorization (go/no-go) practice; the Part-6 source prose is absent from the repo.
 
 **Phase:** Validate
 **Intent:** Go/No-Go authorization of the validated work with an evidence package. **The QA→here move is the AC's blocked transition** when a P1 defect is open.
