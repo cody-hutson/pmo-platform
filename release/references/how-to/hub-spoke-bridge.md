@@ -981,7 +981,7 @@ Before executing the task, verify:
 
 > **Cutover discipline:** Applies to all releases going forward.
 
-**Mode Provenance block cutover:** The `### Mode Provenance` block addition to the Spoke Template above (4 fields: Declared mode / Invoked mode / Mode source / Mode-match) is the runtime-drift surface of the mode-invocation composite detection mechanism (companion to `deploy.sh --check` Check 34 + Stage 8 QA LLM-graded review). Where Model Provenance catches model drift, Mode Provenance catches mode drift — a spoke silently skipping or mis-selecting a required mode. The Mode source field names which convention sourced the skill's mode-enum (`body-heading` preferred over `description-list` when a skill carries both, since the description list can be a stale subset).
+**Mode Provenance block cutover:** The `### Mode Provenance` block addition to the Spoke Template above (4 fields: Declared mode / Invoked mode / Mode source / Mode-match) is the runtime-drift surface of the mode-invocation composite detection mechanism (companion to `deploy.sh --check` Check 35 + Stage 8 QA LLM-graded review). Where Model Provenance catches model drift, Mode Provenance catches mode drift — a spoke silently skipping or mis-selecting a required mode. The Mode source field names which convention sourced the skill's mode-enum (`body-heading` preferred over `description-list` when a skill carries both, since the description list can be a stale subset).
 
 > **Cutover discipline:** Applies to all releases going forward.
 
