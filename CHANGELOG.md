@@ -8,6 +8,17 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.21] - 2026-06-14
+
+Two new automated quality gates ship, both starting in a logged-but-not-blocking mode while they settle in. One confirms that a starter template still carries every section its format rules require, so a template cannot quietly fall out of step with its own schema; the other scans a change for leftover old values after a rename or restructure, catching the case where some occurrences got updated and some were missed.
+
+### Added
+
+- **Starter templates are checked against their own format rules.** A new gate confirms each template governed by a schema carries every section that schema requires, and flags one that has drifted; the Open Meetings tracker template — the first divergence caught — was reconciled to its schema in the same release. *Why it matters:* a project scaffolded from a template gets the structure the format actually calls for, instead of a stale template that quietly lost a section. ([#318](https://github.com/cody-hutson/pmo-platform/issues/318))
+- **Leftover old values after a rename or restructure are now caught.** The quality auditor gained a check that scans the changed files in a piece of work for occurrences of an old value a rename or restructure was supposed to sweep, and flags any it missed. *Why it matters:* a rename that updated most references but missed a few is surfaced rather than left as a half-renamed change to be discovered later. ([#79](https://github.com/cody-hutson/pmo-platform/issues/79))
+
+[Full notes](release/releases/notes/v1.21_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.21)
+
 ## [parallel-launch-quota-budget-gate] - 2026-06-14
 
 Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel-launch-quota-budget-gate`, which is also the signed git tag and the GitHub Release tag). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.
