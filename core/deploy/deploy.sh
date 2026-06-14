@@ -3343,7 +3343,7 @@ cmd_check() {
         "$c28_pr_template does not exist — expected per the Stage 5 spec"
     else
       local _has_section
-      _has_section=$(/usr/bin/grep -cE '^### Documentation Impact' "$c28_pr_template" 2>/dev/null || echo 0)
+      _has_section=$(/usr/bin/grep -cE '^### Documentation Impact' "$c28_pr_template" 2>/dev/null || true); _has_section=${_has_section:-0}
       if [[ "$_has_section" -eq 0 ]]; then
         c28_output+="${c28_pr_template}: missing \`### Documentation Impact\` H3 subsection — required per the Stage 5 spec for Beat 2 surface"$'\n'
         c28_findings=$((c28_findings + 1))
@@ -3355,7 +3355,7 @@ cmd_check() {
     for _tmpl in ".github/ISSUE_TEMPLATE/improvement.yml" ".github/ISSUE_TEMPLATE/bug.yml"; do
       [[ -f "$_tmpl" ]] || continue
       local _has_field
-      _has_field=$(/usr/bin/grep -cE 'label: Documentation Impact' "$_tmpl" 2>/dev/null || echo 0)
+      _has_field=$(/usr/bin/grep -cE 'label: Documentation Impact' "$_tmpl" 2>/dev/null || true); _has_field=${_has_field:-0}
       if [[ "$_has_field" -eq 0 ]]; then
         c28_output+="${_tmpl}: missing \`Documentation Impact\` field — required per the Stage 5 spec for Beat 1 declaration"$'\n'
         c28_findings=$((c28_findings + 1))
@@ -3413,8 +3413,8 @@ cmd_check() {
         [[ -f "$_agent_file" ]] || continue
         c29_files_scanned=$((c29_files_scanned + 1))
         _agent_name=$(/usr/bin/basename "$_agent_file" .md)
-        _has_h2=$(/usr/bin/grep -cE '^## Return Value to Hub' "$_agent_file" 2>/dev/null || echo 0)
-        _has_xref=$(/usr/bin/grep -cE 'hub-spoke-bridge\.md' "$_agent_file" 2>/dev/null || echo 0)
+        _has_h2=$(/usr/bin/grep -cE '^## Return Value to Hub' "$_agent_file" 2>/dev/null || true); _has_h2=${_has_h2:-0}
+        _has_xref=$(/usr/bin/grep -cE 'hub-spoke-bridge\.md' "$_agent_file" 2>/dev/null || true); _has_xref=${_has_xref:-0}
         if [[ "$_has_h2" -eq 0 ]]; then
           c29_output+="${_agent_file}: missing \`## Return Value to Hub\` H2 — see schema at release/references/how-to/hub-spoke-bridge.md § Procedure 3"$'\n'
           c29_findings=$((c29_findings + 1))
