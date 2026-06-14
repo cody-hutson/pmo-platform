@@ -498,7 +498,7 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 
    On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
 
-   **Ongoing-gate discipline.** This check is a standing pre-launch step for every parallel wave, not a one-time Stage 4 estimate — running it once and treating the batch as cleared for the whole release is the failure mode the runtime checkpoint exists to prevent. **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch a batch; it does not reclassify the parallel-safe stages' Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (reflexive-pipeline-loop discipline).
+   **Ongoing-gate discipline.** This check is a standing pre-launch step for every parallel wave, not a one-time Stage 4 estimate — running it once and treating the batch as cleared for the whole release is the failure mode the runtime checkpoint exists to prevent. **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch a batch; it does not reclassify the parallel-safe stages' Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
 
    #### File-contention boundary rules
 
@@ -1902,8 +1902,8 @@ write-serialized stages (6/13), which launch one spoke at a time by design.
 **Cutover.** Applies to releases entering the pipeline on or after this
 constraint's introducing-release merge SHA recorded in
 `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`; the introducing release itself is exempt
-(reflexive-pipeline-loop discipline — its own Stage 5 ran a small batch and
-would not have self-triggered a deferral regardless).
+(the gate cannot fire on the release that introduces it — its own Stage 5 ran a
+small batch and would not have self-triggered a deferral regardless).
 
 ---
 
