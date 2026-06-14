@@ -38,7 +38,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v1.20 | health-and-raid-determinism | #271, #270, #269, #261 | #933 | `626b9926270216c639b7c7c13727c0648733028f` | `v1.20` | VERIFIED | 2026-06-14 |
 | parallel-launch-quota-budget-gate (version-less) | parallel-launch-quota-budget-gate | #23, #24 | #911 | `b2b5f69873075de6f9516e3f1d053a7829416114` | — | VERIFIED | 2026-06-14 |
 | v1.21 | governance-as-code-quality-gates | #318, #79 | #1040 | `62595481ef14bb4f37dd841809f5ca8b1568ce45` | `v1.21` | VERIFIED | 2026-06-14 |
-| v1.22 | deploy-toolchain-defect-cleanup | #88, #76, #332, #111, #104, #26, #331, #92, #1058 | #1081 | `edb99eb6313f6d991edc7ee0c231c918654c94fb` | `v1.22` | DEPLOYED | 2026-06-14 |
+| v1.22 | deploy-toolchain-defect-cleanup | #88, #76, #332, #111, #104, #26, #331, #92, #1058 | #1081 | `edb99eb6313f6d991edc7ee0c231c918654c94fb` | `v1.22` | VERIFIED | 2026-06-14 |
 | v1.23 | pmo-skill-reference-substrate | #224, #267, #268, #1011, #1012, #1013, #1014, #1015 | #1043 | `23cafa4be9408be7d4320d458c780f1df0e0a08c` | `v1.23` | DEPLOYED | 2026-06-14 |
 
 #### Deployment Log v1.23

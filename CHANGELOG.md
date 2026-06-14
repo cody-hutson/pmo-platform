@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.22] - 2026-06-14
+
+The deploy and governance toolchain is repaired across eleven defects on its most-edited file plus one folded-in same-class fix. Checks that used to crash on a counting step, swallow a read-only install error then fail opaquely later, clip a configured path at a `#`, or crash on a non-English character now run cleanly and report what they find, and a new check flags when a multi-mode skill's modes drift out of recognizability.
+
+### Added
+
+- **A check for multi-mode skill drift.** A new deploy check confirms each skill offering multiple modes still exposes them in a machine-recognizable way, and flags one that has drifted. *Why it matters:* a skill whose modes can no longer be detected is surfaced before it causes a mode-routing surprise, rather than failing silently later. ([#26](https://github.com/cody-hutson/pmo-platform/issues/26))
+
+### Fixed
+
+- **The deploy check no longer crashes on its own counting step.** Two governance checks counted matches in a way that could emit two values and fail with a math error; both now capture a single number. *Why it matters:* the deploy check completes and reports its findings instead of aborting with a `syntax error in expression`. ([#76](https://github.com/cody-hutson/pmo-platform/issues/76), [#1058](https://github.com/cody-hutson/pmo-platform/issues/1058))
+- **A read-only leftover from a prior install is handled and explained.** Deploy used to hide a read-only-orphan failure then fail later with an unrelated error; it now clears the leftover where it can and otherwise reports the real cause and the fix. *Why it matters:* a failed deploy names the read-only leftover instead of an unrelated downstream error. ([#88](https://github.com/cody-hutson/pmo-platform/issues/88))
+- **A configured install path containing a `#` is read in full.** The install-path reader used to cut the value off at the first `#`; it now reads the whole quoted path. *Why it matters:* an install path that legitimately contains a `#` is honored instead of silently truncated. ([#332](https://github.com/cody-hutson/pmo-platform/issues/332))
+- **The dependency-graph tool no longer crashes on non-English characters.** The blast-radius tool failed with an "illegal byte sequence" error on any non-ASCII file; it now sorts those files cleanly. *Why it matters:* a file with an accented name or non-English content can be analyzed instead of crashing the tool. ([#92](https://github.com/cody-hutson/pmo-platform/issues/92))
+- **The `--report` view matches the `--check` view.** A governance check that ran under `--check` was missing from the `--report` summary; the report now carries the same pass/fail row. *Why it matters:* the report you use for close-out evidence reflects the checks the deploy actually ran. ([#104](https://github.com/cody-hutson/pmo-platform/issues/104))
+
+[Full notes](release/releases/notes/v1.22_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.22)
+
 ## [v1.21] - 2026-06-14
 
 Two new automated quality gates ship, both starting in a logged-but-not-blocking mode while they settle in. One confirms that a starter template still carries every section its format rules require, so a template cannot quietly fall out of step with its own schema; the other scans a change for leftover old values after a rename or restructure, catching the case where some occurrences got updated and some were missed.
