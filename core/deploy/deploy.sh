@@ -4240,6 +4240,51 @@ cmd_report() {
   fi
   echo ""
 
+  # --- Framework-corpus version-anchor drift (Check 18) ---
+  # Catalog-registry-driven; mirrors cmd_check's Check 18 assertion
+  # (18a catalog completeness / 18b catalog↔doc anchor consistency / 18c
+  # cadence aging) into report PASS/FAIL form. As with Checks 16/17, the report
+  # uses unvarnished enforce-mode semantics regardless of cmd_check warn-mode —
+  # the "what would happen in enforce-mode" view, suitable for Stage 13
+  # evidence. Guard failures (primitive/python/catalog missing, or
+  # path-resolution exit 3) report FAIL because the assertion could not be
+  # evaluated; exit 0 reports PASS; finding rows report FAIL.
+  echo "--- Framework-corpus version-anchor drift (Check 18) ---"
+  local c18r_script="core/deploy/tools/check-version-anchors.py"
+  local c18r_catalog="core/specs/framework-catalog.md"
+  if [[ ! -f "$c18r_script" ]]; then
+    echo "[FAIL] framework-anchor-drift — primitive script missing: $c18r_script"
+    FAIL=$((FAIL + 1))
+  elif [[ ! -x "/usr/bin/python3" ]]; then
+    echo "[FAIL] framework-anchor-drift — /usr/bin/python3 not executable; cannot run primitive"
+    FAIL=$((FAIL + 1))
+  elif [[ ! -f "$c18r_catalog" ]]; then
+    echo "[FAIL] framework-anchor-drift — catalog registry missing: $c18r_catalog"
+    FAIL=$((FAIL + 1))
+  else
+    local c18r_output c18r_exit=0
+    c18r_output=$(/usr/bin/python3 "$c18r_script" \
+      --catalog-path "$c18r_catalog" \
+      --output-format tsv 2>&1) || c18r_exit=$?
+    if [[ $c18r_exit -eq 3 ]]; then
+      echo "[FAIL] framework-anchor-drift — path-resolution failure (exit 3): $(echo "$c18r_output" | head -1)"
+      FAIL=$((FAIL + 1))
+    elif [[ $c18r_exit -eq 0 ]]; then
+      echo "[PASS] framework-anchor-drift — catalog complete, anchors consistent, no overdue reviews"
+      PASS=$((PASS + 1))
+    else
+      local c18r_findings
+      c18r_findings=$(echo "$c18r_output" | tail -n +2 | wc -l | tr -d ' ')
+      echo "[FAIL] framework-anchor-drift — ${c18r_findings} finding(s) — see core/standards/framework-corpus-discipline.md"
+      FAIL=$((FAIL + 1))
+      echo "$c18r_output" | head -10 | sed 's/^/  /' || true
+      if [[ $c18r_findings -gt 10 ]]; then
+        echo "  ... ($((c18r_findings - 10)) more; rerun primitive directly for full output)"
+      fi
+    fi
+  fi
+  echo ""
+
   local total=$((PASS + FAIL))
   echo "=== Summary: $total checks, $PASS passed, $FAIL failed ==="
 
