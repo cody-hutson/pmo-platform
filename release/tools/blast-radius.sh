@@ -516,7 +516,7 @@ find_first_order() {
       print rel, line, text
     }
   ' "$matches_raw" \
-    | sort -u -t $'\t' -k1,1 -k2,2n > "$parsed"
+    | LC_ALL=C sort -u -t $'\t' -k1,1 -k2,2n > "$parsed"
 
   # Aggregate: per file, count of unique (file,line); emit one row per
   # (file, line) with reference_count for the file aggregated separately.
@@ -593,7 +593,7 @@ aggregate_first_order() {
   if [ -n "$agg" ]; then
     # Sort: reference_count DESC, path ASC
     local sorted
-    sorted=$(printf '%s\n' "$agg" | sort -t $'\t' -k2,2nr -k1,1)
+    sorted=$(printf '%s\n' "$agg" | LC_ALL=C sort -t $'\t' -k2,2nr -k1,1)
 
     fo_entries="$(jq -n '[]')"
     fm_entries="$(jq -n '[]')"
@@ -758,7 +758,7 @@ EOF
   ' "$so_filtered")
 
   local sorted
-  sorted=$(printf '%s\n' "$agg" | sort -t $'\t' -k2,2nr -k1,1)
+  sorted=$(printf '%s\n' "$agg" | LC_ALL=C sort -t $'\t' -k2,2nr -k1,1)
 
   local entries="$(jq -n '[]')"
   local count=0
