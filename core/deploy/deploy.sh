@@ -103,7 +103,7 @@ _audit_src_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd 
 AUDIT_REPO="${PMO_AUDIT_REPO:-}"
 if [ -z "$AUDIT_REPO" ] && [ -r "${_audit_cfg_root}/operator.toml" ]; then
   AUDIT_REPO="$(grep -E '^[[:space:]]*audit_repo[[:space:]]*=' "${_audit_cfg_root}/operator.toml" 2>/dev/null \
-    | head -1 | sed -E 's/.*=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]' || true)"
+    | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | tr -d '[:space:]' || true)"
 fi
 if [ -z "$AUDIT_REPO" ]; then
   AUDIT_REPO="$(git -C "${_audit_src_root:-.}" remote get-url origin 2>/dev/null \
@@ -416,7 +416,7 @@ resolve_platform_config() {
     [ -n "$_f" ] && [ -r "$_f" ] || return 0
     /usr/bin/grep -E "^[[:space:]]*${_k}[[:space:]]*=" "$_f" 2>/dev/null \
       | /usr/bin/head -1 \
-      | /usr/bin/sed -E 's/.*=[[:space:]]*"?([^"#]*)"?.*/\1/' \
+      | /usr/bin/sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' \
       | /usr/bin/sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true
   }
 
@@ -759,7 +759,7 @@ detect_install_path() {
   local cowork_base=""
   if [ -r "${_di_cfg_root}/operator.toml" ]; then
     cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${_di_cfg_root}/operator.toml" 2>/dev/null \
-      | head -1 | sed -E 's/.*=[[:space:]]*"?([^"#]+)"?.*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+      | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
   fi
   local search_base="$SEARCH_ROOT"
   if [[ -n "$cowork_base" ]]; then
@@ -1712,7 +1712,7 @@ cmd_check() {
       local c8_cowork_base=""
       if [[ -r "${c8_cfg_root}/operator.toml" ]]; then
         c8_cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${c8_cfg_root}/operator.toml" 2>/dev/null \
-          | head -1 | sed -E 's/.*=[[:space:]]*"?([^"#]+)"?.*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+          | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
       fi
       if [[ -z "$c8_cowork_base" ]]; then
         log "  SKIP:  cowork_install_path not configured (operator.toml [paths]) — no canonical base to validate against"
