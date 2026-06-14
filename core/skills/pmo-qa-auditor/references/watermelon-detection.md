@@ -381,6 +381,6 @@ signals, which describe the *project's* reporting failure). Per
 
 ### Provenance
 
-- Reference doc created per the health-and-raid-determinism milestone (v1.19), tracking item
+- Reference doc created per the health-and-raid-determinism milestone (v1.20), tracking item
   **#270**. Consumes the metric registry from tracking item **#271** and
   the RAID-age escalation owner **#269**.
