@@ -8,6 +8,26 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.17] - 2026-06-14
+
+The two skills that draft your communications and project artifacts are refocused on PMO-unique work, and the commodity drafting an Anthropic skill does well is handed off to it at design time so the PMO skills carry no live dependency on it. The comms skill now owns executive briefs and stakeholder emails directly, the artifact skill has a tighter catalog plus a routing tree, and a duplicate architecture-decision record is renumbered.
+
+### Added
+
+- **The comms skill now owns executive briefs and stakeholder emails.** It produces both in the right voice in one step, without reaching for an outside skill while you use it, because that voice was built into the skill ahead of time. *Why it matters:* an exec brief or stakeholder email comes out with no setup and does not depend on any outside skill being available when you ask. ([#173](https://github.com/cody-hutson/pmo-platform/issues/173))
+- **A routing decision now picks the right drafting path for each artifact request.** A decision tree routes a request to the PMO catalog when the work is PMO-specific and to a commodity drafting path otherwise. *Why it matters:* each request lands with the tool best suited to it without you having to know which skill owns what. ([#175](https://github.com/cody-hutson/pmo-platform/issues/175))
+
+### Changed
+
+- **The comms skill is focused on six PMO-unique communication types.** It keeps the rules that make its output principal-grade — audience calibration, escalation discipline, and the no-status-theater guardrails — and drops scope it never needed to own. *Why it matters:* the skill does PMO-specific communications well instead of spreading across commodity drafting another tool handles better. ([#174](https://github.com/cody-hutson/pmo-platform/issues/174))
+- **The artifact catalog is tighter and clearer.** The artifact skill now lists the project artifacts that are genuinely PMO-specific and hands commodity drafting to a separate path. *Why it matters:* you see a focused menu of what the PMO skill is built to produce, instead of a long list mixing PMO-specific work with generic documents. ([#176](https://github.com/cody-hutson/pmo-platform/issues/176))
+
+### Fixed
+
+- **A duplicate architecture-decision record number is resolved.** Two records shared the same identifier; the skill-sourcing record is renumbered so each decision record has a unique, stable number. *Why it matters:* references to these decision records resolve to a single, unambiguous document. ([#791](https://github.com/cody-hutson/pmo-platform/issues/791))
+
+[Full notes](release/releases/notes/v1.17_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.17)
+
 ## [v1.15] - 2026-06-13
 
 The platform now measures and improves the quality of its own agents: a quality auditor that checks for base-vs-build compatibility drift on a regular cadence, a data-driven target for how many failure modes a complex skill should document, a single root-cause method anyone can invoke on a defect, and a playbook for migrating between approaches. A verified triage reconciles a month-old quality audit to current state.
