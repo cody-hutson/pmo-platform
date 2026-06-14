@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
-version: v1.15
+version: v1.21
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -144,7 +144,7 @@ change-management, technical-analyst, process-designer).
    - **G7: Domain-specific failure-mode discipline** — When the output under audit is a
      SKILL.md file, verify ≥ 3 domain-specific failure modes are documented in
      `## Domain-Specific Failure Modes` using the 5-field conditional template per
-     `pmo-platform/reference/specs/failure-mode-standard.md`. Phase 1 structural checks
+     `../../specs/failure-mode-standard.md`. Phase 1 structural checks
      (regex-based, deterministic): section heading present (G7-01), ≥ 3 `###` subsections
      (G7-02), each subsection header carries one of 5 category tags TRIG / INPUT / PROC /
      OUT / HAND (G7-03), each subsection contains all 5 required fields (G7-04), Conditional
@@ -153,6 +153,40 @@ change-management, technical-analyst, process-designer).
      principal-vs-junior gradient meaningfulness (G7-08). All Phase 1 PASS + Phase 2
      thresholds met → G7 PASS. All Phase 1 PASS + one+ Phase 2 below threshold → CONDITIONAL
      PASS with findings. Any Phase 1 FAIL → G7 FAIL with specific regex non-match cited.
+   - **G8: Cascade-completeness verification** — When the output under audit is a
+     **Stage 5 spec carrying a `### Cascade-Sweep` block** (per
+     [`stage-05-solutioning.md` § 5.6](../../../release/references/pipeline/stage-05-solutioning.md)),
+     re-run each declared sweep against the changed-file set on the release branch and verify
+     the swept-declaration table enumerates every OLD-value occurrence found. The L5
+     defense-in-depth detector for the cascade-omission failure mode — the audit-time,
+     across-the-changed-file-set complement to L1–L4's authoring/review-time, within-the-matrix
+     prevention (§ 5.6 line 212 cedes the whole-changed-file-set sweep to "`pmo-qa-auditor`
+     automation"). **Phase 1 structural checks (regex/grep-based, deterministic — operate on a
+     PRESENT block):** each declared sweep command is a runnable, file-scoped `grep` invocation
+     (G8-02); **re-run completeness (the load-bearing check)** — for each `(file, OLD-value)`
+     pair, the live `grep` match-set ⊆ the swept-table row-set, where G8 **derives the grep
+     regex from the OLD-value string itself** (regex-escaped literal match plus the § 5.6
+     value-scope derivatives — `20` → `20`, `(20)`, `20 custom`, `twenty`), NOT from a §5.6
+     column (the table carries no per-row regex field); the `(file, OLD-value)` pair is the
+     load-bearing join key, `line` is advisory (Engineering may shift lines), so a benign line
+     drift does not FAIL but a genuinely un-enumerated occurrence does, with the exact `file:line`
+     cited (G8-03); each table row carries a disposition (UPDATE / PRESERVE / N/A) + non-empty
+     rationale (G8-04). **Phase 2 content checks (LLM-graded — judgment, not regex):** should a
+     `### Cascade-Sweep` block exist at all? — a should-a-block-exist judgment that re-derives the
+     § 5.6 trigger determination (T1/T2/T3 fired vs. the NEW-count / fenced-historical exclusions),
+     which a regex cannot adjudicate because an *absent* block has no field to grep and the
+     not-fired exclusions are irreducibly judgment-laden (G8-01); PRESERVE/N/A dispositions are
+     load-bearing, not gate-evasion (G8-05); cascade-scope completeness — does the changed-file
+     set carry the OLD value in a file **outside** the spec's declared affected-files matrix (the
+     Tier 2 [SCOPE CHANGE] signal)? (G8-06). All Phase 1 PASS + Phase 2 thresholds met → G8 PASS.
+     All Phase 1 PASS + one+ Phase 2 below threshold → CONDITIONAL PASS with findings. Any Phase 1
+     FAIL → G8 FAIL with specific `file:line` / regex non-match cited. A flagged occurrence routes
+     **Tier 1 [ADJUST]** (inside the declared matrix — Engineering refresh) or **Tier 2 [SCOPE
+     CHANGE]** (outside the matrix — hub Decision Briefing); G8 flags + recommends the tier, it
+     does not self-resolve. The gate **does not fire** when no `### Cascade-Sweep` block is present
+     and no trigger is in scope (correct omission per § 5.6). Full two-phase tables, the
+     swept-declaration read contract, the routing table, and the L1–L5 composability map live in
+     [`references/cascade-completeness-detection.md`](references/cascade-completeness-detection.md).
 4. Produce the QA audit report (see Output Format below).
 
 ### Mode B: Cross-Skill Coherence Review
@@ -312,9 +346,10 @@ Mode D uses the dual-output checklist.
 | G4 | Evidence quality | PASS/FAIL | [specific finding] |
 | G5 | Operational value | PASS/FAIL | [specific finding] |
 | G6 | Anti-pattern check | PASS/FAIL | [specific finding] |
-| G7 | Domain-specific failure-mode discipline | PASS/FAIL | [Phase 1 structural regex + Phase 2 LLM content check; see `../../reference/failure-mode-standard.md`. Fires only when output under audit is a SKILL.md file.] |
+| G7 | Domain-specific failure-mode discipline | PASS / FAIL / CONDITIONAL PASS | [Phase 1 structural regex + Phase 2 LLM content check; see `../../specs/failure-mode-standard.md`. Fires only when output under audit is a SKILL.md file.] |
+| G8 | Cascade-completeness verification | PASS / FAIL / CONDITIONAL PASS | [Phase 1 deterministic re-run (G8-02/03/04) + Phase 2 LLM judgment (G8-01/05/06); see `references/cascade-completeness-detection.md`. Fires only when output under audit is a Stage 5 spec carrying a `### Cascade-Sweep` block. Un-swept occurrence cited as `file:line` with Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] routing.] |
 
-**Overall**: PASS (all gates pass) / FAIL (any gate fails)
+**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings).
 
 ### 3. Findings
 
@@ -524,14 +559,18 @@ In addition to the guardrails above, apply these suite-wide guardrail checks whe
 
 These domain-specific anti-patterns coexist with `## Guardrails`, `## Guardrails
 (Extended)`, and `## Reversibility Discipline`. Each entry uses the 5-field conditional
-template per `pmo-platform/reference/specs/failure-mode-standard.md`.
+template per `../../specs/failure-mode-standard.md`.
 
 **Self-compliance note:** This auditor's own failure-mode section satisfies G7-01
-through G7-05 — the enforcer is itself compliant with the rule it enforces. The four
+through G7-05 — the enforcer is itself compliant with the rule it enforces. The five
 anti-patterns below pass G7 structural checks (`## Domain-Specific Failure Modes`
 heading present, ≥ 3 `###` subsections, valid category tag per subsection, all 5 fields
 per subsection, Conditional regex match on the relaxed G7-05 pattern per Amendment
-A4.1). This mirrors the bidirectional-compliance principle applied to G4 in an earlier release: the skill that enforces a rule is a consumer of that same rule.
+A4.1). This mirrors the bidirectional-compliance principle applied to G4 in an earlier release: the skill that enforces a rule is a consumer of that same rule. The same
+bidirectionality now applies to G8 — the INPUT entry below ("Audited output's
+self-reported quality claims accepted as gate evidence") covers the G8 swept-table-as-
+ground-truth case, so the auditor that enforces cascade-completeness documents its own
+cascade-completeness evidence-trust failure mode.
 
 ### PARTIAL verdict emitted to avoid PASS/FAIL commitment — PROC
 
@@ -647,32 +686,51 @@ A4.1). This mirrors the bidirectional-compliance principle applied to G4 in an e
 - **Signature (observable signal):** A gate verdict's Evidence column cites the
   audited output's own assertions about itself — an embedded self-consistency
   declaration ("summary counts verified against table rows"), a self-compliance
-  note ("this section passes the structural checks"), or the bare presence of
-  evidence-quality labels — rather than the auditor's re-derivation: no recount
-  of the rows, no re-run of the G7 regexes, no spot-check of a labeled claim
-  against its cited source.
+  note ("this section passes the structural checks"), the bare presence of
+  evidence-quality labels, **or — for a G8 cascade-completeness verdict — the
+  audited Stage 5 spec's own `### Cascade-Sweep` table treated as ground truth
+  (its quoted "Sweep verdict: 3 UPDATE / 1 PRESERVE / 0 N/A — complete" cited as
+  PASS evidence)** — rather than the auditor's re-derivation: no recount
+  of the rows, no re-run of the G7 regexes, **no re-execution of each declared
+  sweep `grep` against the release-branch changed-file set (no recomputed
+  match-set, no `file:line` of any un-enumerated occurrence)**, no spot-check of
+  a labeled claim against its cited source.
 - **Conditional:** do NOT accept the audited output's self-reported quality
   claims as gate evidence when the underlying check can be re-derived from the
-  artifact content, because the audit's input is another agent's self-describing
+  artifact content — **including a spec's `### Cascade-Sweep` table, whose
+  swept-set must be re-derived by re-running each declared sweep grep against the
+  changed-file set, never read off the table's own quoted verdict** — because the
+  audit's input is another agent's self-describing
   output and grading the description rather than the content certifies the
   claim instead of the work — the echo-chamber failure with the auditor as the
-  amplifier.
+  amplifier (the same failure G8 exists to catch one layer up, now reflected onto
+  G8's own evidence discipline).
 - **Root cause:** Skill outputs in this suite narrate their own compliance by
   design (self-consistency check steps, evidence-quality labels, self-compliance
   notes), so a trust-shaped sentence is usually already present in the input;
   re-derivation costs effort, while agreeing with a confident claim feels like
-  confirmation.
+  confirmation. A `### Cascade-Sweep` table is especially seductive here — it
+  looks authoritative because it is itself a structured grep result, so agreeing
+  with it reads as confirmation while re-running N greps feels redundant.
 - **Mitigation:** Derive gate evidence from the artifact, never from its
   narration: recount table rows behind any count claim (G1/G6); re-run the G7
   Phase 1 regexes on the section content regardless of any self-compliance
-  note; for G4, spot-check at least one [SOURCE]-labeled claim per output
+  note; **for G8, for every `(file, OLD-value)` pair in the `### Cascade-Sweep`
+  table, re-execute `grep -nE '<regex>' <file>` against the release branch
+  (regex derived from the OLD-value string), compute match-set ⊆ table-row-set,
+  and render FAIL with the exact un-enumerated `file:line` on any match absent
+  from the table — never the quoted sweep verdict**; for G4, spot-check at least
+  one [SOURCE]-labeled claim per output
   against the cited source when that source is available in context, and record
   the label-accuracy result; cite the re-derivation, not the quoted claim, in
   the Evidence column.
 - **Principal response vs. junior response:** Principal recounts the gate table,
-  re-runs the regex, finds that the "self-consistency verified" output actually
-  has a 6-vs-5 mismatch, and renders FAIL with the recount as evidence. Junior
-  quotes the output's own verification sentence into the Evidence column, and
+  re-runs the regex (and, for G8, re-runs each declared sweep grep), finds that
+  the "self-consistency verified" output actually has a 6-vs-5 mismatch — or that
+  the swept table omits the OLD-value occurrence on line 96 — and renders FAIL
+  with the recount as evidence. Junior
+  quotes the output's own verification sentence (or "sweep verdict: complete")
+  into the Evidence column, and
   the audit certifies a defect the audited skill had asserted away.
 
 ## Reference Docs
@@ -687,7 +745,9 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `references/push-to-resolve-rubric.md` | Mode C | Classification rules and examples for item resolution |
 | `references/dual-output-compliance.md` | Mode D | Full dual-output checklist and compliance criteria |
 | `../../reference/reversibility-protocol.md` | Mode A G4 | 4-tier reversibility vocabulary and decision-class algorithm |
-| `../../reference/failure-mode-standard.md` | Mode A G7 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline |
+| `../../specs/failure-mode-standard.md` | Mode A G7, Mode A G8 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline; the `### Cascade-omission at count update — PROC` entry names G8 as the L5 automated detection surface |
 | `../../reference/review-discipline-principles.md` | When auditing review-class skill outputs | Shared 10 anti-laziness rules and 6-deliverable output structure |
 | `../../../release/references/protocols/platform-health-audit-framework.md` | Mode E | Audit methodology + cadence policy; §4 is the Mode E integration spec |
 | `../../specs/anthropic-base-vs-build-registry.md` | Mode E | The base-vs-build registry instance Mode E audits; header carries the Overlap Detection Rubric + Scorecard Weighting |
+| `../../../release/references/pipeline/stage-05-solutioning.md` | Mode A G8 | § 5.6 Cascade-Completeness Sweep — the T1/T2/T3 trigger semantics G8 re-derives (Phase 2) and the `### Cascade-Sweep` block schema (the swept-declaration G8 reads as its swept-set) |
+| `references/cascade-completeness-detection.md` | Mode A G8 | Full G8 two-phase check tables, the swept-declaration read contract, the matrix-relative routing table, and the L1–L5 composability map |
