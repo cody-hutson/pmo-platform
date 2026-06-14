@@ -69,6 +69,7 @@ Authoritative registry of every named framework, methodology, or standard the pl
 | Kotter 8-Step | EXTERNAL | Kotter (Leading Change, 2nd ed. 2012) | operations/skills/change-management/references/kotter-8-step.md | pmo-skill-reference-substrate | change-management skill (methodology suite) | evolving | 12mo | 2026-06-14 | 2027-06-14 | Workspace owner ([OPERATOR_NAME]) |
 | Lewin 3-Stage | EXTERNAL | Lewin (Field Theory in Social Science, 1951) | operations/skills/change-management/references/lewin-3-stage.md | pmo-skill-reference-substrate | change-management skill (methodology suite) | stable | 36mo | 2026-06-14 | 2029-06-14 | Workspace owner ([OPERATOR_NAME]) |
 | Bridges Transition | EXTERNAL | Bridges (Managing Transitions, 4th ed. 2017) | operations/skills/change-management/references/bridges-transition.md | pmo-skill-reference-substrate | change-management skill (methodology suite) | evolving | 12mo | 2026-06-14 | 2027-06-14 | Workspace owner ([OPERATOR_NAME]) |
+| McKinsey 7-S | EXTERNAL | McKinsey 7-S (Peters & Waterman / Pascale & Athos, 1980) | operations/skills/change-management/references/mckinsey-7s.md | pmo-skill-reference-substrate | change-management skill (methodology suite) | stable | 36mo | 2026-06-14 | 2029-06-14 | Workspace owner ([OPERATOR_NAME]) |
 
 ## Notes
 
