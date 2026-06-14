@@ -8,6 +8,66 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.24] - 2026-06-14
+
+The triage assistant's automated backlog-hygiene checks — finding issues with an orphaned (rejected or missing) dependency, and finding P1 work blocked by lower-priority work — were silently returning nothing because of a shell-parsing bug, so those problems went unsurfaced even when present. The bug is fixed and the checks now return correct results. A stale cross-reference in the release-process documentation was also corrected.
+
+### Fixed
+
+- Triage's orphaned-dependency check (Pattern 1b) was silently returning nothing; it now reads each issue's dependency list correctly and flags issues waiting on a rejected or missing dependency. ([#309](https://github.com/cody-hutson/pmo-platform/issues/309))
+- Triage's P1-blocked-by-lower escalation check (Pattern 2a) hit the same parsing bug and returned nothing; it now extracts each issue's priority correctly and flags a Critical (P1) item blocked by lower-priority work. ([#309](https://github.com/cody-hutson/pmo-platform/issues/309))
+- A stale cross-reference in `release-process.md` named the wrong section of the triage spec for the "stale issues" check; it now points to the correct `Phase A6.5 Pattern (1a)`. ([#309](https://github.com/cody-hutson/pmo-platform/issues/309))
+
+[Full notes](release/releases/notes/v1.24_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.24)
+
+## [v1.23] - 2026-06-14
+
+The change-management skill becomes a pluggable toolkit of five change methodologies — ADKAR, Kotter's 8-Step, Lewin's 3-Stage, the Bridges Transition Model, and McKinsey 7-S — with a selection step that picks the right one (or combination) for a given change. ADKAR's scale, previously defined twice, is consolidated to one source of truth. An intake-governance standard (tiering, WSJF, SLAs, demand taxonomy) ships for the intake desk, and a cross-pipeline sub-task methodology reference documents how sub-tasks are used across the pipeline.
+
+### Added
+
+- Four codified change methodologies for change-management — Kotter 8-Step, Lewin 3-Stage, Bridges Transition Model, McKinsey 7-S — each registered in the framework catalog.
+- A methodology-selection mechanism (a `methodology-selection.md` selector + a SKILL.md Step 2.5) that picks the applicable methodology or combination per change context, or honors an explicit user choice.
+- An intake-governance reference standard for intake-desk: business-case tiering, a WSJF prioritization formula, intake SLAs, a six-type demand taxonomy, and anti-pattern detection.
+- A cross-pipeline sub-task methodology best-practices reference standard.
+
+### Changed
+
+- ADKAR's 1-5 scale and barrier-point rule consolidated into `adkar-framework.md` as the single source of truth; `impact-assessment.md` and `readiness-checklist.md` now reference it.
+- `change-management` and `intake-desk` skill versions bumped to v1.23.
+- `framework-catalog.md` gains the four methodology rows plus ADKAR and Cost-of-Delay `canonical_doc` pointers.
+
+[Full notes](release/releases/notes/v1.23_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.23)
+
+## [v1.22] - 2026-06-14
+
+The deploy and governance toolchain is repaired across eleven defects on its most-edited file plus one folded-in same-class fix. Checks that used to crash on a counting step, swallow a read-only install error then fail opaquely later, clip a configured path at a `#`, or crash on a non-English character now run cleanly and report what they find, and a new check flags when a multi-mode skill's modes drift out of recognizability.
+
+### Added
+
+- **A check for multi-mode skill drift.** A new deploy check confirms each skill offering multiple modes still exposes them in a machine-recognizable way, and flags one that has drifted. *Why it matters:* a skill whose modes can no longer be detected is surfaced before it causes a mode-routing surprise, rather than failing silently later. ([#26](https://github.com/cody-hutson/pmo-platform/issues/26))
+
+### Fixed
+
+- **The deploy check no longer crashes on its own counting step.** Two governance checks counted matches in a way that could emit two values and fail with a math error; both now capture a single number. *Why it matters:* the deploy check completes and reports its findings instead of aborting with a `syntax error in expression`. ([#76](https://github.com/cody-hutson/pmo-platform/issues/76), [#1058](https://github.com/cody-hutson/pmo-platform/issues/1058))
+- **A read-only leftover from a prior install is handled and explained.** Deploy used to hide a read-only-orphan failure then fail later with an unrelated error; it now clears the leftover where it can and otherwise reports the real cause and the fix. *Why it matters:* a failed deploy names the read-only leftover instead of an unrelated downstream error. ([#88](https://github.com/cody-hutson/pmo-platform/issues/88))
+- **A configured install path containing a `#` is read in full.** The install-path reader used to cut the value off at the first `#`; it now reads the whole quoted path. *Why it matters:* an install path that legitimately contains a `#` is honored instead of silently truncated. ([#332](https://github.com/cody-hutson/pmo-platform/issues/332))
+- **The dependency-graph tool no longer crashes on non-English characters.** The blast-radius tool failed with an "illegal byte sequence" error on any non-ASCII file; it now sorts those files cleanly. *Why it matters:* a file with an accented name or non-English content can be analyzed instead of crashing the tool. ([#92](https://github.com/cody-hutson/pmo-platform/issues/92))
+- **The `--report` view matches the `--check` view.** A governance check that ran under `--check` was missing from the `--report` summary; the report now carries the same pass/fail row. *Why it matters:* the report you use for close-out evidence reflects the checks the deploy actually ran. ([#104](https://github.com/cody-hutson/pmo-platform/issues/104))
+
+[Full notes](release/releases/notes/v1.22_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.22)
+
+## [v1.21] - 2026-06-14
+
+Two new automated quality gates ship, both starting in a logged-but-not-blocking mode while they settle in. One confirms that a starter template still carries every section its format rules require, so a template cannot quietly fall out of step with its own schema; the other scans a change for leftover old values after a rename or restructure, catching the case where some occurrences got updated and some were missed.
+
+### Added
+
+- **Starter templates are checked against their own format rules.** A new gate confirms each template governed by a schema carries every section that schema requires, and flags one that has drifted; the Open Meetings tracker template — the first divergence caught — was reconciled to its schema in the same release. *Why it matters:* a project scaffolded from a template gets the structure the format actually calls for, instead of a stale template that quietly lost a section. ([#318](https://github.com/cody-hutson/pmo-platform/issues/318))
+- **Leftover old values after a rename or restructure are now caught.** The quality auditor gained a check that scans the changed files in a piece of work for occurrences of an old value a rename or restructure was supposed to sweep, and flags any it missed. *Why it matters:* a rename that updated most references but missed a few is surfaced rather than left as a half-renamed change to be discovered later. ([#79](https://github.com/cody-hutson/pmo-platform/issues/79))
+
+[Full notes](release/releases/notes/v1.21_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.21)
+
 ## [parallel-launch-quota-budget-gate] - 2026-06-14
 
 Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel-launch-quota-budget-gate`, which is also the signed git tag and the GitHub Release tag). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.

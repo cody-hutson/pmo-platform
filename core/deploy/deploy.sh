@@ -72,9 +72,13 @@ CANARY_SKILLS=(
 # Precedence: --workspace-root flag (entry scripts export this var) > env >
 # $HOME default. The operator.toml rung is deferred (YAGNI — no persisted
 # deploy-root consumer). With the var unset, $DEPLOY_ROOT == $HOME and every
-# target is byte-identical to the prior behavior (set -u: the :- default
-# fires for an UNSET var; an exported-but-EMPTY value is caught by the
-# rm -rf bounded-target guards in deploy_skill_user_local / the Cowork path).
+# target is byte-identical to the prior behavior. The ${VAR:-default} form
+# fires for BOTH an unset var AND an exported-but-EMPTY one (#331 F4 — the
+# prior comment claimed unset-only): so an empty override also collapses to
+# $HOME right here at assignment, never producing an empty $DEPLOY_ROOT. The
+# rm -rf bounded-target guards in deploy_skill_user_local / the Cowork path
+# are therefore belt-and-suspenders against an empty root, not the primary
+# mechanism (proven by test_deploy_sandbox.sh Test D).
 DEPLOY_ROOT="${PMO_PLATFORM_DEPLOY_ROOT:-$HOME}"
 SEARCH_ROOT="$DEPLOY_ROOT/Library/Application Support/Claude/local-agent-mode-sessions"
 INSTALL_PATH=""
@@ -103,7 +107,7 @@ _audit_src_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd 
 AUDIT_REPO="${PMO_AUDIT_REPO:-}"
 if [ -z "$AUDIT_REPO" ] && [ -r "${_audit_cfg_root}/operator.toml" ]; then
   AUDIT_REPO="$(grep -E '^[[:space:]]*audit_repo[[:space:]]*=' "${_audit_cfg_root}/operator.toml" 2>/dev/null \
-    | head -1 | sed -E 's/.*=[[:space:]]*"?([^"#]+)"?.*/\1/' | tr -d '[:space:]' || true)"
+    | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | tr -d '[:space:]' || true)"
 fi
 if [ -z "$AUDIT_REPO" ]; then
   AUDIT_REPO="$(git -C "${_audit_src_root:-.}" remote get-url origin 2>/dev/null \
@@ -220,6 +224,32 @@ die() {
 
 log() {
   echo "[$(date +%H:%M:%S)] $1"
+}
+
+# Remove a derived-mirror subtree, self-healing read-only orphans and
+# failing loud (never silently) when removal is impossible. Returns 0 if the
+# path is gone after the call, non-zero (with an actionable error logged) if not.
+# Rationale: under `set -euo pipefail`, a bare `rm -rf` that returns non-zero
+# aborts the whole deploy; the prior `2>/dev/null || true` prevented that abort
+# but SWALLOWED the root cause. This keeps the non-abort property AND surfaces
+# the cause. `label` is the caller's context string for the log line.
+remove_mirror_subtree() {
+  local target="$1" label="$2"
+  [[ -e "$target" ]] || return 0                 # nothing to remove — success
+  # Self-heal the common case: a read-only orphan left by Cowork session churn
+  # (dr-x------ dir + r-------- files). The target is a pure derived mirror, not
+  # operator state, so making it writable before removal is in-contract.
+  chmod -R u+w "$target" 2>/dev/null || true     # best-effort; rm result is authoritative
+  local rm_err rm_rc
+  rm_err=$(rm -rf "$target" 2>&1) && rm_rc=0 || rm_rc=$?   # guarded: no set -e abort
+  if [[ $rm_rc -ne 0 || -e "$target" ]]; then
+    log "  FAILED:   $label — cannot refresh references/ mirror: target is read-only or undeletable"
+    log "            path: $target"
+    log "            cause: ${rm_err:-rm returned $rm_rc}"
+    log "            remediation: chmod -R u+w \"$target\" && ./deploy.sh --deploy <skill>  (derived mirror; safe to chmod — git source untouched)"
+    return 1
+  fi
+  return 0
 }
 
 validate_workspace() {
@@ -390,7 +420,7 @@ resolve_platform_config() {
     [ -n "$_f" ] && [ -r "$_f" ] || return 0
     /usr/bin/grep -E "^[[:space:]]*${_k}[[:space:]]*=" "$_f" 2>/dev/null \
       | /usr/bin/head -1 \
-      | /usr/bin/sed -E 's/.*=[[:space:]]*"?([^"#]*)"?.*/\1/' \
+      | /usr/bin/sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' \
       | /usr/bin/sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true
   }
 
@@ -677,7 +707,9 @@ deploy_skill_user_local() {
     log "  FAILED:   $skill — user-local mirror — refusing rm -rf of unexpected target ($target_dir)"
     return 1
   fi
-  rm -rf "$target_dir" 2>/dev/null || true
+  if ! remove_mirror_subtree "$target_dir" "$skill — user-local mirror"; then
+    return 1   # caller (deploy_skill_user_local invocation) converts to FAILURES+=("$skill (user-local)")
+  fi
   mkdir -p "$target_dir"
 
   if ! cp -R "$source_dir/." "$target_dir/" 2>/dev/null; then
@@ -731,7 +763,7 @@ detect_install_path() {
   local cowork_base=""
   if [ -r "${_di_cfg_root}/operator.toml" ]; then
     cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${_di_cfg_root}/operator.toml" 2>/dev/null \
-      | head -1 | sed -E 's/.*=[[:space:]]*"?([^"#]+)"?.*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+      | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
   fi
   local search_base="$SEARCH_ROOT"
   if [[ -n "$cowork_base" ]]; then
@@ -1170,13 +1202,14 @@ cmd_deploy() {
             log "  FAILED:   $skill references/ — refusing rm -rf of unexpected target ($INSTALL_PATH/$skill/references)"
             FAILURES+=("$skill (references)")
           else
-            rm -rf "$INSTALL_PATH/$skill/references" 2>/dev/null || true
-            if cp -R "$source_refs" "$INSTALL_PATH/$skill/" 2>/dev/null; then
+            if ! remove_mirror_subtree "$INSTALL_PATH/$skill/references" "$skill references/"; then
+              FAILURES+=("$skill (references)")
+            elif cp -R "$source_refs" "$INSTALL_PATH/$skill/" 2>/dev/null; then
               local ref_count
               ref_count=$(find "$INSTALL_PATH/$skill/references" -type f 2>/dev/null | wc -l | tr -d ' ')
               log "  Deployed: $skill references/ ($ref_count files from source)"
             else
-              log "  FAILED:   $skill references/ — cp -R failed"
+              log "  FAILED:   $skill references/ — cp -R failed (target writable but copy failed; check disk/space/path)"
               FAILURES+=("$skill (references)")
             fi
           fi
@@ -1311,11 +1344,17 @@ cmd_check() {
         while IFS= read -r _inj_base; do
           [[ -n "$_inj_base" ]] && c1_ref_excludes+=("--exclude=$_inj_base")
         done < <(injected_ref_basenames "$skill")
+        # AC-3 cause-classification: if the target exists but is read-only
+        # (the Cowork session-churn orphan class), annotate the DRIFT line so
+        # the cause is actionable (RO-perms vs. missing vs. differs).
+        # Diagnostic-only — does not change ISSUES counts or exit codes.
+        local _ro_annot=""
+        [[ -e "$installed_refs_dir" && ! -w "$installed_refs_dir" ]] && _ro_annot=" (read-only — chmod -R u+w then redeploy)"
         if [[ ! -d "$installed_refs_dir" ]]; then
-          log "  DRIFT: $skill — references/ not deployed (source has files)"
+          log "  DRIFT: $skill — references/ not deployed (source has files)$_ro_annot"
           ISSUES=$((ISSUES + 1))
         elif ! diff -rq ${c1_ref_excludes[@]+"${c1_ref_excludes[@]}"} "$source_refs" "$installed_refs_dir" >/dev/null 2>&1; then
-          log "  DRIFT: $skill — references/ installed copy differs from source"
+          log "  DRIFT: $skill — references/ installed copy differs from source$_ro_annot"
           ISSUES=$((ISSUES + 1))
         else
           local installed_refs
@@ -1677,7 +1716,7 @@ cmd_check() {
       local c8_cowork_base=""
       if [[ -r "${c8_cfg_root}/operator.toml" ]]; then
         c8_cowork_base="$(grep -E '^[[:space:]]*cowork_install_path[[:space:]]*=' "${c8_cfg_root}/operator.toml" 2>/dev/null \
-          | head -1 | sed -E 's/.*=[[:space:]]*"?([^"#]+)"?.*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+          | head -1 | sed -E -e 's/.*=[[:space:]]*"([^"]*)".*/\1/' -e t -e 's/.*=[[:space:]]*([^#]*).*/\1/' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
       fi
       if [[ -z "$c8_cowork_base" ]]; then
         log "  SKIP:  cowork_install_path not configured (operator.toml [paths]) — no canonical base to validate against"
@@ -2250,7 +2289,7 @@ cmd_check() {
   # warn-mode for ≥3-day shakedown per bypass-mode-readiness.md §Shakedown.
   # Per-issue age computed via jq's `now - (.createdAt | fromdate)` builtin —
   # avoids BSD-vs-GNU date arithmetic divergence on macOS.
-  # Override hooks (testing-only): C15_THRESHOLD_OVERRIDE_FILE points at a
+  # Override hooks (testing-only): C17_THRESHOLD_OVERRIDE_FILE points at a
   # space-separated single-line "WARN ESCALATE CRITICAL" file (e.g. "0 0 0" to force all
   # extant proposed issues into critical band for synthetic threshold testing).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
@@ -2258,8 +2297,8 @@ cmd_check() {
     local THRESHOLD_WARN_DAYS=14
     local THRESHOLD_ESCALATE_DAYS=30
     local THRESHOLD_CRITICAL_DAYS=45
-    if [[ -n "${C15_THRESHOLD_OVERRIDE_FILE:-}" ]] && [[ -f "$C15_THRESHOLD_OVERRIDE_FILE" ]]; then
-      read -r THRESHOLD_WARN_DAYS THRESHOLD_ESCALATE_DAYS THRESHOLD_CRITICAL_DAYS < "$C15_THRESHOLD_OVERRIDE_FILE"
+    if [[ -n "${C17_THRESHOLD_OVERRIDE_FILE:-}" ]] && [[ -f "$C17_THRESHOLD_OVERRIDE_FILE" ]]; then
+      read -r THRESHOLD_WARN_DAYS THRESHOLD_ESCALATE_DAYS THRESHOLD_CRITICAL_DAYS < "$C17_THRESHOLD_OVERRIDE_FILE"
       log "  TEST:  threshold override active (warn=${THRESHOLD_WARN_DAYS} escalate=${THRESHOLD_ESCALATE_DAYS} critical=${THRESHOLD_CRITICAL_DAYS})"
     fi
 
@@ -2421,9 +2460,9 @@ cmd_check() {
       # Data rows start with '| YYYY-' (ISO timestamp begins with a digit).
       # Header + separator do NOT match this pattern; only data rows do.
       local c19_log_rows c19_write_lines
-      c19_log_rows=$(/usr/bin/grep -cE '^\| [0-9]{4}-' "$c19_log" 2>/dev/null || echo 0)
+      c19_log_rows=$(/usr/bin/grep -cE '^\| [0-9]{4}-' "$c19_log" 2>/dev/null || true); c19_log_rows=${c19_log_rows:-0}
       # Write-log: non-blank, non-comment lines.
-      c19_write_lines=$(/usr/bin/grep -cE '^[^#[:space:]]' "$c19_write_log" 2>/dev/null || echo 0)
+      c19_write_lines=$(/usr/bin/grep -cE '^[^#[:space:]]' "$c19_write_log" 2>/dev/null || true); c19_write_lines=${c19_write_lines:-0}
 
       if [[ "$c19_log_rows" -ne "$c19_write_lines" ]]; then
         flag_warn_or_issue "pipeline-event-log-integrity" \
@@ -2432,7 +2471,7 @@ cmd_check() {
 
       # 19c — header preserved (1st column header must be 'ts_iso')
       local c19_header_ok
-      c19_header_ok=$(/usr/bin/grep -c '^| ts_iso |' "$c19_log" 2>/dev/null || echo 0)
+      c19_header_ok=$(/usr/bin/grep -c '^| ts_iso |' "$c19_log" 2>/dev/null || true); c19_header_ok=${c19_header_ok:-0}
       if [[ "$c19_header_ok" -lt 1 ]]; then
         flag_warn_or_issue "pipeline-event-log-integrity" \
           "header row missing or malformed in $c19_log (expected '| ts_iso | …')"
@@ -3304,7 +3343,7 @@ cmd_check() {
         "$c28_pr_template does not exist — expected per the Stage 5 spec"
     else
       local _has_section
-      _has_section=$(/usr/bin/grep -cE '^### Documentation Impact' "$c28_pr_template" 2>/dev/null || echo 0)
+      _has_section=$(/usr/bin/grep -cE '^### Documentation Impact' "$c28_pr_template" 2>/dev/null || true); _has_section=${_has_section:-0}
       if [[ "$_has_section" -eq 0 ]]; then
         c28_output+="${c28_pr_template}: missing \`### Documentation Impact\` H3 subsection — required per the Stage 5 spec for Beat 2 surface"$'\n'
         c28_findings=$((c28_findings + 1))
@@ -3316,7 +3355,7 @@ cmd_check() {
     for _tmpl in ".github/ISSUE_TEMPLATE/improvement.yml" ".github/ISSUE_TEMPLATE/bug.yml"; do
       [[ -f "$_tmpl" ]] || continue
       local _has_field
-      _has_field=$(/usr/bin/grep -cE 'label: Documentation Impact' "$_tmpl" 2>/dev/null || echo 0)
+      _has_field=$(/usr/bin/grep -cE 'label: Documentation Impact' "$_tmpl" 2>/dev/null || true); _has_field=${_has_field:-0}
       if [[ "$_has_field" -eq 0 ]]; then
         c28_output+="${_tmpl}: missing \`Documentation Impact\` field — required per the Stage 5 spec for Beat 1 declaration"$'\n'
         c28_findings=$((c28_findings + 1))
@@ -3374,8 +3413,8 @@ cmd_check() {
         [[ -f "$_agent_file" ]] || continue
         c29_files_scanned=$((c29_files_scanned + 1))
         _agent_name=$(/usr/bin/basename "$_agent_file" .md)
-        _has_h2=$(/usr/bin/grep -cE '^## Return Value to Hub' "$_agent_file" 2>/dev/null || echo 0)
-        _has_xref=$(/usr/bin/grep -cE 'hub-spoke-bridge\.md' "$_agent_file" 2>/dev/null || echo 0)
+        _has_h2=$(/usr/bin/grep -cE '^## Return Value to Hub' "$_agent_file" 2>/dev/null || true); _has_h2=${_has_h2:-0}
+        _has_xref=$(/usr/bin/grep -cE 'hub-spoke-bridge\.md' "$_agent_file" 2>/dev/null || true); _has_xref=${_has_xref:-0}
         if [[ "$_has_h2" -eq 0 ]]; then
           c29_output+="${_agent_file}: missing \`## Return Value to Hub\` H2 — see schema at release/references/how-to/hub-spoke-bridge.md § Procedure 3"$'\n'
           c29_findings=$((c29_findings + 1))
@@ -3811,6 +3850,214 @@ cmd_check() {
     fi
   fi
 
+  # ─── Check 34: Template↔schema conformance (contract-fidelity; warn-mode initial) ───
+  # A THIRD fidelity axis, distinct from Check 13 (canonical↔mirror COPY-fidelity,
+  # byte-identity) and Check 13b (unregistered shared-reference collision): Check 34
+  # asserts a schema-BEARING canonical template carries every section its governing
+  # schema mandates. A canonical template can otherwise drift from the schema that
+  # governs its instances and no gate catches it (#318).
+  #
+  # Schema-bearing set = TEMPLATE_SCHEMA_MAP membership (opt-in by manifest presence).
+  # A template with NO entry here is NEVER inspected — structural skip, zero false
+  # positives by construction (parent AC#4). Extend coverage by ADDING a manifest
+  # line (register-or-extend per template-storage.md §3.5b).
+  #
+  # Manifest tuple (4 fields, '|||'-delimited — the field separator is '|||' rather
+  # than ':' because the schema-anchor field legitimately contains a ': ', e.g.
+  # "Tracker 3: Open Meetings Tracker"; the section list inside field 4 stays
+  # pipe-delimited):
+  #   field 1  <template-path>
+  #   field 2  <governing-schema-path>
+  #   field 3  <schema H2 anchor>  (the "## <anchor>" heading bounding the schema block)
+  #   field 4  <pipe-delimited expected H2 sections the template MUST carry>
+  # Fields are split with `awk -F'\|\|\|'` (NOT `IFS='|||' read`, which bash collapses
+  # to single-'|' separators and silently empties fields 2/3).
+  #
+  # Warn-mode initial via flag_warn_or_issue / deploy-check.mode (the Checks 8-10 /
+  # 13b / 14 / 33 precedent): in warn-mode a breach logs WARN: + appends
+  # deploy-check-warn-log.jsonl WITHOUT incrementing ISSUES; in enforce-mode it
+  # increments ISSUES so `--check` (STRICT) exits non-zero on a real divergence.
+  # Flip-to-enforce path: template-storage.md §3.5b + bypass-mode-readiness.md
+  # Shakedown→Enforce checklist + the runtime deploy-check.mode file.
+  local -a TEMPLATE_SCHEMA_MAP=(
+    "operations/templates/open-meetings-tracker-template.md|||core/schemas/tracker-schemas.md|||Tracker 3: Open Meetings Tracker|||Upcoming Meetings|Recently Completed|Recurring Cadences"
+  )
+
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 34: Template↔schema conformance (contract-fidelity)"
+    local c34_any_finding=false
+    local c34_entry
+    for c34_entry in "${TEMPLATE_SCHEMA_MAP[@]}"; do
+      # Field split on the literal '|||' (CD-1: awk, not IFS-read).
+      local c34_tmpl c34_schema c34_anchor c34_expect
+      c34_tmpl=$(awk -F'\\|\\|\\|'   '{print $1}' <<< "$c34_entry")
+      c34_schema=$(awk -F'\\|\\|\\|' '{print $2}' <<< "$c34_entry")
+      c34_anchor=$(awk -F'\\|\\|\\|' '{print $3}' <<< "$c34_entry")
+      c34_expect=$(awk -F'\\|\\|\\|' '{print $4}' <<< "$c34_entry")
+
+      # Presence guards (no false-fail on environmental gaps).
+      # Template absent → SKIP (Check 12/13 own presence; do not double-fail).
+      if [[ ! -f "$c34_tmpl" ]]; then
+        log "  SKIP:  $c34_tmpl absent (Check 12/13 own presence)"
+        continue
+      fi
+      # Governing schema absent → that IS a contract breach (the schema vanished).
+      if [[ ! -f "$c34_schema" ]]; then
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_tmpl: governing schema $c34_schema not found"
+        c34_any_finding=true
+        continue
+      fi
+
+      # Schema block = lines from "## <anchor>" up to the next "## " (or EOF).
+      local c34_schema_block
+      c34_schema_block=$(awk -v anchor="## ${c34_anchor}" '
+        $0 == anchor { grab=1; next }
+        grab && /^## / { exit }
+        grab { print }
+      ' "$c34_schema")
+      if [[ -z "$c34_schema_block" ]]; then
+        # Anchor not found in the schema → the manifest points at a section that
+        # no longer exists. Treat as a contract breach (manifest↔schema drift).
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_tmpl: schema anchor '## $c34_anchor' not found in $c34_schema (manifest↔schema drift)"
+        c34_any_finding=true
+        continue
+      fi
+
+      # Split the expected-sections pipe-list into an array.
+      local -a c34_sections
+      IFS='|' read -r -a c34_sections <<< "$c34_expect"
+
+      # MISSING = expected sections not present as a "## <section>" heading in the
+      # template (the load-bearing contract assertion). The Header (a '#'-level
+      # title + metadata) and any extra '## CHANGE SUMMARY' log section are NOT in
+      # the expected list, so an extra template section is allowed — only a MISSING
+      # mandated section breaches the contract.
+      local c34_missing=""
+      # A-318-1: manifest↔schema cross-check elevated MAY→SHOULD — each expected
+      # section name SHOULD also appear in the schema block; a mismatch warns
+      # (guards the field-4-hardcodes-schema-sections coupling against drift).
+      local c34_schema_drift=""
+      local c34_sec
+      for c34_sec in "${c34_sections[@]}"; do
+        if ! grep -qxF "## ${c34_sec}" "$c34_tmpl"; then
+          c34_missing="${c34_missing:+$c34_missing, }${c34_sec}"
+        fi
+        if ! printf '%s\n' "$c34_schema_block" | grep -qF "$c34_sec"; then
+          c34_schema_drift="${c34_schema_drift:+$c34_schema_drift, }${c34_sec}"
+        fi
+      done
+
+      # A-318-1 (SHOULD): manifest field-4 vs schema block. A drift here means the
+      # manifest's expected-sections no longer match the schema it cites — warn so
+      # the coupling is re-reconciled (separate from the template breach below).
+      if [[ -n "$c34_schema_drift" ]]; then
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_schema §$c34_anchor: manifest expected-section(s) not found in schema block: $c34_schema_drift (manifest↔schema drift — reconcile TEMPLATE_SCHEMA_MAP field 4)"
+        c34_any_finding=true
+      fi
+
+      # Conformance assertion (load-bearing for AC#1): a MISSING mandated section
+      # is the contract breach.
+      if [[ -n "$c34_missing" ]]; then
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_tmpl missing schema-mandated section(s): $c34_missing (per $c34_schema §$c34_anchor)"
+        c34_any_finding=true
+      else
+        log "  OK:    $c34_tmpl conforms to $c34_schema §$c34_anchor"
+      fi
+    done
+    [[ "$c34_any_finding" == "false" ]] && \
+      log "  OK:    all ${#TEMPLATE_SCHEMA_MAP[@]} schema-bearing template(s) conform to their governing schema"
+  fi
+
+
+  # Check 35 — Mode-invocation drift (warn-mode initial, #26). Config-drift
+  # surface of the mode-invocation composite detection mechanism — companion to
+  # the Procedure 3 Spoke Template `### Mode Provenance` block (runtime-drift
+  # surface) and the Stage 8 QA LLM-graded review (hub-emit surface). Where Check
+  # 27 + the `### Model Provenance` block catch model drift, this check + the
+  # `### Mode Provenance` block catch mode drift (a spoke silently skipping or
+  # mis-selecting a required mode).
+  #
+  # Scans the multi-mode SKILL.md population across all three module skill dirs
+  # and asserts each multi-mode skill carries a MACHINE-RECOGNIZABLE mode-enum,
+  # so the runtime block's "Invoked mode" can be validated against a real enum
+  # rather than free prose. It does NOT demand a new frontmatter field — it
+  # asserts the EXISTING prose is parseable by a documented rule.
+  #
+  # Mode declaration is non-uniform across the corpus (the AC3 audit finding), so
+  # the recognizer handles BOTH conventions:
+  #   (1) body-heading enum — DISTINCT mode letters from `### Mode X:` / `### Mode
+  #       X —` section headings, anchored to a `:`/`—`/`-` delimiter immediately
+  #       after the letter so failure-mode anti-pattern headings
+  #       (`### Mode A execution without a Dry-Run Record — PROC`) do NOT match.
+  #   (2) description-list fallback — the `·`-separated list after the `Modes:`
+  #       token inside the frontmatter `description`. NOTE: the `Modes:` token in
+  #       the two desc-only skills (release/skills/pmo-skill-editor,
+  #       operations/skills/project-initiator) is INLINE mid-line in a folded-YAML
+  #       `description: >` block, NOT at line-start — so the match is NOT
+  #       line-start-anchored (a `^[[:space:]]*Modes:` anchor would silently
+  #       false-negative those two multi-mode skills, treating them as
+  #       single-mode). The `·` count is taken on the substring AFTER `Modes:`
+  #       so `·` separators elsewhere in the description (e.g. a Triggers list)
+  #       cannot inflate the arity.
+  # body-heading is authoritative when present (the description list can be a
+  # stale subset, F-AC3-3); the check PASSes a skill recognizable by EITHER
+  # convention and warns only on a skill that advertises modes (a `Modes:` token,
+  # or ≥2 body headings) yet exposes no machine-recognizable enum by either path.
+  # Cutover comment family-standard: applies to ./deploy.sh --check invocations
+  # on/after the introducing release's merge SHA in RELEASE_LOG.md; that release
+  # itself exempt — reflexive-pipeline-loop discipline.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 35: Mode-invocation drift (multi-mode SKILL.md mode-enum recognizability) (#26)"
+    local c35_findings=0
+    local c35_scanned=0
+    local c35_output=""
+    local c35_skill_md c35_body_enum c35_desc_line c35_desc_after c35_desc_dots c35_desc_arity
+    for c35_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
+      [[ -f "$c35_skill_md" ]] || continue
+      # (1) body-heading enum — distinct, delimiter-anchored mode letters.
+      c35_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35_skill_md" 2>/dev/null \
+                      | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35_body_enum=0
+      # (2) description-list arity — `Modes:` matched ANYWHERE on the line (folded
+      #     YAML puts it mid-line); `·` counted on the substring after `Modes:`.
+      c35_desc_line=$(/usr/bin/grep -E 'Modes:' "$c35_skill_md" 2>/dev/null | /usr/bin/head -1) || c35_desc_line=""
+      c35_desc_arity=0
+      if [[ -n "$c35_desc_line" ]]; then
+        c35_desc_after=$(printf '%s' "$c35_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
+        c35_desc_dots=$(printf '%s' "$c35_desc_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+        c35_desc_arity=$(( c35_desc_dots + 1 ))
+      fi
+      # In scope iff the skill advertises modes: a `Modes:` token is present OR it
+      # carries ≥2 delimited body headings.
+      if [[ -n "$c35_desc_line" || "$c35_body_enum" -ge 2 ]]; then
+        c35_scanned=$((c35_scanned + 1))
+        # Recognizable iff a clean body-heading enum (≥2) OR a parseable desc list (≥2).
+        if [[ "$c35_body_enum" -ge 2 || "$c35_desc_arity" -ge 2 ]]; then
+          : # PASS — mode-enum machine-recognizable by at least one convention
+        else
+          c35_output+="${c35_skill_md}: advertises modes but exposes no machine-recognizable mode-enum (neither ≥2 delimited \`### Mode X\` headings nor a parseable (≥2 \`·\`-separated) \`Modes:\` list)"$'\n'
+          c35_findings=$((c35_findings + 1))
+        fi
+      fi
+    done
+    if [[ "$c35_scanned" -eq 0 ]]; then
+      # Audit-baseline guard: the multi-mode population could be transiently empty
+      # if a refactor moves skills. Baseline = ≥9 multi-mode skills (7 body-heading
+      # + 2 desc-only) at the introducing release; an empty scan is itself suspect.
+      flag_warn_or_issue "mode-invocation-drift" \
+        "no multi-mode SKILL.md files found — expected ≥9 per the mode-enum audit (7 body-heading + 2 desc-only)"
+    elif [[ "$c35_findings" -eq 0 ]]; then
+      log "  OK:    all $c35_scanned multi-mode skill(s) expose a machine-recognizable mode-enum"
+    else
+      flag_warn_or_issue "mode-invocation-drift" \
+        "$c35_findings of $c35_scanned multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
+      printf '%s' "$c35_output" | /usr/bin/sed 's/^/         /'
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
@@ -3875,7 +4122,12 @@ cmd_report() {
           local installed_refs
           installed_refs=$(find "$INSTALL_PATH/$skill/references" -type f 2>/dev/null | wc -l | tr -d ' ')
           if [[ $installed_refs -eq 0 ]]; then
-            echo "[FAIL] $skill references/ — not deployed"
+            # AC-3 cause-classification (Stage-13 evidence parity with Check 1/12):
+            # annotate the FAIL when the target exists but is read-only — the
+            # Cowork session-churn orphan class. Diagnostic-only; no FAIL/exit change.
+            local _ro_annot=""
+            [[ -e "$INSTALL_PATH/$skill/references" && ! -w "$INSTALL_PATH/$skill/references" ]] && _ro_annot=" (read-only — chmod -R u+w then redeploy)"
+            echo "[FAIL] $skill references/ — not deployed$_ro_annot"
             FAIL=$((FAIL + 1))
           else
             echo "[PASS] $skill references/ ($installed_refs files)"
@@ -4075,6 +4327,98 @@ cmd_report() {
   fi
   if [[ "$c15r_warn" -gt 0 ]]; then
     printf '%s' "$c15r_partition" | jq -r '.warn[] | "  #\(.number) \(.age_days)d warn — \(.title)"'
+  fi
+  echo ""
+
+  # --- Framework-corpus version-anchor drift (Check 18) ---
+  # Catalog-registry-driven; mirrors cmd_check's Check 18 assertion
+  # (18a catalog completeness / 18b catalog↔doc anchor consistency / 18c
+  # cadence aging) into report PASS/FAIL form. As with Checks 16/17, the report
+  # uses unvarnished enforce-mode semantics regardless of cmd_check warn-mode —
+  # the "what would happen in enforce-mode" view, suitable for Stage 13
+  # evidence. Guard failures (primitive/python/catalog missing, or
+  # path-resolution exit 3) report FAIL because the assertion could not be
+  # evaluated; exit 0 reports PASS; finding rows report FAIL.
+  echo "--- Framework-corpus version-anchor drift (Check 18) ---"
+  local c18r_script="core/deploy/tools/check-version-anchors.py"
+  local c18r_catalog="core/specs/framework-catalog.md"
+  if [[ ! -f "$c18r_script" ]]; then
+    echo "[FAIL] framework-anchor-drift — primitive script missing: $c18r_script"
+    FAIL=$((FAIL + 1))
+  elif [[ ! -x "/usr/bin/python3" ]]; then
+    echo "[FAIL] framework-anchor-drift — /usr/bin/python3 not executable; cannot run primitive"
+    FAIL=$((FAIL + 1))
+  elif [[ ! -f "$c18r_catalog" ]]; then
+    echo "[FAIL] framework-anchor-drift — catalog registry missing: $c18r_catalog"
+    FAIL=$((FAIL + 1))
+  else
+    local c18r_output c18r_exit=0
+    c18r_output=$(/usr/bin/python3 "$c18r_script" \
+      --catalog-path "$c18r_catalog" \
+      --output-format tsv 2>&1) || c18r_exit=$?
+    if [[ $c18r_exit -eq 3 ]]; then
+      echo "[FAIL] framework-anchor-drift — path-resolution failure (exit 3): $(echo "$c18r_output" | head -1)"
+      FAIL=$((FAIL + 1))
+    elif [[ $c18r_exit -eq 0 ]]; then
+      echo "[PASS] framework-anchor-drift — catalog complete, anchors consistent, no overdue reviews"
+      PASS=$((PASS + 1))
+    else
+      local c18r_findings
+      c18r_findings=$(echo "$c18r_output" | tail -n +2 | wc -l | tr -d ' ')
+      echo "[FAIL] framework-anchor-drift — ${c18r_findings} finding(s) — see core/standards/framework-corpus-discipline.md"
+      FAIL=$((FAIL + 1))
+      echo "$c18r_output" | head -10 | sed 's/^/  /' || true
+      if [[ $c18r_findings -gt 10 ]]; then
+        echo "  ... ($((c18r_findings - 10)) more; rerun primitive directly for full output)"
+      fi
+    fi
+  fi
+  echo ""
+
+  # --- Mode-invocation drift (Check 35) ---
+  # Mirrors cmd_check's Check 35 (multi-mode SKILL.md mode-enum recognizability,
+  # #26) into report PASS/FAIL form. As with Check 18, the report uses unvarnished
+  # enforce-mode semantics regardless of cmd_check warn-mode — the "what would
+  # happen in enforce-mode" view, suitable for Stage 13 evidence. Dual-convention
+  # recognizer: delimiter-anchored distinct body-heading enum, with a non-line-
+  # start-anchored `Modes:` description-list fallback (the desc-only skills carry
+  # `Modes:` inline mid-line in folded YAML; `·` counted after `Modes:`). An empty
+  # population reports FAIL (audit-baseline guard — the scan could not be
+  # evaluated); recognizable-everywhere reports PASS; finding rows report FAIL.
+  echo "--- Mode-invocation drift (Check 35) ---"
+  local c35r_findings=0 c35r_scanned=0 c35r_output=""
+  local c35r_skill_md c35r_body_enum c35r_desc_line c35r_desc_after c35r_desc_dots c35r_desc_arity
+  for c35r_skill_md in operations/skills/*/SKILL.md release/skills/*/SKILL.md core/skills/*/SKILL.md; do
+    [[ -f "$c35r_skill_md" ]] || continue
+    c35r_body_enum=$(/usr/bin/grep -oE '^### Mode [A-Z][[:space:]]*[:—-]' "$c35r_skill_md" 2>/dev/null \
+                     | /usr/bin/grep -oE 'Mode [A-Z]' | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ') || c35r_body_enum=0
+    c35r_desc_line=$(/usr/bin/grep -E 'Modes:' "$c35r_skill_md" 2>/dev/null | /usr/bin/head -1) || c35r_desc_line=""
+    c35r_desc_arity=0
+    if [[ -n "$c35r_desc_line" ]]; then
+      c35r_desc_after=$(printf '%s' "$c35r_desc_line" | /usr/bin/sed -E 's/.*Modes:(.*)/\1/')
+      c35r_desc_dots=$(printf '%s' "$c35r_desc_after" | /usr/bin/grep -oE '·' | /usr/bin/wc -l | /usr/bin/tr -d ' ')
+      c35r_desc_arity=$(( c35r_desc_dots + 1 ))
+    fi
+    if [[ -n "$c35r_desc_line" || "$c35r_body_enum" -ge 2 ]]; then
+      c35r_scanned=$((c35r_scanned + 1))
+      if [[ "$c35r_body_enum" -ge 2 || "$c35r_desc_arity" -ge 2 ]]; then
+        :
+      else
+        c35r_output+="${c35r_skill_md}: advertises modes but exposes no machine-recognizable mode-enum"$'\n'
+        c35r_findings=$((c35r_findings + 1))
+      fi
+    fi
+  done
+  if [[ "$c35r_scanned" -eq 0 ]]; then
+    echo "[FAIL] mode-invocation-drift — no multi-mode SKILL.md files found — expected ≥9 (audit-baseline guard)"
+    FAIL=$((FAIL + 1))
+  elif [[ "$c35r_findings" -eq 0 ]]; then
+    echo "[PASS] mode-invocation-drift — all $c35r_scanned multi-mode skill(s) expose a machine-recognizable mode-enum"
+    PASS=$((PASS + 1))
+  else
+    echo "[FAIL] mode-invocation-drift — ${c35r_findings} of ${c35r_scanned} multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
+    FAIL=$((FAIL + 1))
+    printf '%s' "$c35r_output" | /usr/bin/sed 's/^/  /' || true
   fi
   echo ""
 

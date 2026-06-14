@@ -572,7 +572,13 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   in the spec. Full schema at
   [`pmo-platform/reference/pipeline/stage-05-solutioning.md § 5.6`](../../release/references/pipeline/stage-05-solutioning.md).
   Forcing function: `design-review-checklist.md § Section 3.5` self-check at
-  Phase A4 → A5 transition rejects incomplete sweep block. **Cutover:** Applies
+  Phase A4 → A5 transition rejects incomplete sweep block.
+  **Automated detection (L5):** `pmo-qa-auditor` gate **G8** (Cascade-Completeness
+  Verification) is the post-Engineering, QA-time detection surface — it re-runs each
+  declared sweep against the changed-file set and FAILs on any un-enumerated OLD-value
+  occurrence (`file:line` cited), catching this failure mode automatically before DT
+  (see [`cascade-completeness-detection.md`](../skills/pmo-qa-auditor/references/cascade-completeness-detection.md)).
+  **Cutover:** Applies
   to all releases going forward — to any Stage 5 spec touching a count,
   enumeration, or threshold.
 - **Principal response vs. junior response:** Principal authors the
