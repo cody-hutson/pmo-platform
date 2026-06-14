@@ -8,6 +8,25 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.23] - 2026-06-14
+
+The change-management skill becomes a pluggable toolkit of five change methodologies — ADKAR, Kotter's 8-Step, Lewin's 3-Stage, the Bridges Transition Model, and McKinsey 7-S — with a selection step that picks the right one (or combination) for a given change. ADKAR's scale, previously defined twice, is consolidated to one source of truth. An intake-governance standard (tiering, WSJF, SLAs, demand taxonomy) ships for the intake desk, and a cross-pipeline sub-task methodology reference documents how sub-tasks are used across the pipeline.
+
+### Added
+
+- Four codified change methodologies for change-management — Kotter 8-Step, Lewin 3-Stage, Bridges Transition Model, McKinsey 7-S — each registered in the framework catalog.
+- A methodology-selection mechanism (a `methodology-selection.md` selector + a SKILL.md Step 2.5) that picks the applicable methodology or combination per change context, or honors an explicit user choice.
+- An intake-governance reference standard for intake-desk: business-case tiering, a WSJF prioritization formula, intake SLAs, a six-type demand taxonomy, and anti-pattern detection.
+- A cross-pipeline sub-task methodology best-practices reference standard.
+
+### Changed
+
+- ADKAR's 1-5 scale and barrier-point rule consolidated into `adkar-framework.md` as the single source of truth; `impact-assessment.md` and `readiness-checklist.md` now reference it.
+- `change-management` and `intake-desk` skill versions bumped to v1.23.
+- `framework-catalog.md` gains the four methodology rows plus ADKAR and Cost-of-Delay `canonical_doc` pointers.
+
+[Full notes](release/releases/notes/v1.23_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.23)
+
 ## [v1.22] - 2026-06-14
 
 The deploy and governance toolchain is repaired across eleven defects on its most-edited file plus one folded-in same-class fix. Checks that used to crash on a counting step, swallow a read-only install error then fail opaquely later, clip a configured path at a `#`, or crash on a non-English character now run cleanly and report what they find, and a new check flags when a multi-mode skill's modes drift out of recognizability.
