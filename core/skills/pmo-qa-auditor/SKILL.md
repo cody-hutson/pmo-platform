@@ -1,8 +1,8 @@
 ---
 name: pmo-qa-auditor
 description: >
-  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
-version: v1.10
+  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
+version: v1.15
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -58,7 +58,9 @@ outputs must also pass review-discipline compliance.
 
 ## Mode Selection
 
-This skill has 4 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "cross-output review", "push-to-resolve audit") are unambiguous; ambiguity arises for generic phrases like "review this" or "QA this" which most commonly mean Mode A Single Output Review but can also map to any of the other three depending on input.
+This skill has 5 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "cross-output review", "push-to-resolve audit", "platform health audit") are unambiguous; ambiguity arises for generic phrases like "review this" or "QA this" which most commonly mean Mode A Single Output Review but can also map to any of the other modes depending on input.
+
+> **Producer-vs-consumer asymmetry.** Modes A–D are **consumer/reviewer** modes (a skill output goes in; a gate verdict comes out, in-chat). **Mode E — Platform Health Audit is the lone producer mode** (the registry + framework methodology go in; a dated on-disk audit folder comes out). Mode E is the only mode that writes a durable artifact and the only mode bound by audit-class observational output discipline rather than gate-verdict discipline — a future maintainer should not be surprised by this asymmetry.
 
 **Tier classification:** Ask-when-ambiguous (per [OPERATIONS.md § Mode Selection Protocol](../../governance/OPERATIONS.md)). Trigger-heuristic first; AUQ as fallback.
 
@@ -78,6 +80,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "cross-skill coherence", "review these outputs together", "coherence across outputs", multiple-output comparison requested | Mode B — Cross-Skill Coherence Review |
 | "push-to-resolve audit", "are we actually resolving", "did we close the loop", resolution-velocity question | Mode C — Push-to-Resolve Audit |
 | "document management compliance", "dual-output check", "governance compliance audit", document-lifecycle question | Mode D — Document Management Compliance |
+| "platform health audit", "base-vs-build audit", "anthropic overlap audit", "drift check the registry", "audit the platform health" | Mode E — Platform Health Audit |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -93,6 +96,8 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Audit whether identified issues actually got resolved, not just logged."
   - option: "Document Management Compliance"
     description: "Audit dual-output compliance and document lifecycle adherence across skill outputs."
+  - option: "Platform Health Audit"
+    description: "Observational base-vs-build drift audit — re-enumerates the Anthropic catalog + PMO roster against the registry, emits a dated audit folder."
 
 Await the user's selection; use it as the mode.
 
@@ -231,6 +236,51 @@ or any request to verify the dual-output rule and artifact update cycle.
 
 See `references/dual-output-compliance.md` for the full checklist.
 
+### Mode E: Platform Health Audit
+
+**Trigger**: "Platform health audit", "base-vs-build audit", "anthropic overlap audit",
+"drift check the registry", "audit the platform health", or the quarterly / drift-watch
+scheduled-task invocation.
+
+**Input**: The two corpus files (NOT a pasted skill output) —
+`core/specs/anthropic-base-vs-build-registry.md` (the instance) and
+`release/references/protocols/platform-health-audit-framework.md` (the methodology). This is
+the only mode whose input is the corpus rather than a skill output under review.
+
+**Mutation posture — OBSERVE-only.** Mode E **observes** drift and emits observation-format
+issue-drafts; it **never mutates the registry**. The registry §3.3 row write is a separate
+human-gated change. Authority: framework **§3.3(a)** assigns the registry row-add to the skill
+author's creation PR, structurally distinct from an audit mode.
+
+**Process**:
+1. **Load inputs.** Read the registry instance + the framework methodology. Extract the
+   recorded `audit_baseline_sha` + `audit_baseline_date` from the registry header.
+2. **Re-enumerate the Anthropic catalog** per framework §3.1 Hybrid baseline — Source A
+   (`find ~/.claude/plugins/cache/claude-plugins-official -maxdepth 4 -name "skills" -type d`)
+   ∪ Source B (`anthropic-skills:*` namespace from the system-prompt available-skills list),
+   deduped on skill name.
+3. **Re-enumerate the PMO source roster** (`ls -1d {core,operations,release}/skills/*/`) and diff
+   it against the registry's row set (the §3.5 **T5** check); diff the re-enumerated Anthropic
+   catalog against the recorded baseline (the §3.5 **T1–T4** checks).
+4. **Classify drift** per the §3.5 trigger table (T1–T5) → each drift item maps to a §3.3
+   (a/b/c) update path. Apply the registry-header **Overlap Detection Rubric** to score any
+   new/changed overlap relationship; apply the registry-header **Scorecard Weighting** to
+   produce the SUMMARY health posture.
+5. **Emit the audit folder** at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/`
+   (operator-instance, git-ignored; `${AUDIT_DATE_UTC}` = `date -u +%Y-%m-%d` at run time) —
+   `SUMMARY.md` (with the Scorecard Weighting header), `findings-register.md`,
+   `base-build-deltas.md`, and ≥3 `issue-drafts/NNN-*.md` in **observation format**
+   (`observation.yml` 3-field schema — drift findings are observations until the operator
+   triages them).
+6. **Observational-discipline self-check.** Before emitting, scan all output for prescriptive
+   verbs (`recommend`, `migrate`, `consolidate`, `should`) per the framework Observational
+   discipline + [review-discipline-principles.md](../../disciplines/review-discipline-principles.md)
+   audit-class output discipline; rewrite any to observational form.
+
+See [`platform-health-audit-framework.md`](../../../release/references/protocols/platform-health-audit-framework.md)
+§4 for the mode-integration spec and [OPERATIONS.md § Platform Health Audit Protocol](../../governance/OPERATIONS.md)
+for the operational cadence.
+
 ## Output format
 
 Every QA auditor response follows this structure:
@@ -352,6 +402,26 @@ Replace the gate table (Section 2) with:
 | D7 | Change summary: what changed | PASS/FAIL | |
 | D8 | Change summary: why ([SOURCE] reference) | PASS/FAIL | |
 | D9 | Change summary: stakeholder doc identified | PASS/FAIL | |
+
+### Mode E: Platform Health Audit Output
+
+Mode E does NOT emit a gate table or PASS/FAIL verdict (it is observational, not gate-class).
+It produces a **dated audit folder** plus an **in-chat SUMMARY echo**.
+
+**Audit folder** at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/`
+(operator-instance, git-ignored):
+
+| File | Contents |
+|------|----------|
+| `SUMMARY.md` | Top-level report; header carries the Scorecard Weighting (cited from the registry header, not duplicated); records baseline SHA + audit date; observational posture only. |
+| `findings-register.md` | One row per drift item: T1–T5 classification, §3.3 (a/b/c) update-path, Overlap Detection Rubric score. |
+| `base-build-deltas.md` | The Anthropic-catalog-vs-baseline + roster-vs-registry raw enumeration deltas. |
+| `issue-drafts/NNN-kebab-name.md` | ≥3 drafts in observation format (`observation.yml` 3-field schema). |
+
+**In-chat SUMMARY echo:** baseline SHA + audit date, the drift-item count by trigger type
+(T1–T5), the health posture per the Scorecard Weighting, and a pointer to the audit folder.
+No prescriptive verbs — every line describes an observed state, not an action. Decision-class
+items (the observation issue-drafts) carry reversibility tiers; there is no gate verdict to tier.
 
 ## Reversibility Discipline
 
@@ -619,3 +689,5 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `../../reference/reversibility-protocol.md` | Mode A G4 | 4-tier reversibility vocabulary and decision-class algorithm |
 | `../../reference/failure-mode-standard.md` | Mode A G7 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline |
 | `../../reference/review-discipline-principles.md` | When auditing review-class skill outputs | Shared 10 anti-laziness rules and 6-deliverable output structure |
+| `../../../release/references/protocols/platform-health-audit-framework.md` | Mode E | Audit methodology + cadence policy; §4 is the Mode E integration spec |
+| `../../specs/anthropic-base-vs-build-registry.md` | Mode E | The base-vs-build registry instance Mode E audits; header carries the Overlap Detection Rubric + Scorecard Weighting |

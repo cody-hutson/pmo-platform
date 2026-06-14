@@ -536,6 +536,72 @@ optional_fields:
 
 ---
 
+## Platform Health Audit Protocol
+
+The platform catalogs every PMO source-roster skill against the Anthropic skill catalog in the
+[`anthropic-base-vs-build-registry.md`](../specs/anthropic-base-vs-build-registry.md) instance.
+This section owns the **operational cadence** (trigger, responsible party, escalation, audit-trail)
+for re-auditing that instance; the **methodology** is owned by
+[`platform-health-audit-framework.md`](../../release/references/protocols/platform-health-audit-framework.md)
+(cite-not-duplicate per `duplicate-source-discipline.md`). The executor is **pmo-qa-auditor Mode E —
+Platform Health Audit** (see [`../skills/pmo-qa-auditor/SKILL.md`](../skills/pmo-qa-auditor/SKILL.md)
+§Modes), an **OBSERVE-only** producer mode.
+
+### Rule 1 — Trigger (event-bound + quarterly fallback)
+
+Platform Health Audit fires on a quarterly cadence plus reactive drift signals. There is **no
+"audit the platform every week" full-audit calendar** — the full audit is quarterly; a lightweight
+weekly sentinel watches for drift only.
+
+| Trigger | Detection mechanism |
+|---|---|
+| T-quarterly | The `platform-health-quarterly-audit` scheduled task (cron `0 9 1 1,4,7,10 *` — 09:00 on the 1st of Jan/Apr/Jul/Oct, LOCAL timezone) spawns a session that invokes Mode E. |
+| T-drift-watch | The `platform-health-drift-watch` scheduled task (weekly) runs ONLY the framework §3.5 T1–T5 drift detection; any drift self-routes to a single observation issue-draft. |
+| T-reactive | A §3.5 drift signal observed out-of-band (a new plugin pack, a new `anthropic-skills:*` skill, a new PMO skill) per the framework §3.5 trigger taxonomy. |
+| T-operator | Operator invokes pmo-qa-auditor Mode E directly. Always available. |
+
+Quarterly is chosen over a tighter full-audit cadence because the Anthropic-catalog surface changes
+slowly (the registry baseline held 41 days to the first observed T5 drift). Scheduled tasks run only
+while the app is open (deferred-to-launch otherwise — see Rule 4). Schedule is evaluated in LOCAL
+timezone; the audit-folder date stamp uses UTC (`date -u`) — intentional, do not unify.
+
+### Rule 2 — What a triggered audit checks
+
+When the audit fires, the pmo-qa-auditor Mode E execution:
+
+1. **Loads** the registry instance + the framework methodology; extracts the recorded `audit_baseline_sha` + `audit_baseline_date` from the registry header.
+2. **Re-enumerates** the Anthropic catalog per framework §3.1 Hybrid baseline (Source A plugin-cache ∪ Source B `anthropic-skills:*` namespace, deduped).
+3. **Re-enumerates** the PMO source roster (`ls -1d {core,operations,release}/skills/*/`) and diffs it against the registry's row set (the §3.5 **T5** check); diffs the re-enumerated Anthropic catalog against the recorded baseline (the §3.5 **T1–T4** checks).
+4. **Classifies drift** per the §3.5 trigger table → each item maps to a §3.3 (a/b/c) update path; applies the registry-header Overlap Detection Rubric and Scorecard Weighting.
+5. **Emits** the audit folder (`<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/` — operator-instance, git-ignored): SUMMARY.md, findings-register.md, base-build-deltas.md, and ≥3 `issue-drafts/NNN-*.md` in observation format.
+6. **Observational self-check** — scans output for prescriptive verbs (`recommend`, `migrate`, `consolidate`, `should`) per the audit-class output discipline; rewrites any to observational form.
+
+### Rule 3 — Drift disposition (observe → observation-issue)
+
+Mode E **observes** drift and emits `issue-drafts/` in observation format (`observation.yml` 3-field
+schema). The operator triages each on GitHub (PROMOTE to a Proposal / DEFER / CLOSE) — the same
+draft→operator-verdict split as the Pattern Review Cadence Protocol. The registry §3.3 row write is a
+**separate human-gated change** ("No ungoverned changes"); Mode E never mutates the registry. Authority:
+framework **§3.3(a)** assigns the registry row-add to the skill author's creation PR, structurally
+distinct from an audit mode.
+
+### Rule 4 — Escalation when overdue
+
+If the quarterly job has not run for **2 consecutive quarters** (app-closed accumulation — scheduled
+tasks only run while the app is open), the operator runs Mode E manually. Mirrors the Framework Review
+Check-18c aging-signal posture: a persistently un-run audit is itself a reviewable signal that the
+catalog is not being maintained.
+
+### Rule 5 — Responsible party + audit-trail
+
+The workspace owner ([OPERATOR_NAME]) is accountable for triaging Mode E findings at the PROMOTE /
+DEFER / CLOSE point per Rule 3. Each audit folder is the durable audit-trail; the audit-folder date
+is the cadence anchor. The two scheduled-task registrations are non-git MCP state (install-root); their
+registration is recorded as a Stage 12 deploy-log line item, and rollback is deregistration (`enabled:false`
+or task delete), NOT `git revert`.
+
+---
+
 ## Corpus Research & Adoption Protocol
 
 Before any methodological practice enters the K1 corpus, the proposing agent or operator MUST research its evidence base and emit a curation Intake record. This protocol is the **operational producer** of [`corpus-curation.md`](../disciplines/corpus-curation.md) curation-protocol Step 1 (Intake) — the doc owns the *rubric* (evidence tiers, source taxonomy, evidence labels); this section owns the *procedure*, exactly as the Methodology Awareness Protocol operationalises `methodology-parameterization-v1.md`. The corpus is the K1 Codified set per [`knowledge-architecture.md#k1-codified`](../disciplines/knowledge-architecture.md#k1-codified); contextual K2–K5 knowledge is never curated here.

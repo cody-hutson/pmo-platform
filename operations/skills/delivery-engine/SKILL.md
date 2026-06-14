@@ -129,7 +129,12 @@ any [DELIVERY] tag referencing backlog health.
    - Priority misalignment → recommended re-prioritization with justification
    - Sprint cycling → escalation recommendation with impact statement
 4. Produce a RAID entry for any systemic issue (e.g., "42% of tickets lack AC" is a
-   process risk, not just a data quality finding)
+   process risk, not just a data quality finding). Before originating the RAID entry,
+   **invoke the RCA method** (`core/disciplines/root-cause-analysis.md`) to root-cause the
+   systemic finding — walk symptom → proximal cause → systemic pattern and classify it
+   (one of the 5 categories in `review-discipline-principles.md` §3) so the entry carries
+   a cause, not a symptom. A RAID risk logged without its root cause produces a
+   remediation that treats the symptom and lets the pattern recur.
 
 **Output**: Read `references/output-format.md` for the full structure. Key sections:
 mode identification, health scorecard, findings with remediations, RAID entries,
@@ -207,7 +212,11 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
 1. Assess sprint progress: items completed vs. planned, burndown trajectory,
    blocked items, items at risk of not completing
 2. Identify emerging risks: scope creep (new items added mid-sprint), velocity
-   degradation, blocker accumulation
+   degradation, blocker accumulation. For a slip or regression that has already
+   surfaced, **invoke the RCA method** (`core/disciplines/root-cause-analysis.md`) to
+   root-cause it before drafting the escalation or adjustment — a slip named without
+   its cause recurs next sprint. Apply the falsification test (step 4): if the named
+   cause were removed, would the slip still recur? If yes, the chain is incomplete.
 3. Produce a mid-sprint health check:
    - **On track**: items progressing as planned
    - **At risk**: items that may not complete — with specific reason and remediation.
@@ -639,3 +648,4 @@ Read these on first use, then as needed per mode:
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
 | `references/dependency-rules.md` | Any mode with cross-item dependencies | Dependency types, escalation triggers, tracking format |
+| `core/disciplines/root-cause-analysis.md` | Mode A (systemic finding), Mode C (DoR with no cause), Mode E (slip/regression), Mode G (systemic RAID entry) | The invokable RCA method — the 6-step procedure for root-causing a defect/failure before originating a RAID entry or remediation; cites the root-cause FORMAT in `review-discipline-principles.md` §2/§3 |
