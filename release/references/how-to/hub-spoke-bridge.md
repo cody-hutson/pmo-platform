@@ -412,9 +412,12 @@ Cutover discipline for D-ReleaseClass: applies to all releases going forward.
 7. Present the full scaffolding to the operator for review — include the list of skipped sub-tasks with rationale in the scaffolding summary
 
 **Sub-Task Template:**
+
+Hub: before creating each sub-task, resolve `{PARENT_STATUS_LABEL}` = the parent issue's current `status:` label via `gh issue view {ISSUE_NUMBER} --json labels` at scaffold time, and stamp it on the `Label:` line below alongside `sub-task` (mirror the parent's lifecycle position at creation — a point-in-time snapshot, not auto-resynced on later parent transitions; per [label-taxonomy.md](../../../core/specs/label-taxonomy.md) Rule 6).
+
 ```
 Title: Stage {N} {Name} — #{ISSUE_NUMBER} ({MILESTONE})
-Label: sub-task
+Label: sub-task, {PARENT_STATUS_LABEL}
 Body:
 
 ## Stage {N} {Stage Name}
