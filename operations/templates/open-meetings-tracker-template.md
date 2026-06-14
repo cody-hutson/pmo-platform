@@ -12,12 +12,18 @@
 
 ---
 
-## ACTIVE
+## Upcoming Meetings
 
-*No active meetings.*
+*No upcoming meetings.*
 
 ---
 
-## COMPLETED (Summary)
+## Recently Completed
 
-*No completed meetings.*
+*No recently completed meetings.*
+
+---
+
+## Recurring Cadences
+
+*No recurring cadences defined.*
