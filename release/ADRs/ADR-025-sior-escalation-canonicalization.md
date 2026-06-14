@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 ---
 title: "ADR-025 — SIOR escalation canonicalization: single-source protocol doc + link-reference consumption"
 status: Accepted
