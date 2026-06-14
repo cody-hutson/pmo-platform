@@ -8,6 +8,7 @@ audit_baseline_date: 2026-05-03
 baseline_policy_reference: audit-baseline-when-target-population-is-empty discipline
 adr: governing ADR (in the release plan)
 ---
+<!-- reference-durability: allow-link -->
 
 # Platform Health Audit Framework
 

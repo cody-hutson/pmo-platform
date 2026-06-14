@@ -141,7 +141,7 @@ enumerated. A skill that satisfies the floor and stops is **not** thereby
 well-specified — see the audit evidence below.
 
 **Target range (audit-data-driven).** Per the v11.01c failure-mode coverage
-audit (parent issue #902, audit dated 2026-05-02; audit folder:
+audit (audit dated 2026-05-02; audit folder:
 `failure-mode-coverage-audit-2026-05-02`, operator-instance analysis path),
 the **typical complex skill should document 6–10 (target band `6-10`)
 domain-specific failure modes** when its operational surface justifies the

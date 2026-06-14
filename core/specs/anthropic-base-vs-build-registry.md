@@ -73,7 +73,7 @@ Each row carries 8 columns:
 
 ## §Overlap Detection Rubric
 
-> **Operator-ratified (#358).** The STRUCTURE (D1–D5 dimensions) below is authored at this release;
+> **Operator-ratified.** The STRUCTURE (D1–D5 dimensions) below is authored at this release;
 > the **scoring-input enum wording**, the **derived-vs-descriptive posture question**, and **whether
 > the rubric is advisory or a §3.3(a) registry-row-required field** were operator-owned and are now
 > ratified (see the ratified-fields notes after the table).
@@ -93,10 +93,10 @@ re-confirm the three-condition wording at the ADR-022 flip.**
 | D4 — Blast radius (ADR-022 cond. 2) | Would a silent upstream change hit a stakeholder-facing / governance-binding surface? | `low` / `high` |
 | D5 — Guard posture (ADR-022 cond. 3) | Is any runtime coupling drift-canary-guarded? | `guarded` / `unguarded` / `n-a` |
 
-**Ratified fields (operator decision, #358):**
+**Ratified fields (operator decision):**
 - **(a) Derived-vs-descriptive** — **descriptive.** D3+D4+D5 stay purely descriptive; they do NOT produce a *derived* ADR-022 posture-conformance flag. A derived conformance flag would be evaluative, which would breach the §Observational discipline — the descriptive reading preserves it.
 - **(b) Scoring-input enum wording** — **ratified as drafted.** The D1–D5 value labels above are final: D1 `none` / `partial` / `full`; D2 maps to the §Schema enum; D3 `stable` / `drifting`; D4 `low` / `high`; D5 `guarded` / `unguarded` / `n-a`.
-- **(c) Advisory-vs-required** — **advisory.** The rubric is observational, not a gate; it is NOT a §3.3(a) registry-row-required field at skill creation. Making a registry-row field required at skill creation would be a §3.3 change out of #358 scope.
+- **(c) Advisory-vs-required** — **advisory.** The rubric is observational, not a gate; it is NOT a §3.3(a) registry-row-required field at skill creation. Making a registry-row field required at skill creation would be a §3.3 change out of this release's scope.
 
 ---
 
