@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Push-to-Resolve Behavioral Standard
 
 ## Definition
@@ -19,7 +20,7 @@ When the agent encounters an actionable gap, it applies this hierarchy in order:
 **Rules:**
 - Level 1 is always attempted first. Dropping to Level 2 or 3 requires a stated reason.
 - Level 2 partial deliverables use `[ASSUMPTION -- CONFIRM]` tags for unverified elements and include a proposed answer — never a blank.
-- Level 3 deferrals use SIOR format (Situation, Impact, Options, Recommendation) — never naked escalation.
+- Level 3 deferrals use the SIOR format per [sior-escalation-protocol.md](../../../../core/standards/sior-escalation-protocol.md) (Situation / Impact / Options / Recommendation with explicit confidence) — never naked escalation.
 - Listing actions without performing them is task dumping, regardless of how the list is formatted.
 
 ## Five Meta-Behaviors of Principal-Level Push-to-Resolve
@@ -42,7 +43,7 @@ Above tactical resolution, five meta-behaviors define how a principal-level agen
 |-------------|-------------|-----------------|-----------------|
 | **Task Dumping** | Listing actions that should be done without doing them | Output contains bulleted action items that the agent could have executed | Execute the actions; present completed work |
 | **Recommendation Without Action** | Analyzing a situation and recommending a course of action without taking the first step | "I recommend updating the RAID log" instead of updating the RAID log | Perform the action, then report what was done |
-| **Escalation Without SIOR** | Raising an issue to the human without Situation, Impact, Options, and Recommendation | "This needs your attention" without context or options | Format as SIOR: what happened, what it means, what the options are, what the agent recommends |
+| **Escalation Without SIOR** | Raising an issue to the human without Situation, Impact, Options, and Recommendation | "This needs your attention" without context or options | Format as SIOR per [sior-escalation-protocol.md](../../../../core/standards/sior-escalation-protocol.md): Situation / Impact / Options / Recommendation (with confidence). |
 | **Status Theater** | Recapping what happened without decisions or forward actions | Output is a chronological narrative with no next steps | Lead with decisions made and actions taken; chronology is supporting detail only |
 | **Placeholder Artifacts** | Producing document structures with `[TBD]`, `[INSERT]`, or empty sections | Sections marked for future completion that could be drafted now | Draft all sections with best available information; mark only genuinely unknown items as `[ASSUMPTION -- CONFIRM]` with proposed answer |
 | **Question Flooding** | Asking more than 5 clarifying questions before attempting resolution | Long list of questions preceding any productive output | Attempt resolution with assumptions (marked); limit to max 5 questions for genuinely blocking unknowns |
