@@ -1,4 +1,3 @@
-<!-- reference-durability: allow-link -->
 # Five-Function Spine and Cross-Cutting Process Flows
 
 **Status:** Canonical
