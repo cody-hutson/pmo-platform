@@ -72,9 +72,13 @@ CANARY_SKILLS=(
 # Precedence: --workspace-root flag (entry scripts export this var) > env >
 # $HOME default. The operator.toml rung is deferred (YAGNI — no persisted
 # deploy-root consumer). With the var unset, $DEPLOY_ROOT == $HOME and every
-# target is byte-identical to the prior behavior (set -u: the :- default
-# fires for an UNSET var; an exported-but-EMPTY value is caught by the
-# rm -rf bounded-target guards in deploy_skill_user_local / the Cowork path).
+# target is byte-identical to the prior behavior. The ${VAR:-default} form
+# fires for BOTH an unset var AND an exported-but-EMPTY one (#331 F4 — the
+# prior comment claimed unset-only): so an empty override also collapses to
+# $HOME right here at assignment, never producing an empty $DEPLOY_ROOT. The
+# rm -rf bounded-target guards in deploy_skill_user_local / the Cowork path
+# are therefore belt-and-suspenders against an empty root, not the primary
+# mechanism (proven by test_deploy_sandbox.sh Test D).
 DEPLOY_ROOT="${PMO_PLATFORM_DEPLOY_ROOT:-$HOME}"
 SEARCH_ROOT="$DEPLOY_ROOT/Library/Application Support/Claude/local-agent-mode-sessions"
 INSTALL_PATH=""
