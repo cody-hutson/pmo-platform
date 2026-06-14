@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Five-Function Spine and Cross-Cutting Process Flows
 
 **Status:** Canonical
@@ -158,7 +159,7 @@ The flow that manages branches, commits, tags, and deployed artifacts across the
 | Stage 12 Execute | Merge to main; version tag; deploy via `deploy.sh` | Primary |
 | Stage 13 Close | Branch cleanup; worktree detach | Primary |
 
-**Canonical source.** [`../rules/git-workflow.md`](../rules/git-workflow.md); [`../rules/harness-deployment.md`](../rules/harness-deployment.md); `deploy.sh` at workspace root.
+**Canonical source.** [`../rules/git-workflow.md`](../rules/git-workflow.md); [`../rules/harness-deployment.md`](../rules/harness-deployment.md); `core/deploy/deploy.sh`.
 
 ### 7. Decision Management Flow
 

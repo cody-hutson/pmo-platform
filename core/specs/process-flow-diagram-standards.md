@@ -2,7 +2,7 @@
 # Process-Flow Diagram Standards
 
 **Status:** Canonical
-**Owner:** `pmo-platform/reference/specs/process-flow-diagram-standards.md`
+**Owner:** `core/specs/process-flow-diagram-standards.md`
 **Introduced:** 2026-05-15
 **Consumers:** Every skill or reference doc that authors/modifies a process-flow diagram. The retrofit track consumes the Adoption § Exemptions Registry anchor.
 **Cross-references:** see § Related References at the foot of this file.

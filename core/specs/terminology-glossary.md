@@ -55,7 +55,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Definition:** A category of work or responsibility in the delivery lifecycle, independent of methodology (e.g., Planning, Executing, Monitoring & Controlling).
 - **Real-world PMO equivalent:** PMBOK Process Group — the 5 universal PM functions (Initiating, Planning, Executing, Monitoring & Controlling, Closing) apply regardless of delivery approach (Agile, Waterfall, PRINCE2).
 - **Platform equivalent:** Cross-stage activity categories that recur across multiple pipeline stages, enumerated in the authoritative file below.
-- **Authoritative file:** `pmo-platform/reference/explanation/five-function-spine-and-process-flows.md`
+- **Authoritative file:** `core/disciplines/five-function-spine-and-process-flows.md`
 - **Consumers:** Skill personas (pmo-process-designer, ppm-agent), Stage 5 Solutioning design specs, future methodology-aware skill authoring.
 
 ### term: Role {#term-role}
@@ -87,7 +87,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Definition:** A governed sequence of stages that transforms inputs into outputs end-to-end — stable over time, independent of the delivery methodology used inside any single stage.
 - **Real-world PMO equivalent:** PMBOK "Process" = a defined activity with inputs/tools-and-techniques/outputs. At the macro level, a delivery lifecycle (initiation → closure) is a process; at the micro level, each governance step (risk review, change control) is also a process.
 - **Platform equivalent:** The 13-stage pipeline (Intake → Triage → Bundle → Planning → … → Close) is the platform's canonical delivery Process. Sub-processes: triage protocol, gate evaluation protocol.
-- **Authoritative file:** `pmo-platform/reference/pipeline/` (13-stage pipeline) + `.claude/rules/release-process.md` (concise operating model).
+- **Authoritative file:** `release/references/pipeline/` (13-stage pipeline) + `.claude/rules/release-process.md` (concise operating model).
 - **Consumers:** All release-operation documentation, all stage sub-task templates, all pipeline-aware skills.
 
 **Distinguishing mark:** Process is **WHAT sequence of stages we run**, regardless of methodology. A release moves through the same 13 stages under Scrum or Waterfall.
@@ -97,7 +97,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Definition:** A named delivery approach that parameterizes how work is decomposed, sequenced, and time-boxed within a given Process — e.g., Scrum, Kanban, Waterfall, SAFe, PRINCE2, XP, Hybrid, Custom.
 - **Real-world PMO equivalent:** PMI / PMBOK "Delivery Approach" (Predictive / Agile / Hybrid) or PRINCE2 / SAFe / Scrum framework names. Collectively: the named family of practices + ceremonies + artifacts a project commits to.
 - **Platform equivalent:** PROJECT.md `delivery_approach` enum (8 values: Scrum / Kanban / XP / Waterfall / PRINCE2 / SAFe / Hybrid / Custom) + optional `custom_methodology_definition` typed block when Custom. Defined in `methodology-parameterization-v1.md`.
-- **Authoritative file:** `release/references/specs/methodology-parameterization-v1.md` (methodology deliverable) + `pmo-platform/reference/schemas/project-schema.md` (schema deliverable, enum validation) + `pmo-platform/reference/specs/methodology-archetype-matrix.md` (variation table).
+- **Authoritative file:** `release/references/specs/methodology-parameterization-v1.md` (methodology deliverable) + `core/schemas/project-schema.md` (schema deliverable, enum validation) + `release/references/specs/methodology-archetype-matrix.md` (variation table).
 - **Consumers:** All methodology-aware skills (delivery-engine sprint modes, project-initiator, ppm-agent), OPERATIONS.md § Methodology Awareness Protocol, downstream methodology variation tables in 10 files.
 
 **Distinguishing mark:** Methodology is **WHICH named delivery approach a project chooses**. Different projects using the same Process can choose different Methodologies.
@@ -129,15 +129,15 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Definition:** A numbered top-level division of the 13-stage pipeline Process (e.g., Stage 5 Solutioning).
 - **Real-world PMO equivalent:** PMBOK Process Group / PRINCE2 Stage — a named phase of the lifecycle with entry + exit gates and defined deliverables.
 - **Platform equivalent:** Stages 1-13 in `pipeline/`; each has a GitHub Project `Stage` field value, a sub-task per issue, a persona card, and a transition gate.
-- **Authoritative file:** `pmo-platform/reference/pipeline/`.
-- **Consumers:** `hub-spoke-bridge.md`, `release-personas.md`, all sub-task templates, `reference/schemas/stage-io-contracts.md`.
+- **Authoritative file:** `release/references/pipeline/`.
+- **Consumers:** `hub-spoke-bridge.md`, `release-personas.md`, all sub-task templates, `core/schemas/stage-io-contracts.md`.
 
 ### term: Phase {#term-phase}
 
 - **Definition:** A sub-division of a single Stage's execution — typically used in multi-phase stage processes (e.g., Stage 2 Phase A Agent / Phase B Human, Stage 7 Phase A/B/C DT-QA lanes).
 - **Real-world PMO equivalent:** PMBOK "Phase" sometimes overloaded with Stage; at the sub-stage level, corresponds to Activity Groups within a Work Package.
 - **Platform equivalent:** Phase A / Phase B labels inside Stage 2, 3, 4, 5, 7 Process sections of `pipeline/`.
-- **Authoritative file:** `pmo-platform/reference/pipeline/` per-stage `## 5. Process` subsection.
+- **Authoritative file:** `release/references/pipeline/` per-stage `## 5. Process` subsection.
 - **Consumers:** Stage-internal processing documentation, skill-mode definitions that align to stage phases.
 
 ### term: Step {#term-step}
@@ -183,7 +183,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Definition:** A specific output artifact produced by a Stage that can be named, located, and verified (e.g., "release plan file," "ADR issue," "PR").
 - **Real-world PMO equivalent:** PMBOK "Deliverable" (verifiable output of a project, phase, or process).
 - **Platform equivalent:** Named in each Stage's `## 6. Outputs` section of `pipeline/`. Examples: release plan file, ADR issue with `adr` label, PR with full metadata.
-- **Authoritative file:** `pmo-platform/reference/pipeline/` per-stage Outputs section.
+- **Authoritative file:** `release/references/pipeline/` per-stage Outputs section.
 - **Consumers:** Gate criteria (checks for deliverable presence), QA checkpoints (verify deliverable content), downstream stages (consume deliverable as input).
 
 **Distinguishing the four:** Work Item is the generic wrapper; Task/Sub-task are tracking-artifact names for a stage-scoped Work Item; Deliverable is the verifiable output produced BY executing a Task.
@@ -205,14 +205,14 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Definition:** A scope-boxed grouping of Work Items that ship together as a single release; identified by a version number (e.g., `v1.2`) and tracked as a GitHub Milestone.
 - **Real-world PMO equivalent:** PMBOK "Milestone" (significant point or event) generalized to "scope boundary" — a checkpoint that gathers multiple deliverables and marks a release boundary.
 - **Platform equivalent:** GitHub Milestones labeled `vX.Y-description`; every release Issue is assigned a Milestone at Stage 3 Bundle.
-- **Authoritative file:** `.claude/rules/release-process.md` + `pmo-platform/reference/how-to/github-projects-guide.md`.
+- **Authoritative file:** `.claude/rules/release-process.md` + `core/disciplines/github-projects-guide.md`.
 - **Consumers:** Release-process stages 3/4/9/12/13, release-planner skill, RELEASE_LOG.md.
 
 ### term: Release {#term-release}
 
 - **Definition:** A deployment-boxed event that ships a set of Work Items to production — the act of merging the release branch to `main`, tagging, and deploying.
 - **Real-world PMO equivalent:** PMBOK "Deployment" event / SAFe "Release" (release of value, often PI-ending).
-- **Platform equivalent:** Git tag `vX.Y`, the merged PR, the `pmo-platform/releases/plans/vX.Y_RELEASE_PLAN.md` file, the RELEASE_LOG.md entry. 1 Milestone = 1 Release per current convention.
+- **Platform equivalent:** Git tag `vX.Y`, the merged PR, the `release/releases/plans/vX.Y_RELEASE_PLAN.md` file, the RELEASE_LOG.md entry. 1 Milestone = 1 Release per current convention.
 - **Authoritative file:** `.claude/rules/release-process.md` § Lifecycle.
 - **Consumers:** Stage 12 Execute, Stage 13 Close, `deploy.sh`, RELEASE_LOG.md.
 
@@ -262,7 +262,7 @@ Terms NOT used in the platform (with reason) and the canonical term that replace
 ## See Also
 
 - [execution-framework.md](../disciplines/execution-framework.md) — consumes glossary; names Framework as its layer
-- `pmo-platform/reference/pipeline/` — consumes Stage / Phase / Step / Deliverable
+- `release/references/pipeline/` — consumes Stage / Phase / Step / Deliverable
 - [hub-spoke-bridge.md](../../release/references/how-to/hub-spoke-bridge.md) — consumes Task / Sub-task / Role / Persona
 - [methodology-parameterization-v1.md](../../release/references/specs/methodology-parameterization-v1.md) — consumes Methodology; owns `delivery_approach` enum
 - [release-personas.md](../../release/references/specs/release-personas.md) — owns Persona content

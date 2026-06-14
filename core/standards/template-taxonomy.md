@@ -17,7 +17,7 @@ Every PMO template is classified into exactly one of three domains. The domain d
 | Domain | Description | Canon Family | Realized in PMO By |
 |---|---|---|---|
 | **Project** | Stakeholder-facing artifacts produced during project delivery. Audience: PMs / sponsors / SteerCo / external stakeholders. | PMBOK 7 Performance Domains | 12 canonical templates today (status reports, RAID, communications tracker, etc.) — see §3 |
-| **Software** | Engineering / technical-decision artifacts. Audience: developers / SREs / architects. | Per-family canon (Nygard / Google SRE / IETF / Rust / Anthropic plugin convention / etc.) | Currently absent from `pmo-platform/reference/templates/` — 8 gaps surfaced (see §4 + §6) |
+| **Software** | Engineering / technical-decision artifacts. Audience: developers / SREs / architects. | Per-family canon (Nygard / Google SRE / IETF / Rust / Anthropic plugin convention / etc.) | Currently absent from `operations/templates/` — 8 gaps surfaced (see §4 + §6) |
 | **Platform-internal** | Skill-runtime guidance + skill-internal scaffolding. Audience: the skill itself at runtime, not stakeholders. | n/a (not stakeholder-facing artifacts) | 4 skill-embedded standalone templates (raid-templates, rubric-templates, pmo-platform-template, release-plan-template) |
 
 **Domain boundary rule.** Project-domain artifacts represent project state observable to stakeholders. Software-domain artifacts represent engineering decisions or operations procedures observable to engineers. Platform-internal templates represent skill-runtime authoring guidance — they are not produced as stakeholder-visible artifacts. When a template ambiguously straddles two domains, classify by the audience of the rendered output, not by the audience that consumes the template specification.
@@ -32,38 +32,38 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Communications Tracker | Log of stakeholder communications + cadence | `pmo-platform/reference/templates/communications-tracker-template.md` | No |
-| Open Meetings Tracker | Log of stakeholder meetings + outstanding agenda items | `pmo-platform/reference/templates/open-meetings-tracker-template.md` | No |
+| Communications Tracker | Log of stakeholder communications + cadence | `operations/templates/communications-tracker-template.md` | No |
+| Open Meetings Tracker | Log of stakeholder meetings + outstanding agenda items | `operations/templates/open-meetings-tracker-template.md` | No |
 | Stakeholder Register | Identification + classification + engagement strategy per stakeholder | (none) | YES — closure path: future release |
 | RACI / RAEW / RAS | Responsibility-assignment matrix | (none) | YES — closure path: future release |
-| Glossary / Key Terms | Shared-vocabulary index | `pmo-platform/reference/templates/key-terms-glossary-template.csv` | No |
+| Glossary / Key Terms | Shared-vocabulary index | `operations/templates/key-terms-glossary-template.csv` | No |
 
 ### §3.2 Team
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Onboarding / KT doc | Team-onboarding or knowledge-transfer reference | `pmo-platform/reference/templates/PMO_Platform_Template.md` | No (operational instance — KT for the platform itself) |
+| Onboarding / KT doc | Team-onboarding or knowledge-transfer reference | `operations/templates/PMO_Platform_Template.md` | No (operational instance — KT for the platform itself) |
 
 ### §3.3 Development Approach + Lifecycle
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| SPM Bridge | Hybrid Agile↔Waterfall delivery-framing dual-output | `pmo-platform/reference/templates/spm-bridge-template.md` | No |
+| SPM Bridge | Hybrid Agile↔Waterfall delivery-framing dual-output | `operations/templates/spm-bridge-template.md` | No |
 
 ### §3.4 Planning
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Milestone Tracker | Planned milestones + status + dependencies | `pmo-platform/reference/templates/milestone-tracker-template.md` | No |
-| Sprint Tracker | Sprint backlog + velocity + burndown | `pmo-platform/reference/templates/sprint-tracker-template.md` | No |
-| Requirements (epics/features/stories) | Decomposition hierarchy aligned with PMBOK 7 §Planning | `pmo-platform/skills/pmo-process-designer/references/requirements-template.md` (skill-embedded; canonical promotion authorized in L3 Storage) | Pending promotion this release |
-| PROJECT.md scaffolding | Per-project canonical state file | `pmo-platform/skills/project-initiator/references/project-md-template.md` (skill-embedded; canonical promotion authorized in L3 Storage) | Pending promotion this release |
+| Milestone Tracker | Planned milestones + status + dependencies | `operations/templates/milestone-tracker-template.md` | No |
+| Sprint Tracker | Sprint backlog + velocity + burndown | `operations/templates/sprint-tracker-template.md` | No |
+| Requirements (epics/features/stories) | Decomposition hierarchy aligned with PMBOK 7 §Planning | `operations/templates/requirements-template.md` (promoted to canonical per L3 Storage) | No |
+| PROJECT.md scaffolding | Per-project canonical state file | `operations/templates/project-md-template.md` (promoted to canonical per L3 Storage) | No |
 
 ### §3.5 Project Work
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Transcript Register | Log of meeting/call transcripts + processing state | `pmo-platform/reference/templates/transcript-register-template.md` | No |
+| Transcript Register | Log of meeting/call transcripts + processing state | `operations/templates/transcript-register-template.md` | No |
 
 ### §3.6 Delivery
 
@@ -73,15 +73,15 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| Daily Status Log | Carry-forward log of daily status updates | `pmo-platform/reference/templates/daily-status-log-template.md` | No |
-| Daily Status Update Framework | Structural framework for daily status messages | `pmo-platform/reference/templates/daily-status-update-framework-template.md` | No |
-| Executive Status Report Prompt | Template for leadership-ready status reports | `pmo-platform/reference/templates/executive-status-report-prompt-template.md` | No |
+| Daily Status Log | Carry-forward log of daily status updates | `operations/templates/daily-status-log-template.md` | No |
+| Daily Status Update Framework | Structural framework for daily status messages | `operations/templates/daily-status-update-framework-template.md` | No |
+| Executive Status Report Prompt | Template for leadership-ready status reports | `operations/templates/executive-status-report-prompt-template.md` | No |
 
 ### §3.8 Uncertainty
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| RAID Log | Risks + Assumptions + Issues + Decisions/Dependencies | `pmo-platform/reference/templates/raid-log-template.csv` | No |
+| RAID Log | Risks + Assumptions + Issues + Decisions/Dependencies | `operations/templates/raid-log-template.csv` | No |
 
 ## §4 Software-Domain Taxonomy (engineering best-practice canons)
 
@@ -135,10 +135,10 @@ Skill-embedded templates whose audience is the skill at runtime (not project sta
 
 | File | Skill | Purpose | Why platform-internal |
 |---|---|---|---|
-| `pmo-platform/skills/delivery-engine/references/raid-templates.md` | delivery-engine | Mode G runtime guidance for RAID-entry composition | The RAID *log* is the stakeholder artifact (see §3.8); this file is *guidance for filling rows*, consumed by the skill at runtime |
-| `pmo-platform/skills/eval-writer/references/rubric-templates.md` | eval-writer | 7 rubric templates for binary-grader composition (Module 6 §4) | Consumed by eval-writer at authoring time; not produced as a stakeholder artifact |
-| `pmo-platform/skills/pmo-skill-refiner/references/pmo-platform-template.md` | pmo-skill-refiner | Injection-point template for new SKILL.md authoring | Skill-development scaffolding; not a project artifact |
-| `pmo-platform/skills/release-planner/references/release-plan-template.md` | release-planner | Mode B output spec — defines `pmo-platform/releases/plans/vX.Y_RELEASE_PLAN.md` structure | Skill-internal output spec; the rendered release plan is a platform artifact, but this file is the *spec for the spec* |
+| `operations/skills/delivery-engine/references/raid-templates.md` | delivery-engine | Mode G runtime guidance for RAID-entry composition | The RAID *log* is the stakeholder artifact (see §3.8); this file is *guidance for filling rows*, consumed by the skill at runtime |
+| `core/skills/eval-writer/references/rubric-templates.md` | eval-writer | 7 rubric templates for binary-grader composition (Module 6 §4) | Consumed by eval-writer at authoring time; not produced as a stakeholder artifact |
+| `release/skills/pmo-skill-refiner/references/pmo-platform-template.md` | pmo-skill-refiner | Injection-point template for new SKILL.md authoring | Skill-development scaffolding; not a project artifact |
+| `release/skills/release-planner/references/release-plan-template.md` | release-planner | Mode B output spec — defines `release/releases/plans/vX.Y_RELEASE_PLAN.md` structure | Skill-internal output spec; the rendered release plan is a platform artifact, but this file is the *spec for the spec* |
 
 ## §6 Canon-per-Artifact-Family Mapping (REQUIRED — AC4)
 

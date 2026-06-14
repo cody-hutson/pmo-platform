@@ -5,13 +5,13 @@
 
 A **harness artifact** is a workspace-global runtime tool (bash entrypoint + slash command + supporting docs/config) that lives outside the skill system but is governed and deployed identically: source-of-truth in git, deploy-script-driven sync to the runtime path. Examples: `account-switcher` (Mac-app multi-account launcher with `clone-prefs` mirroring).
 
-Harness artifacts differ from skills in that they are **not** invoked by Claude as part of a chained PMO workflow. They are operator-facing utilities (slash commands + bash) that interact with the macOS / Electron / filesystem surface. The deploy mechanism is symmetric with skills (`pmo-platform/skills/<name>/` → installed location); the operator-state preservation policy is the additional concern unique to harness.
+Harness artifacts differ from skills in that they are **not** invoked by Claude as part of a chained PMO workflow. They are operator-facing utilities (slash commands + bash) that interact with the macOS / Electron / filesystem surface. The deploy mechanism is symmetric with skills (`<module>/skills/<name>/` → installed location); the operator-state preservation policy is the additional concern unique to harness.
 
 ## Paths
 
-- **Git source:** `pmo-platform/harness/<name>/` (in repo)
+- **Git source:** `harness/<name>/` (in repo)
 - **Runtime location:** `~/.claude/<name>/`
-- **Slash command source:** `pmo-platform/harness/<name>/commands/*.md`
+- **Slash command source:** `harness/<name>/commands/*.md`
 - **Slash command runtime:** `~/.claude/commands/<file>.md`
 
 Slash commands deploy to the workspace-global commands directory (NOT under the harness's own runtime dir) so they are invocable as `/<file>` from any Claude Code session.
@@ -24,7 +24,7 @@ Slash commands deploy to the workspace-global commands directory (NOT under the 
 
 ## Tracked Harness Artifacts
 
-Current roster: see `deploy.sh` `HARNESS_LIST` array. `deploy.sh --check` Check 11 asserts every artifact directory under `pmo-platform/harness/` has a runtime counterpart at `~/.claude/<name>/` and that source files (excluding the `config.toml` template + operator-state allowlist) match runtime byte-identically.
+Current roster: see `deploy.sh` `HARNESS_LIST` array. `deploy.sh --check` Check 11 asserts every artifact directory under `harness/` has a runtime counterpart at `~/.claude/<name>/` and that source files (excluding the `config.toml` template + operator-state allowlist) match runtime byte-identically.
 
 ## Operator-State Preservation Policy
 
@@ -54,7 +54,7 @@ A future hardening pass (out of scope) may introduce true TOML smart-merge (sour
 ## Deployment Steps (Post-Merge)
 
 1. **Auto-detected deploy** — `./deploy.sh --deploy` detects changed harness artifacts via tag-based git diff and includes them alongside changed skills.
-2. **Manual deploy** — `./deploy.sh --deploy account-switcher` (or any other registered harness name). Manual mode validates the artifact exists in `pmo-platform/harness/<name>/` before proceeding.
+2. **Manual deploy** — `./deploy.sh --deploy account-switcher` (or any other registered harness name). Manual mode validates the artifact exists in `harness/<name>/` before proceeding.
 3. **Verify deployment** — invoke the slash command in Claude Code or run the bash entrypoint directly; confirm expected behavior.
 4. **Drift check (optional)** — `./deploy.sh --check` Check 11 reports any source/runtime divergence on the next run.
 
@@ -62,17 +62,17 @@ A future hardening pass (out of scope) may introduce true TOML smart-merge (sour
 
 `deploy.sh --check` Check 11 (always-enforce) validates:
 
-1. **Every `HARNESS_LIST` entry has a source dir** at `pmo-platform/harness/<name>/`. Missing source dir → FAIL.
+1. **Every `HARNESS_LIST` entry has a source dir** at `harness/<name>/`. Missing source dir → FAIL.
 2. **Every `HARNESS_LIST` entry has a runtime dir** at `~/.claude/<name>/`. Missing runtime dir → DRIFT (with remediation: `./deploy.sh --deploy <name>`).
 3. **Source files (excluding `config.toml` + operator-state)** match runtime byte-identically. Any mismatch → DRIFT.
 4. **`config.toml`** runtime presence is checked (operator-state preservation means content may diverge by design); missing runtime config.toml → DRIFT (initial deploy needed).
-5. **Slash commands** at `pmo-platform/harness/<name>/commands/*.md` match `~/.claude/commands/<file>.md` byte-identically. Missing or divergent → DRIFT.
+5. **Slash commands** at `harness/<name>/commands/*.md` match `~/.claude/commands/<file>.md` byte-identically. Missing or divergent → DRIFT.
 
-The mirror-pair sync between `.claude/rules/harness-deployment.md` and `pmo-platform/engineering/rules/harness-deployment.md` (this file) is enforced by `deploy.sh --check` Check 9 (rules-mirror sync).
+The mirror-pair sync between the canonical source `core/rules/harness-deployment.md` (this file) and the deployed mirror `~/.claude/rules/harness-deployment.md` is enforced by `deploy.sh --check` Check 9 (rules-mirror sync).
 
 ## Adding a New Harness Artifact (Operator Workflow)
 
-1. Create source directory: `mkdir -p pmo-platform/harness/<name>/commands`
+1. Create source directory: `mkdir -p harness/<name>/commands`
 2. Author the bash entrypoint (`<name>.sh` or similar), README, AUTO_*.md notes, and slash command (`commands/<name>.md`)
 3. If the artifact has a `config.toml`, author it as a TEMPLATE with placeholder values (no operator-identifying data)
 4. Update `deploy.sh` `HARNESS_LIST` to include the new artifact name

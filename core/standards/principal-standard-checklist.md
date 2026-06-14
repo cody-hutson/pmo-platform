@@ -25,7 +25,7 @@ If a consumer needs a minimum bar, express it by Scoring Guide tier:
 
 This pattern cascade-survives future competency additions without requiring consumer updates. Authors of new skills and consumers that previously embedded numeric competency ratios should migrate to Scoring Guide vocabulary.
 
-**Enforcement scope.** This rule governs governance / schema / reference docs under `pmo-platform/reference/` and workspace rules under `.claude/rules/`. Per-skill SKILL.md propagation is handled by the Skill Discipline migration.
+**Enforcement scope.** This rule governs governance / schema / reference docs under `core/` and workspace rules under `.claude/rules/`. Per-skill SKILL.md propagation is handled by the Skill Discipline migration.
 
 ---
 

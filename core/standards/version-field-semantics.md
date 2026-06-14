@@ -57,7 +57,7 @@ The dual-gate naming aligns with [`.claude/rules/skill-deployment.md`](../rules/
 
 **Gate 1 — `deploy.sh --check` assertion** (built by  as Check 6 + Check 10 of the dual-gate framework):
 
-- For each skill in `SKILL_LIST` + `SUPPLEMENTARY_SKILLS` + canary:
+- For each skill in the per-module arrays (`OPERATIONS_SKILLS`/`RELEASE_SKILLS`/`CORE_SKILLS`) + `SUPPLEMENTARY_SKILLS` + canary:
 - Check 6 asserts: the `version:` field is present and matches the format regex
 - Check 10 asserts (on migrated skills): the last non-merge commit touching the skill carries the `pmo-skill-editor` audit-trail trailer
 - FAIL surfaces the skill path, current value (or missing-field signal), and last-touching commit SHA
@@ -76,7 +76,7 @@ The two gates compose: edit-time enforcement via the PreToolUse hook (fast feedb
 
 ## Backfill Policy
 
-All skills in `pmo-platform/skills/` migrate at the migration baseline. The post-migration state per the Stage 8 QA cohort split (15 + 1 + 5 + 1 = 22 source directories at the migration baseline):
+All skills in `{operations,release,core}/skills/` migrate at the migration baseline. The post-migration state per the Stage 8 QA cohort split (15 + 1 + 5 + 1 = 22 source directories at the migration baseline):
 
 | Cohort | Count | Backfill value | Rationale |
 |---|---|---|---|
@@ -89,7 +89,7 @@ All skills in `pmo-platform/skills/` migrate at the migration baseline. The post
 
 ## NEW Skill Registration
 
-When a new skill is added to `pmo-platform/skills/` and registered in `deploy.sh` `SKILL_LIST` (or `SUPPLEMENTARY_SKILLS`):
+When a new skill is added to `{operations,release,core}/skills/` and registered in `deploy.sh` per-module arrays (`OPERATIONS_SKILLS`/`RELEASE_SKILLS`/`CORE_SKILLS`) (or `SUPPLEMENTARY_SKILLS`):
 
 1. Set `version: vX.Y` in frontmatter where `X.Y` matches the platform release tag at registration time (or the in-progress release tag if registering between tags, e.g., `v1.3` while v1.3 is being developed)
 2. Canary skills (exempt from D-Refs per `canonical-skill-structure.md` §2) use `version: vX.Y-canary` sentinel format
@@ -108,9 +108,9 @@ version: v1.3
 
 ## Scope of Enforcement
 
-**Applies to:** Every SKILL.md in `pmo-platform/skills/*/`.
+**Applies to:** Every SKILL.md in `{operations,release,core}/skills/*/`.
 
-**Does NOT apply to:** Reference docs bundled under `pmo-platform/skills/<skill>/reference/` — those are skill-internal references, not SKILL.md itself.
+**Does NOT apply to:** Reference docs bundled under `{operations,release,core}/skills/<skill>/reference/` — those are skill-internal references, not SKILL.md itself.
 
 **Canary exemption.** `pmo-skill-refiner-selftest-canary` is exempted from the references-required threshold per D-Refs. It is NOT exempted from the version-field requirement; it uses the `-canary` sentinel per § Format.
 
@@ -122,8 +122,8 @@ Tools and rules that reference this semantics doc:
 
 - `deploy.sh --check` — Gate 1
 - `.claude/hooks/block-skill-direct-edit.sh` — Gate 2
-- `pmo-platform/skills/pmo-skill-editor/SKILL.md` — editor workflow respects this contract
-- `pmo-platform/skills/pmo-skill-refiner/SKILL.md` — refiner workflow sets initial value at skill creation
+- `release/skills/pmo-skill-editor/SKILL.md` — editor workflow respects this contract
+- `release/skills/pmo-skill-refiner/SKILL.md` — refiner workflow sets initial value at skill creation
 - `.claude/rules/skill-deployment.md` (and engineering mirror) — deployment doc cross-references this
 - `pmo-platform/reference/knowledge-base/dependency-graph.md` — Shared Reference Documents subsection lists this doc as a contract source
 

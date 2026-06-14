@@ -44,21 +44,36 @@ The two areas share an agent but never share files. Platform changes always go t
 ```
 workspace root/
 ├── CLAUDE.md                           ← workspace config (Claude Code auto-loads)
-├── deploy.sh                           ← deployment engine
 ├── .gitignore                          ← ignores projects/
 │
 ├── .claude/                            ← Claude Code runtime config
-│   ├── rules/          (5 files)       ← operating procedures (git-tracked)
+│   ├── rules/                          ← operating rules (deployed from core/rules/)
 │   ├── settings.json                   ← settings (git-tracked)
-│   └── hooks/                          ← pre-commit hooks (git-tracked)
+│   └── hooks/                          ← security/governance hooks (deployed from core/hooks/)
 │
-├── pmo-platform/                       ← THE PLATFORM (git-tracked)
-│   ├── governance/                     ← operational rules
-│   ├── skills/                         ← skill definitions (see deploy.sh SKILL_LIST + SUPPLEMENTARY_SKILLS + canary)
-│   ├── packages/                       ← compiled .skill packages (one per SKILL_LIST + SUPPLEMENTARY_SKILLS entry)
-│   ├── reference/                      ← schemas, templates, standards, docs
-│   ├── releases/                       ← release history
-│   └── engineering/                    ← pipeline docs
+├── pmo-platform/                       ← THE PLATFORM (git-tracked, modular monolith)
+│   ├── core/                           ← cross-cutting core
+│   │   ├── governance/                 ← OPERATIONS.md
+│   │   ├── deploy/                     ← deploy.sh (deploy + --check + --report)
+│   │   ├── rules/                      ← Claude Code operating rules (mirror source)
+│   │   ├── disciplines/                ← architecture, operating-model, discovery/review/RCA
+│   │   ├── standards/                  ← authoring standards & frameworks
+│   │   ├── specs/                      ← autonomy-tiers, failure-mode, reversibility, …
+│   │   ├── schemas/                    ← output-contract & data schemas
+│   │   ├── skills/                     ← core skills (eval-writer, pmo-qa-auditor, prompt-builder)
+│   │   ├── hooks/                      ← security/governance hooks (mirror source)
+│   │   └── ADRs/                       ← architecture decision records
+│   ├── operations/                     ← operations module
+│   │   ├── skills/                     ← PMO ops skills (ppm-agent, comms-writer, …)
+│   │   └── templates/                  ← artifact templates
+│   ├── release/                        ← release module
+│   │   ├── governance/                 ← RELEASE_PROTOCOL.md + release-process.md
+│   │   ├── references/                 ← pipeline specs, how-to, standards
+│   │   ├── releases/                   ← RELEASE_LOG.md, plans/, notes/, archive/
+│   │   ├── skills/                     ← release skills (release-planner, pmo-skill-editor, …)
+│   │   └── tools/                      ← release-support scripts
+│   ├── docs/                           ← install/setup docs + scripts
+│   └── packages/                       ← compiled .skill packages
 │
 └── projects/                           ← OPERATIONAL WORKSPACE (git-ignored)
     ├── _config/        (3 files)       ← operational state
@@ -80,7 +95,7 @@ Skills are the core product — they define how Claude Code behaves in PMO opera
 Source (git-tracked)           Package (compiled)              Deployed (runtime)
 ────────────────────          ──────────────────              ────────────────────
 pmo-platform/                 pmo-platform/                   ~/.claude/skills/
-  skills/ppm-agent/             packages/ppm-agent.skill        ppm-agent/
+  operations/skills/ppm-agent/  packages/ppm-agent.skill        ppm-agent/
     SKILL.md                      (ZIP containing:)               SKILL.md ← from git
                                     SKILL.md                      references/
                                     references/                     push-to-resolve.md
@@ -95,9 +110,9 @@ pmo-platform/                 pmo-platform/                   ~/.claude/skills/
 
 ### Skill Roster
 
-Current skill roster: see `deploy.sh` `SKILL_LIST` (deployed skills) + `SUPPLEMENTARY_SKILLS` (full-tree deployments) arrays, plus `pmo-skill-refiner-selftest-canary` (source-only canary per ADR-04). Sum equals the directory listing at `release/skills/`.
+Current skill roster: see `core/deploy/deploy.sh` per-module arrays `OPERATIONS_SKILLS` + `RELEASE_SKILLS` + `CORE_SKILLS` (deployed roster) + `SUPPLEMENTARY_SKILLS` (full-tree deployments), plus `pmo-skill-refiner-selftest-canary` (source-only canary per ADR-04). Sum equals the directory listing across `{operations,release,core}/skills/`.
 
-Packages: every skill in `SKILL_LIST` + `SUPPLEMENTARY_SKILLS` has a corresponding `.skill` package in `packages/` — no exceptions per package-freshness enforcement. Canary is source-only (no package).
+Packages: every skill in the deployed roster (`OPERATIONS_SKILLS` + `RELEASE_SKILLS` + `CORE_SKILLS`) + `SUPPLEMENTARY_SKILLS` has a corresponding `.skill` package in `packages/` — no exceptions per package-freshness enforcement. Canary is source-only (no package).
 
 Claude Code first-party skills (not version-controlled in this repo, managed by Anthropic): `docx`, `pdf`, `pptx`, `xlsx`, `schedule`.
 
@@ -128,9 +143,9 @@ Claude Code loads updated skills + references at next session start
 | Mode | Purpose |
 |---|---|
 | `--deploy [skill...]` | Deploy changed skills (auto-detect or manual) |
-| `--check [--warn]` | Validate platform health (4 checks) |
+| `--check [--warn]` | Validate platform health (numbered Check suite) |
+| `--all` | Deploy the full skill roster + all packages (bootstrap / redeploy-everything) |
 | `--report` | Structured report for release evidence |
-| `--init` | One-time cutover migration |
 
 ### What gets deployed vs read in place
 | Asset | Deployed? | Mechanism |
@@ -200,32 +215,32 @@ The 13-stage pipeline (above) and the hub-spoke execution model load ≥9 peer s
 
 | Concept | Owning spec | Section anchor | What it answers |
 |---|---|---|---|
-| **M1 Localization Check** | `reference/decision-discipline.md` | § 2.1 | How does a decision-class consumer reconcile platform-localized context against a generic heuristic? |
-| **M2 Opposing View** | `reference/decision-discipline.md` | § 2.2 | What concrete counter-argument would change the recommendation? |
-| **M3 Pattern Cache Scan** | `reference/decision-discipline.md` | § 2.3 | Has the operator surfaced this class pattern before, and what should the consumer do about it? |
-| **Decision-class triage table** | `reference/decision-discipline.md` | § 3 | Which of M1/M2/M3 apply to a given decision class? |
-| **Pattern cache infrastructure** (observation log + emergence rule) | `reference/decision-discipline.md` | § 4 | How do operator corrections promote from one-off observations to confirmed behavioral rules? |
-| **Decision Briefing (Operating Principle)** | `reference/hub-spoke-bridge.md` | Operating Principle | How does the hub present spoke outputs + release state to the operator without routing past pending judgment? |
-| **D-Gate Template** | `reference/hub-spoke-bridge.md` | Procedure 0 § D-Gate Template | What structural fields does each D-decision in a release plan carry (gate input, options, recommendation, upstream compatibility)? |
-| **Hub-spoke Procedures P0–P7** | `reference/hub-spoke-bridge.md` | Procedures 0–7 | What does the hub do at release planning, scaffolding, routing, spoke prompts, spoke completion, gates, early merge, release close? |
-| **Stage I/O boundary contract** (7-field schema) | `reference/schemas/stage-io-contracts.md` | § Schema Definition | What artifact, format, requirement, decision tier, cognitive load, delivery surface, and validation rule crosses each stage boundary? |
-| **Three-Layer Gate Assessment** (metrics / judgment / calibration) | `reference/schemas/gate-evaluation-spec.md` | § Three-Layer Assessment Protocol | At a stage transition, how does an agent assess gate readiness and produce a PROCEED / PROCEED WITH CAVEATS / HOLD recommendation? |
-| **Gate criteria** (G1 / G2 / G3 / G-BR / G9 / G12 / G13) | `reference/schemas/gate-criteria-spec.md` | per-Gate § | WHAT specifically does each pipeline gate check (criterion ID / type / check / automation)? |
-| **Five-Phase Handoff Orchestration** | `reference/schemas/handoff-coordinator-spec.md` | § Five-Phase Orchestration Protocol | At a stage boundary, how does the coordinator validate, evaluate, route, iterate, and report? |
+| **M1 Localization Check** | `core/disciplines/decision-discipline.md` | § 2.1 | How does a decision-class consumer reconcile platform-localized context against a generic heuristic? |
+| **M2 Opposing View** | `core/disciplines/decision-discipline.md` | § 2.2 | What concrete counter-argument would change the recommendation? |
+| **M3 Pattern Cache Scan** | `core/disciplines/decision-discipline.md` | § 2.3 | Has the operator surfaced this class pattern before, and what should the consumer do about it? |
+| **Decision-class triage table** | `core/disciplines/decision-discipline.md` | § 3 | Which of M1/M2/M3 apply to a given decision class? |
+| **Pattern cache infrastructure** (observation log + emergence rule) | `core/disciplines/decision-discipline.md` | § 4 | How do operator corrections promote from one-off observations to confirmed behavioral rules? |
+| **Decision Briefing (Operating Principle)** | `release/references/how-to/hub-spoke-bridge.md` | Operating Principle | How does the hub present spoke outputs + release state to the operator without routing past pending judgment? |
+| **D-Gate Template** | `release/references/how-to/hub-spoke-bridge.md` | Procedure 0 § D-Gate Template | What structural fields does each D-decision in a release plan carry (gate input, options, recommendation, upstream compatibility)? |
+| **Hub-spoke Procedures P0–P7** | `release/references/how-to/hub-spoke-bridge.md` | Procedures 0–7 | What does the hub do at release planning, scaffolding, routing, spoke prompts, spoke completion, gates, early merge, release close? |
+| **Stage I/O boundary contract** (7-field schema) | `core/schemas/stage-io-contracts.md` | § Schema Definition | What artifact, format, requirement, decision tier, cognitive load, delivery surface, and validation rule crosses each stage boundary? |
+| **Three-Layer Gate Assessment** (metrics / judgment / calibration) | `core/schemas/gate-evaluation-spec.md` | § Three-Layer Assessment Protocol | At a stage transition, how does an agent assess gate readiness and produce a PROCEED / PROCEED WITH CAVEATS / HOLD recommendation? |
+| **Gate criteria** (G1 / G2 / G3 / G-BR / G9 / G12 / G13) | `core/schemas/gate-criteria-spec.md` | per-Gate § | WHAT specifically does each pipeline gate check (criterion ID / type / check / automation)? |
+| **Five-Phase Handoff Orchestration** | `core/schemas/handoff-coordinator-spec.md` | § Five-Phase Orchestration Protocol | At a stage boundary, how does the coordinator validate, evaluate, route, iterate, and report? |
 | **Inter-Stage Feedback Tier 1/2/3** | `release/governance/release-process.md` (mirror: `engineering/rules/`) | § Inter-Stage Feedback Protocol | When a downstream stage finds upstream output insufficient mid-execution, what tier of return-to-upstream fires? |
-| **Tier 0 — Premise Rejection** | `reference/standards/triage-design-rereview.md` | § 9 | When a Stage 4/5 re-review identifies a premise problem at stage **entry** (not execution), what escalation block fires and what operator options exist? |
-| **Re-Review Schema** (D1/D2/D3 dimensions, C1/C2/C3 classifications, PT-1..PT-4 premise-problem types) | `reference/standards/triage-design-rereview.md` | § 1–3 | What dimensions does a Stage 4/5 re-review evaluate per requirement, what classifications can result, and what premise-problem taxonomy applies? |
-| **Stage 5 Activation Gate** (Phase 0) | `reference/pipeline/stage-05-solutioning.md` | § 5 Phase 0 | When does Solutioning activate (all-or-nothing per release)? |
-| **Forecast Discipline** (deploy-resolution) | `reference/pipeline/stage-05-solutioning.md` | § 5.5 | Which `deploy.sh --check` findings does Stage 12 deploy actually resolve vs. require a subsequent commit? |
-| **Collective Review** (release-level checkpoint) | `reference/pipeline/stage-05-solutioning.md` | § Release-Level Checkpoint | Post-Solutioning, how does the hub validate cross-issue design coherence before authorizing Engineering, and how does scope lock work? |
-| **`delivery_approach` parameter** | `reference/methodology-parameterization-v1.md` | § 3 Definitions | What methodology archetype values are recognized (Scrum/Kanban/XP/Waterfall/PRINCE2/SAFe/Hybrid/Custom), and what does each parameterize? |
-| **Custom Extension Protocol** | `reference/methodology-parameterization-v1.md` | § 4 | When `delivery_approach: Custom`, how is the project methodology specified and consumed? |
-| **Glossary terms** (Task / Sub-task / Persona / Role / Milestone / Release / Process / Methodology / Framework) | `reference/terminology-glossary.md` | per-category § | When two specs use overlapping terms (e.g., Process vs. Methodology vs. Framework), which usage is canonical? |
-| **Five Execution Dimensions** (Work Breakdown · Assignment · Tracking · Handoff · State Persistence) | `reference/execution-framework.md` | Dimensions 1–5 | At a layer below Process (pipeline) and Methodology (delivery approach), what tool-agnostic execution dimensions does every release exercise? |
-| **Practice Efficacy Framework** (6-signal catalog + 3-trigger protocol + tier-derived cadence binding) | `reference/standards/practice-efficacy-framework.md` | per-section | What signals measure practice efficacy, how often does efficacy review fire per framework tier, what triggers a re-evaluation, and how does this scope boundary against staleness and drift? |
-| **Review Composition Framework + 7-dim taxonomy** (WHEN × WHAT × WHO/POSTURE × DETAIL × FOCUS × OUTPUT × AUTHORITY) | `reference/standards/review-composition-framework.md` | per-section § | Which review fires at which pipeline stage with what posture, detail, focus, output, and authority — and how does the same object reviewed at multiple stages compose? |
-| **Initiative-roadmap framework + cohesion-check** | `reference/standards/initiative-roadmap-framework.md` | per-section (§3 / §4 / §5 / §6 / §7.9) | When does an initiative warrant a roadmap, what lifecycle does it follow, how does it differ from an ADR or Initiative Issue, and how is cross-milestone cohesion checked? |
-| **KM Governance Framework + 4-class ownership enum + 4-source retirement protocol** | `reference/standards/km-governance-framework.md` | per-section (§2 ownership / §3 approval / §4 retirement / §5 meta-governance / §6 composition boundaries / §9 schema-stability) | Who owns each K1 artifact, what authority approves new K1 entries by evidence tier, what triggers and workflow govern KM artifact retirement, who governs the KM-governance framework itself, and how does this compose with records-management, DRAFT→APPROVED, operating-model, and Anthropic-base-vs-build? |
+| **Tier 0 — Premise Rejection** | `release/references/standards/triage-design-rereview.md` | § 9 | When a Stage 4/5 re-review identifies a premise problem at stage **entry** (not execution), what escalation block fires and what operator options exist? |
+| **Re-Review Schema** (D1/D2/D3 dimensions, C1/C2/C3 classifications, PT-1..PT-4 premise-problem types) | `release/references/standards/triage-design-rereview.md` | § 1–3 | What dimensions does a Stage 4/5 re-review evaluate per requirement, what classifications can result, and what premise-problem taxonomy applies? |
+| **Stage 5 Activation Gate** (Phase 0) | `release/references/pipeline/stage-05-solutioning.md` | § 5 Phase 0 | When does Solutioning activate (all-or-nothing per release)? |
+| **Forecast Discipline** (deploy-resolution) | `release/references/pipeline/stage-05-solutioning.md` | § 5.5 | Which `deploy.sh --check` findings does Stage 12 deploy actually resolve vs. require a subsequent commit? |
+| **Collective Review** (release-level checkpoint) | `release/references/pipeline/stage-05-solutioning.md` | § Release-Level Checkpoint | Post-Solutioning, how does the hub validate cross-issue design coherence before authorizing Engineering, and how does scope lock work? |
+| **`delivery_approach` parameter** | `release/references/specs/methodology-parameterization-v1.md` | § 3 Definitions | What methodology archetype values are recognized (Scrum/Kanban/XP/Waterfall/PRINCE2/SAFe/Hybrid/Custom), and what does each parameterize? |
+| **Custom Extension Protocol** | `release/references/specs/methodology-parameterization-v1.md` | § 4 | When `delivery_approach: Custom`, how is the project methodology specified and consumed? |
+| **Glossary terms** (Task / Sub-task / Persona / Role / Milestone / Release / Process / Methodology / Framework) | `core/specs/terminology-glossary.md` | per-category § | When two specs use overlapping terms (e.g., Process vs. Methodology vs. Framework), which usage is canonical? |
+| **Five Execution Dimensions** (Work Breakdown · Assignment · Tracking · Handoff · State Persistence) | `core/disciplines/execution-framework.md` | Dimensions 1–5 | At a layer below Process (pipeline) and Methodology (delivery approach), what tool-agnostic execution dimensions does every release exercise? |
+| **Practice Efficacy Framework** (6-signal catalog + 3-trigger protocol + tier-derived cadence binding) | `core/standards/practice-efficacy-framework.md` | per-section | What signals measure practice efficacy, how often does efficacy review fire per framework tier, what triggers a re-evaluation, and how does this scope boundary against staleness and drift? |
+| **Review Composition Framework + 7-dim taxonomy** (WHEN × WHAT × WHO/POSTURE × DETAIL × FOCUS × OUTPUT × AUTHORITY) | `core/standards/review-composition-framework.md` | per-section § | Which review fires at which pipeline stage with what posture, detail, focus, output, and authority — and how does the same object reviewed at multiple stages compose? |
+| **Initiative-roadmap framework + cohesion-check** | `core/standards/initiative-roadmap-framework.md` | per-section (§3 / §4 / §5 / §6 / §7.9) | When does an initiative warrant a roadmap, what lifecycle does it follow, how does it differ from an ADR or Initiative Issue, and how is cross-milestone cohesion checked? |
+| **KM Governance Framework + 4-class ownership enum + 4-source retirement protocol** | `core/standards/km-governance-framework.md` | per-section (§2 ownership / §3 approval / §4 retirement / §5 meta-governance / §6 composition boundaries / §9 schema-stability) | Who owns each K1 artifact, what authority approves new K1 entries by evidence tier, what triggers and workflow govern KM artifact retirement, who governs the KM-governance framework itself, and how does this compose with records-management, DRAFT→APPROVED, operating-model, and Anthropic-base-vs-build? |
 
 **How to use this map.** When applying a concept, follow the section anchor. When two specs appear to define the same concept, the owning spec wins; the other spec is a citation. When a new concept emerges, add a row before the duplicate-source-discipline check fails — see [`standards/duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md).
 
@@ -237,11 +252,11 @@ The 13-stage pipeline (above) and the hub-spoke execution model load ≥9 peer s
 
 ### pmo-platform/ (the product)
 Everything that defines how the PMO works as software:
-- How Claude Code behaves in operations (governance/, skills/)
-- What Claude Code produces in operations (reference/schemas/, reference/templates/)
-- Quality standards (reference/standards/)
-- Release history (releases/)
-- Compiled packages (packages/)
+- How Claude Code behaves in operations (`core/governance/`, `{operations,release,core}/skills/`)
+- What Claude Code produces in operations (`core/schemas/`, `operations/templates/`)
+- Quality standards (`core/standards/`)
+- Release history (`release/releases/`)
+- Compiled packages (`packages/`)
 
 ### core/rules/ (Claude Code's operating manual)
 How Claude Code operates when working on the platform:
@@ -259,8 +274,9 @@ The actual work being managed by the platform:
 
 ### Workspace root
 - CLAUDE.md — workspace config read by both agents
-- deploy.sh — deployment engine
 - README.md — repo overview
+
+(The deployment engine `deploy.sh` is not at workspace root — it lives under `core/deploy/deploy.sh`.)
 
 ---
 

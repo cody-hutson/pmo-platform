@@ -2,7 +2,7 @@
 # Operational-Artifact Inventory (first-pass)
 
 **Status:** Canonical (first-pass — incremental-fill posture)
-**Owner:** `pmo-platform/reference/specs/operational-artifact-inventory.md`
+**Owner:** `core/specs/operational-artifact-inventory.md`
 **Introduced:** project-data-foundation initiative (2026-05-16) — project-data-architecture initiative, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
 **Establishing scope:** N1 — first-pass operational-artifact inventory, W1 work-stream
 **Architectural basis:** the Two-Axis Entity Lifecycle ADR (**RATIFIED** at Collective Review, 2026-05-16)
@@ -43,7 +43,7 @@ The inventory uses an **8-column FROZEN schema** (transcribed verbatim from  D2)
 | 2 | `class` | enum(5) | `core-tracker` · `methodology-variant-tracker` · `structural-file` · `generated-artifact` · `typed-plan` | §3 ordered discriminator decision tree (top-down, first match wins) |
 | 3 | `source_entity` | ref \| flag | `#N <EntityName>` (1..17 per project-entity-model §4 roster) · `[ASSUMPTION – CONFIRM]` · `⚠ NO-ENTITY-HOME (FINDING-3)` | §4 primary-entity rule |
 | 4 | `format` | enum | `.csv` · `.md` · `.json` · `.csv (+Confluence dual)` | From file pattern in seed source; RAID Log = dual per `tracker-schemas.md` §Confluence Dual-Format |
-| 5 | `template_status` | path \| enum | `reference/templates/<file>` · `absent` · `[ASSUMPTION – CONFIRM]` | Match artifact against the `templates/README.md` Registered-Templates table + `deploy.sh TEMPLATE_SYNC_MAP`; populate path if registered, else `absent` |
+| 5 | `template_status` | path \| enum | `operations/templates/<file>` · `absent` · `[ASSUMPTION – CONFIRM]` | Match artifact against the `templates/README.md` Registered-Templates table + `deploy.sh TEMPLATE_SYNC_MAP`; populate path if registered, else `absent` |
 | 6 | `schema_status` | enum(EAD-aligned) | `entity-derived` · `prose-only` · `absent` · `[ASSUMPTION – CONFIRM]` | `entity-derived` iff an `EAD(E,C,D,mode)` machine-schema file exists; else `prose-only` iff a prose schema exists in `tracker-schemas.md`/a `schemas/` doc; else `absent` |
 | 7 | `owning_skill` | string \| enum | skill name · `unknown` | The **Maintains** agent of `source_entity` from  §6 (owning-agent matrix), cross-checked against `per-skill-output-contracts.md`; `unknown` if `source_entity` is a FINDING-3 flag |
 | 8 | `reconciliation_flag` | enum | `clean` · `context-implicit` · `composite-multi-entity` · `⚠ FINDING-3 (artifact-element-no-entity-home)` · `[ASSUMPTION – CONFIRM]` | §4 / §6 — EAD-crosswalk completeness, **both directions**. **Mandatory on every row.** |
@@ -84,11 +84,11 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
-| `[Project]_Daily_Status_Log.md` | core-tracker | entity 6 RAID Item | .md | `reference/templates/daily-status-log-template.md` | prose-only | tracker-manager | composite-multi-entity | Aggregator (D4a): dominant=entity 6 RAID Item; secondaries entity 5 Decision, entity 7 Meeting, entity 10 Person. Operational producer cross-check: `daily-status` |
-| `[Project]_Communications_Tracker.md` | core-tracker | ⚠ NO-ENTITY-HOME (FINDING-3) | .md | `reference/templates/communications-tracker-template.md` | prose-only | unknown | ⚠ FINDING-3 (artifact-element-no-entity-home) | **RATIFIED decision item 4** — no Communication entity in frozen 18-roster; out-of-standard-until-reconciled known-exception; flag + carry; entity-roster expansion NOT in scope; do **NOT** add an entity |
-| `[Project]_Open_Meetings_Tracker.md` | core-tracker | entity 7 Meeting | .md | `reference/templates/open-meetings-tracker-template.md` | prose-only | ppm-agent | clean | Owning-agent cross-check: file-router creates, ppm-agent maintains ( §6) |
-| `[Project]_Transcript_Register.md` | core-tracker | #9 Artifact `[ASSUMPTION – CONFIRM]` | .md | `reference/templates/transcript-register-template.md` | prose-only | ppm-agent (route: file-router) | context-implicit | Passive search/reference index of transcript-Artifacts; `project_id` filename-implicit; "index not tracker" behavioral nuance (tracker-schemas.md Tracker 4 note) flagged, not forced |
-| `[Project]_RAID_Log.csv` | core-tracker | entity 6 RAID Item | .csv (+Confluence dual) | `reference/templates/raid-log-template.csv` | entity-derived | tracker-manager | clean | **EAD pilot proven** ([`raid-log.schema.json`](../schemas/raid-log.schema.json)) — the **only** first-pass `entity-derived` artifact; `impact`/`action_plan` re-frozen first-class per the Stage 5 Option-A spec |
+| `[Project]_Daily_Status_Log.md` | core-tracker | entity 6 RAID Item | .md | `operations/templates/daily-status-log-template.md` | prose-only | tracker-manager | composite-multi-entity | Aggregator (D4a): dominant=entity 6 RAID Item; secondaries entity 5 Decision, entity 7 Meeting, entity 10 Person. Operational producer cross-check: `daily-status` |
+| `[Project]_Communications_Tracker.md` | core-tracker | ⚠ NO-ENTITY-HOME (FINDING-3) | .md | `operations/templates/communications-tracker-template.md` | prose-only | unknown | ⚠ FINDING-3 (artifact-element-no-entity-home) | **RATIFIED decision item 4** — no Communication entity in frozen 18-roster; out-of-standard-until-reconciled known-exception; flag + carry; entity-roster expansion NOT in scope; do **NOT** add an entity |
+| `[Project]_Open_Meetings_Tracker.md` | core-tracker | entity 7 Meeting | .md | `operations/templates/open-meetings-tracker-template.md` | prose-only | ppm-agent | clean | Owning-agent cross-check: file-router creates, ppm-agent maintains ( §6) |
+| `[Project]_Transcript_Register.md` | core-tracker | #9 Artifact `[ASSUMPTION – CONFIRM]` | .md | `operations/templates/transcript-register-template.md` | prose-only | ppm-agent (route: file-router) | context-implicit | Passive search/reference index of transcript-Artifacts; `project_id` filename-implicit; "index not tracker" behavioral nuance (tracker-schemas.md Tracker 4 note) flagged, not forced |
+| `[Project]_RAID_Log.csv` | core-tracker | entity 6 RAID Item | .csv (+Confluence dual) | `operations/templates/raid-log-template.csv` | entity-derived | tracker-manager | clean | **EAD pilot proven** ([`raid-log.schema.json`](../schemas/raid-log.schema.json)) — the **only** first-pass `entity-derived` artifact; `impact`/`action_plan` re-frozen first-class per the Stage 5 Option-A spec |
 
 ### 5.2 methodology-variant-tracker (21) — from `tracker-schemas.md` §Methodology Variation "Applies to" (dedup union across 7 archetypes)
 
@@ -120,12 +120,12 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
-| `PROJECT.md` | structural-file | #1 Project | .md | `reference/templates/project-md-template.md` | prose-only | ppm-agent | clean | Project entity ⊇ PROJECT.md ( §2 D1); `project-schema.md` is the persistence dialect (prose schema, not EAD machine-schema) |
+| `PROJECT.md` | structural-file | #1 Project | .md | `operations/templates/project-md-template.md` | prose-only | ppm-agent | clean | Project entity ⊇ PROJECT.md ( §2 D1); `project-schema.md` is the persistence dialect (prose schema, not EAD machine-schema) |
 | `PORTFOLIO.md` | structural-file | entity 13 Portfolio | .md | absent | absent | weekly-status-rollup | clean | Portfolio-level → `projects/_config/`; Layer-2 bridge file (Claude Code read-only per operations-bridge.md) |
 | `SESSION_STATE.md` | structural-file | `[ASSUMPTION – CONFIRM]` | .md | absent | absent | `[ASSUMPTION – CONFIRM]` | `[ASSUMPTION – CONFIRM]` | Session-continuity bridge file; no frozen-entity home — first-pass deferred (candidate no-entity-home, NOT anchored by the Stage 5 spec) |
 | `CORRECTIONS.md` | structural-file | `[ASSUMPTION – CONFIRM]` | .md | absent | absent | `[ASSUMPTION – CONFIRM]` | `[ASSUMPTION – CONFIRM]` | Cowork-owned behavioral-corrections config; no frozen-entity home — first-pass deferred |
 | `SWAP_HANDOFF.md` | structural-file | `[ASSUMPTION – CONFIRM]` | .md | absent | absent | `[ASSUMPTION – CONFIRM]` | `[ASSUMPTION – CONFIRM]` | account-switcher harness-written; no frozen-entity home — first-pass deferred |
-| `key-terms-glossary` | structural-file | `[ASSUMPTION – CONFIRM]` | .csv | `reference/templates/key-terms-glossary-template.csv` | absent | `[ASSUMPTION – CONFIRM]` | `[ASSUMPTION – CONFIRM]` | Stakeholder glossary index; registered template but no frozen-entity home — first-pass deferred |
+| `key-terms-glossary` | structural-file | `[ASSUMPTION – CONFIRM]` | .csv | `operations/templates/key-terms-glossary-template.csv` | absent | `[ASSUMPTION – CONFIRM]` | `[ASSUMPTION – CONFIRM]` | Stakeholder glossary index; registered template but no frozen-entity home — first-pass deferred |
 
 ### 5.4 generated-artifact (10) — from `per-skill-output-contracts.md` Skill-N Output Contracts
 
@@ -133,15 +133,15 @@ All map to `source_entity = #9 Artifact` (OOS-3 Artifact-seam); `reconciliation_
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
-| executive status report | generated-artifact | #9 Artifact | .md | `reference/templates/executive-status-report-prompt-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: ppm-agent / comms-writer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
+| executive status report | generated-artifact | #9 Artifact | .md | `operations/templates/executive-status-report-prompt-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: ppm-agent / comms-writer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | weekly status roll-up | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: weekly-status-rollup. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | decision briefing | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: ppm-agent. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | change-impact assessment | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: change-management. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | technical-analysis report | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-technical-analyst. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| requirements / FRD | generated-artifact | #9 Artifact | .md | `reference/templates/requirements-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-process-designer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
+| requirements / FRD | generated-artifact | #9 Artifact | .md | `operations/templates/requirements-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-process-designer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | traceability matrix | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-process-designer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | build-reviewer findings register | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: build-reviewer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| daily-status Teams update | generated-artifact | #9 Artifact | .md | `reference/templates/daily-status-update-framework-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: daily-status. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
+| daily-status Teams update | generated-artifact | #9 Artifact | .md | `operations/templates/daily-status-update-framework-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: daily-status. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | comms drafts | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: comms-writer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 
 ### 5.5 typed-plan (6) — `source_entity == #4 Plan`
@@ -170,7 +170,7 @@ At first pass exactly **one** artifact satisfies this with a live machine-schema
 **(b) Gap-class query (the Finding-3 structural catch).** The complete downstream-triage population is a single queryable set:
 
 ```bash
-grep "⚠ FINDING-3" pmo-platform/reference/specs/operational-artifact-inventory.md
+grep "⚠ FINDING-3" core/specs/operational-artifact-inventory.md
 ```
 
 This returns every artifact whose `source_entity`/`reconciliation_flag` is `⚠ FINDING-3 (artifact-element-no-entity-home)` — the legacy-artifact-element-with-no-entity-home gap class, surfaced **by construction** (mandatory `reconciliation_flag` on all 48 rows), not by ad-hoc discovery. At first pass this returns the **Communications Tracker** (RATIFIED decision item 4 — `out-of-standard-until-reconciled` known-exception; entity-roster expansion is NOT in scope). N2 consumes this to scope entity-derived templatization; N3 consumes it as its harness known-exception register. Per-instance disposition is downstream's job — the inventory surfaces the class, it does not adjudicate each instance.

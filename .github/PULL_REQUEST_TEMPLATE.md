@@ -23,7 +23,7 @@
 <!-- One row per in-PR issue. Status: LINKED / CREATED / UPDATED / NONE. -->
 <!-- NONE applies when the issue declared `None — no documentation impact (rationale: ...)` at Intake. -->
 <!-- Resolution gate fires at Stage 13 Close (G-CL8 via deploy.sh Check 28). -->
-<!-- Scope: K1 codified corpus only (.claude/rules/, pmo-platform/reference/, pmo-platform/governance/, pmo-platform/skills/*/SKILL.md + references/, CLAUDE.md). -->
+<!-- Scope: K1 codified corpus only (core/rules/, core/, core/governance/ + release/governance/, {operations,release,core}/skills/*/SKILL.md + references/, CLAUDE.md). -->
 
 | Issue | Declared docs | Status | Commit(s) | Notes |
 |---|---|---|---|---|

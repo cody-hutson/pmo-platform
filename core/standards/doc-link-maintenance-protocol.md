@@ -5,7 +5,7 @@
 **Owner:** Platform engineering — release-ops domain
 **Enforcement:** Automated via `./deploy.sh --check` Check 14 (governance + skill SKILL.md scope) + Check 15 (release-corpus scope)
 **Primitive:** [`core/deploy/tools/check-doc-links.py`](../deploy/tools/check-doc-links.py)
-**Mirror:** This standard is mirrored at [`.claude/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md) ↔ [`pmo-platform/engineering/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md) for operator-facing visibility (Check 9 byte-identity).
+**Mirror:** This standard's canonical source [`core/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md) is mirrored to the deployed workspace mirror `~/.claude/rules/doc-link-maintenance.md` for operator-facing visibility (Check 9 byte-identity).
 
 ---
 
@@ -74,8 +74,8 @@ Exit codes: 0 = no broken refs, 1 = broken refs found
 
 | Check | Scope | Source |
 |---|---|---|
-| **Check 14** | Layer 1 governance (`pmo-platform/governance/`, `pmo-platform/reference/`, `.claude/rules/`) + skill SKILL.md (`pmo-platform/skills/*/SKILL.md`) | This protocol |
-| **Check 15** | Release corpus (`pmo-platform/governance/RELEASE_LOG.md`, `pmo-platform/releases/plans/*.md`, `pmo-platform/releases/notes/*.md`) | This protocol |
+| **Check 14** | Layer 1 governance (`core/governance/`, `release/governance/`, `core/standards|specs|schemas|disciplines/`, `.claude/rules/`) + skill SKILL.md (`<module>/skills/*/SKILL.md`) | This protocol |
+| **Check 15** | Release corpus (`release/releases/RELEASE_LOG.md`, `release/releases/plans/*.md`, `release/releases/notes/*.md`) | This protocol |
 
 Both checks invoke the same primitive script with disjoint `--target-paths` arguments. Disjoint scopes per Collective Review CR-D2.
 
@@ -90,7 +90,7 @@ Allowlist: [`.claude/skip-doc-link-check.txt`](<OPERATOR_INSTANCE_CLAUDE_DIR>/sk
 **Format:** One pattern per line. Trailing slash matches directories. `#` introduces comments. Empty lines ignored.
 
 **Allowlisted by default:**
-- `pmo-platform/releases/archive/` — archived release plans contain intentional historical references (e.g., to deleted files like `IMPROVEMENTS.md` from an earlier bridge era)
+- `release/releases/archive/` — archived release plans contain intentional historical references (e.g., to deleted files like `IMPROVEMENTS.md` from an earlier bridge era)
 - `pmo-platform/analysis/legacy-imp-audit-*/` — audit artifacts cite broken refs as evidence (the broken-ref TSV literally enumerates broken refs as data)
 - `pmo-platform/analysis/cross-domain-drift-audit-*/` — same evidentiary purpose
 
@@ -106,7 +106,7 @@ Pattern C (temporal-language drift) cannot be automatically detected by the link
 
 1. **Post-reorg cleanup** (Stage 13 Close or follow-up release): grep the affected file set for stale temporal framing:
    ```bash
-   grep -rEn "\b(deferred|interim|Future:|TODO:|pending|will be|to be added|not yet)\b" pmo-platform/reference/ .claude/rules/ pmo-platform/governance/
+   grep -rEn "\b(deferred|interim|Future:|TODO:|pending|will be|to be added|not yet)\b" core/standards/ core/specs/ core/schemas/ core/disciplines/ .claude/rules/ core/governance/ release/governance/
    ```
 2. **Major content migration**: same grep, scoped to the migrated content.
 3. **Stage 9 Plan Review** (release readiness): scan the release's touched files for temporal language that should now be historical (e.g., "deferred to vX.Y" when the release is vX.Y itself).
@@ -159,7 +159,7 @@ Warn-mode without operator-driven review degrades to ceremony. To prevent that, 
 ## 10. Cross-References
 
 - **Stage 5 spec:** D-decisions endorsed at Collective Review
-- **Mirror pair:** [`.claude/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md) ↔ [`pmo-platform/engineering/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md)
+- **Mirror pair:** canonical source [`core/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md) ↔ deployed mirror `~/.claude/rules/doc-link-maintenance.md`
 - **Companion scope:** Check 15 — release-corpus scope
 - **Pattern C treatment:** manual-checklist treatment; automation at F-1
 - **Broken-ref backlog drainage:** F-4

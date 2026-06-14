@@ -20,7 +20,7 @@ The Stage 5 spoke output triggers Evidence-Grounding for any of the following op
 |---|---|---|
 | Selecting a canonical value from ≥2 observed variants in the codebase | `reference/` vs `references/`; `feat:` vs `feature:` | YES |
 | Introducing a new structural rule that constrains existing artifacts | "every SKILL.md MUST have `version:` field" | YES |
-| Naming a new file/section/identifier that fits into an existing naming scheme | "new `release-corpus-schema.md` in `reference/standards/`" | YES (verify scheme conformance) |
+| Naming a new file/section/identifier that fits into an existing naming scheme | "new `release-corpus-schema.md` in `core/standards/`" | YES (verify scheme conformance) |
 | Specifying a regex / grep pattern that asserts against current state | `^v[0-9]+\.[0-9]+(-[a-z]+)?$` (version-field regex) | YES |
 | Setting a numeric threshold or boundary | "N=2 emergence rule", "180-day staleness window" | YES (justify against current state distribution) |
 | Pure design choice without state-comparison surface | "use markdown table over YAML for the briefing template" | NO (no current state to canonicalize against) |
@@ -97,7 +97,7 @@ inspectable Evidence-Grounding artifact in your output:
    citations + reproducible grep command).
 2. Justify the canonical choice with citation to (a) an audit finding,
    (b) an upstream-reference catalog entry per R2 (see
-   `pmo-platform/reference/standards/upstream-reference-catalog.md`), or
+   `core/standards/upstream-reference-catalog.md`), or
    (c) a documented governance rationale (ADR issue # or doc section).
 3. List any out-of-scope drift observed during the survey, with routing
    recommendation (Tier 1 [ADJUST] / next-release issue / accepted-residual).

@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Subagent Security Posture — Hub-Orchestrated Autonomous Spawning
 
 **Origin:** monolith-cleanup release
@@ -213,7 +214,7 @@ This counter-design sidesteps the unknown-upstream-semantic gap entirely: regard
 
 ## § 8. Cutover
 
-Applies to releases entering Stage 5 strictly AFTER the merge SHA recorded in [`pmo-platform/governance/RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). **The introducing release itself is exempt** per reflexive-pipeline-loop discipline — the release IS orchestrated by the Agent-tool subagent mechanism this standard documents; applying the standard to its own Stage 5 / 6 / 7 / 8 spokes would create a footgun where the rule shipping in THIS release would fire on THIS release's own orchestration. Subsequent releases adopt the 4-mechanism posture as canonical.
+Applies to releases entering Stage 5 strictly AFTER the merge SHA recorded in [`release/releases/RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). **The introducing release itself is exempt** per reflexive-pipeline-loop discipline — the release IS orchestrated by the Agent-tool subagent mechanism this standard documents; applying the standard to its own Stage 5 / 6 / 7 / 8 spokes would create a footgun where the rule shipping in THIS release would fire on THIS release's own orchestration. Subsequent releases adopt the 4-mechanism posture as canonical.
 
 ---
 

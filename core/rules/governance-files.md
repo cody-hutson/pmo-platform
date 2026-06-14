@@ -20,7 +20,7 @@ These files govern the platform. Extra caution applies.
 
 ## Cross-File Impact
 When editing one governance file, check if the change affects others:
-- CLAUDE.md change → does pmo-platform/governance/OPERATIONS.md need updating?
+- CLAUDE.md change → does core/governance/OPERATIONS.md need updating?
 - OPERATIONS.md change → do skills reference the changed section?
 - RELEASE_PROTOCOL.md change → does release-process.md need updating?
 

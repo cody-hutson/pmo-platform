@@ -16,7 +16,7 @@ version: ""
 
 This standard defines how a NEW hub session reconstructs the in-flight state of an active release without operator hand-holding. Three concerns: (1) WHAT state the hub persists across sessions, (2) WHERE that state lives (file paths + schema), (3) HOW a fresh session reads and validates it before routing new work.
 
-The parent issue framed the gap as "a new hub is a shift change with no shift notes." That framing overstates the missing infrastructure — three persistence surfaces already exist per [`hub-spoke-bridge.md` Framework Alignment row 20 (State Persistence)](../../release/references/how-to/hub-spoke-bridge.md): the release plan file at `pmo-platform/releases/plans/vX.Y_RELEASE_PLAN.md`, sub-task comments, and `projects/_config/SESSION_STATE.md`. The actual gap has three parts that this standard closes: (1) NO codified startup read-order knitting the existing surfaces into a coherent context-rebuild; (2) NO release-scoped durable substrate for the queued-approval mechanism; (3) NO explicit drift-detection between hub state and operator decisions across sessions.
+The parent issue framed the gap as "a new hub is a shift change with no shift notes." That framing overstates the missing infrastructure — three persistence surfaces already exist per [`hub-spoke-bridge.md` Framework Alignment row 20 (State Persistence)](../../release/references/how-to/hub-spoke-bridge.md): the release plan file at `release/releases/plans/vX.Y_RELEASE_PLAN.md`, sub-task comments, and `projects/_config/SESSION_STATE.md`. The actual gap has three parts that this standard closes: (1) NO codified startup read-order knitting the existing surfaces into a coherent context-rebuild; (2) NO release-scoped durable substrate for the queued-approval mechanism; (3) NO explicit drift-detection between hub state and operator decisions across sessions.
 
 **Scope.** Hub state persistence across SESSION boundaries within a single release. Cross-RELEASE state lives in workspace-level surfaces (`SESSION_STATE.md` for workspace handoff, `SWAP_HANDOFF.md` for cross-account handoff) and is out of scope here. Cross-AGENT handoffs (skill-to-skill, spoke-to-spoke, stage-to-stage) are owned by [`agent-handoff-framework.md`](agent-handoff-framework.md). Action-item schemas (deferred edits, follow-ups, reminders) are owned by [`hub-action-tracking.md`](hub-action-tracking.md) (sibling standard) and ride on the substrate convention this standard defines.
 
@@ -24,7 +24,7 @@ The parent issue framed the gap as "a new hub is a shift change with no shift no
 
 ## 1. D-2 Placement Verdict
 
-Per Stage 5 D-2 verdict on the hub-session-continuity sub-task: the persistence schema + state contract + resume procedure are normative spec material — `pmo-platform/reference/standards/` is the canonical K1 home per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md). The verdict IS this file's existence at this path. Sibling NEW standards files (`agent-handoff-framework.md` for the handoff framework, `hub-action-tracking.md` for action-item tracking) converge on the same placement, satisfying R4 N-way consistency at Collective Review. A thin Procedure 0b cross-reference in [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) points operators to this standard for full schema + behavior; the bridge doc does NOT duplicate normative content.
+Per Stage 5 D-2 verdict on the hub-session-continuity sub-task: the persistence schema + state contract + resume procedure are normative spec material — `core/standards/` is the canonical K1 home per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md). The verdict IS this file's existence at this path. Sibling NEW standards files (`agent-handoff-framework.md` for the handoff framework, `hub-action-tracking.md` for action-item tracking) converge on the same placement, satisfying R4 N-way consistency at Collective Review. A thin Procedure 0b cross-reference in [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) points operators to this standard for full schema + behavior; the bridge doc does NOT duplicate normative content.
 
 ## 2. Persistence Format
 
@@ -146,7 +146,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | 1 | `CLAUDE.md` + `.claude/rules/` (all 7 files) | Workspace governance baseline | YES |
 | 2 | `projects/_config/SESSION_STATE.md` (Layer 2) | Workspace-level session handoff (cross-release context) | YES — if exists |
 | 3 | `gh api repos/[OPERATOR_GITHUB]/pmo-platform/milestones?state=open --paginate` | Identify active milestone(s) | YES |
-| 4 | `pmo-platform/releases/plans/vX.Y_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
+| 4 | `release/releases/plans/vX.Y_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
 | 5 | `gh issue list --milestone "<name>" --label sub-task --state all --limit 500 --json number,title,state,labels,projectItems` | Per-stage sub-task states + GitHub Projects field anchors | YES |
 | 6 | `grep "\| v<X.Y> \|" pmo-platform/engineering/evals/results/pipeline-event-log.md` | Release-scoped decision history (D-class verdicts, scope-lock, gate outcomes, escalations) | YES |
 | 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/pending-approvals.md` | Queued approvals awaiting current session | YES — if exists |
@@ -323,7 +323,7 @@ fi
 | [`hub-spoke-bridge.md` Procedure 0a — Audit-Aware Orientation](../../release/references/how-to/hub-spoke-bridge.md) | Drift-detection precedent (audit-snapshot vs current state) — anchors Resume Procedure Step 9 |
 | [`operations-bridge.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/operations-bridge.md) | Layer 1 / Layer 2 partition rationale; SESSION_STATE.md Cowork-ownership boundary |
 | [`release-process.md` Stage 3 A7](../../release/governance/release-process.md) | Bundle Mutability Protocol — anchor for Step 9 "Release plan file out-of-sync" drift class |
-| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | K1 codified-knowledge convention placing standards in `reference/standards/` |
+| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | K1 codified-knowledge convention placing standards in `core/standards/` |
 
 ## 10. Version History
 

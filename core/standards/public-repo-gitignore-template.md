@@ -56,7 +56,7 @@ The following block is a ready-to-copy starting template. Consumers adjust patte
 
 ```gitignore
 # Public-Repo Operator-Local Config Template
-# Source: pmo-platform/reference/standards/public-repo-gitignore-template.md
+# Source: core/standards/public-repo-gitignore-template.md
 # Operator-local config MUST never enter tracked content in any public repo
 # extracted from pmo-platform.
 
@@ -108,4 +108,4 @@ cd <repo-root> && git check-ignore test-operator.log && rm test-operator.log
 
 ## 7. Cutover
 
-Applies to PUBLIC-repo extractions whose extraction work executes strictly AFTER this standard's merge SHA recorded in `pmo-platform/governance/RELEASE_LOG.md`. **The introducing release itself is exempt** for the META standard's authorship (the standard cannot fire on its own authorship without creating a reflexive-pipeline loop); the in-release `pmo-platform/harness/account-switcher/.gitignore` first-instance consumer applies the standard's patterns voluntarily at this release per the Pass 2 spec's FMF-3 mitigation. All public-repo extractions executed before this standard shipped are exempt (no PUBLIC repo had yet been extracted from pmo-platform).
+Applies to PUBLIC-repo extractions whose extraction work executes strictly AFTER this standard's merge SHA recorded in `release/releases/RELEASE_LOG.md`. **The introducing release itself is exempt** for the META standard's authorship (the standard cannot fire on its own authorship without creating a reflexive-pipeline loop); the in-release `pmo-platform/harness/account-switcher/.gitignore` first-instance consumer applies the standard's patterns voluntarily at this release per the Pass 2 spec's FMF-3 mitigation. All public-repo extractions executed before this standard shipped are exempt (no PUBLIC repo had yet been extracted from pmo-platform).

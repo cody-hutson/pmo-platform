@@ -94,7 +94,7 @@ git log --follow <path/to/artifact.md>
 git show <sha>:<path/to/artifact.md>
 ```
 
-The current file is the current state. Git is the version database. This matches workspace precedent — [`RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>) is append-only with git as rollback; release plan files at [`pmo-platform/releases/plans/`](../../release/releases/plans/) are single-version per release; [`release-notes-standard.md`](../../release/references/standards/release-notes-standard.md) and [`evidence-grounding-standard.md`](evidence-grounding-standard.md) ship as single canonical files with git as retention.
+The current file is the current state. Git is the version database. This matches workspace precedent — [`RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>) is append-only with git as rollback; release plan files at [`release/releases/plans/`](../../release/releases/plans/) are single-version per release; [`release-notes-standard.md`](../../release/references/standards/release-notes-standard.md) and [`evidence-grounding-standard.md`](evidence-grounding-standard.md) ship as single canonical files with git as retention.
 
 **Rationale:**
 
@@ -135,7 +135,7 @@ Three-tier activation matrix.
 | Process-flow (agent / human / skill / decision) | Per `process-flow-diagram-standards.md` decision rule (≥1 gate, ≥2 actors, OR cited as canonical) | Mermaid or ASCII flow-block |
 | Architecture | Issue creates a new `explanation/` doc with ≥1 structural diagram, OR materially modifies an existing `explanation/` doc's structural diagram (>3 line delta) | ASCII tree |
 | Data flow | Issue creates/modifies a schema, contract, or output-format file with cross-component data flow (≥2 producer/consumer entities) | Markdown tables OR Mermaid (multi-actor) |
-| Concept model | Issue creates a new `pmo-platform/reference/explanation/` doc, OR introduces a new architectural concept named in a governance file | ASCII tree + structured tables |
+| Concept model | Issue creates a new `core/disciplines/` doc, OR introduces a new architectural concept named in a governance file | ASCII tree + structured tables |
 
 ### Tier-B activation (CONDITIONAL — refresh-only at Stage 13, no new artifact produced)
 
@@ -266,7 +266,7 @@ Revisions are tracked in git history. Per § 5, git history is the canonical ret
 - [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) — canonical schema for Gate 13 G-CL6 row + self-repair action.
 - [`pipeline/stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) — Stage 5 PRODUCES surface (Phase A6).
 - [`pipeline/stage-13-close.md`](../../release/references/pipeline/stage-13-close.md) — Stage 13 REFRESH-GATE surface (Phase A5 G-CL6).
-- [`release-notes-standard.md`](../../release/references/standards/release-notes-standard.md) — sibling location-convention precedent (`pmo-platform/reference/standards/` for new "-standard.md" docs).
+- [`release-notes-standard.md`](../../release/references/standards/release-notes-standard.md) — sibling location-convention precedent (`core/standards/` for new "-standard.md" docs).
 - [`evidence-grounding-standard.md`](evidence-grounding-standard.md) — sibling location-convention precedent.
 - [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) — workspace-canonical warn-mode → enforce shakedown precedent (Checks 8/9/10/14/15).
 - [`doc-link-maintenance.md`](../rules/doc-link-maintenance.md) — bidirectional cross-reference enforcement (Check 14 / Check 15).

@@ -1,7 +1,7 @@
 # operations/skills/
 
 **Purpose:** Source-of-truth skill definitions for the **operations-class** subset of the PMO Agent Suite — skills consumed by PMO operations (portfolio / project / cross-project work). Each skill is a `SKILL.md` plus optional `references/`, `evals/`, and supplementary content.
-**Organization:** One subfolder per skill. Roster source-of-truth is `core/deploy/deploy.sh` `SKILL_LIST` + `SUPPLEMENTARY_SKILLS` (per ADR-04); `deploy.sh --check` Check 5 asserts roster ↔ directory equivalence.
+**Organization:** One subfolder per skill. Roster source-of-truth is `core/deploy/deploy.sh` the per-module arrays (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS) + `SUPPLEMENTARY_SKILLS` (per ADR-04); `deploy.sh --check` Check 5 asserts roster ↔ directory equivalence.
 **Governance:** [../../core/rules/skill-deployment.md](../../core/rules/skill-deployment.md), [../../core/standards/canonical-skill-structure.md](../../core/standards/canonical-skill-structure.md), [../../core/standards/version-field-semantics.md](../../core/standards/version-field-semantics.md).
 **Layer:** 1 (Engineering, git-tracked)
 **Sibling catalogs:** [`../../release/skills/README.md`](../../release/skills/README.md) (release-pipeline skills), [`../../core/skills/README.md`](../../core/skills/README.md) (universal-discipline skills).

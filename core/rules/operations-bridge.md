@@ -45,7 +45,7 @@ usage. After switching back from Cowork and before any git operation, run
 signal (resolve per Rule 4 above). Full detection / prevention / recovery
 conventions, the per-layer (1 git-managed / 2 operational / 3 bridge-file)
 safeguard model, and the bridge-file write-safety convention are specified in
-`pmo-platform/reference/how-to/concurrency-safeguards.md`.
+`core/disciplines/concurrency-safeguards.md`.
 
 The `platform-health` scheduled tasks (pmo-qa-auditor Mode E — see OPERATIONS.md
 § Platform Health Audit Protocol) are a Claude-Code-authored mode with a scheduled

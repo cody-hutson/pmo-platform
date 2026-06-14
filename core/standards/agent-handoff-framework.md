@@ -254,7 +254,7 @@ The mechanism layer (sibling Stage 5 sub-task) ships the Agent-tool orchestratio
 
 ## 11. Dimension 10 — D-2 Placement Justification
 
-**Decision.** NEW file at `pmo-platform/reference/standards/agent-handoff-framework.md` (this file).
+**Decision.** NEW file at `core/standards/agent-handoff-framework.md` (this file).
 
 **Cross-reference to R1 Evidence-Grounding artifact.** Full rationale is documented in the framework's Stage 5 spec (closing comment, § "Evidence-Grounding (per R1) — Canonicalization 1: Framework doc location"). Summary:
 

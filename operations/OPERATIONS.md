@@ -44,7 +44,7 @@ The PMO skill suite consists of 16 production skills. Each skill has a defined s
 
 ## KM Governance Ownership
 
-KM corpus governance — ownership / approval / retirement / meta-governance for K1 codified-knowledge artifacts — is delegated to [`pmo-platform/reference/standards/km-governance-framework.md`](../core/standards/km-governance-framework.md). The framework codifies the 4-value owner-class enum (`operator-class` / `role-class` / `artifact-class` / `future-collective-class`), the 2-tier storage model (framework-catalog `owner` column authoritative + frontmatter `owner:` cache for K1 reference docs), the approval protocol composing with [`corpus-curation.md`](../core/disciplines/corpus-curation.md) ET1–ET5, and the 4-source retirement protocol composing with [`practice-efficacy-framework.md`](../core/standards/practice-efficacy-framework.md) (efficacy) + [`corpus-curation.md`](../core/disciplines/corpus-curation.md) (curation) + [`km-protocols.md`](../core/disciplines/km-protocols.md) (staleness) + reserved slot for contraindication-prevalence.
+KM corpus governance — ownership / approval / retirement / meta-governance for K1 codified-knowledge artifacts — is delegated to [`core/standards/km-governance-framework.md`](../core/standards/km-governance-framework.md). The framework codifies the 4-value owner-class enum (`operator-class` / `role-class` / `artifact-class` / `future-collective-class`), the 2-tier storage model (framework-catalog `owner` column authoritative + frontmatter `owner:` cache for K1 reference docs), the approval protocol composing with [`corpus-curation.md`](../core/disciplines/corpus-curation.md) ET1–ET5, and the 4-source retirement protocol composing with [`practice-efficacy-framework.md`](../core/standards/practice-efficacy-framework.md) (efficacy) + [`corpus-curation.md`](../core/disciplines/corpus-curation.md) (curation) + [`km-protocols.md`](../core/disciplines/km-protocols.md) (staleness) + reserved slot for contraindication-prevalence.
 
 The authoritative ownership registry of record is [`framework-catalog.md`](../core/specs/framework-catalog.md) `owner` column (col 11 of 11-col schema) per `km-governance-framework.md` §2.4 Tier 1. Frontmatter `owner:` field on K1 reference docs is the Tier 2 cache; conflict resolution rule: registry wins. Cadence + amendment protocol + Tier 2 [SCOPE CHANGE] escalation are defined in `km-governance-framework.md` §5 (Meta-Governance) and apply reflexively to the framework itself per §5.5 cutover discipline.
 
@@ -93,7 +93,7 @@ Mitigation: Parallel testing [ASSUMPTION – CONFIRM: Assumes parallel testing a
 
 This protocol governs auto-invocation policy. The framework spec consumers bind against is at [`agent-handoff-framework.md`](../core/standards/agent-handoff-framework.md).
 
-Governs auto-invocation from one skill to another (skill chaining) and post-approval cascade (a single user approval authorizing downstream dependent updates). Operationalizes the existing max-depth-2 architectural constraint codified in **XC-05** (`pmo-platform/reference/standards/regression-checks.md`) and the routing tree in `pmo-platform/reference/knowledge-base/dependency-graph.md` for the specific case of auto-invocation and cascading writes. This subsection does not modify XC-05 or dependency-graph.md — it cites them as the architectural source of the depth bound and extends their scope to programmatic invocation.
+Governs auto-invocation from one skill to another (skill chaining) and post-approval cascade (a single user approval authorizing downstream dependent updates). Operationalizes the existing max-depth-2 architectural constraint codified in **XC-05** (`core/standards/regression-checks.md`) and the routing tree in `pmo-platform/reference/knowledge-base/dependency-graph.md` for the specific case of auto-invocation and cascading writes. This subsection does not modify XC-05 or dependency-graph.md — it cites them as the architectural source of the depth bound and extends their scope to programmatic invocation.
 
 **Platform capability.** The Cowork `Skill` tool permits programmatic invocation from within one skill's execution. Rules C1–C7 constrain when that capability fires automatically; outside these rules, the capability is still present but invocation remains manual (informational handoff tags for the operator).
 
@@ -103,8 +103,8 @@ Governs auto-invocation from one skill to another (skill chaining) and post-appr
 | **C2** | **Breadth bound** | A single PPM response may auto-invoke ≤3 downstream skills per run. When more than 3 tags qualify, auto-invoke the top 3 by urgency (URGENT > APPROACHING > ADVISORY, tiebreak on earliest deadline); surface remaining tags with explicit note "Auto-invocation skipped: breadth-bound exceeded." |
 | **C3** | **Context gate** | Auto-invoke requires ALL five handoff fields populated (Tag, Context, Source, Scope, Inputs) AND `evidence_quality` ∈ {`[SOURCE]`, `[INFERRED]`}. An `[ASSUMPTION – CONFIRM]` on any field demotes the action to manual — prevents amplifying uncertainty downstream. |
 | **C4** | **Tier gate** | Only Document Tier 2 (operational tracker) writes auto-execute. Document Tier 1 (stakeholder-facing) writes always require explicit user approval, regardless of how the action was triggered. The downstream skill produces a draft; the user approves; then the write happens. |
-| **C5** | **Governance gate** | Governance-file updates (CLAUDE.md, OPERATIONS.md, RELEASE_PROTOCOL.md, PROJECT.md, any file in `pmo-platform/`) never auto-cascade. Always require GitHub Issue + release plan per [`.claude/rules/governance-files.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/governance-files.md). |
-| **C6** | **Approval scope** | A Document Tier 1 user approval authorizes cascade only within the artifact's declared `cascade_scope` (field in Handoff Manifest — see `pmo-platform/skills/ppm-agent/SKILL.md` Section 10). Cascade does not escalate outside the named scope without a new approval. |
+| **C5** | **Governance gate** | Governance-file updates (CLAUDE.md, OPERATIONS.md, RELEASE_PROTOCOL.md, PROJECT.md, any file in `core/`/`operations/`/`release/`) never auto-cascade. Always require GitHub Issue + release plan per [`.claude/rules/governance-files.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/governance-files.md). |
+| **C6** | **Approval scope** | A Document Tier 1 user approval authorizes cascade only within the artifact's declared `cascade_scope` (field in Handoff Manifest — see `operations/skills/ppm-agent/SKILL.md` Section 10). Cascade does not escalate outside the named scope without a new approval. |
 | **C7** | **Allowlist** | Auto-cascade is permitted only for these source→target pairs: PPM `[COMMS]` + complete context → comms-writer (Document Tier 2 draft); PPM `[DELIVERY]` + complete context → delivery-engine (Document Tier 2 tracker); PPM `TRACKER_UPDATE` block → tracker-manager (Document Tier 2 tracker); PPM `[ARTIFACT_GAP]` + complete context → artifact-generator (08-Generated/ staging only). Adding a new allowlist pair requires a GitHub issue + Release. |
 
 **Post-approval cascade semantics (C6 elaborated).**
@@ -128,7 +128,7 @@ Terminating the cascade is always safe — the pending work falls back to a manu
 
 **4-skill cascade allowlist (per C7).** The four auto-cascade target skills are: **comms-writer**, **delivery-engine**, **tracker-manager**, **artifact-generator**. Each target carries a "Chained Invocation Contract" section in its SKILL.md documenting upstream invokers, chained-context pre-fill from the Handoff Manifest, and `chained=true` argument semantics. All other skills remain manual-invocation and do not participate in auto-cascade. Adding a new target requires a GitHub issue + release.
 
-**Relationship to the Handoff Manifest.** The Handoff Manifest schema (`pmo-platform/skills/ppm-agent/SKILL.md` Section 10) carries the cascade metadata fields (`target_skill`, `cascade_scope`, `auto_invoke`, `chain_skip_askuserquestion`, `evidence_quality`, `dependencies`, `deadline`). Rules C1–C7 consume those fields to compute whether auto-invocation fires. The Manifest defines the contract; this protocol defines the enforcement.
+**Relationship to the Handoff Manifest.** The Handoff Manifest schema (`operations/skills/ppm-agent/SKILL.md` Section 10) carries the cascade metadata fields (`target_skill`, `cascade_scope`, `auto_invoke`, `chain_skip_askuserquestion`, `evidence_quality`, `dependencies`, `deadline`). Rules C1–C7 consume those fields to compute whether auto-invocation fires. The Manifest defines the contract; this protocol defines the enforcement.
 
 **Alternative design (not active).** If Cowork could not chain skills programmatically, the fallback would be AD-1 "tag bundle": PPM emits a copy/paste block listing all qualifying tags; the user clicks once to expand into parallel invocations. AD-1 preserves the breadth/depth bounds but loses the push-to-resolve latency benefit. Documented here for portability to environments without Skill-tool chaining; not active in the current platform.
 
@@ -150,7 +150,7 @@ Governs how multi-mode skills select which mode to run on a given invocation. Pa
 
 **Three-step pattern (applied in every `## Mode Selection` section of multi-mode SKILL.md).**
 
-1. **Step 1 — Chain-skip check.** Detect `chained=true` token in the Skill-tool `args` string (see Skill Chaining Protocol above for arg semantics). When present, read the `mode=<value>` token from the same string (pre-filled from the Handoff Manifest action entry per `pmo-platform/skills/ppm-agent/SKILL.md` Section 10) and skip AUQ entirely.
+1. **Step 1 — Chain-skip check.** Detect `chained=true` token in the Skill-tool `args` string (see Skill Chaining Protocol above for arg semantics). When present, read the `mode=<value>` token from the same string (pre-filled from the Handoff Manifest action entry per `operations/skills/ppm-agent/SKILL.md` Section 10) and skip AUQ entirely.
 2. **Step 2 — Tier-conditional default.** Always-ask tier invokes AUQ unconditionally; ask-when-ambiguous tier applies a per-skill trigger-match heuristic first and invokes AUQ only on ambiguous or no-match; never-ask tier has no Step 2 (no `## Mode Selection` section at all).
 3. **Step 3 — Execute.** Once the mode is resolved (via Step 1, heuristic, or AUQ), proceed to the corresponding mode section in the skill body.
 
@@ -214,7 +214,7 @@ All skills auto-log improvements by creating a GitHub Issue via the `improvement
 **Two paths for improvements:**
 
 **Path A — Self-generated (skill finds a gap during processing):**
-1. Apply the **tier-selection test** (symmetric content-shape routing, per `pmo-platform/reference/pipeline/stage-01-intake.md` §5 Path A) to choose the intake template, then create the GitHub Issue immediately using the chosen template:
+1. Apply the **tier-selection test** (symmetric content-shape routing, per `release/references/pipeline/stage-01-intake.md` §5 Path A) to choose the intake template, then create the GitHub Issue immediately using the chosen template:
    - **Observation tier** — author with `observation.yml` when EITHER (a) the insight reduces to "X is missing / drifting / suspect" with next action "look at it" rather than "do this specific thing", OR (b) the "what good looks like" answer fits in one sentence and no specific change / affected file / AC has been proposed yet. Three fields (what is missing, what good looks like in one sentence, which file or section). `observation` label auto-applied. Promotion to Proposal at Triage includes category selection.
    - **Proposal tier** — author with `improvement.yml` when both observation-tier triggers are absent AND every required field can be filled with substantive content. The required Category dropdown must be selected — Triage (Stage 2) applies the matching category label at CER Resolve. Severity is set in the body Priority field.
 
@@ -253,13 +253,13 @@ This protocol applies to PPM Agent processing. See § Skill Chaining Protocol ab
 
 ### Template Protocol
 
-Governs when a skill should produce an artifact via a canonical template versus author it ad-hoc. The protocol owns artifact-family classification, lifecycle state machine (DRAFT→REVIEWED→APPROVED→DEPRECATED→ARCHIVED), provenance schema, and 5 trigger conditions (T1-T5) + 5 promotion gates (P1-P5). Authoritative spec lives at [`pmo-platform/reference/standards/template-protocol.md`](../core/standards/template-protocol.md); canonical template-family taxonomy lives at [`pmo-platform/reference/standards/template-taxonomy.md`](../core/standards/template-taxonomy.md). Consumer skills (the 6 template-authoring skills: project-initiator, delivery-engine, eval-writer, pmo-process-designer, pmo-skill-refiner, release-planner) consult the protocol's T1-T5 trigger evaluation before authoring a templatizable artifact and the P1-P5 promotion gates before promoting a skill-internal template to canonical. See the [`template-architecture` roadmap](<OPERATOR_INSTANCE_ROADMAPS_PATH>/template-architecture.md) (operator-local) for the architected path-to-done across downstream initiatives.
+Governs when a skill should produce an artifact via a canonical template versus author it ad-hoc. The protocol owns artifact-family classification, lifecycle state machine (DRAFT→REVIEWED→APPROVED→DEPRECATED→ARCHIVED), provenance schema, and 5 trigger conditions (T1-T5) + 5 promotion gates (P1-P5). Authoritative spec lives at [`core/standards/template-protocol.md`](../core/standards/template-protocol.md); canonical template-family taxonomy lives at [`core/standards/template-taxonomy.md`](../core/standards/template-taxonomy.md). Consumer skills (the 6 template-authoring skills: project-initiator, delivery-engine, eval-writer, pmo-process-designer, pmo-skill-refiner, release-planner) consult the protocol's T1-T5 trigger evaluation before authoring a templatizable artifact and the P1-P5 promotion gates before promoting a skill-internal template to canonical. See the [`template-architecture` roadmap](<OPERATOR_INSTANCE_ROADMAPS_PATH>/template-architecture.md) (operator-local) for the architected path-to-done across downstream initiatives.
 
 ### Release Management Protocol
 
-Platform changes follow the release lifecycle defined in `Projects/_governance/RELEASE_PROTOCOL.md`. That file governs: lifecycle steps (intake → triage → bundle → plan → dry-run → snapshot → execute → close → verify), versioning, GitHub Issue requirements, implementation plan format, dry-run protocol, pre-change snapshot protocol with retention policy, and rollback procedures.
+Platform changes follow the release lifecycle defined in `release/governance/RELEASE_PROTOCOL.md`. That file governs: lifecycle steps (intake → triage → bundle → plan → dry-run → snapshot → execute → close → verify), versioning, GitHub Issue requirements, implementation plan format, dry-run protocol, pre-change snapshot protocol with retention policy, and rollback procedures.
 
-See `_governance/RELEASE_PROTOCOL.md` for the full protocol. Do not duplicate release process rules in this file.
+See `release/governance/RELEASE_PROTOCOL.md` for the full protocol. Do not duplicate release process rules in this file.
 
 ### Stale-RAID Auto-Escalation Protocol
 
@@ -690,7 +690,7 @@ All projects follow this structure. Do NOT create project-specific subfolders ou
 
 ### Platform Boundary Enforcement
 
-All PMO operational skills operate within Layer 2 (Operations domain — `Projects/` and its subfolders). Skills that write operational data — trackers, status logs, transcripts, generated artifacts — must target Layer 2 paths exclusively. No operational skill may modify Layer 1 files (`CLAUDE.md`, `pmo-platform/`, `.claude/settings.json`, `.claude/rules/`) without an approved IMP entry and a release executed through RELEASE_PROTOCOL.md. Bridge files (Layer 3) follow their dual-ownership rules defined in CLAUDE.md "Platform vs. Working Content Boundary."
+All PMO operational skills operate within Layer 2 (Operations domain — `Projects/` and its subfolders). Skills that write operational data — trackers, status logs, transcripts, generated artifacts — must target Layer 2 paths exclusively. No operational skill may modify Layer 1 files (`CLAUDE.md`, `core/`/`operations/`/`release/`, `.claude/settings.json`, `.claude/rules/`) without an approved IMP entry and a release executed through RELEASE_PROTOCOL.md. Bridge files (Layer 3) follow their dual-ownership rules defined in CLAUDE.md "Platform vs. Working Content Boundary."
 
 ```
 [Project Name]/
@@ -786,7 +786,7 @@ Every major folder carries a `README.md` so contributors and agents get cold-sta
 
 **Purpose:** <one sentence — what lives here>
 **Organization:** <how files/subdirs are arranged>
-**Governance:** <governing doc — /CLAUDE.md §X / pmo-platform/governance/OPERATIONS.md §Y / RELEASE_PROTOCOL.md>
+**Governance:** <governing doc — /CLAUDE.md §X / core/governance/OPERATIONS.md §Y / RELEASE_PROTOCOL.md>
 **Layer:** <1 (Engineering, git-tracked) | 2 (Operations) | 3 (Bridge)>
 ```
 
@@ -796,17 +796,17 @@ Every major folder carries a `README.md` so contributors and agents get cold-sta
 
 | Class | Applies to | Contract |
 |---|---|---|
-| **Index-style** | `pmo-platform/skills/`, `pmo-platform/reference/schemas/`, `pmo-platform/reference/templates/` | 4-line header **+ `## Index` table**. `skills/`: parameterized roster — `deploy.sh` `SKILL_LIST` + `SUPPLEMENTARY_SKILLS` + canary is the source of truth, `deploy.sh --check` Check 5 asserts the count; never hardcode a skill number. `schemas/`: one row per `*.md` with coverage area (regenerate from directory listing). `templates/`: preserve the existing registry (augment-not-regenerate). |
-| **Map-pointer** | `pmo-platform/reference/README.md` | Owned per the canonical reference-README convention — the canonical Diátaxis quadrant map. Per-folder READMEs never author quadrant prose. |
+| **Index-style** | `core/skills/`/`operations/skills/`/`release/skills/`, `core/schemas/`, `operations/templates/` | 4-line header **+ `## Index` table**. `skills/`: parameterized roster — `deploy.sh` the per-module arrays (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS) + `SUPPLEMENTARY_SKILLS` + canary is the source of truth, `deploy.sh --check` Check 5 asserts the count; never hardcode a skill number. `schemas/`: one row per `*.md` with coverage area (regenerate from directory listing). `templates/`: preserve the existing registry (augment-not-regenerate). |
+| **Map-pointer** | `core/README.md` | Owned per the canonical reference-README convention — the canonical Diátaxis quadrant map. Per-folder READMEs never author quadrant prose. |
 | **Lightweight** | all other folders | 4-line header + at most a 1–3 line "key entries / see <governing doc>" pointer — **no exhaustive file enumeration** (a hand-maintained file list rots; avoids duplicate-source drift vs. governing docs). |
 
-**`reference/` cross-link rule.** `pmo-platform/reference/README.md` is the canonical Diátaxis quadrant map for the reference tree. Per-folder READMEs inside `reference/` carry the lightweight 4-line header only and link up to it for the quadrant taxonomy — they do **not** restate the map. Each carries exactly one pointer line:
+**`core/` cross-link rule.** `core/README.md` is the canonical Diátaxis quadrant map for the reference tree. Per-folder READMEs inside `core/` carry the lightweight 4-line header only and link up to it for the quadrant taxonomy — they do **not** restate the map. Each carries exactly one pointer line:
 
 ```markdown
-> Quadrant taxonomy: see `pmo-platform/reference/README.md`.
+> Quadrant taxonomy: see `core/README.md`.
 ```
 
-**Link convention.** All links in per-folder READMEs use **workspace-rooted absolute form** (`pmo-platform/...`, `.claude/...`, `projects/...`, `memory/...`; leading-slash `/CLAUDE.md` for workspace-root files) — zero `../`, depth-invariant, so a future reorganization does not re-break them (per Amendment 1).
+**Link convention.** All links in per-folder READMEs use **workspace-rooted absolute form** (`core/...`/`operations/...`/`release/...`, `.claude/...`, `projects/...`, `memory/...`; leading-slash `/CLAUDE.md` for workspace-root files) — zero `../`, depth-invariant, so a future reorganization does not re-break them (per Amendment 1).
 
 ---
 

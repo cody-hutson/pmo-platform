@@ -24,7 +24,7 @@ The parent design discussion framed the gap as the absence of a tracking mechani
 
 ## 1. D-2 Placement Verdict
 
-Per Stage 5 D-2 verdict on : the action-item schema + persistence-substrate-binding + review-cadence rule + Procedure 7 hard gate are normative spec material — `pmo-platform/reference/standards/` is the canonical K1 home per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) (Q1 universality classifier: TRUE for any PMO-platform deployment; K1 codified-knowledge tier). The verdict IS this file's existence at this path. Sibling NEW standards files converge on the same placement, satisfying R4 N-way consistency at Collective Review: `hub-session-continuity.md` , `agent-handoff-framework.md` , and this file. Thin Procedure 4a + 7a cross-references in [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) plus subsection additions to the Operating Principle Decision Briefing template + Procedures 2 / 5 point operators to this standard for full schema + behavior; the bridge doc does NOT duplicate normative content.
+Per Stage 5 D-2 verdict on : the action-item schema + persistence-substrate-binding + review-cadence rule + Procedure 7 hard gate are normative spec material — `core/standards/` is the canonical K1 home per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) (Q1 universality classifier: TRUE for any PMO-platform deployment; K1 codified-knowledge tier). The verdict IS this file's existence at this path. Sibling NEW standards files converge on the same placement, satisfying R4 N-way consistency at Collective Review: `hub-session-continuity.md` , `agent-handoff-framework.md` , and this file. Thin Procedure 4a + 7a cross-references in [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) plus subsection additions to the Operating Principle Decision Briefing template + Procedures 2 / 5 point operators to this standard for full schema + behavior; the bridge doc does NOT duplicate normative content.
 
 ## 2. Action-Item Schema
 
@@ -50,7 +50,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 
 | id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| AI-001 | 2026-05-23T14:22:01Z | 5 | #NNNN | deferred-edit | hub | dedup github-projects-guide.md after PR #NNNN merges | event | after merge of PR #NNNN | file:pmo-platform/reference/specs/github-projects-guide.md | open | — | — |
+| AI-001 | 2026-05-23T14:22:01Z | 5 | #NNNN | deferred-edit | hub | dedup github-projects-guide.md after PR #NNNN merges | event | after merge of PR #NNNN | file:core/disciplines/github-projects-guide.md | open | — | — |
 ```
 
 **Field semantics (13 fields):**
@@ -227,7 +227,7 @@ Each of the THREE NEW protocols shipping in this standard carries the cutover cl
 | [`hub-spoke-bridge.md` Procedure 4a + Procedure 7a + Operating Principle + Procedures 2/5](../../release/references/how-to/hub-spoke-bridge.md) | Thin procedural cross-references — Operating Principle Decision Briefing template gains "Action items surfaced this routing point" subsection; Procedures 2/5 add scan-step; Procedure 4a is the scan binding at spoke completion; Procedure 7a is the HARD GATE binding at release close |
 | Stage 13 automated-closeout | Stage 13 automated-closeout consumer (FUTURE) — `automated-closeout.sh` MAY add an `action-items.md` open-row check before Phase 5 RELEASE_LOG transition when consumer-side adoption is timely. ACCEPT-AS-RESIDUAL. |
 | Release-synthesizer | Release-synthesizer composer (FUTURE) — cross-release pattern detection MAY surface chronic-carry-forward signals from `action-item-superseded` chains across ≥3 releases when first-class AI-NNN queryability is enabled |
-| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | K1 codified-knowledge convention placing standards in `reference/standards/`; Q1 universality classifier (action-item tracking is universal — TRUE for any PMO-platform deployment) |
+| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | K1 codified-knowledge convention placing standards in `core/standards/`; Q1 universality classifier (action-item tracking is universal — TRUE for any PMO-platform deployment) |
 | [`canonical-skill-structure.md § 2`](canonical-skill-structure.md) | `standards/` houses enforcement-carrying specs; schema + lifecycle + review-cadence + hard-gate are enforcement-carrying |
 | [`duplicate-source-discipline.md`](duplicate-source-discipline.md) | Register-or-remove rule; cross-reference over restatement — this standard CITES the hub-session-continuity substrate without re-canonicalizing |
 | [`evidence-grounding-standard.md`](evidence-grounding-standard.md) | R1 Evidence-Grounding artifact format for the 5 canonicalizations the Stage 5 spec produced |

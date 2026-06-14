@@ -75,7 +75,7 @@ The five-type mapping, with C12 altitude and primary consumer:
 |---|---|---|---|---|
 | 1 | **Vision** | Portfolio | User auto-memory store (durable platform-purpose) | Workspace owner; all skills consuming "what is this platform for" |
 | 2 | **Roadmap** | Program | `<OPERATOR_INSTANCE_ROADMAPS_PATH>/*.md` (operator-local, untracked per ADR-012) | `release-planner`, Stage 3 Bundle (convention only — in-repo enforcement retired per ADR-012) |
-| 3 | **Spec** | Project | `pmo-platform/reference/specs/*.md`, `pmo-platform/reference/standards/*.md`, release plans at `pmo-platform/releases/plans/*.md` | Stage 4 Planning, Stage 5 Solutioning, Stage 6 Engineering |
+| 3 | **Spec** | Project | `core/specs/*.md`, `core/standards/*.md`, release plans at `release/releases/plans/*.md` | Stage 4 Planning, Stage 5 Solutioning, Stage 6 Engineering |
 | 4 | **ADR** | Team-level decision record | `core/ADRs/ADR-NNN-*.md` (cross-cutting / platform-architecture) or `release/ADRs/ADR-NNN-*.md` (release-scope) per the ADR module-restructure | Decision-class consumers reading "why was X chosen?" |
 | 5 | **Git history** | Team-level change record | `.git/` (commits + PRs on github.com/[OPERATOR_GITHUB]/pmo-platform) | All audit / archeology / "what changed when" lookups |
 
@@ -425,18 +425,18 @@ The 6 pilot roadmaps generated 13 distinct findings (F1–F10 from automation.md
 
 ### Platform governance (Layer 1)
 
-- [`pmo-platform/governance/OPERATIONS.md`](../governance/OPERATIONS.md) — PMO protocols
-- [`pmo-platform/reference/explanation/knowledge-architecture.md`](../disciplines/knowledge-architecture.md) — K1-K5 tier model; placement of this framework as K1 standards
-- [`pmo-platform/reference/standards/framework-corpus-discipline.md`](framework-corpus-discipline.md) — corpus-class governance (sibling K1 standard)
-- [`pmo-platform/reference/standards/design-artifact-standard.md`](design-artifact-standard.md) — Tier-A design artifact activation (referenced in §2.2)
-- [`pmo-platform/reference/standards/evidence-grounding-standard.md`](evidence-grounding-standard.md) — R1 canonicalization grounding
-- [`pmo-platform/reference/standards/duplicate-source-discipline.md`](duplicate-source-discipline.md) — register-or-remove rule (referenced in §7.10)
-- [`pmo-platform/reference/specs/framework-catalog.md`](../specs/framework-catalog.md) — registry row for this framework
-- [`pmo-platform/reference/specs/reversibility-protocol.md`](../specs/reversibility-protocol.md) — CHEAP/MODERATE/EXPENSIVE/IRREVERSIBLE tiering (referenced in §3.1)
-- [`pmo-platform/reference/specs/label-taxonomy.md`](../specs/label-taxonomy.md) — `cluster:` / `initiative:` label semantics (referenced in §3.1)
+- [`core/governance/OPERATIONS.md`](../governance/OPERATIONS.md) — PMO protocols
+- [`core/disciplines/knowledge-architecture.md`](../disciplines/knowledge-architecture.md) — K1-K5 tier model; placement of this framework as K1 standards
+- [`core/standards/framework-corpus-discipline.md`](framework-corpus-discipline.md) — corpus-class governance (sibling K1 standard)
+- [`core/standards/design-artifact-standard.md`](design-artifact-standard.md) — Tier-A design artifact activation (referenced in §2.2)
+- [`core/standards/evidence-grounding-standard.md`](evidence-grounding-standard.md) — R1 canonicalization grounding
+- [`core/standards/duplicate-source-discipline.md`](duplicate-source-discipline.md) — register-or-remove rule (referenced in §7.10)
+- [`core/specs/framework-catalog.md`](../specs/framework-catalog.md) — registry row for this framework
+- [`core/specs/reversibility-protocol.md`](../specs/reversibility-protocol.md) — CHEAP/MODERATE/EXPENSIVE/IRREVERSIBLE tiering (referenced in §3.1)
+- [`core/specs/label-taxonomy.md`](../specs/label-taxonomy.md) — `cluster:` / `initiative:` label semantics (referenced in §3.1)
 - [`.claude/rules/release-process.md`](../../release/governance/release-process.md) — Collective Review Protocol (referenced in §7.9)
 - [`.claude/rules/doc-link-maintenance.md`](../rules/doc-link-maintenance.md) — cross-link integrity (referenced in §7.6)
-- [`pmo-platform/reference/pipeline/stage-13-close.md`](../../release/references/pipeline/stage-13-close.md) — Stage 13 Close checklist (forcing-function enforcement, §5)
+- [`release/references/pipeline/stage-13-close.md`](../../release/references/pipeline/stage-13-close.md) — Stage 13 Close checklist (forcing-function enforcement, §5)
 
 ### Non-overlap (explicit cross-reference per AC#7)
 

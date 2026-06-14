@@ -1,3 +1,5 @@
+<!-- reference-durability: allow-version-ref -->
+<!-- reference-durability: allow-link -->
 # Per-Stage Shard Standard — Pipeline Stage Definition Files
 
 **Origin:** sub-task re-scoped under Tier 0 Override (Option B) on 2026-05-23 — original premise referenced the now-deleted `pipeline-stages.md` (per [ADR-002](../../release/ADRs/ADR-002-modular-pipeline-stages-split.md)); re-scoped to per-stage shard authoring discipline.
@@ -10,7 +12,7 @@
 
 ## § 1. Purpose + Scope
 
-A **per-stage shard** is a single self-contained `pmo-platform/reference/pipeline/stage-NN-<name>.md` file that defines one of the 13 stages of the pmo-platform improvement-to-deployment pipeline. The shard set replaced the monolithic `pmo-platform/reference/pipeline-stages.md` per [ADR-002](../../release/ADRs/ADR-002-modular-pipeline-stages-split.md).
+A **per-stage shard** is a single self-contained `release/references/pipeline/stage-NN-<name>.md` file that defines one of the 13 stages of the pmo-platform improvement-to-deployment pipeline. The shard set replaced the monolithic `release/references/pipeline-stages.md` per [ADR-002](../../release/ADRs/ADR-002-modular-pipeline-stages-split.md).
 
 This standard codifies, prospectively:
 
@@ -175,14 +177,14 @@ Future extensions beyond § 12 follow the same rule. If a stage requires more th
 | Add a new cross-stage protocol owned by an existing stage | YES — append as extended-protocol H2 after § 11 (§ 3.2) | NO |
 | Add a stage-specific decimal sub-section to § 5 Process | YES — within the owning shard (§ 3.3) | NO |
 | Add a new enforcement infrastructure section to a stage | YES — append as § 12+ to the owning shard (§ 3.4) | NO |
-| Add a 14th stage to the pipeline | NO | YES — `stage-14-<name>.md` + Stage Index row in [`pipeline/README.md`](../../release/references/pipeline/README.md) + cross-cuts in [`.claude/rules/release-process.md`](../../release/governance/release-process.md) + mirror-pair update in [`pmo-platform/engineering/rules/release-process.md`](../../release/governance/release-process.md) |
+| Add a 14th stage to the pipeline | NO | YES — `stage-14-<name>.md` + Stage Index row in [`pipeline/README.md`](../../release/references/pipeline/README.md) + cross-cuts in the canonical source [`release/governance/release-process.md`](../../release/governance/release-process.md), redeployed to the workspace mirror `~/.claude/rules/release-process.md` (Check 9) |
 | Document a brand-new artifact class that is NOT a pipeline stage | NO | YES — but the artifact does NOT belong at `pipeline/stage-NN-*.md`; route per K1 standards / specs placement per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) |
 
 Author NEW shards in their entirety per § 2 (or § 3.1 when PLATFORM-SATISFIED applies). Pre-populate every § 1-§ 10 heading even when content is sparse; future revisions will fill them in.
 
 ### § 4.2 No mirror-pair contract
 
-There is NO mirror-pair contract for `pipeline/stage-NN-*.md` shards. Shards are **single-source** K1 reference docs. The mirror-pair pattern (per [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md) and [`.claude/rules/harness-deployment.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/harness-deployment.md)) applies to `.claude/rules/*` ↔ `pmo-platform/engineering/rules/*` pairs and is validated by `./deploy.sh --check` Check 9. Shard authors do NOT mirror, and no Check asserts byte-identity across two copies of a shard.
+There is NO mirror-pair contract for `pipeline/stage-NN-*.md` shards. Shards are **single-source** K1 reference docs. The mirror-pair pattern (per [`.claude/rules/skill-deployment.md`](../rules/skill-deployment.md) and [`.claude/rules/harness-deployment.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/harness-deployment.md)) applies to canonical source `core/rules/<name>.md` ↔ deployed mirror `~/.claude/rules/<name>.md` pairs and is validated by `./deploy.sh --check` Check 9. Shard authors do NOT mirror, and no Check asserts byte-identity across two copies of a shard.
 
 ### § 4.3 Naming + anchor conventions
 
@@ -219,7 +221,7 @@ When a protocol shipping in version `vX.Y` lands inside a stage shard (typically
 
 ```markdown
 **Cutover:** <protocol name> applies to releases entering Stage N strictly AFTER the v<X.Y> merge SHA
-recorded in [`pmo-platform/governance/RELEASE_LOG.md`](../../release/releases/RELEASE_LOG.md).
+recorded in [`release/releases/RELEASE_LOG.md`](../../release/releases/RELEASE_LOG.md).
 **The v<X.Y> release itself is exempt** (the rule shipping in v<X.Y> cannot fire on its own
 Stage N without creating a reflexive-pipeline loop).
 ```
@@ -289,20 +291,20 @@ This matches the workspace's canonical K1 retention pattern:
 
 ```bash
 # All commits that touched the shard:
-git log --follow pmo-platform/reference/pipeline/stage-NN-<name>.md
+git log --follow release/references/pipeline/stage-NN-<name>.md
 
 # Specific historical version:
-git show <sha>:pmo-platform/reference/pipeline/stage-NN-<name>.md
+git show <sha>:release/references/pipeline/stage-NN-<name>.md
 
 # Diff between two points in time:
-git diff <sha-old>..<sha-new> -- pmo-platform/reference/pipeline/stage-NN-<name>.md
+git diff <sha-old>..<sha-new> -- release/references/pipeline/stage-NN-<name>.md
 ```
 
 ### § 6.3 No frontmatter version field on shards
 
-Shards do NOT carry YAML frontmatter and do NOT carry a `version:` field. The [`version-field-semantics.md`](version-field-semantics.md) standard scopes the version-field discipline to skill `SKILL.md` files only. Empirical verification: `grep -l "^version:" pmo-platform/reference/pipeline/*.md` returns nothing.
+Shards do NOT carry YAML frontmatter and do NOT carry a `version:` field. The [`version-field-semantics.md`](version-field-semantics.md) standard scopes the version-field discipline to skill `SKILL.md` files only. Empirical verification: `grep -l "^version:" release/references/pipeline/*.md` returns nothing.
 
-The shard's *content* is the shard's contract. When a shard changes materially, the change ships in a release whose plan (`pmo-platform/releases/plans/vX.Y_RELEASE_PLAN.md`) cites the shard among the modified files and whose `RELEASE_LOG.md` deployment-log block records the release SHA. The combination of release-plan + RELEASE_LOG + `git log --follow` is sufficient for version-tracing; no in-file frontmatter is needed.
+The shard's *content* is the shard's contract. When a shard changes materially, the change ships in a release whose plan (`release/releases/plans/vX.Y_RELEASE_PLAN.md`) cites the shard among the modified files and whose `RELEASE_LOG.md` deployment-log block records the release SHA. The combination of release-plan + RELEASE_LOG + `git log --follow` is sufficient for version-tracing; no in-file frontmatter is needed.
 
 ### § 6.4 No shard header-metadata-block
 
@@ -346,7 +348,7 @@ A future revision MAY add § 11 to a stage that currently omits it (e.g., if Sta
 ### § 8.1 Canonical companions
 
 - [ADR-002 — Modular Pipeline Stages Split](../../release/ADRs/ADR-002-modular-pipeline-stages-split.md) — the architectural decision the shards implement.
-- [`pmo-platform/reference/pipeline/README.md`](../../release/references/pipeline/README.md) — directory index + Stage Index table + Cross-Cutting Reference Map. The shard reader's primary entry point.
+- [`release/references/pipeline/README.md`](../../release/references/pipeline/README.md) — directory index + Stage Index table + Cross-Cutting Reference Map. The shard reader's primary entry point.
 - [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) — K1 tier classification (this standard and the shards are K1).
 - [`execution-framework.md`](../disciplines/execution-framework.md) — the Process-layer explanation that every shard's § 5 Process body's `**Framework dimensions touched:**` line refers back to.
 
