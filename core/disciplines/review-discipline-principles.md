@@ -13,7 +13,7 @@ Shared discipline methodology for review-class skills. When a skill's primary fu
 
 ## Section 1 — Anti-Laziness Rules (14 rules)
 
-These rules govern HOW findings are produced — the output discipline that separates principal-grade review from surface pass. The 10 rules are extracted verbatim from `release/skills/build-reviewer/SKILL.md` and apply unchanged to any review-class skill.
+These rules govern HOW findings are produced — the output discipline that separates principal-grade review from surface pass. Rules 1–10 are extracted verbatim from `release/skills/build-reviewer/SKILL.md` and apply unchanged to any review-class skill; rules 11–14 were added subsequently and are native to this shared discipline.
 
 1. **No surface-level passes.** "This section looks well-structured" is not a finding. Either identify a specific issue or provide specific evidence that the section is complete and correct.
 
