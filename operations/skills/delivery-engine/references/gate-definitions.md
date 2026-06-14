@@ -68,7 +68,7 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 - [LG-1-EX-1] The business case quantifies expected value against cost with a stated assumption set (evidence: value/cost figures with named assumptions; not "TBD").
 - [LG-1-EX-2] Funding is authorized for the initiation phase, with a budget guardrail (evidence: a recorded funding decision and a guardrail figure).
 - [LG-1-EX-3] A sponsor is named and has accepted accountability (evidence: the sponsor field is populated by a person, not a role placeholder).
-- [LG-1-EX-4] Portfolio capacity is confirmed to absorb the work, or a sequencing decision is recorded (evidence: a capacity check referencing current portfolio load — see `capacity-model.md`, authored in this same release, once available).
+- [LG-1-EX-4] Portfolio capacity is confirmed to absorb the work, or a sequencing decision is recorded (evidence: a capacity check referencing current portfolio load — see [`capacity-model.md`](capacity-model.md)).
 **Key decisions:** Fund / hold / reject the business case (go / kill / hold).
 **Artifacts required:** Business case (value, cost, assumptions); funding decision record; named sponsor.
 **Escalation path:** Escalate to the portfolio governing body when the business case exceeds the authority holder's funding threshold or when capacity cannot absorb the work without displacing a committed initiative; trigger = funding-threshold breach or capacity conflict.
@@ -102,7 +102,7 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 - [LG-3-EX-1] The plan is baselined — scope, schedule milestones, and budget are committed and version-stamped (evidence: a baselined plan with a baseline date).
 - [LG-3-EX-2] The backlog is sufficiently refined for the first execution increment to start, with a Definition of Ready agreed (evidence: a DoR exists and the first increment's candidate items reference it — see [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist)).
 - [LG-3-EX-3] Cross-team and external dependencies are identified with owners and need-by dates (evidence: a dependency register with owner + date per edge — see [`dependency-rules.md`](dependency-rules.md)).
-- [LG-3-EX-4] Capacity is confirmed against the planned scope for the first planning horizon (evidence: a capacity assessment referencing team availability — see `capacity-model.md`, authored in this same release, once available).
+- [LG-3-EX-4] Capacity is confirmed against the planned scope for the first planning horizon (evidence: a capacity assessment referencing team availability — see [`capacity-model.md`](capacity-model.md)).
 **Key decisions:** Baseline the plan and authorize execution / hold pending dependency or capacity resolution / recycle to LG-2 for charter/scope rework.
 **Artifacts required:** Baselined delivery plan; refined backlog with agreed DoR; dependency register; capacity assessment.
 **Escalation path:** Escalate to the Steering Committee when a critical dependency has no committed owner/date, or when confirmed capacity cannot meet the baselined scope; trigger = uncommitted critical dependency or a capacity-vs-scope shortfall at baseline.
@@ -118,7 +118,7 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 **Exit criteria** (ALL must hold to PASS and transition to LG-5 — these ARE the Definition of Ready; run the template, do not restate it):
 - [LG-4-EX-1] Acceptance criteria are defined as specific, testable conditions (evidence: AC written in Given/When/Then or equivalent — per [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist) DoR #1).
 - [LG-4-EX-2] Dependencies are identified and none are in a blocked state (evidence: the item's dependency links are mapped and clear — DoR #2).
-- [LG-4-EX-3] The item is sized/estimated (evidence: an estimate is assigned — DoR #3; estimation discipline per `estimation-standards.md`, authored in this same release, once available).
+- [LG-4-EX-3] The item is sized/estimated (evidence: an estimate is assigned — DoR #3; estimation discipline per [`estimation-standards.md`](estimation-standards.md)).
 - [LG-4-EX-4] The technical approach is reviewed where applicable, with no open architecture question (evidence: design note or a recorded "no design needed" — DoR #4).
 - [LG-4-EX-5] A test approach is identified with test data available or a plan to create it (evidence: a stated test strategy — DoR #5).
 - [LG-4-EX-6] The item is small enough to fit one iteration (evidence: it meets the INVEST "Small" criterion; otherwise it is sliced — DoR #6).
@@ -286,7 +286,7 @@ When an agent is asked to advance work from Gate N to Gate N+1:
 | [`core/schemas/gate-criteria-spec.md`](../../../../core/schemas/gate-criteria-spec.md) | The platform-release **pipeline-stage** gates (`G-PR*/G-EX*/G-CL*`). Disambiguated from these project-lifecycle `LG-` gates by the namespace note in Purpose. |
 | [`sprint-defaults.md`](sprint-defaults.md) | Sprint cadence / capacity / velocity handling, consumed at the LG-4 (DoR) and LG-5 (DoD) work-item gates. |
 | [`dependency-rules.md`](dependency-rules.md) | Dependency types + escalation triggers, consumed at LG-3 (dependency register) and LG-4 (dependency clearance). |
-| `estimation-standards.md` · `capacity-model.md` (same dir; authored in this same release) | Estimation and capacity references consumed at LG-1/LG-3 (capacity confirmation) and LG-4 (sizing). Links added when those docs land on this branch. See § Provenance. |
+| [`estimation-standards.md`](estimation-standards.md) · [`capacity-model.md`](capacity-model.md) (same dir) | Estimation and capacity references consumed at LG-1/LG-3 (capacity confirmation) and LG-4 (sizing). See § Provenance. |
 | delivery-engine `SKILL.md` (`../SKILL.md`) | The consumer skill — Mode F applies these gates' exit criteria + the §4 transition rule; Mode G attributes gate decisions; Mode C references for context. |
 
 **Sibling-list reconciliation (out of scope here).** Three other corpus docs carry divergent, partial project-lifecycle gate lists today (`pmo-process-designer/references/traceability-matrix.md`, `ppm-agent/references/artifact-gap-detection.md`, `comms-writer/references/channel-formats.md`). Reconciling them to this canonical eleven-gate sequence is tracked separately and is NOT performed in this doc.

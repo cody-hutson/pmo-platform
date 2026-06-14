@@ -118,7 +118,7 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 - Requirements are defined (Stage 4 exit) — evidence: the requirements set exists.
 
 **Exit criteria** (ALL must hold to leave):
-- Capacity is committed against the planned scope for the planning horizon — evidence: a capacity assessment referencing team availability (capacity discipline per `capacity-model.md`, authored in this same release).
+- Capacity is committed against the planned scope for the planning horizon — evidence: a capacity assessment referencing team availability (capacity discipline per [`capacity-model.md`](capacity-model.md)).
 - A timeline with milestones is established — evidence: a scheduled plan with dated milestones.
 - Dependencies are identified with owners and need-by dates — evidence: a dependency register with an owner and date per edge (see [`dependency-rules.md`](dependency-rules.md)).
 
@@ -400,7 +400,7 @@ For example: LG-6 (the QA Gate carrying the AC's P1 predicate) is a **Quality** 
 | [`gate-checklists.md`](gate-checklists.md) | The gate-TYPE taxonomy (5 types) + per-type checklist templates + nine-dimension readiness. §6 forward-notes the type relationship; this doc never restates checklist content. |
 | [`methodology-parameterization-v1.md`](../../../../release/references/specs/methodology-parameterization-v1.md) | The canonical 8-value `delivery_approach` enum. §4's five-model grid is a labeled five-of-eight subset; SAFe/Hybrid semantics anchor to this doc's §3 definitions. |
 | [`dependency-rules.md`](dependency-rules.md) | Dependency types + escalation triggers, consumed at Stage 5 (Plan & Sequence — dependency register) and Stage 6 (DoR dependency clearance). |
-| `estimation-standards.md` · `capacity-model.md` (same dir; authored in this same release) | Estimation and capacity references consumed at Stage 3 (size band), Stage 5 (capacity commitment), and Stage 6 (DoR sizing). Links added when those docs land on this branch. |
+| [`estimation-standards.md`](estimation-standards.md) · [`capacity-model.md`](capacity-model.md) (same dir) | Estimation and capacity references consumed at Stage 3 (size band), Stage 5 (capacity commitment), and Stage 6 (DoR sizing). |
 | delivery-engine [`SKILL.md`](../SKILL.md) | The consumer skill — Mode C reads stage entry criteria (DoR is the entry gate to Build); Mode F reads QA/Acceptance exit criteria and the §5 P1 block (the AC). |
 
 ---
