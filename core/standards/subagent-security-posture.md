@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Subagent Security Posture — Hub-Orchestrated Autonomous Spawning
 
 **Origin:** monolith-cleanup release
