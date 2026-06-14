@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v1.10
+version: v1.18
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -310,6 +310,7 @@ HANDOFF_MANIFEST:
       context: "Exec digest required for Monday's steerco on [PROJECT_KEY] cutover"
       source: "Transcript TR-047 timestamp 14:22, decision by J. Smith"
       scope: "2-paragraph exec summary + decision log entries D-018, D-019"
+      sior_block: |                     # escalation-class [COMMS] only; per sior-escalation-protocol.md § Format Spec; voice-neutral; null otherwise
       inputs:
         - "05-Transcripts/Daily-Connects/2026-04-17.txt"
         - "04-PMO-Operations/[PROJECT_KEY]_Daily_Status_Log.md"
@@ -338,6 +339,12 @@ programmatic consumption by chaining logic.
 `target_skill`, `what`, `who_does`, `evidence_quality`, `cascade_scope`, `auto_invoke`. The backward-
 compatible 5-field tag set (tag/context/source/scope/inputs) is preserved verbatim — consumers
 parsing those five fields continue to work unchanged; cascade metadata layers on top.
+`sior_block` is **conditionally required**: it is REQUIRED when `tag: "[COMMS]"` AND the routed finding
+is escalation-class per the canonical Severity Thresholds in
+[sior-escalation-protocol.md](../../../core/standards/sior-escalation-protocol.md) (CRITICAL always;
+HIGH with the authority check; a MEDIUM that blocks a downstream deliverable/milestone/dependency);
+omitted or null otherwise. Like the cascade-metadata fields, it layers on top of the 5-field tag set —
+a consumer that predates the field ignores it and continues to parse the tag unchanged.
 
 **Self-check gate (Layer D — primary forcing function).** Before terminating the response, validate
 each `next_actions` entry against the required field set above. For each entry:
@@ -421,6 +428,7 @@ When emitting follow-up tags, use this format so downstream skills receive consi
 - **Source:** Evidence citation from the processed artifact
 - **Scope:** What the downstream skill should focus on
 - **Inputs:** What data/files the downstream skill needs
+- **SIOR block** (escalation-class `[COMMS]` only): a pre-formatted Situation / Impact / Options / Recommendation block per [sior-escalation-protocol.md](../../../core/standards/sior-escalation-protocol.md) § Format Spec. Voice-neutral — comms-writer renders voice/audience and writes the deadline-bearing Ask (Recommendation ≠ Ask). Emit per the canonical Severity Thresholds: CRITICAL always; HIGH with authority check (warn + route to PgM when the decision owner is unresolvable from PROJECT.md `## Key People`); MEDIUM only when the item blocks a downstream deliverable/milestone/dependency; LOW never.
 
 ## Dual output rule
 
@@ -665,6 +673,46 @@ structural conformance and content quality.
   the DIRECT updates, skips the matrix, and marks the run CLOSED; the un-cascaded
   secondary effects surface a week later as tracker drift the next processing run has
   to reverse-engineer.
+
+### [COMMS] escalation routed without a SIOR block at severity ≥ HIGH — HAND
+
+- **Signature (observable signal):** A `[COMMS]` follow-up tag (or its Section 10
+  Handoff Manifest action entry) routes an escalation-class finding — a materialized
+  risk, a blocker, a scope change, a schedule slip — to comms-writer carrying only
+  `context` / `scope` prose and no `sior_block`, when the finding is CRITICAL or HIGH
+  (or a MEDIUM that blocks a downstream deliverable). comms-writer then has to
+  re-derive the Situation / Impact / Options / Recommendation structure the routing
+  was supposed to carry.
+- **Conditional:** do NOT route a `[COMMS]`-tagged escalation to comms-writer without
+  a pre-formatted SIOR block when the routed finding is escalation-class at severity
+  ≥ HIGH (per the canonical Severity Thresholds), because routing the escalation
+  un-structured pushes the SIOR derivation downstream to comms-writer — which then
+  re-reads the source artifact ppm-agent already analyzed, defeating the
+  consume-structured-escalation contract and producing a naked escalation one hop
+  later.
+- **Root cause:** Emitting a full four-component SIOR block (with Options carrying
+  trade-offs and a Recommendation with confidence) costs more tokens than a one-line
+  `context` annotation; under output pressure the agent collapses the escalation into
+  a bare `[COMMS]` tag and assumes comms-writer will "structure it," treating the
+  voice-neutral structuring as comms-writer's job when it is ppm-agent's analytic
+  burden to carry.
+- **Mitigation:** Apply the trigger criteria strictly (`## Follow-up tags` →
+  Follow-Up Tag Handoff Format): for any `[COMMS]` tag whose routed finding is
+  CRITICAL (always), HIGH (with the authority check — warn + route to PgM when the
+  owner is unresolvable from PROJECT.md `## Key People`), or a blocks-downstream
+  MEDIUM, emit the `sior_block` per
+  [sior-escalation-protocol.md](../../../core/standards/sior-escalation-protocol.md)
+  § Format Spec — Situation / Impact / Options (2–3 with trade-offs) / Recommendation
+  (with explicit confidence), voice-neutral. Leave the deadline-bearing Ask to
+  comms-writer (Recommendation ≠ Ask). A LOW or non-blocking-MEDIUM `[COMMS]` tag
+  carries no SIOR block — omission there is correct, not a miss.
+- **Principal response vs. junior response:** Principal hands comms-writer a complete
+  voice-neutral SIOR block ("S: vendor API spec slips to 2026-06-30; I: 2-sprint build
+  start blocked or ~1 sprint rework; O: build-on-draft / wait-and-compress /
+  partial-spec-freeze; R: recommend partial-spec freeze, confidence MEDIUM") so
+  comms-writer only layers voice and writes the Ask. Junior routes
+  `[COMMS]: "vendor spec slipped — need an escalation email"` and leaves comms-writer
+  to reconstruct the impact, options, and recommendation from the source transcript.
 
 ## Shared Behavioral Rules
 
