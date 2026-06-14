@@ -1,5 +1,3 @@
-<!-- reference-durability: allow-version-ref -->
-<!-- reference-durability: allow-link -->
 # Per-Stage Shard Standard — Pipeline Stage Definition Files
 
 **Origin:** sub-task re-scoped under Tier 0 Override (Option B) on 2026-05-23 — original premise referenced the now-deleted `pipeline-stages.md` (per [ADR-002](../../release/ADRs/ADR-002-modular-pipeline-stages-split.md)); re-scoped to per-stage shard authoring discipline.

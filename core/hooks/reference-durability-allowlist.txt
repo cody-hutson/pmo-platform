@@ -80,3 +80,17 @@ release/releases/plans/
 # in the added-lines delta. They are NOT net-new fragile refs — an anchor fragment and a
 # regex. Mirrors the sibling stage-03-bundle / stage-04-planning / stage-12-execute entries.
 release/references/pipeline/stage-02-triage.md
+
+# v2 structural path reconciliation (#1103) — pre-existing intra-repo links + governance
+# version-cutover prose on touched lines. The pmo-platform/* -> v2 modular-monolith path
+# reconciliation re-touched lines in these durable-corpus files that ALSO carry pre-existing
+# intra-repo cross-reference links — five-function-spine is itself a concept-ownership
+# navigation map of per-section "Canonical source" pointers (a link-resolution map by design,
+# like the pipeline README above) — and, in subagent-security-posture, the pre-existing
+# reflexive-pipeline exemption clause: governance content, not a removable reference (same
+# class as the stage-04-planning version-cutover entry above). These are NOT net-new fragile
+# refs authored by the pass; the delta gate flags them only because the reconciliation touched
+# their lines. Retained by operator decision; exempting the files keeps the gate from
+# re-flagging pre-existing constructs surfaced incidentally by that edit.
+core/disciplines/five-function-spine-and-process-flows.md
+core/standards/subagent-security-posture.md
