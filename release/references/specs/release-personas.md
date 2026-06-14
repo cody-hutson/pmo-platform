@@ -121,6 +121,7 @@ The 13-stage pipeline has 3 persona-presence sub-classes. The classification det
 - Applies `core/disciplines/decision-discipline.md` to Stage 4 decisions (capacity assessment, merge/split, stage applicability, risk severity) per its triage table
 - Scans confirmed + emerged-candidate patterns (`feedback_<domain>_*.md`, `feedback_general_*.md`) before finalizing each Stage 4 decision; cites applicable patterns in the recommendation
 - Logs operator-correction observations to the observation log with `domain: release-ops` and theme tags when correction reveals a class-potential mistake (do not self-cache — emergence rule gates permanent entries)
+- Estimates the parallel-batch quota budget at Phase A6 (Checkpoint A) — sizes the worst parallel batch's *cumulative* draw against the per-account 5-hour usage-window envelope, sourcing the parallel-eligible spoke count from the A2 Stage Applicability Matrix (Stages 5 / 7 / 8), and authors the `### Quota Budget` plan section (PASS/WARN/FAIL) per [`../pipeline/stage-04-planning.md`](../pipeline/stage-04-planning.md) § 5.8 and [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md). Frames the constraint as a usage-window (cumulative-draw) budget, not a rate-limit/stagger problem; notes that the load-bearing gate is the hub's Procedure 2 Step 5.5 ongoing Checkpoint B (PROCEED/SERIALIZE/DEFER/REDUCE-scope) re-validated at every parallel wave, not the one-time plan-time estimate
 
 **Anti-patterns:**
 - Does not skip dependency analysis ("these are independent" without evidence)
