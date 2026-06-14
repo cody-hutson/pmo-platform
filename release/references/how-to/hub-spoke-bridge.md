@@ -952,6 +952,13 @@ For each finding requiring operator judgment:
 - **Parent-session model:** `{as-reported-by-spoke-runtime; e.g., from claude --version or session metadata}`
 - **Designated-model match:** YES / NO (PASS if all three are `opus` and match the agent-definition default OR an operator-declared per-stage override per `core/config/allowlists/agents-model-overrides.txt`)
 
+### Mode Provenance
+
+- **Declared mode:** `{the mode the hub named for this spoke — read verbatim from the sub-task instruction / chip prompt, e.g., "Mode B — Release Planning"}` (write `none-declared` if the hub named no mode)
+- **Invoked mode:** `{the mode the spoke actually executed — the SKILL.md ### Mode X section it ran, or `single-mode` for a one-mode skill, or `N/A — no skill (general-purpose persona)` when the spoke ran as a raw persona with no SKILL.md}`
+- **Mode source:** `body-heading` (`### Mode X` headings) / `description-list` (the `Modes:` line in the frontmatter `description`) / `n/a-single-mode` / `n/a-no-skill` — names the convention the skill's mode-enum was read from, so the enum's provenance is auditable
+- **Mode-match:** PASS / N/A / DRIFT (PASS when Declared == Invoked AND Invoked is in the skill's mode-enum; N/A when the skill is single-mode or no skill applies; DRIFT when Declared ≠ Invoked, OR Invoked is not in the enum, OR a multi-mode skill ran with `none-declared`)
+
 Then close sub-task #{SUB_TASK_NUMBER}.
 
 ## Scope
@@ -971,6 +978,10 @@ Before executing the task, verify:
 ```
 
 **Model Provenance block cutover (Stage 5 ADR Dimension 6):** The `### Model Provenance` block addition to the Spoke Template above (4 fields: Invocation model parameter / Agent-definition default / Parent-session model / Designated-model match) is the runtime-drift surface of the composite detection mechanism (companion to `deploy.sh --check` Check 27 + Stage 8 QA LLM-graded review).
+
+> **Cutover discipline:** Applies to all releases going forward.
+
+**Mode Provenance block cutover:** The `### Mode Provenance` block addition to the Spoke Template above (4 fields: Declared mode / Invoked mode / Mode source / Mode-match) is the runtime-drift surface of the mode-invocation composite detection mechanism (companion to `deploy.sh --check` Check 34 + Stage 8 QA LLM-graded review). Where Model Provenance catches model drift, Mode Provenance catches mode drift — a spoke silently skipping or mis-selecting a required mode. The Mode source field names which convention sourced the skill's mode-enum (`body-heading` preferred over `description-list` when a skill carries both, since the description list can be a stale subset).
 
 > **Cutover discipline:** Applies to all releases going forward.
 
