@@ -8,6 +8,19 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.20] - 2026-06-14
+
+Health colors and RAID escalations used to depend on which skill produced them and how each one decided where the lines were. This release writes those lines down once — the thresholds that turn a metric green, yellow, or red, and the ages at which an open risk or issue is warned and then escalated — and has every skill read from the same place, so the same project situation produces the same color and the same escalation no matter which part of the platform reports it.
+
+### Added
+
+- **One agreed set of health thresholds.** A single index now records which measure drives a health color at which level, where its green / yellow / red lines fall, and what each color tells you to do. *Why it matters:* a project that is eight percent behind schedule comes back the same color every time, instead of green from one skill and yellow from another. ([#271](https://github.com/cody-hutson/pmo-platform/issues/271))
+- **"Green on the outside, red on the inside" status is now caught.** The quality auditor has a defined set of checks for a status reported green while the evidence underneath is amber or red. *Why it matters:* a health roll-up that looks fine but hides a slipping schedule or overdue risks gets flagged for you instead of passing review. ([#270](https://github.com/cody-hutson/pmo-platform/issues/270))
+- **Stale risks and issues escalate on their own.** An open RAID item now has agreed ages at which it is first flagged and then escalated — an issue at 14 and 30 days, a risk at 30 and 60 — naming the owner and the threshold it crossed. *Why it matters:* a risk sitting open for two months surfaces a recommended escalation on its own instead of quietly aging until someone notices. ([#261](https://github.com/cody-hutson/pmo-platform/issues/261))
+- **Escalation routing reads from the same agreed thresholds.** How a scored risk or issue is routed to an escalation tier, and the ages that trigger escalation, are defined in one place the others cite. *Why it matters:* how severe an item must be to escalate, and how long it can sit before it does, are the same everywhere rather than re-decided skill by skill. ([#269](https://github.com/cody-hutson/pmo-platform/issues/269))
+
+[Full notes](release/releases/notes/v1.20_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.20)
+
 ## [v1.19] - 2026-06-14
 
 When a skill raised a Critical or High issue, it used to name the problem and hand the analysis back to you. It now states the situation, what it blocks, the realistic options, and a recommended course of action with a confidence level — pointed at a named decision owner — and it reads the same way whether the escalation came from a status update, a project review, a technical review, or a delivery/RAID surface.
