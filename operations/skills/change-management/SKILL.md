@@ -2,7 +2,7 @@
 name: change-management
 description: >
   Plans and tracks organizational change for go-lives and system transitions. Modes: Impact assessment · Training plan · Readiness checklist · Hypercare plan · Adoption tracking · Change matrix review. Ensures no deployment proceeds without impact assessment, training, and readiness validation. Triggers: "change impact assessment", "training plan", "readiness checklist", "hypercare plan", "adoption plan", "are we ready for go-live", "post-go-live support."
-version: v1.10
+version: v1.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -130,6 +130,17 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Audience-calibrated communications schedule across the change timeline."
 
 Await the user's selection; use it as the mode.
+
+### Step 2.5 — Select the change methodology (Modes A, C, D)
+
+After a mode is resolved (Step 1, 2, or 3) and before executing, for **Mode A (Change Impact Assessment), Mode C (Readiness Checklist), and Mode D (Hypercare Plan)** — the modes whose output is shaped by which change methodology applies — select the methodology (or combination) before executing:
+
+1. **Explicit user choice wins.** If the user named a methodology or combination (e.g. "use ADKAR", "Kotter + 7-S"), validate it is coherent per `references/methodology-selection.md` §5 (flag if two methodologies own the same layer for the same scope) and use it. Skip to Step 4.
+2. **Otherwise, run the selector.** Execute the selection procedure in `references/methodology-selection.md` §6: read the five selection axes from the change context (unit-of-change from the impact picture; `delivery_approach` from the project; org-scope, time-horizon, dominant-risk from the stakeholder/risk picture), run Selection Table A (unit-of-change) and Table B (delivery-approach → combination), reconcile, and emit the methodology-combination + per-methodology rationale.
+3. **Carry the selection into the mode.** The chosen combination determines which methodology deep-docs the mode reads (e.g. a Lewin + ADKAR + Bridges selection has Mode A read `references/adkar-framework.md` for the scoring scale, `references/lewin-3-stage.md` for the frame, `references/bridges-transition.md` for the transition layer). State the selected methodology(ies) in the mode output so the user sees which lens produced the artifact.
+4. **Omission signal.** Modes B (Training Plan), E (Change Matrix Ingestion), and F (CM Communications Schedule) do not run methodology selection — their outputs are not methodology-variant in the selection sense (Mode B's methodology variation is delivery-cadence, owned by `references/training-plan.md`). Omission for these modes is correct, not a gap.
+
+**Tier:** this is an inference step (Ask-when-ambiguous, consistent with Mode Selection's own tier) — the agent infers the axes and asks the user only when the unit-of-change or dominant-risk is genuinely undeterminable from the available context.
 
 ### Step 4 — Execute the selected mode
 
@@ -619,4 +630,10 @@ Read these on first use, then as needed for specific modes:
 | `references/readiness-checklist.md` | Mode C | Full readiness checklist, milestone linkage, verdict criteria |
 | `references/hypercare-plan.md` | Mode D | Hypercare template, exit criteria, adoption KPIs |
 | `references/change-matrix-schema.md` | Mode E | Expected schemas for change matrix sheets |
+| `references/adkar-framework.md` | Mode A, C, D (methodology) | ADKAR change-adoption model — the 1-5 scoring scale, barrier-point rule, sponsor-engagement ABCs, ADKAR-gated training timing, change-champion sizing |
+| `references/kotter-8-step.md` | Mode A, C, D (methodology) | Kotter 8-step process — the org-process transformation sequence, sequence-gate rules, and the three cardinal Kotter errors |
+| `references/lewin-3-stage.md` | Mode A, C, D (methodology) | Lewin 3-stage model — the Unfreeze → Change → Refreeze meta-frame, Force-Field analysis, and the stage-gate rules |
+| `references/bridges-transition.md` | Mode A, C, D (methodology) | Bridges transition model — the 3-zone psychological transition (Ending → Neutral Zone → New Beginning) and the ADKAR-seam composition |
+| `references/mckinsey-7s.md` | Mode A, C, D (methodology) | McKinsey 7-S framework — the 7-element alignment diagnostic, the 21-pair consistency assessment, and the Shared-Values central-weighting rule |
+| `references/methodology-selection.md` | Mode A, C, D (methodology selection) | Cross-methodology selection model — axes, the layered model (Lewin frame · Kotter/ADKAR/Bridges operational layers · 7-S cross-section), the delivery-approach → methodology-combination table, and the runnable selection procedure |
 | `references/output-format.md` | First response | Full output format spec with field definitions |

@@ -47,21 +47,11 @@ the culture dimension.
 
 ## ADKAR Barrier Point Integration
 
-For each stakeholder group, score each ADKAR element (1-5) to identify the barrier
-point -- the first element scoring <=3.
-
-| ADKAR Element | Score Range | Barrier Point Signal | Intervention Required Before Advancing |
-|---------------|------------|---------------------|---------------------------------------|
-| **Awareness** | 1-5 | "Why are we doing this?"; rumors; lack of context | Executive sponsor messaging, burning platform narrative, role-specific impact statements |
-| **Desire** | 1-5 | Disengagement, seeking exit, passive resistance | WIIFM framing, involvement in design, address fears directly, peer influence via champions |
-| **Knowledge** | 1-5 | Honest attempts fail, frequent questions, rework | Formal training, eLearning, job aids, sandbox environments, mentoring |
-| **Ability** | 1-5 | Inconsistent execution, reverting under pressure | Hands-on practice, coaching, shadowing, protected learning time |
-| **Reinforcement** | 1-5 | Backsliding post-go-live, old behaviors resurface | Recognition, metrics tied to new behaviors, celebrations, onboarding integration |
-
-**Barrier point rule:** Address the barrier point BEFORE investing in later elements.
-Sending someone to Knowledge training when they score 2 on Desire wastes the training
-budget entirely. Organizations using barrier point assessments achieve approximately
-95% adoption vs. 35% without.
+The ADKAR 1-5 scoring scale, the per-element barrier signals, and the barrier-point
+rule (first element scoring <=3; address it before investing in later elements) are
+defined in `adkar-framework.md` (the ADKAR single-source-of-truth). For each
+stakeholder group, score each ADKAR element 1-5 per that scale to identify the barrier
+point, then apply the impact-analysis-specific mapping below.
 
 ### ADKAR-Dimension Interaction Matrix
 
@@ -107,15 +97,21 @@ management realize 40% more value from initiatives (McKinsey).
 
 Impact assessment approach varies by delivery methodology:
 
-| Methodology | Assessment Timing | Assessment Cadence | Primary Framework | Integration Point |
-|-------------|------------------|-------------------|------------------|------------------|
-| **Waterfall** | Front-loaded during planning phase; comprehensive before build begins | Once at project initiation; refresh at each phase gate | Lewin + ADKAR | Phase gate review; change control board |
-| **Scrum** | Incremental per sprint; brief impact check per PBI with change implications | Every sprint (lightweight); deep assessment when scope changes | ADKAR + Bridges | Sprint Planning (what changes?); Sprint Review (did impact land?) |
-| **SAFe** | PI-cadenced; assessed at PI Planning for upcoming features | Every PI boundary; refreshed at I&A | Kotter + 7-S + ADKAR | PI Planning (alignment); I&A (improvement); IP iteration (training) |
-| **PRINCE2** | Stage-gate; assessed within Benefits Management Approach | Each stage boundary | Benefits Management | Stage boundary review; benefits review |
-| **Kanban** | Continuous; assessed per work item when impact threshold met | On-demand; triggered by impact severity threshold | STATIK + ADKAR | Service Delivery Review; Operations Review |
-| **Hybrid** | Dual-cadence: sprint-level for agile streams, phase-gate for waterfall streams | Per sprint (agile) + per phase gate (waterfall); integration sprint reviews | 7-S + phased stream integration | Integration sprint reviews + phase gate CABs |
-| **Lean** | Continuous; gemba-based daily observation of change absorption | Daily (gemba); formal monthly or quarterly review | Respect for People + kata | Gemba walks; obeya room reviews |
+| Methodology | Assessment Timing | Assessment Cadence | Integration Point |
+|-------------|------------------|-------------------|------------------|
+| **Waterfall** | Front-loaded during planning phase; comprehensive before build begins | Once at project initiation; refresh at each phase gate | Phase gate review; change control board |
+| **Scrum** | Incremental per sprint; brief impact check per PBI with change implications | Every sprint (lightweight); deep assessment when scope changes | Sprint Planning (what changes?); Sprint Review (did impact land?) |
+| **SAFe** | PI-cadenced; assessed at PI Planning for upcoming features | Every PI boundary; refreshed at I&A | PI Planning (alignment); I&A (improvement); IP iteration (training) |
+| **PRINCE2** | Stage-gate; assessed within Benefits Management Approach | Each stage boundary | Stage boundary review; benefits review |
+| **Kanban** | Continuous; assessed per work item when impact threshold met | On-demand; triggered by impact severity threshold | Service Delivery Review; Operations Review |
+| **Hybrid** | Dual-cadence: sprint-level for agile streams, phase-gate for waterfall streams | Per sprint (agile) + per phase gate (waterfall); integration sprint reviews | Integration sprint reviews + phase gate CABs |
+| **Lean** | Continuous; gemba-based daily observation of change absorption | Daily (gemba); formal monthly or quarterly review | Gemba walks; obeya room reviews |
+
+Change-methodology selection — which methodology or combination applies per delivery
+approach (e.g. Waterfall → Lewin + ADKAR, Scrum → ADKAR + Bridges, SAFe → Kotter + 7-S +
+ADKAR) — is owned by `methodology-selection.md` §4
+(Selection Table B), the authoritative cross-methodology selector. This table covers the
+impact-assessment timing / cadence / integration view only.
 
 ## Impact Assessment Schema (Mode A Output)
 

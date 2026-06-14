@@ -93,18 +93,11 @@ cutover plans and environment readiness assessments, use them as [SOURCE].
 
 ## ADKAR Readiness Scoring
 
-For each stakeholder group, score ADKAR elements 1-5. The barrier point is the first
-element scoring <=3.
-
-### Scoring Guide
-
-| Score | Label | Observable Indicators |
-|-------|-------|----------------------|
-| 5 | **Strong** | Active advocacy; consistent demonstration; no regression risk |
-| 4 | **Adequate** | Meets threshold; functional capability; minor gaps manageable |
-| 3 | **Borderline** | Inconsistent; requires active support to maintain; at risk under pressure |
-| 2 | **Weak** | Significant gaps; frequently reverts; requires intensive intervention |
-| 1 | **Absent** | No evidence of this element; foundational work required |
+For each stakeholder group, score ADKAR elements 1-5. The 1-5 scoring scale (5 Strong /
+4 Adequate / 3 Borderline / 2 Weak / 1 Absent, with observable indicators) and the
+barrier-point rule (the barrier is the first element scoring <=3) are defined in
+`adkar-framework.md` (the ADKAR single-source-of-truth). Apply that scale, then use the
+readiness-specific decision logic and summary table below.
 
 ### Barrier Point Decision Logic
 
