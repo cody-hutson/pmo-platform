@@ -23,7 +23,11 @@ Because #87 is a single issue, the dependency graph is **internal** (ordering am
 
 **Baseline pin (audit-baseline discipline):** This plan's cross-release contention scan and currency claims are pinned at **origin/main `dfb3836`** (worktree HEAD `4a6b7aa` is 9 commits behind origin/main from the v1.15 merge, but **none of the six affected files diverge** between the two — verified `git diff --stat 4a6b7aa origin/main -- <6 files>` returns empty). Re-check the sibling-milestone population (≈28 open milestones) before relying on the contention findings at Stage 9. [SOURCE: `git rev-parse`, `git diff --stat`]
 
----
+### Domain Practice Provenance
+
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-06-13, domain: governance }
+
+This is a pipeline-internal / governance release — its entire File Change Matrix is internal pmo-platform artifacts (pipeline-spec edits, a schema bump, an ADR, and one skill-internal change). Per `stage-04-planning.md` § 5.7 (Phase A1.5 Domain-Best-Practice Sourcing-or-Flag Step, software/governance/pipeline-internal exemption clause), no *external* domain best-practice applies; the `governance` domain class points the downstream design-aware consumers at `core/standards/domain-best-practices/governance.md`, which encodes the platform's own internal-deliverable practice. Exempt from external sourcing only — NOT from domain classification. [SOURCE: `stage-04-planning.md` § 5.7 exemption clause + label form]
 
 ### Dependency Graph
 
