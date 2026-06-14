@@ -2,7 +2,7 @@
 name: pmo-technical-analyst
 description: >
   Reviews technical artifacts with senior TPM judgment — surfaces risks not obvious from the document alone. Modes: FDD review · Integration risk · Architecture assessment · Dependency identification · Feasibility feedback. Use when uploading FDDs, integration specs, or architecture documents. Triggers: "review this FDD", "what are the technical risks", "check this integration design", "architecture review", "feasibility check", "what's missing from this spec."
-version: v1.10
+version: v1.19
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -287,6 +287,72 @@ Findings organized by the 6 risk dimensions. Each finding includes:
 severity (CRITICAL / HIGH / MEDIUM / LOW), likelihood (HIGH / MEDIUM / LOW),
 evidence, impact, and remediation. Top 5 risks must be prioritized by
 severity × likelihood.
+
+### 3.1 SIOR Emission for High-Severity Findings
+
+CRITICAL and HIGH findings in the Risk Matrix are **escalation-class** — they carry their
+own escalation structure, not just a matrix row. Emit them in **SIOR format** (Situation /
+Impact / Options / Recommendation) per the canonical
+[sior-escalation-protocol.md](../../../core/standards/sior-escalation-protocol.md). This skill
+does not re-define SIOR — it references the canonical format, severity-threshold policy, and
+decision-owner-mapping pattern there.
+
+**CRITICAL findings — always SIOR, with a named decision owner.**
+Every CRITICAL finding is emitted as a full SIOR block (all four components — the
+Recommendation is mandatory and carries an explicit confidence level HIGH/MEDIUM/LOW) **and
+names a decision owner** resolved via the Decision-Owner Mapping below. A CRITICAL finding is
+escalated with all four SIOR components regardless of context — there is no conditional skip.
+The SIOR block accompanies the Risk Matrix row and feeds the Section 8 R-TA-### RAID entry
+(per the existing severity-gated promotion rule — see the "High-severity finding terminates in
+the review" failure mode).
+
+**Decision-Owner Mapping (per [sior-escalation-protocol.md](../../../core/standards/sior-escalation-protocol.md) § Decision-Owner Mapping).**
+Resolve the owner by role from the project's free-text `## Key People` table in PROJECT.md:
+1. Determine the finding's decision domain (schedule / scope / resource / technical / vendor —
+   for technical findings this is typically the technical lead or architecture owner).
+2. Look up the responsible role in the `## Key People` table.
+3. **If a matching role is present:** name that owner by role in the SIOR Recommendation
+   ("Recommend the Technical Lead approve Option 2 by …"). Label per the Guardrails
+   memory-attribution rule (`[CONTEXT]` "from project context, not current artifact" when the
+   owner is sourced from project context rather than the reviewed artifact).
+4. **If no matching authority role is present, or the table is absent:** do **not** fabricate an
+   owner — emit a warning and route to the PgM ("⚠️ No authority owner resolvable for [domain]
+   from `## Key People`; routing to PgM"). See the HIGH-finding authority check below.
+
+**HIGH findings — SIOR with a preceding stakeholder-authority check.**
+Before emitting a HIGH finding's SIOR block, run the authority check: resolve the decision owner
+via the Decision-Owner Mapping, then confirm the named owner has authority over the finding's
+decision domain.
+- **If authority is clear** (a matching role exists in `## Key People`): emit the full SIOR block
+  naming that owner.
+- **If the named owner's authority is unclear, or no authority data exists** in `## Key People`:
+  **raise a warning and route the escalation to the PgM** as the default escalation owner
+  ("⚠️ Authority for [domain] unclear from `## Key People` — routing this HIGH finding to PgM").
+  Never fabricate an authority owner to fill the gap.
+
+This degrades gracefully against verified live state: PROJECT.md has no structured
+authority/`decision_owner` field today (the `## Key People` table is free-text; a dedicated
+Stakeholder Register / RACI is a documented future-release gap). When a structured authority
+field ships, this check upgrades to read it.
+
+**MEDIUM findings — SIOR conditional, not by whim.**
+Emit SIOR for a MEDIUM finding **only when it blocks downstream work** — per the canonical
+Severity-Threshold policy in [sior-escalation-protocol.md](../../../core/standards/sior-escalation-protocol.md)
+§ Severity Thresholds (MEDIUM = conditional-on-blocks-downstream: the finding is on a path to a
+dated commitment another item, milestone, or dependency relies on). A MEDIUM finding with no
+downstream block is tracked as a Risk Matrix row, not escalated via SIOR. **LOW** findings are
+never emitted in SIOR. This skill applies the canonical table — it does not define its own MEDIUM
+rule (consistent with ppm-agent and delivery-engine, which reference the same table).
+
+**Why the threshold gradient.** CRITICAL findings always carry SIOR because a CRITICAL technical
+finding *is* a decision the TPM must broker now — a naked CRITICAL ("the batch job has no rollback")
+without Options + a Recommendation transfers the analytic burden back to the reader at the worst
+possible moment. HIGH findings carry SIOR but gate on authority because a HIGH finding routed to the
+wrong owner stalls; the authority check ensures the escalation lands where it can be actioned. MEDIUM
+is conditional because escalating every MEDIUM finding in SIOR floods the decision channel and
+trains the reader to ignore it — SIOR is reserved for MEDIUM items that actually block a downstream
+commitment, where the structured Options/Recommendation earns its cost. The gradient matches the
+escalation-cost-vs-decision-value tradeoff the canonical protocol encodes.
 
 ### 4. Gap Analysis
 What the document doesn't say. Missing sections, absent considerations,
@@ -584,6 +650,40 @@ structural conformance and content quality.
   as Risk Matrix row 3 with nothing in Section 8; six weeks later the production
   incident postmortem finds the risk was "known" — documented in a review output
   nobody promoted into the RAID Log.
+
+### CRITICAL finding emitted without SIOR structure + a named decision owner — OUT
+
+- **Signature (observable signal):** A Section 3 Risk Matrix finding classified CRITICAL ships as
+  a plain matrix row (severity / likelihood / evidence / impact / remediation) without a SIOR block —
+  no Situation/Impact/Options/Recommendation structure, no explicit confidence level, and/or no named
+  decision owner (and no `⚠️ routing to PgM` warning where the owner is unresolvable). The reader gets
+  a flagged problem but not the structured decision package a CRITICAL finding demands.
+- **Conditional:** do NOT emit a CRITICAL finding without a full SIOR block and a named decision owner
+  (or a warn-and-route-to-PgM when the owner is unresolvable), because a CRITICAL technical finding is a
+  decision the TPM must broker immediately — a bare matrix row transfers the Options analysis and the
+  routing decision back to the reader at the moment they can least afford it, and an unrouted CRITICAL
+  ages silently until it surfaces as the production incident it predicted.
+- **Root cause:** The Risk Matrix row feels complete — severity, likelihood, impact, and a remediation
+  are all written down, so the finding reads as "handled." Authoring the SIOR block (Options with
+  trade-offs + an explicit Recommendation + resolving the owner) is a second, heavier representation of
+  the same finding, and under output volume (a 40-page FDD producing a dozen findings) the heavier step
+  is the one that gets dropped — precisely on the highest-severity rows where it matters most.
+- **Mitigation:** Apply the severity-conditional SIOR rule (per
+  `../../../core/standards/sior-escalation-protocol.md` § Severity Thresholds): every CRITICAL finding
+  produces a full SIOR block with an explicit confidence level AND a decision owner resolved via the
+  Decision-Owner Mapping (free-text `## Key People`; warn-and-route-to-PgM on a miss — never fabricate
+  an owner). HIGH findings additionally pass the authority pre-check before SIOR emission. The SIOR
+  block composes with the existing Section-8 RAID promotion rule — the finding is complete when its
+  Risk Matrix row, its SIOR block, and its Section 8 R-TA-### entry reconcile.
+- **Principal response vs. junior response:** Principal ships "**CRITICAL** — reservation batch has no
+  warehouse-lag failure handling. **S:** the batch reads warehouse data that can lag the source by hours;
+  **I:** stale-read produces silently-wrong reservations, invisible to the catch-block, blocking accurate
+  inventory at go-live; **O:** (1) add a freshness-gate check pre-read [cost: 1 story], (2) move the batch
+  behind the warehouse-refresh event [cost: integration rework], (3) accept + monitor [risk: silent data
+  errors]; **R:** Option 1 — lowest cost, closes the silent-failure path; confidence: HIGH [MODERATE ·
+  confidence: HIGH]. **Decision owner:** Technical Lead [CONTEXT — from `## Key People`]." Junior ships
+  "Risk Matrix row 3: reservation batch warehouse-lag — CRITICAL" and nothing else; the decision-maker
+  has to derive the options and find the owner themselves, and the finding stalls.
 
 ## Shared Behavioral Rules
 

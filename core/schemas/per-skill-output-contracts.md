@@ -212,6 +212,14 @@ entry `stakeholder-comms-structure`).
 - All drafts reviewed for accessibility (plain language, active voice, numbered lists)
 - Escalation drafts reviewed for urgency framing (clear ask, context, deadline)
 
+**SIOR Escalation Structure (Escalation type):**
+- Escalation-type output uses the SIOR block per [`sior-escalation-protocol.md`](../standards/sior-escalation-protocol.md):
+  Situation / Impact / Options (2–3 with trade-offs) / Recommendation (with explicit confidence level).
+- The Recommendation is mandatory and explicit; an Ask may accompany it but never replaces it
+  (Recommendation ≠ Ask).
+- Severity-threshold policy (when SIOR fires) is the canonical table in the protocol doc — CRITICAL
+  always / HIGH with authority check / MEDIUM conditional-on-blocks-downstream.
+
 ### Reversibility Tier + Confidence
 
 Output class → default tier + confidence (per `../specs/reversibility-protocol.md`):
@@ -240,6 +248,7 @@ All factual claims in drafts carry one of the 5 evidence labels per CLAUDE.md §
 - [ ] Evidence tags on all factual claims; no [ASSUMPTION] tags if marked READY
 - [ ] Draft is complete and copy/paste-ready
 - [ ] Compliance check present (org-wide or escalation types)
+- [ ] Escalation-type drafts carry a full SIOR block with an explicit Recommendation + confidence level
 - [ ] Audience notes present (if needed)
 - [ ] Alternative versions present (if significant audience gap)
 - [ ] Tone appropriate for type and audience

@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Stage 3: Bundle
 
 > **Source:** Stage 3 originating spec
@@ -56,14 +57,15 @@ The map carries a bidirectional verdict + an evidence-cited per-edge table + an 
 ```
 ## Parallelization Map (recorded YYYY-MM-DD)
 
-**Verdict:** [Tier-A clean / Tier-B soft-coupled / Tier-C blocking-dep — bidirectional scan]
+**Verdict:** [Tier-A clean / Tier-B soft-coupled / Tier-C blocking-dep / Tier-S structural-blast-radius — bidirectional scan]
 
 | Other milestone | Direction | Edge type | Body confirmation |
 |---|---|---|---|
-| v<N.M> | this-blocks-other / other-blocks-this / bidirectional | hard / soft / file-contention | <evidence cite> |
+| v<N.M> | this-blocks-other / other-blocks-this / bidirectional | hard / soft / file-contention / structural-blast-radius | <evidence cite — for a structural-blast-radius edge, the mover-classifier + F1–F6 sweep verdict line + the intersecting form(s)> |
 
 **Reconfirm procedure:** Run hard-vs-soft scan via:
 `gh issue list --milestone "<this milestone>" --state open --json number,body --jq '.[] | select(.body | test("(?i)blocked by|depends on|requires|after #[0-9]+"))'`
+AND, for any sibling milestone whose File Change Matrix declares a rename / relocate / delete, re-run the structural-blast-radius mover-classifier + F1–F6 sweep and re-test the intersection predicate (see the Structural-Blast-Radius axis below).
 
 Reconfirmed at Stage 3 A7 refresh and Stage 4 Phase A0 entry; stale-dated map = finding.
 ```
@@ -75,6 +77,7 @@ Reconfirmed at Stage 3 A7 refresh and Stage 4 Phase A0 entry; stale-dated map = 
 | Hard | "blocks", "depends on", "requires", "after #N" | enters bidirectional graph as dep |
 | Soft | "composes with", "coordinates with", "adjacent to", "relates to" | does NOT enter graph; informational |
 | File-contention | "same file as #N", "edits same section" | enters Contention Map only, not dep graph |
+| Structural-blast-radius | a sibling's edit-set intersects this release's structural surface — computed by the mover-classifier → F1–F6 sweep (`git`-computed; see the axis definition below). Pre-branch fallback (no release branch exists yet at Stage 3): the sibling's File Change Matrix `change_type` declaring rename / relocate / delete. | enters the Parallelization Map as a serialization edge (Tier-S); NOT the dep graph |
 
 The full classifier note is the Hard-vs-Soft Edge Classifier in the release-planner dependency-analysis reference.
 
@@ -83,6 +86,29 @@ The full classifier note is the Hard-vs-Soft Edge Classifier in the release-plan
 - **File-contention always-emit pattern — runs at the `release-planner` skill's Mode B emit time** — its Mode B Output Format always emits a `## File Contention Map` even when no file contention is detected (positive-signal pattern). Emit-once-per-release-plan; not a standing milestone-description artifact.
 
 This A9.6 convention covers the standing/durable/reconfirmable record that those two surfaces do not. Three surfaces, three scopes — not conflated.
+
+**A9.6.1 — Structural-Blast-Radius (Path-Invalidation) contention axis.** A third contention class sits alongside the ticket-dependency (Hard) and same-path (File-contention) classes above: **structural blast radius**. A file-mover release — one that renames, relocates, deletes-and-recreates, or restructures a directory of durable-corpus files — invalidates path assumptions for every concurrent release whose edit-set references the moved/deleted paths, even when the two releases carry **no ticket-dependency edge and no same-path content overlap**. This is the collision class the Hard and File-contention rows are structurally blind to (a sibling that references a renamed path by a relative `../` link shares no literal path with the mover and declares no dependency on it). A release intersecting another's structural surface is a **serialization point, not a parallel candidate**.
+
+*Step 1 — produce the mover-set (reproducible 4-token git mover-classifier).* Deterministic, re-runnable by any operator/spoke; status codes map to git ground truth:
+
+| Signal token | Definition | Reproducible detection command (repo-agnostic) |
+|---|---|---|
+| `RENAME` | a path renamed in place (same directory, new basename) | `git diff --name-status --find-renames=50% <base>..<head>` → `R` lines, dirname unchanged |
+| `RELOCATE` | a path moved across directories (path prefix changed) | `git diff --name-status --find-renames=50% <base>..<head>` → `R` lines, dirname changed |
+| `DELETE-RECREATE` | a path deleted (with or without a near-identical re-add elsewhere) | `git diff --name-status <base>..<head>` → `D` lines. A standalone `D <path>` is a mover unconditionally — not gated on a recreate being rename-paired — so a sub-threshold copy+delete still enters the sweep via the pre-move baseline tree |
+| `DIR-RESTRUCTURE` | ≥2 paths under a common directory prefix all RENAME / RELOCATE / DELETE in one release | group the above by leading directory prefix; ≥2 movers sharing a prefix = a subtree restructure |
+
+The mover-set = `{renamed-from} ∪ {renamed-to} ∪ {relocated, both ends} ∪ {deleted}`, plus restructured-subtree roots.
+
+*Step 2 — compute the cross-release structural surface `SURFACE(R)` via the F1–F6 ref-form sweep.* Detection of the rewrite/break surface of a moving set is the canonical job of the **ref-form sweep** in [`doc-corpus-reorg-ref-forms.md`](../protocols/doc-corpus-reorg-ref-forms.md) (the same sweep Stage 5 Phase A3.2 fires for within-release rewrite-completeness); the cross-release axis **consumes that protocol parameterized by the mover-set's old/new path pairs** rather than re-deriving a second surface enumerator. For a deleted/renamed-from path the inbound forms run against the **pre-move baseline tree** (`git show <baseline>:<old-path>` exists where HEAD does not), because the sibling's edit-set still contains references to the old path string. The cross-release `SURFACE(R)` is the union of the REWRITE-dispositioned paths across **F1 (module-rooted) + F2 (relative-inbound) + F3 (root-escape) + F5 (retained-sibling→mover) + the in-tree half of F6 (governed mirror-pair)**. **F4 (mover-internal-outbound) is EXCLUDED from the cross-release intersection** — F4 links live *inside* the moving file and break because the mover's own base path changes; rewriting them is R₁'s own Stage-5 Phase A3.2 obligation, not an edit to the target files, so a sibling editing those targets is not a cross-release contention. Including F4 would over-serialize against the repo's highest-traffic governance files (the over-serialization guard). For F6, only **in-tree mirror pairs** enter the git predicate; a workspace-mirror partner (`~/.claude/rules/*`) is out-of-tree and inert in a `git log origin/main` predicate — that half is a deploy-check (Check 9) concern, not the cross-release surface.
+
+*Step 3 — the intersection predicate (the serialization decision).* For each concurrent/planned sibling release R₂: `serialize(R₁, R₂) := EDITSET(R₂) ∩ SURFACE(R₁) ≠ ∅`. `true` → R₁ and R₂ are a serialization point (one merges, the other re-baselines); `false` → parallel-safe on the structural axis (still subject to the Hard + File-contention axes). The surface is bounded to the mover-set's own rewrite/break surface (the sweep is parameterized by the mover-set, never the whole repo) — a sibling edit outside the surface is explicitly not a serialization signal.
+
+**Catch-point honesty.** At **Stage 3 Bundle no release branch exists yet**, so the git mover-classifier (which needs `base..head`) cannot run, and a zero-ticket-edge structural collision typically carries no mover-language in either issue body — therefore Stage 3 is an **advisory pre-filter** keyed on each sibling's File Change Matrix `change_type`. The **authoritative** structural detection runs at **Stage 4 A4** (the first point a release branch exists → the mover-classifier + F1–F6 sweep are runnable) and is re-confirmed at **Stage 9 G-PR9** / **Stage 12 Phase A.5**. The convention does not claim Stage-3 reliability for the zero-edge class.
+
+**Scope.** This axis covers **corpus mover-sets** (markdown-reference forms rooted at `core/` / `release/` / `operations/` — every observed cross-release structural collision to date is a corpus reorg). A future release whose mover-set is **code** uses the domain-aware impact-analysis branch the Stage 5 Phase A3.1 domain-selector already defines (a code-import-graph analog), not this corpus sweep.
+
+**Cutover (introducing-release-exempt).** The structural-blast-radius axis applies to milestones entering Stage 3 / Stage 4 strictly AFTER this protocol's introducing-release merge SHA recorded in the release log. The introducing release itself is exempt (reflexive-pipeline-loop discipline — the release that adds this axis cannot fire it on its own bundling). All milestones that entered the relevant stage prior to the introducing release are also exempt.
 
 **Auto-populator candidate:** the `release-planner` skill's Mode B already maps cross-milestone deps + emits G3-07 status + file contention; drafting the Parallelization Map is a natural extension of that surface. The skill SHOULD draft the map at Mode B emit time so operator review at Phase B1 covers the map alongside Outcome Statement + Release Class. The auto-populator convention note lives in the `release-planner` skill definition.
 

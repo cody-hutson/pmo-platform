@@ -1,5 +1,5 @@
 ---
-title: "ADR-024 — Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key"
+title: "ADR-026 — Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key"
 status: Proposed
 date: 2026-06-13
 release: parallel-launch-quota-budget-gate
@@ -11,13 +11,16 @@ source_observations:
   - "The schema § 3 governance rule states that adding a subtype requires a governance change; there is therefore no zero-surface telemetry route — the cheapest honest surface is a two-surface edit (schema § 3 enum row + the append-pipeline-event.sh static-fallback mirror kept in lockstep with § 3)."
 ---
 
-# ADR-024 — Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key
+# ADR-026 — Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key
 
 ## Status
 Proposed — rendered at the D-EventTelemetrySurface gate during Stage 5 Solutioning
 for the parallel-launch-quota-budget-gate release; carried to Collective Review
-scope-lock for operator render. (Numbering: platform-global monotonic, continuing
-from ADR-023 in the core module.)
+scope-lock for operator render. (Numbering: platform-global monotonic. Renumbered
+from the draft ADR-024 to ADR-026 at merge time — the concurrent
+`cross-release-impact-model` release claimed ADR-024 and the `sior-escalation`
+release claimed ADR-025, so this telemetry ADR resumes the release-scoped thread at
+the next-free slot ADR-026.)
 
 ## Context
 The dual-checkpoint quota-budget gate estimates a parallel batch's cumulative
@@ -103,4 +106,6 @@ enum-validated; legal `test-run` subtypes = suite-pass/fail/skip only), and the
 fallback paths.
 
 ## Related ADRs
-None upstream. Platform-global monotonic numbering continues from ADR-023 (core).
+None upstream. Platform-global monotonic numbering: this ADR landed at ADR-026
+(renumbered from the draft ADR-024) after the concurrent `cross-release-impact-model`
+(ADR-024) and `sior-escalation` (ADR-025) releases claimed the intervening slots.

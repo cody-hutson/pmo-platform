@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Proactive Follow-Up Tracking Protocol
 
 ## Purpose
@@ -60,11 +61,9 @@ Escalation occurs automatically when any of these conditions are met:
 | **Cascade Risk** (follow-up delay impacts downstream milestone) | Surface dependency chain and impact timeline | Yes |
 | **Owner Unresponsive** (no progress update in 2x the expected timeframe) | Surface to user for re-assignment or direct engagement | Yes |
 
-**SIOR format for escalation:**
-- **Situation:** What is the follow-up and its current state
-- **Impact:** What happens if it remains unresolved (quantified where possible)
-- **Options:** 2-3 viable resolution paths
-- **Recommendation:** Which option the agent recommends and why
+These triggers map to the canonical Severity Thresholds: each "Yes" row is an escalation-class condition (≥ HIGH or a blocks-downstream MEDIUM); see [sior-escalation-protocol.md](../../../../core/standards/sior-escalation-protocol.md) § Severity Thresholds.
+
+**SIOR format for escalation:** per [sior-escalation-protocol.md](../../../../core/standards/sior-escalation-protocol.md) § Format Spec — Situation / Impact / Options (2–3 with trade-offs) / Recommendation (with explicit confidence). The Escalation Triggers above fire SIOR per the canonical Severity Thresholds.
 
 ## 5-Phase Proactive Next Steps Model
 

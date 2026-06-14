@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
-version: v1.14
+version: v1.18
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -114,32 +114,7 @@ Proceed to the corresponding mode section below (Mode A Backlog Analysis, Mode B
 
 For each suggested bundle, run the G3-07 check per `core/schemas/gate-criteria-spec.md` § Gate 3. Construct the milestone-position map per the Milestone-Position Resolution algorithm (`position:` override → `due_on` ascending → milestone `number` ascending). For each candidate bundle, enumerate all dependency edges owned by in-bundle issues; compute violations; render the G3-07 result. **Always emit the `### G3-07` section under each bundle entry when the bundle has ≥1 dependency edge (any type — same-milestone, cross-milestone resolved, cross-milestone exception-registered, or cross-milestone violation). Emit `G3-07 Status: PASS — N dependency edge(s) checked, 0 cross-milestone violations` body when the bundle has dep edges but zero unresolved cross-milestone violations — explicit positive signal that the gate ran, analogous to the File Contention Map `No file contention detected` empty-state. Suppress the section entirely only when the bundle has zero dependency edges (no check possible).** Edges registered in the candidate milestone's `## Dependency Exceptions` block PASS as governed exceptions.
 
-5. Present a prioritized view with rationale. Format:
-
-```
-## Backlog Analysis — [date]
-
-### Dependency Graph
-[Topo-sort sequence with priority annotations; optional Mermaid block when > 5 nodes]
-
-### Suggested Bundles
-**Bundle 1 (recommended next):** #X, #Y, #Z
-- Theme: [description]
-- Rationale: [why these together, why now]
-- Estimated scope: [file count, change type]
-- Version suggestion: [major/minor/patch with rationale]
-- G3-07 Status: PASS | PASS-WITH-EXCEPTIONS (N registered) | FAIL (N unresolved)
-
-### File Contention Map
-| File | Issues | Intent Mix | Severity | Recommendation |
-|---|---|---|---|---|
-| <path> | #N, #M, ... | edit×K, add×J, delete×L | NONE \| BINARY \| MULTI-WAY \| CONFLICT | <operator hint per severity> |
-
-**Parse-quality:** <N> issues parsed cleanly · <M> deferred (excluded) · <K> parse-failed (BLOCKING) — denominator = conformant-bundleable only (per Step 1.5)
-**Pre-filter (Step 1.5):** <T> type-excluded (sub-task/observation/adr/[Initiative]/umbrella) · <R> needs-body-repair (improvement|bug, no Affected Files heading — surfaced to operator, excluded from denominator)
-
-**Bundle 2:** ...
-```
+5. Present a prioritized view with rationale. See [`references/output-templates.md` § Mode A — Backlog Analysis output](references/output-templates.md) for the output-format example.
 
 Emit the G3-07 section under each bundle entry (when bundle has ≥1 dependency edge) with the status line `G3-07 Status: PASS | PASS-WITH-EXCEPTIONS (N registered) | FAIL (N unresolved)`. Include the violation table when status is FAIL; include the registered-exception list when PASS-WITH-EXCEPTIONS; include only the counted status line (`PASS — N dependency edge(s) checked, 0 cross-milestone violations`) when PASS — the status line is the load-bearing positive-signal artifact when bundle has dep edges but zero violations. When the bundle has ≥2 issues, always emit the File Contention Map (with explicit `No file contention detected` body when severity_map is all-NONE).
 
@@ -169,7 +144,11 @@ Emit the G3-07 section under each bundle entry (when bundle has ≥1 dependency 
 
    **Bundle-composition-doctrine field persistence.** Mode B persists the doctrine-derived fields per [`bundle-composition-doctrine.md § 7`](../../references/standards/bundle-composition-doctrine.md) Required Fields schema into the release plan's `## Summary` H2 section: composition shape (capability-slice / hotfix / audit-driven / cleanup-debt / new-track-inaugural / subsumption-fission per [`bundle-composition-doctrine.md § 8`](../../references/standards/bundle-composition-doctrine.md)), capability outcome (one line — references the milestone description's `### Release Outcome Statement` H3 block per [release-outcome-statement-template.md](../../references/specs/release-outcome-statement-template.md)), size-target band assessment (within 15-25 pts / above / below per § 3 Step 5), frame anchor (resolved from the live `[bundling].bundle_doctrine_frame` config field per the 5-rung resolver; default `F1` SAFe Feature-Slicing + Vertical Slice). Persistence happens in-line with `## Summary` H2 — no new H2 section required. **Cutover:** Applies to all release plans going forward.
 
-   **Parallelization-Map auto-populator.** Mode B is the canonical auto-populator for the standing `## Parallelization Map (recorded YYYY-MM-DD)` section in the milestone description — the standing convention defined in the Stage 3 Bundle spec. At Mode B emit time, the skill ALREADY computes cross-milestone deps (Step 5b G3-07 check), file contention (Step 6), and the dep-graph (Step 5). Drafting the Parallelization Map is a natural extension of that surface: walk the bundle's hard-vs-soft edges using the Hard-vs-Soft Edge Classifier in the dependency-analysis reference, bidirectionally scan other open milestones, and emit the `## Parallelization Map (recorded YYYY-MM-DD)` block (verdict + table + reconfirm procedure) into the milestone description via `gh api repos/.../milestones/<N> --field description=...` at the same Phase B3 moment when the doctrine-required fields land. Operator review at Phase B1 covers the map alongside Outcome Statement + Release Class. **Mechanism note:** the auto-populator is the convention; this skill is the candidate auto-populator. The map ITSELF is persisted in the milestone description (durable, queryable), NOT in the release plan file — the release plan may reference it for traceability but does not own the canonical copy. The convention binds milestones going forward and does not retroactively bind milestones that predate its adoption (which carry no map by construction).
+   **Parallelization-Map auto-populator.** Mode B is the canonical auto-populator for the standing `## Parallelization Map (recorded YYYY-MM-DD)` section in the milestone description — the standing convention defined in the Stage 3 Bundle spec. At Mode B emit time, the skill ALREADY computes cross-milestone deps (Step 5b G3-07 check), file contention (Step 6), and the dep-graph (Step 5). Drafting the Parallelization Map is a natural extension of that surface: walk the bundle's hard-vs-soft edges using the Hard-vs-Soft Edge Classifier in the dependency-analysis reference, bidirectionally scan other open milestones, and emit the `## Parallelization Map (recorded YYYY-MM-DD)` block (verdict + table + reconfirm procedure) into the milestone description via `gh api repos/.../milestones/<N> --field description=...` at the same Phase B3 moment when the doctrine-required fields land. Operator review at Phase B1 covers the map alongside Outcome Statement + Release Class.
+
+   **Structural-blast-radius (Tier-S) emission.** Beyond the hard / soft / file-contention edge classes, the auto-populator ALSO emits the **Tier-S verdict tier** and the **`structural-blast-radius` edge type** per the structural-blast-radius (path-invalidation) contention axis defined in the Stage 3 Bundle spec § A9.6.1. When this release's File Change Matrix declares a rename / relocate / delete (and once a release branch exists at Stage 4), compute the mover-set via the 4-token git mover-classifier (`RENAME` / `RELOCATE` / `DELETE-RECREATE` / `DIR-RESTRUCTURE`, from `git diff --name-status --find-renames <base>..<head>`), then compute the cross-release structural surface `SURFACE(R)` via the F1–F6 ref-form sweep in the doc-corpus-reorg ref-form protocol (`references` neighbor `doc-corpus-reorg-ref-forms.md`), parameterized by the mover-set's old/new path pairs — consuming the Stage 5 Phase A3.2 sweep output when it has already fired rather than recomputing. The cross-release `SURFACE(R)` is the union of the five inbound-reference forms enumerated in that protocol — F1 + F2 + F3 + F5 + the in-tree half of F6; **F4 (mover-internal-outbound) is EXCLUDED** — it is the release's own A3.2 rewrite obligation, not an edit to the target files, and including it over-serializes. Any open/planned sibling milestone whose edit-set intersects `SURFACE(R)` enters the map as a Tier-S `structural-blast-radius` serialization edge (one merges, the other re-baselines), with the F1–F6 sweep verdict + intersecting form(s) cited as evidence. Cite the F1–F6 protocol — do not re-author its six forms (the surface enumerator is owned there; this skill consumes it). At Stage 3 (no release branch yet), Tier-S is an advisory pre-filter keyed on the sibling's File-Change-Matrix `change_type`; Stage 4 A4 is the authoritative structural-detection surface. Scope: corpus mover-sets (the code-mover case uses the Stage 5 Phase A3.1 domain-aware impact-analysis branch).
+
+   **Mechanism note:** the auto-populator is the convention; this skill is the candidate auto-populator. The map ITSELF is persisted in the milestone description (durable, queryable), NOT in the release plan file — the release plan may reference it for traceability but does not own the canonical copy. The convention binds milestones going forward and does not retroactively bind milestones that predate its adoption (which carry no map by construction).
 5. Determine execution sequence based on dependency ordering. Within this step:
 
    **Step 5a — Bundle refresh check (runs FIRST per CR Conflict C):**
@@ -207,7 +186,7 @@ The Mode B output file contains 11 H2 sections in fixed order. Each H2 with its 
 | 4 | `## Cross-Milestone Dependency Validation` | Mode B Step 5b / G3-07 spec / always-emit harmonization | `### G3-07 Status` (always when section emitted; body `PASS — N dependency edge(s) checked, 0 cross-milestone violations` when zero violations — positive signal), `### Violations` (when FAIL), `### Resolved Edges (B is Done)` (when [RESOLVED] annotations exist), `### Registered Exceptions` (when ## Dependency Exceptions block present) | Always emitted when bundle has ≥1 dependency edge (any type); suppressed only when bundle has zero dependency edges (no check possible) — analogous to row 3's `No file contention detected` always-emit pattern / always-emit harmonization |
 | 5 | `## Bundle Refresh State` | Mode B Step 5a / refresh-state ADR | (none — body inline) | Conditional — present only when Gate G-BR fired non-no-op since last Mode A/B; absent otherwise |
 | 6 | `## Implementation Sequence` | Mode B Step 5 | `### Commit Plan`, `### Stage Applicability Matrix` | Always |
-| 7 | `## Cross-PR Overlap Audit` | Stage 4 A4 | `### Baseline SHA`, `### Open PRs in Scope`, `### Recently-Merged PRs in Scope` | Always |
+| 7 | `## Cross-PR Overlap Audit` | Stage 4 A4 | `### Baseline SHA` (records the audit-start baseline SHA AND, when a GO is rendered, the GO baseline SHA + the sibling-merge revalidation predicate `git log <baseline>..origin/main --name-status --find-renames` intersected against this release's structural surface `SURFACE(R)` per the Stage 3 Bundle spec § A9.6.1 axis — the UNIFIED predicate shared by Stage 9 G-PR9 and Stage 12 Phase A.5; `--name-status --find-renames`, NOT `--merges`, so squash / fast-forward sibling landings are caught; the pin self-invalidates when a sibling parallel release merges after the baseline and before Stage 9), `### Open PRs in Scope`, `### Recently-Merged PRs in Scope`, `### Structural Sub-Audit` (the mover-set + `SURFACE(R)` intersection per sibling milestone, when this release's File Change Matrix declares a rename / relocate / delete; suppressed otherwise) | Always |
 | 8 | `## Risk Register` | Mode B Step 4 | (none — table inline) | Always |
 | 9 | `## Operator Decisions (D-Gate Block)` | Stage 4 D-Gate | `### D-N: <decision title>` per D-decision with required subsections (Gate input / Pre-decided / Gate decision / Blocks / Upstream compatibility / Reversibility-Confidence / Spoke recommendation) | Always (one H3 per D-decision; `Upstream compatibility` subsection is structurally required) |
 | 10 | `## Recommendations` | Mode B Step 8 | (none — numbered list) | Always; each entry must be Stage 6+ chip-prompt-input-shaped (actionable, not "consider X") |
@@ -257,92 +236,9 @@ Sub-section anchors `### File Contention Map` (when used inline within Mode A bu
 
 5. **Draft graduation candidates** — for each cluster, draft the literal Proposal-tier issue body per the 9-field mapping in `core/governance/OPERATIONS.md` § Pattern Review Cadence Protocol Rule 3 (verbatim quoted-block preservation of source observation bodies as Description sub-content). The drafted body is what `gh issue create -F <body>` will literally receive at Mode G execution time. Persist each cluster's draft body to a file for handoff to Mode G.
 
-6. **Present Decision Briefing** — emit structured output AS THE LITERAL PROPOSAL BODIES INLINE (the operator approves the verbatim body, not just the verdict abstraction):
+6. **Present Decision Briefing** — emit structured output AS THE LITERAL PROPOSAL BODIES INLINE (the operator approves the verbatim body, not just the verdict abstraction). See [`references/output-templates.md` § Mode D — Pattern Review Decision Briefing output](references/output-templates.md) for the verbatim Decision Briefing format the operator approves literally.
 
-```
-## Pattern Review — YYYY-MM-DD (release-planner Mode D — DRAFT only)
-
-### Open Observations Scanned
-N total · grouped by (domain, Pass-2 broadened theme) tuple
-Pass-1 narrow tags surfaced for operator reference
-
-### Uncategorized Observations Requiring Operator Theme Assignment (if any)
-- #<obs_n> — title — <reason Pass-2 produced unknown-mechanism>
-  [HALT: awaits operator theme assignment before clustering]
-
-### Candidate Clusters (count ≥ 2 within 180 days)
-**Cluster 1:** (release-ops, drift-detection) — N=3 observations
-- #<obs1> — <one-line title> — Pass-1 narrow: `dim-drift`
-- #<obs2> — <one-line title> — Pass-1 narrow: `drift-check-enumeration`
-- #<obs3> — <one-line title> — Pass-1 narrow: `pre-merge-spec-vs-reality`
-
-**Proposed Proposal (verbatim — operator approves this body literally):**
-
-    ### Priority
-    P3 - Medium
-
-    ### Category
-    protocol
-
-    ### Description
-    [2-3 sentence emergent-theme summary.]
-
-    > #<obs1> (filed YYYY-MM-DD by operator):
-    > [verbatim quoted body of observation #<obs1>]
-
-    > #<obs2> (filed YYYY-MM-DD by operator):
-    > [verbatim quoted body of observation #<obs2>]
-
-    > #<obs3> (filed YYYY-MM-DD by operator):
-    > [verbatim quoted body of observation #<obs3>]
-
-    ### Evidence
-    [SOURCE: #<obs1>] — <one-line summary>
-    [SOURCE: #<obs2>] — <one-line summary>
-    [SOURCE: #<obs3>] — <one-line summary>
-
-    ### Affected Files
-    <union of source observation affected-files; dedup>
-
-    ### Acceptance Criteria
-    [Draft 2-4 AC per § 9-field map; operator refines at Triage]
-
-    ### Origin
-    Promoted from Observation tier via Pattern Review on YYYY-MM-DD per OPERATIONS.md § Pattern Review Cadence Protocol. Source observations: #<obs1>, #<obs2>, #<obs3>.
-
-    ### Dependencies
-    None
-
-**Verdict requested:** PROMOTE / DEFER / CLOSE
-
-**Cluster 2:** ...
-
-### Singleton Observations (count = 1)
-N observations not yet eligible; listed for operator awareness
-
-### Reversibility-tier (per decision-discipline.md):
-- PROMOTE verdict on Cluster N: MODERATE · confidence: <HIGH/MED/LOW>
-- DEFER verdict: CHEAP
-- CLOSE verdict: MODERATE (close-as-not-planned reversible by re-open)
-
-### Adoption Counter (per § decision-discipline.md G5)
-- Last Pattern Review: YYYY-MM-DD
-- Clusters surfaced this cycle: N
-- Draft Proposals presented: N
-```
-
-7. **Await operator verdict per candidate.** On any PROMOTE verdict, present operator with handoff option:
-
-```
-## Operator-Explicit Handoff to release-executor Mode G
-
-PROMOTE verdicts on N clusters require write-execution. Invoke release-executor Mode G — Pattern Review Execute with the following manifest:
-
-- Cluster 1: PROMOTE — approved body file `<path to literal body draft persisted by Mode D Step 5>`
-- Cluster 2: ...
-
-The release-executor Mode G invocation is operator-explicit (NOT a chained=true cascade — release-executor is not on the 4-skill cascade allowlist per its SKILL.md Dormant-branch note; operator invokes Mode G directly with the approved manifest).
-```
+7. **Await operator verdict per candidate.** On any PROMOTE verdict, present operator with handoff option per [`references/output-templates.md` § Mode D — Operator-Explicit Handoff to release-executor Mode G](references/output-templates.md).
 
    Mode D HALTS here. No file writes, no GitHub state mutation occur in Mode D. The operator-explicit handoff is the seam; release-executor Mode G executes the writes.
 
@@ -597,10 +493,49 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
   to land at 24 pts and ships the "clean" bundle — the operator discovers the orphaned
   issues a release later, with no record of who descoped them or why.
 
+### Structural-blast-radius axis omitted or computed with the wrong instrument — PROC
+
+- **Signature (observable signal):** A Parallelization Map this skill auto-populates
+  for a milestone whose File Change Matrix declares a rename / relocate / delete ships
+  with NO Tier-S verdict and no `structural-blast-radius` edge — OR the map's Tier-S
+  edge was derived by running the inbound-discovery blast-radius CLI on the mover-set
+  (which exits on a non-extant renamed-from / deleted path and is depth-capped, so it
+  cannot enumerate a relocating set's surface) instead of the F1–F6 ref-form sweep —
+  so a sibling milestone whose edit-set references a path this release moves is
+  classified parallel-safe despite sharing zero ticket-dependency edge and zero
+  same-path overlap.
+- **Conditional:** do NOT emit a Parallelization Map for a mover-declaring milestone
+  without computing the Tier-S axis via the F1–F6 ref-form sweep over the mover-set,
+  because the structural-blast-radius collision class is invisible to the ticket-graph
+  and same-path classifiers (the two releases never reference each other) — it is the
+  exact zero-edge case the cross-release impact model exists to catch — and the
+  inbound-discovery CLI structurally cannot enumerate a moving set's surface, so using
+  it re-creates the silent blind spot the axis was added to remove.
+- **Root cause:** The mover-classifier + F1–F6 sweep is a distinct multi-step
+  discipline (compute the mover-set, parameterize the sweep, intersect per sibling),
+  whereas the hard / soft / file-contention edges fall out of the dep-graph and
+  contention work the skill already does — so the structural axis is the step easy to
+  skip when the map "looks complete," and the nearest-named inbound tracer is the
+  tempting wrong tool because it superficially answers "what references this path."
+- **Mitigation:** When the milestone's File Change Matrix declares a rename / relocate
+  / delete, compute the mover-set (`git diff --name-status --find-renames <base>..<head>`),
+  then compute `SURFACE(R)` per the Tier-S emission rule in Mode B above (the F1–F6
+  sweep in the doc-corpus-reorg ref-form protocol; cross-release surface = F1/F2/F3/F5 +
+  in-tree F6, F4 excluded), consuming the Stage 5 Phase A3.2 sweep output when present;
+  test each open/planned sibling's edit-set for intersection; emit any intersecting
+  sibling as a Tier-S `structural-blast-radius` serialization edge with the sweep
+  verdict cited. Never substitute the inbound-discovery CLI for the mover-set surface.
+- **Principal response vs. junior response:** Principal runs the mover-classifier +
+  F1–F6 sweep, surfaces the Tier-S serialization edge with the intersecting form, and
+  recommends the serialize order. Junior emits a clean-looking map with only hard /
+  soft / file-contention edges, the two mover-vs-referrer releases are run in parallel,
+  and one voids the other's GO mid-pipeline as a rename/modify conflict.
+
 ## Reference Files
 
 Read these on first use:
 - `references/release-plan-template.md` — Template for release plan files
 - `references/dependency-analysis.md` — Dependency mapping methodology
 - `references/diff-format.md` — Dry-run diff production format
+- `references/output-templates.md` — Output-format examples for Mode A (Backlog Analysis), Mode D (Pattern Review Decision Briefing + Operator-Explicit Handoff)
 - [`release/references/standards/bundle-composition-doctrine.md`](../../references/standards/bundle-composition-doctrine.md) — Bundle composition doctrine: 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + 6 worked-example shapes; current default frame F1 SAFe Feature-Slicing + Vertical Slice (resolved from the live `[bundling].bundle_doctrine_frame` config field per the 5-rung resolver — see [`OPERATIONS.md § Platform-Config Resolution Protocol`](../../../core/governance/OPERATIONS.md)); Mode A consults at Step 4; Mode B persists doctrine-derived fields per § 7 (cutover applies to all bundles going forward)
