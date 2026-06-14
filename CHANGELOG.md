@@ -8,6 +8,22 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v1.15] - 2026-06-13
+
+The platform now measures and improves the quality of its own agents: a quality auditor that checks for base-vs-build compatibility drift on a regular cadence, a data-driven target for how many failure modes a complex skill should document, a single root-cause method anyone can invoke on a defect, and a playbook for migrating between approaches. A verified triage reconciles a month-old quality audit to current state.
+
+### Added
+
+- **The quality auditor can now run a platform-health audit on a cadence.** A new `platform-health` mode checks for compatibility drift between the underlying model behavior and what the platform's skills assume, and runs on a registered schedule rather than only on request. *Why it matters:* drift that would silently degrade agent quality gets caught on a regular cadence instead of surfacing as a surprise. ([#358](https://github.com/cody-hutson/pmo-platform/issues/358))
+- **A single root-cause method is now available to invoke on a defect.** Root-cause analysis is now a named, invokable method with defined steps and handoff points from intake and the pipeline. *Why it matters:* defects get a consistent, repeatable diagnosis instead of an ad-hoc one that varies by who looks at it. ([#754](https://github.com/cody-hutson/pmo-platform/issues/754))
+- **A migration playbook is now available.** A new playbook lays out how to move between approaches with a defined intake and pipeline handoff. *Why it matters:* a migration has a referenceable, repeatable path instead of being reinvented each time. ([#754](https://github.com/cody-hutson/pmo-platform/issues/754))
+
+### Changed
+
+- **Skill authoring now targets a data-driven number of failure modes, not just a floor.** The failure-mode standard now states a target range (6–10 for complex skills) instead of only a minimum of three. *Why it matters:* complex skills get failure-mode coverage sized to their real risk surface, so the auditor's coaching points authors at an evidence-based target rather than the bare minimum. ([#359](https://github.com/cody-hutson/pmo-platform/issues/359))
+
+[Full notes](release/releases/notes/v1.15_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v1.15)
+
 ## [v1.14] - 2026-06-13
 
 The platform's operator-configurable choices now resolve from one declared surface with a documented precedence order and a catalog of every field, and a new onboarding map lays out the whole clone-to-working-install journey and where each host choice plugs in. This is the adapter-config foundation the host adapters compose into.
