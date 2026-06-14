@@ -81,9 +81,11 @@ decomposition callout for later slicing — never auto-created as child items.
 
 ## Enabled type-pack resolution (the lock-in seam)
 
-The work-item `type:` is assigned at Triage by resolving the deployment's **enabled
-type-pack** — never hard-coded in this corpus file (the kind *values* are
-operator-local K4 config, not public package content). Resolution follows the
+Distinct from the **intake form** chosen in § The current work-item types above
+(`improvement` / `bug` / `observation` — what the desk elicits), the downstream
+work-item `type:` **label** (the Agile kind: `story` / `task` / `epic` / …) is assigned
+at Triage by resolving the deployment's **enabled type-pack** — never hard-coded in this
+corpus file (the kind *values* are operator-local K4 config, not public package content). Resolution follows the
 work-organization mapping framework's Layer-4 (K4, operator-local) precedence:
 
 1. Read the deployment's `delivery_approach` (operator config / `PROJECT.md`). If it
