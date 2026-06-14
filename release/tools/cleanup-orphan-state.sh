@@ -175,10 +175,36 @@ has_merged_pr() {
   [[ "$n" -ge 1 ]]
 }
 
-# Returns 0 if a worktree is currently attached to the branch.
+# One-shot snapshot of the porcelain worktree list, reused by every worktree
+# reader below through here-strings. It replaces per-call live pipes that
+# SIGPIPE the generator when a consumer (grep -q, or awk that calls exit) closes
+# the read end while git is still writing — fatal under set -o pipefail once the
+# list is non-trivially long (the exit-141-at-scale defect). Refreshed at the
+# top of each detect_* pass; built on demand for any earlier reader. [WTPIPEGUARD]
+WT_SNAPSHOT=""
+WT_SNAPSHOT_BUILT=0
+refresh_wt_snapshot() {
+  WT_SNAPSHOT="$(git worktree list --porcelain 2>/dev/null || true)"
+  WT_SNAPSHOT_BUILT=1
+}
+
+# Branch ref (refs/heads/…) attached to a worktree path, parsed from WT_SNAPSHOT.
+# Empty for a detached or absent worktree. Here-string input — no live pipe that
+# an early awk-exit could SIGPIPE. [WTPIPEGUARD]
+branch_for_worktree() {
+  local wpath="$1"
+  [[ "$WT_SNAPSHOT_BUILT" == "1" ]] || refresh_wt_snapshot
+  awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}' <<<"$WT_SNAPSHOT"
+}
+
+# Returns 0 if a worktree is currently attached to the branch. Always LIVE — the
+# resolve pass re-checks this against post-removal state, so it must reflect
+# current reality, not the enumeration snapshot. The here-string is fed by a
+# completed command substitution (git finishes before grep reads), so there is
+# no live pipe for an early grep-q to SIGPIPE, even at scale. [WTPIPEGUARD]
 branch_has_worktree() {
   local branch="$1"
-  git worktree list --porcelain | grep -q "^branch refs/heads/${branch}$" 2>/dev/null
+  grep -q "^branch refs/heads/${branch}$" <<<"$(git worktree list --porcelain 2>/dev/null)"
 }
 
 # Returns disk size in MB for a worktree path (rounded).
@@ -215,9 +241,14 @@ SCRIPT_WORKTREE=""
 MAIN_WORKTREE=""
 
 compute_self_worktree() {
-  local top main
+  local top main snap
   top="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
-  main="$(git worktree list --porcelain 2>/dev/null | awk 'NR==1 && /^worktree /{sub(/^worktree /,""); print}' || true)"
+  # Snapshot then here-string (not a live pipe): the primary is the first entry,
+  # so this awk never needs an early exit, but keeping the no-live-pipe idiom
+  # uniform means a later "add exit for speed" edit cannot reintroduce the
+  # SIGPIPE-at-scale defect here either. [WTPIPEGUARD]
+  snap="$(git worktree list --porcelain 2>/dev/null || true)"
+  main="$(awk 'NR==1 && /^worktree /{sub(/^worktree /,""); print}' <<<"$snap" || true)"
   if [[ -n "$main" ]]; then MAIN_WORKTREE="$(physical_path "$main")"; fi
   if [[ -n "$top" ]]; then
     top="$(physical_path "$top")"
@@ -425,6 +456,7 @@ classify_worktree() {
 detect_release_close() {
   local slug="$1"
   [[ -z "$slug" ]] && return 0
+  refresh_wt_snapshot
   local b
   for b in $(git for-each-ref "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" --format='%(refname:short)' 2>/dev/null); do
     classify_local "$b" 0
@@ -436,16 +468,17 @@ detect_release_close() {
     [[ "$line" =~ ^worktree[[:space:]](.*)$ ]] || continue
     local wpath="${BASH_REMATCH[1]}" wbranch=""
     local next
-    next=$(git worktree list --porcelain | awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}')
+    next=$(branch_for_worktree "$wpath")
     wbranch="${next#refs/heads/}"
     [[ -z "$wbranch" || "$wbranch" == "$next" ]] && continue
     case "$wbranch" in
       release/${slug}*|chore/${slug}*) classify_worktree "$wpath" "$wbranch" ;;
     esac
-  done < <(git worktree list --porcelain)
+  done <<<"$WT_SNAPSHOT"
 }
 
 detect_spawn_task() {
+  refresh_wt_snapshot
   local b
   for b in $(git for-each-ref 'refs/heads/claude/*' --format='%(refname:short)' 2>/dev/null); do
     classify_local "$b" 0
@@ -456,13 +489,14 @@ detect_spawn_task() {
   while IFS= read -r line; do
     [[ "$line" =~ ^worktree[[:space:]](.*)$ ]] || continue
     local wpath="${BASH_REMATCH[1]}" wbranch=""
-    wbranch=$(git worktree list --porcelain | awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}')
+    wbranch=$(branch_for_worktree "$wpath")
     wbranch="${wbranch#refs/heads/}"
     case "$wbranch" in claude/*) classify_worktree "$wpath" "$wbranch" ;; esac
-  done < <(git worktree list --porcelain)
+  done <<<"$WT_SNAPSHOT"
 }
 
 detect_historical() {
+  refresh_wt_snapshot
   local b
   for b in $(git for-each-ref 'refs/heads/' --format='%(refname:short)' 2>/dev/null); do
     is_protected "$b" && continue
@@ -474,12 +508,12 @@ detect_historical() {
     [[ "$line" =~ ^worktree[[:space:]](.*)$ ]] || continue
     local wpath="${BASH_REMATCH[1]}" wbranch=""
     [[ "$wpath" == "$WORKSPACE_ROOT" ]] && continue
-    wbranch=$(git worktree list --porcelain | awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}')
+    wbranch=$(branch_for_worktree "$wpath")
     wbranch="${wbranch#refs/heads/}"
     if [[ -z "$wbranch" ]] || is_fully_merged "$wbranch"; then
       classify_worktree "$wpath" "$wbranch"
     fi
-  done < <(git worktree list --porcelain)
+  done <<<"$WT_SNAPSHOT"
 }
 
 # ─── Output ──────────────────────────────────────────────────────────────────
@@ -1200,6 +1234,44 @@ selftest_fixed_point() {
   return 0
 }
 
+# Regression guard for the exit-141-at-scale defect (SIGPIPE on a worktree-list
+# generator whose consumer closes the read end early, fatal under set -o pipefail).
+# Two layers:
+#   (1) STRUCTURAL: scan our own source for a live worktree-list generator piped
+#       into an early-closing consumer (grep -q, or awk containing exit). After
+#       the snapshot+here-string refactor there must be none. Lines that mention
+#       the search text for legitimate reasons carry a WTPIPEGUARD tag and are
+#       exempt so the guard never flags itself.
+#   (2) FUNCTIONAL: the replacement idiom extracts the right branch from an
+#       800-entry synthetic list under pipefail and exits 0.
+selftest_no_live_worktree_pipes() {
+  local src hits
+  src="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  hits=$(grep -nE 'git worktree list --porcelain[^|]*\|[^|]*grep -q' "$src" | grep -v 'WTPIPEGUARD' || true)   # WTPIPEGUARD
+  if [[ -n "$hits" ]]; then
+    echo "self-test: worktree-pipe guard FAILED — live worktree-list-into-grep-q pipe reintroduced:" >&2
+    printf '%s\n' "$hits" >&2; exit 1
+  fi
+  hits=$(grep -nE 'git worktree list --porcelain[^|]*\|[^|]*awk' "$src" | grep 'exit' | grep -v 'WTPIPEGUARD' || true)   # WTPIPEGUARD
+  if [[ -n "$hits" ]]; then
+    echo "self-test: worktree-pipe guard FAILED — live worktree-list-into-awk-exit pipe reintroduced:" >&2
+    printf '%s\n' "$hits" >&2; exit 1
+  fi
+  local big i out rc=0
+  big="$(for ((i=0; i<800; i++)); do printf 'worktree /tmp/wt-%s\nHEAD %040d\nbranch refs/heads/scale/%s\n\n' "$i" 0 "$i"; done)"
+  ( set -o pipefail
+    out=$(awk -v p="/tmp/wt-7" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}' <<<"$big")
+    [[ "$out" == "refs/heads/scale/7" ]] || exit 7
+    grep -q "^branch refs/heads/scale/7$" <<<"$big" || exit 8
+  ) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "self-test: worktree-pipe guard FAILED — snapshot+here-string idiom errored at scale (rc=$rc)" >&2
+    exit 1
+  fi
+  echo "self-test: worktree-pipe guard PASS — no live early-closing worktree-list pipes; idiom survives 800-entry list" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -1217,6 +1289,8 @@ self_test() {
   selftest_liveness_gate
   echo "self-test: exercising fixed-point apply (worktree + freed branch in one run)..." >&2
   selftest_fixed_point
+  echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
+  selftest_no_live_worktree_pipes
   echo "self-test: PASS" >&2
   exit 0
 }
