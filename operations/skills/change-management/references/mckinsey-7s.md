@@ -403,7 +403,7 @@ fixture.
   Strategy)** is the weakest by the weighting rule.
 - **alignment_state:** a Shared-Values pair is <=2 → **CORE MISALIGNMENT.**
 - **Per-element readout (§5):** **Strategy = 1 — Contradictory** (it opposes Structure,
-  Systems, Shared Values, Style, Staff — five of its six pairs are <=2; it is the dominant
+  Systems, Shared Values, Skills, Style, Staff — all six of its pairs are <=2; it is the dominant
   misalignment element). Shared Values = 3 — Partial (aligned with the *old* world, but
   contradictory with the new Strategy). Structure, Systems, Skills, Style, Staff are each
   internally aligned with one another — they cohere as a *sales-led* organization; only the
