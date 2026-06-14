@@ -104,7 +104,7 @@ See `context-lifecycle-model.md` for transition diagram (§3), per-state stall d
 
 **Object prefix:** `Artifact-`
 
-**Authoritative source (forward-binding to the planned protocol doc):** the Artifact Workflow state machine (`DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED`) is defined in-repo by this §3.2. The states + transition rules + frontmatter convention + lineage-graph fields are restated below; a future release will ship a co-located protocol doc at `pmo-platform/reference/artifact-workflow-protocol.md` that will become the authoritative home for the operational protocol (transitions, gates, automation hooks). Until then, this §3.2 is the canonical source for the vocabulary + state machine. The future implementation MUST use these state names verbatim per forward-binding contract (provenance: state semantics shipped this release; see `pmo-platform/governance/RELEASE_LOG.md`).
+**Authoritative source (forward-binding to the planned protocol doc):** the Artifact Workflow state machine (`DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED`) is defined in-repo by this §3.2. The states + transition rules + frontmatter convention + lineage-graph fields are restated below; a future release will ship a co-located protocol doc at `core/artifact-workflow-protocol.md` that will become the authoritative home for the operational protocol (transitions, gates, automation hooks). Until then, this §3.2 is the canonical source for the vocabulary + state machine. The future implementation MUST use these state names verbatim per forward-binding contract (provenance: state semantics shipped this release; see `release/releases/RELEASE_LOG.md`).
 
 **States (5):**
 
@@ -137,7 +137,7 @@ See `context-lifecycle-model.md` for transition diagram (§3), per-state stall d
 | `sibling_topic` | string | NO | Topic identifier for sibling-artifact grouping |
 | `origin_transcript` | string | NO | Path to the source transcript when artifact derives from one |
 
-State semantics are a forward-binding contract — the future implementation MUST use these state names verbatim. That release's Stage 13 close action: register `pmo-platform/reference/artifact-workflow-protocol.md` as an additional Consumer Registry row at §6.1; the §3.2 authoritative-source pointer (this paragraph) updates to cross-reference the new protocol doc as the operational-protocol home, while the state machine + frontmatter restated above remains the vocabulary canonical source.
+State semantics are a forward-binding contract — the future implementation MUST use these state names verbatim. That release's Stage 13 close action: register `core/artifact-workflow-protocol.md` as an additional Consumer Registry row at §6.1; the §3.2 authoritative-source pointer (this paragraph) updates to cross-reference the new protocol doc as the operational-protocol home, while the state machine + frontmatter restated above remains the vocabulary canonical source.
 
 ### §3.3 Domain C Lifecycle
 
@@ -171,7 +171,7 @@ Four additional state-vocabulary spaces exist in the platform with already-canon
 
 **Object prefix:** `Domain-A-`
 
-**Authoritative source:** [`pmo-platform/reference/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 2 — Lifecycle. Domain A files follow the **Baselined Document** pattern (formal state changes, explicit approval; C12).
+**Authoritative source:** [`core/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 2 — Lifecycle. Domain A files follow the **Baselined Document** pattern (formal state changes, explicit approval; C12).
 
 **States (5):** `created / draft / active / superseded / archived`
 
@@ -181,7 +181,7 @@ Four additional state-vocabulary spaces exist in the platform with already-canon
 
 **Object prefix:** `Domain-B-`
 
-**Authoritative source:** [`pmo-platform/reference/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 2 — Lifecycle. Domain B files follow the **Living Document** pattern (continuous updates, no formal baseline; C12).
+**Authoritative source:** [`core/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 2 — Lifecycle. Domain B files follow the **Living Document** pattern (continuous updates, no formal baseline; C12).
 
 **States (7):** `created / emerging / current / needs-review / stale / superseded / archived`
 
@@ -191,7 +191,7 @@ Four additional state-vocabulary spaces exist in the platform with already-canon
 
 **Object prefix:** `Trust-`
 
-**Authoritative source:** [`pmo-platform/reference/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 5 — Trust, and [`core/disciplines/document-ecosystem-design.md`](../disciplines/document-ecosystem-design.md) §5 (Trust Model). Defined per design brief §14.
+**Authoritative source:** [`core/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 5 — Trust, and [`core/disciplines/document-ecosystem-design.md`](../disciplines/document-ecosystem-design.md) §5 (Trust Model). Defined per design brief §14.
 
 **Categories (5):** `evidence / controlled-truth / interpretation / working-context / historical-record`
 
@@ -201,7 +201,7 @@ Four additional state-vocabulary spaces exist in the platform with already-canon
 
 **Object prefix:** `KM-`
 
-**Authoritative source:** [`pmo-platform/reference/how-to/km-protocols.md`](../disciplines/km-protocols.md#km-artifact-lifecycle) — Knowledge-Management Protocols §1, KM-Artifact Lifecycle. Defines the state machine for K1-tier managed-knowledge artifacts (ADRs, promoted lessons-learned, codified-practice docs, the reference corpus docs themselves). Composes with — does not duplicate — [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) (K1-K5 tiers) and [`corpus-curation.md`](../disciplines/corpus-curation.md) (ET1-ET5 evidence tiers).
+**Authoritative source:** [`core/disciplines/km-protocols.md`](../disciplines/km-protocols.md#km-artifact-lifecycle) — Knowledge-Management Protocols §1, KM-Artifact Lifecycle. Defines the state machine for K1-tier managed-knowledge artifacts (ADRs, promoted lessons-learned, codified-practice docs, the reference corpus docs themselves). Composes with — does not duplicate — [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) (K1-K5 tiers) and [`corpus-curation.md`](../disciplines/corpus-curation.md) (ET1-ET5 evidence tiers).
 
 **States (5):** `KM-Proposed / KM-Active / KM-Deprecated / KM-Superseded / KM-Rejected`
 
@@ -256,7 +256,7 @@ Downstream consumers that cite this canonical source as authoritative for lifecy
 |---|---|---|
 | [`core/disciplines/context-lifecycle-model.md`](../disciplines/context-lifecycle-model.md) | Adopts `<Object>-<State>` convention for the 5 Context states; cross-references this doc in §2 (State Definitions) and §7 (Distinction from Domain C) | Framework doc §2 header note + §7 cross-reference + §8 Consumers table |
 | [`release/references/how-to/domain-c-lifecycle-protocol.md`](../../release/references/how-to/domain-c-lifecycle-protocol.md) | Registers Domain C 5 states under `Domain-C-` prefix; additive 1-line cross-reference in Purpose section | Domain C protocol Purpose section (additive line per F2 / Collective Review approval) |
-| Artifact Workflow release (planned; `pmo-platform/reference/artifact-workflow-protocol.md` once shipped) | Cites canonical source as authoritative for `Artifact-REVIEWED` / `Artifact-APPROVED` semantics; the Artifact Workflow uses object-typed names verbatim per forward-binding contract restated at §3.2 | Forward-binding row — the planned protocol doc registers as an additional Consumer Registry row at that release's Stage 13 close; the vocabulary + state machine are canonically defined in-repo at §3.2 |
+| Artifact Workflow release (planned; `core/artifact-workflow-protocol.md` once shipped) | Cites canonical source as authoritative for `Artifact-REVIEWED` / `Artifact-APPROVED` semantics; the Artifact Workflow uses object-typed names verbatim per forward-binding contract restated at §3.2 | Forward-binding row — the planned protocol doc registers as an additional Consumer Registry row at that release's Stage 13 close; the vocabulary + state machine are canonically defined in-repo at §3.2 |
 
 ### §6.2 Forward-citation consumers (future releases)
 
@@ -264,7 +264,7 @@ These consumers are designed but not yet authored. They will register here when 
 
 | Consumer | Planned release | Expected consumption |
 |---|---|---|
-| `pmo-platform/reference/artifact-workflow-protocol.md` | planned | When the protocol doc ships, this canonical source's §3.2 authoritative-source citation updates from "in-repo §3.2 restatement (vocabulary canonical source)" to additionally cross-reference the protocol doc as the operational-protocol home. The §3.2 vocabulary + state machine restatement remains the canonical source. Handled at that release's Stage 13 close. |
+| `core/artifact-workflow-protocol.md` | planned | When the protocol doc ships, this canonical source's §3.2 authoritative-source citation updates from "in-repo §3.2 restatement (vocabulary canonical source)" to additionally cross-reference the protocol doc as the operational-protocol home. The §3.2 vocabulary + state machine restatement remains the canonical source. Handled at that release's Stage 13 close. |
 | file-router ingest and KB capability | future | file-router attaches Context Lifecycle state metadata to routed files using `Context-Captured` / `Context-Structured` (soft outbound). |
 | Knowledge Architecture doc | shipped | Parallel companion to this canonical source; cites this doc for lifecycle vocabulary. |
 | Future cross-domain consistency checker | TBD | Reads §5 Collision Map programmatically; enforces object-prefix discipline in cross-machine prose. |

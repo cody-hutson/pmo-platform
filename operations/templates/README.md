@@ -1,4 +1,4 @@
-# pmo-platform/reference/templates/ — Canonical Templates Registry
+# operations/templates/ — Canonical Templates Registry
 
 **Purpose:** Canonical home for stakeholder-facing template files (typed-format specifications — column headers, section structure, placeholder semantics) used across the PMO platform.
 **Organization:** One file per template; the registry table below groups by domain (Project-domain PMBOK-7-anchored / Platform-internal). Canonical → mirror propagation is `deploy.sh` `TEMPLATE_SYNC_MAP`.
@@ -14,7 +14,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 - [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) — canon-per-artifact-family mapping (which external best-practice convention each template anchors to)
 - [`../standards/template-storage.md` §7](../../core/standards/template-storage.md) — registered mirrors (which skill consumes which canonical file via deploy-sync)
 - [`../standards/operational-artifact-template-standard.md`](../../core/standards/operational-artifact-template-standard.md) — PDA-side template contract overlay: entity-derivation rule + machine-schema-companion convention + FINDING-3 known-exception path
-- `TEMPLATE_SYNC_MAP` in [`../../../deploy.sh`](../../core/deploy/deploy.sh) — authoritative source of canonical → mirror propagation entries
+- `TEMPLATE_SYNC_MAP` in [`core/deploy/deploy.sh`](../../core/deploy/deploy.sh) — authoritative source of canonical → mirror propagation entries
 
 ## Registered Templates
 

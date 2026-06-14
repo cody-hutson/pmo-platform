@@ -16,10 +16,10 @@ It exists in parallel to [`template-taxonomy.md`](template-taxonomy.md) (L1 — 
 
 ### §2.1 Folder placement
 
-- **Canonical home for templates:** `pmo-platform/reference/templates/`
-- **Canonical home for standards docs:** `pmo-platform/reference/standards/`
+- **Canonical home for templates:** `operations/templates/`
+- **Canonical home for standards docs:** `core/standards/`
 - **Diátaxis classification:** Both folders are sub-genres of "Reference" per the Option A footnote (Stage 4 D3 evidence trail; reaffirmed at the D-Gate 2026-05-10).
-- **Per-folder README:** `pmo-platform/reference/templates/README.md` enumerates registered templates with cross-links to [`template-taxonomy.md` §6](template-taxonomy.md) (canon-per-family mapping) and §7 of this doc (registered mirrors). The README protocol itself is light currently; the full per-folder-README protocol ships in a later release.
+- **Per-folder README:** `operations/templates/README.md` enumerates registered templates with cross-links to [`template-taxonomy.md` §6](template-taxonomy.md) (canon-per-family mapping) and §7 of this doc (registered mirrors). The README protocol itself is light currently; the full per-folder-README protocol ships in a later release.
 
 ### §2.2 Naming convention
 
@@ -45,8 +45,8 @@ The canonical source path for each entry is resolved by filename pattern in `res
 The function `sync_canonical_templates_to_source()` (defined in [`deploy.sh`](../deploy/deploy.sh)) is invoked from `cmd_deploy()` BEFORE the per-skill deploy loop. Algorithm:
 
 1. For each entry matching the current skill filter (or all entries if no filter):
-   - Resolve source path: lookup `<canonical-filename>` under `pmo-platform/reference/templates/` (for `*-template.{md,csv}`) or `pmo-platform/reference/standards/` (for `template-*.md`). Source-path subdir is determined by file pattern, not declared per-entry.
-   - Resolve target: `pmo-platform/skills/<skill>/<target-path-relative-to-skill-root>`.
+   - Resolve source path: lookup `<canonical-filename>` under `operations/templates/` (for `*-template.{md,csv}`) or `core/standards/` (for `template-*.md`). Source-path subdir is determined by file pattern, not declared per-entry.
+   - Resolve target: `<module>/skills/<skill>/<target-path-relative-to-skill-root>`.
    - Create target parent dir if missing.
    - `cp` source → target (overwrite).
    - Verify: post-copy `diff -q` against canonical (byte-identical).
@@ -54,7 +54,7 @@ The function `sync_canonical_templates_to_source()` (defined in [`deploy.sh`](..
 
 ### §3.3 Why pre-loop (not in-loop)
 
-`sync_canonical_templates_to_source()` writes to the source tree (`pmo-platform/skills/<skill>/references/...`). Subsequent steps in the per-skill deploy loop (SKILL.md copy + supplementary copy + `.skill` package extraction + user-local mirror) read the source tree and propagate to runtime. Running sync before the loop ensures the per-skill deploy reads a synced source.
+`sync_canonical_templates_to_source()` writes to the source tree (`<module>/skills/<skill>/references/...`). Subsequent steps in the per-skill deploy loop (SKILL.md copy + supplementary copy + `.skill` package extraction + user-local mirror) read the source tree and propagate to runtime. Running sync before the loop ensures the per-skill deploy reads a synced source.
 
 Running sync inside the loop AFTER `.skill` package extraction (`deploy.sh` line 519-532) would create a window where the install path holds stale (pre-sync) content extracted from the package while source holds synced content. Pre-loop sync + Check 7 (package-freshness) cooperate to prevent that window.
 
@@ -105,24 +105,24 @@ Template Architecture (this initiative) and Project Data Architecture (abbreviat
 
 | Concern | Owned by | Lives in |
 |---|---|---|
-| **Typed-format specification** (what fields/sections/structure an artifact must have) | **Template Architecture L3** (this doc) | `pmo-platform/reference/templates/` (engineering source tree, Layer 1) |
+| **Typed-format specification** (what fields/sections/structure an artifact must have) | **Template Architecture L3** (this doc) | `operations/templates/` (engineering source tree, Layer 1) |
 | **Entity instance data** (the actual values populating a template-specified format at runtime) | **PDA L2 Storage** | `projects/[Project]/`, `projects/_pmo/`, `projects/_config/` (operations tree, Layer 2) |
 
-**Concrete example.** A RAID Log template (`pmo-platform/reference/templates/raid-log-template.csv`) declares column headers (RAID Item ID, Type, Description, Owner, Status, etc.) — that is Template Architecture L3 turf. A RAID Item ENTITY for the [PROJECT_KEY] project (a row in `projects/[PROJECT_KEY] Implementation/04-PMO-Operations/[PROJECT_KEY]_RAID_Log.csv` with `RAID-001 | Risk | [COLLEAGUE_I] integration delay | ...`) — that is PDA L2 turf. The template governs the contract; the instance is the data. Template Architecture does not govern WHERE risk instances live in the project folder structure; PDA does not govern WHAT fields a risk has.
+**Concrete example.** A RAID Log template (`operations/templates/raid-log-template.csv`) declares column headers (RAID Item ID, Type, Description, Owner, Status, etc.) — that is Template Architecture L3 turf. A RAID Item ENTITY for the [PROJECT_KEY] project (a row in `projects/[PROJECT_KEY] Implementation/04-PMO-Operations/[PROJECT_KEY]_RAID_Log.csv` with `RAID-001 | Risk | [COLLEAGUE_I] integration delay | ...`) — that is PDA L2 turf. The template governs the contract; the instance is the data. Template Architecture does not govern WHERE risk instances live in the project folder structure; PDA does not govern WHAT fields a risk has.
 
 **Surface boundary rules:**
 
-1. **Templates declare structure; PDA instances populate structure.** Template Architecture changes the canonical template file; PDA changes never modify `pmo-platform/reference/templates/`. PDA changes the project entity layout; Template Architecture changes never modify `projects/`.
+1. **Templates declare structure; PDA instances populate structure.** Template Architecture changes the canonical template file; PDA changes never modify `operations/templates/`. PDA changes the project entity layout; Template Architecture changes never modify `projects/`.
 2. **Schema/Storage/Presentation separation** (per [`document-ecosystem-design.md` §6](../disciplines/document-ecosystem-design.md)) holds: Templates feed the Schema layer (typed-format specification); PDA L2 owns the Storage layer (how the agent persists entity data on source files); rendering of a RAID instance in Obsidian / Teams / status report is Presentation Layer (separate concern, not in either L3 or L2 scope).
-3. **Frontmatter ownership.** PDA  specifies frontmatter fields for entity instances (`type: person`, `aliases:`, etc.). Templates may include `{{frontmatter}}` placeholders that PDA's frontmatter-schema fills in at instance-creation time — but the schema definition is PDA's, the placeholder is the template's. Template Architecture does NOT modify `pmo-platform/reference/schemas/frontmatter-schema.md`; PDA does NOT modify templates to add frontmatter fields.
-4. **Sync direction.** Template Architecture L3's deploy-sync moves canonical templates and standards docs `pmo-platform/reference/{templates,standards}/` → skill `references/` mirrors (engineering-internal flow). PDA L2 entity files (`_pmo/people/jane-doe.md`) are runtime-created by skills (project-initiator, ppm-agent) consuming templates — that flow is project-initiator's runtime concern, not L3's sync concern.
+3. **Frontmatter ownership.** PDA  specifies frontmatter fields for entity instances (`type: person`, `aliases:`, etc.). Templates may include `{{frontmatter}}` placeholders that PDA's frontmatter-schema fills in at instance-creation time — but the schema definition is PDA's, the placeholder is the template's. Template Architecture does NOT modify `core/schemas/frontmatter-schema.md`; PDA does NOT modify templates to add frontmatter fields.
+4. **Sync direction.** Template Architecture L3's deploy-sync moves canonical templates and standards docs `operations/templates/` + `core/standards/` → skill `references/` mirrors (engineering-internal flow). PDA L2 entity files (`_pmo/people/jane-doe.md`) are runtime-created by skills (project-initiator, ppm-agent) consuming templates — that flow is project-initiator's runtime concern, not L3's sync concern.
 5. **Drift-detection ownership.** Check 13 (this initiative) validates canonical-to-mirror drift in the engineering tree. PDA's analogous health checks (per its L3 Automation layer; `health-check-architecture.md`) validate instance-level drift in the operations tree. The two check suites do not overlap.
 
-**What composition looks like over time.** A new project type (e.g., a hypercare-only sub-project under PDA's  typed-sub-entities) introduces a new template (Template Architecture authors it under `pmo-platform/reference/templates/hypercare-plan-template.md`) AND a new entity-storage convention (PDA  declares `plan_subtype: hypercare` + lifecycle states in frontmatter-schema). The two changes ship in their respective initiatives' release cycles; neither blocks the other once this boundary is in place.
+**What composition looks like over time.** A new project type (e.g., a hypercare-only sub-project under PDA's  typed-sub-entities) introduces a new template (Template Architecture authors it under `operations/templates/hypercare-plan-template.md`) AND a new entity-storage convention (PDA  declares `plan_subtype: hypercare` + lifecycle states in frontmatter-schema). The two changes ship in their respective initiatives' release cycles; neither blocks the other once this boundary is in place.
 
-**Where this boundary IS broken (acceptable cases):** Authoring conveniences. A skill consuming PDA frontmatter schemas (e.g., delivery-engine's RAID writers) may include inline frontmatter examples in its SKILL.md — those are not templates in the L3 canonical-registry sense (they are skill-internal authoring guidance per Foundation Stage 5 audit `location_class: skill-internal-standalone`). The boundary applies to canonical templates in `pmo-platform/reference/templates/`, not to every appearance of frontmatter-shaped text across the platform.
+**Where this boundary IS broken (acceptable cases):** Authoring conveniences. A skill consuming PDA frontmatter schemas (e.g., delivery-engine's RAID writers) may include inline frontmatter examples in its SKILL.md — those are not templates in the L3 canonical-registry sense (they are skill-internal authoring guidance per Foundation Stage 5 audit `location_class: skill-internal-standalone`). The boundary applies to canonical templates in `operations/templates/`, not to every appearance of frontmatter-shaped text across the platform.
 
-**Collective Review consumability test:** An operator reading the boundary above should be able to answer the question "If I am working on PDA  next quarter, do I edit any file under `pmo-platform/reference/templates/`?" with a confident "No." (Test passed at Collective Review 2026-05-10.)
+**Collective Review consumability test:** An operator reading the boundary above should be able to answer the question "If I am working on PDA  next quarter, do I edit any file under `operations/templates/`?" with a confident "No." (Test passed at Collective Review 2026-05-10.)
 
 ## §6 Sync-Map Registration Protocol
 
@@ -136,7 +136,7 @@ When a new template enters the canonical registry, OR a new skill consumes a can
 6. Run `./deploy.sh --check` to confirm Check 13 passes (Check 13b reports no new collision once the basename is registered).
 7. Commit the canonical file + deploy.sh edit + this doc's §7 update in a single commit per the standard release flow ([`.claude/rules/git-workflow.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/git-workflow.md)).
 
-**Note on `template-protocol.md` (L4 deliverable):** `TEMPLATE_SYNC_MAP` entries that reference `template-protocol.md` are added in the L4 Stage 6 commit (after the canonical file exists at `pmo-platform/reference/standards/template-protocol.md`). Adding those entries before L4 Stage 6 lands would cause Check 13 to ENOENT-fail (canonical missing); the L3 Stage 6 commit deliberately defers them to maintain a green Check 13 across the L3→L4 commit window.
+**Note on `template-protocol.md` (L4 deliverable):** `TEMPLATE_SYNC_MAP` entries that reference `template-protocol.md` are added in the L4 Stage 6 commit (after the canonical file exists at `core/standards/template-protocol.md`). Adding those entries before L4 Stage 6 lands would cause Check 13 to ENOENT-fail (canonical missing); the L3 Stage 6 commit deliberately defers them to maintain a green Check 13 across the L3→L4 commit window.
 
 ## §7 Registered Mirrors (point-in-time snapshot — see TEMPLATE_SYNC_MAP for authoritative source)
 

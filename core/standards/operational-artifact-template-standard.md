@@ -12,18 +12,18 @@
 
 | AC | Requirement | Satisfied by | Verification |
 |---|---|---|---|
-| **AC-1** | Standard file exists | this file at `pmo-platform/reference/standards/operational-artifact-template-standard.md` | `test -f` |
+| **AC-1** | Standard file exists | this file at `core/standards/operational-artifact-template-standard.md` | `test -f` |
 | **AC-2** | Required template anatomy — ≥4 named required structural elements | §3 Elements A–F (6 ≥ 4 floor) | `grep -cE '^### Element [A-F] '` → 6 |
 | **AC-3** | Entity-derivation rule referencing the entity-field schema | §4 rule T1–T8; **T2 explicitly cites `entity-field-schemas.md`** | `grep -n 'entity-field-schemas.md' §4` resolves |
 | **AC-4** | Machine-schema companion convention (what a template must declare to be machine-validatable) | §5 four-EAD-input declaration contract | §5 declares `source_entity`/`entity_crosswalk`/`serialization_dialect`/`schema_mode` |
 | **AC-5** | ≥1 worked example applying the standard to a real N1-inventory artifact | §7 RAID Log (positive, `entity-derived`) + §7.1 Communications Tracker (exception, `out-of-standard-until-reconciled`) | §7 table + §7.1 contrast present |
-| **AC-6** | `templates/README.md` points to the standard | additive pointer line in `pmo-platform/reference/templates/README.md` using cross-directory relative path `../standards/operational-artifact-template-standard.md` | `grep operational-artifact-template-standard pmo-platform/reference/templates/README.md` resolves |
+| **AC-6** | `templates/README.md` points to the standard | additive pointer line in `operations/templates/README.md` using cross-directory relative path `../standards/operational-artifact-template-standard.md` | `grep operational-artifact-template-standard operations/templates/README.md` resolves |
 
 ---
 
 ## §1 Purpose
 
-This standard defines what makes an operational-artifact template **"highly machine-readable and manageable"** per the reframed capability (project-data-foundation initiative). An *operational artifact* is a tracker, structural file, generated artifact, or typed plan enumerated in the N1 inventory (`pmo-platform/reference/specs/operational-artifact-inventory.md`).
+This standard defines what makes an operational-artifact template **"highly machine-readable and manageable"** per the reframed capability (project-data-foundation initiative). An *operational artifact* is a tracker, structural file, generated artifact, or typed plan enumerated in the N1 inventory (`core/specs/operational-artifact-inventory.md`).
 
 **First-pass discipline (consolidate, do not invent).** This standard is satisfied by **reference, not re-authoring**. It consolidates four existing convention sources by **citation** and adds **exactly three net-new contract clauses**:
 
@@ -128,7 +128,7 @@ The rule is stated as numbered **T-rules** (T = Template-conformance; parallel t
 | **T7** | The template declares a `source_entity` (Element E) resolving to a PDA 17-roster entity **OR** the `⚠ NO-ENTITY-HOME (FINDING-3)` sentinel from the PDA inventory col 3 | conformance gate | structural (auto) |
 | **T8** | `template-local` MUST NOT be used to bypass a field that DOES have an entity home (escape hatch is for genuine dialect/computed/no-home fields only) | conformance (judgment) | judgment (recommend) |
 
-**Entity-derivation reference is to (`entity-field-schemas.md`)** — explicitly cited in T2 above. A bound row's `entity_binding` resolves to a field defined in `pmo-platform/reference/schemas/entity-field-schemas.md` (the PDA frozen surface). This satisfies AC-3's "referencing the entity-field schema" requirement.
+**Entity-derivation reference is to (`entity-field-schemas.md`)** — explicitly cited in T2 above. A bound row's `entity_binding` resolves to a field defined in `core/schemas/entity-field-schemas.md` (the PDA frozen surface). This satisfies AC-3's "referencing the entity-field schema" requirement.
 
 ### §4.1 Conformance Completeness assertion (operationalizes AC-3; mirrors `project-schema.md` §5.1)
 
@@ -219,7 +219,7 @@ N3 consumes the tri-state as its compliance predicate:
 
 **Artifact:** RAID Log (`raid-log-template.csv` family / `[Project]_RAID_Log.csv` instances) — a `core-tracker` from the N1 inventory; the EAD pilot already proven by the RAID-log pilot.
 
-> **Transcription note (frozen-authority binding).** Per the Stage-5 frozen spec's repeated instruction ("bindings authoritative from `raid-log.schema.json` `x-pmo-entity-field` provenance + frozen RAID Item surface — Stage 6 transcribes from those frozen sources, does NOT re-derive"; "S = EAD(...) → derives `raid-log.schema.json` exactly as the RAID-log pilot already proved"), the Entity-Derivation Table below is transcribed verbatim from the on-branch frozen authority — `pmo-platform/reference/schemas/raid-log.schema.json` `x-pmo-class` / `x-pmo-entity-field` / `x-pmo-derived-from` / `x-pmo-referential` provenance, cross-checked against `entity-field-schemas.md` §3.6 RAID Item Table F crosswalk (frozen Option-A). The Stage-5 draft's `[ASSUMPTION – CONFIRM]` row resolved against that frozen text: the frozen RAID Item surface has **no `probability` field** and the frozen 14-column crosswalk (Table F) maps 1:1 to the schema property set — the canonical RAID Log column set is the 14-column set used below.
+> **Transcription note (frozen-authority binding).** Per the Stage-5 frozen spec's repeated instruction ("bindings authoritative from `raid-log.schema.json` `x-pmo-entity-field` provenance + frozen RAID Item surface — Stage 6 transcribes from those frozen sources, does NOT re-derive"; "S = EAD(...) → derives `raid-log.schema.json` exactly as the RAID-log pilot already proved"), the Entity-Derivation Table below is transcribed verbatim from the on-branch frozen authority — `core/schemas/raid-log.schema.json` `x-pmo-class` / `x-pmo-entity-field` / `x-pmo-derived-from` / `x-pmo-referential` provenance, cross-checked against `entity-field-schemas.md` §3.6 RAID Item Table F crosswalk (frozen Option-A). The Stage-5 draft's `[ASSUMPTION – CONFIRM]` row resolved against that frozen text: the frozen RAID Item surface has **no `probability` field** and the frozen 14-column crosswalk (Table F) maps 1:1 to the schema property set — the canonical RAID Log column set is the 14-column set used below.
 
 **Machine-Schema Companion declaration (Element E):**
 
@@ -253,7 +253,7 @@ schema_mode:          dialect-enforce      # pilot validates the live legacy CSV
 
 **Conformance verdict: `entity-derived`.** 12 entity-bound fields + 2 `template-local`-with-rationale (`Tags` dialect, `Section` computed) + 1 `context-implicit` (`project_id`, file-level). Every field is accounted for; `source_entity = #6 RAID Item` resolves to the frozen 17-roster (per `entity-field-schemas.md` §3.6). T1–T7 PASS; T8 judgment: the two locals are genuine dialect / computed projections, not entity-home bypass.
 
-**Machine-schema companion:** `S = EAD(#6 RAID Item, <this table>, csv, dialect-enforce)` derives `pmo-platform/reference/schemas/raid-log.schema.json` exactly as the RAID-log pilot already proved. This worked example **points at** the frozen schema as the EAD output proof — it does not re-author it.
+**Machine-schema companion:** `S = EAD(#6 RAID Item, <this table>, csv, dialect-enforce)` derives `core/schemas/raid-log.schema.json` exactly as the RAID-log pilot already proved. This worked example **points at** the frozen schema as the EAD output proof — it does not re-author it.
 
 ### §7.1 Contrast — Communications Tracker (`out-of-standard-until-reconciled`)
 
@@ -283,12 +283,12 @@ AC-checkable assertions (mirrors `project-schema.md` §5 / `template-protocol.md
 
 | AC | Assertion | Command |
 |---|---|---|
-| **AC-1** | This standard file exists | `test -f pmo-platform/reference/standards/operational-artifact-template-standard.md` |
-| **AC-2** | ≥4 named required structural elements (returns 6) | `grep -cE '^### Element [A-F] ' pmo-platform/reference/standards/operational-artifact-template-standard.md` |
-| **AC-3** | Entity-derivation rule references the entity-field schema (T2) | `grep -nE 'entity-field-schemas.md' pmo-platform/reference/standards/operational-artifact-template-standard.md` resolves in §4 |
-| **AC-4** | §5 declares the four EAD inputs | `grep -nE 'source_entity:.*entity_crosswalk:.*serialization_dialect:.*schema_mode:' pmo-platform/reference/standards/operational-artifact-template-standard.md` — all four present in §5 |
+| **AC-1** | This standard file exists | `test -f core/standards/operational-artifact-template-standard.md` |
+| **AC-2** | ≥4 named required structural elements (returns 6) | `grep -cE '^### Element [A-F] ' core/standards/operational-artifact-template-standard.md` |
+| **AC-3** | Entity-derivation rule references the entity-field schema (T2) | `grep -nE 'entity-field-schemas.md' core/standards/operational-artifact-template-standard.md` resolves in §4 |
+| **AC-4** | §5 declares the four EAD inputs | `grep -nE 'source_entity:.*entity_crosswalk:.*serialization_dialect:.*schema_mode:' core/standards/operational-artifact-template-standard.md` — all four present in §5 |
 | **AC-5** | §7 RAID Log table present + §7.1 Communications contrast present | `grep -nE '## §7 Worked Example — RAID Log' && grep -nE '### §7.1 Contrast — Communications Tracker'` |
-| **AC-6** | `templates/README.md` points to the standard | `grep operational-artifact-template-standard pmo-platform/reference/templates/README.md` resolves (link uses cross-directory relative path `../standards/operational-artifact-template-standard.md`) |
+| **AC-6** | `templates/README.md` points to the standard | `grep operational-artifact-template-standard operations/templates/README.md` resolves (link uses cross-directory relative path `../standards/operational-artifact-template-standard.md`) |
 
 ---
 
@@ -296,16 +296,16 @@ AC-checkable assertions (mirrors `project-schema.md` §5 / `template-protocol.md
 
 | Reference | Role |
 |---|---|
-| L4 `pmo-platform/reference/standards/template-protocol.md` §3/§4.1/§4.4/§8 | Template lifecycle + 14-field provenance + composition boundary (REFERENCED, not modified) |
-| L1 `pmo-platform/reference/standards/template-taxonomy.md` §2 | Three-domain model; operational artifacts = `project`-domain subset (REFERENCED) |
-| L3 `pmo-platform/reference/standards/template-storage.md` §5 | PDA boundary — the load-bearing placement evidence (REFERENCED, not modified) |
-| `pmo-platform/reference/schemas/frontmatter-schema.md` | Instance-frontmatter Category 1–7 + 7 MVP rels + Domain A/B/C (REFERENCED) |
-| `pmo-platform/reference/schemas/project-schema.md` §5–§6 | V-style validation-rule structural pattern (MIRRORED) |
-| `pmo-platform/reference/explanation/project-entity-model.md` | The 17-entity canonical roster (`source_entity` resolution target) |
-| `pmo-platform/reference/schemas/entity-field-schemas.md` | Per-entity field schemas — **the entity-derivation target cited by T2** |
-| `pmo-platform/reference/schemas/raid-log.schema.json` | EAD pilot + §7 worked-example frozen authority (`S=EAD` output proof) |
-| `pmo-platform/reference/specs/operational-artifact-inventory.md` | N1 inventory — the `reconciliation_blocker` inventory-row target; FINDING-3 register |
+| L4 `core/standards/template-protocol.md` §3/§4.1/§4.4/§8 | Template lifecycle + 14-field provenance + composition boundary (REFERENCED, not modified) |
+| L1 `core/standards/template-taxonomy.md` §2 | Three-domain model; operational artifacts = `project`-domain subset (REFERENCED) |
+| L3 `core/standards/template-storage.md` §5 | PDA boundary — the load-bearing placement evidence (REFERENCED, not modified) |
+| `core/schemas/frontmatter-schema.md` | Instance-frontmatter Category 1–7 + 7 MVP rels + Domain A/B/C (REFERENCED) |
+| `core/schemas/project-schema.md` §5–§6 | V-style validation-rule structural pattern (MIRRORED) |
+| `core/disciplines/project-entity-model.md` | The 17-entity canonical roster (`source_entity` resolution target) |
+| `core/schemas/entity-field-schemas.md` | Per-entity field schemas — **the entity-derivation target cited by T2** |
+| `core/schemas/raid-log.schema.json` | EAD pilot + §7 worked-example frozen authority (`S=EAD` output proof) |
+| `core/specs/operational-artifact-inventory.md` | N1 inventory — the `reconciliation_blocker` inventory-row target; FINDING-3 register |
 | ADR for the two-axis lifecycle (RATIFIED) | Two-axis entity lifecycle (Axis-1 `lifecycle_state` ⊥ Axis-2 `content_lifecycle_pattern`) — the `Status` binding basis |
 | Forthcoming `artifact-naming-standard.md` (OPEN; file ABSENT) | Naming-convention authority-when-shipped (FORWARD-REFERENCED, Element F) |
 | Forthcoming generated-artifact provenance spec (OPEN/approved) | Instance provenance for `08-Generated/` (FORWARD-REFERENCED, instance-level) |
-| `pmo-platform/reference/standards/duplicate-source-discipline.md` | The register-or-remove / cite-don't-duplicate discipline this standard observes |
+| `core/standards/duplicate-source-discipline.md` | The register-or-remove / cite-don't-duplicate discipline this standard observes |

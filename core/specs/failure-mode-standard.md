@@ -9,7 +9,7 @@ The discipline lifts skill authoring from "generic guardrails listed" to "princi
 
 ## Scope
 
-Applies to every skill in `pmo-platform/skills/`. Every SKILL.md must contain a `## Domain-Specific Failure Modes` section with ≥ 3 entries using the template below.
+Applies to every skill in `{operations,release,core}/skills/`. Every SKILL.md must contain a `## Domain-Specific Failure Modes` section with ≥ 3 entries using the template below.
 
 SKILL.md files without this section fail pmo-qa-auditor gate G7 (structural check). SKILL.md files with the section but with generic, non-actionable, or degenerate entries fail G7 Phase 2 (content check).
 

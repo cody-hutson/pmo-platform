@@ -117,7 +117,7 @@ The catalog-registry check (Check 18) does not scan prose for framework names. A
 2. **Post-reorg / major content migration**: spot-check that migrated content's named frameworks are catalog-registered:
    ```bash
    grep -rEn "\b(PMBOK|SAFe|Scrum|Kanban|PRINCE2|SECI|Diátaxis|ADKAR|Cost of Delay)\b" \
-     pmo-platform/reference/ pmo-platform/governance/ .claude/rules/ \
+     core/ core/governance/ core/rules/ \
      | grep -viE "framework-catalog\.md|framework-corpus-discipline\.md"
    ```
    Any named framework recurring in prose with no catalog row → add a catalog row (or, if intentionally inline-only, confirm it is acceptably out of registry scope).

@@ -158,7 +158,7 @@ Some skills produce outputs that are entirely non-decision-class — for example
 
 A report-only skill includes an explicit statement in its SKILL.md — in the mode definition or output contract section — that reads:
 
-> **Reversibility scope:** This skill does not produce decision-class outputs (recommendations, plans, escalations, or proposed actions). The reversibility tier check per `pmo-platform/reference/specs/reversibility-protocol.md` does not apply to this skill's outputs.
+> **Reversibility scope:** This skill does not produce decision-class outputs (recommendations, plans, escalations, or proposed actions). The reversibility tier check per `core/specs/reversibility-protocol.md` does not apply to this skill's outputs.
 
 pmo-qa-auditor G4 reads the skill's SKILL.md before evaluating the output. If the opt-out is present, G4 skips the reversibility check for that skill's outputs cleanly.
 
@@ -281,7 +281,7 @@ The remediation itself is CHEAP (a trivial text edit the user can make and rever
 
 A hypothetical `status-rollup` skill that only narrates completed work declares in its SKILL.md:
 
-> **Reversibility scope:** This skill does not produce decision-class outputs (recommendations, plans, escalations, or proposed actions). The reversibility tier check per `pmo-platform/reference/specs/reversibility-protocol.md` does not apply to this skill's outputs.
+> **Reversibility scope:** This skill does not produce decision-class outputs (recommendations, plans, escalations, or proposed actions). The reversibility tier check per `core/specs/reversibility-protocol.md` does not apply to this skill's outputs.
 
 pmo-qa-auditor G4 detects the opt-out before scanning the output, and the reversibility check is skipped for this skill.
 

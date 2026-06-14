@@ -434,9 +434,9 @@ Schema-stability constraint OVERRIDES downstream-consumer design convenience —
 
 ### §10.1 Ship state
 
-At ship, the framework is published as this file at [`pmo-platform/reference/standards/km-governance-framework.md`](km-governance-framework.md). The companion ownership-registry entries are:
+At ship, the framework is published as this file at [`core/standards/km-governance-framework.md`](km-governance-framework.md). The companion ownership-registry entries are:
 
-- **[`framework-catalog.md`](../specs/framework-catalog.md) row** — `km-governance-framework | INTERNAL | pmo-platform/reference/standards/km-governance-framework.md | 2026-05-23 | KM corpus governance for adopted platform knowledge artifacts | emerging | continuous | 2026-05-23 | continuous | Workspace owner ([OPERATOR_NAME])`.
+- **[`framework-catalog.md`](../specs/framework-catalog.md) row** — `km-governance-framework | INTERNAL | core/standards/km-governance-framework.md | 2026-05-23 | KM corpus governance for adopted platform knowledge artifacts | emerging | continuous | 2026-05-23 | continuous | Workspace owner ([OPERATOR_NAME])`.
 - **[`architecture-overview.md § Peer-Spec Concept Ownership`](../disciplines/architecture-overview.md) row** — KM Governance Framework + 4-class ownership enum + 4-source retirement protocol (becomes row 32 after the sibling specs added rows 29 / 30 / 31).
 - **[`OPERATIONS.md § KM Governance Ownership`](../governance/OPERATIONS.md)** — new H2 section (thin 2-paragraph pointer to this framework + reference to framework-catalog as registry; no duplication of framework content).
 - **[`km-protocols.md`](../disciplines/km-protocols.md) frontmatter `consumers:` line update** — acknowledges this framework as now-shipped (F5a light frontmatter update).

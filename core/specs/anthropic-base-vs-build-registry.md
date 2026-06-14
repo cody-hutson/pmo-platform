@@ -60,7 +60,7 @@ Each row carries 8 columns:
 
 | Column | Type | Required | Definition |
 |---|---|---|---|
-| `skill_name` | string (kebab-case) | yes | Matches directory name in `pmo-platform/skills/` |
+| `skill_name` | string (kebab-case) | yes | Matches directory name in `{operations,release,core}/skills/` |
 | `deploy_status` | enum: `deployed` \| `source-only-canary` | yes | Per the registry ADR D-Plan-2a (ii); preserves ADR-04 source-only canary semantics |
 | `anthropic_overlap_status` | enum: `extends` \| `replaces` \| `independent` \| `pass-through` | yes | Per the registry ADR D-Plan-2b (iii); closed 4-element enum |
 | `anthropic_skill_ref` | string \| `null` | conditional | Anthropic-side identifier; `null` when `anthropic_overlap_status` = `independent` |
@@ -139,7 +139,7 @@ what action is to be taken.
 ## §Row count rationale
 
 Per the registry ADR D-Plan-2a (ii), the registry has **22 rows** — full source roster from
-`pmo-platform/skills/` directory listing at audit-baseline SHA. The roster includes:
+`{operations,release,core}/skills/` directory listing at audit-baseline SHA. The roster includes:
 
 - 21 entries deployed via `deploy.sh` `SKILL_LIST` (S-2 mechanism per
   [skill-deployment.md](../rules/skill-deployment.md))
@@ -467,7 +467,7 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `replaces` | 1 | `prompt-builder` |
 | `independent` | 19 | `artifact-generator`, `build-reviewer`, `change-management`, `comms-writer`, `daily-status`, `delivery-engine`, `eval-writer`, `file-router`, `implementation-planner`, `pmo-process-designer`, `pmo-qa-auditor`, `pmo-skill-refiner-selftest-canary`, `pmo-technical-analyst`, `ppm-agent`, `project-initiator`, `release-executor`, `release-planner`, `tracker-manager`, `weekly-status-rollup` |
 | `pass-through` | 0 | (none observed in current source roster; reserved for future) |
-| **TOTAL** | **22** | (matches `pmo-platform/skills/` directory listing at audit-baseline SHA) |
+| **TOTAL** | **22** | (matches `{operations,release,core}/skills/` directory listing at audit-baseline SHA) |
 
 **Deploy status tally:**
 

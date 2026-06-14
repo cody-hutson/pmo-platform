@@ -2,7 +2,7 @@
 # Template Protocol — PMO Platform
 
 **Last Refreshed:** 2026-05-10
-**Authority:** L4 of the 5-Layer Template Architecture. Defines the lifecycle workflow, provenance header schema, and trigger/promotion protocol governing every template in `pmo-platform/reference/templates/`. Consumed by L3 Storage (P4 single-source-of-truth gate per [`template-storage.md`](template-storage.md) §6), L5 Governance (consumer-skill integration — ), and instance-level protocols ( provenance /  instance lifecycle /  instance lineage).
+**Authority:** L4 of the 5-Layer Template Architecture. Defines the lifecycle workflow, provenance header schema, and trigger/promotion protocol governing every template in `operations/templates/`. Consumed by L3 Storage (P4 single-source-of-truth gate per [`template-storage.md`](template-storage.md) §6), L5 Governance (consumer-skill integration — ), and instance-level protocols ( provenance /  instance lifecycle /  instance lineage).
 
 **Reversibility tier:** MODERATE — Confidence: HIGH. Protocol doc itself is reversible per file via `git revert`. Coupling intensifies once ≥3 consumer SKILL.md files reference the protocol — at baseline, zero SKILL.md edits have landed (L5 Governance is a separate sub-issue), so revert cost is currently low; retroactive schema change after L5 ships requires `pmo-skill-editor` re-edit of N skills.
 
@@ -16,13 +16,13 @@ This protocol provides L4 **schema primitives** (state names, provenance field s
 
 ### What IS enforced
 
-This protocol governs every file at `pmo-platform/reference/templates/` — the canonical-template registry per [`template-storage.md`](template-storage.md) §2.1. Each registered template carries a YAML provenance header (markdown templates) or a sibling `.provenance.yml` file (CSV templates) per §4.4, and progresses through the 5-state lifecycle defined in §3. Sync-map registration in `TEMPLATE_SYNC_MAP` (deploy.sh) is governed by L3 Storage; this protocol governs only the provenance + state attributes on the canonical source files.
+This protocol governs every file at `operations/templates/` — the canonical-template registry per [`template-storage.md`](template-storage.md) §2.1. Each registered template carries a YAML provenance header (markdown templates) or a sibling `.provenance.yml` file (CSV templates) per §4.4, and progresses through the 5-state lifecycle defined in §3. Sync-map registration in `TEMPLATE_SYNC_MAP` (deploy.sh) is governed by L3 Storage; this protocol governs only the provenance + state attributes on the canonical source files.
 
 ### What is NOT enforced (intentional non-enforcement boundary)
 
 - **Artifact instances** generated at `projects/*/08-Generated/`, `projects/*/01-Governance/`, etc. — these are governed by the three instance-level protocols (provenance / workflow / lineage) which compose with this protocol (see §8) but are not enforced by it.
-- **Skill-internal-standalone templates** at `pmo-platform/skills/<skill>/references/...-template.md` that are skill-runtime authoring guidance (per [`template-taxonomy.md`](template-taxonomy.md) §5 platform-internal domain) — these are not in the canonical registry and do not carry the L4 provenance header schema.
-- **`references/` mirror copies** at `pmo-platform/skills/<skill>/references/<template-or-standard>` — these are byte-identical mirrors of canonical files, propagated via the L3 deploy-sync mechanism. They inherit provenance state from the canonical source; they do not carry independent lifecycle state.
+- **Skill-internal-standalone templates** at `<module>/skills/<skill>/references/...-template.md` that are skill-runtime authoring guidance (per [`template-taxonomy.md`](template-taxonomy.md) §5 platform-internal domain) — these are not in the canonical registry and do not carry the L4 provenance header schema.
+- **`references/` mirror copies** at `<module>/skills/<skill>/references/<template-or-standard>` — these are byte-identical mirrors of canonical files, propagated via the L3 deploy-sync mechanism. They inherit provenance state from the canonical source; they do not carry independent lifecycle state.
 
 The composition boundary with downstream consumers is documented in §8.
 
@@ -59,7 +59,7 @@ The five state sub-sections below establish the authoritative entry/exit conditi
 
 **Definition.** The template file exists at its canonical path with the required frontmatter, but no human review has occurred. Default starting state for any new template authored by a skill or operator.
 
-**Entry conditions.** Template file is committed to `pmo-platform/reference/templates/` with a complete provenance header per §4.1. Required fields: `artifact_type: template`, `template_family`, `domain`, `canonical_path`, `owner`, `review_status: DRAFT`, `created`, `updated`, `generated_by`. Optional fields may be left as placeholders (e.g., `reviewer: N/A`).
+**Entry conditions.** Template file is committed to `operations/templates/` with a complete provenance header per §4.1. Required fields: `artifact_type: template`, `template_family`, `domain`, `canonical_path`, `owner`, `review_status: DRAFT`, `created`, `updated`, `generated_by`. Optional fields may be left as placeholders (e.g., `reviewer: N/A`).
 
 **Exit conditions.** Designated reviewer (named in `owner`, OR operator) completes at least one substantive read-pass and sets `reviewer:` to their name. Trivial whitespace edits or typo fixes do NOT count as substantive review; the read-pass must evaluate structure and content fitness.
 
@@ -116,7 +116,7 @@ The canonical YAML provenance block placed at the top of every markdown template
 artifact_type: template
 template_family: <ADR | Runbook | Status Report | RAID | KT-Onboarding | ...>  # value from L1 §3-§5
 domain: project | software | platform-internal
-canonical_path: pmo-platform/reference/templates/<file>
+canonical_path: operations/templates/<file>
 owner: <skill-name | operator-name>
 review_status: DRAFT | REVIEWED | APPROVED | PROMOTED | ARCHIVED
 created: YYYY-MM-DD
@@ -148,7 +148,7 @@ superseded_by: <filename | N/A>
 | `canon` | YES (for `domain: software`); OPTIONAL otherwise | string | named canon per L1 [`template-taxonomy.md`](template-taxonomy.md) §6 mapping (Nygard 2011 / PMBOK 7 / Google SRE / IETF / etc.) | P5 gate evaluation input. |
 | `canon_compat` | YES | enum | `plugin-aligned` \| `PMO-extension` \| `none` | P5 gate evaluation result. Path `none` is permitted ONLY for `domain: project` templates without an Anthropic plugin counterpart (per §6 P5 path (c)). |
 | `version` | YES | string | `^v[0-9]+\.[0-9]+(-[a-z]+)?$` per [`version-field-semantics.md`](version-field-semantics.md) regex | Template version. Same release-tag-at-last-material-edit convention as SKILL.md `version:` field. |
-| `supersedes` | OPTIONAL | filename | filename OR `N/A` | Lineage primitive — points to the prior template this one supersedes. **Shared field NAME with ** which uses the same field for instance-to-instance lineage. Dual-semantics documented in §8 (file scope distinguishes — templates at `pmo-platform/reference/templates/`; instances at `projects/*/08-Generated/`). |
+| `supersedes` | OPTIONAL | filename | filename OR `N/A` | Lineage primitive — points to the prior template this one supersedes. **Shared field NAME with ** which uses the same field for instance-to-instance lineage. Dual-semantics documented in §8 (file scope distinguishes — templates at `operations/templates/`; instances at `projects/*/08-Generated/`). |
 | `superseded_by` | OPTIONAL | filename | filename OR `N/A` | Lineage primitive — points to the successor template that supersedes this one. **Shared field NAME with ** (dual semantics — see §8). |
 
 ### §4.3 Compatibility with  (downstream artifact-instance schema)
@@ -180,8 +180,8 @@ The provenance header schema in §4.1 is **field-by-field compatible** with the 
 **CSV templates** (`*-template.csv` in the canonical registry): CSV files do not support inline frontmatter (the header row is data, not metadata). Provenance for CSV templates lives in a sibling `<file>.provenance.yml` file at the same path. Example: `raid-log-template.csv` has its provenance in `raid-log-template.provenance.yml` in the same directory.
 
 **AC4 verification clauses (per template format):**
-- For markdown exemplars: `grep -l 'review_status: APPROVED' pmo-platform/reference/templates/*.md`
-- For CSV exemplars (if ever): `grep -l 'review_status: APPROVED' pmo-platform/reference/templates/*.provenance.yml`
+- For markdown exemplars: `grep -l 'review_status: APPROVED' operations/templates/*.md`
+- For CSV exemplars (if ever): `grep -l 'review_status: APPROVED' operations/templates/*.provenance.yml`
 
 CSV-specific handling rationale: Foundation Stage 5 hypothesized CSV templates as `keep-canonical-only` with mechanical drift-detection via `md5sum`; sibling-file provenance preserves CSV format integrity while supporting the same gate evaluation against `review_status`.
 
@@ -219,7 +219,7 @@ A template candidate is **PROMOTED to the canonical registry** when ALL of P1-P5
   - **(b) PMO-extension**: operator has explicitly approved PMO-extension status with a documented rationale and a named mitigation (registered in [`canonical-skill-structure.md`](canonical-skill-structure.md) PMO-extensions appendix or equivalent governance artifact) per the D-Gate Template upstream-compatibility subsection per [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) §D-Gate Template, OR
   - **(c) none**: the template's `domain:` is `project` AND no Anthropic plugin counterpart exists for the artifact family (e.g., RAID Log, Status Report, KT-Onboarding) — the upstream-compat dimension does not apply to project-domain artifacts that lack plugin equivalents.
 
-The `canon_compat:` field in the template provenance header (per §4.1) records which path (a/b/c) applies. P5 verification = `grep canon_compat: pmo-platform/reference/templates/<file>` returns one of three permitted values; paths (a) and (b) require the cited evidence to be machine-locatable. Path (c) is permitted ONLY when `domain: project` AND no Anthropic plugin counterpart exists per L1 [`template-taxonomy.md`](template-taxonomy.md) §6.
+The `canon_compat:` field in the template provenance header (per §4.1) records which path (a/b/c) applies. P5 verification = `grep canon_compat: operations/templates/<file>` returns one of three permitted values; paths (a) and (b) require the cited evidence to be machine-locatable. Path (c) is permitted ONLY when `domain: project` AND no Anthropic plugin counterpart exists per L1 [`template-taxonomy.md`](template-taxonomy.md) §6.
 
 **Composition with cross-D upstream-compatibility scan.** P5 is the per-template instantiation of the cross-D upstream-compatibility scan defined in [`release-process.md`](../../release/governance/release-process.md) Collective Review Protocol. Every D-decision in a release that touches templates must verify P5 alignment per the release's Collective Review.
 
@@ -227,7 +227,7 @@ The `canon_compat:` field in the template provenance header (per §4.1) records 
 
 ### §7.1 Exemplar choice and rationale
 
-The L4 lifecycle exemplar — the template promoted through the full `DRAFT` → `APPROVED` lifecycle as proof-of-protocol — is `pmo-platform/reference/templates/PMO_Platform_Template.md`.
+The L4 lifecycle exemplar — the template promoted through the full `DRAFT` → `APPROVED` lifecycle as proof-of-protocol — is `operations/templates/PMO_Platform_Template.md`.
 
 **Selection criteria** (per AC4 + L4 Stage 5 DD-E):
 
@@ -244,7 +244,7 @@ The L4 lifecycle exemplar — the template promoted through the full `DRAFT` →
 artifact_type: template
 template_family: KT-Onboarding
 domain: project
-canonical_path: pmo-platform/reference/templates/PMO_Platform_Template.md
+canonical_path: operations/templates/PMO_Platform_Template.md
 owner: [OPERATOR_NAME]
 review_status: APPROVED
 created: 2026-03-27
@@ -266,9 +266,9 @@ superseded_by: N/A
 The protocol AC4 verification chain:
 
 ```
-$ grep -l 'review_status: APPROVED' pmo-platform/reference/templates/*.md
-pmo-platform/reference/templates/PMO_Platform_Template.md
-$ grep -A 8 '^## §9' pmo-platform/reference/standards/template-protocol.md | head -12
+$ grep -l 'review_status: APPROVED' operations/templates/*.md
+operations/templates/PMO_Platform_Template.md
+$ grep -A 8 '^## §9' core/standards/template-protocol.md | head -12
 # (returns the lineage table with the PMO_Platform_Template seed row — see §9)
 ```
 
@@ -300,7 +300,7 @@ This protocol provides L4 **primitives** (state names, field names, trigger prim
 2. **L4 MUST cite each consumer in §8.1.** This protocol enumerates each consumer's owned fields explicitly so a reader of this protocol knows which fields are out of L4 scope. The table in §8.1 is bidirectional reference.
 3. **The 5-state enum is L4's authoritative definition.** Consumers REFERENCE it; consumers do NOT redefine it. If a consumer needs an instance-only state (e.g., `IN_REVIEW` distinct from `REVIEWED`), the consumer MUST file an upstream issue against L4 to extend the enum — silent local extension is forbidden.
 4. **Field NAMES that appear in both L4 and a consumer schema MUST have aligned semantics in the documentation,** even when the value differs (e.g., `created` means the same date concept; the value population context differs because one is template and the other is instance). Documentation in BOTH locations must reference the other (L4 §4 references  schema;  schema MUST reference L4 §4 in its implementation).
-5. **Dual-semantics field names MUST be flagged in BOTH locations.** Specifically: `generated_by` (template-author vs instance-generator), `reviewer` (template-approver vs instance-reviewer), `supersedes` / `superseded_by` (template-version-chain vs instance-lineage). These are NOT conflicts; they are scope-localized interpretations. The flag prevents future readers from collapsing the two interpretations into one. File scope distinguishes (templates at `pmo-platform/reference/templates/`; instances at `projects/*/08-Generated/`).
+5. **Dual-semantics field names MUST be flagged in BOTH locations.** Specifically: `generated_by` (template-author vs instance-generator), `reviewer` (template-approver vs instance-reviewer), `supersedes` / `superseded_by` (template-version-chain vs instance-lineage). These are NOT conflicts; they are scope-localized interpretations. The flag prevents future readers from collapsing the two interpretations into one. File scope distinguishes (templates at `operations/templates/`; instances at `projects/*/08-Generated/`).
 
 ### §8.3 Single load-bearing ambiguity flag
 
@@ -308,7 +308,7 @@ This protocol provides L4 **primitives** (state names, field names, trigger prim
 
 ## §9 Lineage Graph
 
-The lineage graph is an appendix recording template-to-template versioning relationships across the canonical registry. Currently, the lineage graph is rendered inline in this protocol; when the dedicated artifact-lineage file ships, the template lineage portion may migrate to a co-located file under `pmo-platform/reference/` and this §9 will be updated with a supersede pointer.
+The lineage graph is an appendix recording template-to-template versioning relationships across the canonical registry. Currently, the lineage graph is rendered inline in this protocol; when the dedicated artifact-lineage file ships, the template lineage portion may migrate to a co-located file under `core/` and this §9 will be updated with a supersede pointer.
 
 ### §9.1 Schema
 
@@ -327,7 +327,7 @@ Each lineage row carries the following fields:
 
 | `template_id` | `canonical_path` | `first_committed` | `supersedes` | `superseded_by` | `known_instance_locations` |
 |---|---|---|---|---|---|
-| `PMO_Platform_Template.md` | `pmo-platform/reference/templates/PMO_Platform_Template.md` | 2026-03-27 | N/A | N/A | `projects/Archive/*/PMO_Platform_KT_*.html` (informational; one HTML instance per platform release per L1 §3.2) |
+| `PMO_Platform_Template.md` | `operations/templates/PMO_Platform_Template.md` | 2026-03-27 | N/A | N/A | `projects/Archive/*/PMO_Platform_KT_*.html` (informational; one HTML instance per platform release per L1 §3.2) |
 
 Future lineage entries are added at the L4 Stage 6 commit that promotes any subsequent template through the lifecycle. Successor templates' rows also update the predecessor's `superseded_by:` field to maintain a bidirectional chain.
 

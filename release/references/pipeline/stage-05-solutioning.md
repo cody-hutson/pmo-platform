@@ -172,7 +172,7 @@ When a Stage 5 change spec includes a **count update**, **enumeration update**, 
 | # | Trigger | Examples |
 |---|---|---|
 | T1 | Numeric count update (cardinality change: N → M) | "20 custom skills" → "19 custom skills"; "(11)" → "(10)"; "4 without packages" → "3 without packages" |
-| T2 | Enumerated list update (member added / removed / renamed) | implementer skill removed from alphabetical SKILL_LIST; new skill added to Tracked Skills |
+| T2 | Enumerated list update (member added / removed / renamed) | implementer skill removed from an alphabetical per-module skills array (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS`); new skill added to Tracked Skills |
 | T3 | Threshold / version narrative reference change | "180-day window" → "90-day window"; "N=2" → "N=3"; "v1.02" cited narratively → "v1.07" |
 
 **Trigger does NOT fire when:**

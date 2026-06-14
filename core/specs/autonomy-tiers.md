@@ -117,7 +117,7 @@ Per operator D-3 decision 2026-05-04: explicit prefixed terminology throughout. 
 | **Document Tier** | 1-4 | `CLAUDE.md` § File Management Protocol | document approval level (Stakeholder / Operational / New / Context) | Tier 1 = RAID Log; Tier 2 = Daily Status Log; Tier 3 = uploaded transcript; Tier 4 = PROJECT.md |
 | **Skill Tier** | 1-2 | `OPERATIONS.md` § Skill Tiers | skill role classification (PPM/Comms/Delivery = Tier 1; Technical/Process/Change = Tier 2) | Tier 1 = ppm-agent, comms-writer, delivery-engine; Tier 2 = pmo-technical-analyst, pmo-process-designer |
 | **Automation Tier** | 1-3 | `pipeline/` + 10 schema docs (gate-evaluation-spec.md, gate-criteria-spec.md, stage-io-contracts.md, etc.) | per-stage execution model (Tier 1 Auto, Tier 2 Recommend, Tier 3 Human-only) | Stage 1 Intake = Tier 1; Stage 4 Planning = Tier 2; Stage 9 Plan Review = Tier 3 |
-| **Autonomy Tier** | 0-3 | `pmo-platform/reference/specs/autonomy-tiers.md` (this file) | agent action autonomy (Tier 0 Manual → Tier 3 Autonomous) | Tier 0 = Stage 9 GO; Tier 1 = comms-writer draft; Tier 2 = tracker-manager scoped write; Tier 3 = Stage 6 Engineering per plan |
+| **Autonomy Tier** | 0-3 | `core/specs/autonomy-tiers.md` (this file) | agent action autonomy (Tier 0 Manual → Tier 3 Autonomous) | Tier 0 = Stage 9 GO; Tier 1 = comms-writer draft; Tier 2 = tracker-manager scoped write; Tier 3 = Stage 6 Engineering per plan |
 
 > **⚠ Critical inversion warning:** Automation Tier and Autonomy Tier use *inverted* numerical orderings. Automation Tier 1 = highest automation (Auto); Autonomy Tier 3 = highest automation (Autonomous). When citing tiers across files, always use the prefixed terminology (e.g., "Automation Tier 1" or "Autonomy Tier 3") — never bare "Tier 1" / "Tier 3" — because the numeric value alone is ambiguous between the two conventions.
 
@@ -141,11 +141,11 @@ The following actions are **never delegable to agents**, regardless of standing 
 
 4. **Stage 9 Plan Review GO/NO-GO** — release-readiness sign-off before merge.
    - *Why irreducible:* Per pipeline/stage-09-plan-review.md, "hub presents decision to operator, no spoke launched." The gate is the operator's per-instance act.
-   - *Source rule:* `pmo-platform/reference/pipeline/stage-09-plan-review.md`; `pmo-platform/reference/specs/release-personas.md` § Stage 9.
+   - *Source rule:* `release/references/pipeline/stage-09-plan-review.md`; `release/references/specs/release-personas.md` § Stage 9.
 
 5. **Stage 12 Execute authorization** — operator authorizes deployment at the gate; agent executes only post-authorization.
    - *Why irreducible:* Stage 12 deploys to production; rollback EXPENSIVE per reversibility protocol. Authorization is per-instance.
-   - *Source rule:* `.claude/rules/release-process.md` § Stage 12; `pmo-platform/reference/pipeline/stage-12-execute.md`.
+   - *Source rule:* `.claude/rules/release-process.md` § Stage 12; `release/references/pipeline/stage-12-execute.md`.
 
 6. **Governance-file modification without approval** — CLAUDE.md, OPERATIONS.md, RELEASE_PROTOCOL.md, SKILL.md, etc. require Issue + plan + approval.
    - *Why irreducible:* Per CLAUDE.md "No ungoverned changes." Self-generated improvements log only; never auto-fix. Governance never auto-cascades (OPERATIONS.md Cascade rule C5).
@@ -230,9 +230,9 @@ A Tier 1 skill (per OPERATIONS.md skill classification — e.g., comms-writer) c
 | Consumer file | Reference type | Path |
 |---|---|---|
 | `CLAUDE.md` autonomy section | New section cites this file | `CLAUDE.md` (root) |
-| `pmo-platform/reference/explanation/autonomous-execution-model.md` | Distinguishes Cowork (per-step) from Claude Code (PR-gate); will cite tier semantics for "self-repair within Tier 3 scope" | NEW file in same release |
-| `pmo-platform/reference/specs/stage-to-skill-mode-mapping.md` | "Automation level" column will reference Autonomy Tier values for cross-pipeline consistency | NEW file in same release |
-| `pmo-platform/reference/specs/engagement-charter.md` | R1 dimension "Automation tier ↔ engagement hierarchy" | NEW file in same release (D-1: `reference/`) |
+| `core/disciplines/autonomous-execution-model.md` | Distinguishes Cowork (per-step) from Claude Code (PR-gate); will cite tier semantics for "self-repair within Tier 3 scope" | NEW file in same release |
+| `release/references/specs/stage-to-skill-mode-mapping.md` | "Automation level" column will reference Autonomy Tier values for cross-pipeline consistency | NEW file in same release |
+| `core/specs/engagement-charter.md` | R1 dimension "Automation tier ↔ engagement hierarchy" | NEW file in same release (D-1: `reference/`) |
 
 ### Outbound consumers (soft handoff)
 
@@ -253,4 +253,4 @@ A Tier 1 skill (per OPERATIONS.md skill classification — e.g., comms-writer) c
 - [review-discipline-principles.md](../disciplines/review-discipline-principles.md) — review-class output discipline (parallel, no inheritance)
 - [OPERATIONS.md](../governance/OPERATIONS.md) — Skill Tier classification (1-2) + cascade rules C1-C7
 - [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) — File Management Protocol (Document Tier 1-4); Quality Standards (Reversibility discipline, No ungoverned changes); Prohibited Actions
-- `pmo-platform/reference/pipeline/` — Automation Tier 1-3 convention (inverted from this file's Autonomy Tier — see § Tier Disambiguation Table)
+- `release/references/pipeline/` — Automation Tier 1-3 convention (inverted from this file's Autonomy Tier — see § Tier Disambiguation Table)

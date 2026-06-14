@@ -4,7 +4,7 @@
 
 ## §1 Purpose
 
-This document is the canonical specification for every skill authored under `pmo-platform/skills/`. It closes the documented-but-not-enforced gap identified by the 2026-04-20 skill discipline audit and establishes the structural contract that dual-gate enforcement (`.claude/hooks/block-skill-direct-edit.sh` at edit-time + `deploy.sh --check` Checks 6-10 at deploy-time) guarantees. It governs Phase 1 of the Skill Discipline release; subsequent per-skill migration brings existing skills into compliance.
+This document is the canonical specification for every skill authored under `{operations,release,core}/skills/`. It closes the documented-but-not-enforced gap identified by the 2026-04-20 skill discipline audit and establishes the structural contract that dual-gate enforcement (`.claude/hooks/block-skill-direct-edit.sh` at edit-time + `deploy.sh --check` Checks 6-10 at deploy-time) guarantees. It governs Phase 1 of the Skill Discipline release; subsequent per-skill migration brings existing skills into compliance.
 
 **Reversibility tier:** MODERATE — Confidence: HIGH. Enforcement gates are toggleable via `.claude/hooks/.mode` file flip and via migration-marker removal from a skill's frontmatter. The spec itself is per-commit revertable.
 
@@ -37,11 +37,11 @@ PMO tooling does NOT gate the NEW-skill authoring path. **Rationale:** per D-Cre
 
 ### Excluded skills
 
-`docx`, `pdf`, `pptx`, `xlsx`, `schedule` — Cowork-provided proprietary skills managed by Anthropic. They are outside PMO governance surface and are explicitly not registered in `deploy.sh` `SKILL_LIST`. Enforcement gates skip these by exclusion.
+`docx`, `pdf`, `pptx`, `xlsx`, `schedule` — Cowork-provided proprietary skills managed by Anthropic. They are outside PMO governance surface and are explicitly not registered in `deploy.sh` per-module arrays (`OPERATIONS_SKILLS`/`RELEASE_SKILLS`/`CORE_SKILLS`). Enforcement gates skip these by exclusion.
 
 ## §3 Required Frontmatter Fields
 
-Every `pmo-platform/skills/<skill>/SKILL.md` MUST include YAML frontmatter at the file head with the following fields:
+Every `{operations,release,core}/skills/<skill>/SKILL.md` MUST include YAML frontmatter at the file head with the following fields:
 
 | Field | Type | Required | Enforcement | Purpose |
 |---|---|---|---|---|
@@ -77,7 +77,7 @@ Additional frontmatter fields are allowed; unknown fields are ignored by enforce
 
 ### Forbidden at skill root
 
-- `.editor-session` — runtime-only sentinel written by `pmo-skill-editor` at Mode A entry; committed artifacts of this file MUST NOT land in git. The workspace-root `.gitignore` excludes `pmo-platform/skills/*/.editor-session`.
+- `.editor-session` — runtime-only sentinel written by `pmo-skill-editor` at Mode A entry; committed artifacts of this file MUST NOT land in git. The workspace-root `.gitignore` excludes the per-module sentinel globs `operations/skills/*/.editor-session`, `release/skills/*/.editor-session`, and `core/skills/*/.editor-session`.
 
 ## §5 When Reference Files Are REQUIRED
 

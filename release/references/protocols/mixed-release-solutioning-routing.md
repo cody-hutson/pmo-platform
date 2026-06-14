@@ -49,7 +49,7 @@ Mixed-routing activates only when all three controls return PASS. Any control re
 
 ### C1 — Dependency isolation
 
-**Mechanism:** Stage 4 release-planner invokes [`engineering/tools/blast-radius.sh`](../../tools/blast-radius.sh) (per [`blast-radius-protocol.md`](blast-radius-protocol.md)) at A4 on every `DESIGN`-candidate issue's affected files. Verifies, using schema v1 `first_order` and `second_order` arrays (depth=2), that the intersection of the union(`first_order` ∪ `second_order`) for `DESIGN`-candidate files and the union(`first_order` ∪ `second_order`) for `SKIP`-candidate files is empty.
+**Mechanism:** Stage 4 release-planner invokes [`release/tools/blast-radius.sh`](../../tools/blast-radius.sh) (per [`blast-radius-protocol.md`](blast-radius-protocol.md)) at A4 on every `DESIGN`-candidate issue's affected files. Verifies, using schema v1 `first_order` and `second_order` arrays (depth=2), that the intersection of the union(`first_order` ∪ `second_order`) for `DESIGN`-candidate files and the union(`first_order` ∪ `second_order`) for `SKIP`-candidate files is empty.
 
 **Outcomes:**
 - **PASS** = empty intersection across both depths.
