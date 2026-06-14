@@ -244,7 +244,7 @@ produces; owning them first-party keeps an executive's briefing deterministic â€
 silently change because an upstream skill shipped a new version.
 
 > **Sourcing posture (reference).** The governing record is the skill-sourcing-coupling
-> posture ADR (**ADR-021**): own-with-harvested-learnings is the default; a runtime
+> posture ADR (**ADR-023**): own-with-harvested-learnings is the default; a runtime
 > Anthropic dependency is the guarded exception, permitted only for commodity-stable,
 > low-blast-radius, drift-guarded couplings â€” and **barred entirely for stakeholder-facing
 > generation**. The bare ADR number is provenance; the self-describing role above carries

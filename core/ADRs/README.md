@@ -115,13 +115,6 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP at ship, trending MODERATE as downstream artifacts accumulate rung citations.
 **File:** [ADR-020-agent-script-promotion-ladder.md](ADR-020-agent-script-promotion-ladder.md)
 
-### ADR-021 — Skill sourcing-coupling posture: own-with-harvest default; guarded-wrap exception
-
-**Status:** Proposed (flips to Accepted at the comms-writer/artifact-generator-anthropic-offload-refactor Collective Review scope-lock — the Stage 5 N-way-consistency gate per § Status enum).
-**Decision:** A PMO skill is `independent` (own) by default — authored first-party and *harvesting* upstream Anthropic structure/patterns at design time via the upstream-reference catalog, not at runtime. A runtime dependency (`extends` / `pass-through`) is the exception, permitted only when all three hold: the upstream contract is commodity-stable, a silent upstream change has low blast radius, and the coupling is guarded by a drift canary. Stakeholder-facing generation and any PMO-judgment or governance-binding skill never take a runtime Anthropic dependency. Maps onto the registry's existing four-value enum (no new vocabulary); the registry update trigger and the Stage-4 D-Gate cite this ADR rather than restating it.
-**Reversibility:** MODERATE (CHEAP pre-application; crosses to MODERATE once skills are re-classified or re-pointed under the rule).
-**File:** [ADR-021-skill-sourcing-coupling-posture.md](ADR-021-skill-sourcing-coupling-posture.md)
-
 ## Config-architecture ADRs
 
 ### ADR-022 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior
@@ -130,6 +123,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Decision:** Adopt Option C-refined — a two-file config split along the security/access-control boundary, relocating nothing. `operator.toml` is the operator-ENVIRONMENT / IDENTITY surface (identity, paths, methodology default, host-adapter selectors consolidated into a new `[adapters]` table — the onboarding seam; retains `chmod 600` security posture). `platform-config.toml` (NEW) is the platform-BEHAVIOR surface, holding only the new behavior categories ADR-017 did not enumerate (`[bundling]`, `[release_class]`, `[relationship_mapping]`, `[calibration]`). The legacy `[platform].work_board` field is reconciled by deprecation alias, not removal. Refines and extends ADR-017 §S2; relocates nothing, so it is not an ADR-017 deviation.
 **Reversibility:** CHEAP at ship (additive — revert the release PR; the alias keeps existing readers working), trending MODERATE as downstream adapter tickets and consumers wire into the new seams.
 **File:** [ADR-022-platform-config-vs-operator-toml-split.md](ADR-022-platform-config-vs-operator-toml-split.md)
+
+## Skill-architecture ADRs
+
+### ADR-023 — Skill sourcing-coupling posture: own-with-harvest default; guarded-wrap exception
+
+**Status:** Proposed (flips to Accepted at the comms-writer/artifact-generator-anthropic-offload-refactor Collective Review scope-lock — the Stage 5 N-way-consistency gate per § Status enum).
+**Decision:** A PMO skill is `independent` (own) by default — authored first-party and *harvesting* upstream Anthropic structure/patterns at design time via the upstream-reference catalog, not at runtime. A runtime dependency (`extends` / `pass-through`) is the exception, permitted only when all three hold: the upstream contract is commodity-stable, a silent upstream change has low blast radius, and the coupling is guarded by a drift canary. Stakeholder-facing generation and any PMO-judgment or governance-binding skill never take a runtime Anthropic dependency. Maps onto the registry's existing four-value enum (no new vocabulary); the registry update trigger and the Stage-4 D-Gate cite this ADR rather than restating it.
+**Reversibility:** MODERATE (CHEAP pre-application; crosses to MODERATE once skills are re-classified or re-pointed under the rule).
+**File:** [ADR-023-skill-sourcing-coupling-posture.md](ADR-023-skill-sourcing-coupling-posture.md)
 
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 

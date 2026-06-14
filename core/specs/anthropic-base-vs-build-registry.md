@@ -104,13 +104,15 @@ skills") literally while disclosing the canary's source-only status transparentl
 
 ## §Update triggers
 
-See [framework §3.3 Registry Update Protocol](../../release/references/protocols/platform-health-audit-framework.md)
-for the (a/b/c) trigger taxonomy:
+[Framework §3.3 Registry Update Protocol](../../release/references/protocols/platform-health-audit-framework.md)
+defines triggers (a/b/c); trigger (d) is a registry-local extension (not in framework §3.3) added by
+the skill-sourcing-coupling posture work to cover a changed skill's Anthropic coupling. The full (a/b/c/d)
+trigger taxonomy:
 
-- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-021 holds the rule; this trigger cites it, it does not restate it.
+- (a) New PMO skill built — author adds row at skill-creation PR **and declares the skill's sourcing posture**: the `anthropic_overlap_status` value is chosen deliberately per [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md) (own / guarded-wrap / pass-through), with a one-line blast-radius × commodity-stability justification recorded in `overlap_rationale`. ADR-023 holds the rule; this trigger cites it, it does not restate it.
 - (b) Anthropic releases new skill — registry walked for new overlap relationships
 - (c) Anthropic deprecates existing skill — affected `anthropic_overlap_status` re-classified
-- (d) Existing PMO skill changes its Anthropic sourcing relationship (adopts, drops, or alters an `extends` / `pass-through` runtime coupling) — re-observe the affected row: update `anthropic_overlap_status` + `anthropic_skill_ref` + `overlap_rationale` with the blast-radius × commodity-stability justification per [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md). ADR-021 holds the rule; this trigger cites it, it does not restate it.
+- (d) Existing PMO skill changes its Anthropic sourcing relationship (adopts, drops, or alters an `extends` / `pass-through` runtime coupling) — re-observe the affected row: update `anthropic_overlap_status` + `anthropic_skill_ref` + `overlap_rationale` with the blast-radius × commodity-stability justification per [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md). ADR-023 holds the rule; this trigger cites it, it does not restate it.
 
 See [framework §3.5](../../release/references/protocols/platform-health-audit-framework.md) for the 5-trigger event
 taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
@@ -128,8 +130,8 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_overlap_status` | `independent` |
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
-| `overlap_rationale` | Produces or updates PMO-unique project artifacts (governance, change, cutover, operations/status, Waterfall governance, comms-adjacent) and owns the 08-Generated/ staging + promotion orchestration. Post-narrowing, deliberately routes-OUT tech-docs (→ Anthropic `engineering/documentation`) and PRDs (→ Anthropic `product-management/feature-spec`) as design-time user-routing guidance with no runtime dependency; a Wrapper Mode ingests externally-produced artifacts and prepends PMO metadata (`source: external`) for staging. Remains `independent` per ADR-021 (routing + wrap-and-stage are not runtime coupling). No Anthropic counterpart observed for the retained PMO-unique catalog in Hybrid baseline. |
-| `overlap_notes` | Catalog deliberately scoped to PMO-unique artifacts; technical-documentation and PRD/feature-spec generation are routed out as design-time guidance to Anthropic `engineering/documentation` and `product-management/feature-spec` respectively (no runtime dependency — posture remains own-with-harvest per ADR-021). The external-artifact Wrapper Mode re-ingests Anthropic-produced content under PMO metadata staging; the wrapper is a one-way design-time ingestion path, not a runtime skill binding. See `core/standards/artifact-skill-routing.md` and `references/{tech-doc,prd}-routing.md`. No `extends`/`pass-through` coupling introduced. |
+| `overlap_rationale` | Produces or updates PMO-unique project artifacts (governance, change, cutover, operations/status, Waterfall governance, comms-adjacent) and owns the 08-Generated/ staging + promotion orchestration. Post-narrowing, deliberately routes-OUT tech-docs (→ Anthropic `engineering/documentation`) and PRDs (→ Anthropic `product-management/feature-spec`) as design-time user-routing guidance with no runtime dependency; a Wrapper Mode ingests externally-produced artifacts and prepends PMO metadata (`source: external`) for staging. Remains `independent` per ADR-023 (routing + wrap-and-stage are not runtime coupling). No Anthropic counterpart observed for the retained PMO-unique catalog in Hybrid baseline. |
+| `overlap_notes` | Catalog deliberately scoped to PMO-unique artifacts; technical-documentation and PRD/feature-spec generation are routed out as design-time guidance to Anthropic `engineering/documentation` and `product-management/feature-spec` respectively (no runtime dependency — posture remains own-with-harvest per ADR-023). The external-artifact Wrapper Mode re-ingests Anthropic-produced content under PMO metadata staging; the wrapper is a one-way design-time ingestion path, not a runtime skill binding. See `core/standards/artifact-skill-routing.md` and `references/{tech-doc,prd}-routing.md`. No `extends`/`pass-through` coupling introduced. |
 | `build_buy_observation` | PMO custom skill targeting PMO-unique project artifact generation; no Anthropic equivalent observed in Hybrid baseline. |
 
 ### Row 2 — build-reviewer
@@ -168,7 +170,7 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
 | `overlap_rationale` | Produces audience-calibrated stakeholder communications (email, Teams, Confluence, exec briefs, agendas). No Anthropic counterpart observed in Hybrid baseline. |
-| `overlap_notes` | Design-time harvest relationship recorded: comms-writer owns exec-brief + stakeholder-email generation first-party and harvests structure/phrasing from `product-management/stakeholder-comms` at design time (own-with-harvest per ADR-021). Catalogued in `../standards/upstream-reference-catalog.md` (entry `stakeholder-comms-structure`); no runtime coupling. Observation, not a constraint. |
+| `overlap_notes` | Design-time harvest relationship recorded: comms-writer owns exec-brief + stakeholder-email generation first-party and harvests structure/phrasing from `product-management/stakeholder-comms` at design time (own-with-harvest per ADR-023). Catalogued in `../standards/upstream-reference-catalog.md` (entry `stakeholder-comms-structure`); no runtime coupling. Observation, not a constraint. |
 | `build_buy_observation` | PMO custom skill for stakeholder communication authoring; no Anthropic equivalent observed in Hybrid baseline. |
 
 ### Row 5 — daily-status

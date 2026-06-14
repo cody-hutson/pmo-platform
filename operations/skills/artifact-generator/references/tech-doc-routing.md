@@ -39,12 +39,12 @@ The artifact then follows the normal PROMOTE / REVISE / REJECT promotion workflo
 
 ## Coupling posture (design-time only — NO runtime call)
 
-This is **user-routing guidance**, not a runtime-coupling spec. There is **no runtime Anthropic call** anywhere in this path: the Anthropic skill is invoked *separately, before* the wrap, and Wrapper Mode touches only the inert output. Per [ADR-021 — Skill sourcing-coupling posture](../../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md), artifact-generator remains `independent` / own-with-harvest — routing-out plus wrap-and-stage are not runtime coupling. Structure and conventions are harvested at design time via the [upstream-reference catalog](../../../../core/standards/upstream-reference-catalog.md), the recorded harvest surface; no `extends` / `pass-through` binding is introduced.
+This is **user-routing guidance**, not a runtime-coupling spec. There is **no runtime Anthropic call** anywhere in this path: the Anthropic skill is invoked *separately, before* the wrap, and Wrapper Mode touches only the inert output. Per [ADR-023 — Skill sourcing-coupling posture](../../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md), artifact-generator remains `independent` / own-with-harvest — routing-out plus wrap-and-stage are not runtime coupling. Structure and conventions are harvested at design time via the [upstream-reference catalog](../../../../core/standards/upstream-reference-catalog.md), the recorded harvest surface; no `extends` / `pass-through` binding is introduced.
 
 ## Related
 
 - Decision tree (all branches): [`core/standards/artifact-skill-routing.md`](../../../../core/standards/artifact-skill-routing.md)
 - Sibling branch (PRDs / feature specs): [`prd-routing.md`](prd-routing.md)
 - PMO-unique catalog (what artifact-generator DOES produce): [`artifact-catalog.md`](artifact-catalog.md)
-- Sourcing posture: [ADR-021](../../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md)
+- Sourcing posture: [ADR-023](../../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md)
 - Harvest surface: [upstream-reference catalog](../../../../core/standards/upstream-reference-catalog.md)

@@ -1,8 +1,8 @@
 ---
 title: Artifact-Skill Routing Standard
-purpose: The user-facing "which artifact skill to call" decision tree — routes an artifact need to the correct skill (artifact-generator and its specialist routes, delivery-engine, comms-writer) or out to a purpose-built Anthropic skill (then wrap). Composes with (does NOT restate) ADR-021 skill-sourcing-coupling-posture and the artifact-generator catalog.
+purpose: The user-facing "which artifact skill to call" decision tree — routes an artifact need to the correct skill (artifact-generator and its specialist routes, delivery-engine, comms-writer) or out to a purpose-built Anthropic skill (then wrap). Composes with (does NOT restate) ADR-023 skill-sourcing-coupling-posture and the artifact-generator catalog.
 type: reference
-composes_with: [ADR-021-skill-sourcing-coupling-posture.md, upstream-reference-catalog.md, duplicate-source-discipline.md]
+composes_with: [ADR-023-skill-sourcing-coupling-posture.md, upstream-reference-catalog.md, duplicate-source-discipline.md]
 source: initial release
 reversibility: CHEAP / Confidence HIGH
 ---
@@ -17,7 +17,7 @@ This standard answers one question for a workspace user: **"I need an artifact �
 
 It exists because the platform splits artifact production across several skills, and one class (technical documentation and product-requirement specs) is deliberately **routed out** to purpose-built Anthropic skills and then re-ingested under PMO metadata staging. Without a single routing surface, a user (or an agent) reaches for the closest-looking skill and produces a near-miss. This tree makes the correct route explicit.
 
-It is **user-facing guidance**, not a runtime-coupling spec. Routing a need to an Anthropic skill and then wrapping the result is a **design-time** path with **no runtime Anthropic dependency** — see [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md).
+It is **user-facing guidance**, not a runtime-coupling spec. Routing a need to an Anthropic skill and then wrapping the result is a **design-time** path with **no runtime Anthropic dependency** — see [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md).
 
 ## Decision tree
 
@@ -50,7 +50,7 @@ Need an artifact?
 
 The last two branches are the offload targets made user-visible. artifact-generator no longer **produces** technical documentation or PRDs/feature specs; instead, the user invokes the purpose-built Anthropic skill, then brings the result into the project via artifact-generator **Wrapper Mode** (metadata-prepend + stage, no content mutation; the staged header carries `source: external` + `source_origin`).
 
-This keeps artifact-generator's sourcing posture `independent` / own-with-harvest per [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md): routing a user to an Anthropic skill and wrapping its inert output is **not** a runtime dependency. Structure and conventions are harvested at design time via the [upstream-reference catalog](upstream-reference-catalog.md). No `extends` / `pass-through` binding exists.
+This keeps artifact-generator's sourcing posture `independent` / own-with-harvest per [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md): routing a user to an Anthropic skill and wrapping its inert output is **not** a runtime dependency. Structure and conventions are harvested at design time via the [upstream-reference catalog](upstream-reference-catalog.md). No `extends` / `pass-through` binding exists.
 
 ## Related
 
@@ -58,5 +58,5 @@ This keeps artifact-generator's sourcing posture `independent` / own-with-harves
 - Technical-documentation branch detail: [`tech-doc-routing.md`](../../operations/skills/artifact-generator/references/tech-doc-routing.md)
 - PRD / feature-spec branch detail: [`prd-routing.md`](../../operations/skills/artifact-generator/references/prd-routing.md)
 - PMO-unique artifact catalog: [`artifact-catalog.md`](../../operations/skills/artifact-generator/references/artifact-catalog.md)
-- Sourcing posture (own-with-harvest; no runtime coupling): [ADR-021](../ADRs/ADR-021-skill-sourcing-coupling-posture.md)
+- Sourcing posture (own-with-harvest; no runtime coupling): [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md)
 - Design-time harvest surface: [upstream-reference catalog](upstream-reference-catalog.md)

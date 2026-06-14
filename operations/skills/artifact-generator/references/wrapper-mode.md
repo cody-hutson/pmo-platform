@@ -2,7 +2,7 @@
 
 This reference holds the procedural detail for artifact-generator's **Wrapper Mode**. The mode model, the mode-discriminator table, and the metadata-header schema live in the [SKILL.md §Wrapper Mode](../SKILL.md) section; this file is the gate-by-gate intake procedure the agent runs once Wrapper Mode is selected.
 
-Wrapper Mode ingests an *already-produced* external artifact (an Anthropic-skill output, a user upload) and runs only the PMO orchestration tail — prepend a metadata header, stage in `08-Generated/`, present for review. **It makes no runtime Anthropic call**: the Anthropic skill ran separately, before, and Wrapper Mode touches only the inert output. It is categorically distinct from a runtime `extends` coupling — see [ADR-021](../../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md).
+Wrapper Mode ingests an *already-produced* external artifact (an Anthropic-skill output, a user upload) and runs only the PMO orchestration tail — prepend a metadata header, stage in `08-Generated/`, present for review. **It makes no runtime Anthropic call**: the Anthropic skill ran separately, before, and Wrapper Mode touches only the inert output. It is categorically distinct from a runtime `extends` coupling — see [ADR-023](../../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md).
 
 ## Mode selection (recap)
 
@@ -52,4 +52,4 @@ The existing Chained Invocation Contract (`chained=true` from ppm-agent `[ARTIFA
 - Mode model + schema: [SKILL.md §Wrapper Mode](../SKILL.md)
 - Which-skill-to-call decision tree: [`core/standards/artifact-skill-routing.md`](../../../../core/standards/artifact-skill-routing.md)
 - Route-out branch detail: [`tech-doc-routing.md`](tech-doc-routing.md) · [`prd-routing.md`](prd-routing.md)
-- Sourcing posture (no runtime coupling): [ADR-021](../../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md)
+- Sourcing posture (no runtime coupling): [ADR-023](../../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md)

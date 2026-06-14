@@ -121,7 +121,7 @@ or a user upload — and runs only the PMO orchestration tail: prepend a metadat
 stage in 08-Generated/, present for review. **Wrapper Mode makes no runtime Anthropic
 call** — the Anthropic skill ran separately, before; the wrapper touches inert content.
 This is categorically distinct from a runtime `extends` coupling; the sourcing posture
-stays `independent` per [ADR-021](../../../core/ADRs/ADR-021-skill-sourcing-coupling-posture.md).
+stays `independent` per [ADR-023](../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md).
 
 **Mode selection is content-driven and automatic** — inferred from whether an
 artifact-to-wrap is present, exactly as Step 1 infers artifact *type* from the trigger.
