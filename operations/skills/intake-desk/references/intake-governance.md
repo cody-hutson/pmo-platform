@@ -117,7 +117,7 @@ A 6-type classification of where intake demand originates, so the desk can tag e
 
 **Tie to the altitude model (compose, don't duplicate).** The "type / altitude emphasis" column references the altitude → type table in [`type-map.md`](type-map.md). The demand source is an **additional tag** on the item — it does not replace the work-item type or the altitude; an item has all three.
 
-**MECE + tie-break rule.** Every intake item maps to **exactly one** demand source. When an item could read as two (the common case is a compliance-driven defect), tag it by **what is driving the work**: a defect that exists only because a regulator mandated the fix tags as **#4 Regulatory** (the mandate is the driver); a defect surfaced through normal operation tags as **#3 Defect**. State the driver in one line when the tag is non-obvious.
+**MECE + tie-break rule.** Every intake item maps to **exactly one** demand source. When an item could read as two (the common case is a compliance-driven defect), tag it by **what is driving the work**: a defect that exists only because a regulator mandated the fix tags as **type 4 (Regulatory)** (the mandate is the driver); a defect surfaced through normal operation tags as **type 3 (Defect)**. State the driver in one line when the tag is non-obvious.
 
 The count is fixed at **six** by the standard ITSM/PPM demand-management taxonomy and by the originating acceptance criteria ("demand source taxonomy (6 types)"). A coarser 3-type run/change/defect cut loses the regulatory and debt-reduction distinctions that drive differentiated CoD scoring; a per-stakeholder list is not collectively exhaustive — six is the MECE set that maps cleanly onto the altitude → type table.
 
