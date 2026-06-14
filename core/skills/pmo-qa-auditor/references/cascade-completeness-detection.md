@@ -18,10 +18,10 @@ a Stage 5 spec carrying a `### Cascade-Sweep` block. The SKILL.md G8 gate defini
 Process step 3) points here for the full tables.
 
 **Authoritative cross-references:**
-- `../../../release/references/pipeline/stage-05-solutioning.md` § 5.6 — the `### Cascade-Sweep`
+- `../../../../release/references/pipeline/stage-05-solutioning.md` § 5.6 — the `### Cascade-Sweep`
   block schema, the T1/T2/T3 trigger conditions, and the value-scope derivative rule. G8 reads
   this block; it does not define a new schema.
-- `../../specs/failure-mode-standard.md` — the `### Cascade-omission at count update — PROC`
+- `../../../specs/failure-mode-standard.md` — the `### Cascade-omission at count update — PROC`
   entry (the failure mode G8 detects) names G8 as the L5 detection surface.
 
 ---
@@ -151,20 +151,30 @@ swept-table row suppresses the G8-03 flag), so it adds coverage without re-count
 
 ---
 
-## 6. Forward-note — invocation guarantee (CDF-1; out of #79 scope)
+## 6. Forward-note — invocation guarantee (CDF-1; out of the cascade-gate issue's scope)
 
 QA-time invocation gives **no unconditional invocation guarantee**: G8 fires only when
 `pmo-qa-auditor` Mode A is actually pointed at a Stage 5 spec carrying a `### Cascade-Sweep`
 block. If a release skips the QA pass on its specs, L5 silently does not run, and L1–L4
 (authoring/review-time, narrow file-scope) are by design blind to the exact cross-file occurrence
-L5 exists to catch. The §79 AC ("operational on at least one release post-deploy") is satisfied by
-a single worked example and does not establish standing invocation.
+L5 exists to catch. The cascade-gate issue's acceptance criterion ("operational on at least one
+release post-deploy") is satisfied by a single worked example and does not establish standing
+invocation.
 
 A future deploy-time complement — a thin `deploy.sh` CI check (an L5′) that shells the same
 derived-regex completeness logic at PR/merge time, **re-using G8's swept-declaration contract so
 the two never diverge** — would close this coverage hole with a hard gate. The `git diff
 --name-only "$diff_base"..HEAD` changed-files primitive already exists in `deploy.sh`, so this is a
-clean later add. **It is filed as a forward-note only; it is NOT built here** (#79 ships the QA-time
-G8 gate; the CI-enforced L5′ is a separate future-release candidate). A Stage-7/8 forcing-function
+clean later add. **It is filed as a forward-note only; it is NOT built here** (the cascade-gate
+issue ships the QA-time G8 gate; the CI-enforced L5′ is a separate future-release candidate). A
+Stage-7/8 forcing-function
 that *requires* G8 on any spec carrying a `### Cascade-Sweep` block is the alternative
 invocation-guarantee path; same out-of-scope disposition.
+
+---
+
+### Source
+
+- L5 cascade-completeness gate (G8) — add the QA-time, across-the-changed-file-set
+  cascade-completeness detector to `pmo-qa-auditor` (defense-in-depth for the L1–L4
+  prevention surfaces). GitHub issue **#79**.
