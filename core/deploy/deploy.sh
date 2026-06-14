@@ -3811,6 +3811,128 @@ cmd_check() {
     fi
   fi
 
+  # ─── Check 34: Template↔schema conformance (contract-fidelity; warn-mode initial) ───
+  # A THIRD fidelity axis, distinct from Check 13 (canonical↔mirror COPY-fidelity,
+  # byte-identity) and Check 13b (unregistered shared-reference collision): Check 34
+  # asserts a schema-BEARING canonical template carries every section its governing
+  # schema mandates. A canonical template can otherwise drift from the schema that
+  # governs its instances and no gate catches it (#318).
+  #
+  # Schema-bearing set = TEMPLATE_SCHEMA_MAP membership (opt-in by manifest presence).
+  # A template with NO entry here is NEVER inspected — structural skip, zero false
+  # positives by construction (parent AC#4). Extend coverage by ADDING a manifest
+  # line (register-or-extend per template-storage.md §3.5b).
+  #
+  # Manifest tuple (4 fields, '|||'-delimited — the field separator is '|||' rather
+  # than ':' because the schema-anchor field legitimately contains a ': ', e.g.
+  # "Tracker 3: Open Meetings Tracker"; the section list inside field 4 stays
+  # pipe-delimited):
+  #   field 1  <template-path>
+  #   field 2  <governing-schema-path>
+  #   field 3  <schema H2 anchor>  (the "## <anchor>" heading bounding the schema block)
+  #   field 4  <pipe-delimited expected H2 sections the template MUST carry>
+  # Fields are split with `awk -F'\|\|\|'` (NOT `IFS='|||' read`, which bash collapses
+  # to single-'|' separators and silently empties fields 2/3).
+  #
+  # Warn-mode initial via flag_warn_or_issue / deploy-check.mode (the Checks 8-10 /
+  # 13b / 14 / 33 precedent): in warn-mode a breach logs WARN: + appends
+  # deploy-check-warn-log.jsonl WITHOUT incrementing ISSUES; in enforce-mode it
+  # increments ISSUES so `--check` (STRICT) exits non-zero on a real divergence.
+  # Flip-to-enforce path: template-storage.md §3.5b + bypass-mode-readiness.md
+  # Shakedown→Enforce checklist + the runtime deploy-check.mode file.
+  local -a TEMPLATE_SCHEMA_MAP=(
+    "operations/templates/open-meetings-tracker-template.md|||core/schemas/tracker-schemas.md|||Tracker 3: Open Meetings Tracker|||Upcoming Meetings|Recently Completed|Recurring Cadences"
+  )
+
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 34: Template↔schema conformance (contract-fidelity)"
+    local c34_any_finding=false
+    local c34_entry
+    for c34_entry in "${TEMPLATE_SCHEMA_MAP[@]}"; do
+      # Field split on the literal '|||' (CD-1: awk, not IFS-read).
+      local c34_tmpl c34_schema c34_anchor c34_expect
+      c34_tmpl=$(awk -F'\\|\\|\\|'   '{print $1}' <<< "$c34_entry")
+      c34_schema=$(awk -F'\\|\\|\\|' '{print $2}' <<< "$c34_entry")
+      c34_anchor=$(awk -F'\\|\\|\\|' '{print $3}' <<< "$c34_entry")
+      c34_expect=$(awk -F'\\|\\|\\|' '{print $4}' <<< "$c34_entry")
+
+      # Presence guards (no false-fail on environmental gaps).
+      # Template absent → SKIP (Check 12/13 own presence; do not double-fail).
+      if [[ ! -f "$c34_tmpl" ]]; then
+        log "  SKIP:  $c34_tmpl absent (Check 12/13 own presence)"
+        continue
+      fi
+      # Governing schema absent → that IS a contract breach (the schema vanished).
+      if [[ ! -f "$c34_schema" ]]; then
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_tmpl: governing schema $c34_schema not found"
+        c34_any_finding=true
+        continue
+      fi
+
+      # Schema block = lines from "## <anchor>" up to the next "## " (or EOF).
+      local c34_schema_block
+      c34_schema_block=$(awk -v anchor="## ${c34_anchor}" '
+        $0 == anchor { grab=1; next }
+        grab && /^## / { exit }
+        grab { print }
+      ' "$c34_schema")
+      if [[ -z "$c34_schema_block" ]]; then
+        # Anchor not found in the schema → the manifest points at a section that
+        # no longer exists. Treat as a contract breach (manifest↔schema drift).
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_tmpl: schema anchor '## $c34_anchor' not found in $c34_schema (manifest↔schema drift)"
+        c34_any_finding=true
+        continue
+      fi
+
+      # Split the expected-sections pipe-list into an array.
+      local -a c34_sections
+      IFS='|' read -r -a c34_sections <<< "$c34_expect"
+
+      # MISSING = expected sections not present as a "## <section>" heading in the
+      # template (the load-bearing contract assertion). The Header (a '#'-level
+      # title + metadata) and any extra '## CHANGE SUMMARY' log section are NOT in
+      # the expected list, so an extra template section is allowed — only a MISSING
+      # mandated section breaches the contract.
+      local c34_missing=""
+      # A-318-1: manifest↔schema cross-check elevated MAY→SHOULD — each expected
+      # section name SHOULD also appear in the schema block; a mismatch warns
+      # (guards the field-4-hardcodes-schema-sections coupling against drift).
+      local c34_schema_drift=""
+      local c34_sec
+      for c34_sec in "${c34_sections[@]}"; do
+        if ! grep -qxF "## ${c34_sec}" "$c34_tmpl"; then
+          c34_missing="${c34_missing:+$c34_missing, }${c34_sec}"
+        fi
+        if ! printf '%s\n' "$c34_schema_block" | grep -qF "$c34_sec"; then
+          c34_schema_drift="${c34_schema_drift:+$c34_schema_drift, }${c34_sec}"
+        fi
+      done
+
+      # A-318-1 (SHOULD): manifest field-4 vs schema block. A drift here means the
+      # manifest's expected-sections no longer match the schema it cites — warn so
+      # the coupling is re-reconciled (separate from the template breach below).
+      if [[ -n "$c34_schema_drift" ]]; then
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_schema §$c34_anchor: manifest expected-section(s) not found in schema block: $c34_schema_drift (manifest↔schema drift — reconcile TEMPLATE_SCHEMA_MAP field 4)"
+        c34_any_finding=true
+      fi
+
+      # Conformance assertion (load-bearing for AC#1): a MISSING mandated section
+      # is the contract breach.
+      if [[ -n "$c34_missing" ]]; then
+        flag_warn_or_issue "template-schema-conformance" \
+          "$c34_tmpl missing schema-mandated section(s): $c34_missing (per $c34_schema §$c34_anchor)"
+        c34_any_finding=true
+      else
+        log "  OK:    $c34_tmpl conforms to $c34_schema §$c34_anchor"
+      fi
+    done
+    [[ "$c34_any_finding" == "false" ]] && \
+      log "  OK:    all ${#TEMPLATE_SCHEMA_MAP[@]} schema-bearing template(s) conform to their governing schema"
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then

@@ -15,7 +15,7 @@ description: >
   issue", "turn this into a work item", "log this idea", "what type of work item
   is this", "scope this idea for intake", "is this intake-ready", or "help me write
   up this bug/story/initiative".
-version: v1.21
+version: v1.22
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
