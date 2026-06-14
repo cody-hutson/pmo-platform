@@ -87,17 +87,19 @@ fi
 FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
 [ -z "$FILE_PATH" ] && exit 0
 
-# --- SCOPE CHECK — only act on pmo-platform/skills/<skill>/SKILL.md, reference/*.md, or references/*.md ---
-case "$FILE_PATH" in
-  */pmo-platform/skills/*/SKILL.md|*/pmo-platform/skills/*/reference/*.md|*/pmo-platform/skills/*/references/*.md) ;;
-  pmo-platform/skills/*/SKILL.md|pmo-platform/skills/*/reference/*.md|pmo-platform/skills/*/references/*.md) ;;
-  *) exit 0 ;;
-esac
+# --- SCOPE CHECK — act on <root>/skills/<skill>/{SKILL.md | reference[s]/*.md} ---
+# <root> is a SOURCE module: operations | release | core | pmo-platform (legacy).
+# Deploy targets (.claude/skills/) are intentionally NOT in scope.
+SKILL_SCOPE_RE='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/[^/]+\.md)$'
+if [[ ! "$FILE_PATH" =~ $SKILL_SCOPE_RE ]]; then
+  exit 0
+fi
 
-# --- EXTRACT SKILL NAME ---
-skill="$("$PRINTF" '%s' "$FILE_PATH" | /usr/bin/sed -nE 's|.*/?pmo-platform/skills/([^/]+)/.*|\1|p')"
-if [ -z "$skill" ]; then
-  log_error "SCOPE-PARSE-ERROR: could not extract skill name from $FILE_PATH"
+# --- EXTRACT SKILL DIRECTORY + NAME (from the edited file's own path, any root) ---
+skill_dir="$("$PRINTF" '%s' "$FILE_PATH" | /usr/bin/sed -nE 's@^(.*(operations|release|core|pmo-platform)/skills/[^/]+)/.*@\1@p')"
+skill="$("$PRINTF" '%s' "$skill_dir" | /usr/bin/sed -nE 's|.*/skills/([^/]+)$|\1|p')"
+if [ -z "$skill" ] || [ -z "$skill_dir" ]; then
+  log_error "SCOPE-PARSE-ERROR: could not extract skill dir from $FILE_PATH"
   exit 0  # fail-open on parse failure (defensive)
 fi
 
@@ -109,10 +111,11 @@ fi
 # --- PRE-MIGRATION pass-through ---
 # Non-breaking on legacy: if the skill has NOT yet landed the migration marker
 # (via per-skill migration commits), the gate is not yet active on that skill.
-SKILL_MD="pmo-platform/skills/$skill/SKILL.md"
+# Resolve SKILL.md from the skill's own directory (absolute path resolves
+# directly; a repo-relative path falls back under the workspace root).
+SKILL_MD="$skill_dir/SKILL.md"
 if [ ! -f "$SKILL_MD" ]; then
-  # Try absolute-path form in case Claude's cwd differs from skill root
-  SKILL_MD_ABS="${PRIMARY_ROOT}/pmo-platform/skills/$skill/SKILL.md"
+  SKILL_MD_ABS="${PRIMARY_ROOT}/$skill_dir/SKILL.md"
   [ -f "$SKILL_MD_ABS" ] && SKILL_MD="$SKILL_MD_ABS"
 fi
 if [ -f "$SKILL_MD" ] && ! "$GREP" -qE '^skill_discipline_migrated_v10_2:[[:space:]]*true[[:space:]]*$' "$SKILL_MD"; then
@@ -120,9 +123,9 @@ if [ -f "$SKILL_MD" ] && ! "$GREP" -qE '^skill_discipline_migrated_v10_2:[[:spac
 fi
 
 # --- SENTINEL check ---
-SENTINEL="pmo-platform/skills/$skill/.editor-session"
+SENTINEL="$skill_dir/.editor-session"
 if [ ! -f "$SENTINEL" ]; then
-  SENTINEL_ABS="${PRIMARY_ROOT}/pmo-platform/skills/$skill/.editor-session"
+  SENTINEL_ABS="${PRIMARY_ROOT}/$skill_dir/.editor-session"
   [ -f "$SENTINEL_ABS" ] && SENTINEL="$SENTINEL_ABS"
 fi
 
@@ -182,14 +185,14 @@ apply_block() {
 
 # Determine rule ID based on file type in scope
 case "$FILE_PATH" in
-  */SKILL.md|pmo-platform/skills/*/SKILL.md) RULE_ID="BLOCK-SKILL-EDIT-001" ;;
+  */SKILL.md) RULE_ID="BLOCK-SKILL-EDIT-001" ;;
   *) RULE_ID="BLOCK-SKILL-EDIT-002" ;;
 esac
 
 # --- SENTINEL presence ---
 if [ ! -f "$SENTINEL" ]; then
   apply_block "$RULE_ID" \
-    "Direct edit to $FILE_PATH denied — no pmo-skill-editor session marker at pmo-platform/skills/$skill/.editor-session (skill has migration marker; gate active)." \
+    "Direct edit to $FILE_PATH denied — no pmo-skill-editor session marker at $skill_dir/.editor-session (skill has migration marker; gate active)." \
     "invoke pmo-skill-editor Mode A to start an editing session, OR exit claude and relaunch with CLAUDE_HOOK_BYPASS=1 claude"
 fi
 
