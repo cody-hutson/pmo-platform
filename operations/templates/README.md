@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # operations/templates/ — Canonical Templates Registry
 
 **Purpose:** Canonical home for stakeholder-facing template files (typed-format specifications — column headers, section structure, placeholder semantics) used across the PMO platform.
