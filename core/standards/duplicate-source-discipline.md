@@ -9,7 +9,7 @@ This is option (a) per the originating initiative's Stage 5 — documentation-on
 
 ## §1 Principle — register or remove
 
-Content MUST NOT exist in two or more files within `pmo-platform/` or `.claude/` unless one of three conditions holds:
+Content MUST NOT exist in two or more files within `core/` / `release/` or `.claude/` unless one of three conditions holds:
 
 1. **Registered as a mirror.** Both copies are listed in the platform's mirror registry and gain byte-identity enforcement under `deploy.sh --check` Check 9 / Check 11 / Check 13 (see §2). The system enforces drift detection.
 2. **Consolidated to a canonical source.** Content lives in exactly one file; former duplicate sites are replaced with cross-references (markdown link to the canonical source).
@@ -23,9 +23,9 @@ Three `deploy.sh --check` checks today provide byte-identity enforcement on regi
 
 | Check | Surface | Enforcement | Source |
 |---|---|---|---|
-| **Check 9** — Rules-mirror sync | `.claude/rules/<name>.md` ↔ `pmo-platform/engineering/rules/<name>.md` for the four registered pairs (skill-deployment, bypass-mode-readiness, release-process, harness-deployment) | Byte-identity required; mismatch → DRIFT [SOURCE: `deploy.sh:1137`] | — |
-| **Check 11** — Harness-mirror sync | `pmo-platform/harness/<name>/` ↔ `~/.claude/<name>/` for every entry in `HARNESS_LIST` (currently `account-switcher`) | Byte-identity required on canonical files; operator-state files (per `HARNESS_OPERATOR_STATE` allowlist) preserved [SOURCE: `deploy.sh:1205`] | Per D-1.B |
-| **Check 13** — Template-sync drift detection | `TEMPLATE_SYNC_MAP` byte-identity-enforced template pairs | Byte-identity required; matches Check 1 / Check 11 zero-FP posture [SOURCE: `deploy.sh:1323`] | — |
+| **Check 9** — Rules-mirror sync | canonical source `core/rules/<name>.md` (for release-process.md the source is `release/governance/release-process.md`) ↔ deployed mirror `~/.claude/rules/<name>.md` | Byte-identity required; mismatch → DRIFT [SOURCE: `deploy.sh:1695`] | — |
+| **Check 11** — Harness-mirror sync | `harness/<name>/` ↔ `~/.claude/<name>/` for every entry in `HARNESS_LIST` (currently `account-switcher`) | Byte-identity required on canonical files; operator-state files (per `HARNESS_OPERATOR_STATE` allowlist) preserved [SOURCE: `deploy.sh:1798`] | Per D-1.B |
+| **Check 13** — Template-sync drift detection | `TEMPLATE_SYNC_MAP` byte-identity-enforced template pairs | Byte-identity required; matches Check 1 / Check 11 zero-FP posture [SOURCE: `deploy.sh:1929`] | — |
 
 **Out of scope for these checks:**
 - Content-level near-duplicates outside the registered mirror set (the gap this principle addresses).
@@ -35,10 +35,10 @@ Three `deploy.sh --check` checks today provide byte-identity enforcement on regi
 
 ## §3 Scope boundary
 
-This principle covers **content-level duplicates outside the registered mirror set** within `pmo-platform/{governance,reference,engineering,releases}/` and `.claude/rules/` and workspace-root governance files (CLAUDE.md, README.md).
+This principle covers **content-level duplicates outside the registered mirror set** within `core/` and `release/` (governance, reference/standards/specs/schemas/disciplines, releases) and `.claude/rules/` and workspace-root governance files (CLAUDE.md, README.md).
 
 **Out of scope — governed elsewhere:**
-- **SKILL.md boilerplate across skills** is governed by [canonical-skill-structure.md](canonical-skill-structure.md) (the canonical home for skill-authoring discipline). Skills MAY share boilerplate text by design; this preserves compatibility with `anthropic-skills:skill-creator` convention. Any future scan-based enforcement (see §6) MUST exclude `pmo-platform/skills/` from its scope.
+- **SKILL.md boilerplate across skills** is governed by [canonical-skill-structure.md](canonical-skill-structure.md) (the canonical home for skill-authoring discipline). Skills MAY share boilerplate text by design; this preserves compatibility with `anthropic-skills:skill-creator` convention. Any future scan-based enforcement (see §6) MUST exclude `<module>/skills/` from its scope.
 - **Filename-collision duplicates** are covered by `deploy.sh --check` Check 3 (orthogonal — see §2 footer).
 - **Layer 2 operational content** (`projects/`) is Cowork-managed and outside the engineering governance surface.
 
@@ -81,7 +81,7 @@ When a trigger fires, the future deploy.sh hook is **Check 14** — NOT Check 13
 
 Scan-based enforcement would conflict with `anthropic-skills:skill-creator` convention — skills MAY share boilerplate text by design [SOURCE: convention review at the originating initiative's Stage 5, 2026-05-11]. When Check 14 ships, the CONFLICT MUST be resolved using the preference order rendered at the originating initiative's Stage 5:
 
-1. **Preferred — scope-exclude `pmo-platform/skills/` entirely.** Scan limited to `pmo-platform/{governance,reference,engineering,releases}/` + `.claude/rules/` + workspace-root governance files. Cleanest CONFLICT resolution; cleanly defers SKILL.md content discipline to [canonical-skill-structure.md](canonical-skill-structure.md).
+1. **Preferred — scope-exclude `<module>/skills/` entirely.** Scan limited to `core/` and `release/` (governance, reference/standards/specs/schemas/disciplines, releases) + `.claude/rules/` + workspace-root governance files. Cleanest CONFLICT resolution; cleanly defers SKILL.md content discipline to [canonical-skill-structure.md](canonical-skill-structure.md).
 2. **Section-exempt named SKILL.md boilerplate sections** (e.g., persona blocks, output-contract boilerplate) via section-anchor exemption registered in `.claude/duplicate-source-exemption-list.txt` (new file modeled on `.claude/skill-editor-exemption-list.txt`). Higher maintenance cost; consider only if Check 14 needs partial coverage of `skills/`.
 3. **Document as PMO-only constraint with full exemption list.** Highest maintenance cost; consider only if (1) and (2) prove insufficient. Exemption list registered under "No ungoverned changes" protocol.
 
@@ -97,7 +97,7 @@ No exemption-list file is created. The principle doc names `.claude/duplicate-so
 **Registered-mirror enforcement (the existing 3-check enforcement layer):**
 - [.claude/rules/skill-deployment.md](../rules/skill-deployment.md) — Check 9 documentation (rules-mirror sync)
 - [.claude/rules/harness-deployment.md](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/harness-deployment.md) — Check 11 documentation (harness-mirror sync)
-- [deploy.sh](../deploy/deploy.sh) line 1323 — Check 13 implementation (template-sync drift)
+- [deploy.sh](../deploy/deploy.sh) line 1929 — Check 13 implementation (template-sync drift)
 
 **Out-of-scope governance home (preserves `anthropic-skills:skill-creator` compatibility):**
 - [canonical-skill-structure.md](canonical-skill-structure.md) — SKILL.md content discipline canonical home

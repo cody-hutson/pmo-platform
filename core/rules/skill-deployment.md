@@ -21,7 +21,7 @@ Canonical templates and standards docs live ONCE in the repo:
 - `core/standards/template-protocol.md`
 - `core/standards/template-storage.md`
 - `core/standards/template-taxonomy.md`
-- `operations/references/templates/*.md` and `operations/references/templates/*.csv`
+- `operations/templates/*.md` and `operations/templates/*.csv`
 
 Per-skill consumers (e.g., `operations/skills/delivery-engine/references/template-protocol.md`) are NOT carried in the source tree. They are runtime artifacts injected by `sync_canonical_templates_to_runtime()` in `deploy.sh` at deploy time, and by `core/deploy/tools/build-skill-packages.sh` at package build time. The mapping (which canonicals inject into which skill) lives in `deploy.sh`'s `TEMPLATE_SYNC_MAP`.
 
@@ -112,7 +112,7 @@ which skills changed since the last deployment reference. Mechanism:
 4. If no tag exists, fall back to `HEAD~1`.
 
 The diff is filtered by directory (`-- {core,operations,release}/skills/` for
-skills, `packages/` for packages, `pmo-platform/harness/` for harness
+skills, `packages/` for packages, `harness/` for harness
 artifacts) — any file change under these trees, including `references/*.md`,
 surfaces the parent skill/package/harness in `CHANGED_*` output. 
 
