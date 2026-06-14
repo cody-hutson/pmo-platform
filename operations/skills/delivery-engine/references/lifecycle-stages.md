@@ -217,7 +217,7 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 
 **Exit criteria** (ALL must hold to leave):
 - A documented Go/No-Go decision is rendered with an evidence package — evidence: a recorded authorization decision referencing the QA results and AC verdicts.
-- The go-live readiness assessment shows no Red dimension (at most two Amber with documented mitigations) — evidence: the completed readiness assessment (see [`gate-checklists.md §3`](gate-checklists.md#3-go-live-readiness-assessment)).
+- The go-live readiness assessment shows no Red dimension (at most two Amber with documented mitigations) — evidence: the completed readiness assessment (see [`gate-checklists.md §3`](gate-checklists.md)).
 
 **Artifacts consumed:** QA-passed increment; release candidate; acceptance report.
 **Artifacts produced:** A release authorization decision with evidence package.
@@ -236,7 +236,7 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 
 **Exit criteria** (ALL must hold to leave):
 - A deployment runbook is documented and reviewed by operations — evidence: a reviewed runbook.
-- A rollback plan is documented and validated against a tested restore point, with quantitative rollback triggers defined — evidence: a verified rollback procedure plus recorded error-rate / response-time / availability thresholds (see [`gate-checklists.md §3.3`](gate-checklists.md#33-quantitative-rollback-triggers)).
+- A rollback plan is documented and validated against a tested restore point, with quantitative rollback triggers defined — evidence: a verified rollback procedure plus recorded error-rate / response-time / availability thresholds (see [`gate-checklists.md §3.3`](gate-checklists.md)).
 - Stakeholder communications and required enablement are prepared — evidence: a drafted comms plan and training-completion status.
 
 **Artifacts consumed:** Release authorization decision.
@@ -277,7 +277,7 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 **Artifacts consumed:** The change live in production; acceptance criteria.
 **Artifacts produced:** A post-deployment verification result.
 
-**Gate at exit:** none — intra-Deliver flow into Clean / Stabilize. (The Deployment-Verified handoff boundary is checklist-governed per [`gate-definitions.md §3`](gate-definitions.md#3-critical-handoff-checklists) H4; the next named gate is LG-9 PIR after stabilization.)
+**Gate at exit:** none — intra-Deliver flow into Clean / Stabilize. (The Deployment-Verified handoff boundary is checklist-governed per [`gate-definitions.md §3`](gate-definitions.md) H4; the next named gate is LG-9 PIR after stabilization.)
 
 ### 2.14 Clean / Stabilize
 
@@ -337,7 +337,7 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 | **LG-9** — Post-Implementation Review (PIR) | Stage 14 (Clean / Stabilize) → Stage 15 (Close) — at/after stabilization | Persevere / pivot / cancel; benefits verdict |
 | **LG-10** — Closure | terminal — at Stage 15 (Close) | Formally close the project; release resources |
 
-**Reading the seam.** Gates LG-4 through LG-6 are the **work-item-level** gates (per increment / per sprint), sitting on the Prepare→Build→Validate transitions; LG-0 through LG-3 and LG-7 through LG-10 are **project-altitude** gates. A single work item may cycle LG-4 → LG-5 → LG-6 many times within one project window. The seam is intentionally **not** one-gate-per-stage-boundary: gates sit at the **decision-significant** boundaries, and several intra-phase stage transitions (e.g., Classify → Define Requirements, Deploy → Verify) carry no named gate (the "none — intra-phase flow" entries in §2). The two named critical-handoff boundaries that this doc's stages cross without a *new* gate — Deployment Verified (Stage 13→14) and Release→Operate (Stage 14→15) — are checklist-governed per [`gate-definitions.md §3`](gate-definitions.md#3-critical-handoff-checklists) (H3/H4).
+**Reading the seam.** Gates LG-4 through LG-6 are the **work-item-level** gates (per increment / per sprint), sitting on the Prepare→Build→Validate transitions; LG-0 through LG-3 and LG-7 through LG-10 are **project-altitude** gates. A single work item may cycle LG-4 → LG-5 → LG-6 many times within one project window. The seam is intentionally **not** one-gate-per-stage-boundary: gates sit at the **decision-significant** boundaries, and several intra-phase stage transitions (e.g., Classify → Define Requirements, Deploy → Verify) carry no named gate (the "none — intra-phase flow" entries in §2). The two named critical-handoff boundaries that this doc's stages cross without a *new* gate — Deployment Verified (Stage 13→14) and Release→Operate (Stage 14→15) — are checklist-governed per [`gate-definitions.md §3`](gate-definitions.md) (H3/H4).
 
 **The load-bearing cell** is LG-6 at the Stage 9 → Stage 10 boundary: this is where the AC's P1 block is enforced (§5). The two endpoint cells (LG-0 at lifecycle entry; LG-10 at Close) anchor the sequence.
 
@@ -384,7 +384,7 @@ This is the acceptance criterion for the universal lifecycle: *a work-item move 
 
 > BLOCKED — QA/Acceptance (Stage 9) → Plan Review (Stage 10). Open P1 defect `<ID>` (status: `<status>`) violates Stage 9 exit criterion "no open P1 defect" and the LG-6 QA Gate exit criterion `[LG-6-EX-2]`. To unblock: resolve-and-verify `<ID>`, or record an authority severity downgrade, before re-requesting the move.
 
-This predicate is **severity-specific**: P2/P3/P4 defects do not auto-block — they route to the gate authority's risk-acceptance judgment per the gate model (see [`gate-definitions.md §4`](gate-definitions.md#4-gate-transition-rule)). Only **P1** hard-blocks.
+This predicate is **severity-specific**: P2/P3/P4 defects do not auto-block — they route to the gate authority's risk-acceptance judgment per the gate model (see [`gate-definitions.md §4`](gate-definitions.md)). Only **P1** hard-blocks.
 
 **Why exit-criterion encoding (not a gate redefinition).** The *gate* that fires at this boundary (LG-6) is owned by [`gate-definitions.md`](gate-definitions.md); this doc owns the *stage exit criterion* — the temporal predicate that the gate's quality check reads. The predicate stated here and the gate criterion `[LG-6-EX-2]` are two views of the same rule: this doc binds it to the Stage 9 → Stage 10 transition; gate-definitions.md binds it to the LG-6 QA Gate's authority and escalation path.
 
@@ -394,7 +394,7 @@ This predicate is **severity-specific**: P2/P3/P4 defects do not auto-block — 
 
 ## 6. Relationship to Gate Types and Gate Checklists
 
-Each lifecycle gate instance in [`gate-definitions.md`](gate-definitions.md) is one of the **five gate TYPES** defined in [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types) — Phase / Quality / Flow / Approval / Hypothesis — and each runs the per-type checklist template in [`gate-checklists.md §2`](gate-checklists.md#2-per-gate-type-checklist-templates). This doc does not classify gate types or restate checklists; it records stage placement (§3) and stage exit criteria (§2, §5). The gate-type taxonomy is owned by [`gate-checklists.md`](gate-checklists.md); the gate instances and their types are listed in [`gate-definitions.md §1`](gate-definitions.md#1-lifecycle-gate-model-lg-0--lg-10--overview).
+Each lifecycle gate instance in [`gate-definitions.md`](gate-definitions.md) is one of the **five gate TYPES** defined in [`gate-checklists.md §1`](gate-checklists.md) — Phase / Quality / Flow / Approval / Hypothesis — and each runs the per-type checklist template in [`gate-checklists.md §2`](gate-checklists.md). This doc does not classify gate types or restate checklists; it records stage placement (§3) and stage exit criteria (§2, §5). The gate-type taxonomy is owned by [`gate-checklists.md`](gate-checklists.md); the gate instances and their types are listed in [`gate-definitions.md §1`](gate-definitions.md).
 
 For example: LG-6 (the QA Gate carrying the AC's P1 predicate) is a **Quality** gate — it runs the Quality Gate / DoD checklist plus the Test-Quality readiness dimension per [`gate-definitions.md`](gate-definitions.md) Gate 6. The temporal predicate lives here (§5); the gate type, authority, and checklist live in the gate docs.
 

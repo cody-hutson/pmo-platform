@@ -17,7 +17,7 @@ This document is the canonical **sequence** of project-lifecycle gates — eleve
 
 ## 1. Lifecycle Gate Model (LG-0 — LG-10) — Overview
 
-The project lifecycle passes through eleven gates in order. The table below establishes the whole sequence at a glance and sets the gate-TYPE cross-reference once, table-wide (each type links into [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)).
+The project lifecycle passes through eleven gates in order. The table below establishes the whole sequence at a glance and sets the gate-TYPE cross-reference once, table-wide (each type links into [`gate-checklists.md §1`](gate-checklists.md)).
 
 | Gate | Name | Gate type (→ `gate-checklists.md §1`) | Authority holder | Primary decision |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 
 ### Gate 0 — Idea Screen (LG-0)
 
-**Gate type:** Hypothesis → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Hypothesis → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Portfolio / Intake authority (the single Accountable)
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-0-EN-1] An idea is captured as a work item with a one-line problem statement and a named requester (evidence: the intake record exists).
@@ -55,11 +55,11 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 **Key decisions:** Advance to business-case work (LG-1) / screen out (kill) / park for a future portfolio cycle (hold).
 **Artifacts required:** Intake record (one-line problem + requester + strategic-fit hypothesis). Cross-ref the intake's governed home where one exists (the work-tracker intake item).
 **Escalation path:** Escalate to the Portfolio lead when strategic fit is contested or two requesters dispute priority; trigger = unresolved fit dispute at screen time.
-**Checklist template:** → [`gate-checklists.md §2.5`](gate-checklists.md#25-hypothesis-gate-checklist) (Hypothesis Gate Checklist)
+**Checklist template:** → [`gate-checklists.md §2.5`](gate-checklists.md) (Hypothesis Gate Checklist)
 
 ### Gate 1 — Portfolio Intake / Business Case (LG-1)
 
-**Gate type:** Phase → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Phase → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Steering / Lean Portfolio Management
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-1-EN-1] The idea cleared LG-0 (evidence: LG-0 exit recorded PASS).
@@ -72,11 +72,11 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 **Key decisions:** Fund / hold / reject the business case (go / kill / hold).
 **Artifacts required:** Business case (value, cost, assumptions); funding decision record; named sponsor.
 **Escalation path:** Escalate to the portfolio governing body when the business case exceeds the authority holder's funding threshold or when capacity cannot absorb the work without displacing a committed initiative; trigger = funding-threshold breach or capacity conflict.
-**Checklist template:** → [`gate-checklists.md §2.1`](gate-checklists.md#21-phase-gate-checklist) (Phase Gate Checklist)
+**Checklist template:** → [`gate-checklists.md §2.1`](gate-checklists.md) (Phase Gate Checklist)
 
 ### Gate 2 — Project Initiation / Kickoff (LG-2)
 
-**Gate type:** Phase → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Phase → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Steering Committee / Sponsor
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-2-EN-1] The business case cleared LG-1 and funding is authorized (evidence: LG-1 exit PASS + funding record).
@@ -89,67 +89,67 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 **Key decisions:** Authorize the project and commit initiation resources / hold for charter rework / recycle to LG-1 for business-case revision.
 **Artifacts required:** Approved project charter; team roster; initial RAID entries; governance/RACI definition.
 **Escalation path:** Escalate to the Sponsor when the charter scope conflicts with the funded business case, or when a required accountable role cannot be staffed; trigger = scope-vs-funding conflict or an unstaffable accountable role.
-**Checklist template:** → [`gate-checklists.md §2.1`](gate-checklists.md#21-phase-gate-checklist) (Phase Gate Checklist)
+**Checklist template:** → [`gate-checklists.md §2.1`](gate-checklists.md) (Phase Gate Checklist)
 
 ### Gate 3 — Plan Baseline / Readiness (LG-3)
 
-**Gate type:** Phase → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Phase → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Steering Committee
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-3-EN-1] The project cleared LG-2 and the team is staffed (evidence: LG-2 exit PASS + roster).
 - [LG-3-EN-2] A draft delivery plan exists with a scope breakdown and a sequencing view (evidence: the plan draft / backlog is attached).
 **Exit criteria** (ALL must hold to PASS and transition to LG-4):
 - [LG-3-EX-1] The plan is baselined — scope, schedule milestones, and budget are committed and version-stamped (evidence: a baselined plan with a baseline date).
-- [LG-3-EX-2] The backlog is sufficiently refined for the first execution increment to start, with a Definition of Ready agreed (evidence: a DoR exists and the first increment's candidate items reference it — see [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist)).
+- [LG-3-EX-2] The backlog is sufficiently refined for the first execution increment to start, with a Definition of Ready agreed (evidence: a DoR exists and the first increment's candidate items reference it — see [`gate-checklists.md §2.2`](gate-checklists.md)).
 - [LG-3-EX-3] Cross-team and external dependencies are identified with owners and need-by dates (evidence: a dependency register with owner + date per edge — see [`dependency-rules.md`](dependency-rules.md)).
 - [LG-3-EX-4] Capacity is confirmed against the planned scope for the first planning horizon (evidence: a capacity assessment referencing team availability — see [`capacity-model.md`](capacity-model.md)).
 **Key decisions:** Baseline the plan and authorize execution / hold pending dependency or capacity resolution / recycle to LG-2 for charter/scope rework.
 **Artifacts required:** Baselined delivery plan; refined backlog with agreed DoR; dependency register; capacity assessment.
 **Escalation path:** Escalate to the Steering Committee when a critical dependency has no committed owner/date, or when confirmed capacity cannot meet the baselined scope; trigger = uncommitted critical dependency or a capacity-vs-scope shortfall at baseline.
-**Checklist template:** → [`gate-checklists.md §2.1`](gate-checklists.md#21-phase-gate-checklist) (Phase Gate Checklist)
+**Checklist template:** → [`gate-checklists.md §2.1`](gate-checklists.md) (Phase Gate Checklist)
 
 ### Gate 4 — Sprint DoR (Execution Entry) (LG-4)
 
-**Gate type:** Quality → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Quality → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Tech Leads / Product Owner
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-4-EN-1] The plan is baselined (LG-3 exit PASS) for the project window the increment falls in (evidence: LG-3 exit recorded).
 - [LG-4-EN-2] A candidate work item is proposed for execution entry (evidence: the item exists in the backlog with a summary).
 **Exit criteria** (ALL must hold to PASS and transition to LG-5 — these ARE the Definition of Ready; run the template, do not restate it):
-- [LG-4-EX-1] Acceptance criteria are defined as specific, testable conditions (evidence: AC written in Given/When/Then or equivalent — per [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist) DoR #1).
-- [LG-4-EX-2] Dependencies are identified and none are in a blocked state (evidence: the item's dependency links are mapped and clear — DoR #2).
-- [LG-4-EX-3] The item is sized/estimated (evidence: an estimate is assigned — DoR #3; estimation discipline per [`estimation-standards.md`](estimation-standards.md)).
-- [LG-4-EX-4] The technical approach is reviewed where applicable, with no open architecture question (evidence: design note or a recorded "no design needed" — DoR #4).
-- [LG-4-EX-5] A test approach is identified with test data available or a plan to create it (evidence: a stated test strategy — DoR #5).
-- [LG-4-EX-6] The item is small enough to fit one iteration (evidence: it meets the INVEST "Small" criterion; otherwise it is sliced — DoR #6).
+- [LG-4-EX-1] Acceptance criteria are defined as specific, testable conditions (evidence: AC written in Given/When/Then or equivalent — per [`gate-checklists.md §2.2`](gate-checklists.md) DoR criterion 1).
+- [LG-4-EX-2] Dependencies are identified and none are in a blocked state (evidence: the item's dependency links are mapped and clear — DoR criterion 2).
+- [LG-4-EX-3] The item is sized/estimated (evidence: an estimate is assigned — DoR criterion 3; estimation discipline per [`estimation-standards.md`](estimation-standards.md)).
+- [LG-4-EX-4] The technical approach is reviewed where applicable, with no open architecture question (evidence: design note or a recorded "no design needed" — DoR criterion 4).
+- [LG-4-EX-5] A test approach is identified with test data available or a plan to create it (evidence: a stated test strategy — DoR criterion 5).
+- [LG-4-EX-6] The item is small enough to fit one iteration (evidence: it meets the INVEST "Small" criterion; otherwise it is sliced — DoR criterion 6).
 **Key decisions:** Admit to execution (Ready) / return for refinement (not Ready) / slice into smaller items.
-**Artifacts required:** The DoR checklist run against the item ([`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist)); the refined work item (AC, estimate, dependencies).
+**Artifacts required:** The DoR checklist run against the item ([`gate-checklists.md §2.2`](gate-checklists.md)); the refined work item (AC, estimate, dependencies).
 **Escalation path:** Escalate to the Product Owner when an item is repeatedly returned as not-Ready (≥2 refinement cycles) or when a blocking dependency cannot be cleared by the team; trigger = repeat not-Ready or an unclearable blocker.
-**Checklist template:** → [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist) (Definition of Ready)
+**Checklist template:** → [`gate-checklists.md §2.2`](gate-checklists.md) (Definition of Ready)
 
 ### Gate 5 — Dev Complete (DoD) (LG-5)
 
-**Gate type:** Quality → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Quality → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Tech Leads / Developers
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-5-EN-1] The item passed LG-4 DoR and was admitted to execution (evidence: LG-4 exit PASS).
 - [LG-5-EN-2] Implementation is claimed complete and committed (evidence: the change is committed; a "done" claim is raised).
 **Exit criteria** (ALL must hold to PASS and transition to LG-6 — these ARE the Definition of Done; run the template, do not restate it):
-- [LG-5-EX-1] All acceptance criteria are met and verified with evidence (evidence: each AC checked against an artifact — per [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist) DoD #1).
-- [LG-5-EX-2] Code is peer-reviewed with no unresolved comments (evidence: a completed review record — DoD #2).
-- [LG-5-EX-3] Tests pass per the test pyramid with coverage on new code (evidence: a green test run / coverage report — DoD #3).
-- [LG-5-EX-4] The automated regression suite is green (evidence: a passing regression run link — DoD #4).
-- [LG-5-EX-5] Documentation is updated as applicable (evidence: the relevant docs/runbooks reflect the change — DoD #5).
-- [LG-5-EX-6] The artifact builds cleanly and the deployment pipeline is green (evidence: a successful build — DoD #6).
-- [LG-5-EX-7] The Product Owner has inspected and accepted the increment (evidence: a recorded PO acceptance — DoD #7).
+- [LG-5-EX-1] All acceptance criteria are met and verified with evidence (evidence: each AC checked against an artifact — per [`gate-checklists.md §2.2`](gate-checklists.md) DoD criterion 1).
+- [LG-5-EX-2] Code is peer-reviewed with no unresolved comments (evidence: a completed review record — DoD criterion 2).
+- [LG-5-EX-3] Tests pass per the test pyramid with coverage on new code (evidence: a green test run / coverage report — DoD criterion 3).
+- [LG-5-EX-4] The automated regression suite is green (evidence: a passing regression run link — DoD criterion 4).
+- [LG-5-EX-5] Documentation is updated as applicable (evidence: the relevant docs/runbooks reflect the change — DoD criterion 5).
+- [LG-5-EX-6] The artifact builds cleanly and the deployment pipeline is green (evidence: a successful build — DoD criterion 6).
+- [LG-5-EX-7] The Product Owner has inspected and accepted the increment (evidence: a recorded PO acceptance — DoD criterion 7).
 **Key decisions:** Accept the increment as Done / return it to development with the specific failing criterion cited.
-**Artifacts required:** The DoD checklist run against the increment ([`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist)); review record; test/coverage evidence; PO acceptance.
+**Artifacts required:** The DoD checklist run against the increment ([`gate-checklists.md §2.2`](gate-checklists.md)); review record; test/coverage evidence; PO acceptance.
 **Escalation path:** Escalate to the Tech Lead when a "done" claim repeatedly fails DoD, or when acceptance is blocked by an unowned defect; trigger = repeat DoD failure or an unowned blocking defect. (Do NOT round a near-miss up to PASS — gate criteria are binary per criterion; see the delivery-engine gate-washing guardrail.)
-**Checklist template:** → [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist) (Definition of Done)
+**Checklist template:** → [`gate-checklists.md §2.2`](gate-checklists.md) (Definition of Done)
 
 ### Gate 6 — QA Gate (LG-6)
 
-**Gate type:** Quality → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Quality → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** QA Lead
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-6-EN-1] The increment passed LG-5 DoD (evidence: LG-5 exit PASS).
@@ -158,52 +158,52 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 - [LG-6-EX-1] Planned QA test cases are executed with a recorded pass rate meeting the agreed threshold (evidence: a test-execution report with pass rate vs. threshold).
 - [LG-6-EX-2] Zero open critical or high-severity defects against the increment (evidence: the defect tracker shows no open critical/high — or an explicitly approved, documented exception).
 - [LG-6-EX-3] Regression and integration testing across affected interfaces is green end-to-end (evidence: an integration/regression run covering the touched interfaces).
-- [LG-6-EX-4] Non-functional checks required for this increment are met — performance / security as scoped (evidence: the scoped NFR results; security scan clean of unresolved critical/high — cross-ref [`gate-checklists.md §3`](gate-checklists.md#3-go-live-readiness-assessment) Compliance dimension).
+- [LG-6-EX-4] Non-functional checks required for this increment are met — performance / security as scoped (evidence: the scoped NFR results; security scan clean of unresolved critical/high — cross-ref [`gate-checklists.md §3`](gate-checklists.md) Compliance dimension).
 **Key decisions:** Pass to release readiness / return to development with the failing test or defect cited / accept a documented exception (only where the gate type's checklist permits a CONDITIONAL outcome).
 **Artifacts required:** Test-execution report; defect inventory with severities; integration/regression evidence; NFR results as scoped.
 **Escalation path:** Escalate to the QA Lead and the increment's Tech Lead when a critical defect cannot be resolved within the release window, or when test coverage is insufficient to render a verdict; trigger = unresolvable critical defect or a coverage gap that blocks a PASS/FAIL call.
-**Checklist template:** → [`gate-checklists.md §2.2`](gate-checklists.md#22-quality-gate-checklist) (Quality Gate / DoD) + [`gate-checklists.md §3`](gate-checklists.md#3-go-live-readiness-assessment) (Test Quality dimension)
+**Checklist template:** → [`gate-checklists.md §2.2`](gate-checklists.md) (Quality Gate / DoD) + [`gate-checklists.md §3`](gate-checklists.md) (Test Quality dimension)
 
 ### Gate 7 — Release Readiness (LG-7)
 
-**Gate type:** Approval → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Approval → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Business Owner / Release Manager
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-7-EN-1] All in-scope increments passed LG-6 QA (evidence: LG-6 exit PASS for each increment in the release).
 - [LG-7-EN-2] A release candidate is assembled and identified (evidence: a named, versioned release candidate exists).
 **Exit criteria** (ALL must hold to PASS and transition to LG-8 — run the nine-dimension readiness assessment, do not restate it):
-- [LG-7-EX-1] The nine-dimension go-live readiness assessment shows zero Red dimensions and at most two Amber (with documented mitigations) (evidence: the completed RAG assessment — per [`gate-checklists.md §3`](gate-checklists.md#3-go-live-readiness-assessment)).
-- [LG-7-EX-2] A deployment plan / runbook is documented and reviewed by operations (evidence: a reviewed runbook — Approval checklist #2, [`gate-checklists.md §2.4`](gate-checklists.md#24-approval-gate-checklist)).
-- [LG-7-EX-3] A rollback plan is documented and validated against a tested restore point (evidence: a rollback procedure verified in staging or equivalent — Approval #3; one of the never-compress gates, [`gate-checklists.md §3.2`](gate-checklists.md#32-gates-that-never-compress)).
-- [LG-7-EX-4] Quantitative rollback triggers are defined with thresholds (evidence: error-rate / response-time / availability thresholds recorded — per [`gate-checklists.md §3.3`](gate-checklists.md#33-quantitative-rollback-triggers)).
-- [LG-7-EX-5] Stakeholder communications and required enablement/training are prepared (evidence: a drafted comms plan and training-completion status — Approval #4/#5).
-- [LG-7-EX-6] Security review is passed with no unresolved critical/high vulnerability (evidence: a clean security scan — Approval #6; a never-compress gate, [`gate-checklists.md §3.2`](gate-checklists.md#32-gates-that-never-compress)).
+- [LG-7-EX-1] The nine-dimension go-live readiness assessment shows zero Red dimensions and at most two Amber (with documented mitigations) (evidence: the completed RAG assessment — per [`gate-checklists.md §3`](gate-checklists.md)).
+- [LG-7-EX-2] A deployment plan / runbook is documented and reviewed by operations (evidence: a reviewed runbook — Approval checklist criterion 2, [`gate-checklists.md §2.4`](gate-checklists.md)).
+- [LG-7-EX-3] A rollback plan is documented and validated against a tested restore point (evidence: a rollback procedure verified in staging or equivalent — Approval criterion 3; one of the never-compress gates, [`gate-checklists.md §3.2`](gate-checklists.md)).
+- [LG-7-EX-4] Quantitative rollback triggers are defined with thresholds (evidence: error-rate / response-time / availability thresholds recorded — per [`gate-checklists.md §3.3`](gate-checklists.md)).
+- [LG-7-EX-5] Stakeholder communications and required enablement/training are prepared (evidence: a drafted comms plan and training-completion status — Approval criteria 4/5).
+- [LG-7-EX-6] Security review is passed with no unresolved critical/high vulnerability (evidence: a clean security scan — Approval criterion 6; a never-compress gate, [`gate-checklists.md §3.2`](gate-checklists.md)).
 **Key decisions:** Go / no-go on the release candidate / conditional-go with named mitigations / hold for readiness remediation.
 **Artifacts required:** Nine-dimension readiness assessment; deployment runbook; validated rollback plan + triggers; comms/training status; security review result.
 **Escalation path:** Escalate to the Business Owner when any readiness dimension is Red, when a never-compress gate cannot be satisfied, or when the change window conflicts with another release; trigger = a Red dimension, an unmet never-compress gate, or a window conflict.
-**Checklist template:** → [`gate-checklists.md §2.4`](gate-checklists.md#24-approval-gate-checklist) (Approval Gate) + [`gate-checklists.md §3`](gate-checklists.md#3-go-live-readiness-assessment) (nine-dimension readiness)
+**Checklist template:** → [`gate-checklists.md §2.4`](gate-checklists.md) (Approval Gate) + [`gate-checklists.md §3`](gate-checklists.md) (nine-dimension readiness)
 
 ### Gate 8 — Go-Live / Deployment Approval (LG-8)
 
-**Gate type:** Approval → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Approval → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Change Authority / CAB
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-8-EN-1] The release candidate passed LG-7 Release Readiness (evidence: LG-7 exit PASS).
 - [LG-8-EN-2] A change request is raised with the deployment window and back-out plan attached (evidence: the change record exists with window + back-out).
 **Exit criteria** (ALL must hold to PASS and transition to LG-9):
-- [LG-8-EX-1] All upstream quality gates are evidenced as passed with none bypassed (evidence: LG-5/LG-6/LG-7 records present and complete — Approval checklist #1, [`gate-checklists.md §2.4`](gate-checklists.md#24-approval-gate-checklist)).
-- [LG-8-EX-2] A backup is taken before deployment, enabling rollback (evidence: a verified pre-deployment backup — a never-compress gate, [`gate-checklists.md §3.2`](gate-checklists.md#32-gates-that-never-compress)).
-- [LG-8-EX-3] The change window is confirmed and conflict-free (evidence: an approved, scheduled window — Approval #7).
-- [LG-8-EX-4] All required approvers have signed off (evidence: a formal sign-off record with every required approver — Approval #8).
-- [LG-8-EX-5] Post-deployment monitoring and alerting are configured before cut-over (evidence: monitoring active with alerts — a never-compress gate, [`gate-checklists.md §3.2`](gate-checklists.md#32-gates-that-never-compress)).
+- [LG-8-EX-1] All upstream quality gates are evidenced as passed with none bypassed (evidence: LG-5/LG-6/LG-7 records present and complete — Approval checklist criterion 1, [`gate-checklists.md §2.4`](gate-checklists.md)).
+- [LG-8-EX-2] A backup is taken before deployment, enabling rollback (evidence: a verified pre-deployment backup — a never-compress gate, [`gate-checklists.md §3.2`](gate-checklists.md)).
+- [LG-8-EX-3] The change window is confirmed and conflict-free (evidence: an approved, scheduled window — Approval criterion 7).
+- [LG-8-EX-4] All required approvers have signed off (evidence: a formal sign-off record with every required approver — Approval criterion 8).
+- [LG-8-EX-5] Post-deployment monitoring and alerting are configured before cut-over (evidence: monitoring active with alerts — a never-compress gate, [`gate-checklists.md §3.2`](gate-checklists.md)).
 **Key decisions:** Approve deployment into production / reject / approve with conditions (e.g., reduced blast-radius rollout).
 **Artifacts required:** Change record with window + back-out plan; pre-deployment backup confirmation; approver sign-off record; monitoring/alerting configuration.
 **Escalation path:** Escalate to the Change Authority chair (and invoke the rollback decision per the quantitative triggers) when a required approver withholds sign-off, when the backup cannot be verified, or when monitoring is not in place at the window; trigger = missing sign-off, unverified backup, or absent monitoring at cut-over.
-**Checklist template:** → [`gate-checklists.md §2.4`](gate-checklists.md#24-approval-gate-checklist) (Approval Gate) + [`gate-checklists.md §3.2`](gate-checklists.md#32-gates-that-never-compress) (gates that never compress)
+**Checklist template:** → [`gate-checklists.md §2.4`](gate-checklists.md) (Approval Gate) + [`gate-checklists.md §3.2`](gate-checklists.md) (gates that never compress)
 
 ### Gate 9 — Post-Implementation Review (PIR) (LG-9)
 
-**Gate type:** Hypothesis → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Hypothesis → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Epic Owner / Sponsor
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-9-EN-1] The change is live in production (LG-8 exit PASS) and hypercare/the stabilization window is complete (evidence: deployment confirmed + the agreed stabilization period elapsed).
@@ -212,16 +212,16 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 - [LG-9-EX-1] Realized outcomes are assessed against the LG-1 business-case success criteria (evidence: an actuals-vs-targets analysis referencing the original success measures).
 - [LG-9-EX-2] A persevere / pivot / cancel (benefits) verdict is recorded with rationale (evidence: a documented decision tied to the outcome data).
 - [LG-9-EX-3] Lessons learned are captured and actionable follow-ups are assigned with owners (evidence: a retrospective output with assigned actions).
-- [LG-9-EX-4] Operational ownership of the deployed change is confirmed for the post-project run state (evidence: a named operational owner / run-team handoff — Operational Readiness, cross-ref [`gate-checklists.md §3`](gate-checklists.md#3-go-live-readiness-assessment)).
+- [LG-9-EX-4] Operational ownership of the deployed change is confirmed for the post-project run state (evidence: a named operational owner / run-team handoff — Operational Readiness, cross-ref [`gate-checklists.md §3`](gate-checklists.md)).
 - [LG-9-EX-5] Any residual risks or open follow-ups are recorded in the RAID artifact with owners and a disposition (evidence: RAID entries for each residual, each owned and dispositioned).
 **Key decisions:** Persevere / pivot / cancel on the investment thesis; benefits-realization verdict; authorize transition to formal Closure (LG-10).
 **Artifacts required:** Outcome-vs-target analysis; benefits verdict record; lessons-learned / retrospective output; operational-ownership handoff; residual-risk RAID entries.
 **Escalation path:** Escalate to the Sponsor when realized outcomes materially miss the business-case targets (pivot/cancel territory), or when no operational owner will accept the run-state handoff; trigger = a material benefits shortfall or an unowned run state. (Closure does NOT proceed on an unowned run state — LG-9-EX-4 must hold.)
-**Checklist template:** → [`gate-checklists.md §2.5`](gate-checklists.md#25-hypothesis-gate-checklist) (Hypothesis Gate Checklist)
+**Checklist template:** → [`gate-checklists.md §2.5`](gate-checklists.md) (Hypothesis Gate Checklist)
 
 ### Gate 10 — Closure (LG-10)
 
-**Gate type:** Approval → see [`gate-checklists.md §1`](gate-checklists.md#1-five-gate-types)
+**Gate type:** Approval → see [`gate-checklists.md §1`](gate-checklists.md)
 **Authority holder:** Sponsor / PMO
 **Entry criteria** (ALL must hold to OPEN the gate review):
 - [LG-10-EN-1] PIR (LG-9) is complete with a recorded benefits verdict (evidence: LG-9 exit PASS).
@@ -236,7 +236,7 @@ Every gate below uses the fixed 6-field block. Exit criteria are the machine-che
 **Key decisions:** Formally close the project and release resources / hold closure pending final sign-off or financial reconciliation.
 **Artifacts required:** Final acceptance/sign-off record; cost reconciliation; resource-release record; archived project records + closed lessons-learned log; closed/transferred RAID; closure communication.
 **Escalation path:** Escalate to the Sponsor / PMO when final deliverable acceptance is withheld, when financials cannot be reconciled, or when RAID items remain open with no operational owner to accept them; trigger = withheld final acceptance, an unreconciled budget, or orphaned open RAID items at closure.
-**Checklist template:** → [`gate-checklists.md §2.4`](gate-checklists.md#24-approval-gate-checklist) (Approval Gate Checklist)
+**Checklist template:** → [`gate-checklists.md §2.4`](gate-checklists.md) (Approval Gate Checklist)
 
 ---
 
@@ -246,10 +246,10 @@ Four lifecycle boundaries carry the highest unwind cost when a handoff is incomp
 
 | # | Critical handoff | Gate boundary | Checklist template (→ `gate-checklists.md`) | Why critical |
 |---|---|---|---|---|
-| **H1** | Design → Build | LG-4 → LG-5 (DoR → Dev Complete) | [§2.2 Definition of Ready](gate-checklists.md#22-quality-gate-checklist) | Building on an unready story is the costliest early-stage rework — under-specified AC surface as mid-sprint defects. |
-| **H2** | Build → Test | LG-5 → LG-6 (DoD → QA) | [§2.2 Definition of Done](gate-checklists.md#22-quality-gate-checklist) | "Done-but-untested" defects escape downstream where they are far costlier to fix. |
-| **H3** | Test → Release | LG-6 → LG-7 → LG-8 (QA → Readiness → Go-Live) | [§2.4 Approval Gate](gate-checklists.md#24-approval-gate-checklist) + [§3 nine-dimension](gate-checklists.md#3-go-live-readiness-assessment) + [§3.2 gates that never compress](gate-checklists.md#32-gates-that-never-compress) | Deployment is high-blast-radius; the never-compress gates (security, backup, rollback, monitoring) live on this boundary. |
-| **H4** | Release → Operate | LG-8 → LG-9 → LG-10 (Go-Live → PIR → Closure) | [§3 Operational Readiness dimension](gate-checklists.md#3-go-live-readiness-assessment) + [§2.5 Hypothesis Gate](gate-checklists.md#25-hypothesis-gate-checklist) | Hypercare / benefits-realization handoff; an unowned post-deploy run state is a silent failure that blocks Closure (LG-9-EX-4 / LG-10-EX-5). |
+| **H1** | Design → Build | LG-4 → LG-5 (DoR → Dev Complete) | [§2.2 Definition of Ready](gate-checklists.md) | Building on an unready story is the costliest early-stage rework — under-specified AC surface as mid-sprint defects. |
+| **H2** | Build → Test | LG-5 → LG-6 (DoD → QA) | [§2.2 Definition of Done](gate-checklists.md) | "Done-but-untested" defects escape downstream where they are far costlier to fix. |
+| **H3** | Test → Release | LG-6 → LG-7 → LG-8 (QA → Readiness → Go-Live) | [§2.4 Approval Gate](gate-checklists.md) + [§3 nine-dimension](gate-checklists.md) + [§3.2 gates that never compress](gate-checklists.md) | Deployment is high-blast-radius; the never-compress gates (security, backup, rollback, monitoring) live on this boundary. |
+| **H4** | Release → Operate | LG-8 → LG-9 → LG-10 (Go-Live → PIR → Closure) | [§3 Operational Readiness dimension](gate-checklists.md) + [§2.5 Hypothesis Gate](gate-checklists.md) | Hypercare / benefits-realization handoff; an unowned post-deploy run state is a silent failure that blocks Closure (LG-9-EX-4 / LG-10-EX-5). |
 
 To run any of these handoffs, open the linked template in `gate-checklists.md` and evaluate it against the boundary's exit criteria in §2 above.
 
@@ -266,11 +266,11 @@ When an agent is asked to advance work from Gate N to Gate N+1:
 3. If ALL are PASS → transition **ALLOWED**.
 4. If ANY is FAIL or NO-EVIDENCE → transition **BLOCKED**. Emit an evidence-backed rejection naming the FIRST violated criterion by ID:
    > "Gate N→N+1 BLOCKED: [LG-N-EX-k] unmet — <criterion text>. Evidence: <what was checked and what was missing or failing>. To unblock: <the specific remediation>."
-5. A BLOCK is **binary** — "close enough" on any `[LG-N-EX-k]` is still a BLOCK (gate-washing guardrail; see the delivery-engine SKILL.md `## Guardrails`). Render **PASS WITH CONDITIONS** only where the gate type's checklist in [`gate-checklists.md §2`](gate-checklists.md#2-per-gate-type-checklist-templates) explicitly permits a CONDITIONAL outcome (e.g., an Approval gate's Conditional sign-off).
+5. A BLOCK is **binary** — "close enough" on any `[LG-N-EX-k]` is still a BLOCK (gate-washing guardrail; see the delivery-engine SKILL.md `## Guardrails`). Render **PASS WITH CONDITIONS** only where the gate type's checklist in [`gate-checklists.md §2`](gate-checklists.md) explicitly permits a CONDITIONAL outcome (e.g., an Approval gate's Conditional sign-off).
 
 **Worked example.** Advancing an increment LG-5 → LG-6 when the regression suite is failing:
 
-> Gate LG-5→LG-6 BLOCKED: [LG-5-EX-4] unmet — the automated regression suite is not green. Evidence: the latest regression run reports 3 failing cases in the checkout flow (run #482). To unblock: fix the 3 failing cases and attach a green regression run, then re-request the LG-5 exit.
+> Gate LG-5→LG-6 BLOCKED: [LG-5-EX-4] unmet — the automated regression suite is not green. Evidence: the latest regression run reports 3 failing cases in the checkout flow (run 482). To unblock: fix the 3 failing cases and attach a green regression run, then re-request the LG-5 exit.
 
 **Reversibility framing.** A gate BLOCK is a CHEAP/MODERATE decision-class output — it returns work, it does not destroy it — and inherits the delivery-engine reversibility-tier discipline (see the delivery-engine SKILL.md `## Reversibility Discipline`). Label the BLOCK verdict with its tier and confidence like any other decision-class output.
 
