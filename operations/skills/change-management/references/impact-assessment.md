@@ -47,21 +47,11 @@ the culture dimension.
 
 ## ADKAR Barrier Point Integration
 
-For each stakeholder group, score each ADKAR element (1-5) to identify the barrier
-point -- the first element scoring <=3.
-
-| ADKAR Element | Score Range | Barrier Point Signal | Intervention Required Before Advancing |
-|---------------|------------|---------------------|---------------------------------------|
-| **Awareness** | 1-5 | "Why are we doing this?"; rumors; lack of context | Executive sponsor messaging, burning platform narrative, role-specific impact statements |
-| **Desire** | 1-5 | Disengagement, seeking exit, passive resistance | WIIFM framing, involvement in design, address fears directly, peer influence via champions |
-| **Knowledge** | 1-5 | Honest attempts fail, frequent questions, rework | Formal training, eLearning, job aids, sandbox environments, mentoring |
-| **Ability** | 1-5 | Inconsistent execution, reverting under pressure | Hands-on practice, coaching, shadowing, protected learning time |
-| **Reinforcement** | 1-5 | Backsliding post-go-live, old behaviors resurface | Recognition, metrics tied to new behaviors, celebrations, onboarding integration |
-
-**Barrier point rule:** Address the barrier point BEFORE investing in later elements.
-Sending someone to Knowledge training when they score 2 on Desire wastes the training
-budget entirely. Organizations using barrier point assessments achieve approximately
-95% adoption vs. 35% without.
+The ADKAR 1-5 scoring scale, the per-element barrier signals, and the barrier-point
+rule (first element scoring <=3; address it before investing in later elements) are
+defined in `adkar-framework.md` (the ADKAR single-source-of-truth). For each
+stakeholder group, score each ADKAR element 1-5 per that scale to identify the barrier
+point, then apply the impact-analysis-specific mapping below.
 
 ### ADKAR-Dimension Interaction Matrix
 
