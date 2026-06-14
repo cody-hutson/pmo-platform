@@ -34,7 +34,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v1.16 | delivery-capacity-and-lifecycle-gating | #272, #273, #274, #275 | #859 | `a915daa94caa68423b42cbf7e7db69a4dfbc37e1` | `v1.16` | VERIFIED | 2026-06-13 |
 | v1.17 | comms-writer-artifact-generator-anthropic-offload-refactor | #173, #174, #175, #176, #791 | #864 | `79d8827d0fb57f671ad49c0a80acf9e376bc5a55` | `v1.17` | VERIFIED | 2026-06-14 |
 | v1.18 | cross-release-impact-model | #87 | #928 | `7d9307bbfcf317e29bfe34a772f5fac08a8934ea` | `v1.18` | VERIFIED | 2026-06-14 |
-| v1.19 | sior-escalation-discipline-across-the-comms-triage-technical | #179, #178, #177, #934 | #941 | `787029df87e2ea6e961e9cdc5a030ffa248fcfd2` | `v1.19` | DEPLOYED | 2026-06-14 |
+| v1.19 | sior-escalation-discipline-across-the-comms-triage-technical | #179, #178, #177, #934 | #941 | `787029df87e2ea6e961e9cdc5a030ffa248fcfd2` | `v1.19` | VERIFIED | 2026-06-14 |
 | v1.20 | health-and-raid-determinism | #271, #270, #269, #261 | #933 | `626b9926270216c639b7c7c13727c0648733028f` | `v1.20` | DEPLOYED | 2026-06-14 |
 
 #### Deployment Log v1.20
