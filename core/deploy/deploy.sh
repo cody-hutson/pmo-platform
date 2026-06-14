@@ -222,6 +222,32 @@ log() {
   echo "[$(date +%H:%M:%S)] $1"
 }
 
+# Remove a derived-mirror subtree, self-healing read-only orphans and
+# failing loud (never silently) when removal is impossible. Returns 0 if the
+# path is gone after the call, non-zero (with an actionable error logged) if not.
+# Rationale: under `set -euo pipefail`, a bare `rm -rf` that returns non-zero
+# aborts the whole deploy; the prior `2>/dev/null || true` prevented that abort
+# but SWALLOWED the root cause. This keeps the non-abort property AND surfaces
+# the cause. `label` is the caller's context string for the log line.
+remove_mirror_subtree() {
+  local target="$1" label="$2"
+  [[ -e "$target" ]] || return 0                 # nothing to remove — success
+  # Self-heal the common case: a read-only orphan left by Cowork session churn
+  # (dr-x------ dir + r-------- files). The target is a pure derived mirror, not
+  # operator state, so making it writable before removal is in-contract.
+  chmod -R u+w "$target" 2>/dev/null || true     # best-effort; rm result is authoritative
+  local rm_err rm_rc
+  rm_err=$(rm -rf "$target" 2>&1) && rm_rc=0 || rm_rc=$?   # guarded: no set -e abort
+  if [[ $rm_rc -ne 0 || -e "$target" ]]; then
+    log "  FAILED:   $label — cannot refresh references/ mirror: target is read-only or undeletable"
+    log "            path: $target"
+    log "            cause: ${rm_err:-rm returned $rm_rc}"
+    log "            remediation: chmod -R u+w \"$target\" && ./deploy.sh --deploy <skill>  (derived mirror; safe to chmod — git source untouched)"
+    return 1
+  fi
+  return 0
+}
+
 validate_workspace() {
   # E-05: Confirm script is running from pmo-platform-v2 repo root.
   # Checks for the 3-module skeleton (operations/, release/, core/) plus
@@ -677,7 +703,9 @@ deploy_skill_user_local() {
     log "  FAILED:   $skill — user-local mirror — refusing rm -rf of unexpected target ($target_dir)"
     return 1
   fi
-  rm -rf "$target_dir" 2>/dev/null || true
+  if ! remove_mirror_subtree "$target_dir" "$skill — user-local mirror"; then
+    return 1   # caller (deploy_skill_user_local invocation) converts to FAILURES+=("$skill (user-local)")
+  fi
   mkdir -p "$target_dir"
 
   if ! cp -R "$source_dir/." "$target_dir/" 2>/dev/null; then
@@ -1170,13 +1198,14 @@ cmd_deploy() {
             log "  FAILED:   $skill references/ — refusing rm -rf of unexpected target ($INSTALL_PATH/$skill/references)"
             FAILURES+=("$skill (references)")
           else
-            rm -rf "$INSTALL_PATH/$skill/references" 2>/dev/null || true
-            if cp -R "$source_refs" "$INSTALL_PATH/$skill/" 2>/dev/null; then
+            if ! remove_mirror_subtree "$INSTALL_PATH/$skill/references" "$skill references/"; then
+              FAILURES+=("$skill (references)")
+            elif cp -R "$source_refs" "$INSTALL_PATH/$skill/" 2>/dev/null; then
               local ref_count
               ref_count=$(find "$INSTALL_PATH/$skill/references" -type f 2>/dev/null | wc -l | tr -d ' ')
               log "  Deployed: $skill references/ ($ref_count files from source)"
             else
-              log "  FAILED:   $skill references/ — cp -R failed"
+              log "  FAILED:   $skill references/ — cp -R failed (target writable but copy failed; check disk/space/path)"
               FAILURES+=("$skill (references)")
             fi
           fi
@@ -1311,11 +1340,17 @@ cmd_check() {
         while IFS= read -r _inj_base; do
           [[ -n "$_inj_base" ]] && c1_ref_excludes+=("--exclude=$_inj_base")
         done < <(injected_ref_basenames "$skill")
+        # AC-3 cause-classification: if the target exists but is read-only
+        # (the Cowork session-churn orphan class), annotate the DRIFT line so
+        # the cause is actionable (RO-perms vs. missing vs. differs).
+        # Diagnostic-only — does not change ISSUES counts or exit codes.
+        local _ro_annot=""
+        [[ -e "$installed_refs_dir" && ! -w "$installed_refs_dir" ]] && _ro_annot=" (read-only — chmod -R u+w then redeploy)"
         if [[ ! -d "$installed_refs_dir" ]]; then
-          log "  DRIFT: $skill — references/ not deployed (source has files)"
+          log "  DRIFT: $skill — references/ not deployed (source has files)$_ro_annot"
           ISSUES=$((ISSUES + 1))
         elif ! diff -rq ${c1_ref_excludes[@]+"${c1_ref_excludes[@]}"} "$source_refs" "$installed_refs_dir" >/dev/null 2>&1; then
-          log "  DRIFT: $skill — references/ installed copy differs from source"
+          log "  DRIFT: $skill — references/ installed copy differs from source$_ro_annot"
           ISSUES=$((ISSUES + 1))
         else
           local installed_refs
@@ -3997,7 +4032,12 @@ cmd_report() {
           local installed_refs
           installed_refs=$(find "$INSTALL_PATH/$skill/references" -type f 2>/dev/null | wc -l | tr -d ' ')
           if [[ $installed_refs -eq 0 ]]; then
-            echo "[FAIL] $skill references/ — not deployed"
+            # AC-3 cause-classification (Stage-13 evidence parity with Check 1/12):
+            # annotate the FAIL when the target exists but is read-only — the
+            # Cowork session-churn orphan class. Diagnostic-only; no FAIL/exit change.
+            local _ro_annot=""
+            [[ -e "$INSTALL_PATH/$skill/references" && ! -w "$INSTALL_PATH/$skill/references" ]] && _ro_annot=" (read-only — chmod -R u+w then redeploy)"
+            echo "[FAIL] $skill references/ — not deployed$_ro_annot"
             FAIL=$((FAIL + 1))
           else
             echo "[PASS] $skill references/ ($installed_refs files)"
