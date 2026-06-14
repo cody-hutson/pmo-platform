@@ -472,12 +472,33 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 
    | Stage | Parallel-actionable across issues? | Mechanism | Rationale |
    |---|---|---|---|
-   | **5 Solutioning** | YES — parallel-safe | Spokes post sub-task comments only; no commit/file write on release branch or main | Output channel is GitHub Issue comment — no contention surface. Multiple Stage 5 chips may run concurrently across issues; Collective Review fires after ALL close |
+   | **5 Solutioning** | YES — parallel-safe | Spokes post sub-task comments only; no commit/file write on release branch or main | Output channel is GitHub Issue comment — no contention surface. Multiple Stage 5 chips may run concurrently across issues; Collective Review fires after ALL close. Subject to the per-account 5-hour usage-window envelope — concurrent spokes draw **cumulatively** against the remaining window even though the output channel has no file-contention surface; see § Per-Account Usage Window Constraint for quota-budgeting / window-aware-timing / serialize-on-failure mitigation |
    | **6 Engineering** | NO — write-serialized | Hub Procedure 2 routes ONE Engineering chip at a time per release plan's Implementation Sequence | Under D-C SINGLE topology, every Engineering commit lands on `release/vX.Y` sequentially; concurrent chips race on branch HEAD. File-disjoint commits still serialize at git's push level. Under D-C OPTION-A (per-issue branches), parallel commits are mechanically permitted but contention shifts to PR-merge order at Stage 12 — same effective serialization, different surface |
    | **7 Dev Testing / 8 QA Testing** | YES — parallel-safe | Spokes post sub-task comments + structured Handoff Payloads; no PR mutation, no main mutation | Review-only output. DT↔Engineering iteration loop and DT↔QA handoff carry routing context in comment thread — read-only against PR diff and committed evidence |
    | **13 Close** | NO — write-serialized | Single Close chip per release; release-corpus mutations (`RELEASE_LOG.md` row + visible-H4 Deployment Log + `RELEASE_INDEX.md` + `RELEASE_DIGEST.md` + `RELEASE_NOTES`) bundle into ONE Stage 13 chore PR | All mutations land on main via one chore PR; Milestone close is hub Tier-1 per Standing-GO Authorization Model; structurally serial — no axis of parallelism within Close |
 
    **Release-scoped stages omitted from the table by design:** Stage 4 (Planning), Stage 9 (Plan Review — gate, no spoke), Stage 12 (Execute) each run as a single per-release spoke/gate; there is no cross-issue parallelism axis at these stages, so they do not need an explicit rule. The table covers the per-issue stages (5/6/7/8) plus Close (release-scoped but with internal-mutation serialization concerns).
+
+   **Parallel-safe is coordination semantics, not usage-window semantics (orthogonality note).** "Parallel-safe" in the table above is a *coordination*/file-contention property — it means the stage's output channel has no shared write surface, so concurrent spokes do not race on a commit or file. It is **orthogonal** to the per-account 5-hour usage-window envelope: concurrent Agent-tool spokes still draw *cumulatively* against the shared usage window even when they have no file-contention surface (see § Per-Account Usage Window Constraint). The two gates compose — a stage marked parallel-safe here may still require SERIALIZE / DEFER / REDUCE-scope under the usage-window gate (Step 5.5 below). Do not read "parallel-safe" as "usage-window-free."
+
+   #### Step 5.5: Quota check before parallel launch
+
+   Before issuing N parallel Agent invocations in the same hub response (the parallel-safe stages 5 / 7 / 8 above), the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every* parallel wave, not once at Stage 4, because each wave (Stage 5 batch / Stage 7 batch / Stage 8 batch) faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline).
+
+   The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
+
+   | Verdict | Hub action |
+   |---|---|
+   | **PROCEED** | Launch all N in parallel (existing behavior) |
+   | **SERIALIZE** | Launch one spoke at a time, halt on first usage-limit failure (reduces simultaneous-draw count) |
+   | **DEFER** | Hold the batch for the next window; surface a reset-time estimate (reduces cumulative draw entirely) |
+   | **REDUCE-scope** | Launch with a smaller per-wave footprint — compact prompts, narrower scope, fewer canonical reads (reduces per-wave consumption) |
+
+   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
+
+   On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
+
+   **Ongoing-gate discipline.** This check is a standing pre-launch step for every parallel wave, not a one-time Stage 4 estimate — running it once and treating the batch as cleared for the whole release is the failure mode the runtime checkpoint exists to prevent. **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch a batch; it does not reclassify the parallel-safe stages' Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
 
    #### File-contention boundary rules
 
@@ -1439,7 +1460,17 @@ sub-tasks in parallel (e.g., Stage 5 across several issues),
 the hub issues one Agent invocation per actionable sub-task in
 the same response, subject to the parallelism rules in
 Procedure 2 Step 5 (Stage 5/7/8 parallel-safe; Stage 6/13
-write-serialized).
+write-serialized). For the per-account 5-hour usage-window
+constraint on these parallel launches and the quota-budgeting /
+window-aware-timing / serialize-on-failure mitigations, see
+§ Per-Account Usage Window Constraint below. Before issuing the
+batch, the hub runs Checkpoint B of the quota-budget gate
+(Procedure 2 Step 5.5 / [`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md))
+and acts on its verdict — PROCEED launches all N; SERIALIZE
+launches one at a time; DEFER holds the batch for the next
+window (with an operator override-to-PROCEED exit); REDUCE-scope
+launches with a smaller per-wave footprint. STAGGER is a
+secondary rate-limit-only defense, not a usage-window mitigation.
 
 **Composition with  Agent Handoff Framework:** 's
 9-field handoff manifest defines the contract layer; the Agent
@@ -1778,6 +1809,101 @@ Spoke-launch primitives (Agent tool, `spawn_task`) are ONE of three distinct sur
 **Discipline:** Chip / Agent-tool is for **work execution after decision**; GH comment / event-log row is for **decision recording after decision**; main-thread chat is for **rendering the decision itself**. Three distinct surfaces, three distinct roles — never overload.
 
 **Cutover discipline:** Applies to all releases going forward.
+
+### Per-Account Usage Window Constraint
+
+Stage 5/7/8 are marked parallel-safe in the Procedure 2 Step 5 Parallelism
+Rules table because their output channel (a GitHub sub-task comment) has no
+file-contention surface. Parallel-safe is a *coordination* property, not a
+*usage-window* property: concurrent Agent-tool spokes still draw against a
+shared resource the parallelism table does not model — the per-account
+5-hour usage window.
+
+**The window.** Each operator account has a rolling ~5-hour Opus usage window
+that meters *cumulative total token consumption* within the window (sliding;
+it resets five hours after window-start). This is a usage-window constraint,
+**not a rate limit** — the two are different constraint classes with different
+mitigations:
+
+| Constraint | Mechanism | Reset | Correct mitigation |
+|---|---|---|---|
+| **5-hour usage window** | cumulative total tokens consumed within the sliding window | resets 5h after window-start | quota-budgeting per release; window-aware launch timing; reduce per-spoke consumption; serialize-on-failure; defer batch to next window |
+| **Rate limit** (separate) | momentary peak — tokens/sec or concurrent in-flight reservations | seconds-to-minutes | stagger launches; cap concurrent count; backoff |
+
+**Cumulative-draw failure mode.** When the hub launches N parallel spokes
+(Procedure 3 / § Spoke Launch Mechanisms — Default), the binding question is
+not momentary peak — it is whether the *cumulative* work of the batch fits the
+*remaining* window envelope. If
+`(usage already spent this window) + Σ(tokens_per_spoke over the N spokes)`
+exceeds the window allotment, the batch fails when cumulative usage crosses the
+limit, leaving OPEN sub-tasks and possibly orphan worktrees to recover. How the
+launches are spread in time does not change cumulative consumption — so a
+sleep-stagger (a rate-limit remedy) does not address this failure mode.
+
+**Canonical empirical reference.** v11.27 first-failure (2026-05-24): the hub
+launched 9 Stage 5 spokes near the *tail* of the operator's 5-hour window after
+substantial prior usage. The 9 spokes' cumulative work exceeded the *remaining*
+envelope; all returned `session-limit`, and recovery required reopening the
+sub-tasks and pruning one orphan worktree. The binding factor was the tail-of-
+window remaining envelope, not a momentary concurrent peak. This is the
+canonical anchor for the cumulative-draw failure mode.
+
+**Load-bearing mitigations** (the hub applies these against the usage window):
+
+1. **Pre-flight quota check.** Before launching N parallel spokes, the hub
+   checks the remaining-window quota and defers the batch if it would be
+   insufficient for the estimated cumulative consumption. *(Note: remaining-
+   window quota is not queryable from within a session today; this is the check
+   the state-aware usage-window gate — sister work that references this
+   constraint — is designed to provide. Until it is queryable, the hub relies on
+   the budgeting and timing mitigations below plus serialize-on-failure.)*
+2. **Quota-budgeting per release.** Estimate `tokens_per_spoke × N` against the
+   typical 5-hour-window allotment. If that estimate exceeds a fresh window's
+   allotment, split the batch across multiple windows rather than launching all
+   N at once.
+3. **Window-aware launch timing.** Launch parallel batches *early* in a usage
+   window (full quota available), not at the tail (when most quota is already
+   spent by other work) — the tail-of-window condition is the one the v11.27
+   first-failure hit.
+4. **Serialize-on-failure.** If any spoke in a batch hits the usage limit, hold
+   the remaining work for the next window rather than burning more quota on
+   doomed re-launches.
+5. **Reduce per-spoke consumption.** Lower `tokens_per_spoke` with more compact
+   prompts, fewer canonical reads, and narrower analysis scope, so a given
+   window absorbs more spokes.
+
+**Secondary note — in-prompt `sleep` stagger (rate-limit only, not load-bearing
+here).** A hub may add an in-prompt `sleep <position × delay>` stagger to spread
+*momentary peak* draw — a defense against the *rate-limit* constraint in the
+table above. It is harmless, but it is **not load-bearing for the 5-hour usage
+window**: spreading N spokes across a few minutes changes nothing about
+cumulative token consumption within the window. Do not treat stagger as the
+mitigation for a usage-window overrun; use the load-bearing mitigations above.
+
+**Batch size as a budget-check trigger.** A batch-size heuristic (e.g., a
+batch of several parallel spokes) is a useful *floor for running a quota-budget
+check* (mitigation 2) — but a fixed concurrent-count alone is not the binding
+predictor: a small batch on a near-tail window can overrun while a large batch
+on a fresh window succeeds. The binding variable is *remaining* window envelope,
+which the count does not read. The state-aware usage-window gate (sister work
+that references this subsection) is the check that factors known window state at
+all batch sizes. The cumulative-draw budget threshold (the per-spoke cost
+estimate and the batch-vs-remaining-window budget at which the hub defers or
+splits) is provisional — `[CALIBRATE-AFTER-3]` (MEDIUM confidence): calibrate it
+after this constraint's introducing release plus two further post-cutover
+releases supply an outcome distribution; the calibration trigger is registered
+on the release log.
+
+**Autonomy-Tier note.** The usage-window mitigations are decisions about
+*whether and when* to launch a batch; they do not reclassify the parallel-safe
+stages' Autonomy Tier (Stage 5/7/8 remain auto-launch). They do not apply to the
+write-serialized stages (6/13), which launch one spoke at a time by design.
+
+**Cutover.** Applies to releases entering the pipeline on or after this
+constraint's introducing-release merge SHA recorded in
+`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`; the introducing release itself is exempt
+(the gate cannot fire on the release that introduces it — its own Stage 5 ran a
+small batch and would not have self-triggered a deferral regardless).
 
 ---
 

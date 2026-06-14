@@ -148,7 +148,8 @@ _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "re-review	phase-a0-row phase-0.5-row" \
   "deployment-status	deploy-skill deploy-harness deploy-package deploy-rules-mirror deploy-helper" \
   "release-synthesis	learnings-triple qc4-05-result qc4-06-result" \
-  "test-run	suite-pass suite-fail suite-skip")"
+  "test-run	suite-pass suite-fail suite-skip" \
+  "spoke-launch	quota-reservation")"
 
 _schema_rows="$(parse_schema_enum 2>/dev/null || true)"
 if [[ -n "$_schema_rows" ]]; then

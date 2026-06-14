@@ -53,7 +53,7 @@ date is recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_
 
 **Standing applicability.** The convention does not retroactively bind milestones that predate its adoption — they carry no Parallelization Map section by construction, so the Phase A0 currency check is suppressed for them. Future milestones reaching Stage 4 Planning carry the reconfirm step per this convention.
 
-**Phase A (Agent):** A1 Milestone validation entry gate (metrics + judgment per gate-evaluation-spec.md), A1.5 domain-best-practice sourcing-or-flag step (the SHIP-WITH-FLAG step below), A2 dependency-ordered sequencing (GitHub Dependencies API), A3 per-issue change specification (file-level: what to add/edit/remove), A4 file contention resolution (matrix, merge order, conflict detection), A5 release plan assembly (full plan with Delivery Strategy per Rev 1).
+**Phase A (Agent):** A1 Milestone validation entry gate (metrics + judgment per gate-evaluation-spec.md), A1.5 domain-best-practice sourcing-or-flag step (the SHIP-WITH-FLAG step below), A2 dependency-ordered sequencing (GitHub Dependencies API), A3 per-issue change specification (file-level: what to add/edit/remove), A4 file contention resolution (matrix, merge order, conflict detection), A5 release plan assembly (full plan with Delivery Strategy per Rev 1), A6 quota-budget pre-check (terminal — parallel-batch capacity estimate against the usage-window envelope; § 5.8).
 
 **§ 5.7 — Phase A1.5: Domain-Best-Practice Sourcing-or-Flag Step (SHIP-WITH-FLAG mechanism):** After A1 milestone validation and BEFORE A2 sequencing, the Planning spoke determines whether the release operates on a domain whose external best-practice the platform does not already encode. If so, the spoke EITHER sources authoritative guidance OR explicitly flags the gap to the operator via a machine-readable `domain_practice` provenance label that downstream stages (Stage 5 Solutioning when activated; Stage 7 Dev Testing always) verify.
 
@@ -92,6 +92,28 @@ The provenance label schema is **inlined here** — it lives in this pipeline sp
 
 **Sibling-merge stale-pin self-invalidation trigger (structural-blast-radius extension).** The baseline-pin limitation above is sharpened for the structural axis: a pinned A4 structural sub-audit at SHA X **self-invalidates** (must be re-run) when a *sibling parallel release merges to `main` after X and before this release's Stage 9*. The trigger predicate — **unified with the Stage 9 G-PR9 sibling-merge revalidation predicate and the Stage 12 Phase A.5 semantic check** so all three surfaces answer the same question the same way (merge-style-agnostic; the repo lands releases via both merge commits AND squash / fast-forward non-merge commits, so a `--merges`-only filter would silently miss a squash landing): at Phase A0 entry and at Stage 9 entry, run `git log X..origin/main --name-status --find-renames` and intersect the touched / renamed / deleted path-set against this release's `SURFACE(R)`. Any intersecting path → re-run the A4 structural sub-audit against the new `main`. This is the durability the audit requires — the pin is reconfirmed where it can go stale, not treated as a one-off. **Cutover:** applies to releases entering Stage 4 strictly AFTER this protocol's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline).
 
+**§ 5.8 — Phase A6: Quota-Budget Pre-Check (terminal):** After A5 release-plan assembly, the Planning spoke runs Checkpoint A of the quota-budget protocol — a plan-time estimate of the worst parallel batch's cumulative draw against the per-account 5-hour usage-window envelope. A6 is sited terminally because it summarizes plan-level capacity for the *assembled* plan; it reads the parallel-eligible spoke count from the **A2 Stage Applicability Matrix** (the parallel-safe stages are 5 / 7 / 8 per the Procedure 2 Step 5 Parallelism Rules table) and the contention output from **A4**. The full band definitions, the verdict logic, the per-spoke cost heuristic, and the calibration treatment live in the canonical [`quota-budget-protocol.md`](../standards/quota-budget-protocol.md) — A6 references them rather than re-stating (register-or-remove discipline).
+
+| Input | Source |
+|---|---|
+| Parallel-eligible spoke count per parallel stage (Stage 5 / 7 / 8) | A2 Stage Applicability Matrix |
+| Per-spoke cost estimate | Per-spoke cost-estimate heuristic per [`quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 5 (size-bucket band until telemetry medians) |
+| Cumulative work estimate | parallel-eligible count × per-spoke cost estimate, per parallel batch (worst batch) |
+| Assumed/stated remaining usage-window envelope | Operator-stated quota state at hub start, OR a conservative default when unstated |
+| Estimated cumulative draw % | cumulative estimate ÷ envelope (worst parallel batch) |
+
+**Routing tree (bands defined in [`quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 3):**
+
+```
+PASS  (cumulative draw < 50% of envelope)   → proceed parallel; no warning in plan
+WARN  (cumulative draw 50–80% of envelope)  → window-aware launch timing + quota-budgeting
+                                              (split batch) recommended in the plan
+FAIL  (cumulative draw > 80% of envelope)   → (a) split-batch / (b) reduce per-spoke cost /
+                                              (c) escalate Tier 2 [SCOPE CHANGE]
+```
+
+A6's verdict is advisory — it surfaces capacity risk in the plan. The load-bearing gate is Checkpoint B, which re-validates at every parallel wave at runtime ([`../how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedure 2 Step 5.5) with the PROCEED / SERIALIZE / DEFER / REDUCE-scope verdict set; STAGGER is a secondary rate-limit-only defense, not a usage-window mitigation. **Cutover:** applies to releases entering Stage 4 on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (reflexive-pipeline-loop discipline — its own A6 ran before the gate existed).
+
 **Phase B (Human):** Approve/modify/split/hold. Plan committed to release branch as first file.
 **Handoff:** Routes to Solutioning (Stage 5) when activation criteria met, or directly to Engineering (Stage 6) when skipped. Activation criteria per [`planning-solutioning-handoff.md`](../../../core/standards/planning-solutioning-handoff.md). Stage 4 spoke instantiates the per-release evaluation matrix in the release plan's § Stage Applicability Matrix.
 
@@ -100,7 +122,21 @@ The provenance label schema is **inlined here** — it lives in this pipeline sp
 **Framework dimensions touched:** Work Breakdown (sub-task decomposition); State Persistence (release plan). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
 
 ## 6. Outputs
-Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy.
+Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output).
+
+The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaffold:
+
+```markdown
+### Quota Budget
+
+**Verdict:** PASS | WARN | FAIL (per `quota-budget-protocol.md` Checkpoint A)
+**Parallel-eligible spokes per parallel stage (from A2 Stage Applicability Matrix):** Stage 5: <N> · Stage 7: <N> · Stage 8: <N>
+**Per-spoke cost estimate:** <band/heuristic or telemetry median> (source: <heuristic | pipeline-event-log spoke-launch medians>)
+**Assumed/stated remaining usage-window envelope:** <operator-stated state at hub start, or conservative default>
+**Estimated cumulative draw % (worst parallel batch):** <cumulative ÷ envelope>%
+**Routing:** <PASS: proceed | WARN: window-aware timing + quota-budget/split | FAIL: (a) split-batch / (b) reduce cost / (c) Tier-2 scope change>
+**Note:** Checkpoint B re-validates at every parallel wave (runtime, load-bearing) with PROCEED/SERIALIZE/DEFER/REDUCE-scope; STAGGER is a secondary rate-limit-only defense, not a usage-window mitigation. Bands + cumulative-draw budget are `[CALIBRATE-AFTER-3]` MEDIUM.
+```
 
 The committed release-plan file is durable corpus and is governed by the reference-durability standard under the core standards set: state the plan's rules and decisions unconditionally and inline, summarize referenced content rather than linking to it, and confine any unavoidable bare issue reference to a designated reference block with an inline summary. A release-plan version label in the plan's own title is a narrative release identifier, not a load-bearing reference. The reference-durability hook flags violations when the plan file is written.
 
