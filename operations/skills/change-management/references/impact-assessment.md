@@ -109,7 +109,7 @@ Impact assessment approach varies by delivery methodology:
 
 Change-methodology selection — which methodology or combination applies per delivery
 approach (e.g. Waterfall → Lewin + ADKAR, Scrum → ADKAR + Bridges, SAFe → Kotter + 7-S +
-ADKAR) — is owned by [`methodology-selection.md`](methodology-selection.md) §4
+ADKAR) — is owned by `methodology-selection.md` §4
 (Selection Table B), the authoritative cross-methodology selector. This table covers the
 impact-assessment timing / cadence / integration view only.
 
