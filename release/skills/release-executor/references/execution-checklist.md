@@ -22,7 +22,7 @@ All items must be verified PASS before execution begins. Any FAIL blocks executi
 ## Tiered Quality-Gate Ladder
 
 After the 8 Pre-Execution checks above pass, run the **three-tier quality-gate ladder**
-defined canonically in [`SKILL.md` § Quality-Gate Ladder](../SKILL.md) **before Step 1
+defined canonically in the `## Quality-Gate Ladder` section in `SKILL.md` **before Step 1
 (Merge PR to Main)**. The ladder fires **in order and short-circuits** — the first
 failure HALTs the run, so a Tier-1 failure prevents Tier 2 and Tier 3 from executing and
 **no merge happens**. This is the live (git-native) entry point; Mode A Step 5 is the

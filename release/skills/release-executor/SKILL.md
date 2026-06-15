@@ -69,12 +69,12 @@ not the whole corpus.
 | **T2** | Cross-reference integrity (**hard fail**) | All intra-repo references in changed files resolve — no broken cross-refs, no broken anchors, no dangling skill/governance references, no stale version refs — and `check-doc-links.py` broken-refs mode exits 0 over the changed files | Any broken cross-ref / broken anchor / deleted-target reference (**exit 1**), OR the target surface is unverifiable (**exit 3** — treated as FAIL, not clean: a gate that cannot prove integrity is not a passing gate) | `python3 core/deploy/tools/check-doc-links.py --target-paths '<changed-files>' --require-targets` (broken-refs mode) | `enforce` |
 | **T3** | Stakeholder approval (**human gate**) | Operator returns explicit **GO** via `AskUserQuestion` after reviewing the T1+T2 PASS evidence and the release diff | Operator returns **NO-GO / Cancel**, OR the gate is not reached (T1 or T2 short-circuited it) | `AskUserQuestion` — **agent cannot self-satisfy** (Autonomy-Tier 3 human gate; sits downstream of Stage 9 Plan Review + the PR-approval Pre-Execution check, not a replacement for them) | `enforce` |
 
-**`rollout-cycle` column (the #245 seam).** `rollout-cycle ∈ {shadow, warn, enforce}`;
+**`rollout-cycle` column (the progressive-rollout seam).** `rollout-cycle ∈ {shadow, warn, enforce}`;
 `enforce` = full hard-fail / short-circuit teeth (the out-of-box behavior — every row
-ships `enforce`, preserving #244's hard-fail intent); `shadow` = run the instrument and
+ships `enforce`, preserving the gate ladder's hard-fail intent); `shadow` = run the instrument and
 log the finding but do NOT halt (record-only); `warn` = run and surface the finding to
 the operator as a warning but do NOT halt. `shadow`/`warn` downgrade a gate's teeth
-**without changing the ladder order**. #245 defines the shadow→warn→enforce transition
+**without changing the ladder order**. The progressive-rollout capability defines the shadow→warn→enforce transition
 semantics and the outcome-log persistence that the non-`enforce` values consume — both
 cards edit this same section; the column is the attachment point.
 
