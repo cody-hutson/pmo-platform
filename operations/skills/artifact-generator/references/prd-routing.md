@@ -33,7 +33,7 @@ The Anthropic-produced document is brought into the project via artifact-generat
 
 - `source: external`
 - `source_origin: Anthropic product-management/feature-spec`
-- the full Step-5 frontmatter block with `status: PENDING_REVIEW`
+- the full Step-5 frontmatter block with `status: Draft` (the lifecycle state on emit)
 
 The artifact then follows the normal PROMOTE / REVISE / REJECT promotion workflow.
 
