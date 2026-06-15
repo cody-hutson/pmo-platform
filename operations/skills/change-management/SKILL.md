@@ -2,7 +2,7 @@
 name: change-management
 description: >
   Plans and tracks organizational change for go-lives and system transitions. Modes: Impact assessment · Training plan · Readiness checklist · Hypercare plan · Adoption tracking · Change matrix review. Ensures no deployment proceeds without impact assessment, training, and readiness validation. Triggers: "change impact assessment", "training plan", "readiness checklist", "hypercare plan", "adoption plan", "are we ready for go-live", "post-go-live support."
-version: v1.23
+version: v2.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -87,7 +87,7 @@ for direct user invocation.
 
 ## Mode Selection
 
-This skill has 6 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous across modes.** Most triggers (e.g., "change impact", "training plan", "hypercare") are unambiguous; ambiguity arises for phrases like "change readiness" or "are we ready" that could map to Impact, Readiness, or Hypercare.
+This skill has 7 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous across modes.** Most triggers (e.g., "change impact", "training plan", "hypercare") are unambiguous; ambiguity arises for phrases like "change readiness" or "are we ready" that could map to Impact, Readiness, or Hypercare.
 
 **Tier classification:** Ask-when-ambiguous (per [OPERATIONS.md § Mode Selection Protocol](../../OPERATIONS.md)). Trigger-heuristic first; AUQ as fallback.
 
@@ -109,6 +109,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "hypercare", "post-go-live support", "hypercare plan", "post-cutover" | Mode D — Hypercare Plan |
 | "change matrix", "matrix ingestion", "ingest this change matrix" | Mode E — Change Matrix Ingestion |
 | "CM communications schedule", "communications plan", "change comms schedule" | Mode F — CM Communications Schedule |
+| "adoption plan", "adoption tracking", "ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right" | Mode G — Adoption Tracking |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -128,6 +129,8 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Ingest an existing change matrix — reconcile with FDD, flag gaps, produce updates."
   - option: "CM Communications Schedule"
     description: "Audience-calibrated communications schedule across the change timeline."
+  - option: "Adoption Tracking"
+    description: "ADKAR barrier assessment per audience + training-timing validation against the ADKAR sequence."
 
 Await the user's selection; use it as the mode.
 
@@ -148,7 +151,7 @@ Proceed to the corresponding mode section below. Do not proceed until Step 1, 2,
 
 ## Modes
 
-The change management skill operates in 6 modes. Detect the appropriate mode from
+The change management skill operates in 7 modes. Detect the appropriate mode from
 context. When multiple modes apply (e.g., a change matrix upload triggers both
 ingestion and gap analysis), execute both and organize the output clearly.
 
@@ -295,6 +298,18 @@ When a specific communication needs drafting, tag it `[COMMS]` for the comms-wri
 
 **Output**: T-minus comms calendar + gap analysis + artifact dependency tracker.
 
+### Mode G: Adoption Tracking
+
+**Trigger**: "adoption plan", "adoption tracking", "run an ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right", any [CHANGE] tag for adoption tracking, or when an impact assessment and a training plan both exist and adoption readiness has not been assessed per audience.
+
+**What you do**:
+1. Read the impacted audiences from the Mode A impact assessment (build one if missing).
+2. Produce the **ADKAR Assessment Table** per `references/adkar-assessment.md` — for each impacted audience, score the 5 ADKAR stages (Awareness, Desire, Knowledge, Ability, Reinforcement) 1-5 per the scale in `references/adkar-framework.md §2`, identify the **barrier stage** (the first element scoring ≤3 in A→D→K→Ab→R order, per `references/adkar-framework.md §4`) and its prescribed intervention (per `references/adkar-framework.md §2`), and derive the per-audience readiness verdict (NOT READY / CONDITIONAL / READY) per `references/adkar-framework.md §4`. Label any unsourced score `[ASSUMPTION – CONFIRM]` (no invention). Carry a reversibility tier + confidence on each row.
+3. Run **Training-Timing Validation**: reconcile the Mode B training schedule against each audience's ADKAR sequence per `references/adkar-assessment.md` + `references/training-plan.md` Step 2. For each audience, **flag any Knowledge/Ability training scheduled before its prerequisite ADKAR stage is met** (Awareness <4 OR Desire <4) as a finding with remediation (defer the training; run the §2 Awareness/Desire intervention first; re-gate when Awareness ≥4 AND Desire ≥4), carrying a reversibility tier + confidence. Escalate as `R-CM-###` when the finding becomes a RAID item.
+4. This mode runs when the Mode A methodology selection (Step 2.5) includes ADKAR, or on an explicit barrier-assessment / adoption-tracking request.
+
+**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + remediation. The ADKAR scoring scale, barrier-point rule, and ADKAR-gated training-timing rule are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth) and consumed by reference — not restated. Read `references/adkar-assessment.md` for the assessment procedure, the output-table contract, and the training-timing finding format.
+
 #### RAID ID Prefix
 
 This skill uses the prefix `R-CM-###` for all RAID entries it originates, per OPERATIONS.md
@@ -400,7 +415,7 @@ Every artifact update includes:
 This skill produces **decision-class outputs** — impact assessments, training plans,
 readiness checklists, hypercare plans, comms schedules, and gap remediations the user is
 expected to act on. Every decision-class item must carry a **reversibility tier** paired
-with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -410,6 +425,7 @@ with a **confidence level** per `pmo-platform/reference/specs/reversibility-prot
 - Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices.
 - Mode E (Change Matrix Ingestion) — completeness findings and remediation recommendations.
 - Mode F (CM Communications Schedule) — T-minus milestone scheduling and comms-gap findings.
+- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict) and Training-Timing Validation findings.
 - Section 4 (Findings & Gaps) — each finding with specific remediation.
 - Section 7 (Next Actions) — actions with owners and deadlines.
 - Section 8 (RAID Updates) — new or updated RAID entries originated by this analysis.
@@ -435,7 +451,7 @@ proceeds immediately.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, worked examples,
+`core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
 ## Guardrails
@@ -473,7 +489,7 @@ Hard rejections — if you catch yourself doing any of these, stop and fix:
   training-plan recommendation, readiness-item classification, readiness verdict, hypercare
   model choice, comms-schedule milestone, or next action must carry a reversibility tier
   label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level
-  (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs
+  (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs
   missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline
   section above.
 
@@ -482,7 +498,7 @@ Hard rejections — if you catch yourself doing any of these, stop and fix:
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### "All users" as the impacted audience — OUT
@@ -613,6 +629,29 @@ structural conformance and content quality.
   plan needed (owner: delivery team)" and stops; the checklist is re-reviewed two weeks
   later with the same row unremediated, now inside the go/no-go window.
 
+### Knowledge/Ability training scheduled past a Desire/Awareness barrier — PROC
+
+- **Signature (observable signal):** A Mode B training row (or a Mode G training-timing
+  check) schedules Knowledge/Ability training for an audience whose ADKAR Assessment
+  Table shows Awareness <4 or Desire <4 (barrier at Awareness/Desire), with no
+  Training-Timing finding raised.
+- **Conditional:** do NOT schedule (or pass without flagging) Knowledge/Ability training
+  for an audience below the `Awareness ≥4 ∧ Desire ≥4` gate, because training delivered
+  before the Awareness/Desire gate does not convert to behavior change
+  (`references/adkar-framework.md §6`) — the budget is spent and the barrier remains, and
+  the omission is invisible until post-go-live adoption fails.
+- **Root cause:** producing a clean training schedule is easier than reconciling it
+  against per-audience barrier scores; under output pressure the agent emits the schedule
+  and skips the gate check.
+- **Mitigation:** run the Mode G Training-Timing Validation step for every audience; when
+  a barrier at Awareness/Desire exists, raise the structured finding (defer the training;
+  run the §2 Awareness/Desire intervention first; re-gate at Awareness ≥4 ∧ Desire ≥4)
+  and carry a reversibility tier + confidence.
+- **Principal response vs. junior response:** Principal raises "Warehouse Ops: Knowledge
+  training T-2wk but Desire=2 (barrier) — defer; run WIIFM/involvement first; re-gate when
+  A≥4 ∧ D≥4" with the finding routed to RAID. Junior ships the schedule with the training
+  in place and discovers at go-live that the trained group never adopted.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -630,7 +669,8 @@ Read these on first use, then as needed for specific modes:
 | `references/readiness-checklist.md` | Mode C | Full readiness checklist, milestone linkage, verdict criteria |
 | `references/hypercare-plan.md` | Mode D | Hypercare template, exit criteria, adoption KPIs |
 | `references/change-matrix-schema.md` | Mode E | Expected schemas for change matrix sheets |
-| `references/adkar-framework.md` | Mode A, C, D (methodology) | ADKAR change-adoption model — the 1-5 scoring scale, barrier-point rule, sponsor-engagement ABCs, ADKAR-gated training timing, change-champion sizing |
+| `references/adkar-assessment.md` | Mode G (adoption tracking), Mode B (timing validation) | ADKAR barrier-assessment capability — the runnable assessment procedure, the ADKAR Assessment Table output contract, and the training-timing validation finding; consumes the scale/barrier-rule/timing-gate from `references/adkar-framework.md` by reference |
+| `references/adkar-framework.md` | Mode A, C, D, G (methodology) | ADKAR change-adoption model — the 1-5 scoring scale, barrier-point rule, sponsor-engagement ABCs, ADKAR-gated training timing, change-champion sizing |
 | `references/kotter-8-step.md` | Mode A, C, D (methodology) | Kotter 8-step process — the org-process transformation sequence, sequence-gate rules, and the three cardinal Kotter errors |
 | `references/lewin-3-stage.md` | Mode A, C, D (methodology) | Lewin 3-stage model — the Unfreeze → Change → Refreeze meta-frame, Force-Field analysis, and the stage-gate rules |
 | `references/bridges-transition.md` | Mode A, C, D (methodology) | Bridges transition model — the 3-zone psychological transition (Ending → Neutral Zone → New Beginning) and the ADKAR-seam composition |
