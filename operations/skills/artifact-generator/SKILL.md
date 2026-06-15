@@ -45,9 +45,9 @@ Cowork `Skill` tool without an intervening user prompt.
 
 **Allowlist trigger pair (C7).** PPM `[ARTIFACT_GAP]` + complete context → artifact-generator
 (08-Generated/ staging only). All generated artifacts stage in 08-Generated/ with
-`status: Draft` (the lifecycle state on emit) — promotion to the target folder still
-requires explicit user approval. The auto-cascade produces the staged draft; it does not
-promote.
+`artifact_state: DRAFT` (the `Artifact-DRAFT` lifecycle state on emit) — promotion to the
+target folder still requires explicit user approval. The auto-cascade produces the staged
+draft; it does not promote.
 
 **Chained-context pre-fill.** When invoked in a chained context, task parameters are pre-filled
 from the Handoff Manifest action entry ([ppm-agent/SKILL.md](../ppm-agent/SKILL.md) Section 10
@@ -155,7 +155,7 @@ source: external                             # NEW VALUE on the existing `source
 source_origin: <e.g. "Anthropic engineering/documentation" | "user upload: runbook.md">  # NEW field — provenance of the external content
 dependencies: <source artifact + related project artifacts>   # SAME field; carries the external source ref (non-empty)
 reversibility: CHEAP | MODERATE | EXPENSIVE | IRREVERSIBLE     # SAME field (already required by SG-3)
-status: Draft                                 # SAME field; lifecycle state — Wrapper Mode stamps Draft and is NEVER promoted on ingest
+artifact_state: DRAFT                          # SAME field; canonical Artifact Workflow state — Wrapper Mode stamps Artifact-DRAFT and is NEVER promoted on ingest
 ---
 ```
 
@@ -228,17 +228,19 @@ dumping, no passive risk voice, validate day-of-week on all dates.
 ### Step 5: Stage in 08-Generated/
 
 Save the artifact to the project's `08-Generated/` folder with a metadata header. The
-`status:` field carries the artifact's **lifecycle state**, drawn from the closed
-six-state set Draft, Review, Approved, Active, Superseded, Archived, and **defaults to
-`Draft`** on every freshly generated artifact — consistent with the 08-Generated staging
-convention where a generated artifact is a draft on emit and is promoted only on
-approval. The full state set, the legal transitions, the zombie-detection rule, and the
-documentation-debt-register rule live in the lifecycle-states reference doc at
+`artifact_state:` field carries the artifact's **lifecycle state** on the platform-canonical
+Artifact Workflow machine, drawn from the closed five-state set `DRAFT`, `REVIEWED`,
+`APPROVED`, `PROMOTED`, `ARCHIVED`, and **defaults to `DRAFT`** (`Artifact-DRAFT`) on every
+freshly generated artifact — consistent with the 08-Generated staging convention where a
+generated artifact is a draft on emit and is promoted only on approval. The authoritative
+vocabulary, the legal transitions, and the frontmatter convention are defined canonically in
+the lifecycle-states canonical source; the artifact-generator application layer — how the
+skill stamps and health-checks those states, plus the zombie-detection and
+documentation-debt-register rules — lives in the lifecycle-states reference doc at
 `references/lifecycle-states.md` (read it before stamping any non-default state). Stamp
-`status: Draft` on emit and never stamp a
-later state (Review, Approved, Active, Superseded, Archived) at generation time — later
-states are reached only through the governed transitions a human or a downstream gate
-authorizes.
+`artifact_state: DRAFT` on emit and never stamp a later state (`REVIEWED`, `APPROVED`,
+`PROMOTED`, `ARCHIVED`) at generation time — later states are reached only through the
+governed transitions a human or a downstream gate authorizes.
 
 ```markdown
 ---
@@ -248,14 +250,15 @@ confidence: HIGH | MEDIUM | LOW
 created: [YYYY-MM-DD]
 source: [what triggered this — user request, ARTIFACT_GAP tag, transcript processing, etc.]
 dependencies: [other artifacts this relates to, if any]
-status: Draft
+artifact_state: DRAFT
 ---
 ```
 
-The prior `PENDING_REVIEW` value is retired in favor of the lifecycle vocabulary:
-`Draft` is the exact equivalent of the former staged-awaiting-promotion state, so every
-consumer that previously keyed on a staged artifact (the Promotion Workflow, the Artifact
-Health Check scan, the Auto-Archive Policy) now keys on `status: Draft`.
+The prior `PENDING_REVIEW` value is retired in favor of the canonical Artifact Workflow
+vocabulary: `artifact_state: DRAFT` (`Artifact-DRAFT`) is the exact equivalent of the former
+staged-awaiting-promotion state, so every consumer that previously keyed on a staged
+artifact (the Promotion Workflow, the Artifact Health Check scan, the Auto-Archive Policy)
+now keys on `artifact_state: DRAFT`.
 
 **File naming convention**: `[ProjectAbbrev]_[ArtifactType]_[Identifier]_[Date].md`
 - Example: `ABC_FDD_Review_FDD002_2026-03-18.md`
@@ -296,14 +299,14 @@ When the user rejects:
 
 ## Auto-Archive Policy
 
-Files in 08-Generated/ that remain in `Draft` status for more than 10 business days are
-automatically moved to `08-Generated/_archived/` with a note. They can be recovered but
-are no longer surfaced in artifact health checks. This 10-business-day staging timeout is
-distinct from the 30-day zombie-detection threshold in the Artifact Health Check: the
-staging timeout sweeps *unreviewed Draft* artifacts out of the staging area, whereas
-zombie detection flags *any* artifact (in any lifecycle state, including promoted ones)
-that has gone unreferenced for more than 30 days. See the lifecycle-states reference doc
-for how the two thresholds compose.
+Files in 08-Generated/ that remain in `artifact_state: DRAFT` (`Artifact-DRAFT`) for more
+than 10 business days are automatically moved to `08-Generated/_archived/` with a note. They
+can be recovered but are no longer surfaced in artifact health checks. This 10-business-day
+staging timeout is distinct from the 30-day zombie-detection threshold in the Artifact Health
+Check: the staging timeout sweeps *unreviewed `Artifact-DRAFT`* artifacts out of the staging
+area, whereas zombie detection flags *any* artifact (in any lifecycle state, including
+promoted ones) that has gone unreferenced for more than 30 days. See the lifecycle-states
+reference doc for how the two thresholds compose.
 
 ## Artifact Health Check
 
@@ -314,18 +317,20 @@ When invoked for a health check (weekly scan or on demand), review:
 4. **Pending reviews**: Items in 08-Generated/ awaiting user action
 5. **Zombie artifacts**: Artifacts unreferenced for more than 30 days — see the
    Zombie Detection step below
-6. **Lifecycle-debt artifacts**: Artifacts in `Superseded` state that were never moved to
-   `Archived` — see the Documentation-Debt Register below
+6. **Lifecycle-debt artifacts**: Artifacts that are no longer current but still sit in a live
+   (non-`ARCHIVED`) state and were never transitioned to `ARCHIVED` — see the
+   Documentation-Debt Register below
 
 Produce a summary table:
 
-| Artifact | Status | Last Updated | Last Referenced | Required By | Action Needed |
-|----------|--------|-------------|-----------------|-------------|---------------|
+| Artifact | Artifact State | Last Updated | Last Referenced | Required By | Action Needed |
+|----------|----------------|-------------|-----------------|-------------|---------------|
 
-The `Status` column carries the artifact's lifecycle state (Draft, Review, Approved,
-Active, Superseded, Archived). The `Last Referenced` column is the input to zombie
-detection. Each `Action Needed` row is a decision-class item and carries a reversibility
-tier per the Reversibility Discipline section.
+The `Artifact State` column carries the artifact's canonical Artifact Workflow state
+(`Artifact-DRAFT`, `Artifact-REVIEWED`, `Artifact-APPROVED`, `Artifact-PROMOTED`,
+`Artifact-ARCHIVED`). The `Last Referenced` column is the input to zombie detection. Each
+`Action Needed` row is a decision-class item and carries a reversibility tier per the
+Reversibility Discipline section.
 
 ### Zombie Detection (the > 30-day unreferenced rule)
 
@@ -339,14 +344,14 @@ debt. The procedure:
    filename or by an explicit reference. When no reference exists, the last-referenced
    date is the artifact's own `created` date.
 2. **Flag as a zombie** any artifact whose last-referenced date is more than 30 days
-   before the scan date AND whose lifecycle state is not `Archived` (an `Archived`
-   artifact is already retired, so an unreferenced `Archived` artifact is expected, not a
-   zombie). A `Superseded` artifact that is also unreferenced past 30 days is both a zombie
-   and a lifecycle-debt item — list it once, in the debt register, with both signals
-   noted.
+   before the scan date AND whose `artifact_state` is not `ARCHIVED` (an `Artifact-ARCHIVED`
+   artifact is already retired, so an unreferenced `Artifact-ARCHIVED` artifact is expected,
+   not a zombie). An artifact that is also no-longer-current (a supersession candidate) and
+   unreferenced past 30 days is both a zombie and a lifecycle-debt item — list it once, in
+   the debt register, with both signals noted.
 3. **Do not auto-transition** a zombie. Zombie detection is a flag, not a state change: the
    operator decides whether the artifact is genuinely orphaned (transition toward
-   `Archived`) or simply quiet-but-current (leave as is, optionally re-reference it). The
+   `ARCHIVED`) or simply quiet-but-current (leave as is, optionally re-reference it). The
    recommended action and its reversibility tier go in the debt register.
 
 The 30-day zombie threshold is the artifact-skill realization of the platform's
@@ -361,22 +366,24 @@ artifacts the operator should action so debt does not silently accumulate. It is
 or refreshed on every health-check scan and contains two populations:
 
 1. **Zombie artifacts** — unreferenced for more than 30 days (per Zombie Detection above).
-2. **Superseded-not-Archived artifacts** — artifacts whose lifecycle state is `Superseded`
-   but that were never transitioned to `Archived`, so a replaced artifact still sits in a
-   live state.
+2. **No-longer-current-but-live artifacts** — artifacts that have been superseded or are
+   otherwise no longer current but still sit in a live (non-`ARCHIVED`) state, so a replaced
+   artifact was never transitioned to `Artifact-ARCHIVED`. The canonical Artifact Workflow
+   carries no `Superseded` state, so supersession is not a frontmatter value — it is a debt
+   signal surfaced here and actioned as an `ARCHIVED`-transition recommendation.
 
-Each row names the artifact, its current lifecycle state, the debt signal (zombie /
-superseded-not-archived / both), the days since last reference, the recommended action,
+Each row names the artifact, its current `artifact_state`, the debt signal (zombie /
+no-longer-current-but-live / both), the days since last reference, the recommended action,
 and the reversibility tier paired with a confidence level:
 
-| Artifact | Lifecycle State | Debt Signal | Days Unreferenced | Recommended Action | Reversibility · Confidence |
-|----------|-----------------|-------------|-------------------|--------------------|----------------------------|
+| Artifact | Artifact State | Debt Signal | Days Unreferenced | Recommended Action | Reversibility · Confidence |
+|----------|----------------|-------------|-------------------|--------------------|----------------------------|
 
 When the register is empty, report it explicitly as `Documentation-debt register: none
-(no zombies, no superseded-not-archived artifacts)` — the honest no-debt signal — rather
+(no zombies, no no-longer-current-but-live artifacts)` — the honest no-debt signal — rather
 than omitting the section. The register is staged in 08-Generated/ like any other
-generated artifact (`status: Draft`); it is the operator's worklist, not an automatic
-remediation.
+generated artifact (`artifact_state: DRAFT`); it is the operator's worklist, not an
+automatic remediation.
 
 ## Integration Points
 
@@ -447,7 +454,7 @@ specialist-routing selections, and new-type flags. Every decision-class item mus
 - Inline: `Recommendation (MODERATE · confidence: HIGH): <text>` — e.g., on the Present for Review summary.
 - Trailing: `<text> [MODERATE · confidence: HIGH]` — e.g., on an Artifact Health Check Action Needed row.
 - Structured column: tier value in a `Reversibility` or `Tier` column of the Artifact Health Check table or the ARTIFACT STAGED metadata header.
-- Structured frame: tier value populated in the metadata header alongside `confidence: HIGH | MEDIUM | LOW` and `status: Draft` (the tier represents the *downstream commitment* if the artifact is promoted; the confidence represents *how-likely-wrong* the draft content is).
+- Structured frame: tier value populated in the metadata header alongside `confidence: HIGH | MEDIUM | LOW` and `artifact_state: DRAFT` (the tier represents the *downstream commitment* if the artifact is promoted; the confidence represents *how-likely-wrong* the draft content is).
 
 Confidence values: `HIGH` / `MEDIUM` / `LOW`. Reversibility is *what-if-wrong cost*;
 confidence is *how-likely-wrong*. Both travel together. The metadata header's existing
@@ -479,7 +486,8 @@ structural conformance and content quality.
 
 - **Signature (observable signal):** An artifact is written directly to its target folder
   (01-Governance/, 02-Design/, 03-Testing/, etc.) on first production without first being
-  staged in the project's 08-Generated/ folder with a `status: Draft` metadata header.
+  staged in the project's 08-Generated/ folder with an `artifact_state: DRAFT` metadata
+  header.
 - **Conditional:** do NOT write a generated artifact directly to the target folder when
   the Promotion Workflow requires staging in 08-Generated/ first, because the staging
   step is the skill's user-approval gate — PROMOTE / REVISE / REJECT — and bypassing it
@@ -490,7 +498,7 @@ structural conformance and content quality.
   directly rather than surface a proposal the user has to action.
 - **Mitigation:** Always write to `[Project]/08-Generated/` on first production with the
   full metadata header (artifact_type, target_folder, confidence, created, source,
-  dependencies, status: Draft); never write directly to the target folder; the
+  dependencies, artifact_state: DRAFT); never write directly to the target folder; the
   Promotion Workflow owns the move from 08-Generated/ to the target folder on explicit
   user approval.
 - **Principal response vs. junior response:** Principal stages in 08-Generated/, surfaces
@@ -550,20 +558,21 @@ structural conformance and content quality.
 
 - **Signature (observable signal):** An artifact file in 08-Generated/ lacks the complete
   frontmatter block (artifact_type, target_folder, confidence, created, source,
-  dependencies, status) — either the block is missing entirely, or fields are absent,
-  or the status is set to something other than `Draft` on a freshly generated artifact.
+  dependencies, artifact_state) — either the block is missing entirely, or fields are
+  absent, or `artifact_state` is set to something other than `DRAFT` on a freshly generated
+  artifact.
 - **Conditional:** do NOT write a staged artifact to 08-Generated/ without the complete
-  metadata header including `status: Draft` (the lifecycle state on emit), because the
-  metadata header is the skill's handoff contract to the PROMOTE / REVISE / REJECT
-  workflow, the Artifact Health Check scanner, and the auto-archive process — missing
-  headers produce artifacts that cannot be tracked, surfaced in health scans, or archived
-  after the 10-business-day unreviewed window.
+  metadata header including `artifact_state: DRAFT` (the `Artifact-DRAFT` lifecycle state on
+  emit), because the metadata header is the skill's handoff contract to the PROMOTE / REVISE
+  / REJECT workflow, the Artifact Health Check scanner, and the auto-archive process —
+  missing headers produce artifacts that cannot be tracked, surfaced in health scans, or
+  archived after the 10-business-day unreviewed window.
 - **Root cause:** The artifact content is the product of the run; the metadata feels like
   bookkeeping and can get dropped when output token pressure mounts or when content alone
   is returned rather than the full frontmatter + content file.
 - **Mitigation:** Generate the metadata header first with all 7 fields populated; generate
   the artifact content second; write the combined file as a single atomic write to
-  08-Generated/; verify the file has a frontmatter block with `status: Draft`
+  08-Generated/; verify the file has a frontmatter block with `artifact_state: DRAFT`
   before presenting the Step 6 summary to the user.
 - **Principal response vs. junior response:** Principal writes header-plus-content as a
   single file and verifies the header is intact. Junior writes content alone, the health
@@ -645,7 +654,7 @@ structural conformance and content quality.
   PMO-generated content and untracked by the Promotion / Health / auto-archive workflow.
 - **Conditional:** do NOT stage an external artifact in `08-Generated/` without running
   Wrapper Mode's metadata-prepend (`source: external` + `source_origin` + the full header
-  with `status: Draft`), because the header is the provenance and lifecycle
+  with `artifact_state: DRAFT`), because the header is the provenance and lifecycle
   contract — without `source: external` a reviewer cannot tell the content was produced
   outside the PMO generator (and may over-trust it), and without the full header the Health
   scan and auto-archive cannot track it.
@@ -654,8 +663,8 @@ structural conformance and content quality.
   step. Under one-shot pressure the agent copies the file in and skips the header.
 - **Mitigation:** On any request to bring external content into the project, enter Wrapper
   Mode (the §Wrapper Mode discriminator); run Step 4-W intake (read, gate-scan, set
-  confidence); write the full header with `source: external` + `source_origin` populated
-  before the file lands; verify `source: external` is present before the Step-6 summary.
+  confidence); write the full header with `source: external` + `source_origin` + `artifact_state: DRAFT`
+  populated before the file lands; verify `source: external` is present before the Step-6 summary.
 - **Principal response vs. junior response:** Principal runs Wrapper Mode, stamps
   `source: external` + provenance, surfaces the `Mode: WRAPPER` summary, waits for PROMOTE.
   Junior copies the Anthropic runbook straight into `08-Generated/` (or a target folder),

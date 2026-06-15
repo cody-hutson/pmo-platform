@@ -43,7 +43,7 @@ When the wrapped artifact's resolved `artifact_type` is one of the dual-framed W
 
 ## Metadata header (recap — schema lives in the SKILL.md)
 
-Wrapper Mode writes the same frontmatter block as Generate Mode, extended by one new field-value (`source: external`) and one new field (`source_origin`), so the header round-trips through every existing consumer (Promotion Workflow, Artifact Health scan, auto-archive). `status` is always `Draft` (the lifecycle state on emit; the former `PENDING_REVIEW` value, renamed to the lifecycle vocabulary) — **Wrapper Mode is never promoted on ingest**. Full schema, the lifecycle-state set, and the Domain-C forward-map note are in the [SKILL.md §Wrapper Mode](../SKILL.md); the state set and transitions live in [`lifecycle-states.md`](lifecycle-states.md).
+Wrapper Mode writes the same frontmatter block as Generate Mode, extended by one new field-value (`source: external`) and one new field (`source_origin`), so the header round-trips through every existing consumer (Promotion Workflow, Artifact Health scan, auto-archive). `artifact_state` is always `DRAFT` (the `Artifact-DRAFT` canonical lifecycle state on emit; the former `PENDING_REVIEW` value, re-specced onto the canonical Artifact Workflow vocabulary) — **Wrapper Mode is never promoted on ingest**. Full schema and the Domain-C forward-map note are in the [SKILL.md §Wrapper Mode](../SKILL.md); the canonical state set, the application-layer stamping rules, and transitions live in [`lifecycle-states.md`](lifecycle-states.md).
 
 ## Chained-path boundary
 
