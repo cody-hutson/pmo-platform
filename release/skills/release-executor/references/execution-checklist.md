@@ -41,6 +41,24 @@ On any FAIL, emit the 5-field finding record from `SKILL.md` § Quality-Gate Lad
 (`what failed` / `where` / `evidence` / `what to fix` / `short-circuit`) naming which
 tier failed and which downstream tiers were skipped; do not proceed to Step 1.
 
+**Progressive-rollout dispatch (per-gate `rollout-cycle`).** Each gate Tier carries a
+`rollout-cycle` (the column on the ladder table in `SKILL.md` § Quality-Gate Ladder;
+default `enforce`). Before treating a Tier's would-fail as a hard FAIL, read its
+`rollout-cycle` and dispatch per `references/progressive-rollout.md`:
+
+| `rollout-cycle` | On a Tier would-fail | Short-circuits the ladder? |
+|---|---|---|
+| `enforce` | emit the 5-field finding, **HALT, no merge** | **Yes** — downstream Tiers do NOT run |
+| `warn` | append a hit to `core/hooks/<tier-id>-rollout-log.jsonl` AND surface an operator-facing ⚠ notice | **No** — the ladder continues to the next Tier |
+| `shadow` | append a hit to `core/hooks/<tier-id>-rollout-log.jsonl`, silently | **No** — the ladder continues to the next Tier |
+
+So the "fires in order and short-circuits on first failure" rule above is scoped to
+`enforce` gates: a `shadow` or `warn` gate observes (and, for `warn`, notices) and the
+ladder proceeds; only an `enforce` gate halts the run and skips the remaining Tiers.
+Default to `enforce` on an absent or unparseable `rollout-cycle` — an unmarked gate keeps
+its blocking teeth (fail-safe). A `shadow`/`warn` Tier that would-fail does NOT flip the
+Pre-Execution table's "Any FAIL blocks execution" gate; only an `enforce` Tier does.
+
 > **Pre-apply vs. at-deploy.** These gates run **pre-apply** (before merge). `deploy.sh
 > --check` runs the same instruments (`lint_release_corpus.py`, `check-doc-links.py`)
 > **at deploy time** — the ladder is *earlier* in the pipeline, not duplicative by

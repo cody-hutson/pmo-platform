@@ -74,9 +74,15 @@ not the whole corpus.
 ships `enforce`, preserving the gate ladder's hard-fail intent); `shadow` = run the instrument and
 log the finding but do NOT halt (record-only); `warn` = run and surface the finding to
 the operator as a warning but do NOT halt. `shadow`/`warn` downgrade a gate's teeth
-**without changing the ladder order**. The progressive-rollout capability defines the shadow→warn→enforce transition
-semantics and the outcome-log persistence that the non-`enforce` values consume — both
-cards edit this same section; the column is the attachment point.
+**without changing the ladder order** — a `shadow` or `warn` gate does NOT short-circuit
+(it observes / notices and the ladder continues to the next Tier); only an `enforce` gate
+fails-and-short-circuits, so the short-circuit invariant below is scoped to `enforce`
+gates. The progressive-rollout capability — defined canonically in
+`references/progressive-rollout.md` — owns the shadow→warn→enforce transition semantics,
+the per-rule `rollout-cycle` attribute (default `enforce`; fail-safe to `enforce` on an
+absent or unparseable value), the operator-gated advance procedure, and the per-rule
+outcome-log persistence (`core/hooks/<rule-id>-rollout-log.jsonl`) that the non-`enforce`
+values consume. This column is the attachment point where that capability wraps each gate.
 
 **Short-circuit invariant (testable).** Run **T1**; on FAIL emit the finding and **HALT**
 — do NOT run T2 or T3. Else run **T2**; on FAIL emit the finding and **HALT** — do NOT
@@ -183,7 +189,13 @@ Proceed to the corresponding mode section below (Mode A Execute Release, Mode B 
    change; T3 is the operator GO gate. The same ladder is consumed at the
    `references/execution-checklist.md` Pre-Execution surface for git-native (PR-merge)
    releases — this Step 5 entry point gates the Cowork snapshot-and-apply lineage.
-   For each IMP in the plan's execution sequence:
+   At each gate, read the gate's `rollout-cycle` and dispatch per the progressive-rollout
+   model (`references/progressive-rollout.md`): an `enforce` gate that would-fail emits the
+   finding, HALTs, and short-circuits the downstream Tiers; a `shadow` gate logs the hit to
+   `core/hooks/<rule-id>-rollout-log.jsonl` and the ladder continues; a `warn` gate logs
+   AND surfaces an operator-facing notice, and the ladder continues. Default to `enforce`
+   on an absent or unparseable `rollout-cycle` (fail-safe — an unmarked gate keeps its
+   blocking teeth). For each IMP in the plan's execution sequence:
    a. Read the implementation details from the plan
    b. Apply the file modifications (edits, new files, structural changes)
    c. Read back the modified file to verify the write succeeded
@@ -952,3 +964,4 @@ Read these on first use:
 - `references/execution-checklist.md` — Step-by-step execution protocol
 - `references/verification-checklist.md` — Post-release QA checks
 - `references/rollback-protocol.md` — Failure recovery procedures
+- `references/progressive-rollout.md` — Three-cycle progressive-rollout model (shadow → warn → enforce) for governance rules and the quality-gate ladder
