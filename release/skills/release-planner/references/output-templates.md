@@ -20,6 +20,16 @@ format:
 ### Dependency Graph
 [Topo-sort sequence with priority annotations; optional Mermaid block when > 5 nodes]
 
+### Artifact Relationship Graph
+Typed per core/schemas/frontmatter-schema.md §Category 4 (GENERATES · DEPENDS_ON · BLOCKS · SUPERSEDES) — derivation in references/dependency-analysis.md § Artifact-Relationship Classification. Artifact-relationship axis, orthogonal to the FS/SS scheduling axis.
+
+| Source | Type | Target | Direction | Derived from |
+|---|---|---|---|---|
+| #N | BLOCKS | #M | #N → #M | native `blocks` |
+| #P | DEPENDS_ON | #N | #P → #N | body Dependencies (default) |
+
+(Emit `No typed artifact relationships — bundle has no native/body dependency edges and no Create/supersede file changes` as the body when the classifier yields zero edges — explicit positive signal, per the `No file contention detected` convention.)
+
 ### Suggested Bundles
 **Bundle 1 (recommended next):** #X, #Y, #Z
 - Theme: [description]

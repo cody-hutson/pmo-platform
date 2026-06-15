@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
-version: v1.21
+version: v2.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -187,6 +187,22 @@ change-management, technical-analyst, process-designer).
      and no trigger is in scope (correct omission per § 5.6). Full two-phase tables, the
      swept-declaration read contract, the routing table, and the L1–L5 composability map live in
      [`references/cascade-completeness-detection.md`](references/cascade-completeness-detection.md).
+   - **G9: RACI validation gate** — When the output under audit **assigns, implies, or
+     depends on ownership of an action, decision, deliverable, or risk** (any output
+     carrying action items, RAID entries, commitments, escalations, or a decision frame),
+     verify every owned item names a **single clear Responsible AND a single Accountable**
+     (a named person or role, not "the team" / "the PMO" / passive voice). PASS = every
+     owned item has a single R and a single A. FAIL = one or more owned items with a
+     missing or ambiguous R or A (no Accountable, multiple un-disambiguated Accountables,
+     or a "the team"-class non-owner), cited with the exact item plus the suggested
+     owner-line in the Remediation field. Binary — no PARTIAL (per Operating principles);
+     one or more ownerless owned items renders FAIL (zero-tolerance on owned items, per the
+     platform single-Accountable RACI convention). Consulted/Informed gaps are an
+     OBSERVATION, not a FINDING — the gate's teeth are on R and A only. The gate **does not
+     fire** on pure-analysis outputs that assign no ownership (correct conditional omission,
+     parallel to G7/G8). The criterion, the R+A rationale, and the data source live in
+     `references/failure-mode-detectors.md`; the platform-trend roll-up of G9's per-output
+     findings is detector D2 (Faceless PMO) in Mode E.
 4. Produce the QA audit report (see Output Format below).
 
 ### Mode B: Cross-Skill Coherence Review
@@ -274,7 +290,13 @@ See `references/dual-output-compliance.md` for the full checklist.
 
 **Trigger**: "Platform health audit", "base-vs-build audit", "anthropic overlap audit",
 "drift check the registry", "audit the platform health", or the quarterly / drift-watch
-scheduled-task invocation.
+scheduled-task invocation. (No new trigger phrase is needed for the detector battery — it
+runs as a step of this mode whenever Platform Health Audit is invoked.)
+
+**Scope**: Mode E covers two observational surfaces — the base-vs-build drift audit
+(re-enumerate the Anthropic catalog + PMO roster against the registry) **and** the
+**Failure-Mode Detector Battery (D1–D8)**: 8 named platform failure-mode detectors that
+report current status + threshold per `references/failure-mode-detectors.md`.
 
 **Input**: The two corpus files (NOT a pasted skill output) —
 `core/specs/anthropic-base-vs-build-registry.md` (the instance) and
@@ -300,13 +322,22 @@ author's creation PR, structurally distinct from an audit mode.
    (a/b/c) update path. Apply the registry-header **Overlap Detection Rubric** to score any
    new/changed overlap relationship; apply the registry-header **Scorecard Weighting** to
    produce the SUMMARY health posture.
-5. **Emit the audit folder** at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/`
+5. **Run the Failure-Mode Detector Battery (D1–D8)** per `references/failure-mode-detectors.md`
+   — the 8 named platform failure-mode detectors (automation complacency, faceless PMO, echo
+   chamber, quality drift, SPOF, breadth burnout, AI hallucination, trust erosion). For each
+   detector, evaluate its observable signature against the reviewed set, apply its numeric
+   threshold, and produce its current-status read. A detector whose required input or config
+   key cannot be resolved reports INDETERMINATE (the missing input named) — never silently
+   clean. Emit a `## Failure-Mode Detector Battery` section in `findings-register.md` listing
+   **all 8 detectors with current-status read + threshold** (one row per detector; the table
+   format is in the ref doc's Verdict/reporting section).
+6. **Emit the audit folder** at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/`
    (operator-instance, git-ignored; `${AUDIT_DATE_UTC}` = `date -u +%Y-%m-%d` at run time) —
-   `SUMMARY.md` (with the Scorecard Weighting header), `findings-register.md`,
-   `base-build-deltas.md`, and ≥3 `issue-drafts/NNN-*.md` in **observation format**
-   (`observation.yml` 3-field schema — drift findings are observations until the operator
-   triages them).
-6. **Observational-discipline self-check.** Before emitting, scan all output for prescriptive
+   `SUMMARY.md` (with the Scorecard Weighting header), `findings-register.md` (carrying the
+   `## Failure-Mode Detector Battery` section from step 5), `base-build-deltas.md`, and ≥3
+   `issue-drafts/NNN-*.md` in **observation format** (`observation.yml` 3-field schema — drift
+   findings are observations until the operator triages them).
+7. **Observational-discipline self-check.** Before emitting, scan all output for prescriptive
    verbs (`recommend`, `migrate`, `consolidate`, `should`) per the framework Observational
    discipline + [review-discipline-principles.md](../../disciplines/review-discipline-principles.md)
    audit-class output discipline; rewrite any to observational form.
@@ -348,8 +379,9 @@ Mode D uses the dual-output checklist.
 | G6 | Anti-pattern check | PASS/FAIL | [specific finding] |
 | G7 | Domain-specific failure-mode discipline | PASS / FAIL / CONDITIONAL PASS | [Phase 1 structural regex + Phase 2 LLM content check; see `../../specs/failure-mode-standard.md`. Fires only when output under audit is a SKILL.md file.] |
 | G8 | Cascade-completeness verification | PASS / FAIL / CONDITIONAL PASS | [Phase 1 deterministic re-run (G8-02/03/04) + Phase 2 LLM judgment (G8-01/05/06); see `references/cascade-completeness-detection.md`. Fires only when output under audit is a Stage 5 spec carrying a `### Cascade-Sweep` block. Un-swept occurrence cited as `file:line` with Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] routing.] |
+| G9 | RACI validation (ownership clarity) | PASS / FAIL | [Fires only when the output asserts ownership of an action / decision / deliverable / risk. One or more owned items with no single clear Responsible+Accountable cited as the finding with the suggested owner-line; see `references/failure-mode-detectors.md`. Consulted/Informed gaps are OBSERVATIONs, not findings.] |
 
-**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings).
+**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings). G9 is per-output binary — PASS / FAIL only, no CONDITIONAL — and fires only when the output asserts ownership.
 
 ### 3. Findings
 
@@ -449,14 +481,17 @@ It produces a **dated audit folder** plus an **in-chat SUMMARY echo**.
 | File | Contents |
 |------|----------|
 | `SUMMARY.md` | Top-level report; header carries the Scorecard Weighting (cited from the registry header, not duplicated); records baseline SHA + audit date; observational posture only. |
-| `findings-register.md` | One row per drift item: T1–T5 classification, §3.3 (a/b/c) update-path, Overlap Detection Rubric score. |
+| `findings-register.md` | One row per drift item: T1–T5 classification, §3.3 (a/b/c) update-path, Overlap Detection Rubric score. Carries the `## Failure-Mode Detector Battery` section: all 8 detectors (D1–D8) with current-status read + threshold per `references/failure-mode-detectors.md`. |
 | `base-build-deltas.md` | The Anthropic-catalog-vs-baseline + roster-vs-registry raw enumeration deltas. |
 | `issue-drafts/NNN-kebab-name.md` | ≥3 drafts in observation format (`observation.yml` 3-field schema). |
 
 **In-chat SUMMARY echo:** baseline SHA + audit date, the drift-item count by trigger type
-(T1–T5), the health posture per the Scorecard Weighting, and a pointer to the audit folder.
-No prescriptive verbs — every line describes an observed state, not an action. Decision-class
-items (the observation issue-drafts) carry reversibility tiers; there is no gate verdict to tier.
+(T1–T5), the health posture per the Scorecard Weighting, a **detector-battery status line**
+(count of fired detectors among D1–D8 + the headline posture, pointing to the
+`## Failure-Mode Detector Battery` section in `findings-register.md`), and a pointer to the
+audit folder. No prescriptive verbs — every line describes an observed state, not an action.
+Decision-class items (the observation issue-drafts) carry reversibility tiers; there is no
+gate verdict to tier.
 
 ## Reversibility Discipline
 
@@ -746,6 +781,7 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `references/dual-output-compliance.md` | Mode D | Full dual-output checklist and compliance criteria |
 | `../../reference/reversibility-protocol.md` | Mode A G4 | 4-tier reversibility vocabulary and decision-class algorithm |
 | `../../specs/failure-mode-standard.md` | Mode A G7, Mode A G8 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline; the `### Cascade-omission at count update — PROC` entry names G8 as the L5 automated detection surface |
+| `references/failure-mode-detectors.md` | Mode E, Mode A G9 | The 8 named platform failure-mode detectors (D1–D8: automation complacency, faceless PMO, echo chamber, quality drift, SPOF, breadth burnout, AI hallucination, trust erosion) — signature, threshold, data source, current-status read for each; plus the RACI validation gate (G9) data source and the Mode E battery-section reporting format |
 | `../../reference/review-discipline-principles.md` | When auditing review-class skill outputs | Shared 10 anti-laziness rules and 6-deliverable output structure |
 | `../../../release/references/protocols/platform-health-audit-framework.md` | Mode E | Audit methodology + cadence policy; §4 is the Mode E integration spec |
 | `../../specs/anthropic-base-vs-build-registry.md` | Mode E | The base-vs-build registry instance Mode E audits; header carries the Overlap Detection Rubric + Scorecard Weighting |

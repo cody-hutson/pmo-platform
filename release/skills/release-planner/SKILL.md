@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
-version: v1.18
+version: v2.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -79,6 +79,17 @@ Proceed to the corresponding mode section below (Mode A Backlog Analysis, Mode B
 
 ## Modes
 
+### Typed Artifact Relationships (Mode A + Mode B)
+
+When emitting a dependency view, Mode A and Mode B label each in-release edge with one of four **typed artifact-relationship kinds**. The vocabulary is adopted from `core/schemas/frontmatter-schema.md` §Category 4 (a subset of the frozen 7 MVP relationship types) — referenced, not redefined — so planner output and backlog relations cannot diverge. The four kinds, one line each:
+
+- **GENERATES** — the source artifact produced the target (e.g. an issue whose File Change Matrix Creates a file generates it).
+- **DEPENDS_ON** — the source depends on the target for its validity (the default for any issue→issue edge not provably BLOCKS).
+- **BLOCKS** — the source's state blocks progress on the target (derived from a native `blocks` dependency).
+- **SUPERSEDES** — the source replaces the target (a version-supersession file change, e.g. a `_v2` over a `_v1`).
+
+This artifact-relationship axis is **orthogonal to the FS/SS/FF/SF scheduling axis** the critical path consumes — an edge can carry both, and the CPM forward-pass never reads the artifact-relationship type. Derivation rules and edge-case dispositions live in `references/dependency-analysis.md` § Artifact-Relationship Classification.
+
 ### Mode A — Backlog Analysis
 
 **Trigger:** "review the backlog", "what should we release next", "prioritize improvements",
@@ -101,6 +112,8 @@ Proceed to the corresponding mode section below (Mode A Backlog Analysis, Mode B
    - Circular dependencies (HALT bundle recommendation; emit cycle path `#A → #B → #C → #A` with ERROR severity per failure-mode entry)
    - Items that unblock the most downstream work (high leverage)
    - Schedule-determining chain (longest path from chain-head to chain-tail; emitted as `### Critical Path` H3 with mode annotation header per § Step 5c output schema)
+
+   After the dep-graph is built, classify each in-bundle edge into the four §Category 4 artifact-relationship types (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES) per `references/dependency-analysis.md` § Artifact-Relationship Classification, and emit the `### Artifact Relationship Graph` (with the empty-state positive-signal body when the classifier yields zero edges). This artifact-relationship axis is independent of the FS/SS scheduling type used by the Critical Path.
 4. Suggest release bundles based on:
    - Dependency ordering (items that unblock others go first)
    - Category clustering (protocol changes together, skill changes together)
@@ -168,6 +181,9 @@ Emit the G3-07 section under each bundle entry (when bundle has ≥1 dependency 
 
    The activation predicate `degraded_mode_active(bundle)` is field-presence-checking over `edge.edge_type`; transition to typed mode fires automatically when every edge carries typed metadata (no operator-cutover ceremony). **Cutover:** Applies to all releases entering Stage 3 Bundle / Stage 4 Planning going forward.
 
+   **Step 5d — Artifact-relationship typing (CPM-independent).**
+   Classify each in-bundle edge into the four §Category 4 artifact-relationship types (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES) per `references/dependency-analysis.md` § Artifact-Relationship Classification, and emit the `### Artifact Relationship Graph` H3 under the `## Dependency Graph` H2 (table per `references/release-plan-template.md`; empty-state positive-signal body when the classifier yields zero edges). Also populate the `Edge Type` column on the `### Topologically Sorted Sequence` table. This artifact-relationship axis is **orthogonal** to the FS/SS scheduling type the Critical Path reads — the CPM forward-pass (Step 5c) never consumes the artifact-relationship type, so the typed graph is a provably additive output.
+
 6. Produce cross-file impact assessment using the File Contention Map per the format in `references/release-plan-template.md`. Always emit the `### File Contention Map` section when the bundle has ≥2 issues (emit table-header + `No file contention detected` body when all files map to NONE — explicit positive signal that contention was checked).
 7. Write the plan to `release/releases/plans/[version]_RELEASE_PLAN.md`.
 8. Present summary to user for review.
@@ -181,7 +197,7 @@ The Mode B output file contains 11 H2 sections in fixed order. Each H2 with its 
 | # | H2 Section | Content owner | Required H3s | Conditional emit |
 |---|---|---|---|---|
 | 1 | `## Summary` | Mode B Step 8 | (none) | Always |
-| 2 | `## Dependency Graph` | Mode A Step 3 / CPM step | `### Topologically Sorted Sequence`, `### Mermaid Visualization` (when >5 nodes), `### Tie-Breaker Trace` (when ties existed), `### Critical Path` (always when bundle ≥1 issue — emits mode annotation header `[DEGRADED-MODE: ...]` or `[TYPED-MODE: ...]` + chain ordered list + chain length + algorithm reference per `references/dependency-analysis.md § Step 5c`; emits "(none — bundle has no dependency edges)" body when bundle has zero edges) | Always |
+| 2 | `## Dependency Graph` | Mode A Step 3 / CPM step / Step 5d | `### Topologically Sorted Sequence` (carries the `Edge Type` column — the §Category 4 artifact-relationship type per in-release edge), `### Artifact Relationship Graph` (always when bundle ≥1 issue — typed edges per `references/dependency-analysis.md § Artifact-Relationship Classification`; emits the `No typed artifact relationships — ...` empty-state body when the classifier yields zero edges), `### Mermaid Visualization` (when >5 nodes; edges labeled with the artifact-relationship type), `### Tie-Breaker Trace` (when ties existed), `### Critical Path` (always when bundle ≥1 issue — emits mode annotation header `[DEGRADED-MODE: ...]` or `[TYPED-MODE: ...]` + chain ordered list + chain length + algorithm reference per `references/dependency-analysis.md § Step 5c`; emits "(none — bundle has no dependency edges)" body when bundle has zero edges) | Always |
 | 3 | `## File Contention Map` | Mode B Step 6 | (none — table inline) | Always when bundle ≥2 issues; explicit "No file contention detected" body when all-NONE |
 | 4 | `## Cross-Milestone Dependency Validation` | Mode B Step 5b / G3-07 spec / always-emit harmonization | `### G3-07 Status` (always when section emitted; body `PASS — N dependency edge(s) checked, 0 cross-milestone violations` when zero violations — positive signal), `### Violations` (when FAIL), `### Resolved Edges (B is Done)` (when [RESOLVED] annotations exist), `### Registered Exceptions` (when ## Dependency Exceptions block present) | Always emitted when bundle has ≥1 dependency edge (any type); suppressed only when bundle has zero dependency edges (no check possible) — analogous to row 3's `No file contention detected` always-emit pattern / always-emit harmonization |
 | 5 | `## Bundle Refresh State` | Mode B Step 5a / refresh-state ADR | (none — body inline) | Conditional — present only when Gate G-BR fired non-no-op since last Mode A/B; absent otherwise |
@@ -530,6 +546,45 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
   recommends the serialize order. Junior emits a clean-looking map with only hard /
   soft / file-contention edges, the two mover-vs-referrer releases are run in parallel,
   and one voids the other's GO mid-pipeline as a rename/modify conflict.
+
+### Artifact-relationship type conflated with FS/SS scheduling type — PROC
+
+- **Signature (observable signal):** The `### Artifact Relationship Graph` or the
+  `Edge Type` column labels an edge with an FS/SS/FF/SF scheduling value
+  (Finish-Start, Start-Start…) instead of a §Category 4 artifact-relationship type
+  (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES) — OR the §Category 4 type is fed
+  into the critical-path computation (the chain length or chain identity changes
+  when an edge's artifact-relationship type changes), proving the CPM forward-pass
+  read the artifact-relationship field it must never read.
+- **Conditional:** do NOT read the §Category 4 artifact-relationship type field in
+  the critical-path computation, and do NOT emit a scheduling-precedence value in the
+  artifact-relationship render, because the two are orthogonal axes — the
+  artifact-relationship type answers "what kind of relationship connects these
+  artifacts," the scheduling type answers "what precedence does this edge impose on
+  the schedule" — and conflating them either corrupts the schedule chain (if §Cat-4
+  types reach the DP-DAG relaxation) or mislabels the rendered graph (if FS/SS values
+  reach the artifact-relationship column), destroying the provably-additive guarantee
+  that lets the typed graph coexist with the existing CPM math untouched.
+- **Root cause:** Both axes are "edge types" stored on the same edge record, and the
+  skill already carries a typed `edge_type` enum for scheduling — so a single-axis
+  mental model collapses the two into one field, and the CPM relaxation (which legitimately
+  reads `edge_type`) is one field-name slip away from also reading `artifact_rel`. The
+  two enums are lexically distinct but conceptually adjacent, which is exactly when a
+  cross-wire is easy and invisible.
+- **Mitigation:** Keep the two edge attributes as independent fields — `edge_type ∈
+  {FS, SS, FF, SF}` consumed ONLY by the CPM forward-pass (§ Step 5b/5c), and
+  `artifact_rel ∈ {GENERATES, DEPENDS_ON, BLOCKS, SUPERSEDES}` consumed ONLY by the
+  `### Artifact Relationship Graph` render (§ Step 5d) and the `Edge Type` column. Per
+  `references/dependency-analysis.md` § Artifact-Relationship Classification, the
+  derivation of `artifact_rel` reads native-dep kind / body provenance / File-Change-Matrix
+  change-type — never the scheduling enum; the CPM relaxation reads `edge_type` /
+  `lead_lag` — never `artifact_rel`. On any output where a critical-path number moves
+  with an artifact-relationship change, halt and trace which field the CPM path read.
+- **Principal response vs. junior response:** Principal keeps the two fields strictly
+  separate, verifies the critical-path output is byte-identical when only artifact-relationship
+  types change, and renders each axis in its own surface. Junior overloads the existing
+  `edge_type` enum with GENERATES/BLOCKS, the CPM forward-pass relaxes over a union enum
+  it cannot weight, and the schedule chain length silently becomes meaningless.
 
 ## Reference Files
 

@@ -241,12 +241,49 @@ tag for hypercare, or when go-live is within 2 weeks and no hypercare plan exist
    - **Known risk areas** (highest-severity impacts from the assessment)
    - **Monitoring** (what metrics/indicators signal issues — e.g., order entry errors,
      date discrepancies, batch job failures)
-3. Define exit criteria: what must be true for hypercare to close
+2.5. **Classify each known/emerging hypercare risk** and assign it a hypercare tier:
+   compute `Hypercare Risk Score = Severity × Likelihood × Blast-Radius` (Severity and
+   Likelihood by reference to `references/hypercare-plan.md` §Hypercare Risk Classification,
+   which sources them from `delivery-engine/references/raid-templates.md §5.1/§5.2`;
+   Blast-Radius 1–3 defined inline there), read the tier off the banding table
+   (**HC-T1 Critical / HC-T2 Elevated / HC-T3 Routine**), and attach the tier's support
+   model + escalation path + committed SLA. This produces a **tiered hypercare risk
+   register** (Risk | Sev | Like | BR | Score | HC-Tier | Support Model | Escalation Path
+   (named owners) | Committed SLA | Reversibility·Confidence) — named owners required
+   (`[ASSUMPTION – CONFIRM]` where an owner is unknown; never `[INSERT]`). The tier
+   axis *references*, and does not replace, the existing 3-Tier Support model and the
+   S1–S4 severity→SLA matrix — it is the orthogonal management-posture axis.
+3. Define exit criteria: what must be true for hypercare to close. **Open SLA breaches
+   are a hard exit gate** — hypercare cannot be declared complete while any tracked SLA
+   event (step 4.5) is OPEN past its tier's committed resolution, and that gate is
+   non-waivable by sponsor approval (the borderline-criteria CONDITIONAL EXIT path does
+   not apply to an open breach). See `references/hypercare-plan.md` §Exit Criteria +
+   Exit Decision Model.
 4. Define adoption KPIs: measurable indicators that the change has landed
+4.5. **Track each hypercare incident against its tier's committed SLA, then produce the
+   compliance report.** Record every incident as an `R-CM-###` (anticipated/at-risk) or
+   `I-CM-###` (materialised) RAID/issue entry — reusing the skill's existing prefix, **no
+   separate tracker** — carrying its **HC-tier** (read off the step-2.5 tiered register, one
+   of `{HC-T1, HC-T2, HC-T3}`), **open time**, **resolve time**, and a **met/breached
+   verdict** computed against that tier's committed (response, resolution) SLA. The committed
+   SLA values are *read by reference* from `references/hypercare-plan.md` §Tier → Support
+   Model / Escalation / Committed SLA — never restate them here. Then produce the **hypercare
+   compliance report**: per tier, the count of SLA events, the **met-vs-breached** tally
+   (plus open / live-breach), and **breach detail** (which incident, breached by how much).
+   A verdict asserted without an open/resolve timestamp pair to derive it from is not
+   shippable. The compliance report and its SLA verdicts are decision-class — carry a
+   reversibility tier + confidence on each (an internal read is CHEAP; a stakeholder-shared
+   compliance report is EXPENSIVE/IRREVERSIBLE). Read `references/hypercare-plan.md` §SLA
+   Tracking and Compliance Reporting for the SLA-event record fields + the per-tier
+   compliance-report format.
 5. Produce the hypercare schedule: daily standups → weekly reviews → close-out
 
-**Output**: Hypercare plan + exit criteria + adoption KPIs + support matrix.
-Read `references/hypercare-plan.md` for the full template.
+**Output**: Hypercare plan + exit criteria (incl. the open-SLA-breach gate) + adoption KPIs
++ support matrix + **tiered hypercare risk register** + **hypercare SLA-compliance report**.
+Read `references/hypercare-plan.md` for the full template (including §Hypercare Risk
+Classification — the tier set, scoring rule, and tier→support-model/SLA map — and §SLA
+Tracking and Compliance Reporting — the SLA-event record fields and the per-tier
+compliance-report format).
 
 ### Mode E: Change Matrix Ingestion
 
@@ -314,7 +351,17 @@ When a specific communication needs drafting, tag it `[COMMS]` for the comms-wri
 
 This mode runs when the Mode A methodology selection (Step 2.5) includes ADKAR, or on an explicit adoption-instrumentation request (barrier assessment, champion-ratio check, sponsor-engagement check, or valley-prep).
 
-**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + the consolidated **adoption-tracking table** (audience × champion ratio × champion status × sponsor ABC status × sponsor trend × valley prep window × valley prep status × reversibility·confidence) + champion-gap findings + valley prep plan + sponsor-engagement status + `R-CM-###` RAID entries + remediation. Each row/finding carries a reversibility tier + confidence. No fabricated champion/sponsor names (`[ASSUMPTION – CONFIRM]` / `[CONTEXT]` where sourced from memory). The ADKAR scoring scale + barrier-point rule + ADKAR-gated training-timing rule + change-champion denominators (§7) + sponsor-engagement ABCs (§5) + valley-of-despair model (§8) are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth), and the valley parameter values + adoption-KPI set in `references/hypercare-plan.md` — consumed by reference, not restated. Read `references/adkar-assessment.md` for the ADKAR assessment procedure + training-timing finding format, and `references/adoption-tracking.md` for the champion-ratio comparison logic, valley-window derivation, sponsor-signal set, and the adoption-tracking-table schema.
+**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + the consolidated **adoption-tracking table** (audience × champion ratio × champion status × sponsor ABC status × sponsor trend × valley prep window × valley prep status × reversibility·confidence) + champion-gap findings + valley prep plan + sponsor-engagement status + the **change-fatigue table** + the **outcome scorecard** (per the Adoption-Tracking Capabilities below) + `R-CM-###` RAID entries + remediation. Each row/finding carries a reversibility tier + confidence. No fabricated champion/sponsor names (`[ASSUMPTION – CONFIRM]` / `[CONTEXT]` where sourced from memory). The ADKAR scoring scale + barrier-point rule + ADKAR-gated training-timing rule + change-champion denominators (§7) + sponsor-engagement ABCs (§5) + valley-of-despair model (§8) are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth), and the valley parameter values + adoption-KPI set in `references/hypercare-plan.md` — consumed by reference, not restated. Read `references/adkar-assessment.md` for the ADKAR assessment procedure + training-timing finding format, and `references/adoption-tracking.md` for the champion-ratio comparison logic, valley-window derivation, sponsor-signal set, and the adoption-tracking-table schema.
+
+### Adoption-Tracking Capabilities — Change-Fatigue Monitoring & Outcome Measurement
+
+These are two cross-cutting capabilities of Mode G, not separate modes — they have no independent trigger; they enrich go-live and hypercare adoption work by answering "is this audience overloaded?" and "did the change actually land?" Both attach their output to the consolidated **adoption-tracking table** (the shared adoption-instrumentation surface in `references/adoption-tracking.md`), keeping the audience-row spine and the evidence-label + reversibility conventions identical across the adoption-tracking family (ADKAR Assessment Table → adoption-tracking table → fatigue table + outcome scorecard).
+
+**Change-Fatigue Monitoring.** For each impacted audience of this change, read the cumulative change load — concurrent in-flight changes **plus** changes still inside their hypercare reinforcement window (per `references/hypercare-plan.md`) — and classify it against the saturation bands defined in `references/impact-assessment.md` §Cumulative Change Load Assessment. **Reference the bands; do not restate the numbers** (the saturation math and the band cut-points are owned by impact-assessment.md — restating them forks a single source). Flag any audience landing in the **High** or **Critical** band as **fatigued** and attach the band-mapped remediation (Moderate → sequence; High → stagger/defer; Critical → pause new Knowledge/Ability load, per the `references/adkar-framework.md` §9 threshold rule). When the cumulative-load table has not been produced, produce the load row(s) for this change's audiences using the impact-assessment method (push-to-resolve) and label any unsourced concurrent-change severity `[ASSUMPTION – CONFIRM]`. Output is the **change-fatigue table** (`Audience × concurrent/recent change load (saturation band, by reference) × fatigue status × remediation × reversibility·confidence`).
+
+**Outcome Measurement.** Tie each change to its **adoption KPIs as already defined in Mode D Hypercare** (`references/hypercare-plan.md` Exit Criteria). **Reuse these definitions; introduce no new KPI and do not edit the Mode D KPI table** — outcome measurement consumes the existing KPI dictionary as its measurement surface. Report **actual-vs-target measured at each KPI's defined horizon**, and present the result with an explicit **Deployed vs Adopted** split: *Deployed* = go-live occurred (binary; evidence = cutover record); *Adopted* = the KPI verdicts at horizon. Verdict scale = **MET / ON-TRACK / NOT-MET / NO-DATA**; before a KPI's horizon its verdict is **NO-DATA** ("Deployed — adoption not yet proven"), never "successful" — distinguishing "deployed" from "adopted" is the point of the capability. Output is the **outcome scorecard** (`KPI × target (by reference to hypercare-plan) × actual × horizon × verdict × reversibility·confidence`), preceded by a one-line **Deployed:** Yes/No (go-live date) header.
+
+Both outputs carry `[SOURCE]` on measured values, `[ASSUMPTION – CONFIRM]` where the underlying data is unavailable, and a reversibility tier + confidence per the Reversibility Discipline (pmo-qa-auditor G4) — a NO-DATA/internal read is CHEAP; an externally-shared scorecard asserting ADOPTED is EXPENSIVE/IRREVERSIBLE. Read `references/fatigue-and-outcomes.md` for the per-change counting rule, the band → remediation map, and the deployed-vs-adopted scorecard format + verdict rule; it owns the capability layer and references (never restates) the impact-assessment saturation bands and the hypercare adoption KPIs.
 
 #### RAID ID Prefix
 
@@ -428,10 +475,10 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 - Mode A (Change Impact Assessment) — impact-severity ratings and CM notes for High-severity impacts.
 - Mode B (Training Plan) — training-needs matrix entries, approach recommendations, target dates, prerequisite calls.
 - Mode C (Readiness Checklist) — per-item READY / NOT READY / AT RISK classifications and overall readiness verdict (READY / CONDITIONAL / NOT READY).
-- Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices.
+- Mode D (Hypercare Plan) — support model, escalation path, exit criteria (including the open-SLA-breach exit gate), adoption KPI choices, **hypercare tier assignments** (HC-T1/HC-T2/HC-T3 per risk) and the **per-tier committed SLAs** (response/resolution) those assignments commit to, and the **SLA met/breached verdicts** plus the **hypercare compliance report** computed against those committed SLAs.
 - Mode E (Change Matrix Ingestion) — completeness findings and remediation recommendations.
 - Mode F (CM Communications Schedule) — T-minus milestone scheduling and comms-gap findings.
-- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, and sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk.
+- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk, change-fatigue status + band-mapped remediation per audience, and outcome verdicts (MET/ON-TRACK/NOT-MET/NO-DATA) including the deployed-vs-adopted determination.
 - Section 4 (Findings & Gaps) — each finding with specific remediation.
 - Section 7 (Next Actions) — actions with owners and deadlines.
 - Section 8 (RAID Updates) — new or updated RAID entries originated by this analysis.
@@ -658,6 +705,88 @@ structural conformance and content quality.
   A≥4 ∧ D≥4" with the finding routed to RAID. Junior ships the schedule with the training
   in place and discovers at go-live that the trained group never adopted.
 
+### Declaring a change "adopted" on deployment evidence alone — OUT
+
+- **Signature (observable signal):** The outcome scorecard reports a change as
+  successful/adopted while every adoption KPI is still NO-DATA (pre-horizon) or only the
+  *Deployed* row is populated; or the change-fatigue table is omitted for a go-live whose
+  impacted audiences also carry other in-flight changes.
+- **Conditional:** do NOT mark a change "adopted" when its adoption KPIs have not been
+  measured at their defined horizon, because deployment is not adoption — calling a
+  deployed-but-unmeasured change successful manufactures the exact "declaring victory at
+  go-live" failure the readiness and hypercare references warn against, and the gap is
+  invisible until post-go-live reversion surfaces in the valley.
+- **Root cause:** Go-live is the visible, celebratable event; the adoption horizon
+  (sustained 2-week DAU, T+8 reinforcement) lands weeks later when attention has moved on.
+  Under closure pressure the agent reports the deployment it can see and treats the
+  unmeasured KPIs as a pass.
+- **Mitigation:** Split the scorecard into Deployed (go-live occurred) vs Adopted (KPI
+  verdicts at horizon). Before any KPI's horizon, its verdict is NO-DATA = "deployed, not
+  yet measurable", never MET. Pair the deployed-vs-adopted call with a reversibility tier
+  (an externally-shared ADOPTED claim is EXPENSIVE/IRREVERSIBLE). Produce the change-fatigue
+  table whenever the go-live's audiences carry concurrent/recent change load.
+- **Principal response vs. junior response:** Principal reports "Deployed 2026-xx-xx;
+  adoption NO-DATA until T+2-week DAU sustain — re-measure [date]" and keeps hypercare open.
+  Junior reports "go-live successful, adoption complete" on go-live day, support is pulled,
+  and reversion surfaces in the valley with no scorecard to catch it.
+
+### Hypercare tier assigned without computing the risk score — PROC
+
+- **Signature (observable signal):** A Mode D tiered hypercare risk register row shows an
+  HC-tier (HC-T1/HC-T2/HC-T3) with no `Severity × Likelihood × Blast-Radius` value in the
+  score column, or a tier label whose band contradicts the score that is shown.
+- **Conditional:** do NOT assign a hypercare tier when the `Severity × Likelihood ×
+  Blast-Radius` score has not been computed, because an unscored tier assignment is an
+  unfalsifiable guess — the committed SLA the tier carries (response/resolution) has no
+  derivation to audit against, so downstream SLA-compliance tracking has no baseline to test
+  met-vs-breached, and the mis-sizing is invisible until a critical risk sits in the routine
+  queue during the valley.
+- **Root cause:** Assigning a tier "by feel" is faster than scoring three factors and
+  reading the banding table; under output pressure the agent labels the risk Critical or
+  Routine on intuition and skips the arithmetic.
+- **Mitigation:** For every register row, compute and show `Sev × Like × BR = score`, then
+  read the tier off the §Hypercare Risk Classification banding table in
+  `references/hypercare-plan.md`; a row whose tier contradicts its score band is a finding to
+  fix, not a row to ship. Severity and Likelihood come by reference from
+  `delivery-engine/references/raid-templates.md §5.1/§5.2`; only Blast-Radius (1–3) is scored
+  locally.
+- **Principal response vs. junior response:** Principal renders `Sev4 × Like3 × BR3 = 36 →
+  HC-T1` so the tier is reproducible and the committed SLA is auditable. Junior writes "HC-T1
+  (Critical)" with no score, and the SLA-compliance report later has no baseline to test the
+  tier's response/resolution targets against.
+
+### Hypercare SLA verdict asserted without the timestamp pair — PROC
+
+- **Signature (observable signal):** A Mode D SLA-event record or compliance-report row carries
+  a met/breached verdict (or a per-tier met-vs-breached tally) with no open-time + resolve-time
+  pair to derive it from — a verdict column populated while the open/resolve columns are blank —
+  or a hypercare compliance report is presented as evidence while an `R-CM-###`/`I-CM-###` SLA
+  event is still OPEN past its committed resolution and the report does not flag it as a live
+  breach.
+- **Conditional:** do NOT assert an SLA met/breached verdict when the incident's open time and
+  resolve time are not both recorded (resolve time may be legitimately blank only when the event
+  is still OPEN — which is itself a verdict state, not a MET), because the verdict is a
+  *computation* (`first-response − open` vs committed response; `resolve − open` vs committed
+  resolution) — without the timestamps it is an unfalsifiable assertion, the compliance report
+  built on it cannot be audited against the committed SLA, and an unflagged still-open breach
+  lets hypercare exit through the open-breach gate it was supposed to block.
+- **Root cause:** Reporting "met" is the desirable, closure-friendly verdict; capturing the
+  open/resolve timestamps and computing the delta against the tier's committed SLA is the harder
+  step. Under closure pressure the agent fills the verdict from impression ("it got handled") and
+  leaves the timestamp columns empty, or reports aggregate compliance without reconciling the
+  still-open events.
+- **Mitigation:** For every SLA-event record, capture **open time** and (when resolved)
+  **resolve time** before writing any verdict; compute the verdict against the committed SLA read
+  from `references/hypercare-plan.md` §Tier → Support Model / Escalation / Committed SLA; render a
+  still-open event as **OPEN** (and as a **live breach** once past its committed resolution),
+  never as MET; in the compliance report, surface open / live-breach events in their own column
+  and breach-detail rows so the open-breach exit gate can see them.
+- **Principal response vs. junior response:** Principal records `I-CM-021 open 22:15 / resolved
+  next-day 14:00 → resolution BREACHED +2.5 business hours` and lists the still-open `I-CM-030`
+  as a live breach blocking exit. Junior writes "SLA: met" with no timestamps, the compliance
+  report shows clean tiers, and a critical incident that never actually resolved rides out the
+  exit gate undetected.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -673,14 +802,15 @@ Read these on first use, then as needed for specific modes:
 | `references/impact-assessment.md` | Mode A, Mode E | Impact analysis schema, severity criteria, field definitions |
 | `references/training-plan.md` | Mode B | Training needs matrix, prerequisite tracking, approach types |
 | `references/readiness-checklist.md` | Mode C | Full readiness checklist, milestone linkage, verdict criteria |
-| `references/hypercare-plan.md` | Mode D, G | Hypercare template, exit criteria, adoption KPIs; valley-of-despair parameters + OCM Reinforcement schedule + sponsor-engagement statistic (read by Mode G) |
+| `references/hypercare-plan.md` | Mode D, G | Hypercare template, exit criteria (incl. the open-SLA-breach exit gate), adoption KPIs; the hypercare risk-classification tier set + scoring + tier→committed-SLA map and the SLA-tracking record fields + per-tier compliance-report format (Mode D); valley-of-despair parameters + OCM Reinforcement schedule + sponsor-engagement statistic (read by Mode G) |
 | `references/change-matrix-schema.md` | Mode E | Expected schemas for change matrix sheets |
 | `references/adkar-assessment.md` | Mode G (adoption tracking), Mode B (timing validation) | ADKAR barrier-assessment capability — the runnable assessment procedure, the ADKAR Assessment Table output contract, and the training-timing validation finding; consumes the scale/barrier-rule/timing-gate from `references/adkar-framework.md` by reference |
 | `references/adoption-tracking.md` | Mode G (adoption tracking) | Adoption-instrumentation layer — champion actual-vs-target comparison + under-target flag (reads `references/adkar-framework.md §7`), valley prep-window derivation + binding (reads `references/hypercare-plan.md` valley params), sponsor ABC touchpoint tracking + decline/absence flag (reads `references/adkar-framework.md §5`), and the adoption-tracking-table output schema |
+| `references/fatigue-and-outcomes.md` | Mode G (Adoption-Tracking Capabilities — fatigue + outcome) | Change-fatigue counting rule (references the `references/impact-assessment.md` saturation bands — does not restate them), the band → remediation map, and the deployed-vs-adopted outcome-scorecard format + verdict rule (consumes the `references/hypercare-plan.md` adoption KPIs by reference) |
 | `references/adkar-framework.md` | Mode A, C, D, G (methodology) | ADKAR change-adoption model — the 1-5 scoring scale, barrier-point rule, sponsor-engagement ABCs, ADKAR-gated training timing, change-champion sizing |
 | `references/kotter-8-step.md` | Mode A, C, D (methodology) | Kotter 8-step process — the org-process transformation sequence, sequence-gate rules, and the three cardinal Kotter errors |
 | `references/lewin-3-stage.md` | Mode A, C, D (methodology) | Lewin 3-stage model — the Unfreeze → Change → Refreeze meta-frame, Force-Field analysis, and the stage-gate rules |
 | `references/bridges-transition.md` | Mode A, C, D (methodology) | Bridges transition model — the 3-zone psychological transition (Ending → Neutral Zone → New Beginning) and the ADKAR-seam composition |
 | `references/mckinsey-7s.md` | Mode A, C, D (methodology) | McKinsey 7-S framework — the 7-element alignment diagnostic, the 21-pair consistency assessment, and the Shared-Values central-weighting rule |
 | `references/methodology-selection.md` | Mode A, C, D (methodology selection) | Cross-methodology selection model — axes, the layered model (Lewin frame · Kotter/ADKAR/Bridges operational layers · 7-S cross-section), the delivery-approach → methodology-combination table, and the runnable selection procedure |
-| `references/output-format.md` | First response | Full output format spec with field definitions |
+| The in-skill [`## Output format`](#output-format) section | First response | Full output-format spec with field definitions — the 8-section response structure (Mode & Inputs, Summary, Assessment/Plan/Checklist, Findings & Gaps, Paste-Ready Artifacts, Change Summary, Next Actions, RAID Updates) |
