@@ -19,6 +19,33 @@ All items must be verified PASS before execution begins. Any FAIL blocks executi
 | 7 | **Deployment targets identified** | Operational Deployment Manifest in release plan | All Layer 2 targets listed with mechanism | Add manifest before proceeding |
 | 8 | **Communication plan** | Stage 12 communication requirements reviewed | Stakeholders notified of deployment window (if applicable) | Draft and send notification |
 
+## Tiered Quality-Gate Ladder
+
+After the 8 Pre-Execution checks above pass, run the **three-tier quality-gate ladder**
+defined canonically in [`SKILL.md` § Quality-Gate Ladder](../SKILL.md) **before Step 1
+(Merge PR to Main)**. The ladder fires **in order and short-circuits** — the first
+failure HALTs the run, so a Tier-1 failure prevents Tier 2 and Tier 3 from executing and
+**no merge happens**. This is the live (git-native) entry point; Mode A Step 5 is the
+Cowork-lineage entry point — both consume the same SKILL.md ladder definition.
+
+**Scope:** the release's changed files — `git diff --name-only main...<release-branch>`.
+Compute the changed-file set once and pass it to both T1 and T2.
+
+| Tier | Run | PASS | FAIL (halts; no merge) |
+|---|---|---|---|
+| **T1 — Schema validation** (hard fail) | `python3 core/deploy/tools/lint_release_corpus.py --check schema` (+ assert the frontmatter field set `name`/`description`/`version`/`license` on each changed `SKILL.md`) | exit 0 | non-zero exit, OR any changed skill missing a required frontmatter field → emit T1 finding, HALT |
+| **T2 — Cross-reference integrity** (hard fail) | `python3 core/deploy/tools/check-doc-links.py --target-paths '<changed-files>' --require-targets` (broken-refs mode) | exit 0 | **exit 1** (broken cross-ref/anchor/deleted-target) OR **exit 3** (target surface unverifiable — `--require-targets` forces zero-yield to fail, never a false clean) → emit T2 finding, HALT |
+| **T3 — Stakeholder approval** (human gate) | `AskUserQuestion` GO/NO-GO presenting the T1+T2 PASS evidence + the release diff | operator GO | operator NO-GO / Cancel → HALT (no merge). The agent **cannot** self-satisfy this gate. |
+
+On any FAIL, emit the 5-field finding record from `SKILL.md` § Quality-Gate Ladder
+(`what failed` / `where` / `evidence` / `what to fix` / `short-circuit`) naming which
+tier failed and which downstream tiers were skipped; do not proceed to Step 1.
+
+> **Pre-apply vs. at-deploy.** These gates run **pre-apply** (before merge). `deploy.sh
+> --check` runs the same instruments (`lint_release_corpus.py`, `check-doc-links.py`)
+> **at deploy time** — the ladder is *earlier* in the pipeline, not duplicative by
+> accident.
+
 ## Execution Steps
 
 ### Step 1: Merge PR to Main

@@ -2,7 +2,7 @@
 name: release-executor
 description: >
   Executes approved release plans. Modes: Execute release · Verify release · Rollback release · Close release. Creates snapshots, applies file changes, closes IMP items, updates release log, runs verification, runs automated Stage 13 close-out. Requires an approved plan with Dry-Run Record. Triggers: "execute the release", "deploy v[X.Y]", "ship v[X.Y]", "verify the release", "rollback v[X.Y]", "go live with v[X.Y]", "close the release", "finalize v[X.Y]", "stage 13 close", "run the close-out", "automated close-out".
-version: v1.14
+version: v2.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -43,6 +43,66 @@ snapshot paths, retention rules, and rollback procedures. Do not hardcode these.
 - The release plan file exists and has a Dry-Run Record
 - RELEASE_LOG.md's latest version is the expected predecessor
 - No other release is currently in progress (check: `gh issue list --label "improvement" --label "in-progress" --state open` returns empty)
+
+## Quality-Gate Ladder
+
+This is the single source of truth for the executor's pre-apply quality gates. A
+release passes through a **three-tier ladder — T1 schema validation → T2
+cross-reference integrity → T3 stakeholder approval — that fires in order and
+short-circuits on the first failure.** The ladder runs at TWO consumption points (one
+source, two entry points): the **Pre-Execution Checklist** in
+`references/execution-checklist.md` (the pre-merge gate for the live **git-native**
+path — Stage 12 applies changes via `gh pr merge`, so the PR-merge surface is where
+"before applying changes" bites on the mainline), AND **Mode A Step 5** (the pre-write
+gate for the **Cowork** snapshot-and-apply lineage). Gating only one entry point would
+leave the other lineage ungated — both consume this same ladder. The ladder is a
+**shift-left** of the Mode B verification dimensions (`references/verification-checklist.md`
+Dimension 2 Content Correctness ≈ T1; Dimension 3 Cross-Reference Validity ≈ T2): the
+same checks the platform already owns, run **before apply** in strict order instead of
+only **after deploy**. Mode B remains the post-deploy backstop (defense-in-depth — not
+removed). Scope of T1/T2 = the release's **changed files** (`git diff main...<release-branch>`),
+not the whole corpus.
+
+| Tier | Gate | PASS condition | FAIL condition | Instrument | rollout-cycle |
+|---|---|---|---|---|---|
+| **T1** | Schema validation (**hard fail**) | Every changed artifact's structure is valid — required frontmatter fields present and well-formed, required H2/H3 sections present per the artifact's standard — and `lint_release_corpus.py --check schema` exits 0 over the changed corpus | Any required frontmatter field missing/malformed, any required section absent, or `--check schema` exits non-zero | `python3 core/deploy/tools/lint_release_corpus.py --check schema` (primary) + SKILL-frontmatter field-set assertion (`name`, `description`, `version`, `license`) for changed skills | `enforce` |
+| **T2** | Cross-reference integrity (**hard fail**) | All intra-repo references in changed files resolve — no broken cross-refs, no broken anchors, no dangling skill/governance references, no stale version refs — and `check-doc-links.py` broken-refs mode exits 0 over the changed files | Any broken cross-ref / broken anchor / deleted-target reference (**exit 1**), OR the target surface is unverifiable (**exit 3** — treated as FAIL, not clean: a gate that cannot prove integrity is not a passing gate) | `python3 core/deploy/tools/check-doc-links.py --target-paths '<changed-files>' --require-targets` (broken-refs mode) | `enforce` |
+| **T3** | Stakeholder approval (**human gate**) | Operator returns explicit **GO** via `AskUserQuestion` after reviewing the T1+T2 PASS evidence and the release diff | Operator returns **NO-GO / Cancel**, OR the gate is not reached (T1 or T2 short-circuited it) | `AskUserQuestion` — **agent cannot self-satisfy** (Autonomy-Tier 3 human gate; sits downstream of Stage 9 Plan Review + the PR-approval Pre-Execution check, not a replacement for them) | `enforce` |
+
+**`rollout-cycle` column (the #245 seam).** `rollout-cycle ∈ {shadow, warn, enforce}`;
+`enforce` = full hard-fail / short-circuit teeth (the out-of-box behavior — every row
+ships `enforce`, preserving #244's hard-fail intent); `shadow` = run the instrument and
+log the finding but do NOT halt (record-only); `warn` = run and surface the finding to
+the operator as a warning but do NOT halt. `shadow`/`warn` downgrade a gate's teeth
+**without changing the ladder order**. #245 defines the shadow→warn→enforce transition
+semantics and the outcome-log persistence that the non-`enforce` values consume — both
+cards edit this same section; the column is the attachment point.
+
+**Short-circuit invariant (testable).** Run **T1**; on FAIL emit the finding and **HALT**
+— do NOT run T2 or T3. Else run **T2**; on FAIL emit the finding and **HALT** — do NOT
+run T3. Else present the **T3** operator gate. The canonical acceptance test: *a release
+whose changed artifact has a schema violation hard-fails at T1, and T2 (cross-ref) and
+T3 (approval) MUST NOT execute.* (Sequential early-return — never run-all-then-aggregate;
+mirrors the `verification-checklist.md` "Any Dimension 1–3 FAIL = NOT verified" precedent.)
+
+**Finding emission (5-field record).** Each gate FAIL emits a specific, actionable
+finding — never a bare "failed":
+
+```
+GATE FAIL — Tier <N> (<gate-name>) [<rollout-cycle>]
+  what failed:   <specific defect — e.g., "frontmatter missing required field `license` in release/skills/foo/SKILL.md">
+  where:         <file:line or artifact + instrument invocation>
+  evidence:      <instrument output excerpt / exit code>
+  what to fix:   <concrete remediation — e.g., "add `license: BUSL-1.1` to frontmatter, re-run --check schema">
+  short-circuit: <which downstream tiers were skipped, e.g., "T2, T3 not run">
+```
+
+**Reversibility.** A gate FAIL/HALT is a decision-class output that mutates no state (the
+ladder runs *before* any merge or file write), so it carries reversibility tier **CHEAP**
+paired with a per-gate confidence level per the `## Reversibility Discipline` section
+below. The instrument invocations and exact exit-code handling for the live path live in
+`references/execution-checklist.md` § Tiered Quality-Gate Ladder; the tier definitions,
+ordering, short-circuit contract, and finding schema are canonical here.
 
 ## Mode Selection
 
@@ -117,6 +177,12 @@ Proceed to the corresponding mode section below (Mode A Execute Release, Mode B 
    - Report what was pruned
 
 5. **Execute (per IMP in dependency order):**
+   **Before any file modification, run the `## Quality-Gate Ladder` (T1 → T2 → T3,
+   short-circuit) over the release's changed files.** A hard-fail (T1 or T2 under
+   `enforce`) emits its 5-field finding and HALTs *before* Step 5.b applies the first
+   change; T3 is the operator GO gate. The same ladder is consumed at the
+   `references/execution-checklist.md` Pre-Execution surface for git-native (PR-merge)
+   releases — this Step 5 entry point gates the Cowork snapshot-and-apply lineage.
    For each IMP in the plan's execution sequence:
    a. Read the implementation details from the plan
    b. Apply the file modifications (edits, new files, structural changes)
