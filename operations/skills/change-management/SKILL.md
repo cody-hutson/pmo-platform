@@ -109,7 +109,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "hypercare", "post-go-live support", "hypercare plan", "post-cutover" | Mode D — Hypercare Plan |
 | "change matrix", "matrix ingestion", "ingest this change matrix" | Mode E — Change Matrix Ingestion |
 | "CM communications schedule", "communications plan", "change comms schedule" | Mode F — CM Communications Schedule |
-| "adoption plan", "adoption tracking", "ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right" | Mode G — Adoption Tracking |
+| "adoption plan", "adoption tracking", "ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right", "champion ratio", "are we resourced for adoption", "is sponsorship slipping", "valley of despair prep" | Mode G — Adoption Tracking |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -130,17 +130,17 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
   - option: "CM Communications Schedule"
     description: "Audience-calibrated communications schedule across the change timeline."
   - option: "Adoption Tracking"
-    description: "ADKAR barrier assessment per audience + training-timing validation against the ADKAR sequence."
+    description: "Adoption instrumentation per audience — ADKAR barrier assessment + training-timing validation, plus champion-ratio tracking, valley-of-despair prep, and sponsor-engagement tracking."
 
 Await the user's selection; use it as the mode.
 
-### Step 2.5 — Select the change methodology (Modes A, C, D)
+### Step 2.5 — Select the change methodology (Modes A, C, D, G)
 
-After a mode is resolved (Step 1, 2, or 3) and before executing, for **Mode A (Change Impact Assessment), Mode C (Readiness Checklist), and Mode D (Hypercare Plan)** — the modes whose output is shaped by which change methodology applies — select the methodology (or combination) before executing:
+After a mode is resolved (Step 1, 2, or 3) and before executing, for **Mode A (Change Impact Assessment), Mode C (Readiness Checklist), Mode D (Hypercare Plan), and Mode G (Adoption Tracking)** — the modes whose output is shaped by which change methodology applies — select the methodology (or combination) before executing:
 
 1. **Explicit user choice wins.** If the user named a methodology or combination (e.g. "use ADKAR", "Kotter + 7-S"), validate it is coherent per `references/methodology-selection.md` §5 (flag if two methodologies own the same layer for the same scope) and use it. Skip to Step 4.
 2. **Otherwise, run the selector.** Execute the selection procedure in `references/methodology-selection.md` §6: read the five selection axes from the change context (unit-of-change from the impact picture; `delivery_approach` from the project; org-scope, time-horizon, dominant-risk from the stakeholder/risk picture), run Selection Table A (unit-of-change) and Table B (delivery-approach → combination), reconcile, and emit the methodology-combination + per-methodology rationale.
-3. **Carry the selection into the mode.** The chosen combination determines which methodology deep-docs the mode reads (e.g. a Lewin + ADKAR + Bridges selection has Mode A read `references/adkar-framework.md` for the scoring scale, `references/lewin-3-stage.md` for the frame, `references/bridges-transition.md` for the transition layer). State the selected methodology(ies) in the mode output so the user sees which lens produced the artifact.
+3. **Carry the selection into the mode.** The chosen combination determines which methodology deep-docs the mode reads (e.g. a Lewin + ADKAR + Bridges selection has Mode A read `references/adkar-framework.md` for the scoring scale, `references/lewin-3-stage.md` for the frame, `references/bridges-transition.md` for the transition layer). Mode G (Adoption Tracking) is methodology-variant via the severity-banded champion denominators — when the selection includes ADKAR it reads `references/adkar-framework.md` (§7 champion ratio + §5 sponsor ABCs + §8 valley model) and `references/hypercare-plan.md` (valley parameters + adoption KPIs) as its deep-docs. State the selected methodology(ies) in the mode output so the user sees which lens produced the artifact.
 4. **Omission signal.** Modes B (Training Plan), E (Change Matrix Ingestion), and F (CM Communications Schedule) do not run methodology selection — their outputs are not methodology-variant in the selection sense (Mode B's methodology variation is delivery-cadence, owned by `references/training-plan.md`). Omission for these modes is correct, not a gap.
 
 **Tier:** this is an inference step (Ask-when-ambiguous, consistent with Mode Selection's own tier) — the agent infers the axes and asks the user only when the unit-of-change or dominant-risk is genuinely undeterminable from the available context.
@@ -300,15 +300,21 @@ When a specific communication needs drafting, tag it `[COMMS]` for the comms-wri
 
 ### Mode G: Adoption Tracking
 
-**Trigger**: "adoption plan", "adoption tracking", "run an ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right", any [CHANGE] tag for adoption tracking, or when an impact assessment and a training plan both exist and adoption readiness has not been assessed per audience.
+**Trigger**: "adoption plan", "adoption tracking", "run an ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right", "champion ratio", "are we resourced for adoption", "is sponsorship slipping", "valley of despair prep", any [CHANGE] tag for adoption tracking, or when a go-live/hypercare is in flight and adoption instrumentation (ADKAR barriers, champion ratio, sponsor engagement, valley prep) has not been produced per audience.
 
 **What you do**:
 1. Read the impacted audiences from the Mode A impact assessment (build one if missing).
 2. Produce the **ADKAR Assessment Table** per `references/adkar-assessment.md` — for each impacted audience, score the 5 ADKAR stages (Awareness, Desire, Knowledge, Ability, Reinforcement) 1-5 per the scale in `references/adkar-framework.md §2`, identify the **barrier stage** (the first element scoring ≤3 in A→D→K→Ab→R order, per `references/adkar-framework.md §4`) and its prescribed intervention (per `references/adkar-framework.md §2`), and derive the per-audience readiness verdict (NOT READY / CONDITIONAL / READY) per `references/adkar-framework.md §4`. Label any unsourced score `[ASSUMPTION – CONFIRM]` (no invention). Carry a reversibility tier + confidence on each row.
 3. Run **Training-Timing Validation**: reconcile the Mode B training schedule against each audience's ADKAR sequence per `references/adkar-assessment.md` + `references/training-plan.md` Step 2. For each audience, **flag any Knowledge/Ability training scheduled before its prerequisite ADKAR stage is met** (Awareness <4 OR Desire <4) as a finding with remediation (defer the training; run the §2 Awareness/Desire intervention first; re-gate when Awareness ≥4 AND Desire ≥4), carrying a reversibility tier + confidence. Escalate as `R-CM-###` when the finding becomes a RAID item.
-4. This mode runs when the Mode A methodology selection (Step 2.5) includes ADKAR, or on an explicit barrier-assessment / adoption-tracking request.
+4. Compute the **champion ratio** per impacted audience (audiences from Mode A; the impact assessment supplies the per-group population + severity). Read the target champion_count from `references/adkar-framework.md §7` (`ceil(population / severity-banded denominator)`); compare to the count of ACTIVE champions (Desire ≥4 AND currently engaged, per §7); flag any group where active < target as **UNDER-TARGET** with remediation (recruit `ceil(target − active)` more, selected per §7 criteria — peer-credible, Desire ≥4). The §7 denominators are read, never restated. Carry a reversibility tier + confidence.
+5. Assemble the **valley-of-despair prep plan**: derive the prep window from the go-live date + deployment complexity band (`references/hypercare-plan.md` Valley-of-Despair Parameters — Standard ~week 2; Complex ERP/EHR week 2-4); bind the hypercare OCM Reinforcement interventions (the T+ schedule in `references/hypercare-plan.md`) to the window; flag any planned support step-down that lands inside the valley window (the do-not-pull-support-at-the-bottom rule in `references/adkar-framework.md §8`). go-live absent → `[ASSUMPTION – CONFIRM]` the date and proceed with a relative window. Carry a reversibility tier + confidence.
+6. Track **sponsor engagement**: record sponsor touchpoints/visibility against the §5 ABC obligations (`references/adkar-framework.md §5` — A: active/visible; B: building coalition; C: communicating directly); set status {Active / At-Risk / SINO}; flag declining cadence (below the planned sponsor roadmap) or absence (no touchpoint in the trailing window) as a **TOP-TIER** risk — sponsorship is the lead success predictor (the effective-vs-ineffective-sponsor success statistic in `references/hypercare-plan.md` is the rationale; referenced, not restated). No numeric sponsor score is defined (categorical by design). Carry a reversibility tier + confidence.
+7. Produce the consolidated **adoption-tracking table** (audience × champion ratio (active/target) × champion status × sponsor ABC status × sponsor trend × valley prep window × valley prep status × reversibility·confidence), per `references/adoption-tracking.md`. No fabricated champion/sponsor names (`[ASSUMPTION – CONFIRM]` / `[CONTEXT]` where sourced from memory). This table is the shared adoption-instrumentation surface that the ADKAR Assessment Table (steps 2–3) and sibling fatigue/outcome work attach to.
+8. Emit `R-CM-###` RAID Risk entries for every UNDER-TARGET champion gap and every declining/absent sponsor; route remediation via Section 7 Next Actions / Section 8 RAID Updates.
 
-**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + remediation. The ADKAR scoring scale, barrier-point rule, and ADKAR-gated training-timing rule are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth) and consumed by reference — not restated. Read `references/adkar-assessment.md` for the assessment procedure, the output-table contract, and the training-timing finding format.
+This mode runs when the Mode A methodology selection (Step 2.5) includes ADKAR, or on an explicit adoption-instrumentation request (barrier assessment, champion-ratio check, sponsor-engagement check, or valley-prep).
+
+**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + the consolidated **adoption-tracking table** (audience × champion ratio × champion status × sponsor ABC status × sponsor trend × valley prep window × valley prep status × reversibility·confidence) + champion-gap findings + valley prep plan + sponsor-engagement status + `R-CM-###` RAID entries + remediation. Each row/finding carries a reversibility tier + confidence. No fabricated champion/sponsor names (`[ASSUMPTION – CONFIRM]` / `[CONTEXT]` where sourced from memory). The ADKAR scoring scale + barrier-point rule + ADKAR-gated training-timing rule + change-champion denominators (§7) + sponsor-engagement ABCs (§5) + valley-of-despair model (§8) are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth), and the valley parameter values + adoption-KPI set in `references/hypercare-plan.md` — consumed by reference, not restated. Read `references/adkar-assessment.md` for the ADKAR assessment procedure + training-timing finding format, and `references/adoption-tracking.md` for the champion-ratio comparison logic, valley-window derivation, sponsor-signal set, and the adoption-tracking-table schema.
 
 #### RAID ID Prefix
 
@@ -425,7 +431,7 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 - Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices.
 - Mode E (Change Matrix Ingestion) — completeness findings and remediation recommendations.
 - Mode F (CM Communications Schedule) — T-minus milestone scheduling and comms-gap findings.
-- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict) and Training-Timing Validation findings.
+- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, and sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk.
 - Section 4 (Findings & Gaps) — each finding with specific remediation.
 - Section 7 (Next Actions) — actions with owners and deadlines.
 - Section 8 (RAID Updates) — new or updated RAID entries originated by this analysis.
@@ -667,9 +673,10 @@ Read these on first use, then as needed for specific modes:
 | `references/impact-assessment.md` | Mode A, Mode E | Impact analysis schema, severity criteria, field definitions |
 | `references/training-plan.md` | Mode B | Training needs matrix, prerequisite tracking, approach types |
 | `references/readiness-checklist.md` | Mode C | Full readiness checklist, milestone linkage, verdict criteria |
-| `references/hypercare-plan.md` | Mode D | Hypercare template, exit criteria, adoption KPIs |
+| `references/hypercare-plan.md` | Mode D, G | Hypercare template, exit criteria, adoption KPIs; valley-of-despair parameters + OCM Reinforcement schedule + sponsor-engagement statistic (read by Mode G) |
 | `references/change-matrix-schema.md` | Mode E | Expected schemas for change matrix sheets |
 | `references/adkar-assessment.md` | Mode G (adoption tracking), Mode B (timing validation) | ADKAR barrier-assessment capability — the runnable assessment procedure, the ADKAR Assessment Table output contract, and the training-timing validation finding; consumes the scale/barrier-rule/timing-gate from `references/adkar-framework.md` by reference |
+| `references/adoption-tracking.md` | Mode G (adoption tracking) | Adoption-instrumentation layer — champion actual-vs-target comparison + under-target flag (reads `references/adkar-framework.md §7`), valley prep-window derivation + binding (reads `references/hypercare-plan.md` valley params), sponsor ABC touchpoint tracking + decline/absence flag (reads `references/adkar-framework.md §5`), and the adoption-tracking-table output schema |
 | `references/adkar-framework.md` | Mode A, C, D, G (methodology) | ADKAR change-adoption model — the 1-5 scoring scale, barrier-point rule, sponsor-engagement ABCs, ADKAR-gated training timing, change-champion sizing |
 | `references/kotter-8-step.md` | Mode A, C, D (methodology) | Kotter 8-step process — the org-process transformation sequence, sequence-gate rules, and the three cardinal Kotter errors |
 | `references/lewin-3-stage.md` | Mode A, C, D (methodology) | Lewin 3-stage model — the Unfreeze → Change → Refreeze meta-frame, Force-Field analysis, and the stage-gate rules |
