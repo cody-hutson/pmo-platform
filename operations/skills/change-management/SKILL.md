@@ -314,7 +314,17 @@ When a specific communication needs drafting, tag it `[COMMS]` for the comms-wri
 
 This mode runs when the Mode A methodology selection (Step 2.5) includes ADKAR, or on an explicit adoption-instrumentation request (barrier assessment, champion-ratio check, sponsor-engagement check, or valley-prep).
 
-**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + the consolidated **adoption-tracking table** (audience × champion ratio × champion status × sponsor ABC status × sponsor trend × valley prep window × valley prep status × reversibility·confidence) + champion-gap findings + valley prep plan + sponsor-engagement status + `R-CM-###` RAID entries + remediation. Each row/finding carries a reversibility tier + confidence. No fabricated champion/sponsor names (`[ASSUMPTION – CONFIRM]` / `[CONTEXT]` where sourced from memory). The ADKAR scoring scale + barrier-point rule + ADKAR-gated training-timing rule + change-champion denominators (§7) + sponsor-engagement ABCs (§5) + valley-of-despair model (§8) are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth), and the valley parameter values + adoption-KPI set in `references/hypercare-plan.md` — consumed by reference, not restated. Read `references/adkar-assessment.md` for the ADKAR assessment procedure + training-timing finding format, and `references/adoption-tracking.md` for the champion-ratio comparison logic, valley-window derivation, sponsor-signal set, and the adoption-tracking-table schema.
+**Output**: ADKAR Assessment Table (audience × 5 ADKAR stages × barrier × intervention × readiness × reversibility) + training-timing findings + the consolidated **adoption-tracking table** (audience × champion ratio × champion status × sponsor ABC status × sponsor trend × valley prep window × valley prep status × reversibility·confidence) + champion-gap findings + valley prep plan + sponsor-engagement status + the **change-fatigue table** + the **outcome scorecard** (per the Adoption-Tracking Capabilities below) + `R-CM-###` RAID entries + remediation. Each row/finding carries a reversibility tier + confidence. No fabricated champion/sponsor names (`[ASSUMPTION – CONFIRM]` / `[CONTEXT]` where sourced from memory). The ADKAR scoring scale + barrier-point rule + ADKAR-gated training-timing rule + change-champion denominators (§7) + sponsor-engagement ABCs (§5) + valley-of-despair model (§8) are defined in `references/adkar-framework.md` (the ADKAR single-source-of-truth), and the valley parameter values + adoption-KPI set in `references/hypercare-plan.md` — consumed by reference, not restated. Read `references/adkar-assessment.md` for the ADKAR assessment procedure + training-timing finding format, and `references/adoption-tracking.md` for the champion-ratio comparison logic, valley-window derivation, sponsor-signal set, and the adoption-tracking-table schema.
+
+### Adoption-Tracking Capabilities — Change-Fatigue Monitoring & Outcome Measurement
+
+These are two cross-cutting capabilities of Mode G, not separate modes — they have no independent trigger; they enrich go-live and hypercare adoption work by answering "is this audience overloaded?" and "did the change actually land?" Both attach their output to the consolidated **adoption-tracking table** (the shared adoption-instrumentation surface in `references/adoption-tracking.md`), keeping the audience-row spine and the evidence-label + reversibility conventions identical across the adoption-tracking family (ADKAR Assessment Table → adoption-tracking table → fatigue table + outcome scorecard).
+
+**Change-Fatigue Monitoring.** For each impacted audience of this change, read the cumulative change load — concurrent in-flight changes **plus** changes still inside their hypercare reinforcement window (per `references/hypercare-plan.md`) — and classify it against the saturation bands defined in `references/impact-assessment.md` §Cumulative Change Load Assessment. **Reference the bands; do not restate the numbers** (the saturation math and the band cut-points are owned by impact-assessment.md — restating them forks a single source). Flag any audience landing in the **High** or **Critical** band as **fatigued** and attach the band-mapped remediation (Moderate → sequence; High → stagger/defer; Critical → pause new Knowledge/Ability load, per the `references/adkar-framework.md` §9 threshold rule). When the cumulative-load table has not been produced, produce the load row(s) for this change's audiences using the impact-assessment method (push-to-resolve) and label any unsourced concurrent-change severity `[ASSUMPTION – CONFIRM]`. Output is the **change-fatigue table** (`Audience × concurrent/recent change load (saturation band, by reference) × fatigue status × remediation × reversibility·confidence`).
+
+**Outcome Measurement.** Tie each change to its **adoption KPIs as already defined in Mode D Hypercare** (`references/hypercare-plan.md` Exit Criteria). **Reuse these definitions; introduce no new KPI and do not edit the Mode D KPI table** — outcome measurement consumes the existing KPI dictionary as its measurement surface. Report **actual-vs-target measured at each KPI's defined horizon**, and present the result with an explicit **Deployed vs Adopted** split: *Deployed* = go-live occurred (binary; evidence = cutover record); *Adopted* = the KPI verdicts at horizon. Verdict scale = **MET / ON-TRACK / NOT-MET / NO-DATA**; before a KPI's horizon its verdict is **NO-DATA** ("Deployed — adoption not yet proven"), never "successful" — distinguishing "deployed" from "adopted" is the point of the capability. Output is the **outcome scorecard** (`KPI × target (by reference to hypercare-plan) × actual × horizon × verdict × reversibility·confidence`), preceded by a one-line **Deployed:** Yes/No (go-live date) header.
+
+Both outputs carry `[SOURCE]` on measured values, `[ASSUMPTION – CONFIRM]` where the underlying data is unavailable, and a reversibility tier + confidence per the Reversibility Discipline (pmo-qa-auditor G4) — a NO-DATA/internal read is CHEAP; an externally-shared scorecard asserting ADOPTED is EXPENSIVE/IRREVERSIBLE. Read `references/fatigue-and-outcomes.md` for the per-change counting rule, the band → remediation map, and the deployed-vs-adopted scorecard format + verdict rule; it owns the capability layer and references (never restates) the impact-assessment saturation bands and the hypercare adoption KPIs.
 
 #### RAID ID Prefix
 
@@ -431,7 +441,7 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 - Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices.
 - Mode E (Change Matrix Ingestion) — completeness findings and remediation recommendations.
 - Mode F (CM Communications Schedule) — T-minus milestone scheduling and comms-gap findings.
-- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, and sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk.
+- Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk, change-fatigue status + band-mapped remediation per audience, and outcome verdicts (MET/ON-TRACK/NOT-MET/NO-DATA) including the deployed-vs-adopted determination.
 - Section 4 (Findings & Gaps) — each finding with specific remediation.
 - Section 7 (Next Actions) — actions with owners and deadlines.
 - Section 8 (RAID Updates) — new or updated RAID entries originated by this analysis.
@@ -658,6 +668,31 @@ structural conformance and content quality.
   A≥4 ∧ D≥4" with the finding routed to RAID. Junior ships the schedule with the training
   in place and discovers at go-live that the trained group never adopted.
 
+### Declaring a change "adopted" on deployment evidence alone — OUT
+
+- **Signature (observable signal):** The outcome scorecard reports a change as
+  successful/adopted while every adoption KPI is still NO-DATA (pre-horizon) or only the
+  *Deployed* row is populated; or the change-fatigue table is omitted for a go-live whose
+  impacted audiences also carry other in-flight changes.
+- **Conditional:** do NOT mark a change "adopted" when its adoption KPIs have not been
+  measured at their defined horizon, because deployment is not adoption — calling a
+  deployed-but-unmeasured change successful manufactures the exact "declaring victory at
+  go-live" failure the readiness and hypercare references warn against, and the gap is
+  invisible until post-go-live reversion surfaces in the valley.
+- **Root cause:** Go-live is the visible, celebratable event; the adoption horizon
+  (sustained 2-week DAU, T+8 reinforcement) lands weeks later when attention has moved on.
+  Under closure pressure the agent reports the deployment it can see and treats the
+  unmeasured KPIs as a pass.
+- **Mitigation:** Split the scorecard into Deployed (go-live occurred) vs Adopted (KPI
+  verdicts at horizon). Before any KPI's horizon, its verdict is NO-DATA = "deployed, not
+  yet measurable", never MET. Pair the deployed-vs-adopted call with a reversibility tier
+  (an externally-shared ADOPTED claim is EXPENSIVE/IRREVERSIBLE). Produce the change-fatigue
+  table whenever the go-live's audiences carry concurrent/recent change load.
+- **Principal response vs. junior response:** Principal reports "Deployed 2026-xx-xx;
+  adoption NO-DATA until T+2-week DAU sustain — re-measure [date]" and keeps hypercare open.
+  Junior reports "go-live successful, adoption complete" on go-live day, support is pulled,
+  and reversion surfaces in the valley with no scorecard to catch it.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -677,10 +712,11 @@ Read these on first use, then as needed for specific modes:
 | `references/change-matrix-schema.md` | Mode E | Expected schemas for change matrix sheets |
 | `references/adkar-assessment.md` | Mode G (adoption tracking), Mode B (timing validation) | ADKAR barrier-assessment capability — the runnable assessment procedure, the ADKAR Assessment Table output contract, and the training-timing validation finding; consumes the scale/barrier-rule/timing-gate from `references/adkar-framework.md` by reference |
 | `references/adoption-tracking.md` | Mode G (adoption tracking) | Adoption-instrumentation layer — champion actual-vs-target comparison + under-target flag (reads `references/adkar-framework.md §7`), valley prep-window derivation + binding (reads `references/hypercare-plan.md` valley params), sponsor ABC touchpoint tracking + decline/absence flag (reads `references/adkar-framework.md §5`), and the adoption-tracking-table output schema |
+| `references/fatigue-and-outcomes.md` | Mode G (Adoption-Tracking Capabilities — fatigue + outcome) | Change-fatigue counting rule (references the `references/impact-assessment.md` saturation bands — does not restate them), the band → remediation map, and the deployed-vs-adopted outcome-scorecard format + verdict rule (consumes the `references/hypercare-plan.md` adoption KPIs by reference) |
 | `references/adkar-framework.md` | Mode A, C, D, G (methodology) | ADKAR change-adoption model — the 1-5 scoring scale, barrier-point rule, sponsor-engagement ABCs, ADKAR-gated training timing, change-champion sizing |
 | `references/kotter-8-step.md` | Mode A, C, D (methodology) | Kotter 8-step process — the org-process transformation sequence, sequence-gate rules, and the three cardinal Kotter errors |
 | `references/lewin-3-stage.md` | Mode A, C, D (methodology) | Lewin 3-stage model — the Unfreeze → Change → Refreeze meta-frame, Force-Field analysis, and the stage-gate rules |
 | `references/bridges-transition.md` | Mode A, C, D (methodology) | Bridges transition model — the 3-zone psychological transition (Ending → Neutral Zone → New Beginning) and the ADKAR-seam composition |
 | `references/mckinsey-7s.md` | Mode A, C, D (methodology) | McKinsey 7-S framework — the 7-element alignment diagnostic, the 21-pair consistency assessment, and the Shared-Values central-weighting rule |
 | `references/methodology-selection.md` | Mode A, C, D (methodology selection) | Cross-methodology selection model — axes, the layered model (Lewin frame · Kotter/ADKAR/Bridges operational layers · 7-S cross-section), the delivery-approach → methodology-combination table, and the runnable selection procedure |
-| `references/output-format.md` | First response | Full output format spec with field definitions |
+| The in-skill [`## Output format`](#output-format) section | First response | Full output-format spec with field definitions — the 8-section response structure (Mode & Inputs, Summary, Assessment/Plan/Checklist, Findings & Gaps, Paste-Ready Artifacts, Change Summary, Next Actions, RAID Updates) |
