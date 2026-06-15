@@ -347,6 +347,68 @@ def build_contention_map(records: List[IssueRecord]) -> List[Dict]:
     return out
 
 
+# ---- Artifact-relationship derivation (#246) ----------------------------------
+# READ-ONLY, ADDITIVE: derives the §Category 4 artifact-relationship type
+# (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES) per the derivation rule table in
+# release/skills/release-planner/references/dependency-analysis.md
+# § Artifact-Relationship Classification. Vocabulary referenced from
+# core/schemas/frontmatter-schema.md §Category 4; not redefined here.
+#
+# This is the artifact-relationship axis — ORTHOGONAL to the FS/SS/FF/SF scheduling
+# axis. It does NOT touch parse_dependencies / parse_affected_files /
+# build_contention_map / emit_tsv; it only adds an 'artifact_relationships' key to the
+# JSON output. Native `blocks`/`blocked-by` is unavailable via `gh issue view --json`
+# in this environment (the field set has no such field), so the derivation runs the
+# spec's degraded-but-complete path: issue→issue edges default to DEPENDS_ON, and
+# file-level GENERATES/SUPERSEDES derive from the parsed Affected-Files intents.
+
+# Filename version-supersession pattern (a `_v2` / `-v2` / ` v2` token), per the
+# version-detection rule in core/schemas/agent-processing-contracts.md § Version
+# detection. Used only to type a Modify as SUPERSEDES; never mutates parse output.
+VERSION_SUFFIX_RE = re.compile(r"[._-]v(\d+)\b", re.IGNORECASE)
+
+
+def derive_artifact_relationships(record: IssueRecord) -> List[Dict]:
+    """Return the typed artifact-relationship edges for one issue (additive).
+
+    Deterministic per the derivation rule table:
+      - body Dependencies cite #B (no native blocks available) → DEPENDS_ON (default)
+      - Affected-Files intent 'add' (File Change Matrix Create) → GENERATES
+      - Affected-Files intent 'edit' on a version-suffixed filename → SUPERSEDES
+
+    BLOCKS is reachable only from native `blocks`/`blocked-by`, which `gh issue view
+    --json` does not expose here; in that degraded path no BLOCKS edge is emitted and
+    the dependency defaults to DEPENDS_ON (the weakest correct claim). Pure function of
+    already-parsed fields — no API calls, no mutation of the IssueRecord.
+    """
+    edges: List[Dict] = []
+    # Issue→issue edges: default DEPENDS_ON (degraded — no native blocks signal).
+    for dep in record.dependencies:
+        edges.append({
+            "source": record.number,
+            "type": "DEPENDS_ON",
+            "target": dep,
+            "derived_from": "body Dependencies (default)",
+        })
+    # File-level edges from the File Change Matrix intents.
+    for f in record.affected_files:
+        if f.intent == "add":
+            edges.append({
+                "source": record.number,
+                "type": "GENERATES",
+                "target": f.path,
+                "derived_from": "File Change Matrix (Create)",
+            })
+        elif f.intent == "edit" and VERSION_SUFFIX_RE.search(f.path):
+            edges.append({
+                "source": record.number,
+                "type": "SUPERSEDES",
+                "target": f.path,
+                "derived_from": "FCM version pattern",
+            })
+    return edges
+
+
 # ---- Output formatting --------------------------------------------------------
 
 def emit_json(records: List[IssueRecord], contention: List[Dict]) -> str:
@@ -355,6 +417,9 @@ def emit_json(records: List[IssueRecord], contention: List[Dict]) -> str:
             {
                 **asdict(r),
                 "affected_files": [asdict(f) for f in r.affected_files],
+                # #246 additive read-only field — artifact-relationship axis,
+                # orthogonal to FS/SS scheduling; does not alter any existing field.
+                "artifact_relationships": derive_artifact_relationships(r),
             }
             for r in records
         ],
@@ -559,6 +624,32 @@ Stuff.
         failures.append(f"NONE: got {sev_by_path.get('f2.md')}")
     if sev_by_path.get("f3.md") != "CONFLICT":  # delete+edit
         failures.append(f"CONFLICT: got {sev_by_path.get('f3.md')}")
+
+    # Test 5: artifact-relationship derivation (#246) — additive, read-only.
+    # DEPENDS_ON from body deps (degraded — no native blocks); GENERATES from an
+    # 'add' intent; SUPERSEDES from an 'edit' on a version-suffixed filename.
+    rec_ar = IssueRecord(
+        7, "ar", "open", [], None, None, "clean",
+        [FileRecord("new-thing.md", "add"),
+         FileRecord("design_v2.md", "edit"),
+         FileRecord("plain.md", "edit")],
+        [46, 57],
+    )
+    ar = derive_artifact_relationships(rec_ar)
+    ar_types = sorted((e["type"], str(e["target"])) for e in ar)
+    expected_ar = sorted([
+        ("DEPENDS_ON", "46"), ("DEPENDS_ON", "57"),
+        ("GENERATES", "new-thing.md"), ("SUPERSEDES", "design_v2.md"),
+    ])
+    if ar_types != expected_ar:
+        failures.append(f"#246 artifact-relationships: got {ar_types}")
+    # Edge: zero deps + zero version/add files → no typed edges (empty-state caller-handled).
+    rec_ar_empty = IssueRecord(
+        8, "empty", "open", [], None, None, "clean",
+        [FileRecord("just-edit.md", "edit")], [],
+    )
+    if derive_artifact_relationships(rec_ar_empty) != []:
+        failures.append(f"#246 empty-state: got {derive_artifact_relationships(rec_ar_empty)}")
 
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)

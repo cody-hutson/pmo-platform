@@ -36,20 +36,35 @@ Per ADR-1 — Kahn's BFS topological sort, priority-desc → issue-asc tie-break
 
 #### Topologically Sorted Sequence
 
-| Position | Issue | Priority | Status | Dependencies (in-release) |
+The `Edge Type` column carries the §Category 4 artifact-relationship type for each issue's in-release dependency (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES), derived per `references/dependency-analysis.md` § Artifact-Relationship Classification. It is the artifact-relationship axis — independent of the FS/SS scheduling type read by the critical path. A root with no in-release dependency carries `—`.
+
+| Position | Issue | Priority | Status | Dependencies (in-release) | Edge Type |
+|---|---|---|---|---|---|
+| 1 | #N | P2 | bundled | (none — root) | — |
+| 2 | #M | P2 | bundled | #N | DEPENDS_ON |
+| 3 | #P | P3 | bundled | #M | BLOCKS |
+
+#### Artifact Relationship Graph
+
+Typed per `core/schemas/frontmatter-schema.md` §Category 4 (GENERATES · DEPENDS_ON · BLOCKS · SUPERSEDES) — referenced, not redefined. Derivation: `references/dependency-analysis.md` § Artifact-Relationship Classification. This is the artifact-relationship axis; it is orthogonal to the FS/SS scheduling axis the critical path consumes. Issue→issue edges carry DEPENDS_ON (default) or BLOCKS; file-level edges carry GENERATES (File Change Matrix Create) or SUPERSEDES (version-supersession Modify).
+
+| Source | Type | Target | Direction | Derived from |
 |---|---|---|---|---|
-| 1 | #N | P2 | bundled | (none — root) |
-| 2 | #M | P2 | bundled | #N |
-| 3 | #P | P3 | bundled | #M |
+| #N | BLOCKS | #M | #N → #M | native `blocks` |
+| #P | DEPENDS_ON | #N | #P → #N | body Dependencies (default) |
+| #N | GENERATES | core/standards/adkar-assessment.md | #N → file | File Change Matrix (Create) |
+| design_v2.md | SUPERSEDES | design_v1.md | v2 → v1 | FCM version pattern |
+
+Emit `No typed artifact relationships — bundle has no native/body dependency edges and no Create/supersede file changes` as the body when the classifier yields zero edges — explicit positive signal that typing was checked, per the `No file contention detected` convention.
 
 #### Mermaid Visualization
 
-Optional — emit when graph has >5 nodes (renders on GitHub):
+Optional — emit when graph has >5 nodes (renders on GitHub). When emitted, label each edge with its §Category 4 artifact-relationship type as a no-cost secondary surface (`A -->|BLOCKS| B`):
 
 ```mermaid
 graph LR
-  A[#N: Title] --> B[#M: Title]
-  B --> C[#P: Title]
+  A[#N: Title] -->|BLOCKS| B[#M: Title]
+  B -->|DEPENDS_ON| C[#P: Title]
 ```
 
 #### Tie-Breaker Trace

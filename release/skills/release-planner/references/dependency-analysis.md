@@ -377,6 +377,46 @@ Per the typed-dep Stage 5 / Stage 6 design, the read-surface is `read_dependenci
 
 **Cutover discipline:** This CPM step applies to all releases entering Stage 3 going forward.
 
+## Artifact-Relationship Classification
+
+This section classifies each in-release edge into one of four **typed artifact relationships** so the rendered plan labels *what kind* of relationship connects two artifacts, not just *that* one exists. It is consumed by Mode A Step 3 and Mode B Step 5c when emitting the `### Artifact Relationship Graph`.
+
+**Vocabulary source:** the four types are defined canonically in `core/schemas/frontmatter-schema.md` §Category 4 (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES) — they are a subset of the frozen 7 MVP relationship types. This section **references that vocabulary; it never redefines it.** Planner output and backlog relations therefore cannot diverge — both resolve to the same §Category 4 table.
+
+**Orthogonal to the FS/SS scheduling axis.** The artifact-relationship type is a **second, independent edge attribute** that coexists with the existing `edge_type` (FS / SS / FF / SF) carried by the typed-dep substrate (§ Step 5b). The two axes answer different questions:
+
+| Axis | Field | Enum | Question answered | Consumed by |
+|---|---|---|---|---|
+| **Scheduling precedence** (PMBOK) | `edge_type` | FS / SS / FF / SF | What scheduling-precedence does this edge impose? | CPM forward-pass (§ Step 5b DP-DAG) |
+| **Artifact relationship** (§Category 4) | `artifact_rel` | GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES | What kind of relationship connects these artifacts? | `### Artifact Relationship Graph` render only |
+
+A single edge can carry BOTH (e.g. an edge that is `BLOCKS` on the artifact axis and `FS+0d` on the scheduling axis). **The CPM forward-pass never reads `artifact_rel`** — it relaxes distances over the `edge_type`/`lead_lag` fields only (§ Step 5b). Keeping the two fields independent is what makes the typed-artifact-linking addition a provably additive delta over the critical-path math.
+
+### Derivation rule table
+
+Each edge gets its `artifact_rel` type **deterministically** — a pure function of native-dep kind, body provenance, and File-Change-Matrix change-type. This matches the reproducibility contract of the Hard-vs-Soft classifier above (a regex/JSON read, not a judgment call): any operator or spoke re-running the derivation reaches the same type.
+
+| Source signal (deterministic) | `artifact_rel` assigned | Direction | Authority |
+|---|---|---|---|
+| Issue A native `blocks` issue B (GitHub native dependency) | `BLOCKS` | A → B | native dep kind |
+| Issue A native `blocked-by` issue B | `BLOCKS` (inverse) | B → A | native dep kind |
+| Issue A body `### Dependencies` cites B (any FS / SS / FF / SF prefix), no native `blocks` | `DEPENDS_ON` (default) | A → B | body Dependencies field |
+| Issue A's File Change Matrix row change-type = `Create` for file F | `GENERATES` | A → F | FCM change-type |
+| Issue A modifies F where F matches a version-supersession pattern over an existing F′ (a `_v2` over a `_v1`, per the version-detection rule in `core/schemas/agent-processing-contracts.md` § Version detection) | `SUPERSEDES` | F → F′ | FCM + filename version pattern |
+
+**Default-to-DEPENDS_ON safety net.** Any issue→issue edge that is not provably `BLOCKS` is typed `DEPENDS_ON` — the weakest correct claim (a validity dependency), never an over-claim. This mirrors how the typed-dep substrate defaults an untyped body reference to `FS+0d` on the scheduling axis: default to the conservative base type, now on the artifact-relationship axis.
+
+### Edge-case dispositions
+
+- **An edge that is both native-`blocks` AND body-cited:** type = `BLOCKS` (native `blocks` is the stronger, intentional signal; precedence is `BLOCKS` > `DEPENDS_ON`). The FS/SS scheduling type is still read independently from the body prefix — the two axes do not contend.
+- **No native deps, no body deps, no Create rows:** the bundle has no artifact relationships to type → emit the explicit empty-state body (`No typed artifact relationships — bundle has no native/body dependency edges and no Create/supersede file changes`), mirroring the `No file contention detected` positive-signal convention. Never silently omit the section.
+- **Soft edges** (`composes with` / `relates to` per the Hard-vs-Soft classifier above) do NOT become typed artifact relationships here — they stay out of the dep graph as today. The closed set for this classification is the four hard types only; the other three of the seven MVP types (`BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO`) are out of scope.
+- **The FS/SS/FF/SF scheduling axis is independent and untouched** — it is neither migrated into nor merged with the artifact-relationship axis. Computing one never reads or mutates the other.
+
+### Native-dependency availability (degraded derivation)
+
+Native `blocks` / `blocked-by` is read from the bundle parser's JSON output when the GitHub `--json` schema exposes it in the running environment (see `release/tools/bundle-issues-parser.py`). When native dependencies are **not** exposed by `gh issue view --json` in the environment, the derivation degrades gracefully and remains complete: every issue→issue edge defaults to `DEPENDS_ON` (from the body `### Dependencies` field), and file-level `GENERATES` / `SUPERSEDES` still derive from the File Change Matrix. The render contract — every edge carries one of the four types — holds in both the native-available and degraded paths.
+
 ## Leverage Analysis
 
 Leverage measures how much downstream work an issue unblocks:
