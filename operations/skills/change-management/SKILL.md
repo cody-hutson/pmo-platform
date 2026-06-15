@@ -253,14 +253,37 @@ tag for hypercare, or when go-live is within 2 weeks and no hypercare plan exist
    (`[ASSUMPTION – CONFIRM]` where an owner is unknown; never `[INSERT]`). The tier
    axis *references*, and does not replace, the existing 3-Tier Support model and the
    S1–S4 severity→SLA matrix — it is the orthogonal management-posture axis.
-3. Define exit criteria: what must be true for hypercare to close
+3. Define exit criteria: what must be true for hypercare to close. **Open SLA breaches
+   are a hard exit gate** — hypercare cannot be declared complete while any tracked SLA
+   event (step 4.5) is OPEN past its tier's committed resolution, and that gate is
+   non-waivable by sponsor approval (the borderline-criteria CONDITIONAL EXIT path does
+   not apply to an open breach). See `references/hypercare-plan.md` §Exit Criteria +
+   Exit Decision Model.
 4. Define adoption KPIs: measurable indicators that the change has landed
+4.5. **Track each hypercare incident against its tier's committed SLA, then produce the
+   compliance report.** Record every incident as an `R-CM-###` (anticipated/at-risk) or
+   `I-CM-###` (materialised) RAID/issue entry — reusing the skill's existing prefix, **no
+   separate tracker** — carrying its **HC-tier** (read off the step-2.5 tiered register, one
+   of `{HC-T1, HC-T2, HC-T3}`), **open time**, **resolve time**, and a **met/breached
+   verdict** computed against that tier's committed (response, resolution) SLA. The committed
+   SLA values are *read by reference* from `references/hypercare-plan.md` §Tier → Support
+   Model / Escalation / Committed SLA — never restate them here. Then produce the **hypercare
+   compliance report**: per tier, the count of SLA events, the **met-vs-breached** tally
+   (plus open / live-breach), and **breach detail** (which incident, breached by how much).
+   A verdict asserted without an open/resolve timestamp pair to derive it from is not
+   shippable. The compliance report and its SLA verdicts are decision-class — carry a
+   reversibility tier + confidence on each (an internal read is CHEAP; a stakeholder-shared
+   compliance report is EXPENSIVE/IRREVERSIBLE). Read `references/hypercare-plan.md` §SLA
+   Tracking and Compliance Reporting for the SLA-event record fields + the per-tier
+   compliance-report format.
 5. Produce the hypercare schedule: daily standups → weekly reviews → close-out
 
-**Output**: Hypercare plan + exit criteria + adoption KPIs + support matrix + **tiered
-hypercare risk register**.
+**Output**: Hypercare plan + exit criteria (incl. the open-SLA-breach gate) + adoption KPIs
++ support matrix + **tiered hypercare risk register** + **hypercare SLA-compliance report**.
 Read `references/hypercare-plan.md` for the full template (including §Hypercare Risk
-Classification — the tier set, scoring rule, and tier→support-model/SLA map).
+Classification — the tier set, scoring rule, and tier→support-model/SLA map — and §SLA
+Tracking and Compliance Reporting — the SLA-event record fields and the per-tier
+compliance-report format).
 
 ### Mode E: Change Matrix Ingestion
 
@@ -452,7 +475,7 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 - Mode A (Change Impact Assessment) — impact-severity ratings and CM notes for High-severity impacts.
 - Mode B (Training Plan) — training-needs matrix entries, approach recommendations, target dates, prerequisite calls.
 - Mode C (Readiness Checklist) — per-item READY / NOT READY / AT RISK classifications and overall readiness verdict (READY / CONDITIONAL / NOT READY).
-- Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices, **hypercare tier assignments** (HC-T1/HC-T2/HC-T3 per risk) and the **per-tier committed SLAs** (response/resolution) those assignments commit to.
+- Mode D (Hypercare Plan) — support model, escalation path, exit criteria (including the open-SLA-breach exit gate), adoption KPI choices, **hypercare tier assignments** (HC-T1/HC-T2/HC-T3 per risk) and the **per-tier committed SLAs** (response/resolution) those assignments commit to, and the **SLA met/breached verdicts** plus the **hypercare compliance report** computed against those committed SLAs.
 - Mode E (Change Matrix Ingestion) — completeness findings and remediation recommendations.
 - Mode F (CM Communications Schedule) — T-minus milestone scheduling and comms-gap findings.
 - Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk, change-fatigue status + band-mapped remediation per audience, and outcome verdicts (MET/ON-TRACK/NOT-MET/NO-DATA) including the deployed-vs-adopted determination.
@@ -732,6 +755,38 @@ structural conformance and content quality.
   (Critical)" with no score, and the SLA-compliance report later has no baseline to test the
   tier's response/resolution targets against.
 
+### Hypercare SLA verdict asserted without the timestamp pair — PROC
+
+- **Signature (observable signal):** A Mode D SLA-event record or compliance-report row carries
+  a met/breached verdict (or a per-tier met-vs-breached tally) with no open-time + resolve-time
+  pair to derive it from — a verdict column populated while the open/resolve columns are blank —
+  or a hypercare compliance report is presented as evidence while an `R-CM-###`/`I-CM-###` SLA
+  event is still OPEN past its committed resolution and the report does not flag it as a live
+  breach.
+- **Conditional:** do NOT assert an SLA met/breached verdict when the incident's open time and
+  resolve time are not both recorded (resolve time may be legitimately blank only when the event
+  is still OPEN — which is itself a verdict state, not a MET), because the verdict is a
+  *computation* (`first-response − open` vs committed response; `resolve − open` vs committed
+  resolution) — without the timestamps it is an unfalsifiable assertion, the compliance report
+  built on it cannot be audited against the committed SLA, and an unflagged still-open breach
+  lets hypercare exit through the open-breach gate it was supposed to block.
+- **Root cause:** Reporting "met" is the desirable, closure-friendly verdict; capturing the
+  open/resolve timestamps and computing the delta against the tier's committed SLA is the harder
+  step. Under closure pressure the agent fills the verdict from impression ("it got handled") and
+  leaves the timestamp columns empty, or reports aggregate compliance without reconciling the
+  still-open events.
+- **Mitigation:** For every SLA-event record, capture **open time** and (when resolved)
+  **resolve time** before writing any verdict; compute the verdict against the committed SLA read
+  from `references/hypercare-plan.md` §Tier → Support Model / Escalation / Committed SLA; render a
+  still-open event as **OPEN** (and as a **live breach** once past its committed resolution),
+  never as MET; in the compliance report, surface open / live-breach events in their own column
+  and breach-detail rows so the open-breach exit gate can see them.
+- **Principal response vs. junior response:** Principal records `I-CM-021 open 22:15 / resolved
+  next-day 14:00 → resolution BREACHED +2.5 business hours` and lists the still-open `I-CM-030`
+  as a live breach blocking exit. Junior writes "SLA: met" with no timestamps, the compliance
+  report shows clean tiers, and a critical incident that never actually resolved rides out the
+  exit gate undetected.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -747,7 +802,7 @@ Read these on first use, then as needed for specific modes:
 | `references/impact-assessment.md` | Mode A, Mode E | Impact analysis schema, severity criteria, field definitions |
 | `references/training-plan.md` | Mode B | Training needs matrix, prerequisite tracking, approach types |
 | `references/readiness-checklist.md` | Mode C | Full readiness checklist, milestone linkage, verdict criteria |
-| `references/hypercare-plan.md` | Mode D, G | Hypercare template, exit criteria, adoption KPIs; valley-of-despair parameters + OCM Reinforcement schedule + sponsor-engagement statistic (read by Mode G) |
+| `references/hypercare-plan.md` | Mode D, G | Hypercare template, exit criteria (incl. the open-SLA-breach exit gate), adoption KPIs; the hypercare risk-classification tier set + scoring + tier→committed-SLA map and the SLA-tracking record fields + per-tier compliance-report format (Mode D); valley-of-despair parameters + OCM Reinforcement schedule + sponsor-engagement statistic (read by Mode G) |
 | `references/change-matrix-schema.md` | Mode E | Expected schemas for change matrix sheets |
 | `references/adkar-assessment.md` | Mode G (adoption tracking), Mode B (timing validation) | ADKAR barrier-assessment capability — the runnable assessment procedure, the ADKAR Assessment Table output contract, and the training-timing validation finding; consumes the scale/barrier-rule/timing-gate from `references/adkar-framework.md` by reference |
 | `references/adoption-tracking.md` | Mode G (adoption tracking) | Adoption-instrumentation layer — champion actual-vs-target comparison + under-target flag (reads `references/adkar-framework.md §7`), valley prep-window derivation + binding (reads `references/hypercare-plan.md` valley params), sponsor ABC touchpoint tracking + decline/absence flag (reads `references/adkar-framework.md §5`), and the adoption-tracking-table output schema |

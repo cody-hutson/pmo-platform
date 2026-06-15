@@ -176,6 +176,79 @@ A second risk — a cosmetic label misalignment on a rarely-used report (Sev 2 �
 business hours / resolution per backlog. The same matrix sizes both risks to their actual
 exposure rather than treating every hypercare issue the same.
 
+### SLA Tracking and Compliance Reporting
+
+The classification half above *commits* a per-tier SLA to each risk; this half *measures*
+the actual hypercare incidents against those commitments and rolls the result into a
+compliance report. It turns the tiered plan from a commitment into evidence. **No new
+tracker is introduced** — each SLA event is a RAID/issue entry under the skill's existing
+`R-CM-###` / `I-CM-###` prefix, and the report is computed from those entries against the
+committed SLAs in §Tier → Support Model / Escalation / Committed SLA above. The tier tokens
+`{HC-T1, HC-T2, HC-T3}` and their committed (response, resolution) pairs are **read from that
+section, never restated here** — this section adds only the record fields and the report
+shape.
+
+#### SLA-event record fields
+
+Each hypercare incident is recorded as one `R-CM-###` (Risk-class — an anticipated/at-risk
+SLA event) or `I-CM-###` (Issue-class — a materialised incident) entry carrying these fields:
+
+| Field | Definition | Source / rule |
+|-------|-----------|---------------|
+| **Event ID** | `R-CM-###` or `I-CM-###` | Existing CM RAID prefix; no separate tracker |
+| **Incident** | One-line description of the hypercare issue | From the floor / monitoring / super-user issue feed |
+| **HC-Tier** | One of `{HC-T1, HC-T2, HC-T3}` | Read from the risk's row in the §Hypercare Risk Classification tiered register (the tier already assigned by the classification half) — not re-derived here |
+| **Open time** | Timestamp the incident was raised (response clock start) | Issue-feed timestamp; validate day-of-week on any date label |
+| **First-response time** | Timestamp of first triage/response (response clock stop) | Support log |
+| **Resolve time** | Timestamp the incident was resolved (resolution clock stop); blank while open | Support log |
+| **Committed SLA** | The (response, resolution) pair for this tier | **By reference** to §Tier → Support Model / Escalation / Committed SLA — cited, not restated |
+| **Response verdict** | MET / BREACHED — `first-response − open` vs the tier's committed response | Computed |
+| **Resolution verdict** | MET / BREACHED / OPEN — `resolve − open` vs the tier's committed resolution; **OPEN** until resolved (an OPEN entry already past its committed resolution is a **live breach**) | Computed; business-hours basis matches the committed-SLA unit (business hours / business day / sprint) |
+| **Breach delta** | For a BREACHED verdict, by how much the committed SLA was exceeded (e.g. "+2 business hours", "+1 business day") | Computed; blank when MET |
+| **Reversibility · Confidence** | Tier + confidence on the verdict per the Reversibility Discipline | An internal verdict read is CHEAP; a verdict in a stakeholder-shared compliance report is EXPENSIVE/IRREVERSIBLE |
+
+A row whose verdict is asserted without an open/resolve timestamp pair to derive it from is
+not shippable — the verdict has no computation to audit (see SKILL.md Domain-Specific Failure
+Modes, "Hypercare SLA verdict asserted without the timestamp pair").
+
+#### Per-tier compliance-report format
+
+The compliance report aggregates the SLA-event records by tier:
+
+| HC-Tier | SLA events (count) | Met | Breached | Open (live breach if past committed resolution) | Compliance % (met ÷ closed events) |
+|---------|--------------------|-----|----------|--------------------------------------------------|------------------------------------|
+| **HC-T1 (Critical)** | … | … | … | … | … |
+| **HC-T2 (Elevated)** | … | … | … | … | … |
+| **HC-T3 (Routine)** | … | … | … | … | … |
+| **All tiers** | … | … | … | … | … |
+
+**Breach detail** (one row per breached or live-breach event — the actionable core of the report):
+
+| Event ID | Tier | Incident | Committed (resp / resol) | Actual (resp / resol or OPEN) | Breach delta | Status |
+|----------|------|----------|--------------------------|-------------------------------|--------------|--------|
+
+The report carries a reversibility tier + confidence per the Reversibility Discipline (an
+internal read is CHEAP; an externally-shared compliance report asserting per-tier compliance
+to go/no-go or SteerCo stakeholders is EXPENSIVE/IRREVERSIBLE). Compliance % is computed over
+**closed** events only (met ÷ (met + breached)); OPEN events are surfaced separately because
+an open-but-not-yet-past-SLA event is neither met nor breached, while an open-AND-past-SLA
+event is a **live breach** that gates hypercare exit (see §Exit Criteria).
+
+#### Worked example (tracking)
+
+> The order-entry batch risk above (HC-T1, committed response ≤ 15 min / resolution ≤ 4 business
+> hours) fires twice during hypercare:
+> - **`I-CM-014`** — batch failed 09:02; first response 09:09 (7 min — **response MET**); resolved
+>   11:40 (2 h 38 m — **resolution MET**).
+> - **`I-CM-021`** — batch failed again 22:15; first response 22:31 (16 min — **response BREACHED,
+>   +1 min**); resolved next business day 14:00 (≈ 6.5 business hours — **resolution BREACHED,
+>   +2.5 business hours**).
+>
+> HC-T1 compliance row: **2 events · 1 met · 1 breached · 0 open · 50 %**. Breach detail names
+> `I-CM-021` with its +1 min / +2.5 business-hour deltas. Because `I-CM-021` closed, it does not
+> block exit on the open-breach gate — but a *still-open* HC-T1 incident past 4 business hours
+> would. **Reversibility:** EXPENSIVE · confidence HIGH (report shared to go/no-go).
+
 ## T-Minus Timeline
 
 ### Pre-Go-Live Preparation
@@ -227,6 +300,7 @@ can be waived without sponsor approval and documented rationale.
 | **Support ticket volume trending** | New tickets per day | Declining trend for 2 consecutive weeks; no S1 open; S2 count within threshold | Ticketing system |
 | **System stability confirmed** | Uptime, performance, integration health | >=99.5% uptime; response times within SLA; no degraded integrations | Monitoring dashboard |
 | **BAU team ready** | BAU support team staffed, trained, and handling tickets independently | BAU team resolving >=80% of Tier 1/2 tickets without escalation to project team | Ticket resolution attribution |
+| **No open SLA breaches** | Open hypercare SLA breaches across all HC-tiers (per §SLA Tracking and Compliance Reporting) | **Zero** open breaches — no `R-CM-###` / `I-CM-###` SLA event is OPEN past its tier's committed resolution. This is a **hard gate**: hypercare cannot be declared complete while any tracked SLA breach is unresolved, regardless of how the other criteria trend. | Hypercare compliance report (breach-detail rows with Status = OPEN/live breach) |
 
 ### Qualitative Exit Criteria
 
@@ -239,18 +313,28 @@ can be waived without sponsor approval and documented rationale.
 ### Exit Decision Model
 
 ```
-IF all quantitative criteria met
+IF any open SLA breach exists (any HC-tier event OPEN past its committed resolution)
+THEN → EXTEND HYPERCARE → Resolve the open breach(es) first; the open-breach gate is hard
+       and cannot be waived by sponsor approval (re-assess once breaches clear)
+
+ELSE IF all quantitative criteria met
   AND all qualitative criteria met
   AND sponsor approves
 THEN → EXIT HYPERCARE → Transition to BAU support model
 
-IF most criteria met but 1-2 quantitative criteria borderline
+ELSE IF most criteria met but 1-2 quantitative criteria borderline
+  AND no open SLA breach
   AND sponsor approves with conditions
 THEN → CONDITIONAL EXIT → Extend monitoring for 2 weeks; re-assess
 
-IF any critical criterion not met (S1 open, adoption <60%, error rate increasing)
+ELSE IF any critical criterion not met (S1 open, adoption <60%, error rate increasing)
 THEN → EXTEND HYPERCARE → Address root cause; re-assess in 1 week
 ```
+
+The open-SLA-breach gate is evaluated **first** and is non-waivable: unlike the borderline
+quantitative criteria (which a sponsor may accept with conditions for a CONDITIONAL EXIT), an
+open breach past its committed resolution always forces EXTEND. This is what makes the
+committed per-tier SLA load-bearing rather than aspirational.
 
 ## Super User Activation Protocol
 
@@ -304,6 +388,7 @@ THEN → EXTEND HYPERCARE → Address root cause; re-assess in 1 week
 | **Super User Deployment** | Roster, assignments, ratio, schedule, debrief cadence | Super user activation protocol |
 | **OCM Reinforcement Plan** | ADKAR Reinforcement activities, recognition events, feedback mechanisms | OCM facet activities |
 | **Tiered Hypercare Risk Register** | Each known/emerging risk × Severity×Likelihood×Blast-Radius score × assigned HC-tier × support model × escalation path (named owners) × committed SLA, with reversibility·confidence per row | §Hypercare Risk Classification (this reference) + impact assessment |
+| **Hypercare SLA Compliance Report** | Per-tier SLA-event tally (events, met, breached, open) + breach-detail rows (event ID, tier, committed vs actual, breach delta, status), computed from the `R-CM-###`/`I-CM-###` SLA-event records against the committed per-tier SLAs; carries reversibility·confidence | §SLA Tracking and Compliance Reporting (this reference) + the CM RAID surface |
 
 ## Anti-Patterns
 
