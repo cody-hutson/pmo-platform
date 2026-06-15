@@ -241,12 +241,26 @@ tag for hypercare, or when go-live is within 2 weeks and no hypercare plan exist
    - **Known risk areas** (highest-severity impacts from the assessment)
    - **Monitoring** (what metrics/indicators signal issues — e.g., order entry errors,
      date discrepancies, batch job failures)
+2.5. **Classify each known/emerging hypercare risk** and assign it a hypercare tier:
+   compute `Hypercare Risk Score = Severity × Likelihood × Blast-Radius` (Severity and
+   Likelihood by reference to `references/hypercare-plan.md` §Hypercare Risk Classification,
+   which sources them from `delivery-engine/references/raid-templates.md §5.1/§5.2`;
+   Blast-Radius 1–3 defined inline there), read the tier off the banding table
+   (**HC-T1 Critical / HC-T2 Elevated / HC-T3 Routine**), and attach the tier's support
+   model + escalation path + committed SLA. This produces a **tiered hypercare risk
+   register** (Risk | Sev | Like | BR | Score | HC-Tier | Support Model | Escalation Path
+   (named owners) | Committed SLA | Reversibility·Confidence) — named owners required
+   (`[ASSUMPTION – CONFIRM]` where an owner is unknown; never `[INSERT]`). The tier
+   axis *references*, and does not replace, the existing 3-Tier Support model and the
+   S1–S4 severity→SLA matrix — it is the orthogonal management-posture axis.
 3. Define exit criteria: what must be true for hypercare to close
 4. Define adoption KPIs: measurable indicators that the change has landed
 5. Produce the hypercare schedule: daily standups → weekly reviews → close-out
 
-**Output**: Hypercare plan + exit criteria + adoption KPIs + support matrix.
-Read `references/hypercare-plan.md` for the full template.
+**Output**: Hypercare plan + exit criteria + adoption KPIs + support matrix + **tiered
+hypercare risk register**.
+Read `references/hypercare-plan.md` for the full template (including §Hypercare Risk
+Classification — the tier set, scoring rule, and tier→support-model/SLA map).
 
 ### Mode E: Change Matrix Ingestion
 
@@ -438,7 +452,7 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 - Mode A (Change Impact Assessment) — impact-severity ratings and CM notes for High-severity impacts.
 - Mode B (Training Plan) — training-needs matrix entries, approach recommendations, target dates, prerequisite calls.
 - Mode C (Readiness Checklist) — per-item READY / NOT READY / AT RISK classifications and overall readiness verdict (READY / CONDITIONAL / NOT READY).
-- Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices.
+- Mode D (Hypercare Plan) — support model, escalation path, exit criteria, adoption KPI choices, **hypercare tier assignments** (HC-T1/HC-T2/HC-T3 per risk) and the **per-tier committed SLAs** (response/resolution) those assignments commit to.
 - Mode E (Change Matrix Ingestion) — completeness findings and remediation recommendations.
 - Mode F (CM Communications Schedule) — T-minus milestone scheduling and comms-gap findings.
 - Mode G (Adoption Tracking) — per-audience ADKAR Assessment Table rows (barrier stage, intervention, readiness verdict), Training-Timing Validation findings, champion-ratio UNDER-TARGET flags + remediation, valley-of-despair prep-plan window + interventions, sponsor-engagement {Active/At-Risk/SINO} status + decline/absence top-tier risk, change-fatigue status + band-mapped remediation per audience, and outcome verdicts (MET/ON-TRACK/NOT-MET/NO-DATA) including the deployed-vs-adopted determination.
@@ -692,6 +706,31 @@ structural conformance and content quality.
   adoption NO-DATA until T+2-week DAU sustain — re-measure [date]" and keeps hypercare open.
   Junior reports "go-live successful, adoption complete" on go-live day, support is pulled,
   and reversion surfaces in the valley with no scorecard to catch it.
+
+### Hypercare tier assigned without computing the risk score — PROC
+
+- **Signature (observable signal):** A Mode D tiered hypercare risk register row shows an
+  HC-tier (HC-T1/HC-T2/HC-T3) with no `Severity × Likelihood × Blast-Radius` value in the
+  score column, or a tier label whose band contradicts the score that is shown.
+- **Conditional:** do NOT assign a hypercare tier when the `Severity × Likelihood ×
+  Blast-Radius` score has not been computed, because an unscored tier assignment is an
+  unfalsifiable guess — the committed SLA the tier carries (response/resolution) has no
+  derivation to audit against, so downstream SLA-compliance tracking has no baseline to test
+  met-vs-breached, and the mis-sizing is invisible until a critical risk sits in the routine
+  queue during the valley.
+- **Root cause:** Assigning a tier "by feel" is faster than scoring three factors and
+  reading the banding table; under output pressure the agent labels the risk Critical or
+  Routine on intuition and skips the arithmetic.
+- **Mitigation:** For every register row, compute and show `Sev × Like × BR = score`, then
+  read the tier off the §Hypercare Risk Classification banding table in
+  `references/hypercare-plan.md`; a row whose tier contradicts its score band is a finding to
+  fix, not a row to ship. Severity and Likelihood come by reference from
+  `delivery-engine/references/raid-templates.md §5.1/§5.2`; only Blast-Radius (1–3) is scored
+  locally.
+- **Principal response vs. junior response:** Principal renders `Sev4 × Like3 × BR3 = 36 →
+  HC-T1` so the tier is reproducible and the committed SLA is auditable. Junior writes "HC-T1
+  (Critical)" with no score, and the SLA-compliance report later has no baseline to test the
+  tier's response/resolution targets against.
 
 ## Shared Behavioral Rules
 

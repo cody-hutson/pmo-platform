@@ -67,6 +67,115 @@ User encounters issue
     [Resolved?] → NO → War room activation (S1) or backlog prioritization (S2-S4)
 ```
 
+## Hypercare Risk Classification
+
+The two structures above answer two different questions: the **3-Tier Support Escalation
+Model** answers *who resolves an issue* (Floor → Functional → Vendor), and the
+**Escalation SLA by Severity** answers *how fast, given how bad* (S1–S4 response/resolution
+targets). Neither answers a third question hypercare planning needs: **how tightly should
+each known/emerging risk be watched, staffed, and escalated during the hypercare window?**
+This section adds that third axis — a **hypercare classification tier** assigned to each
+risk — and explicitly *references* the two existing structures rather than replacing them.
+
+**Three orthogonal axes (do not conflate "tier" across them):**
+
+| Axis | Question it answers | Scale | Owner section |
+|------|--------------------|-------|---------------|
+| **Severity** (an *input* to classification) | How damaging if it occurs? | Impact 1–5 / S1–S4 | `delivery-engine/references/raid-templates.md §5.2` · §Escalation SLA by Severity above |
+| **Support tier** (the *response resource*) | Who staffs the resolution? | T1 Floor / T2 Functional / T3 Vendor | §3-Tier Support Escalation Model above |
+| **Hypercare classification tier** (the *management posture* — defined here) | How tightly is this risk watched/staffed/escalated during hypercare? | **HC-T1 / HC-T2 / HC-T3** | This section |
+
+The hypercare classification tier is the **management-posture** axis: it bundles a support
+model + an escalation path + a committed SLA + a monitoring cadence into one named handling
+level and assigns each hypercare risk to exactly one. It is what makes the support matrix
+*tier-driven instead of flat* — a critical order-entry defect gets white-glove handling; a
+cosmetic issue gets the routine queue.
+
+### Tier Set
+
+| Hypercare Tier | Posture | Default support tiers mobilised |
+|----------------|---------|---------------------------------|
+| **HC-T1 (Critical)** | War-room — continuous watch, dedicated owner, breach triggers escalation | T1 Floor + T2 Functional + T3 Vendor (all mobilised) |
+| **HC-T2 (Elevated)** | Focused-watch — dedicated monitoring + named L2 path, short of war-room | T1 Floor + T2 Functional (T3 standard) |
+| **HC-T3 (Routine)** | Standard queue — floor-support / known-issue-list handling | T1 Floor (escalate on standard trigger) |
+
+The tier cardinality (3) intentionally mirrors the 3-Tier Support Escalation Model so the
+default support-resource map reads off cleanly. The tier vocabulary `{HC-T1, HC-T2, HC-T3}`
+is a stable contract — downstream SLA-compliance tracking keys on exactly these tokens.
+
+### Classification Scoring Rule
+
+Each known/emerging hypercare risk is scored:
+
+```
+Hypercare Risk Score = Severity (1–5) × Likelihood (1–5) × Blast-Radius (1–3)   →  range 1–75
+```
+
+- **Severity (1–5)** — adopted **by reference** from the platform's single-sourced risk
+  engine, `delivery-engine/references/raid-templates.md §5.2` (Impact Scale: 1 Negligible →
+  5 Severe). For hypercare framing the same 1–5 reads as post-go-live impact (1 cosmetic →
+  5 go-live-blocking / order-entry-down). *Not re-authored here — read it at the source.*
+- **Likelihood (1–5)** — adopted **by reference** from `raid-templates.md §5.1` (Probability
+  Scale: 1 Very Low <10% → 5 Very High >75%). *Not re-authored here — read it at the source.*
+- **Blast-Radius (1–3)** — the one net-new factor, sized small so it modifies but cannot
+  dominate the Severity×Likelihood core (Impact already partially captures scope, so a full
+  1–5 blast-radius would double-count):
+  - **BR 1 — Contained:** single user / single process / one functional group.
+  - **BR 2 — Cross-functional:** ≥2 functional groups OR a shared integration (WMS/CRM/EDI),
+    but not enterprise-wide.
+  - **BR 3 — Enterprise:** all users / a core shared service / a system-of-record integrity
+    risk.
+
+Reusing the corpus Probability×Impact scale (rather than inventing a bespoke severity scale)
+keeps a single source of risk-scoring truth; only Blast-Radius is new.
+
+### Score → Tier Banding
+
+| Hypercare Risk Score | Hypercare Tier | Band rationale |
+|----------------------|----------------|----------------|
+| **30 – 75** | **HC-T1 (Critical)** | Requires *both* high Severity×Likelihood *and* meaningful blast (e.g. Sev4×Like3×BR3 = 36; Sev5×Like3×BR2 = 30). A high-severity but *contained* risk (Sev5×Like3×BR1 = 15) lands HC-T2, not HC-T1 — it does not over-mobilise the floor. |
+| **10 – 29** | **HC-T2 (Elevated)** | The focused-watch middle band — real risk worth dedicated monitoring + a named L2 path, short of war-room (e.g. Sev4×Like2×BR2 = 16; Sev3×Like3×BR2 = 18). |
+| **1 – 9** | **HC-T3 (Routine)** | Low product — standard floor-support queue / known-issue-list handling (e.g. Sev3×Like2×BR1 = 6; Sev2×Like2×BR2 = 8). |
+
+**Band edges (30 / 10 / 1) are `[INFERRED]`** — chosen so each tier's worked-example cells
+match its management posture, scaled to the 1–75 range. They are flagged for operator
+ratification at release-plan review. The scoring *scale* itself is `[SOURCE]` (Probability×Impact
+from `raid-templates.md §5`); only the Blast-Radius factor and these three band edges are new design.
+
+### Tier → Support Model / Escalation / Committed SLA
+
+This map is the actionable output: each tier binds a support model, an escalation path, a
+monitoring cadence, and a **committed (response, resolution) SLA pair** — every SLA value
+anchored to an existing **§Escalation SLA by Severity** cell so the two tables cannot drift.
+
+| Hypercare Tier | Support model (existing tiers mobilised) | Escalation path | Monitoring cadence | Committed SLA (response / resolution) | Default reversibility of a tier assignment |
+|----------------|------------------------------------------|-----------------|--------------------|---------------------------------------|--------------------------------------------|
+| **HC-T1 (Critical)** | White-glove: dedicated named support owner + T1 Floor + T2 Functional on standby + T3 Vendor on-call; war-room on trigger | Named L1→L2→L3 with **named owners** (no role-only); war-room activation on any breach | Real-time / continuous during Intensive phase; named owner reports at each standup | **Response ≤ 15 min · Resolution ≤ 4 business hours** (anchor: S1 row) | EXPENSIVE (named owners committed) |
+| **HC-T2 (Elevated)** | Focused: T1 Floor + named T2 Functional owner; T3 on standard SLA | L1→L2 named; L3 on escalation | Daily during Intensive; per-standup review | **Response ≤ 1 business hour · Resolution ≤ 1 business day** (anchor: S2 row) | MODERATE–EXPENSIVE |
+| **HC-T3 (Routine)** | Standard: T1 Floor / super-user queue; known-issue-list handling | L1→L2 on standard escalation trigger | Trend-monitored; weekly review sufficient | **Response ≤ 4 business hours · Resolution ≤ 1 sprint / per backlog** (anchor: S3–S4 rows) | MODERATE |
+
+The committed-SLA column is the explicit, named, stable contract that downstream
+SLA-compliance tracking measures incidents against (incident open-time → resolve-time vs the
+tier's committed resolution). The tier tokens `{HC-T1, HC-T2, HC-T3}` and these SLA pairs are
+held stable across the classification capability and any sibling tracking capability.
+
+### Worked Example
+
+> **Risk:** Nightly order-entry batch fails to post to the ERP.
+> **Severity** = 5 (order entry down — go-live-blocking impact) · **Likelihood** = 3
+> (coin-flip — new integration, UAT showed intermittent failures) · **Blast-Radius** = 3
+> (enterprise system-of-record integrity).
+> **Score** = 5 × 3 × 3 = **45** → band 30–75 → **HC-T1 (Critical)**.
+> **Support model:** white-glove — named owner + T1/T2 mobilised, T3 Vendor on-call.
+> **Escalation:** named L1 (floor lead J. Doe) → L2 (app support L. Smith) → L3 (vendor TAM);
+> war-room on breach. **Committed SLA:** response ≤ 15 min / resolution ≤ 4 business hours.
+> **Reversibility:** EXPENSIVE · confidence HIGH (named owners committed; rollback = redistribute coverage).
+
+A second risk — a cosmetic label misalignment on a rarely-used report (Sev 2 × Like 2 × BR 1
+= 4) — bands to **HC-T3 (Routine)**: floor-support queue, weekly trend review, response ≤ 4
+business hours / resolution per backlog. The same matrix sizes both risks to their actual
+exposure rather than treating every hypercare issue the same.
+
 ## T-Minus Timeline
 
 ### Pre-Go-Live Preparation
@@ -194,6 +303,7 @@ THEN → EXTEND HYPERCARE → Address root cause; re-assess in 1 week
 | **Hypercare Schedule** | Daily standups, review cadence, phase transitions | T-minus timeline |
 | **Super User Deployment** | Roster, assignments, ratio, schedule, debrief cadence | Super user activation protocol |
 | **OCM Reinforcement Plan** | ADKAR Reinforcement activities, recognition events, feedback mechanisms | OCM facet activities |
+| **Tiered Hypercare Risk Register** | Each known/emerging risk × Severity×Likelihood×Blast-Radius score × assigned HC-tier × support model × escalation path (named owners) × committed SLA, with reversibility·confidence per row | §Hypercare Risk Classification (this reference) + impact assessment |
 
 ## Anti-Patterns
 
