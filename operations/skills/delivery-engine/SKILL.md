@@ -162,7 +162,7 @@ actions (merge duplicates, link dependencies, escalate blockers).
 tag referencing DoR or readiness.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle). This DoR check is the specific instance of the universal §5.2 per-transition entry-criteria enforcement applied at the Prepare→Build boundary `T(6→7)`.
+1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle). This DoR check is the specific instance of the universal §5.2 per-transition entry-criteria enforcement applied at the Prepare→Build boundary `T(6→7)` — the LG-4 gate, bound to `T(6→7)` in `references/gate-definitions.md §4.2`; render the DoR verdict in the §4.1 `PASS / CONDITIONAL PASS / FAIL` vocabulary.
 2. Evaluate each ticket against every DoR criterion
 3. For each failure:
    - Identify what's missing with specificity (not "needs AC" but "no testable
@@ -259,7 +259,14 @@ recommended adjustments, drafted escalations.
 any [DELIVERY] tag referencing DoD or release.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition — including the QA/Acceptance (Stage 9) → Plan Review (Stage 10) exit predicate that BLOCKS the move while a P1 defect is open (§5, the QA-gate AC; this stage exit predicate feeds the LG-6 `[LG-6-EX-2]` gate criterion). At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4. The QA→Plan-Review P1 block is the worked AC-critical instance of the universal §5.2 per-transition enforcement; for any other transition you evaluate, apply the same §5.2 BLOCK predicate (stage n exit + stage n+1 entry criteria) citing the transition `T(n→n+1)`.
+1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria, the §4 transition BLOCK rule, the **§4.1 tri-state verdict semantics**, and the **§4.2 gate→`T(n→n+1)` binding**, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition (the §3 stage→gate seam + the §5.2 per-transition enforcement). **Apply the §4 transition rule at WHICHEVER lifecycle gate the transition sits at — LG-1…LG-10, not LG-6 alone** (the gate-application loop):
+   - **Identify the gate `LG-N`** this transition sits at, from the §3 stage→gate seam (or the asserted boundary). On ambiguity, ask which boundary (LG-N) is being evaluated, or infer it from the seam if the stage boundary is given and label the inference `[ASSUMPTION – CONFIRM]`; never guess a late gate to justify an advance.
+   - **Evaluate that gate's `[LG-N-EX-k]` exit block per §4** — each criterion `PASS / FAIL / NO-EVIDENCE`.
+   - **Render the `PASS / CONDITIONAL PASS / FAIL` verdict per §4.1** — all-PASS → PASS; `PASS WITH CONDITIONS` → CONDITIONAL PASS **only where the gate type sanctions it** (Approval gates; the LG-6 documented-exception — a hard binary Quality criterion cannot render CONDITIONAL PASS); any FAIL **or NO-EVIDENCE** → FAIL. Never round NO-EVIDENCE up to PASS or to CONDITIONAL.
+   - **On FAIL, BLOCK** the transition with an evidence-backed rejection naming the FIRST violated `[LG-N-EX-k]` + its `T(n→n+1)` (per §4.2; for the project-altitude boundary-point gates LG-0/LG-1/LG-2, cite the criterion + note "no single `T(n→n+1)`" rather than fabricating one) + the remediation (resolve-and-revalidate, or a documented authority exception at that boundary) — the §4 evidence format.
+   - **Evaluate the boundary's handoff checklist (H1–H4) per `gate-definitions.md §3`** where the boundary is a critical handoff (open the linked `gate-checklists.md` template — H1 DoR at LG-4→LG-5, H2 DoD at LG-5→LG-6, H3 Approval+nine-dimension at LG-6→LG-7→LG-8, H4 Op-Readiness+Hypothesis at LG-8→LG-9→LG-10): a failed handoff-checklist item is a FAIL (or, where the gate type permits, CONDITIONAL PASS with the item logged as a tracked RAID item).
+   - **Enforce no-advance-past-unmet-gate / no-skip-a-gate** per §4.2 — a request to advance across a gate whose `[LG-N-EX-k]` is unmet → BLOCK citing the criterion + `T(n→n+1)`; a request to skip an intervening gate → BLOCK naming each skipped gate's unmet predicate in order, advancing only one legal transition at a time (compose with `lifecycle-stages.md §5.2` for the work-item gates LG-4 → LG-5 → LG-6).
+   - **Preserve the LG-6 / `[LG-6-EX-2]` case verbatim as the worked instance:** the QA/Acceptance (Stage 9) → Plan Review (Stage 10) exit predicate that BLOCKS the move while a P1 defect is open (`lifecycle-stages.md §5`, the QA-gate AC; this stage exit predicate feeds the LG-6 `[LG-6-EX-2]` gate criterion at `T(9→10)`). The QA→Plan-Review P1 block is the worked AC-critical instance of this general rule; do not delete or weaken it.
 2. Evaluate deliverables against DoD criteria:
    - Code/config complete and committed
    - Peer review completed
@@ -291,7 +298,7 @@ recommendation, remediation plan for failures, risk entries for any conditional 
 any [DELIVERY] tag referencing RAID, decisions, or milestones.
 
 **What you do**:
-1. Read `references/raid-templates.md` for the artifact templates. When the update logs a gate decision (a go/kill/hold/recycle or pass/fail rendered at a lifecycle gate), also read `references/gate-definitions.md` to attribute the decision to the correct lifecycle gate (LG-N) and authority holder.
+1. Read `references/raid-templates.md` for the artifact templates. When the update logs a gate decision (a go/kill/hold/recycle or pass/fail rendered at a lifecycle gate), also read `references/gate-definitions.md` to attribute the decision to the correct lifecycle gate (LG-N) and authority holder, and record the verdict in the canonical `references/gate-definitions.md §4.1` `PASS / CONDITIONAL PASS / FAIL` vocabulary (a CONDITIONAL PASS logs its open condition as a tracked RAID item with an owner + due date).
 2. Process the input (new information, transcript extract, status change)
 3. Produce the updated artifact with:
    - New entries fully populated (all fields, evidence-tagged)
@@ -719,6 +726,45 @@ structural conformance and content quality.
   stage, and the skipped readiness gap surfaces three stages later as a production
   defect that a transition BLOCK would have caught at the boundary.
 
+### Work item advanced across a lifecycle gate with an unmet exit criterion (or a gate skipped) — PROC
+
+- **Signature (observable signal):** A Mode F gate verdict advances a work item past a
+  lifecycle gate `LG-N` (or skips an intervening gate) while one or more of that gate's
+  `[LG-N-EX-k]` exit criteria (`references/gate-definitions.md` §2) evaluate FAIL or
+  NO-EVIDENCE — the transition is recorded as ALLOWED, or a PASS / CONDITIONAL PASS
+  verdict is rendered, instead of the FAIL / BLOCK the §4 / §4.2 rule requires.
+- **Conditional:** do NOT advance a work item across a lifecycle gate whose `[LG-N-EX-k]`
+  exit criteria are unmet, and do NOT skip an intervening gate, because
+  `references/gate-definitions.md` §4 and §4.2 make every gate transition BLOCKING — a
+  silent advance lets unready work reach a late, higher-blast-radius gate (e.g., Go-Live
+  LG-8 at `T(11→12)`) where the defect is far costlier to fix (the AC's transition-block
+  requirement, generalizing the built LG-6 `[LG-6-EX-2]` P1 block to all of LG-1…LG-10).
+- **Root cause:** failing a transition triggers stakeholder pushback at the gate review;
+  under that interpersonal pressure the agent advances "to keep things moving" rather than
+  rendering the harder FAIL with the specific unmet `[LG-N-EX-k]` cited. The asserted
+  "we've cleared this gate" arrives as a fact; evaluating the §4 per-criterion block is
+  several steps while accepting the assertion is one.
+- **Mitigation:** apply the §4 per-criterion evaluation at the gate the transition sits at;
+  render FAIL on any `[LG-N-EX-k]` that is FAIL or NO-EVIDENCE (per §4.1 — NO-EVIDENCE
+  never rounds to PASS); BLOCK citing the FIRST violated `[LG-N-EX-k]` + its `T(n→n+1)`
+  (per §4.2; "no single `T`" for the boundary-point gates LG-0/LG-1/LG-2); resolve-and-
+  revalidate or obtain a documented authority exception (CONDITIONAL PASS only where the
+  gate type sanctions it — Approval gates, the LG-6 documented-exception; a hard binary
+  Quality criterion renders FAIL). For a skip request, require every intervening gate's
+  exit predicate in order and name each unmet predicate in sequence.
+- **Principal response vs. junior response:** Principal blocks the advance and names the
+  specific unmet `[LG-N-EX-k]` + the gate + its transition (`FAIL — LG-7 Release Readiness,
+  T(10→11): [LG-7-EX-3] unmet — rollback plan not validated against a tested restore
+  point`), and for a skip enumerates every intervening unmet gate in order. Junior advances
+  "we'll catch it at the next gate," and the unready increment surfaces at Go-Live as a
+  production-blocking defect the gate BLOCK would have caught.
+- **Distinctness (do NOT merge with the two sibling entries):** this is the
+  *transition-advancing* axis at the **gate** layer — moving past or skipping a *gate*
+  whose exit criterion is unmet. It coexists with **Gate washing** (the *verdict-rounding*
+  axis — rendering PASS when a criterion fails) and with **skip-ahead** (the *stage*-layer
+  transition axis, `lifecycle-stages.md §5.2`). A gate and a stage transition are two views
+  of the same boundary for the work-item gates (LG-4/LG-5/LG-6); all three entries stay.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -732,7 +778,7 @@ Read these on first use, then as needed per mode:
 | Document | When to read | What it covers |
 |----------|-------------|----------------|
 | `references/gate-checklists.md` | Mode C (DoR) or Mode F (DoD/Release) | Full DoR, DoD, and release readiness criteria |
-| `references/gate-definitions.md` | Mode F (gate transition), Mode G (gate decisions) | Project-lifecycle gate sequence (LG-0 Idea Screen → LG-10 Closure): per-gate entry/exit/authority/artifacts/escalation + the gate-transition BLOCK rule |
+| `references/gate-definitions.md` | Mode F (gate transition across LG-1…LG-10), Mode G (gate decisions), Mode C (LG-4 DoR binding) | Project-lifecycle gate sequence (LG-0 Idea Screen → LG-10 Closure): per-gate entry/exit/authority/artifacts/escalation + the §4 gate-transition BLOCK rule + tri-state `PASS / CONDITIONAL PASS / FAIL` verdict semantics (§4.1) + gate→`T(n→n+1)` binding with the no-advance/no-skip rule (§4.2) |
 | `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode E (stage-tracking — position + per-transition validation + per-stage variance), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping + model resolution/absent-field default (§4.1), universal per-transition entry-criteria enforcement with the `T(n→n+1)` convention + no-skip-ahead (§5.2), the per-stage variance pointer (SPI RAG by role from estimation-standards.md §7), and the QA→Plan-Review P1-defect block |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
