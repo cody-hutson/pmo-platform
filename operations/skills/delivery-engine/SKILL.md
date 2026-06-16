@@ -181,7 +181,7 @@ gate verdict, recommended actions for any FAIL items.
 discussion, any [DELIVERY] tag referencing sprint planning.
 
 **What you do**:
-1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table (§3), Cone-of-Uncertainty range widths (§1), planning-horizon commitment rules (§2), the buffer three-zone model (§4), the **buffer-consumption RAG banding (§4.1)**, the velocity-as-range enforcement rule (§5), and the **milestone-variance (SPI) RAG (§7)**, `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds, and `references/tech-debt-capacity.md` for the tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor *value* is referenced there by role from `sprint-defaults.md` §1.2), the aged-debt threshold (>90d) + escalate/reclassify disposition, and the rework-rate formula + >20% alert
+1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table (§3), Cone-of-Uncertainty range widths (§1), planning-horizon commitment rules (§2), the buffer three-zone model (§4), the **buffer-consumption RAG banding (§4.1)**, the velocity-as-range enforcement rule (§5), and the **milestone-variance (SPI) RAG (§7)**, `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds, and `references/tech-debt-capacity.md` for the tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor *value* is referenced there by role from `sprint-defaults.md` §1.2), the aged-debt threshold (>90d) + escalate/reclassify disposition, and the rework-rate formula + >20% alert, and `references/tech-debt-classification.md` for the **Fowler quadrant** rubric (the 4 quadrants Reckless/Prudent × Deliberate/Inadvertent — §1), the **Cost-of-Delay tech-debt lens** (CoD components referenced by role from `intake-governance.md` §2, with a per-item HIGH/MEDIUM/LOW confidence tier — §2), and the **(quadrant × CoD) lexicographic sort** that ranks the tech-debt slice and fills `tech-debt-capacity.md`'s under-floor deficit up to the floor (§3)
 2. Assess inputs: refined backlog (DoR-passed items), team capacity, velocity history,
    carryover from prior sprint, priority guidance
 3. **Enforce estimation discipline (do not merely read the parameters — apply them, and reject/adjust on violation):**
@@ -195,6 +195,8 @@ discussion, any [DELIVERY] tag referencing sprint planning.
    - **Tech-debt capacity floor**: compute the tech-debt **allocation ratio** (tech-debt-allocated ÷ sprint capacity) and render the 🟢/🟡/🔴 **floor-RAG** per `tech-debt-capacity.md` §1 (the floor *value* is owned by `sprint-defaults.md` §1.2 — referenced by role, never restated). On **🔴 RED (allocation < the floor)**, emit the **"tech debt under floor — capacity over-committed to new features"** warning and require an explicit PM override (**declared and RAID-logged**, per `tech-debt-capacity.md` §1) or re-scope to restore the slice — never silently absorb an under-floor plan. Calibrate the methodology-upper (🟡) edge from the existing `delivery_approach` enum; on absent `delivery_approach`, default to the canonical 15% floor and label the methodology `[ASSUMPTION – CONFIRM]`. When no tech-debt allocation is stated, flag that the floor cannot be verified, default to requiring ≥ the floor, and cite the canonical source — do not default the band to GREEN. Name it "tech-debt floor / allocation ratio" — never "debt budget overage" / "debt RAG"; this floor-RAG is orthogonal to the §4.1 buffer-consumption band and the `capacity-model.md` §9 demand-supply band.
    - **Proposed sprint scope**: prioritized list of items with story points (as ranges per step 3), assignees,
      and rationale for inclusion/exclusion
+   - **Tech-debt classification + ranking**: for every tech-debt item in scope, apply `tech-debt-classification.md` —
+     **(a) classify** into a Fowler quadrant (§1: Reckless/Prudent × Deliberate/Inadvertent); when intent/awareness is not determinable, emit `quadrant: unclassified — intent/awareness not determinable; classify before prioritizing` and **exclude it from the ranked fill** (never default-to-a-quadrant), and route a Reckless/Inadvertent *pattern* to RAID; **(b) quantify CoD** with a confidence tier (§2: score the canonical CoD components — Value / Time-Criticality / RR\|OE — referenced by role from `intake-governance.md` §2, **never re-derived**; attach HIGH/MEDIUM/LOW — when inputs are not measurable, score at LOW from context, **never fabricate a HIGH number and never skip CoD**); **(c) sort the tech-debt slice by (quadrant × CoD)** (§3 lexicographic rule: CoD descending primary, quadrant urgency as the tie-break within a CoD band — Reckless/Deliberate surfaces first when CoD is high); name it "tech-debt rank / (quadrant × CoD) sort" — **never "debt score"**; and **(d) fill the under-floor deficit** with the top-ranked items up to the floor, consuming `tech-debt-capacity.md`'s floor → ranking contract (floor % / allocation ratio / under-floor deficit / aged-item set) **by role — do NOT re-derive the floor**; an aged item (>90d, from the §2 aged-item set) ranks by its (quadrant × CoD) like any item (aging raises Time-Criticality → CoD, no separate aging-weight). When `tech-debt-capacity.md`'s floor/deficit have not been computed, still produce the ranking but state the fill target is unknown and recommend running the capacity-floor check first.
    - **Milestone variance + RAG**: when a milestone schedule baseline exists, compute milestone variance as SPI and assign its 🟢/🟡/🔴 RAG per `estimation-standards.md` §7, **citing the threshold**. Name it "milestone variance (SPI)" / "milestone slip" — never "Schedule Variance". When no baseline exists, emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; do not fabricate a RAG.
    - **Carryover handling**: items carried from prior sprint with reason and risk
    - **Risk items**: items with dependencies, items without estimates, items with
@@ -210,7 +212,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
 6. Bridge to SPM (if co-managed): if any sprint items map to waterfall milestones, note
    the milestone impact and produce both framings
 
-**Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation and a declared PM floor-override).
+**Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), the **tech-debt rank** — each tech-debt item with its Fowler quadrant (or `unclassified`) and its CoD value + HIGH/MEDIUM/LOW confidence tier, the slice sorted by (quadrant × CoD), and the top-ranked items filling the under-floor deficit up to the floor (or a deferred-fill note + recommendation when the floor/deficit are not computed), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation, a Reckless/Inadvertent pattern, and a declared PM floor-override).
 
 ### Mode E: Execution Control Tower
 
@@ -807,6 +809,42 @@ structural conformance and content quality.
   and from the *gate-advance* / *stage-skip* entries (which are transition-validation failures).
   All entries stay; do not merge.
 
+### Tech-debt item prioritized without both a Fowler classification and a CoD value — PROC
+
+- **Signature (observable signal):** A Mode D (Sprint Planning) output ranks or prioritizes a
+  tech-debt item that carries **no Fowler quadrant** (or a silently-guessed one) **OR no CoD
+  value** (even at LOW confidence) — the tech-debt slice is ordered by gut "importance" rather
+  than by the (quadrant × CoD) sort, and an item appears in the ranked fill with a blank
+  quadrant or a missing/absent Cost-of-Delay.
+- **Conditional:** do NOT prioritize a tech-debt item without **both** a Fowler classification
+  **AND** a CoD value (at minimum LOW confidence), because an unclassified or CoD-less item is
+  ranked on vibe — the differential-prioritization the quadrant + CoD model exists to provide
+  collapses, and a Reckless/Deliberate high-cost item can sink below a benign one (the exact
+  mis-ranking the two-factor model prevents).
+- **Root cause:** Under planning pressure, classifying every debt item and scoring CoD feels
+  like overhead; the agent ranks by gut "this one feels urgent," skips the two-factor discipline,
+  and the sort silently degrades to first-come / loudest-voice. Placing every item in a quadrant
+  and scoring its CoD (even at LOW confidence) is several steps; eyeballing importance is one —
+  and the degraded sort is invisible until a high-cost reckless item is found buried mid-backlog.
+- **Mitigation:** Require a quadrant (or an explicit `unclassified` → **excluded from the fill**,
+  NOT defaulted) AND a CoD value (LOW confidence acceptable, a fabricated HIGH number forbidden,
+  skipping CoD forbidden) before any tech-debt item enters the ranked fill; score the CoD
+  components by role from the canonical home (`intake-governance.md` §2 via
+  `tech-debt-classification.md` §2) and cite the quadrant rubric (`tech-debt-classification.md`
+  §1); sort by (quadrant × CoD) per §3. Never call the result a "debt score."
+- **Principal response vs. junior response:** Principal classifies every item into a quadrant,
+  scores CoD at the honest confidence tier (LOW from context when uninstrumented), ranks by
+  (quadrant × CoD), and flags any `unclassified` item for resolution before it enters the fill —
+  so the reckless/deliberate high-cost debt surfaces to the top. Junior eyeballs "this one feels
+  urgent," skips the quadrant and the CoD scoring, and the reckless/deliberate debt that should
+  top the list gets buried under benign-but-louder items.
+- **Distinctness (do NOT merge):** this is the **classification-completeness** axis — a
+  *prioritization-input* failure (a debt item ranked without its quadrant + CoD). It is distinct
+  from #366's **floor-breach** entry (a *capacity-allocation* failure — the tech-debt slice under
+  the floor) and from the *raw-capacity / point-estimate* entry (un-focus-factored capacity and
+  point estimates) and the *gate-advance* / *stage-skip* entries (transition-validation failures).
+  All entries stay; do not merge.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -827,6 +865,7 @@ Read these on first use, then as needed per mode:
 | `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, buffer-consumption RAG banding (§4.1), velocity-as-range enforcement, contingency vs. management reserve, milestone-variance (SPI) RAG (§7) |
 | `references/capacity-model.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Effective-capacity formula (focus-factor × context-switch × allocation), context-switching penalties, Brooks's-Law thresholds, 60/20/20 effort split, team-stability + vendor-ramp + bus-factor (managed-team lens) + demand-supply gap RAG (the 0.85 ceiling is the shared anchor for the §4.1 buffer-consumption Red boundary; cross-refs estimation-standards.md §4.1/§7) |
 | `references/tech-debt-capacity.md` | Mode D (Sprint Planning) | Tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor value is referenced by role from sprint-defaults.md §1.2, not restated), aged-debt detection (>90d escalate/reclassify via raid-templates.md), rework-rate tracking (>20% alert `[ASSUMPTION – CONFIRM]` + not-computable negative path), and the floor→ranking contract consumed by #180 |
+| `references/tech-debt-classification.md` | Mode D (Sprint Planning) | Tech-debt classification + prioritization — the 4 Fowler quadrants (Reckless/Prudent × Deliberate/Inadvertent), the Cost-of-Delay scoring lens (CoD components referenced from intake-governance.md §2 by role, not re-derived; per-item HIGH/MEDIUM/LOW confidence tier), and the (quadrant × CoD) lexicographic sort that ranks the tech-debt slice and fills tech-debt-capacity.md's under-floor deficit up to the floor |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
 | `references/dependency-rules.md` | Any mode with cross-item dependencies | Dependency types, escalation triggers, tracking format |
