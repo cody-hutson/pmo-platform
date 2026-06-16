@@ -2,7 +2,7 @@
 name: tracker-manager
 description: >
   Generic update engine for all operational trackers in 04-PMO-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
-version: v1.10
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -125,6 +125,40 @@ and validate:
 
 Flag any validation failures with the specific error. Do not silently skip invalid instructions.
 
+### Step 1.5: RAID Dedup Check
+
+Fires ONLY for `action: ADD` instructions targeting a RAID Log artifact. MODIFY / CLOSE /
+REACTIVATE are exempt — they reference an existing `entry_id`, so no duplicate entry is being
+created. Non-RAID targets are exempt — this check is RAID-only and adds zero behavior for the
+other tracker types.
+
+For each RAID `ADD`, compare the candidate `Description` against existing rows to catch a
+probable duplicate before a second entry for the same risk lands in the log:
+
+1. **Scope the comparison set.** Compare against **ACTIVE-section rows only** (`Section = ACTIVE`).
+   ARCHIVE rows are excluded — a closed historical risk is not a live duplicate. Same-`RAID
+   Category` rows are the **primary** comparison set; cross-category rows are surfaced only at a
+   **lower-confidence note** (a "Risk" and an "Issue" describing the same condition is a
+   legitimate escalation lineage, not a duplicate).
+2. **Compute similarity.** Use **normalized token-set (Jaccard) similarity** on the `Description`
+   text: lowercase, strip punctuation, drop a small stopword set, then compare token sets via
+   `|A∩B| / |A∪B|`. Compute this by reasoning over the two strings (this is an LLM agent — no
+   library import). The method and threshold are documented in
+   `references/tracker-schemas.md` § Tracker Integrity Rules so the judgment is reproducible
+   and inspectable.
+3. **Apply the threshold — flag, never auto-block.** A **≥ 0.70 (70%)** similarity match flags
+   the ADD as a probable duplicate; it does **not** drop or suppress the entry. Surface it as a
+   decision-class line in Step 2's consolidated summary with the matched ID, the similarity
+   score, and a reversibility tier:
+   `RAID ADD (R-PPM-###) — probable duplicate of R-PPM-012 (0.82 similarity); confirm new entry
+   or merge. [CHEAP · confidence: HIGH]`. Dedup is advisory because false positives exist (two
+   genuinely distinct risks can share vocabulary) — the operator confirms. Below 0.70 on every
+   ACTIVE row → no flag, summary unchanged (a silent pass is correct here).
+
+A wrongly-suppressed RAID entry is a silent loss — worse than a flagged near-duplicate. This is
+why the check flags rather than blocks, consistent with the skill's "flag, don't ask"
+chained-context rule.
+
 ### Step 2: Consolidate
 
 Group validated updates by tracker:
@@ -157,6 +191,42 @@ VALIDATION ISSUES:
 - [any invalid instructions with specific error]
 ```
 
+### Step 2.5: Cascade Guard
+
+A **write-side presence check**, not a discovery engine. tracker-manager does **not** discover
+cascades — that is ppm-agent Section 8.6's deterministic dependency scan, which emits the
+`TRACKER_IMPACT_MATRIX` (DIRECT / SECONDARY rows) that this skill already consumes and validates
+(see Input Format). Re-deriving cascades here would duplicate the read-side engine, do it
+without the cross-tracker context ppm-agent loads in pre-processing, and violate this skill's
+"NOT deciding what should change" charter. The guard asserts the cascade was scanned upstream;
+it does not perform the scan.
+
+1. **Classify each update for a scope-change signal.** The signal fires WHEN any of these holds:
+   - (i) a RAID `ADD` / `MODIFY` whose `RAID Category = Dependency` or `Scope` (the Scope risk
+     sub-category per `delivery-engine/references/raid-templates.md` § 1.2), OR
+   - (ii) a `MODIFY` that changes a milestone / date / deliverable field on a Tier-1 tracker, OR
+   - (iii) an update whose `reason` field names a scope change (re-scoping, descope, added or
+     removed deliverable).
+
+   These are the updates whose §8.6 SECONDARY-effect surface is non-trivial. Routine updates
+   (blocker closes, meeting completions) carry no scope-change signal → the guard does not fire,
+   so there is no "missing matrix" noise on high-volume routine work.
+
+2. **Assert the upstream scan.** For each scope-change update, verify an accompanying
+   `TRACKER_IMPACT_MATRIX` is present for this processing run AND contains a row (DIRECT or
+   SECONDARY) keyed to this update, OR an explicit `No secondary effects identified` record for
+   it. If the matrix is absent or silent on a scope-change update → **flag**:
+   `Cascade-unverified: scope-change update (R-PPM-014) arrived without a Tracker Impact Matrix
+   entry — route through ppm-agent §8.6 dependency scan before applying. [MODERATE · confidence:
+   HIGH]`. MODERATE because un-scanned secondary effects, if written, leave trackers internally
+   inconsistent (days-to-reconcile).
+
+3. **Render the downstream impacts.** When the matrix IS present, list its SECONDARY rows in the
+   consolidated change summary as the "downstream impacts of this scope change." tracker-manager
+   surfaces what §8.6 found — it does not find them. This is the write-side mirror of ppm-agent's
+   `TRACKER_UPDATES emitted without the Section 8.6 dependency scan` failure mode: the read-side
+   enforces emitting the matrix; this guard enforces receiving it before writing a scope change.
+
 ### Step 3: Classify by Document Tier
 
 For each validated update, classify the target tracker:
@@ -182,6 +252,29 @@ Present the consolidated change summary to the user. The user can:
 - **Modify before applying**: Adjust a field value before writing
 
 ### Step 5: Execute Approved Changes
+
+**Lifecycle-State Precondition (runs first, before any Read/Apply below).** Before writing to a
+target artifact, validate that it is still a live document. This reads the artifact's existing
+`lifecycle_state` frontmatter field (`core/schemas/frontmatter-schema.md` § Category 2 — a real,
+REQUIRED field; operational trackers / RAID registers are **Domain B**, value set referenced from
+that schema — do NOT restate the full Domain-B list here beyond the block / flag set). The
+predicate operates on the **target FILE's** lifecycle state, NOT the RAID row's own status:
+
+| Target artifact `lifecycle_state` | Disposition |
+|---|---|
+| `current` / `emerging` / `needs-review` (live Domain-B states; `active` tolerated as a Domain-A alias) | **PROCEED** — write allowed |
+| `archived` / `superseded` | **BLOCK + flag** — refuse the write: `Write refused: target [Project]_RAID_Log.csv is lifecycle_state=archived — updating a closed/archived artifact. Confirm reactivation or redirect to the current artifact. [MODERATE · confidence: HIGH]` |
+| `stale` (Domain B) | **FLAG, proceed-on-confirm** — stale ≠ closed; warn the artifact is past its staleness window and the update may land on out-of-date content |
+| **absent / unparseable / unknown enum** | **`unknown → flag`** (low-noise advisory, never silent-pass and never hard-block) — `Lifecycle-state unknown for [target] (frontmatter field absent or unreadable) — confirm the target is a live artifact before write. [MODERATE · confidence: HIGH]` |
+
+**`unknown → flag` is the dependency-honoring default and must stay low-noise.** Many operator
+trackers do not yet carry the field; an absent field is an **advisory note**, not a workflow
+stop. Scope the **BLOCK** strictly to `archived` / `superseded` — `unknown` on an established
+operational tracker (a routine Daily-Status or Comms auto-write on a field-less `.md`) must NOT
+turn into an approval gate. **CSV RAID artifacts** carry no YAML frontmatter line: read lifecycle
+state from the co-located project context (PROJECT.md artifact registry) where available, else
+`unknown → flag` — do not crash on "no YAML in a `.csv`." Full method documented in
+`references/tracker-schemas.md` § Tracker Integrity Rules.
 
 For each approved change:
 
@@ -248,6 +341,7 @@ The RAID Log uses an active/archive CSV structure. When processing RAID Log upda
 3. **Querying active items:** Filter on Section = ACTIVE. Never include ARCHIVE items in active counts or status summaries unless specifically asked for historical analysis.
 4. **Reactivating:** Change Status back to Open, clear Date_Closed, change Section to ACTIVE. Preserve Closure_Comments as context.
 5. **Schema validation:** Validate all 14 fields per tracker-schemas.md Tracker 5 definition before writing.
+6. **Integrity guards:** RAID `ADD` runs the Step-1.5 dedup check; scope-change RAID updates run the Step-2.5 cascade guard; every write runs the Step-5 lifecycle-state precondition. The dedup threshold (≥ 0.70 token-set Jaccard), cascade-trigger signal set, and lifecycle-state predicate are documented in `references/tracker-schemas.md` § Tracker Integrity Rules.
 
 ## Evidence Gate Enforcement
 
@@ -510,8 +604,52 @@ structural conformance and content quality.
   directly; two of them close items the read-side dependency scan would have
   kept open, and the silent losses surface a week later as forgotten blockers.
 
+### RAID written, scope change applied, or archived artifact updated without the integrity guards — PROC
+
+- **Signature (observable signal):** A RAID `ADD` is written without a Step-1.5 dedup
+  check (no similarity comparison against ACTIVE rows), OR a scope-change update
+  (Dependency / Scope-category RAID, milestone / date / deliverable MODIFY on a Tier-1
+  tracker, or a `reason` naming a re-scope) is applied without the Step-2.5 cascade guard
+  listing its downstream impacts or flagging a missing Tracker Impact Matrix, OR a write
+  lands on an `archived` / `superseded` target without the Step-5 lifecycle-state
+  precondition firing.
+- **Conditional:** do NOT write a RAID entry without a dedup check, apply a scope change
+  without listing cascade impacts (or flagging the absent Impact Matrix), or write to an
+  `archived` / `superseded` artifact without a lifecycle-state check, because each omission
+  is a silent integrity loss: a duplicate RAID entry accumulates two rows for one risk, an
+  un-scanned scope change desyncs dependent trackers (days-to-reconcile), and a write to a
+  closed artifact mutates a document no longer treated as live. The guards are advisory by
+  design (dedup flags, cascade flags, `unknown → flag`) so they never suppress a legitimate
+  entry — but they must run.
+- **Root cause:** The three guards sit between the existing steps the agent already runs
+  (validate → consolidate → execute); under volume-pressure on a routine run they feel
+  skippable because the happy-path write still "works." A RAID ADD looks like any other
+  ADD; a scope-change MODIFY looks like any other MODIFY; a target file's lifecycle state is
+  invisible unless explicitly read. The cost surfaces later — a relitigated risk, a desynced
+  dependent tracker, an edit to an archived log — not at write time.
+- **Mitigation:** Step 1.5 fires on every RAID `ADD` (token-set Jaccard ≥ 0.70 vs. ACTIVE
+  rows → flag, never block). Step 2.5 classifies every update for the scope-change signal and
+  asserts an accompanying `TRACKER_IMPACT_MATRIX` row (absent → `Cascade-unverified` flag,
+  route through ppm-agent §8.6 — this skill renders cascades, it does not discover them). The
+  Step-5 lifecycle precondition reads the target's `lifecycle_state` before any write
+  (`archived` / `superseded` → BLOCK + flag; `stale` → flag / proceed-on-confirm; absent /
+  unparseable → low-noise `unknown → flag`, never silent-pass and never a hard stop on a
+  field-less routine tracker; CSV artifacts → read from the project registry else `unknown →
+  flag`). All three surface as decision-class lines with a reversibility tier in the
+  consolidated change summary. The thresholds and rules live in
+  `references/tracker-schemas.md` § Tracker Integrity Rules.
+- **Principal response vs. junior response:** Principal runs the dedup check (flags the 0.82
+  match for confirm), renders the Impact Matrix's SECONDARY rows for the scope change (or
+  flags the missing matrix), and refuses the write to the `archived` log with a redirect —
+  all advisory, all surfaced, the operator decides. Junior writes the second RAID row for the
+  same risk, applies the descope without touching the three dependent trackers it silently
+  desyncs, and edits the archived log directly; the duplicate, the desync, and the
+  stale-artifact mutation each surface a week later as a separate cleanup.
+
 ## Reference Files
 
 - `references/tracker-schemas.md` — Complete schema definitions for all operational trackers.
   Read this file for field definitions, valid values, ID formats, section structures, and
-  closure/lifecycle rules. This file is the source of truth for tracker validation.
+  closure/lifecycle rules. This file is the source of truth for tracker validation. Its
+  § Tracker Integrity Rules documents the RAID dedup threshold, the cascade-trigger signal
+  set, and the lifecycle-state predicate used by Steps 1.5, 2.5, and 5.
