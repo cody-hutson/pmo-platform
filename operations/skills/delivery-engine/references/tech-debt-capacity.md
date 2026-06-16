@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 <!-- provenance: UNSOURCED-DOMAIN -->
 
 # Tech-Debt Capacity

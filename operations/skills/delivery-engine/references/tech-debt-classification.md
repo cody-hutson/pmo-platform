@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 <!-- provenance: EXTERNAL-FRAMEWORK (Fowler quadrant) + IN-CORPUS-ADOPTED (CoD) + REASONED-DESIGN (sort tie-break) -->
 
 # Tech-Debt Classification
