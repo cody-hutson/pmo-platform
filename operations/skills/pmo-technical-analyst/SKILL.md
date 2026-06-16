@@ -2,7 +2,7 @@
 name: pmo-technical-analyst
 description: >
   Reviews technical artifacts with senior TPM judgment — surfaces risks not obvious from the document alone. Modes: FDD review · Integration risk · Architecture assessment · Dependency identification · Feasibility feedback. Use when uploading FDDs, integration specs, or architecture documents. Triggers: "review this FDD", "what are the technical risks", "check this integration design", "architecture review", "feasibility check", "what's missing from this spec."
-version: v1.19
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -159,16 +159,31 @@ functional design document.
    covered? Are integration touchpoints tested?
 5. Review assumptions and client responsibilities: are they realistic? Are there hidden
    scope items masquerading as assumptions?
-6. Review AC quality: are acceptance criteria testable? Do they cover failure modes?
+6. Review AC quality, then **score the FDD**: are acceptance criteria testable? Do they
+   cover failure modes? Apply the `## FDD Quality Score` rubric in
+   `references/technical-review-checklist.md` — score each of the 6 dimensions
+   (Completeness, Consistency, Technical clarity, Dependency clarity, Risk identification,
+   Operational-readiness coverage) 1–5, take the **mean** (1.0–5.0), and map it to a band:
+   **READY ≥ 4.0 / CONDITIONAL 3.0–3.9 / NOT READY < 3.0**. Emit the score as a one-line
+   headline in Output **Section 2 (Technical Summary)** and decompose the per-dimension
+   scores in **Section 4 (Gap Analysis)**. The score is **decision-class** — carry a
+   reversibility tier + confidence (a NOT-READY verdict gates downstream build → typically
+   `MODERATE · confidence: …`). **Every sub-4 dimension MUST emit a drafted per-dimension
+   remediation** (drafted AC / NFR / gap entry); a bare mean without per-dimension gap drafts
+   is a task dump (see `## Domain-Specific Failure Modes`).
 7. Cross-reference against known project context (active bugs, RAID items, related FDDs)
 8. For each gap, produce the specific remediation:
    - Missing AC → draft the AC (Given/When/Then, labeled DRAFT)
    - Missing NFR → draft the requirement with suggested threshold
    - Integration gap → identify the missing touchpoint and draft the dependency entry
    - Operational gap → draft the operational checklist item
+   - **Rollback plan present?** Apply the `## Rollback-Trigger Gate` — REJECT any trigger
+     that is not quantitative (metric + numeric threshold + window) and draft the numeric
+     trigger.
 
-**Output**: See `references/output-format.md`. Key sections: technical summary, risk
-matrix, gap analysis, drafted remediations, dependency map, recommended actions.
+**Output**: See `core/standards/output-format.md`. Key sections: technical summary, risk
+matrix, gap analysis (incl. the per-dimension FDD score decomposition), drafted remediations,
+dependency map, recommended actions.
 
 ### Mode B: Integration Spec / IDD Review
 
@@ -213,10 +228,39 @@ error handling coverage matrix, monitoring gaps, recommended actions.
 2. Identify what's not covered — architecture docs are notorious for describing the
    happy-path topology without addressing failure modes, capacity limits, or
    operational procedures
-3. Cross-reference with project-specific patterns from `references/erp-patterns.md`
+3. **ADR-immutability gate (enforcement of the existing convention — reference-by-role).**
+   When asked to review or accept a *change* to an Architecture Decision Record, enforce the
+   ADR convention defined in `core/ADRs/README.md` § Status enum — do **NOT** restate or
+   redefine the enum; cite it. **Two-signal trigger (false-positive guard):** the gate fires
+   ONLY when **BOTH** (a) the artifact's frontmatter declares `status: Accepted` (or
+   `Superseded` / `Deprecated`) **AND** (b) its body matches the ADR `## Status` shape. If
+   only one signal is present — e.g. a non-ADR artifact (an FDD/plan) carrying an
+   `approval_state: approved` frontmatter field — the gate **does NOT fire**.
+   - **If both signals present AND the proposed action edits Context/Decision/Consequences in
+     place → REJECT**, and direct to the supersession path: *"An Accepted ADR is immutable.
+     Author a new superseding ADR (next monotonic `ADR-NNN`), and set the old ADR's `## Status`
+     to Superseded citing the new one, per `core/ADRs/README.md` § Status enum."* The only
+     edit permitted on an Accepted ADR is the append-only `## Status` → Superseded annotation
+     pointing to its successor.
+   - **If `status: Proposed` (not yet ratified) → edits are ALLOWED**; no rejection.
+   - **Scope:** the skill enforces immutability at *review time*. It does **NOT** build an
+     ADR-edit git hook (`core/hooks/` is a separate governed surface). An immutability rejection
+     is decision-class → carry a reversibility tier + confidence.
+4. **Rollback-Trigger Gate.** When the architecture/deployment artifact contains a rollback
+   plan, apply the `## Rollback-Trigger Gate` in `references/technical-review-checklist.md`:
+   a trigger PASSES only with a metric + numeric threshold + window; a qualitative or absent
+   trigger → REJECT and draft the numeric trigger (`[ASSUMPTION – CONFIRM]` the threshold with
+   the technical owner). Decision-class → tier + confidence.
+5. **DORA awareness.** When the artifact describes a deployment/operational surface, name the
+   relevant DORA metric(s) per the `## DORA Metric Awareness` table (deployment frequency /
+   lead time for changes / change failure rate / MTTR) and flag where the design does or does
+   not make that metric **measurable**. **Awareness, not measurement** — name the metric and
+   assess measurability; do **NOT** compute DORA values.
+6. Cross-reference with project-specific patterns from `references/erp-patterns.md`
 
 **Output**: Architecture risk assessment, infrastructure gap analysis, environment
-readiness assessment, recommended actions.
+readiness assessment, ADR-immutability verdict (where an ADR change is under review),
+rollback-trigger verdict, DORA-metric awareness flags, recommended actions.
 
 ### Mode D: SOP / Operational Readiness Review
 
@@ -272,7 +316,7 @@ D (Dependency). Counter is auto-incremented per skill.
 ## Output format
 
 Every technical-analyst response follows this structure. Read
-`references/output-format.md` for full field definitions.
+`core/standards/output-format.md` for full field definitions.
 
 ### 1. Mode & Inputs
 Which mode(s), what artifacts ingested, evidence quality labels.
@@ -685,6 +729,44 @@ structural conformance and content quality.
   "Risk Matrix row 3: reservation batch warehouse-lag — CRITICAL" and nothing else; the decision-maker
   has to derive the options and find the owner themselves, and the finding stalls.
 
+### Accepted-ADR edited in place / rollback plan passed without a quantitative trigger — PROC
+
+- **Signature (observable signal):** A Mode C review of an ADR change accepts an in-place
+  edit to the Context/Decision/Consequences of an ADR whose frontmatter is `status: Accepted`
+  (instead of REJECTing and directing to supersede-with-a-new-ADR); and/or a reviewed rollback
+  plan (FDD operational section, deployment strategy, SOP) is passed with a trigger that is
+  qualitative ("roll back if the system seems unstable") or absent, rather than rejected and
+  re-drafted as a metric + numeric threshold + window.
+- **Conditional:** do NOT edit an Accepted ADR in place, and do NOT pass a rollback plan whose
+  triggers are not quantitative, because an Accepted ADR is an immutable audit-of-record
+  (changes must supersede via a new ADR, never overwrite — per `core/ADRs/README.md` § Status
+  enum) and a rollback plan without a numeric trigger cannot be executed under incident
+  pressure — both fail silently until the exact moment they are needed.
+- **Root cause:** Editing the existing ADR is the path of least resistance — it is right there
+  and the change "is just an update" — and a qualitative rollback trigger reads as a complete
+  sentence, so neither omission trips an obvious signal during review. The immutability rule
+  lives in a separate README and the quantitative-trigger requirement is a sharpening of a
+  checklist row that historically only asked "tested?", so under volume both get skipped unless
+  the reviewer applies the two gates deliberately.
+- **Mitigation:** For any ADR change, apply the two-signal immutability gate (fires only when
+  BOTH `status: Accepted` frontmatter AND a `## Status` ADR body shape are present, so it never
+  false-fires on a non-ADR artifact such as an FDD with `approval_state: approved`): if both
+  signals are present and the edit touches Context/Decision/Consequences in place → REJECT and
+  direct to author a new superseding ADR (the old ADR's only permitted edit is the append-only
+  `## Status` → Superseded annotation). For any rollback plan, apply the Rollback-Trigger Gate:
+  PASS only with metric + numeric threshold + window; qualitative/absent → REJECT and draft the
+  numeric trigger (`[ASSUMPTION – CONFIRM]` the threshold with the technical owner). Both
+  verdicts are decision-class → carry a reversibility tier + confidence.
+- **Principal response vs. junior response:** Principal renders "ADR-019 is `status: Accepted` —
+  this in-place edit to its Decision section is REJECTED; author ADR-0NN superseding it and set
+  ADR-019 `## Status` → Superseded citing the successor [per `core/ADRs/README.md`]
+  [IRREVERSIBLE-as-audit-record · confidence: HIGH]" and "rollback trigger 'if unstable' is
+  qualitative — REJECTED; drafted: 'roll back if 5xx error rate > 2% sustained over 5 min'
+  [ASSUMPTION – CONFIRM] threshold with the platform lead [MODERATE · confidence: MEDIUM]."
+  Junior lets the ADR edit through (the decision rationale's history is silently overwritten and
+  the audit trail is destroyed) and passes "roll back if there are problems" (and at 2 AM,
+  mid-incident, nobody can say what threshold was supposed to trigger the rollback).
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -705,7 +787,7 @@ Read these as needed per mode:
 
 | Document | When to read | What it covers |
 |----------|-------------|----------------|
-| `references/technical-review-checklist.md` | Every review | 6-dimension review framework with specific check items |
-| `references/output-format.md` | First response | Detailed output format spec with field definitions |
+| `references/technical-review-checklist.md` | Every review | 6-dimension review framework with specific check items; FDD Quality Score rubric, Rollback-Trigger Gate, and DORA Metric Awareness |
+| `core/standards/output-format.md` | First response | Detailed output format spec with field definitions |
 | `references/erp-patterns.md` | ERP artifacts | Common failure patterns from real ERP implementations |
 | `references/dependency-mapping.md` | Integration specs, cross-artifact reviews | Dependency tracking format, failure mode analysis template |

@@ -100,6 +100,99 @@ For reviewing Functional Design Documents:
 
 ---
 
+## FDD Quality Score
+
+The qualitative FDD Review Checklist above answers *whether* each category is covered.
+This section answers *how well* — it produces a single numeric quality score so an FDD's
+completeness is **measured rather than asserted**. The score quantifies the same checklist
+categories; it does not introduce a parallel review axis. The 5-point scale and the
+PASS/CONDITIONAL/FAIL threshold gradient reuse the platform's established rubric format
+(`core/skills/pmo-qa-auditor/references/push-to-resolve-rubric.md`) so technical-governance
+scoring is consistent with the rest of the suite.
+
+**Method:** Score each of the **6 dimensions** below on the 1–5 scale; the FDD quality
+score is the **mean** of the six (1.0–5.0). Each dimension maps 1:1 onto a category already
+in the FDD Review Checklist (dimensions 1–5), with **Operational-readiness coverage** added
+as dimension 6 to bind FDD scoring to the skill's 6-dimension risk model and the
+Rollback-Trigger Gate below.
+
+| # | Dimension (← checklist category) | 5 (Exemplary) | 3 (Marginal) | 1 (Failure) |
+|---|---|---|---|---|
+| 1 | **Completeness** (scope + interface + NFR coverage) | Every in-scope requirement traces to a section; all interfaces + NFRs documented | Functional scope covered; NFRs or some interfaces missing | Scope gaps; no NFRs |
+| 2 | **Consistency** (internal + external) | No contradictions; aligns with architecture + integration specs | Minor unreconciled differences | Contradictory sections |
+| 3 | **Technical clarity** (implementability + justified choices) | A dev implements with zero clarifying questions; choices justified | Implementable with some questions | Ambiguous; not implementable as written |
+| 4 | **Dependency clarity** (identified + risk-assessed) | All deps listed with status + risk + mitigation | Deps listed, risks not assessed | Deps undocumented |
+| 5 | **Risk identification** (named + assumptions flagged) | Risks named w/ probability·impact·response; assumptions flagged for validation | Some risks named; assumptions implicit | No risk section |
+| 6 | **Operational-readiness coverage** (failure paths, rollback, monitoring) | Failure modes, rollback, monitoring all addressed | Happy path only; rollback/monitoring thin | No failure-path content |
+
+Score 2 and 4 are the intermediate points between the anchors above (2 = closer to Failure;
+4 = closer to Exemplary), scored on the same evidence basis as the named anchors.
+
+**Score thresholds** (mirrors push-to-resolve-rubric PASS/CONDITIONAL/FAIL):
+
+| Band | Mean | Disposition |
+|---|---|---|
+| **READY** | ≥ 4.0 | FDD is implementation-ready; proceed |
+| **CONDITIONAL** | 3.0–3.9 | Targeted remediation on the sub-4 dimensions before build; gaps enumerated as drafted ACs |
+| **NOT READY** | < 3.0 | Fundamental rework; do not pass to Engineering |
+
+**Push-to-resolve binding (mandatory).** The score is a **decision-class output** — it gates
+downstream build — so it carries a reversibility tier + confidence per the skill's
+Reversibility Discipline (a NOT-READY verdict is typically `MODERATE · confidence: …`).
+**Every sub-4 dimension MUST emit a drafted per-dimension remediation** (a drafted AC, NFR,
+or gap entry the technical owner can confirm in one sentence). A bare mean with no
+per-dimension gap drafts is a task dump, not a review — see the
+`## Domain-Specific Failure Modes` guard in SKILL.md.
+
+---
+
+## Rollback-Trigger Gate
+
+Applies whenever a reviewed artifact contains a rollback plan — an FDD operational section,
+an architecture deployment strategy, or an SOP. It sharpens the Operational-dimension
+"Rollback tested" checklist row from *"tested?"* to *"tested **and** numerically triggered?"*.
+A rollback plan is only executable under incident pressure if its triggers are
+**quantitative**: a trigger is acceptable only when it names a **metric + a numeric threshold
++ a window**.
+
+| Trigger form | Verdict | Example |
+|---|---|---|
+| Metric + numeric threshold + window | **PASS** | "Roll back if error rate > 2% sustained over 5 min" |
+| Qualitative / subjective | **REJECT → request numeric threshold** | "Roll back if the system seems unstable" / "if there are problems" |
+| Absent | **REJECT → rollback plan incomplete** | (no trigger stated) |
+
+**On REJECT, push-to-resolve:** draft the quantitative trigger — propose an industry-default
+starting value and flag the threshold `[ASSUMPTION – CONFIRM]` with the technical owner; never
+leave it open. A rollback-gate rejection is decision-class → carry a reversibility tier +
+confidence label. This gate also ties to the Mode D destructive-operation rollback check and
+the Change-failure-rate DORA metric below.
+
+---
+
+## DORA Metric Awareness
+
+When a reviewed artifact describes a deployment or operational surface, the skill **names the
+relevant DORA (Accelerate) metric(s)** alongside the finding and flags where the design does
+or does not make that metric **measurable**. This is an **awareness surface, not a measurement
+surface** — the skill names the metric and assesses measurability; it does **not compute DORA
+values** (computing telemetry is a separate, out-of-scope concern). No in-corpus authoritative
+4-metric list exists to cite; the set below is the industry-standard four
+(`[ASSUMPTION – CONFIRM]` against the canonical Accelerate definition).
+
+| DORA metric | What the skill surfaces in a review | Ties to |
+|---|---|---|
+| **Deployment frequency** | Does the architecture/deployment strategy support the target release cadence? | "Deployment strategy" checklist row |
+| **Lead time for changes** | Does the design's build/test/deploy path keep change lead-time bounded? | CI/CD + deployment-automation rows |
+| **Change failure rate** | Is there a measurable quality gate that bounds the % of changes causing incidents? | Rollback-Trigger Gate above |
+| **Mean time to restore (MTTR)** | Is recovery instrumented — detection + automated/manual restore path? | "Recovery strategy" + monitoring rows |
+
+**Boundary statement:** surface awareness (name the metric + flag whether the design makes it
+measurable); do **not** compute the metric's value. A finding reads "the deployment strategy
+does not bound change failure rate — no quality gate caps incident-causing changes
+[Change failure rate, not measurable as designed]", not a computed percentage.
+
+---
+
 ## Integration Spec Review Checklist
 
 For reviewing integration specifications and interface designs:
