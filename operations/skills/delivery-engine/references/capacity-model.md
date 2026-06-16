@@ -287,6 +287,17 @@ forcing function: the commitment cannot be met from current effective supply, an
 planner surfaces the de-commit / re-scope / re-baseline decision rather than reporting the
 team "behind."
 
+**Cross-reference — buffer-consumption and milestone-variance RAG (owned by estimation-standards.md).**
+Two related discipline parameters live in the estimation-domain reference doc, not here:
+the **buffer-consumption RAG banding** ([`estimation-standards.md` §4.1](estimation-standards.md))
+and the **milestone-variance (SPI) RAG** ([`estimation-standards.md` §7](estimation-standards.md)).
+Read them there by role; this doc does **not** restate the bands (duplicate-source-discipline —
+estimation-standards.md owns estimation/buffer/variance, this doc owns supply). One shared
+anchor binds the two docs: the **0.85 Amber→Red ceiling** in this section's demand-supply
+band is **the same structural boundary** that estimation-standards.md §4.1 adopts as its
+buffer-consumption Yellow→Red boundary, so buffer-Red and demand-Red fire at one point across
+the skill.
+
 ---
 
 ## Applicability

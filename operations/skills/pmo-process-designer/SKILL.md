@@ -2,7 +2,7 @@
 name: pmo-process-designer
 description: >
   Converts business context into structured, traceable requirements and process documentation. Modes: Requirements definition · Workflow documentation · Gap analysis · Traceability matrix · Compliance mapping. Use when uploading business requirements, FDDs, or Jira exports. Triggers: "document this process", "build the requirements", "build the traceability matrix", "write the FRD", "trace from requirement to Jira", "what's the gap."
-version: v1.10
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -157,17 +157,54 @@ tag referencing requirements.
 **What you do**:
 1. Extract requirements from source material (documents, transcripts, emails)
 2. Structure each requirement using the REQ-### format from
-   `references/requirements-template.md`
+   `operations/templates/requirements-template.md`
 3. Classify by type: Functional, Non-Functional, Integration, Data, Operational
 4. Assess completeness: Does each requirement specify the actor, trigger, expected
    behavior, exception handling, and acceptance criteria?
+4a. **Score each story-class requirement against INVEST.** Key on the requirement's
+   **own type tag** from step 3 (Functional / story-shaped → score; a formal
+   "system shall…" Waterfall requirement is reported `N/A — formal requirement, not a
+   user story` and step 4c is primary instead — do not force-score). Read
+   `operations/templates/requirements-template.md` § "INVEST Quality Criteria for User
+   Stories" for the six-dimension definitions and validation questions, and score each
+   dimension **1 (Met) / 0 (Not Met)** per the mechanic in `references/process-checklist.md`
+   § "Requirement Quality (Mode A)" (which points to `delivery-engine/references/backlog-health.md`
+   § 2.2). **Threshold:** a story passes the readiness gate at **≥ 5 of 6**, and a **0
+   on Valuable or Testable is a hard fail** regardless of total. Output a six-row
+   pass/fail table per scored story. For any dimension scored 0, draft the specific fix
+   (push-to-resolve — not just "fails Estimable", but the remediation).
+4b. **Enforce Given-When-Then on acceptance criteria.** Per
+   `operations/templates/requirements-template.md` § "Acceptance Criteria Writing Guide":
+   every **behavioral** AC must be a single **Given [precondition] / When [action] / Then
+   [observable outcome]** scenario; "Then" must be observable (reject subjective terms —
+   "fast", "user-friendly"); negative / edge cases are separate criteria. When a
+   behavioral AC is **not** in Given-When-Then form, **do not pass it** — reject and
+   produce the drafted G-W-T rewrite. **Escape hatch:** for a non-behavioral requirement
+   (configuration, data, infrastructure), the checklist format (`- [ ] verifiable
+   condition`) is acceptable in lieu of G-W-T — do not force G-W-T ceremony where it adds
+   none, and do not false-positive-reject a well-formed infra/data/config checklist.
+4c. **Run the 8-domain completeness checklist.** For each structured requirement, mark
+   each of the 8 completeness domains in `references/process-checklist.md` § "Requirement
+   Quality (Mode A)" as **Covered / Partial / Gap** (reuse the three-level Covered/Partial/Gap
+   scale). For every Partial or Gap, draft the missing piece (DRAFT-labeled, per the
+   REQ-014a–c push-to-resolve pattern). Surface the result as an 8-row coverage strip per
+   requirement (or a roll-up matrix for a set). Domain 7 (Non-functional) feeds step 4d.
+4d. **Prompt for NFRs when absent.** After classifying (step 3) and running completeness
+   (4c), check whether the requirements **set** contains **any** requirement of type
+   Non-Functional (or any domain-7 entry). **When the count is zero, do not pass silently**
+   — emit a single consolidated NFR prompt enumerating the ISO/IEC 25010 categories in
+   `references/process-checklist.md` § "Requirement Quality (Mode A)" and ask which apply,
+   drafting `[INFERRED]` / `[ASSUMPTION – CONFIRM]` candidate NFRs where the business
+   context implies them (e.g., a payments flow implies a Security + Performance NFR even if
+   unstated). The prompt counts against the Max-5-questions budget as **one** question, not
+   seven.
 5. Identify gaps: What requirements should exist based on the business context but
    are not stated? Use patterns from `references/process-checklist.md`
 6. For each gap, draft the missing requirement (labeled DRAFT)
 7. Build initial traceability entries linking requirements to available design/delivery
    artifacts
 
-**Output**: See `references/output-format.md`. Key sections: requirements summary,
+**Output**: See `core/standards/output-format.md`. Key sections: requirements summary,
 structured requirements table, gap analysis, drafted requirements, traceability matrix.
 
 ### Mode B: Process Documentation
@@ -587,6 +624,40 @@ structural conformance and content quality.
   "78% fully traced; 9 broken links, all with drafted actions." Junior ships a matrix
   with quiet blank cells and a flattering integrity number; the unflagged breaks
   surface at phase-gate review when someone asks why REQ-007 was never built.
+
+### Story passed without INVEST score or Given-When-Then enforcement — PROC
+
+- **Signature (observable signal):** Mode A output ships a story-class REQ-### row
+  with no six-dimension INVEST pass/fail table, or with acceptance criteria that are
+  not in Given-When-Then form (and are not a sanctioned non-behavioral checklist),
+  yet the row is presented as complete — no INVEST verdict, no rejected-AC flag, no
+  drafted G-W-T rewrite.
+- **Conditional:** do NOT pass a story-class requirement when it fails an INVEST
+  dimension or carries a behavioral acceptance criterion that is not in Given-When-Then
+  form, because an unscored or under-specified story enters the FRD looking finished and
+  surfaces as a UAT scope dispute — the INVEST gate (≥ 5/6, Valuable + Testable
+  non-negotiable) and the G-W-T format are exactly what make "done" verifiable, and a
+  row that skipped them is untestable downstream.
+- **Root cause:** INVEST scoring (step 4a) and G-W-T enforcement (step 4b) are
+  per-requirement judgment passes that multiply effort per row, while extraction and
+  structuring (steps 1–3) scale linearly and fill the table fast; under a large source
+  document the agent ships the structured rows and skips the quality gate for the rows
+  that needed it most. The non-behavioral checklist escape hatch also tempts the inverse
+  error — waving an unstructured behavioral AC through as if it were an infra checklist.
+- **Mitigation:** Run steps 4a–4b on every story-class row before output. Score the six
+  INVEST dimensions 1/0 (consume `requirements-template.md §INVEST` +
+  `backlog-health.md §2.2` by reference — do not invent the rubric); a 0 on Valuable or
+  Testable is a hard fail. For any non-G-W-T behavioral AC, reject and draft the rewrite;
+  reserve the checklist escape hatch for genuinely non-behavioral (config / data / infra)
+  requirements only. A formal "system shall…" requirement is reported INVEST `N/A`, not
+  force-scored. Each drafted fix carries a reversibility tier (Reversibility Discipline).
+- **Principal response vs. junior response:** Principal ships "REQ-031 (order-status
+  story) — INVEST 4/6: fails Estimable (vendor API unseen — recommend a spike) and Small
+  (split into status-read + notification); AC-2 not in G-W-T — drafted rewrite below,
+  DRAFT," and the story is visibly not-yet-ready with a path to ready. Junior ships
+  REQ-031 as a clean-looking table row with prose acceptance criteria; the missing INVEST
+  verdict and malformed AC are discovered when the dev team builds to its own
+  interpretation and UAT fails on a behavior nobody specified.
 
 ## Shared Behavioral Rules
 

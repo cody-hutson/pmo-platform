@@ -4,7 +4,7 @@
 
 ## Purpose
 
-This document is the canonical **enumeration** of the **15-stage universal delivery lifecycle** — the sequence of stages a managed project moves through from demand intake to post-implementation closure. It is the **temporal axis** of project delivery: WHAT sequence of stages work passes through, with per-stage entry criteria, exit criteria, and the artifacts each stage consumes and produces. It is read by the delivery-engine skill: **Mode C (Refinement Manager / DoR Gate)** reads the *entry criteria* of the execution stages; **Mode F (DoD & Release Readiness Gate)** reads the *exit criteria* of the validation stages — including the QA/Acceptance exit predicate that blocks a move to Plan Review while a P1 defect is open (§5).
+This document is the canonical **enumeration** of the **15-stage universal delivery lifecycle** — the sequence of stages a managed project moves through from demand intake to post-implementation closure. It is the **temporal axis** of project delivery: WHAT sequence of stages work passes through, with per-stage entry criteria, exit criteria, and the artifacts each stage consumes and produces. It also defines **universal per-transition entry-criteria enforcement** (§5.2 — the BLOCK predicate at every transition, the `T(n→n+1)` transition convention, and the no-skip-ahead rule) and **model resolution + absent-field default** (§4.1 — how the skill resolves the methodology column from `delivery_approach` and degrades to canonical stage names when the field is absent or out of grid). It is read by the delivery-engine skill: **Mode C (Refinement Manager / DoR Gate)** reads the *entry criteria* of the execution stages; **Mode E (Execution Control Tower)** reads the §4.1 model resolution and the §5.2 per-transition enforcement to position a work item on the lifecycle, validate each advance, and surface per-stage variance; **Mode F (DoD & Release Readiness Gate)** reads the *exit criteria* of the validation stages — including the QA/Acceptance exit predicate that blocks a move to Plan Review while a P1 defect is open (§5).
 
 **This is the project delivery lifecycle, NOT the platform's release pipeline.** The platform's 13-stage release pipeline ([`release/references/pipeline/`](../../../../release/references/pipeline/README.md)) is the Process layer that governs how the platform builds its *own* releases; it is itself described in the pipeline README as compressed from the PMO Reference Model Part 6 — the 15-stage universal delivery lifecycle this document enumerates. Same lineage, different artifact, different consumer. This document is a delivery-engine reference for the *projects the platform manages*; do not cross-wire it with the release pipeline or renumber either.
 
@@ -345,7 +345,7 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 
 ## 4. Five-Model Terminology Mapping
 
-The grid below maps the 15 universal stages onto the **five methodology archetypes named in the originating requirement** (Scrum / Kanban / Waterfall / Hybrid / SAFe), showing how each stage expresses under that archetype (compress / rename / map-to-ceremony). The SAFe and Hybrid columns use the semantic anchors defined in [`methodology-parameterization-v1.md §3`](../../../../release/references/specs/methodology-parameterization-v1.md) (SAFe = Essential 5.0+ with PI cadence + ART; Hybrid = the SPM-co-managed dual-lifecycle pattern).
+The grid below maps the 15 universal stages onto the **five methodology archetypes named in the originating requirement** (Scrum / Kanban / Waterfall / Hybrid / SAFe), showing how each stage expresses under that archetype (compress / rename / map-to-ceremony). The SAFe and Hybrid columns use the semantic anchors defined in [`methodology-parameterization-v1.md §3`](../../../../release/references/specs/methodology-parameterization-v1.md) (SAFe = Essential 5.0+ with PI cadence + ART; Hybrid = the SPM-co-managed dual-lifecycle pattern). §4.1 below defines **how the skill resolves which column to use** from the project's methodology field, and what it does when that field is absent or names an archetype outside this grid.
 
 | Universal stage(s) | Scrum | Kanban | Waterfall | Hybrid | SAFe |
 |---|---|---|---|---|---|
@@ -366,15 +366,31 @@ The grid below maps the 15 universal stages onto the **five methodology archetyp
 
 **These five archetypes are five of the eight canonical `delivery_approach` values** defined in [`methodology-parameterization-v1.md`](../../../../release/references/specs/methodology-parameterization-v1.md); XP, PRINCE2, and Custom follow the same stage model and are omitted here only because this mapping scopes to the five named in the originating requirement. This is a labeled subset, not a competing five-archetype taxonomy — do not infer a methodology universe of five.
 
+### 4.1 Model Resolution & Absent-Field Default
+
+The §4 grid is keyed to a methodology archetype. **The signal that selects the column is the `delivery_approach` field** — the REQUIRED, 8-value methodology enum (`Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom`) owned by [`methodology-parameterization-v1.md`](../../../../release/references/specs/methodology-parameterization-v1.md) and `core/schemas/project-schema.md`, read at invocation per the OPERATIONS.md Methodology Awareness Protocol (Rule 1 — read it at invocation; do not cache across invocations). The §4 grid's five columns are five of this field's eight values. **This document consumes `delivery_approach`; it does not define a `delivery_model` field** — there is no `delivery_model` field anywhere in the platform (the name is a legacy alias that resolves to `delivery_approach`).
+
+**Resolution rule.** Read `delivery_approach` from PROJECT.md; render the work item's current stage under the matching §4 column. **Never silently default to an archetype** when the field is absent, out of grid, or null — the platform's default discipline (OPERATIONS Rule 2's 3-level fallback "never hard-fail"; the methodology-parameterization CASE-3 rule "emit WITH caveat — never silently default"; project-schema V6 "skills MUST NOT silently default to any archetype when `base_archetype` is `null`") governs every absent-input path below by role.
+
+| Negative path | Behavior (default explicitly; never silently assume Scrum) |
+|---|---|
+| **`delivery_approach` absent** from PROJECT.md (deleted, or no PROJECT.md in context) | Position the item on the **canonical stage names** (Stage 1 Identify … Stage 15 Close — the §2 names). Emit `[ASSUMPTION – CONFIRM] delivery_approach absent — using canonical stage names; set delivery_approach in PROJECT.md for model-specific labels`. Do **not** assume Scrum. |
+| **`delivery_approach` set but outside the five-model grid** — `XP` / `PRINCE2` (the 2 of 8 omitted from §4), or `Custom` with `base_archetype: null` | Use the **canonical stage names** + a note that the archetype is outside the §4 five-model grid (no fabricated column). For **`Custom` with a non-null `base_archetype`** that names a grid archetype, render that archetype's column WITH a "via Custom base_archetype" note; for `base_archetype: null`, canonical names + caveat (never default). |
+| **`delivery_approach: Hybrid`** with `spm_comanaged: true` | Render the **Hybrid column** AND honor the SPM dual-framing the SKILL.md Dual-output rule already requires — the iterative track gets stage/flow naming, the phase-gated track gets milestone naming. (Methodology Awareness: Hybrid skills MUST ALSO read `spm_comanaged`.) |
+
+The resolution and its defaults are pure reuse of the platform's existing methodology-consumption discipline — this section adds no new field and no new fallback; it binds the existing `delivery_approach` read to the §4 grid and states the absent-field path explicitly so a missing field degrades to canonical names with a caveat, never to a silent guess.
+
 ---
 
 ## 5. Stage Exit-Criteria Enforcement
 
 Exit criteria are **BLOCKING**: a work item cannot move to the next stage while any exit criterion for its current stage is unmet. The agent renders the block with evidence — it does not advance the item and round up. A BLOCK is **binary**: "close enough" on any exit criterion is still a BLOCK (the gate-washing guardrail; see the delivery-engine SKILL.md `## Guardrails`).
 
+§5.1 specifies the BLOCK in full for the AC-critical QA→Plan-Review transition; **§5.2 generalizes that same BLOCK pattern to every transition** and defines the `T(n→n+1)` transition-identifier convention the §3 stage→gate seam and the lifecycle gates bind to. Read §5.1 as the worked instance of the universal rule stated in §5.2.
+
 ### 5.1 QA / Acceptance (Stage 9) → Plan Review / Authorize (Stage 10)
 
-This is the acceptance criterion for the universal lifecycle: *a work-item move from QA/Acceptance to Plan Review BLOCKS when a P1 defect is open, with evidence.* The gate that fires at this boundary is **LG-6 (QA Gate)**; its exit criterion `[LG-6-EX-2]` ("zero open critical or high-severity defects") is the gate-side predicate this stage exit criterion feeds.
+This is the AC-critical, worked instance of the universal §5.2 enforcement: *a work-item move from QA/Acceptance to Plan Review BLOCKS when a P1 defect is open, with evidence.* The gate that fires at this boundary is **LG-6 (QA Gate)**; its exit criterion `[LG-6-EX-2]` ("zero open critical or high-severity defects") is the gate-side predicate this stage exit criterion feeds.
 
 **Blocking exit predicate (Stage 9):** No open defect of severity **P1 (Critical)** is associated with the work item. A P1 defect is "open" when its status is not in a closed / resolved-verified terminal state.
 
@@ -389,6 +405,27 @@ This predicate is **severity-specific**: P2/P3/P4 defects do not auto-block — 
 **Why exit-criterion encoding (not a gate redefinition).** The *gate* that fires at this boundary (LG-6) is owned by [`gate-definitions.md`](gate-definitions.md); this doc owns the *stage exit criterion* — the temporal predicate that the gate's quality check reads. The predicate stated here and the gate criterion `[LG-6-EX-2]` are two views of the same rule: this doc binds it to the Stage 9 → Stage 10 transition; gate-definitions.md binds it to the LG-6 QA Gate's authority and escalation path.
 
 **Reversibility framing.** A stage BLOCK is a CHEAP/MODERATE decision-class output — it returns work, it does not destroy it — and inherits the delivery-engine reversibility-tier discipline (see the delivery-engine SKILL.md `## Reversibility Discipline`). Label the BLOCK verdict with its tier and confidence like any other decision-class output.
+
+### 5.2 Universal Entry-Criteria Enforcement (all transitions)
+
+§5.1 BLOCKS one transition (Stage 9 → Stage 10) on its exit predicate. **The same BLOCK applies at every transition.** §2 already defines entry criteria and exit criteria for all 15 stages; this section makes those criteria a tracking gate at each boundary so a work item cannot silently skip a stage or enter one without meeting its criteria.
+
+**Transition-identifier convention `T(n→n+1)`.** The lifecycle has **14 ordered transitions** — `T(1→2)` (Identify → Capture) through `T(14→15)` (Clean/Stabilize → Close) — each the boundary between two named §2 stages. `T(n→n+1)` is the unambiguous handle for the boundary leaving stage n and entering stage n+1. **This is the coordinate the §3 stage→gate seam and the lifecycle gates in [`gate-definitions.md`](gate-definitions.md) bind to** — the §3 seam already names which `T(n→n+1)` each `LG-0…LG-10` sits at (e.g., LG-6 at `T(9→10)`, LG-4 at `T(6→7)`, LG-5 at `T(8→9)`); a gate and a transition predicate are two views of the same boundary. This doc owns the transition predicate (the §2 stage exit/entry criteria); `gate-definitions.md` owns the gate's authority, escalation, and checklist. This doc does not define gates.
+
+**Universal blocking rule (normative).** To advance a work item across `T(n→n+1)`, **ALL** of:
+
+- stage n's **exit criteria** (§2, "ALL must hold to leave"), **AND**
+- stage n+1's **entry criteria** (§2, "ALL must hold to enter")
+
+must hold. If any predicate is unmet, the agent **BLOCKS** the advance and emits an evidence-backed rejection naming (a) the transition `T(n→n+1)`, (b) the specific unmet exit/entry criterion, and (c) the required remediation (satisfy-and-revalidate the criterion, or obtain a documented authority exception from the gate authority at that boundary per [`gate-definitions.md`](gate-definitions.md) when a named gate sits there). The agent does not advance the item and does not round up — a BLOCK is binary per criterion (the gate-washing guardrail). §5.1 is the worked, AC-critical instance: the P1-defect predicate at `T(9→10)`, enforced by LG-6.
+
+**Evidence format the rejection cites (general form — §5.1 is the worked QA instance):**
+
+> BLOCKED — `T(n→n+1)`: <stage n name> → <stage n+1 name>. Unmet predicate: <the specific §2 exit criterion of stage n, or entry criterion of stage n+1>. To unblock: satisfy-and-revalidate <criterion>, or record an authority exception at this boundary, before re-requesting the advance.
+
+**No-skip-ahead rule (normative).** A request to advance from stage n directly to stage **n+k (k > 1)** — skipping one or more intermediate stages — is **BLOCKED**. Every intermediate transition `T(n→n+1), T(n+1→n+2), … , T(n+k−1→n+k)` must be satisfied **in order**; the agent names every intermediate transition whose predicate is unmet, in sequence, and advances only one legal transition at a time. A silent skip lets unready work reach a late stage where the defect is far costlier to fix — the failure this rule forecloses (and the AC's no-skip-ahead requirement).
+
+**Per-stage variance pointer.** Per-stage milestone variance — whether the work item is ahead of / on / behind its planned schedule at the current stage — is computed as the **Schedule Performance Index (SPI)** over the stage's planned window and banded with the **canonical Milestone-Variance RAG owned by [`estimation-standards.md §7`](estimation-standards.md)**. **This doc does not restate the band thresholds or their decision rules** — it owns the temporal axis (stages, transitions, enforcement) and references the variance method by role; `estimation-standards.md §7` owns the SPI band and its `WHEN…THEN…` decision rules. Per-stage variance is the same metric `estimation-standards.md §7` defines at milestone scope, applied at stage granularity. **Naming guard (cohort-wide):** name it **"per-stage milestone variance (SPI)"** or **"stage slip"** — **never "Schedule Variance"** (reserved against EVM SV collision per the §7 naming guard). When no per-stage schedule baseline exists, the SPI **cannot be computed** — emit `per-stage variance: not computable — no stage baseline` and flag the missing baseline as a planning gap; never fabricate a RAG color.
 
 ---
 
@@ -418,3 +455,4 @@ For example: LG-6 (the QA Gate carrying the AC's P1 predicate) is a **Quality** 
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-06-13 | Initial authoring — the canonical fifteen-stage universal delivery lifecycle (Identify → Close, grouped into the five Capture/Prepare/Build/Validate/Deliver phases), per-stage 4-field blocks with entry/exit criteria and artifacts, the §3 stage↔gate seam to the committed eleven-gate LG-0…LG-10 model, the §4 five-model terminology mapping (a labeled five-of-eight subset of the `delivery_approach` enum), and the §5 QA→Plan-Review P1-defect blocking exit predicate (the AC, bound to LG-6). Nine stage names are in-repo Part-6-grounded; six (Stages 3, 4, 5, 6, 10, 11) carry `UNSOURCED-DOMAIN` provenance. Authored under the delivery-capacity-and-lifecycle-gating release. |
+| 1.1 | 2026-06-15 | Added §4.1 (model resolution from `delivery_approach` + explicit absent/out-of-grid defaults — canonical stage names with a caveat, never a silent archetype guess) and §5.2 (universal per-transition entry-criteria enforcement generalizing the §5.1 BLOCK to all 14 transitions, the `T(n→n+1)` transition-identifier convention the §3 seam and the lifecycle gates bind to, the no-skip-ahead rule, and a per-stage-variance pointer to the `estimation-standards.md §7` SPI RAG by role). §5.1 preserved verbatim as the worked AC-critical instance of §5.2; the 15 stage identifiers, the §3 seam, and the §4 grid are unchanged. Wires the delivery-engine Mode E Stage-Tracking sub-protocol. No new field (the `delivery_model` name in the originating card resolves to the existing REQUIRED `delivery_approach` enum) and no change to the stage count or five-phase grouping. |

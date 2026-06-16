@@ -23,6 +23,21 @@ are replaced by the skill during project scaffolding. Conditional sections are m
 **Current phase:** {{CURRENT_PHASE}}
 **Governance model:** {{GOVERNANCE_MODEL}}
 **SPM co-managed:** {{SPM_CO_MANAGED}}
+{{IF INVESTMENT_CLASS}}
+**Investment class:** {{INVESTMENT_CLASS}}
+{{ENDIF}}
+
+<!--
+OPTIONAL FIELD — `investment_class`. One of `Run` | `Grow` | `Transform` (portfolio
+investment classification: Run-the-business / Grow / Transform). This field is OPTIONAL —
+omit the whole `{{IF INVESTMENT_CLASS}}` block when the operator has not classified the
+project. When the field is ABSENT, downstream consumers (e.g., weekly-status-rollup Section 7.3
+Portfolio R-G-T Allocation) class the project as **`Unclassified`** and surface it as a
+coverage gap — they never heuristically auto-bucket it from phase or project-type. The field
+is read, never invented. (NOTE: investment_class is NOT the capacity-model.md §5 60/20/20
+capacity effort-split — a different concept that shares the same digits.)
+-->
+
 
 {{IF GOVERNANCE_MODEL == Agile OR Hybrid}}
 ### Sprint Tracking

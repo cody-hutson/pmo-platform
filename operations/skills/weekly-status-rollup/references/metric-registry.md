@@ -105,6 +105,37 @@ Seed set.
 
 **Provenance discipline.** Every band cell-set carries a `Provenance` value. REFERENCED bands say "see `<doc>`" + link; they never reprint a sibling's numbers. The only registry-OWNED numeric band is **Overdue RAID Count** (plus the `UNSOURCED-DOMAIN` qualitative / seed bands), which carry inline values. **Never fabricate an `audited:` citation** — if no in-corpus anchor exists, the value is `UNSOURCED-DOMAIN` (per the `capacity-model.md` precedent for above-cap Amber/Red boundaries).
 
+## Lag / Lead Indicator Classification
+
+Each registry metric is additionally classified as a **lagging** or **leading** indicator. This is a *property of the existing rows* — it adds no new metric, no new band, and no PROJECT.md field; it lets a consumer audit the **balance** of the metric set it reports (see Consumers — `weekly-status-rollup` Section 7.2 Lag-to-Lead Balance Audit).
+
+- **Lagging** — measures an outcome **after** it has occurred; corrective action is reactive. (Schedule/budget variance already realized, overdue counts already accrued.)
+- **Leading** — **predictive**; movement precedes the outcome, so action can be preventive. (Throughput/velocity trend, capacity pressure, dependency exposure ahead of the slip.)
+
+| Metric | Level | Class | Rationale (one line) |
+|---|---|---|---|
+| Schedule Performance Index (SPI) | Project | **Lagging** | Earned-vs-planned schedule already accrued |
+| Budget (CPI) | Project | **Lagging** | Earned-vs-actual cost already spent |
+| Scope | Project | **Lagging** | CRs already approved against baseline |
+| Risk | Project | **Leading** | Open high/critical risks precede the issue they predict |
+| Integration Risk | Project | **Leading** | Identified integration risk precedes the blocker |
+| Overdue RAID Count | Project | **Lagging** | Items already past due |
+| Aggregate SPI | Program | **Lagging** | Roll-up of realized project SPI |
+| Cross-Project Dependency Health | Program | **Leading** | Unresolved-dependency ratio precedes the cross-project slip |
+| Velocity Variance | Program | **Leading** | Throughput deviation precedes delivery miss (also the velocity-spike watermelon signal) |
+| Milestone Slip Rate | Program | **Lagging** | Slips already occurred in the window |
+| Program Risk Exposure | Program | **Leading** | Open program RED risks precede the program-level issue |
+| Portfolio Health Index | Portfolio | **Lagging** | Composed from projects already at their current color |
+| Count of RED Projects | Portfolio | **Lagging** | Projects already RED |
+| Aggregate Overdue-Decision Count | Portfolio | **Lagging** | Decisions already overdue |
+| Aggregate Budget Health | Portfolio | **Lagging** | Portfolio CPI roll-up of realized spend |
+| Capacity Utilization | Team | **Leading** | Demand-vs-supply pressure precedes the over-commitment miss |
+| Sprint Commitment Reliability | Team | **Lagging** | Delivered-vs-committed for a sprint already closed |
+| Blocked-Item Count | Team | **Leading** | Active blockers precede the throughput drop |
+| Bus-Factor Risk | Team | **Leading** | Externalization-gap precedes the knowledge-loss event |
+
+A consumer reports the **lag : lead ratio** over the metrics it actually surfaces; a set heavily weighted toward lagging indicators is a steering-by-rear-view-mirror balance risk. This classification does not change any band, decision rule, or composition above.
+
 ## AC Worked Example — milestone 8% behind schedule
 
 ```
@@ -129,8 +160,11 @@ Consumers cite these rows verbatim; they do not re-derive thresholds (duplicate-
 | Consumer | What it references here |
 |---|---|
 | `weekly-status-rollup` (Section 1 health logic + Health Indicators composition) | The per-metric Project rows + the Project-Level RAG Composition clause. |
+| `weekly-status-rollup` (Section 7 Portfolio Governance — governance use) | The **Lag / Lead Indicator Classification** (Section 7.2 lag-to-lead balance audit), the per-metric `WHEN…THEN…` **Decision Rule** cells (Section 7.4 per-metric decision-rule validation — cited verbatim, not re-derived), and the Team **Capacity Utilization** row (Section 7.5 capacity dashboard, which follows it to `capacity-model.md`). Section 7.1's watermelon scan consumes the **W1–W8 signal set by reference** from `watermelon-detection.md` (owned by `pmo-qa-auditor`, core module, via-public-api) — see the reciprocal note below. |
 | `watermelon-detection.md` (the pmo-qa-auditor reference — see References) | The Overdue RAID Count owned row (its W3 green-masking trigger: overdue ≥ 1 while overall RAG green), the Velocity Variance `≥ 30%` spike signal, and the SPI / CPI bands for schedule / budget-watermelon signals. |
 | `OPERATIONS.md` RAID protocol (the stale-RAID auto-escalation protocol — see References) | The RAID-derived metrics here for count→RAG; defers per-item AGE escalation to `escalation-thresholds.md`. |
+
+**Reciprocal note — the watermelon signal set now has TWO active consumers.** `watermelon-detection.md` (owned by `pmo-qa-auditor`, core module) defines the canonical W1–W8 signal set; it references this registry for the bands its signals key off (Overdue RAID Count, Velocity Variance `≥ 30%`, SPI/CPI). As of `weekly-status-rollup` v2.01, the **roll-up's Section 7.1 is also an active consumer** of that signal set — it runs W1–W8 **by reference** (via-public-api; no local fork) to scan each project per the verdict-composition rule. So the W1–W8 set is consumed by the *auditor* (output audits) **and** the *roll-up* (portfolio governance) from the single canonical home; the bands those signals key off remain owned here.
 
 ## References
 

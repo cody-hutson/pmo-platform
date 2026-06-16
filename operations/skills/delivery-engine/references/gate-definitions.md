@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This document is the canonical **sequence** of project-lifecycle gates — eleven gates, **LG-0 (Idea Screen)** through **LG-10 (Closure)** — that a managed project passes through from idea to closed. Each gate carries entry criteria, exit criteria, key decisions, authority holder, artifacts required, and an escalation path. It is read by the delivery-engine skill: **Mode F (DoD & Release Readiness Gate)** applies the per-gate exit criteria and the §4 transition rule; **Mode G (RAID / Decision / Milestone Update)** attributes gate decisions to the correct lifecycle gate and authority holder; **Mode C (DoR Gate)** references it for context to situate DoR as LG-4.
+This document is the canonical **sequence** of project-lifecycle gates — eleven gates, **LG-0 (Idea Screen)** through **LG-10 (Closure)** — that a managed project passes through from idea to closed. Each gate carries entry criteria, exit criteria, key decisions, authority holder, artifacts required, and an escalation path. The §4 transition rule states the machine-checkable BLOCK; **§4.1 defines the tri-state verdict semantics** (the `PASS / CONDITIONAL PASS / FAIL` verdict mapped onto the §4 criterion engine) and **§4.2 binds each gate to the `T(n→n+1)` transition coordinate** owned by `lifecycle-stages.md §5.2`, plus the no-advance-past-unmet-gate / no-skip-a-gate rule. It is read by the delivery-engine skill: **Mode F (DoD & Release Readiness Gate)** applies the per-gate exit criteria, the §4 transition rule across LG-1…LG-10, and the §4.1 verdict + §4.2 binding; **Mode G (RAID / Decision / Milestone Update)** attributes gate decisions to the correct lifecycle gate and authority holder and records the §4.1 verdict; **Mode C (DoR Gate)** references it for context to situate DoR as LG-4 (the §4.2 `T(6→7)` binding).
 
 **Boundary vs. `gate-checklists.md` (the sibling doc).** `gate-checklists.md` owns the gate-**TYPE** taxonomy — what KINDS of gates exist (Phase / Quality / Flow / Approval / Hypothesis), the per-type checklist templates, go-live readiness dimensions, risk-based calibration, methodology variation, and gate anti-patterns. This doc owns the lifecycle-gate **INSTANCE sequence** — which gates THIS project lifecycle has, in order, and the entry/exit/authority/artifacts/escalation for each. They are different axes. This doc **cross-references** `gate-checklists.md` for every checklist template and gate-type classification; it never restates them. See [`gate-checklists.md`](gate-checklists.md).
 
@@ -257,7 +257,7 @@ To run any of these handoffs, open the linked template in `gate-checklists.md` a
 
 ## 4. Gate Transition Rule
 
-This is the machine-checkable rule that satisfies the acceptance criterion: *at a gate transition with unmet exit criteria, the agent blocks the transition with an evidence-backed rejection citing the specific violated exit criterion.*
+This is the machine-checkable rule that satisfies the acceptance criterion: *at a gate transition with unmet exit criteria, the agent blocks the transition with an evidence-backed rejection citing the specific violated exit criterion.* §4 defines the per-criterion evaluation engine and the BLOCK; **§4.1 maps the engine onto the `PASS / CONDITIONAL PASS / FAIL` verdict vocabulary** the skill renders; **§4.2 binds each gate to its `T(n→n+1)` transition coordinate** (owned by `lifecycle-stages.md §5.2`) and states the no-advance-past-unmet-gate / no-skip-a-gate rule.
 
 When an agent is asked to advance work from Gate N to Gate N+1:
 
@@ -278,6 +278,61 @@ When an agent is asked to advance work from Gate N to Gate N+1:
 
 ---
 
+## 4.1 Tri-State Verdict Semantics
+
+§4 evaluates each `[LG-N-EX-k]` criterion (`PASS / FAIL / NO-EVIDENCE`) and renders the transition `ALLOWED / BLOCKED / PASS WITH CONDITIONS`. The delivery-engine **SKILL.md** renders gate verdicts in a single vocabulary — **`PASS / CONDITIONAL PASS / FAIL`** (Modes C/F, output §3, the Reversibility Discipline, the Gate-washing failure mode). This section states the mapping so the two are one rule, not two: the §4 engine **produces** the verdict; the verdict vocabulary is what the skill **emits**. No third scheme is minted.
+
+The per-gate verdict is the closed three-value set **🟢 PASS / 🟡 CONDITIONAL PASS / 🔴 FAIL**, each row carrying a `WHEN…THEN…` decision rule:
+
+| Verdict (what the skill emits) | §4 engine condition (what produces it) | `WHEN…THEN…` decision rule | What it permits / blocks | Reversibility framing (→ SKILL.md `## Reversibility Discipline`) |
+|---|---|---|---|---|
+| 🟢 **PASS** | ALL `[LG-N-EX-k]` evaluate PASS (§4 step 3) → transition **ALLOWED** | WHEN every `[LG-N-EX-k]` is PASS THEN render PASS — advance the work item across the gate's `T(n→n+1)` (§4.2) | Transition **ALLOWED** — the work item advances to the next gate boundary | the advance inherits the downstream gate's tier; label per role |
+| 🟡 **CONDITIONAL PASS** | every `[LG-N-EX-k]` is *evidenced* and one or more is *not-yet-observable-but-on-track*, **AND** the gate type's checklist in [`gate-checklists.md §2`](gate-checklists.md) explicitly sanctions a CONDITIONAL outcome (§4 step 5 — `PASS WITH CONDITIONS`) | WHEN every criterion is evidenced, at least one is on-track-but-not-yet-observable, AND the gate type permits a CONDITIONAL outcome THEN render CONDITIONAL PASS — advance with the open condition logged as a tracked RAID item (owner + due date) | Transition **ALLOWED WITH CONDITIONS** — advance permitted; the open condition is logged as a tracked RAID item with an owner + due date and does **not** silently disappear | **MODERATE** — the advance triggers rework if the condition fails; pair with a confidence level |
+| 🔴 **FAIL** | ANY `[LG-N-EX-k]` evaluates FAIL **or** NO-EVIDENCE (§4 step 4) → transition **BLOCKED** | WHEN any `[LG-N-EX-k]` is FAIL or NO-EVIDENCE THEN render FAIL — BLOCK and emit the evidence-backed rejection naming the FIRST violated `[LG-N-EX-k]` + its `T(n→n+1)` (§4.2) + the remediation | Transition **BLOCKED** — the work item does NOT advance; emit the §4 evidence-format rejection | **CHEAP/MODERATE** — returns work, does not destroy it (§4 reversibility framing); pair with a confidence level |
+
+**Verdict mapping (engine ↔ verdict, the canonical reconciliation):** `ALLOWED` (all criteria PASS) **is** PASS; `PASS WITH CONDITIONS` (§4 step 5) **is** CONDITIONAL PASS; `BLOCKED` (any FAIL/NO-EVIDENCE criterion, §4 step 4) **is** FAIL. `BLOCKED` and `FAIL` are the **same** outcome named in two layers — not two different results.
+
+**CONDITIONAL PASS is gate-type-gated.** It is permitted **only** where the gate type's checklist in [`gate-checklists.md §2`](gate-checklists.md) sanctions a CONDITIONAL outcome — concretely the **Approval gate** ("Approved / Rejected / **Conditional**", [`gate-checklists.md §1`](gate-checklists.md)/§2.4) and the **LG-6 documented-exception** path in `[LG-6-EX-2]` ("an explicitly approved, documented exception"). A **Quality gate with a hard binary criterion** (e.g., LG-5 DoD `[LG-5-EX-4]` regression-green — a binary Pass/Fail per [`gate-checklists.md §1`](gate-checklists.md)) **cannot** render CONDITIONAL PASS: a not-green regression is **FAIL**, never "conditional." CONDITIONAL PASS is **not** an escape hatch for an unmet hard criterion — that is the §4-step-5 gate-washing guardrail (see the delivery-engine SKILL.md `## Guardrails`).
+
+**NO-EVIDENCE rounds to FAIL, never to PASS.** A criterion with no evidence is treated as not-satisfied → FAIL (BLOCK), citing the criterion + "evidence absent" + the remediation (produce the evidence). Never round NO-EVIDENCE up to PASS or treat absent evidence as a CONDITIONAL.
+
+**Naming guard (cohort-wide).** The verdict set is closed at exactly three values: **"CONDITIONAL PASS" — never "partial pass" / "soft pass" / "pass\*"**. A two-tier verdict ("mostly pass", "pass with notes") is not a fourth value — it is either a CONDITIONAL PASS (gate-type permitting, condition logged) or a FAIL. This guard mirrors the `estimation-standards.md §7` "never 'Schedule Variance'" naming-guard technique — a closed vocabulary that resists silent expansion.
+
+**Reversibility framing.** A gate verdict is a decision-class output; label each verdict with its reversibility tier + confidence per the delivery-engine SKILL.md `## Reversibility Discipline` (do not restate the tiers here). A FAIL/BLOCK is CHEAP/MODERATE (returns work); a CONDITIONAL PASS is MODERATE (rework-on-condition-failure); a PASS inherits the downstream gate's tier.
+
+---
+
+## 4.2 Gate → Transition Binding (the `T(n→n+1)` coordinate)
+
+The `T(n→n+1)` transition-identifier convention — the 14 ordered transitions `T(1→2)` … `T(14→15)`, each the boundary leaving stage *n* and entering stage *n+1* — is **owned by [`lifecycle-stages.md §5.2`](lifecycle-stages.md)**, and the **§3 stage→gate seam there** is the source of every gate's stage-boundary placement. **This section records the binding as a back-reference; it does not own, define, or re-derive the coordinate or the seam** (reference by role per the duplicate-source discipline — `lifecycle-stages.md` owns the stage axis + the convention; this doc owns the gates). A gate and a transition predicate are **two views of the same boundary**: the gate reads `lifecycle-stages.md §5.2`'s transition predicate exactly as LG-6 already reads the §5.1 P1 predicate.
+
+The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) — copied, not re-derived):
+
+| Gate | Stage boundary (inherited from `lifecycle-stages.md §3`) | `T(n→n+1)` binding | Altitude |
+|---|---|---|---|
+| **LG-3** Plan Baseline | Stage 5 (Plan & Sequence) → Stage 6 (Design / Solution) | **T(5→6)** | project |
+| **LG-4** Sprint DoR | Stage 6 (Design / Solution) → Stage 7 (Build / Develop) | **T(6→7)** | work-item |
+| **LG-5** Dev Complete (DoD) | Stage 8 (Developer Testing) → Stage 9 (QA / Acceptance) | **T(8→9)** | work-item |
+| **LG-6** QA Gate | Stage 9 (QA / Acceptance) → Stage 10 (Plan Review) | **T(9→10)** | work-item *(the built case — `lifecycle-stages.md §5.1`)* |
+| **LG-7** Release Readiness | Stage 10 (Plan Review) → Stage 11 (Release Preparation) | **T(10→11)** | project |
+| **LG-8** Go-Live | Stage 11 (Release Preparation) → Stage 12 (Deploy / Execute) | **T(11→12)** | project |
+| **LG-9** PIR | Stage 14 (Clean / Stabilize) → Stage 15 (Close) | **T(14→15)** | project |
+| **LG-0** Idea Screen | lifecycle entry, Stages 1–2 → entry to Prepare | **boundary-point** (entry — spans `T(1→2)`/`T(2→3)`; no single `T`) | portfolio |
+| **LG-1** Business Case | project-altitude, after Stage 3 | **boundary-point** (no single `T`) | portfolio |
+| **LG-2** Initiation | project-altitude, before plan baseline | **boundary-point** (no single `T`) | project |
+| **LG-10** Closure | terminal at Stage 15 | **terminal** (no successor `T`) | project |
+
+**Boundary-point honesty (do not fabricate a coordinate).** The §3 seam is "intentionally **not** one-gate-per-stage-boundary" ([`lifecycle-stages.md §3`](lifecycle-stages.md)): LG-0/LG-1/LG-2 are project-/portfolio-altitude decisions that do **not** sit on a single work-item stage transition, and LG-10 is terminal. For these gates the BLOCK still cites the violated `[LG-N-EX-k]` for every gate (they all have exit criteria in §2), but it notes **"project-altitude boundary-point — no single `T(n→n+1)`"** rather than forcing a transition coordinate the seam does not assert.
+
+**No-advance-past-unmet-gate / no-skip-a-gate rule (normative).** Composing with [`lifecycle-stages.md §5.2`](lifecycle-stages.md) (which makes every transition predicate BLOCKING):
+
+1. A request to advance a work item **across a gate whose `[LG-N-EX-k]` is unmet** is **BLOCKED**: render FAIL (§4.1), cite the FIRST violated `[LG-N-EX-k]` + the gate's `T(n→n+1)` (or the boundary-point note), and the remediation.
+2. A request to **skip an intervening gate** — advance from a boundary past one or more gates whose exit predicates have not been evaluated/met — is **BLOCKED**: name **each** skipped or unsatisfied gate's unmet predicate **in order**, and advance only one legal gate transition at a time. For the work-item gates **LG-4 → LG-5 → LG-6** (at `T(6→7)`, `T(8→9)`, `T(9→10)`), this composes directly with `lifecycle-stages.md §5.2`'s no-skip-ahead rule — the gate check and the stage-transition predicate are the same boundary.
+
+**Worked instance.** §4's worked example (advancing an increment **LG-5 → LG-6** when the regression suite is failing) is the worked instance of this rule at **`T(8→9)`**: `[LG-5-EX-4]` evaluates FAIL → verdict **FAIL** (§4.1) → transition **BLOCKED**, the rejection naming `[LG-5-EX-4]` **and** `T(8→9)`. (The LG-6 / `[LG-6-EX-2]` QA-gate P1 block at `T(9→10)` is the worked AC-critical instance preserved in SKILL.md Mode F and `lifecycle-stages.md §5.1`.)
+
+---
+
 ## 5. Cross-References
 
 | Document | Relationship |
@@ -287,7 +342,8 @@ When an agent is asked to advance work from Gate N to Gate N+1:
 | [`sprint-defaults.md`](sprint-defaults.md) | Sprint cadence / capacity / velocity handling, consumed at the LG-4 (DoR) and LG-5 (DoD) work-item gates. |
 | [`dependency-rules.md`](dependency-rules.md) | Dependency types + escalation triggers, consumed at LG-3 (dependency register) and LG-4 (dependency clearance). |
 | [`estimation-standards.md`](estimation-standards.md) · [`capacity-model.md`](capacity-model.md) (same dir) | Estimation and capacity references consumed at LG-1/LG-3 (capacity confirmation) and LG-4 (sizing). See § Provenance. |
-| delivery-engine `SKILL.md` (`../SKILL.md`) | The consumer skill — Mode F applies these gates' exit criteria + the §4 transition rule; Mode G attributes gate decisions; Mode C references for context. |
+| [`lifecycle-stages.md`](lifecycle-stages.md) | The 15-stage temporal axis. **Owns** the `T(n→n+1)` transition convention (§5.2) and the §3 stage→gate seam this doc's §4.2 binds to as a back-reference. The de-dup boundary: `lifecycle-stages.md` owns stages + transitions; this doc owns gate entry/exit/authority/escalation + the §4 BLOCK + §4.1 verdict semantics. |
+| delivery-engine `SKILL.md` (`../SKILL.md`) | The consumer skill — Mode F applies these gates' exit criteria + the §4 transition rule across LG-1…LG-10 + the §4.1 verdict + §4.2 binding; Mode G attributes gate decisions + records the §4.1 verdict; Mode C references for context (the §4.2 `T(6→7)` LG-4 binding). |
 
 **Sibling-list reconciliation (out of scope here).** Three other corpus docs carry divergent, partial project-lifecycle gate lists today (`pmo-process-designer/references/traceability-matrix.md`, `ppm-agent/references/artifact-gap-detection.md`, `comms-writer/references/channel-formats.md`). Reconciling them to this canonical eleven-gate sequence is tracked separately and is NOT performed in this doc.
 
@@ -298,3 +354,4 @@ When an agent is asked to advance work from Gate N to Gate N+1:
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-06-13 | Initial authoring — canonical eleven-gate project-lifecycle sequence (LG-0 Idea Screen → LG-10 Closure), per-gate 6-field blocks with `LG-N-EX-k` exit-criterion IDs, the §4 gate-transition BLOCK rule, and the four critical-handoff pointers. Provenance `UNSOURCED-DOMAIN`. Authored under the delivery-capacity-and-lifecycle-gating release (eleven-gate A2 model per Collective Review operator override). |
+| 1.1 | 2026-06-15 | Added §4.1 Tri-State Verdict Semantics (the `🟢 PASS / 🟡 CONDITIONAL PASS / 🔴 FAIL` verdict mapped onto the §4 criterion engine — `ALLOWED`=PASS, `PASS WITH CONDITIONS`=CONDITIONAL PASS, `BLOCKED`=FAIL; CONDITIONAL PASS gate-type-gated to Approval gates + the LG-6 documented-exception; NO-EVIDENCE→FAIL; the closed-three-value naming guard) and §4.2 Gate→Transition Binding (each gate's `T(n→n+1)` coordinate inherited as a back-reference from `lifecycle-stages.md §3`/§5.2 — LG-3 T(5→6), LG-4 T(6→7), LG-5 T(8→9), LG-6 T(9→10), LG-7 T(10→11), LG-8 T(11→12), LG-9 T(14→15); LG-0/LG-1/LG-2 marked project-altitude boundary-point, LG-10 terminal; the no-advance-past-unmet-gate / no-skip-a-gate rule composing with `lifecycle-stages.md §5.2`). Purpose + §4 intro updated; a `lifecycle-stages.md` cross-ref row added. The §4 engine, the eleven gates + their `[LG-N-EX-k]`, and the §3 H1–H4 pointers are unchanged; no new field, no gate redefinition. Authored under the 02-FNH-est-lifecycle-status-hardening release (the delivery-engine 10-gate lifecycle-enforcement story). |

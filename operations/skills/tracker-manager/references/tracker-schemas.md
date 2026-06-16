@@ -186,6 +186,79 @@ If any sentence has no content, use "None identified."
 
 ---
 
+## Tracker Integrity Rules
+
+Write-side integrity guards the Tracker Manager applies during the Processing Cycle. These are
+**advisory by design** — they flag for operator confirmation rather than silently suppressing a
+legitimate entry — but they must run. The Processing Cycle insertion points are Step 1.5 (dedup),
+Step 2.5 (cascade), and the top of Step 5 (lifecycle). This section is the single queryable home
+for the three parameters; the SKILL.md steps reference it by role.
+
+### RAID Deduplication
+
+| Parameter | Value |
+|---|---|
+| **Fires on** | `action: ADD` targeting a RAID Log artifact ONLY. MODIFY / CLOSE / REACTIVATE exempt (they reference an existing `entry_id` — no new entry is created). Non-RAID trackers exempt. |
+| **Comparison field** | The RAID `Description` (free-text risk / issue / assumption / dependency statement). |
+| **Comparison scope** | **ACTIVE-section rows only** (`Section = ACTIVE`). ARCHIVE rows excluded — a closed historical risk is not a live duplicate. Same-`RAID Category` rows are the **primary** set; cross-category matches surface at a **lower-confidence note** only (a Risk and an Issue describing the same condition is an escalation lineage, not a duplicate). |
+| **Method** | Normalized **token-set (Jaccard) similarity** on `Description`: lowercase → strip punctuation → drop a small stopword set → compare token sets via `|A∩B| / |A∪B|`. Computed by the LLM agent reasoning over the two strings (no library import). Jaccard chosen over cosine / embedding similarity: no embedding substrate ships in-repo, and token-set Jaccard is transparent and hand-reproducible for short RAID descriptions (the "no over-engineering" choice). |
+| **Threshold** | **≥ 0.70 (70%) → flag** as a probable duplicate. Adopted as the documented design value from the parent story's stated `>70%`; there is no in-repo RAID-description distribution to empirically tune against (operator RAID logs are Layer-2, git-ignored). Operator decision item: adopt 70% as-stated (recommended) vs. tune at build. |
+| **Action** | **Flag, never auto-block.** A ≥ 0.70 match surfaces as a decision-class line in the Step-2 consolidated summary — matched ID, similarity score, reversibility tier — e.g. `RAID ADD (R-PPM-014) — probable duplicate of R-PPM-012 (0.82 similarity); confirm new entry or merge. [CHEAP · confidence: HIGH]`. Below 0.70 on every ACTIVE row → no flag. A wrongly-suppressed RAID entry is a silent loss, worse than a flagged near-duplicate — hence advisory. |
+
+### Cascade-Trigger Rules
+
+tracker-manager does **NOT** discover cascades. Cascade discovery is owned by **ppm-agent
+Section 8.6** (the deterministic dependency scan that emits the `TRACKER_IMPACT_MATRIX` with
+DIRECT / SECONDARY rows, which this skill already consumes and validates). This guard is a
+**presence check** on the handoff contract — it asserts the upstream scan ran, then renders what
+the matrix found. It does not re-derive the cascade.
+
+| Parameter | Value |
+|---|---|
+| **Scope-change signal (trigger — fires WHEN any holds)** | (i) a RAID `ADD` / `MODIFY` whose `RAID Category = Dependency` or `Scope` (the Scope risk sub-category per `delivery-engine/references/raid-templates.md` § 1.2); OR (ii) a `MODIFY` changing a milestone / date / deliverable field on a Tier-1 tracker; OR (iii) an update whose `reason` names a scope change (re-scoping, descope, added / removed deliverable). Routine updates (blocker closes, meeting completions) carry no signal → guard does not fire. |
+| **Assertion** | An accompanying `TRACKER_IMPACT_MATRIX` is present for the run AND contains a row (DIRECT or SECONDARY) keyed to this update, OR an explicit `No secondary effects identified` record for it. |
+| **Discovery owner** | ppm-agent § 8.6 (reference-by-role). tracker-manager renders the matrix's SECONDARY rows as the "downstream impacts of this scope change"; it does not find them. |
+| **Action** | Matrix present → list the SECONDARY rows in the consolidated summary. Matrix absent / silent on a scope-change update → **flag**: `Cascade-unverified: scope-change update (R-PPM-014) arrived without a Tracker Impact Matrix entry — route through ppm-agent §8.6 dependency scan before applying. [MODERATE · confidence: HIGH]`. MODERATE because un-scanned secondary effects, if written, leave trackers internally inconsistent (days-to-reconcile). |
+
+This is the write-side mirror of ppm-agent's `TRACKER_UPDATES emitted without the Section 8.6
+dependency scan` failure mode — read-side enforces emitting the matrix; this guard enforces
+receiving it before writing a scope change.
+
+### Lifecycle-State Predicate
+
+Before any write, validate that the target artifact is still a live document. The predicate reads
+the target **FILE's** `lifecycle_state` frontmatter (`core/schemas/frontmatter-schema.md`
+§ Category 2 — a real, REQUIRED field; operational trackers / RAID registers are **Domain B**).
+This is distinct from the RAID **row's** own status (Open / Monitoring / Mitigating / Escalated /
+Closed) — the predicate asks "is the artifact I'm about to write to still live?", not "what is the
+state of this RAID row?". Domain-B value set is referenced from the schema and
+`core/standards/lifecycle-states-canonical.md` § 4.2 by role — only the block / flag set is
+restated here.
+
+| Target artifact `lifecycle_state` | Disposition |
+|---|---|
+| `current` / `emerging` / `needs-review` (live Domain-B states; `active` tolerated as a Domain-A alias) | **PROCEED** — write allowed |
+| `archived` / `superseded` | **BLOCK + flag** — refuse the write: `Write refused: target [Project]_RAID_Log.csv is lifecycle_state=archived — updating a closed/archived artifact. Confirm reactivation or redirect to the current artifact. [MODERATE · confidence: HIGH]` |
+| `stale` (Domain B) | **FLAG, proceed-on-confirm** — stale ≠ closed; warn the artifact is past its staleness window and the update may land on out-of-date content |
+| **absent / unparseable / unknown enum** | **`unknown → flag`** — low-noise advisory, never silent-pass and never hard-block: `Lifecycle-state unknown for [target] (frontmatter field absent or unreadable) — confirm the target is a live artifact before write. [MODERATE · confidence: HIGH]` |
+
+**Low-noise discipline (top regression risk).** Many operator trackers do not yet carry the
+field. Scope the **BLOCK** strictly to `archived` / `superseded`. `unknown` on an established
+operational tracker — a routine Daily-Status / Comms / Meetings / Transcript auto-write on a
+field-less `.md` — must produce an **advisory note, NOT an approval gate**. The `unknown → flag`
+default honors the parent card's dependency clause ("if not uniformly present, default to 'state
+unknown → flag for confirmation' rather than silently passing").
+
+**CSV-artifact lifecycle source.** A `.csv` RAID artifact carries no YAML frontmatter line. Read
+its lifecycle state from the co-located project context (PROJECT.md artifact registry) where
+available; absent → `unknown → flag`. Do not crash on "no YAML in a `.csv`."
+
+> Scope note: this is the **skill-local operational** reference. The entity-derived canonical
+> schema at `core/schemas/tracker-schemas.md` is the EAD-derived authority and is left untouched
+> by these integrity rules.
+
+---
+
 ## Extensibility
 To add a new tracker:
 1. Define schema in this file (columns, types, valid values)

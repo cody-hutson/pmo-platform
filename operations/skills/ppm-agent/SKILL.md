@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v1.19
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -88,6 +88,39 @@ extraction approach:
 When the artifact type is ambiguous, state your interpretation and proceed. Do not ask
 "what type of file is this?"
 
+### Intake-governance pass (new request landing on the portfolio)
+
+When an artifact carries — or a user explicitly raises — a **new project/initiative request
+landing on the already-loaded managed portfolio** (a new fundable demand surfaced in a
+transcript or intake artifact, or an explicit "should we take this on?" ask), run an
+**intake-governance pass** on that request before surfacing the accept/defer decision. Read
+`references/ppm-intake-governance.md` by role for the full application contract; do not
+re-derive the rubrics it references. The pass produces, per request:
+
+1. **Business-case tier** (Tier 1 / Tier 2 / Tier 3) and a **demand-source tag** (one of the
+   6-type MECE taxonomy) — both classified by reference to the intake desk's canonical
+   intake-governance rubrics (`ppm-intake-governance.md` §1).
+2. **WSJF score** (`CoD ÷ Job Size`) with its CoD components and Job-Size inputs shown —
+   scored against the canonical formula by reference, never a forked formula
+   (`ppm-intake-governance.md` §2). A WSJF value is always emitted, at LOW confidence with
+   an owned `[ASSUMPTION – CONFIRM]` when the components are not scorable from the artifact.
+3. **Capacity-aware routing** — read the portfolio's effective capacity and demand-supply
+   band from the delivery-engine capacity model by role; **flag "near capacity" when
+   accepting the request would move the band into Amber (≥ 0.85) or push planned utilization
+   to/over the 75–85% planned cap**, and force the trade-off when it would push into Red
+   (> 1.00) (`ppm-intake-governance.md` §3).
+4. **Trade-off analysis** — when the near/over-capacity flag fires, emit the explicit
+   "if this comes in, what gives?" package: the displaced lower-WSJF item(s), the explicit
+   choice, and the capacity arithmetic (`ppm-intake-governance.md` §4). An over-capacity
+   intake **forces a trade-off rather than a silent over-commit.**
+
+**Where it surfaces (no new output Section):** the tier/WSJF-ranked accept/defer decision
+routes to **Section 5 (Decisions needed)**; an over-capacity condition surfaces to
+**Section 6 (Top risks)**; the scored item is logged via **Section 8 (Tracker update
+instructions)**. When capacity data is unavailable, do not fabricate a utilization number —
+score WSJF anyway (it is capacity-independent) and own the missing input per the negative-path
+table in `ppm-intake-governance.md` §4.
+
 ## Pre-processing cross-reference
 
 Before generating output, load the project's operational state. This catches connections
@@ -133,6 +166,42 @@ If no hits: `CROSS_REFERENCE_HITS: None identified.`
 Omit this section only when the user explicitly requests narrow-scope analysis
 (e.g., "just extract the action items, skip cross-referencing").
 
+### Org/decision-model detection (pre-processing derivation)
+
+Before surfacing decisions (Section 5) and routing stale RAID items (Sections 6 / 9.4),
+derive the project's **org/decision model** — *who is empowered to make which class of
+decision under this project's operating model*. There is **no `org_model` /
+`governance_model` schema field**, and you must not assume or read one; the org model is
+**derived from the canonical `delivery_approach` methodology field** per the OPERATIONS.md
+Methodology Awareness Protocol (Rule 1: read `delivery_approach` at invocation). This is the
+"centralized vs. federated decision authority" axis: `delivery_approach` selects a column in
+`references/competency-model.md`'s **Four Universal PMO Functions** table and its **PM
+Authority Fracture** table, which already encode how each methodology distributes authority
+across the four functions (Waterfall consolidates authority in the PM ≈ centralized;
+Scrum/SAFe fracture it across PO / Team / Sponsor ≈ federated; Kanban evolves it toward flow
+management). Read those two tables **by role** — do not restate or re-derive their mapping.
+
+The derivation produces an **authority-distribution profile** for the project: for each of the
+four functions (Product Authority / Delivery Facilitation / Technical Execution / Governance),
+the role that owns it under the project's `delivery_approach`. This profile feeds the
+decision-authority tag in Section 5 and supplies the "routing differs per model" behavior
+(the same class of decision routes to a different owner role under a different model — e.g., a
+scope decision routes to **PM** under Waterfall but to **PO** under Scrum, per the PM Authority
+Fracture rows).
+
+**Negative path — never silently assume a model.** When `delivery_approach` is **absent or
+unparseable** from PROJECT.md, do **NOT** default to Scrum or any base archetype (this is
+exactly the Methodology Awareness Protocol Rule 4 PROC-3 "base-archetype blind fallback" /
+PROC-4 "hardcoded sprint presumption" anti-patterns). Instead, emit a **methodology-agnostic**
+profile — tag decisions with the generic Four-Function owner (Product / Delivery / Technical /
+Governance) without the methodology-specific role refinement — and attach
+`[ASSUMPTION – CONFIRM] decision authority not determinable — delivery_approach absent from
+PROJECT.md — owner: TPM — to close: set delivery_approach`. The decision still surfaces
+(push-to-resolve intact); only the methodology-specific authority refinement is withheld
+pending the field. For `delivery_approach: Custom` with `base_archetype: null`, follow
+Methodology Awareness Protocol Rule 3 CASE 3 — use the Custom block directly, no archetype
+fallback, agnostic output if unparseable.
+
 ## Output format
 
 Every PPM response follows this structure. Read `references/output-format.md` for the full
@@ -172,6 +241,28 @@ which other decisions, milestones, or deliverables are affected by this decision
 can frame the decision to a clear recommendation, do so. See the Reversibility Discipline
 section below for tier definitions, required elements per tier, and label format.
 
+**Decision-authority tag (required on every surfaced decision).** Tag each decision with the
+**decision-authority tier** — the function + role empowered to make *this* decision under the
+project's operating model, taken from the authority-distribution profile derived in
+Org/decision-model detection (above). Name the competency-model function and the
+methodology-specific role owner, e.g., `Decision authority: Product Authority — PO (Scrum)`,
+`Decision authority: Delivery Facilitation — PM (Waterfall)`, or
+`Decision authority: Governance — Sponsor / Steering Committee`. This is the routing axis: the
+same class of decision carries a different owner under a different `delivery_approach` (a scope
+decision → PM under Waterfall, → PO under Scrum, per the competency-model PM Authority Fracture
+rows). When `delivery_approach` is absent/unparseable, tag with the generic Four-Function owner
+and the `[ASSUMPTION – CONFIRM]` note from the detection step — never a silent Scrum default,
+and never an invented named individual (Guardrails: no fabricated owners).
+
+> **This is the decision-authority tier — a distinct axis from the RAID escalation tier in
+> Section 6.** Decision-authority answers *"who is empowered to make this decision?"* (a
+> methodology property — varies by `delivery_approach`, sourced from `competency-model.md`). The
+> RAID escalation tier answers *"what escalation step does this risk's score/age route to?"* (a
+> score/age property — independent of methodology, sourced from `escalation-thresholds.md §2`). A
+> decision is not a P×I-scored item, so it carries **no** RAID exposure score and **no** 5-step
+> ladder tier; tagging a decision with the RAID escalation ladder is a category error. Keep the
+> two axes separate.
+
 ### 6. Top risks
 Each risk includes: description, probability (HIGH/MEDIUM/LOW), impact, trigger, owner,
 mitigation, and mitigation deadline. New risks from this artifact are labeled `[NEW]`.
@@ -179,6 +270,39 @@ Changed risks are labeled `[UPDATED]`. For completed/resolved items, include res
 date if available — omitting resolution dates on closed P1s creates ambiguity. Use the RAID
 ID prefix `R-PPM-###` for all RAID entries originated by this skill. This prevents ID
 collision with entries from other skills in the suite.
+
+**Stale-RAID auto-escalation (run on every open RAID item).** For each open RAID item in the
+loaded RAID Log, compute its **age** and route it through the age-based auto-escalation logic
+that `references/escalation-thresholds.md` is the doc-of-record for. Apply the file's logic
+**by role** — restate **no** number, threshold, or formula here; the values live in that
+reference and the OPERATIONS.md Stale-RAID Auto-Escalation Protocol, which both name this
+Section (6) and Section 9.4 as their consumers:
+
+- **Age clock** — compute age per `escalation-thresholds.md §3`'s age-clock predicate
+  (`age = today − Last Updated`, calendar days; the clock resets only on a **substantive**
+  update — status/score/step change, new mitigation, or owner-confirmed progress; a cosmetic
+  re-save does **not** reset it).
+- **Warn band** — when age crosses the §3 warn threshold for the item's RAID type, flag
+  `[STALE-WARN]` and attach a `[RECOMMENDED]` owner nudge; surface the item in **Section 9.4
+  (Stale follow-ups)**. No escalation-step change (advisory only).
+- **Escalate band** — when age crosses the §3 escalate threshold, flag `[STALE-ESCALATE]` and
+  emit an **escalation action** naming the owner, the breached threshold, and the **routed
+  escalation tier**. The routed tier is the §3 override: `final step = max(score-derived step,
+  age-derived step)` on the `escalation-thresholds.md §2` 5-step ladder (Team → Project →
+  Program → Program-Critical/Sponsor → Portfolio). Surface the escalation here in Section 6.
+
+Reuse the **existing** `[STALE-WARN]` / `[STALE-ESCALATE]` flag tokens from
+`escalation-thresholds.md §3` verbatim — do not coin new flag names. **Negative path:** when a
+RAID item has no `Last Updated` field, or no RAID Log is present, do **not** fabricate an age —
+emit `[ASSUMPTION – CONFIRM] RAID age not computable — Last Updated field/RAID Log unavailable`
+and route the item on its exposure score alone (the age axis simply does not fire). When every
+open item is inside its warn threshold, the stale pass is a clean **no-op** — no `[STALE-*]`
+flags is correct, not a miss.
+
+> **RAID escalation tier ≠ decision-authority tier (Section 5).** The 5-step escalation ladder
+> here routes a *risk's* score/age and is sourced from `escalation-thresholds.md §2` — it is
+> independent of methodology. It is a separate axis from the decision-authority tag in Section 5
+> (which names the methodology-derived decision owner). Do not conflate the two.
 
 ### 7. Dependencies and blockers
 Active blockers with owner, impact, and recommended resolution path. Cross-project
@@ -271,7 +395,13 @@ Sub-sections:
   based on upcoming milestones, risk accumulation, or cadence gaps.
 - **9.4 Stale follow-ups**: Follow-up chains (tagged items from previous processing)
   that received no visible progress in the Daily Status Log, Transcript Register, or
-  tracker updates since the processing run that created them.
+  tracker updates since the processing run that created them. **This sub-section is also
+  where warn-band stale RAID items land**: any open RAID item that crossed its
+  `references/escalation-thresholds.md §3` warn threshold (per the Section 6 stale-RAID
+  auto-escalation pass) surfaces here flagged `[STALE-WARN]` with a `[RECOMMENDED]` owner
+  nudge and no escalation-step change. Escalate-band items (`[STALE-ESCALATE]`) surface in
+  Section 6 with their routed tier, not here. Apply the age-clock predicate by reference —
+  restate no threshold value.
 - **9.5 Artifact gaps**: Summary of Section 8.5 findings for quick reference.
 
 Limit to top 10 most actionable items per processing run, total across all sub-sections.
@@ -714,6 +844,74 @@ structural conformance and content quality.
   `[COMMS]: "vendor spec slipped — need an escalation email"` and leaves comms-writer
   to reconstruct the impact, options, and recommendation from the source transcript.
 
+### Intake request accepted without a WSJF score, or over-capacity without a trade-off — PROC
+
+- **Signature (observable signal):** A new project/initiative request landing on the
+  portfolio is accepted or sequenced in Section 5 with no WSJF value attached (no CoD
+  components, no Job-Size input), OR an accept decision that pushes the portfolio's
+  utilization to/over the capacity ceiling is surfaced with no trade-off package — no
+  displaced lower-WSJF item, no explicit "to take X, defer Y" choice, no capacity arithmetic.
+- **Conditional:** do NOT accept or sequence a new intake request without a WSJF score, or
+  route one past the capacity ceiling without a trade-off, when an intake-governance pass
+  applies to that request, because an unscored intake reverts the portfolio to
+  first-come-first-served instead of weighted economic priority, and a silent over-capacity
+  accept over-commits the portfolio beyond effective supply rather than forcing the explicit
+  displacement decision.
+- **Root cause:** Producing the full pass — resolving the WSJF inputs (referencing the
+  canonical formula and elicitation prompts) and computing the capacity arithmetic and
+  trade-off from the capacity model — costs more tokens than logging the request as accepted;
+  under output pressure the agent collapses the pass and treats the newest request as
+  admissible by arrival, skipping both the score and the displacement analysis the in-flight
+  intake surface exists to produce.
+- **Mitigation:** Run the intake-governance pass per `references/ppm-intake-governance.md`:
+  emit a WSJF value for every intake request (at LOW confidence with an owned
+  `[ASSUMPTION – CONFIRM]` when components are not scorable — never skip the value); read the
+  effective capacity and demand-supply band from `capacity-model.md` by role; when acceptance
+  moves the band into Amber (≥ 0.85) / over the planned cap, or into Red (> 1.00), emit the
+  §4 trade-off package (displaced lower-WSJF item + explicit choice + capacity arithmetic) to
+  Section 5 / Section 6. When capacity data is unavailable, score WSJF anyway and own the
+  missing utilization input rather than fabricating one.
+- **Principal response vs. junior response:** Principal scores every intake request against
+  the canonical WSJF rubric, reads the live capacity band, and — on a near/over-capacity
+  request — surfaces "to take request X (WSJF 1.6), defer committed item Y (WSJF 0.9);
+  resulting utilization 0.92 (Amber)" as an explicit Section 5 decision. Junior logs the new
+  request as accepted with no score and no displacement analysis, and the over-commit surfaces
+  later as a missed commitment the next processing run has to reverse-engineer.
+
+### Decision routed without an authority tier, or stale RAID item not escalated — PROC
+
+- **Signature (observable signal):** A Section 5 decision is surfaced with no
+  decision-authority tag (no function + role owner derived from `delivery_approach`), OR an
+  open RAID item whose age has crossed its `escalation-thresholds.md §3` threshold is emitted
+  with no `[STALE-WARN]`/`[STALE-ESCALATE]` flag and no escalation action — the org-model
+  derivation or the stale-RAID age pass did not fire.
+- **Conditional:** do NOT route a decision without an authority tier, and do NOT let a RAID
+  item pass the staleness threshold without escalating, because an untagged decision leaves
+  the TPM to work out who is even empowered to make it (defeating the routing the org-model
+  detection exists to supply), and an un-escalated stale item silently rots past the point
+  where the doc-of-record says it should have been warned or bumped a tier — the exact neglect
+  the auto-escalation protocol was built to catch.
+- **Root cause:** Both steps consume tokens and feel skippable — deriving the authority owner
+  means reading `delivery_approach` and consulting the competency-model tables; the stale pass
+  means computing age against the `escalation-thresholds.md §3` bands for every open item.
+  Under output pressure the agent surfaces the decision or the risk on its face content and
+  drops the governance-awareness layer, treating the tag and the age check as ceremony rather
+  than the routing they produce.
+- **Mitigation:** Run the Org/decision-model detection step before Section 5 and tag every
+  surfaced decision with its authority tier (generic Four-Function owner +
+  `[ASSUMPTION – CONFIRM]` when `delivery_approach` is absent — never a silent Scrum default).
+  Run the stale-RAID auto-escalation pass over every open RAID item: compute age per the
+  `escalation-thresholds.md §3` age-clock predicate, flag `[STALE-WARN]` (Section 9.4) or
+  `[STALE-ESCALATE]` + routed tier per `max(score, age)` (Section 6) by reference. When
+  `delivery_approach` or `Last Updated` is unavailable, emit the owned `[ASSUMPTION – CONFIRM]`
+  and route on what is computable — do not fabricate an owner or an age.
+- **Principal response vs. junior response:** Principal tags "Decision authority: Product
+  Authority — PO (Scrum)" on the scope decision and surfaces "R-PPM-018 (Issue) at 33 days >
+  30-day escalate threshold → `[STALE-ESCALATE]`, bump Program → Program-Critical, route to
+  Program Manager + Sponsor." Junior surfaces the decision with no owner and the 33-day issue
+  as an ordinary risk, and the un-routed authority and un-escalated staleness resurface later
+  as an orphaned decision and a missed escalation the next run has to reconstruct.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -734,3 +932,5 @@ Read these on first use, then as needed when handling specific artifact types:
 | `references/operational-artifacts.md` | When creating or updating Communications Tracker, Daily Status Log, or Meetings Tracker | Standard operational artifact catalog, lifecycle tiers, transition rules, cross-artifact dependencies |
 | `references/artifact-gap-detection.md` | After every processing run (Section 8.5) | Artifact gap detection logic, [ARTIFACT_GAP] tag format, phase gate requirements |
 | `references/proactive-follow-up-tracking.md` | When constructing Section 9 | Proactive detection logic, committed vs. recommended dates, follow-up chain tracking |
+| `references/ppm-intake-governance.md` | When processing a new intake request (business-case tiering + WSJF + demand tag + capacity-aware routing) | Intake-governance application layer: WSJF/CoD/tiers/taxonomy by reference; capacity-route + trade-off contract |
+| `references/escalation-thresholds.md` | When surfacing risks (Section 6) or stale follow-ups (Section 9.4), and when routing a decision/RAID item to an escalation tier | Risk-scoring → tier routing (5-step ladder) + age-based stale-RAID auto-escalation thresholds (doc-of-record); references the delivery-engine 5×5 scale, does not re-derive it |

@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v1.10
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -49,6 +49,17 @@ Before generating any status update, read these files in order:
    triggered this update
 5. **Communications Tracker** — `04-PMO-Operations/[Project]_Communications_Tracker.md`
    - For Daily Connect Prep: messages sent since last update
+6. **Status-threshold registries** — read *only when computing the status RAG, milestone
+   variance, or buffer-consumption lines* (see `## RAG, Variance & Buffer Status`):
+   - `weekly-status-rollup/references/metric-registry.md` — the Project-Metrics **SPI row**
+     for the milestone-variance RAG bands, the `WHEN…THEN…` decision rule, and the per-metric
+     domains the anomaly flag checks against.
+   - `delivery-engine/references/estimation-standards.md §4.1` (Buffer-Consumption Banding)
+     for the buffer-consumption zone; `§7` (Milestone-Variance RAG) is the same SPI standard
+     the registry indexes.
+   - These are referenced **by role; their threshold values are not restated here**
+     (duplicate-source-discipline — each band has exactly one canonical owner). Read the live
+     band from the source row at compute time; never fork a local copy.
 
 ## Update Types
 
@@ -119,6 +130,91 @@ The update format shifts based on project phase (read from PROJECT.md):
 | Mock Go-Live | Cutover rehearsal tasks | Rehearsal results, gap identification |
 | Cutover | Per-milestone updates (not AM/PM) | Per-milestone updates |
 | Hypercare | Issue monitoring, user feedback | Resolution status, stability metrics |
+
+## RAG, Variance & Buffer Status
+
+When a status update carries a schedule color, a milestone-progress figure, or a buffer
+figure, compute it from the documented formula and cite the threshold — never assign a color
+by feel. This section wires the **AM / PM / Daily Connect Prep** modes to four formula-driven
+lines, all of which **surface** the registry's computed state. The thresholds, bands, and
+decision rules are owned by the registries listed in **Inputs entry 6** and are read **by
+role** — this section restates none of their numbers.
+
+**Surfacing, not recommending (load-bearing — preserves the `## Reversibility Scope` opt-out).**
+Every line below reports the registry's documented `WHEN…THEN…` rule as the *source's* rule,
+attributed to the source. This skill does not issue first-person recommendations, escalations,
+or proposed actions (those belong to ppm-agent / pmo-qa-auditor). Report the color, the figure,
+and the source's rule verbatim — e.g. *"milestone variance 🟡 YELLOW (SPI 0.92; band 0.85 ≤ SPI
+< 0.95 per metric-registry SPI row) — registry rule: watch milestone, flag at next status,"* and
+**never** *"I recommend you escalate."* The `SG-2 [RECOMMENDED]` label remains the marker for
+the edge case where a surfaced date or priority is genuinely the agent's own.
+
+### Formula-RAG (schedule color)
+
+Compute the schedule RAG from the **Schedule Performance Index (SPI)**, banded per the
+metric-registry **SPI row** (which references the platform-canonical Schedule-RAG standard).
+SPI = earned schedule value ÷ planned schedule value; *"X% behind schedule" ⇒ SPI = 1 − X/100*
+(8% behind ⇒ 0.92). Read the live 🟢 / 🟡 / 🔴 band from the SPI row, classify the figure, and
+report the color **with the band cited** — this replaces any by-feel color in the status line.
+Report the registry's `WHEN…THEN…` decision rule as the registry's rule (not a recommendation).
+
+### Milestone variance (SPI)
+
+Report the SPI figure alongside the color. **Name it "milestone variance (SPI)" or "milestone
+slip" — NEVER "Schedule Variance"** (that label is reserved against the EVM Schedule-Variance
+cost figure; this is the SPI *index*). Use the metric-registry SPI-row bands by reference. On a
+PM update, report the SPI delta versus the AM figure; in Daily Connect Prep, surface the figure
+as a prep line so the meeting opens on the formula-derived color, not a verbal feel.
+
+### Buffer-consumption zone
+
+When an iteration-buffer consumption figure is available, name the active zone from
+`estimation-standards.md §4.1` (Buffer-Consumption Banding) — 🟢 / 🟡 / 🔴 on the **fraction of
+the iteration buffer consumed** — and report its `WHEN…THEN…` rule as the source's rule. This is
+**orthogonal** to the §4 (a/b/c) reserve-ownership zones: report **how much of the buffer is
+burned** (consumption), never **which reserve owns the risk** (ownership). The zone line is
+**conditional on a buffer figure existing** — see the negative paths below.
+
+### Metric-anomaly flag
+
+Flag a surfaced metric as an anomaly when it is either **(i) structurally implausible** — outside
+its metric's defined domain (e.g., an SPI ≤ 0 or implausibly high for a daily milestone read, a
+buffer-consumption fraction < 0 or > 1.0, a milestone %-complete that moved backward with no
+re-baseline note, a velocity reported as a single point rather than a range) — or **(ii)
+band-contradicting** — a value the source tracker reports as 🟢 while the computed RAG is 🟡 / 🔴
+(the watermelon green-masking premise). Check against the registry's **existing** per-metric
+domains and RAG bands — author no new anomaly thresholds. **Surface** the anomaly for the reader
+(in Daily Connect Prep, as a PMO-internal prep-note outside the Teams-ready body, like the
+unprocessed-Comms-Tracker prep-note); never auto-correct, re-triage, or adjudicate it — that
+strategic judgment is ppm-agent / pmo-qa-auditor, not this formatting pass.
+
+### Per-mode wiring
+
+| Mode | Formula-RAG | Milestone variance (SPI) | Buffer-consumption zone | Anomaly flag |
+|------|-------------|--------------------------|-------------------------|--------------|
+| **AM Status Update** | Compute the schedule RAG from SPI when a milestone baseline is readable from PROJECT.md; cite the band; replace any by-feel color in the status line. | Report the SPI figure alongside the color. | Report the zone if an iteration-buffer figure is available. | Flag any structurally-implausible / band-contradicting metric surfaced into the update. |
+| **PM Status Update** | Recompute against the day's delta; the progress-delta line carries the updated color + cited band. | Report SPI + the delta vs the AM figure. | Report the zone + consumption delta. | Same. |
+| **Daily Connect Prep** | Surface the current schedule RAG + cited band so the meeting opens on the formula-derived color. | Surface the variance figure as a prep line. | Surface the zone as a prep line. | Surface anomaly flags as a PMO-internal prep-note (outside the Teams-ready body). |
+
+**Phase-adaptation composition.** These lines compose with the `## Phase Adaptation` table, they
+do not override it. In **Cutover** (per-milestone cadence) the milestone-variance line is *more*
+central — the per-milestone update carries the SPI + RAG. In **Hypercare** the buffer/variance
+lines may be N/A (no active sprint buffer) → the missing-input negative path fires.
+
+**Negative paths (REQUIRED — never fail silently, never fabricate a color or zone).**
+
+- **No milestone baseline (SPI not computable):** do NOT fabricate a RAG. Emit
+  `milestone variance: not computable — no schedule baseline` and flag the missing baseline as a
+  status gap (matches `estimation-standards.md §7` Application rule).
+- **No buffer figure available:** state `buffer consumption: not available` — do NOT invent a
+  zone, and never default the band to GREEN on absent input (matches `estimation-standards.md
+  §4.1` Application rule).
+- **Missing milestone %-complete but baseline present:** flag `[ASSUMPTION – CONFIRM]` and do not
+  color.
+- **Project's Daily Status Framework defines no RAG / variance / buffer section:** surface the
+  figures in the nearest applicable line and note the Framework gap — do not silently drop them
+  and do not force-inject a template section the Framework lacks.
+- **Anomaly with no clean resolution:** flag-and-surface — never auto-correct, never re-triage.
 
 ## Post-Generation Actions
 
@@ -338,6 +434,34 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
   prep silently (the team discovers the missed escalation mid-meeting) or plays PPM
   Agent and triages the messages inline — producing strategic judgments a formatting
   skill was never specified to make.
+
+### RAG color assigned by judgment when variance inputs are available — PROC
+
+- **Signature (observable signal):** A daily status update asserts a schedule RAG color
+  (🟢 / 🟡 / 🔴) by feel — "looking green," "we're in good shape" — when PROJECT.md carries a
+  milestone baseline from which the Schedule Performance Index (SPI) is computable, and the
+  computed band is not cited in the status line.
+- **Conditional:** do NOT assign a RAG color by judgment when the variance inputs are available —
+  compute it from SPI per the metric-registry SPI-row band and cite the threshold, because a
+  by-feel green over a measurably-behind milestone is exactly the "watermelon" green-over-red
+  reporting failure this discipline exists to foreclose; the color must trace to the formula, not
+  to optimism.
+- **Root cause:** A schedule color is the fastest line to fill from a verbal read of the day, and
+  the SPI computation feels like extra work when a milestone "feels" on track — so the agent
+  reaches for a feel-based color and skips reading the baseline the registry's SPI row already
+  names as PROJECT.md-sourced (milestone %-complete + plan baseline).
+- **Mitigation:** When a milestone baseline is readable, compute SPI (= earned ÷ planned; *"X%
+  behind" ⇒ 1 − X/100*), band it per the metric-registry SPI row (referenced by role — read the
+  live band, restate no numbers), report the color **with the band cited**, and report the
+  registry's `WHEN…THEN…` rule as the registry's rule (surfacing, not a first-person
+  recommendation — per `## RAG, Variance & Buffer Status`). When no baseline exists, emit
+  `milestone variance: not computable — no schedule baseline` and flag the gap — never fabricate
+  a green on absent input.
+- **Principal response vs. junior response:** Principal computes SPI 0.92 on a milestone 8%
+  behind, reports "milestone variance 🟡 YELLOW (band 0.85 ≤ SPI < 0.95 per metric-registry SPI
+  row) — registry rule: watch milestone, flag at next status," and the color matches reality.
+  Junior writes "schedule 🟢 — on track," the milestone is measurably behind, and the watermelon
+  surfaces a week later when the slip can no longer be hidden.
 
 ## Multi-Project Support
 
