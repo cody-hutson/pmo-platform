@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v1.19
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -87,6 +87,39 @@ extraction approach:
 
 When the artifact type is ambiguous, state your interpretation and proceed. Do not ask
 "what type of file is this?"
+
+### Intake-governance pass (new request landing on the portfolio)
+
+When an artifact carries — or a user explicitly raises — a **new project/initiative request
+landing on the already-loaded managed portfolio** (a new fundable demand surfaced in a
+transcript or intake artifact, or an explicit "should we take this on?" ask), run an
+**intake-governance pass** on that request before surfacing the accept/defer decision. Read
+`references/ppm-intake-governance.md` by role for the full application contract; do not
+re-derive the rubrics it references. The pass produces, per request:
+
+1. **Business-case tier** (Tier 1 / Tier 2 / Tier 3) and a **demand-source tag** (one of the
+   6-type MECE taxonomy) — both classified by reference to the intake desk's canonical
+   intake-governance rubrics (`ppm-intake-governance.md` §1).
+2. **WSJF score** (`CoD ÷ Job Size`) with its CoD components and Job-Size inputs shown —
+   scored against the canonical formula by reference, never a forked formula
+   (`ppm-intake-governance.md` §2). A WSJF value is always emitted, at LOW confidence with
+   an owned `[ASSUMPTION – CONFIRM]` when the components are not scorable from the artifact.
+3. **Capacity-aware routing** — read the portfolio's effective capacity and demand-supply
+   band from the delivery-engine capacity model by role; **flag "near capacity" when
+   accepting the request would move the band into Amber (≥ 0.85) or push planned utilization
+   to/over the 75–85% planned cap**, and force the trade-off when it would push into Red
+   (> 1.00) (`ppm-intake-governance.md` §3).
+4. **Trade-off analysis** — when the near/over-capacity flag fires, emit the explicit
+   "if this comes in, what gives?" package: the displaced lower-WSJF item(s), the explicit
+   choice, and the capacity arithmetic (`ppm-intake-governance.md` §4). An over-capacity
+   intake **forces a trade-off rather than a silent over-commit.**
+
+**Where it surfaces (no new output Section):** the tier/WSJF-ranked accept/defer decision
+routes to **Section 5 (Decisions needed)**; an over-capacity condition surfaces to
+**Section 6 (Top risks)**; the scored item is logged via **Section 8 (Tracker update
+instructions)**. When capacity data is unavailable, do not fabricate a utilization number —
+score WSJF anyway (it is capacity-independent) and own the missing input per the negative-path
+table in `ppm-intake-governance.md` §4.
 
 ## Pre-processing cross-reference
 
@@ -714,6 +747,40 @@ structural conformance and content quality.
   `[COMMS]: "vendor spec slipped — need an escalation email"` and leaves comms-writer
   to reconstruct the impact, options, and recommendation from the source transcript.
 
+### Intake request accepted without a WSJF score, or over-capacity without a trade-off — PROC
+
+- **Signature (observable signal):** A new project/initiative request landing on the
+  portfolio is accepted or sequenced in Section 5 with no WSJF value attached (no CoD
+  components, no Job-Size input), OR an accept decision that pushes the portfolio's
+  utilization to/over the capacity ceiling is surfaced with no trade-off package — no
+  displaced lower-WSJF item, no explicit "to take X, defer Y" choice, no capacity arithmetic.
+- **Conditional:** do NOT accept or sequence a new intake request without a WSJF score, or
+  route one past the capacity ceiling without a trade-off, when an intake-governance pass
+  applies to that request, because an unscored intake reverts the portfolio to
+  first-come-first-served instead of weighted economic priority, and a silent over-capacity
+  accept over-commits the portfolio beyond effective supply rather than forcing the explicit
+  displacement decision.
+- **Root cause:** Producing the full pass — resolving the WSJF inputs (referencing the
+  canonical formula and elicitation prompts) and computing the capacity arithmetic and
+  trade-off from the capacity model — costs more tokens than logging the request as accepted;
+  under output pressure the agent collapses the pass and treats the newest request as
+  admissible by arrival, skipping both the score and the displacement analysis the in-flight
+  intake surface exists to produce.
+- **Mitigation:** Run the intake-governance pass per `references/ppm-intake-governance.md`:
+  emit a WSJF value for every intake request (at LOW confidence with an owned
+  `[ASSUMPTION – CONFIRM]` when components are not scorable — never skip the value); read the
+  effective capacity and demand-supply band from `capacity-model.md` by role; when acceptance
+  moves the band into Amber (≥ 0.85) / over the planned cap, or into Red (> 1.00), emit the
+  §4 trade-off package (displaced lower-WSJF item + explicit choice + capacity arithmetic) to
+  Section 5 / Section 6. When capacity data is unavailable, score WSJF anyway and own the
+  missing utilization input rather than fabricating one.
+- **Principal response vs. junior response:** Principal scores every intake request against
+  the canonical WSJF rubric, reads the live capacity band, and — on a near/over-capacity
+  request — surfaces "to take request X (WSJF 1.6), defer committed item Y (WSJF 0.9);
+  resulting utilization 0.92 (Amber)" as an explicit Section 5 decision. Junior logs the new
+  request as accepted with no score and no displacement analysis, and the over-commit surfaces
+  later as a missed commitment the next processing run has to reverse-engineer.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -734,3 +801,4 @@ Read these on first use, then as needed when handling specific artifact types:
 | `references/operational-artifacts.md` | When creating or updating Communications Tracker, Daily Status Log, or Meetings Tracker | Standard operational artifact catalog, lifecycle tiers, transition rules, cross-artifact dependencies |
 | `references/artifact-gap-detection.md` | After every processing run (Section 8.5) | Artifact gap detection logic, [ARTIFACT_GAP] tag format, phase gate requirements |
 | `references/proactive-follow-up-tracking.md` | When constructing Section 9 | Proactive detection logic, committed vs. recommended dates, follow-up chain tracking |
+| `references/ppm-intake-governance.md` | When processing a new intake request (business-case tiering + WSJF + demand tag + capacity-aware routing) | Intake-governance application layer: WSJF/CoD/tiers/taxonomy by reference; capacity-route + trade-off contract |
