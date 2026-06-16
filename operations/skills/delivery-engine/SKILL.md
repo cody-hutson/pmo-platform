@@ -162,7 +162,7 @@ actions (merge duplicates, link dependencies, escalate blockers).
 tag referencing DoR or readiness.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle).
+1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle). This DoR check is the specific instance of the universal §5.2 per-transition entry-criteria enforcement applied at the Prepare→Build boundary `T(6→7)`.
 2. Evaluate each ticket against every DoR criterion
 3. For each failure:
    - Identify what's missing with specificity (not "needs AC" but "no testable
@@ -216,13 +216,25 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
 
 **What you do**:
 1. Assess sprint progress: items completed vs. planned, burndown trajectory,
-   blocked items, items at risk of not completing
+   blocked items, items at risk of not completing. When a work item's position on the
+   15-stage universal lifecycle is in scope (where it sits, whether it may advance, its
+   per-stage variance), read `references/lifecycle-stages.md` for the §2 per-stage
+   entry/exit criteria, the §4 five-model terminology grid + §4.1 model resolution, and
+   the §5.2 universal per-transition enforcement, and run the **Stage-Tracking sub-protocol**
+   below.
 2. Identify emerging risks: scope creep (new items added mid-sprint), velocity
    degradation, blocker accumulation. For a slip or regression that has already
    surfaced, **invoke the RCA method** (`core/disciplines/root-cause-analysis.md`) to
    root-cause it before drafting the escalation or adjustment — a slip named without
    its cause recurs next sprint. Apply the falsification test (step 4): if the named
    cause were removed, would the slip still recur? If yes, the chain is incomplete.
+   **Stage-Tracking sub-protocol (15-stage lifecycle position + per-transition validation + per-stage variance).** When a work item's lifecycle position is in scope (invoked from step 1):
+   - **Resolve the model column.** Read `delivery_approach` from PROJECT.md at invocation (per the OPERATIONS.md Methodology Awareness Protocol — do not cache across invocations) and select the matching `references/lifecycle-stages.md` §4 grid column. On an absent or out-of-grid field, default per the §4.1 negative-path table — position the item on the **canonical stage names** with a caveat (`[ASSUMPTION – CONFIRM] delivery_approach absent — using canonical stage names`); **never silently assume Scrum**. For `Hybrid` + `spm_comanaged: true`, render the Hybrid column AND the SPM dual-framing per the Dual output rule.
+   - **Name the current stage** under the resolved column (e.g., universal Stage 5 Plan & Sequence → Scrum "Sprint Planning", Waterfall "Planning phase + WBS"). If the current stage is not asserted, infer the **earliest** stage whose §2 entry criteria are met and label it `[ASSUMPTION – CONFIRM] inferred stage`; never guess a late stage.
+   - **Validate the transition predicate** at a requested advance across `T(n→n+1)`. Apply `lifecycle-stages.md` §5.2: ALL of stage n's exit criteria AND stage n+1's entry criteria (both in §2) must hold. On a violation, **BLOCK** with the §5.1-style evidence format citing the transition `T(n→n+1)`, the specific unmet exit/entry criterion, and the remediation. Do not advance the item; do not round up (the gate-washing guardrail).
+   - **Enforce no-skip-ahead.** A request to jump from stage n to stage n+k (k > 1) is **BLOCKED**; name every intermediate transition `T(n→n+1) … T(n+k−1→n+k)` whose predicate is unmet, in order, and advance only one legal transition at a time.
+   - **Compute per-stage variance + RAG** when a per-stage schedule baseline exists: per-stage milestone variance (SPI) over the stage's planned window, banded with the canonical Milestone-Variance RAG **owned by `references/estimation-standards.md` §7** — cite the threshold by role (do not restate the band values); name the active 🟢/🟡/🔴 zone via §7's `WHEN…THEN…` decision-rule format. Name it "per-stage milestone variance (SPI)" / "stage slip" — **never "Schedule Variance"**. When no per-stage baseline exists, emit `per-stage variance: not computable — no stage baseline` and flag the missing baseline as a planning gap — never fabricate a RAG.
+   - **Negative-path defaults are explicit, never silent:** absent `delivery_approach` → canonical names + caveat; unknown current stage → earliest-met stage + `[ASSUMPTION – CONFIRM]`; no per-stage baseline → "not computable"; out-of-grid archetype (XP/PRINCE2/Custom-null) → canonical names + outside-grid note.
 3. Produce a mid-sprint health check:
    - **On track**: items progressing as planned
    - **At risk**: items that may not complete — with specific reason and remediation.
@@ -247,7 +259,7 @@ recommended adjustments, drafted escalations.
 any [DELIVERY] tag referencing DoD or release.
 
 **What you do**:
-1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition — including the QA/Acceptance (Stage 9) → Plan Review (Stage 10) exit predicate that BLOCKS the move while a P1 defect is open (§5, the QA-gate AC; this stage exit predicate feeds the LG-6 `[LG-6-EX-2]` gate criterion). At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4.
+1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria (which lifecycle gate you are evaluating — e.g., LG-5 DoD vs LG-7 Release Readiness vs LG-8 Go-Live) and the §4 transition BLOCK rule, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition — including the QA/Acceptance (Stage 9) → Plan Review (Stage 10) exit predicate that BLOCKS the move while a P1 defect is open (§5, the QA-gate AC; this stage exit predicate feeds the LG-6 `[LG-6-EX-2]` gate criterion). At a gate transition with an unmet exit criterion, BLOCK with an evidence-backed rejection citing the specific violated `[LG-N-EX-k]` criterion per `gate-definitions.md` §4. The QA→Plan-Review P1 block is the worked AC-critical instance of the universal §5.2 per-transition enforcement; for any other transition you evaluate, apply the same §5.2 BLOCK predicate (stage n exit + stage n+1 entry criteria) citing the transition `T(n→n+1)`.
 2. Evaluate deliverables against DoD criteria:
    - Code/config complete and committed
    - Peer review completed
@@ -669,6 +681,44 @@ structural conformance and content quality.
   figures, the sprint looks comfortably full at planning, and the over-commitment
   surfaces as missed commitments at the retro.
 
+### Work item advanced past a stage with unmet entry criteria (skip-ahead) — PROC
+
+- **Signature (observable signal):** A Mode E Stage-Tracking output (or any
+  stage-position output) marks a work item as entering stage n+1 — or jumps it to
+  stage n+k (k > 1) — while at least one of stage n's exit criteria or stage n+1's
+  entry criteria (`references/lifecycle-stages.md` §2) is unmet, advancing it without
+  rendering the BLOCK. The current stage simply changes with no transition predicate
+  evaluated, or an intermediate stage is silently skipped.
+- **Conditional:** do NOT advance a work item past a stage whose entry criteria are
+  unmet, and do NOT skip an intermediate stage, because `lifecycle-stages.md` §5.2
+  makes every transition predicate (stage n exit + stage n+1 entry criteria) BLOCKING —
+  a silent skip lets unready work reach a late stage where the defect is far costlier
+  to fix (the AC's no-skip-ahead requirement, generalizing the §5.1 QA P1 block to all
+  14 transitions).
+- **Root cause:** Advancing the stage is the satisfying, forward-motion action and the
+  asserted "we're at stage N+1 now" arrives as a fact; validating the §5.2 predicate is
+  several steps (read the §2 exit/entry criteria for both stages, check each against
+  evidence, BLOCK on any miss) while accepting the asserted position is one. Under
+  status-throughput pressure — and the same social pressure that drives gate-washing —
+  the agent records the advance rather than rendering the harder BLOCK, especially for
+  an intermediate stage that "everyone knows" was passed.
+- **Mitigation:** At every requested advance, apply the §5.2 per-transition validation:
+  confirm ALL of stage n's exit criteria AND stage n+1's entry criteria hold before
+  recording the advance; on any miss, BLOCK with the evidence format citing the
+  transition `T(n→n+1)`, the specific unmet criterion, and the remediation (satisfy-and-
+  revalidate, or a documented authority exception at that boundary). For a skip request
+  (n → n+k), require every intermediate transition in order and name each unmet predicate
+  in sequence — never advance more than one legal transition at a time. On absent input
+  (unknown current stage), infer the earliest stage whose entry criteria are met and
+  label it `[ASSUMPTION – CONFIRM]`; never assume a late stage to justify an advance.
+- **Principal response vs. junior response:** Principal blocks the advance and names the
+  specific unmet exit/entry criterion and the transition (`BLOCKED — T(6→7): Design /
+  Solution → Build / Develop. Unmet predicate: feasibility not validated against the
+  Stage 4 constraints`), and for a skip request enumerates every intermediate unmet
+  transition in order. Junior rounds "close enough" up, records the work at the later
+  stage, and the skipped readiness gap surfaces three stages later as a production
+  defect that a transition BLOCK would have caught at the boundary.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -683,7 +733,7 @@ Read these on first use, then as needed per mode:
 |----------|-------------|----------------|
 | `references/gate-checklists.md` | Mode C (DoR) or Mode F (DoD/Release) | Full DoR, DoD, and release readiness criteria |
 | `references/gate-definitions.md` | Mode F (gate transition), Mode G (gate decisions) | Project-lifecycle gate sequence (LG-0 Idea Screen → LG-10 Closure): per-gate entry/exit/authority/artifacts/escalation + the gate-transition BLOCK rule |
-| `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping, and the QA→Plan-Review P1-defect block |
+| `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode E (stage-tracking — position + per-transition validation + per-stage variance), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping + model resolution/absent-field default (§4.1), universal per-transition entry-criteria enforcement with the `T(n→n+1)` convention + no-skip-ahead (§5.2), the per-stage variance pointer (SPI RAG by role from estimation-standards.md §7), and the QA→Plan-Review P1-defect block |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
 | `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, buffer-consumption RAG banding (§4.1), velocity-as-range enforcement, contingency vs. management reserve, milestone-variance (SPI) RAG (§7) |
