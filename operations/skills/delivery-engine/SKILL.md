@@ -181,7 +181,7 @@ gate verdict, recommended actions for any FAIL items.
 discussion, any [DELIVERY] tag referencing sprint planning.
 
 **What you do**:
-1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table (§3), Cone-of-Uncertainty range widths (§1), planning-horizon commitment rules (§2), the buffer three-zone model (§4), the **buffer-consumption RAG banding (§4.1)**, the velocity-as-range enforcement rule (§5), and the **milestone-variance (SPI) RAG (§7)**, and `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds
+1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table (§3), Cone-of-Uncertainty range widths (§1), planning-horizon commitment rules (§2), the buffer three-zone model (§4), the **buffer-consumption RAG banding (§4.1)**, the velocity-as-range enforcement rule (§5), and the **milestone-variance (SPI) RAG (§7)**, `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds, and `references/tech-debt-capacity.md` for the tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor *value* is referenced there by role from `sprint-defaults.md` §1.2), the aged-debt threshold (>90d) + escalate/reclassify disposition, and the rework-rate formula + >20% alert
 2. Assess inputs: refined backlog (DoR-passed items), team capacity, velocity history,
    carryover from prior sprint, priority guidance
 3. **Enforce estimation discipline (do not merely read the parameters — apply them, and reject/adjust on violation):**
@@ -192,12 +192,16 @@ discussion, any [DELIVERY] tag referencing sprint planning.
    - **Capacity model**: available hours/points by team member (if data available),
      accounting for PTO, meetings, known distractions — expressed as **focus-adjusted** capacity (FF applied per step 3), never raw.
    - **Buffer-consumption zone**: when an iteration-buffer figure is available, report buffer consumption in the 🟢/🟡/🔴 band per `estimation-standards.md` §4.1 and **name the active zone** with its decision rule. When no iteration-buffer figure exists, state the zone cannot be computed and recommend establishing it (zone a, ~15–30%) — do not default to GREEN.
+   - **Tech-debt capacity floor**: compute the tech-debt **allocation ratio** (tech-debt-allocated ÷ sprint capacity) and render the 🟢/🟡/🔴 **floor-RAG** per `tech-debt-capacity.md` §1 (the floor *value* is owned by `sprint-defaults.md` §1.2 — referenced by role, never restated). On **🔴 RED (allocation < the floor)**, emit the **"tech debt under floor — capacity over-committed to new features"** warning and require an explicit PM override (**declared and RAID-logged**, per `tech-debt-capacity.md` §1) or re-scope to restore the slice — never silently absorb an under-floor plan. Calibrate the methodology-upper (🟡) edge from the existing `delivery_approach` enum; on absent `delivery_approach`, default to the canonical 15% floor and label the methodology `[ASSUMPTION – CONFIRM]`. When no tech-debt allocation is stated, flag that the floor cannot be verified, default to requiring ≥ the floor, and cite the canonical source — do not default the band to GREEN. Name it "tech-debt floor / allocation ratio" — never "debt budget overage" / "debt RAG"; this floor-RAG is orthogonal to the §4.1 buffer-consumption band and the `capacity-model.md` §9 demand-supply band.
    - **Proposed sprint scope**: prioritized list of items with story points (as ranges per step 3), assignees,
      and rationale for inclusion/exclusion
    - **Milestone variance + RAG**: when a milestone schedule baseline exists, compute milestone variance as SPI and assign its 🟢/🟡/🔴 RAG per `estimation-standards.md` §7, **citing the threshold**. Name it "milestone variance (SPI)" / "milestone slip" — never "Schedule Variance". When no baseline exists, emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; do not fabricate a RAG.
    - **Carryover handling**: items carried from prior sprint with reason and risk
    - **Risk items**: items with dependencies, items without estimates, items with
      incomplete AC (should have been caught in DoR but might slip through)
+   - **Aged tech-debt + rework**: apply `tech-debt-capacity.md` §2–§3.
+     - **Aged debt (>90d)**: flag every in-plan tech-debt item open **>90 days** (the threshold adopted from the Mode A >30/60/90-day aging tier) with an **escalate / reclassify** disposition — Escalate (pull into the sprint as a RAID Action with owner + due date, per `references/raid-templates.md`), Reclassify-supersede (close with evidence), or Reclassify-accept (accepted-residual, reversibility-tagged). The "debt cannot quietly age out" rule is the existing auto-escalate-overdue mechanism applied to aged debt — never a silent flag. When no item open-dates exist, state aging cannot be computed and recommend capturing open-dates.
+     - **Rework rate (>20%)**: when a rework-capture source is available (a `rework`/`carryover-rework` label or a retro field), compute rework rate = (capacity consumed by rework from prior incomplete work ÷ total sprint capacity) and **alert when > 0.20** (`[ASSUMPTION – CONFIRM]` — KB-C04 domain threshold, not corpus). When **no rework-capture source exists**, emit `rework rate: not computable — no rework-capture source` and recommend establishing the retro-capture field — **do NOT fabricate a rate**.
    - **Sprint goal**: 1–2 sentence goal statement synthesized from the scope
 5. If capacity and scope don't balance, produce options:
    - Option A: Full scope with overtime/risk acceptance
@@ -206,8 +210,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
 6. Bridge to SPM (if co-managed): if any sprint items map to waterfall milestones, note
    the milestone impact and produce both framings
 
-**Output**: Sprint plan, capacity model, scope options (if needed), sprint goal,
-milestone bridge (if applicable and co-managed), RAID entries for any planning risks.
+**Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation and a declared PM floor-override).
 
 ### Mode E: Execution Control Tower
 
@@ -765,6 +768,45 @@ structural conformance and content quality.
   transition axis, `lifecycle-stages.md §5.2`). A gate and a stage transition are two views
   of the same boundary for the work-item gates (LG-4/LG-5/LG-6); all three entries stay.
 
+### Sprint plan accepted under the tech-debt capacity floor without a declared PM override — PROC
+
+- **Signature (observable signal):** A Mode D (Sprint Planning) output accepts a sprint
+  plan whose tech-debt allocation falls **below the floor** (allocation ratio < 0.15) with
+  **no explicit, logged PM override** — the floor-RAG is not rendered, or it shows 🔴 RED
+  and the plan is produced anyway without the under-floor warning and without a declared,
+  RAID-logged override. The capacity model reads as "more feature capacity" with the
+  tech-debt slice quietly thinned.
+- **Conditional:** do NOT accept a sprint plan allocating < 15% to tech debt (the
+  `sprint-defaults.md` §1.2 non-negotiable floor, referenced by role) without an explicit
+  PM override **declared and logged as a RAID item**, because un-floored debt compounds
+  toward the ~30% rework-accumulation anti-pattern (KB-C04) that surfaces later as runaway
+  rework — exactly the erosion the floor exists to prevent at planning.
+- **Root cause:** Under feature-delivery pressure the tech-debt slice is the first thing
+  cut, and a thinned slice reads as a *benefit* ("more capacity for stories") rather than a
+  breach. Rendering the floor-RAG and demanding a declared override is several steps (compute
+  the allocation ratio per `tech-debt-capacity.md` §1, band it, emit the warning on 🔴,
+  require the override be RAID-logged) while shipping the feature-heavy plan as-given is one;
+  the erosion is invisible until rework spikes a sprint or two later.
+- **Mitigation:** Compute the tech-debt allocation ratio in the Mode D capacity model; render
+  the 🟢/🟡/🔴 floor-RAG (`tech-debt-capacity.md` §1); on allocation < the floor emit the
+  "tech debt under floor — capacity over-committed to new features" warning and require the
+  override be **declared and RAID-logged** (never silently absorbed) or re-scope to restore
+  the slice; cite the canonical floor source. On absent input, default explicitly and flag
+  (no allocation stated → floor unverifiable, default ≥ 15% + cite source; `delivery_approach`
+  absent → default 15% floor + `[ASSUMPTION – CONFIRM]` methodology) — never default the band
+  to GREEN.
+- **Principal response vs. junior response:** Principal flags the under-floor plan, names the
+  15% floor and its `sprint-defaults.md` §1.2 source, and either restores the tech-debt slice
+  or logs the deviation as an owned, declared RAID decision with an owner — so the trade-off is
+  a visible, accountable choice. Junior ships the feature-heavy plan on the unspoken promise to
+  "pay the debt down next sprint," the slice silently erodes sprint over sprint, and the debt
+  compounds into runaway rework that a floor breach flagged at planning would have caught.
+- **Distinctness (do NOT merge):** this is the **floor-breach** axis — a *capacity-allocation*
+  failure (tech-debt slice under the floor). It is distinct from the *raw-capacity / point-estimate*
+  entry (which is about un-focus-factored capacity and point estimates, not the tech-debt floor)
+  and from the *gate-advance* / *stage-skip* entries (which are transition-validation failures).
+  All entries stay; do not merge.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -784,6 +826,7 @@ Read these on first use, then as needed per mode:
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
 | `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, buffer-consumption RAG banding (§4.1), velocity-as-range enforcement, contingency vs. management reserve, milestone-variance (SPI) RAG (§7) |
 | `references/capacity-model.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Effective-capacity formula (focus-factor × context-switch × allocation), context-switching penalties, Brooks's-Law thresholds, 60/20/20 effort split, team-stability + vendor-ramp + bus-factor (managed-team lens) + demand-supply gap RAG (the 0.85 ceiling is the shared anchor for the §4.1 buffer-consumption Red boundary; cross-refs estimation-standards.md §4.1/§7) |
+| `references/tech-debt-capacity.md` | Mode D (Sprint Planning) | Tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor value is referenced by role from sprint-defaults.md §1.2, not restated), aged-debt detection (>90d escalate/reclassify via raid-templates.md), rework-rate tracking (>20% alert `[ASSUMPTION – CONFIRM]` + not-computable negative path), and the floor→ranking contract consumed by #180 |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
 | `references/dependency-rules.md` | Any mode with cross-item dependencies | Dependency types, escalation triggers, tracking format |
