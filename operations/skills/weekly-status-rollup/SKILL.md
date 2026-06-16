@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v1.10
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -35,6 +35,18 @@ Read these files in order before generating:
    d. **Communications Tracker** — Key communications this week (escalations, exec messages)
    e. **RAID entries** — Any new or updated risks/issues from this week
 3. **GitHub Issues** — Any improvement proposals created this week: `gh issue list --label "improvement" --json number,title,createdAt --created ">YYYY-MM-DD"` (where date = 7 days ago)
+
+## Reference docs
+
+This skill consumes governed reference docs by **role-name** — it does not restate their
+content (duplicate-source-discipline; each doc owns its definitions). The Section 7 (Portfolio
+Governance) sub-blocks and the Section 1 dominance check below cite these by role:
+
+| Reference | Owner / module | Consumed by | What this skill reads from it |
+|---|---|---|---|
+| [`metric-registry.md`](references/metric-registry.md) | this skill (`weekly-status-rollup`) — intra-module | Section 1 health logic + Section 7 per-metric decision-rule validation + lag/lead audit | The cross-level metric → RAG-band → `WHEN…THEN…` decision-rule index. Each reported metric cites its governing rule verbatim from the registry row; this skill follows REFERENCED rows to their owning doc (`channel-formats.md`, `capacity-model.md`, `backlog-health.md`) for the live band rather than re-deriving thresholds. |
+| [`watermelon-detection.md`](../../../core/skills/pmo-qa-auditor/references/watermelon-detection.md) | `pmo-qa-auditor` — **core module (via-public-api)** | Section 7 Watermelon Scan + the Section 1 dominance feedback | The **canonical home of the 8-signal watermelon set (W1–W8)** with severity tiers, false-positive filters, and the verdict-composition rule. This skill runs the signals **by reference** — it does **not** fork or restate them. The `operations → core` direction is the sanctioned cross-module flow enumerated in [`operations/README.md` § Cross-Module Dependencies](../../README.md) (markdown-doc-link reference per ADR-007; cross-module consumption posture per [ADR-024](../../../core/ADRs/ADR-024-operations-consume-core-safety-controls-via-public-api.md)). |
+| [`capacity-model.md`](../delivery-engine/references/capacity-model.md) | `delivery-engine` — intra-module (operations) | Section 7 Capacity Dashboard synthesis | The §1 effective-capacity formula and §9 Demand-Supply Gap RAG bands. The cross-project capacity view aggregates per-project Capacity Utilization (whose registry row already references this doc) into a portfolio view; it does **not** restate the formula or bands. |
 
 ## Output Structure
 
@@ -157,6 +169,123 @@ Approve these changes to PORTFOLIO.md? (Or provide corrections)
 ```
 Wait for user confirmation before writing. If running as a scheduled task, produce the
 summary and changes as a draft — flag for approval at next interaction.
+
+### Section 7: Portfolio Governance
+
+Sections 1–6 surface and write back portfolio **state**. Section 7 applies portfolio
+**governance discipline** to that state: it catches green-on-the-outside-red-on-the-inside
+projects, audits the metric set's balance, reports the investment mix, validates every
+reported metric against its governing rule, and synthesizes a portfolio capacity view.
+All five sub-blocks consume governed reference docs **by role** (see `## Reference docs`) —
+they do not restate thresholds, signals, or formulas.
+
+Run Section 7 over **every** active project — including a single-project portfolio (the
+dashboard/cross-project sections are skipped at one project per § Multi-Project Handling, but
+the per-project watermelon scan and metric validation still run).
+
+#### 7.1 Watermelon Scan (8-signal, per project)
+
+For **each** active project, run the 8-signal watermelon scan **W1–W8 by reference** per
+[`watermelon-detection.md`](../../../core/skills/pmo-qa-auditor/references/watermelon-detection.md)
+(owned by `pmo-qa-auditor` — core module, consumed via-public-api; do **not** restate or fork
+the signals). The signals key off the bands owned by `metric-registry.md`:
+
+| ID | Signal (by reference) | Severity |
+|---|---|---|
+| W1 | Persistent-green under recurring RAID | STRONG |
+| W2 | Green project-RAG over Amber/Red component-RAG | STRONG |
+| W3 | Stale / overdue RAID under green *(the headline path)* | STRONG |
+| W4 | Velocity spike beyond credible band | WEAK |
+| W5 | Zero open risks on an active project | WEAK |
+| W6 | Milestone dates not aging (flat %-complete) | WEAK |
+| W7 | 100% task completion under slipping features / scope | WEAK |
+| W8 | Self-reported RAG without objective derivation | WEAK |
+
+**Apply each signal's false-positive filter** (per the canonical doc) before counting it as
+fired, then compose the per-project **verdict by reference** to `watermelon-detection.md`
+§ Verdict Composition:
+
+- **≥1 STRONG signal (W1/W2/W3)** fires → **WATERMELON-FLAG (Tier 1)**. Cite the firing STRONG
+  signal + its evidence (e.g., for W3: the overdue RAID IDs + the Overdue-RAID-Count registry band).
+- **≥2 *independent* WEAK signals (W4–W8)** fire on the same project → **WATERMELON-FLAG (Tier 2)**.
+  Cite the ≥2 corroborating signals. (W8 corroborates only a non-W8 WEAK; same-evidence items
+  de-dup to their highest-severity facet once.)
+- **≥1 signal un-evaluable** (missing artifact / metric) and no STRONG independently fired →
+  **INDETERMINATE / EVIDENCE-GAP** — record the gap; **never** report this as clean.
+- **All signals evaluable and none survived** → **NO-FLAG (CLEAN)** — record the signals
+  evaluated and the FP filters that explained near-misses, so a clean result is distinguishable
+  from an un-evaluated one.
+
+Output, per project: the verdict (Tier 1 / Tier 2 / INDETERMINATE / NO-FLAG), the firing
+signals with evidence, and — for any flag — a one-line statement that the project's Section 1
+color is contradicted by the scan. A flag is an **evidence-integrity finding**, not a unilateral
+re-coloring: route it to the worst-component dominance check below and the failure-mode rule.
+
+#### 7.2 Lag-to-Lead Balance Audit
+
+Classify each metric in `metric-registry.md` that the roll-up reports this week as a **lagging**
+or **leading** indicator (the classification is a property of the registry rows — see the
+registry's lag/lead column; **no new PROJECT.md field**), and report the **lag : lead ratio**
+across the reported set. A set dominated by lagging indicators (outcomes already realized — SPI,
+CPI, overdue counts) with few leading indicators (predictive — velocity variance, capacity
+utilization, dependency health) is surfaced as a balance risk: the portfolio is being steered
+by the rear-view mirror. Cite the registry rows; do not re-derive the metrics.
+
+#### 7.3 Portfolio R-G-T Allocation
+
+Report the portfolio **Run / Grow / Transform** investment allocation. Read each active project's
+**optional** `investment_class: Run|Grow|Transform` field from its `PROJECT.md` (see
+`project-md-template.md` — the field is optional). Compose the portfolio split as the
+Run / Grow / Transform counts (or effort-weighted shares where effort is available).
+
+**Default when the field is absent:** a project with no `investment_class` is classed
+**`Unclassified`** and surfaced as an explicit **coverage gap** — it is **never** silently
+bucketed into Run/Grow/Transform, and it is **never** heuristically auto-classified from phase
+or project-type (that would fabricate an investment call the operator did not make — a
+no-invention violation). The R-G-T block therefore works **with or without** the field: present
+field → real split; absent field → `Unclassified` with the coverage gap named. Do not block the
+roll-up on missing `investment_class`.
+
+> **Disambiguation:** R-G-T (investment classification) is **not** the `capacity-model.md §5`
+> 60/20/20 capacity effort-split — a different concept that happens to share digits. Do not
+> conflate the two.
+
+#### 7.4 Per-Metric Decision-Rule Validation
+
+For **each** metric surfaced anywhere in the roll-up (Sections 1–2 health logic, Section 7
+sub-blocks), **cite its governing `WHEN…THEN…` decision rule verbatim** from its
+`metric-registry.md` row and confirm the reported RAG matches the rule's output. This is pure
+consumption: follow REFERENCED rows to their owning doc (`channel-formats.md`, `capacity-model.md`,
+`backlog-health.md`) for the live band; do **not** re-derive a threshold (duplicate-source-
+discipline). A reported color that does not match its rule's output is itself a finding (a
+likely W2 or W8 watermelon contributor) — surface it, do not silently re-color.
+
+#### 7.5 Capacity Dashboard
+
+Synthesize a **cross-project capacity view**: aggregate each active project's **Capacity
+Utilization** (the `metric-registry.md` Team row, which already references
+[`capacity-model.md`](../delivery-engine/references/capacity-model.md)) into a portfolio
+capacity dashboard, applying `capacity-model.md` §1 (effective-capacity formula) and §9
+(Demand-Supply Gap RAG bands) **by reference**. Report per-project utilization + the portfolio
+roll-up, flagging any project breaching the §9 RED band (`> 1.00` utilization) as over-committed.
+Reproduce the source's inclusivity (`≤ 0.85` is GREEN); do **not** restate the formula or bands.
+
+**Section 7 ↔ Section 1 feedback (worst-component dominance).** The watermelon scan's W2 signal
+(green project-RAG over a worse component) requires the **worst-component dominance rule** to
+detect a violation of. Section 1's project color is therefore composed by the transparent-roll-up
+rule — **the project color is driven by its worst component** (per `channel-formats.md:245-246`,
+the watermelon-prevention dominance rule the registry's `metric-registry.md` § Project-Level RAG
+Composition already names). When the Section 7 scan returns a WATERMELON-FLAG whose evidence shows
+a component worse than the reported project color, the Section 1 color is corrected to the worst
+component (and the correction reasoning is cited per the § Reversibility Discipline — a
+health-color transition shared with leadership is decision-class and carries its tier).
+
+**Reversibility on Section 7 verdicts.** A watermelon verdict or a metric-validation finding that
+shifts a Section 1 health color, or that is surfaced to leadership, is a **decision-class output**
+and carries a reversibility tier paired with a confidence level (per § Reversibility Discipline) —
+a health-color transition shared with leadership is EXPENSIVE/IRREVERSIBLE per the skill's existing
+tier table; an internal pre-confirmation flag is CHEAP. A NO-FLAG / INDETERMINATE record that drives
+no transition is a factual record and does not require a tier.
 
 ## Output Formatting
 
@@ -407,6 +536,45 @@ structural conformance and content quality.
   every portfolio read — dashboards, the next rollup, project-initiator scans — sees
   B clean all week, and B's team learns about the shared-resource exposure when it
   lands on them.
+
+### Project reported green while its watermelon scan fires — OUT
+
+- **Signature (observable signal):** Section 7.1's watermelon scan returns a
+  WATERMELON-FLAG for a project — a STRONG signal (W1/W2/W3) survived, or ≥2
+  independent WEAK signals (W4–W8) survived their false-positive filters — yet
+  Section 1 still reports that project 🟢 GREEN (or the verdict is INDETERMINATE /
+  EVIDENCE-GAP but the roll-up records the project as clean), with no correction to
+  the color and no surfacing of the contradiction.
+- **Conditional:** do NOT report a project 🟢 GREEN when its watermelon scan returns
+  a WATERMELON-FLAG **per the verdict-composition rule** (≥1 STRONG **or** ≥2
+  independent WEAK signals surviving), and do NOT record an INDETERMINATE /
+  EVIDENCE-GAP verdict as clean, because the entire reason the scan exists is to catch
+  green-outside / red-inside status — a flagged project shipped GREEN to SteerCo is the
+  exact failure the scan is the backstop against, and an evidence gap passed as clean
+  converts absence-of-evidence into implied-GREEN that flows into the PORTFOLIO.md
+  write-back.
+- **Root cause:** The watermelon scan is an *extra* governance step layered on a
+  roll-up whose Section 1 color was already assigned from the (possibly self-reported)
+  health signals; under output-pressure the agent runs the scan, sees the flag, but
+  treats the already-written Section 1 color as settled rather than letting the scan
+  feed back into the dominance check. Binding "green vs flagged" to a raw signal *count*
+  rather than the verdict rule compounds it — a single STRONG signal is a Tier-1 flag,
+  but a count-threshold ("≥3 signals") would silently pass it.
+- **Mitigation:** Bind the green-block to the **verdict-composition rule, not a raw
+  count**: any Tier-1 (≥1 STRONG) or Tier-2 (≥2 independent WEAK) verdict blocks 🟢 GREEN
+  for that project; an INDETERMINATE verdict is recorded as an evidence gap, never clean.
+  On a flag, run the Section 7 ↔ Section 1 worst-component dominance feedback — correct the
+  Section 1 color to the worst component, cite the firing signal + evidence, and carry the
+  reversibility tier on the resulting health-color transition (§ Reversibility Discipline).
+  A health-color correction the scan forces is an evidence-integrity finding routed back to
+  the source for a corrected health or a documented justification — not a silent re-color.
+- **Principal response vs. junior response:** Principal writes "🔴 (scan: W3 Tier-1 — 5
+  overdue RAID under self-reported green [SOURCE: RAID R-PPM-052, Overdue-RAID-Count 🔴
+  band]); color corrected from reported 🟢 to worst component [EXPENSIVE · confidence: HIGH]"
+  and the watermelon is caught before SteerCo. Junior runs the scan, notes "W3 fired" in
+  Section 7, leaves Section 1 🟢 because that is what the project reported, and the
+  green-masked overdue RAID reaches leadership as on-track — then writes 🟢 back into
+  PORTFOLIO.md, propagating the masked state to every downstream consumer.
 
 ## Generation Schedule
 
