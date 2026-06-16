@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This document is the canonical source of **estimation discipline** for the delivery-engine skill — how an estimate's precision is bounded by lifecycle phase, how far out work may be committed versus forecast, the **canonical focus-factor table this doc owns**, the three-zone buffer model, the rule that velocity and derived estimates are expressed as ranges rather than points, and the contingency-versus-management-reserve distinction. It is read by the delivery-engine skill: **Mode D (Sprint Planning)** reads the Cone-of-Uncertainty band widths, planning-horizon commitment rules, the focus-factor table, and the buffer model when building a capacity model and sprint scope; **Mode E (Execution Control Tower)** reads the velocity-as-range enforcement rule (§5) when reporting velocity or capacity.
+This document is the canonical source of **estimation discipline** for the delivery-engine skill — how an estimate's precision is bounded by lifecycle phase, how far out work may be committed versus forecast, the **canonical focus-factor table this doc owns**, the three-zone buffer model, the **buffer-consumption RAG banding** (§4.1), the rule that velocity and derived estimates are expressed as ranges rather than points, the contingency-versus-management-reserve distinction, and the **milestone-variance (SPI) RAG banding** (§7). It is read by the delivery-engine skill: **Mode D (Sprint Planning)** reads the Cone-of-Uncertainty band widths, planning-horizon commitment rules, the focus-factor table, the buffer model, the buffer-consumption banding, and the milestone-variance RAG when building a capacity model and sprint scope; **Mode E (Execution Control Tower)** reads the velocity-as-range enforcement rule (§5) when reporting velocity or capacity.
 
 **Sibling relationship.** This doc is the topical home for **estimation** parameters. Its two siblings own adjacent axes: `sprint-defaults.md` owns sprint **cadence** parameters (sprint length, WIP limits, velocity-stabilization windows, ceremony time-boxes) and the iteration-vs-flow decision model; the capacity-model reference doc (this skill's `references/` set) owns the **supply** calculation (available-hours derivation, effective capacity). Where those docs need the focus factor, they reference the canonical table in §3 of this doc by its role and do not restate the value — see the Consumers note in §3.
 
@@ -75,6 +75,24 @@ Reserve is held at three distinct zones, each covering a different class of unce
 
 ---
 
+## 4.1 Buffer-Consumption Banding
+
+The §4 three-zone model answers **which reserve owns a risk** (iteration / feature / management) — a risk-class and ownership taxonomy. This section answers a different, orthogonal question: **how much of the buffer is already burned.** A planner needs both — a 70%-consumed iteration buffer is a healthy ownership story (zone a is the right reserve) and a worrying consumption story (the watch band). Do not conflate the two: naming the active consumption band is never the same as naming the §4 ownership zone.
+
+The band is a 🟢/🟡/🔴 RAG on the **fraction of the iteration buffer (zone a) consumed** — consumed ÷ the established iteration-buffer figure (~15–30% of sprint capacity, per §4 zone a).
+
+| Band | Iteration-buffer consumed | Reading | `WHEN…THEN…` decision rule |
+|---|---|---|---|
+| **🟢 GREEN** | **≤ 0.50** | Buffer healthy; ample reserve remains for intra-sprint unplanned work | WHEN consumption ≤ 0.50 THEN treat the buffer as intact — no escalation; plan normally |
+| **🟡 YELLOW** | **0.50 – 0.85** | Watch; reserve is eroding and a few more interrupts exhaust it | WHEN consumption is 0.50–0.85 THEN flag the watch state — resist mid-sprint scope additions and protect the remaining reserve |
+| **🔴 RED** | **> 0.85** | Buffer near or over exhausted; the next unplanned arrival breaks the commitment | WHEN consumption > 0.85 THEN escalate — re-scope, de-commit, or draw a higher reserve zone (§4 b/c) by explicit decision; do not silently absorb further unplanned work |
+
+**Boundary anchoring (normative — both boundaries adopt existing in-corpus values, neither is invented).** The **0.85 Yellow→Red boundary is the same ceiling, by role, as the demand-supply Amber→Red boundary** in the capacity-model reference doc's §9 Demand-Supply Gap RAG (itself anchored to the 85% planned-utilization cap in `sprint-defaults.md` §1.2). Buffer-Red and demand-Red therefore fire at one structural point — the skill carries **one** 0.85 ceiling, not two competing ones. The **0.50 Green→Yellow boundary is the design midpoint of the §4 zone-a iteration-buffer band** (~15–30%) — "half the buffer consumed" is the natural watch threshold.
+
+**Application rule.** When a buffer-consumption figure is available, name the active band and its decision rule. When no iteration-buffer figure has been established, the band **cannot be computed** — state that explicitly and recommend establishing the iteration-buffer figure (§4 zone a, ~15–30% of sprint capacity); never default the band to GREEN on absent input.
+
+---
+
 ## 5. Velocity-as-Range Enforcement
 
 **Velocity, and every estimate derived from it, is expressed as a range — never a single point value.** A point figure asserts a precision that the Cone of Uncertainty (§1) does not support at any pre-Build phase and that velocity variance does not support even for a stable team. This section is the normative home of that rule and the agent behavior it requires.
@@ -106,3 +124,28 @@ Contingency and management reserve are both "reserve," but they answer different
 | **Maps to buffer zone (§4)** | Zones (a) iteration buffer + (b) feature/release buffer | Zone (c) management reserve |
 
 **Reserve rule (normative).** **Never fund an unknown-unknown from contingency.** Contingency is sized to the identified, in-scope risks and is exhausted legitimately only by those risks. When genuinely new scope appears, it is funded from **management reserve** by a formal governance release — which surfaces the new scope as a decision and keeps the baseline honest — not absorbed silently into contingency, which would hide the scope growth and erode the risk signal the two-tier model exists to preserve.
+
+---
+
+## 7. Milestone-Variance RAG
+
+Milestone variance measures whether a milestone is **ahead of, on, or behind** its schedule baseline, and bands the answer RAG so a single milestone-level health signal is consistent with the platform's schedule-health convention. It is expressed as the **Schedule Performance Index (SPI)** — the EVM-standard schedule-earned ratio that the gate-checklists reference doc already cites (CPI/SPI tolerance) — not as an ad-hoc ±%-slip figure.
+
+```
+Milestone variance (SPI) = earned schedule value (work completed, in baseline units)
+                           ÷ planned schedule value (work that should be complete by now, same units)
+```
+
+An SPI of 1.00 is exactly on schedule; below 1.00 is behind; above 1.00 is ahead.
+
+| Band | SPI | Reading | `WHEN…THEN…` decision rule |
+|---|---|---|---|
+| **🟢 GREEN** | **≥ 0.95** | On or ahead of schedule (within tolerance) | WHEN SPI ≥ 0.95 THEN report on-track — no milestone escalation |
+| **🟡 YELLOW** | **0.85 – 0.94** | Slipping; recoverable but eroding | WHEN SPI is 0.85–0.94 THEN flag the milestone at the next status; watch the critical path and name the recovery lever |
+| **🔴 RED** | **< 0.85** | Materially behind; baseline at risk | WHEN SPI < 0.85 THEN escalate — replan the critical path and surface the re-baseline / de-scope decision; do not report the milestone merely "behind" |
+
+**Band anchoring (normative — adopted by reference, not restated as a divergent value).** These bands are **adopted by reference from the platform-canonical Schedule-RAG standard** in the comms-writer reference doc's RAG Threshold Standards (Schedule/SPI: Green ≥0.95 / Amber 0.85–0.94 / Red <0.85), which the weekly-status-rollup metric-registry already consumes by reference for SPI. This doc reuses the **one** platform schedule-RAG convention rather than inventing a parallel band.
+
+**Naming guard (normative).** Name this metric **"milestone variance (SPI)"** or **"milestone slip"** — **NEVER "Schedule Variance."** The "Schedule Variance" label is reserved against to avoid collision with the EVM Schedule Variance (SV = earned − planned, a *cost*-denominated figure), per the metric-registry naming rule. The milestone-variance signal here is the *index* (SPI ratio), not the EVM SV difference.
+
+**Application rule.** Compute and band milestone variance only when a **schedule baseline exists** (a planned milestone %-complete or earned/planned schedule value). When no baseline exists, the SPI **cannot be computed** — emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; never fabricate a RAG color on absent input.

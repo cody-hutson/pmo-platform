@@ -2,7 +2,7 @@
 name: delivery-engine
 description: >
   Operational backbone for backlog health through release readiness. Modes: Backlog scan · Ticket insight · DoR gate · Sprint planning · Execution control · DoD gate · RAID updates. Use for sprint planning, backlog review, quality gates, or velocity tracking across Agile and Waterfall governance. Triggers: "run DoR on this", "run DoD on this", "check this backlog", "plan the sprint", "velocity check", "is this release ready", "update the RAID log."
-version: v1.19
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -181,23 +181,29 @@ gate verdict, recommended actions for any FAIL items.
 discussion, any [DELIVERY] tag referencing sprint planning.
 
 **What you do**:
-1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table, Cone-of-Uncertainty range widths, planning-horizon commitment rules, and the buffer three-zone model, and `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds
+1. Read `references/sprint-defaults.md` for cadence/WIP/velocity-window parameters, `references/estimation-standards.md` for the focus-factor table (§3), Cone-of-Uncertainty range widths (§1), planning-horizon commitment rules (§2), the buffer three-zone model (§4), the **buffer-consumption RAG banding (§4.1)**, the velocity-as-range enforcement rule (§5), and the **milestone-variance (SPI) RAG (§7)**, and `references/capacity-model.md` for the effective-capacity formula (focus-factor × context-switching × allocation), context-switching penalties, Brooks's-Law thresholds, the 60/20/20 effort split, and the team-stability + vendor-ramp thresholds
 2. Assess inputs: refined backlog (DoR-passed items), team capacity, velocity history,
    carryover from prior sprint, priority guidance
-3. Produce a sprint plan:
+3. **Enforce estimation discipline (do not merely read the parameters — apply them, and reject/adjust on violation):**
+   - **Range validation — reject point estimates.** Apply `estimation-standards.md` §5: any single-point estimate (story-point or velocity figure) is REJECTED and returned as a range, no tighter than the item's Cone-of-Uncertainty band (§1) for its current lifecycle phase. State the phase and the band that set the width. If the lifecycle phase is unknown, default to the **widest applicable band** and label the phase `[ASSUMPTION – CONFIRM]` — never silently accept the point.
+   - **Focus factor — apply to raw capacity.** Apply the `capacity-model.md` §1 multiplicative chain reading the §3 canonical focus factor (FF = 0.65, valid range 0.60–0.75). If an input asserts raw or 100% capacity, flag it and present the **focus-adjusted** capacity instead, naming the factor applied (and `CS(N)` when N > 1 concurrent projects). Never plan against un-focus-factored capacity.
+   - **Planning-horizon validation.** Apply `estimation-standards.md` §2: flag any item carrying a **point commitment beyond the committed horizon** (the current iteration) and downgrade it to a forecast range (or to theme/epic magnitude per the horizon). A point figure committed two or more iterations out is not accepted.
+4. Produce a sprint plan:
    - **Capacity model**: available hours/points by team member (if data available),
-     accounting for PTO, meetings, known distractions
-   - **Proposed sprint scope**: prioritized list of items with story points, assignees,
+     accounting for PTO, meetings, known distractions — expressed as **focus-adjusted** capacity (FF applied per step 3), never raw.
+   - **Buffer-consumption zone**: when an iteration-buffer figure is available, report buffer consumption in the 🟢/🟡/🔴 band per `estimation-standards.md` §4.1 and **name the active zone** with its decision rule. When no iteration-buffer figure exists, state the zone cannot be computed and recommend establishing it (zone a, ~15–30%) — do not default to GREEN.
+   - **Proposed sprint scope**: prioritized list of items with story points (as ranges per step 3), assignees,
      and rationale for inclusion/exclusion
+   - **Milestone variance + RAG**: when a milestone schedule baseline exists, compute milestone variance as SPI and assign its 🟢/🟡/🔴 RAG per `estimation-standards.md` §7, **citing the threshold**. Name it "milestone variance (SPI)" / "milestone slip" — never "Schedule Variance". When no baseline exists, emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; do not fabricate a RAG.
    - **Carryover handling**: items carried from prior sprint with reason and risk
    - **Risk items**: items with dependencies, items without estimates, items with
      incomplete AC (should have been caught in DoR but might slip through)
    - **Sprint goal**: 1–2 sentence goal statement synthesized from the scope
-4. If capacity and scope don't balance, produce options:
+5. If capacity and scope don't balance, produce options:
    - Option A: Full scope with overtime/risk acceptance
    - Option B: Reduced scope with specific items deferred and rationale
    - Option C: Scope with dependency assumptions called out
-5. Bridge to SPM (if co-managed): if any sprint items map to waterfall milestones, note
+6. Bridge to SPM (if co-managed): if any sprint items map to waterfall milestones, note
    the milestone impact and produce both framings
 
 **Output**: Sprint plan, capacity model, scope options (if needed), sprint goal,
@@ -626,6 +632,43 @@ structural conformance and content quality.
   visible sprint into "32 points," plans to it as a commitment, and the team
   discovers mid-sprint that the number was one-third holiday artifact.
 
+### Sprint plan accepted on raw capacity or point estimates — PROC
+
+- **Signature (observable signal):** A Mode D (Sprint Planning) output sizes a
+  sprint against raw (un-focus-factored) capacity — planning to ~100% of nominal
+  hours — or accepts a single-point story-point / velocity estimate without
+  rejecting it and returning a range. The capacity model shows no focus-factor
+  application, or the scope carries bare point figures, or both.
+- **Conditional:** do NOT accept a sprint plan built on raw (un-focus-factored)
+  capacity or on point estimates, because raw capacity overstates available
+  delivery hours by the full focus-factor loss (~35% at FF = 0.65) and a point
+  estimate asserts a precision the Cone of Uncertainty does not support — together
+  they manufacture an over-commitment that stays invisible until the retro, which
+  is exactly the failure-mode estimation discipline exists to catch at planning.
+- **Root cause:** The raw inputs look authoritative and arithmetically clean —
+  "the team has 160 hours," "the story is 5 points" — and applying the discipline
+  is several steps (read FF from `estimation-standards.md` §3, apply the
+  `capacity-model.md` §1 chain, reject the point per §5, return the phase-banded
+  range) while accepting the figure as-given is one. Under planning-throughput
+  pressure the agent consumes the convenient number and skips the enforcement that
+  steps 3–4 require.
+- **Mitigation:** Run the Mode D step-3 enforcement before producing the plan:
+  apply the focus factor to raw capacity and present the focus-adjusted figure
+  (naming the factor, plus `CS(N)` when N > 1); reject every point estimate and
+  return it as a range no tighter than the §1 phase band (§5); report buffer
+  consumption in the §4.1 🟢/🟡/🔴 zone; compute milestone variance + RAG (§7)
+  when a baseline exists; validate the planning horizon (§2). On any absent input,
+  default explicitly and flag (unknown phase → widest band + `[ASSUMPTION –
+  CONFIRM]`; no baseline → `variance: not computable`) — never silently accept the
+  raw figure or default a band to GREEN.
+- **Principal response vs. junior response:** Principal applies FF, shows the
+  focus-adjusted capacity (e.g., 160 → 104 h at FF 0.65), rejects "5 points" and
+  returns "5–7 points" with the phase band cited, and names the active buffer zone
+  — surfacing the real (smaller) capacity and the estimate uncertainty so the team
+  commits to a scope it can hit. Junior plans to the raw 160 h and the flat 5-point
+  figures, the sprint looks comfortably full at planning, and the over-commitment
+  surfaces as missed commitments at the retro.
+
 ## Shared Behavioral Rules
 
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
@@ -643,8 +686,8 @@ Read these on first use, then as needed per mode:
 | `references/lifecycle-stages.md` | Mode C (DoR — stage entry criteria), Mode F (DoD/Release — QA/Acceptance exit criteria), any stage-transition or gate question | The 15-stage universal delivery lifecycle (Identify → Close), per-stage entry/exit criteria and artifacts, the stage↔gate seam to the LG-0…LG-10 model, the five-model terminology mapping, and the QA→Plan-Review P1-defect block |
 | `references/output-format.md` | First response construction | Detailed output format spec with field definitions |
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
-| `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, velocity-as-range enforcement, contingency vs. management reserve |
-| `references/capacity-model.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Effective-capacity formula (focus-factor × context-switch × allocation), context-switching penalties, Brooks's-Law thresholds, 60/20/20 effort split, team-stability + vendor-ramp + bus-factor (managed-team lens) + demand-supply gap RAG |
+| `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, buffer-consumption RAG banding (§4.1), velocity-as-range enforcement, contingency vs. management reserve, milestone-variance (SPI) RAG (§7) |
+| `references/capacity-model.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Effective-capacity formula (focus-factor × context-switch × allocation), context-switching penalties, Brooks's-Law thresholds, 60/20/20 effort split, team-stability + vendor-ramp + bus-factor (managed-team lens) + demand-supply gap RAG (the 0.85 ceiling is the shared anchor for the §4.1 buffer-consumption Red boundary; cross-refs estimation-standards.md §4.1/§7) |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
 | `references/dependency-rules.md` | Any mode with cross-item dependencies | Dependency types, escalation triggers, tracking format |
