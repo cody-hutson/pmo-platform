@@ -155,3 +155,62 @@ Validate that the process fits within the delivery lifecycle stage it claims to 
 | **Cross-Reference Validation** | ___ / 6 passing | | |
 | **Lifecycle Alignment** | ___ | | |
 | **Overall** | Approved / Conditional / Rejected | | |
+
+---
+
+## Requirement Quality (Mode A)
+
+> **Scope:** This section governs **Mode A (Requirements Definition)** only. It is independent of the six **process**-review dimensions above (Mode B). Mode A runs the four-check Requirement Quality gate (steps 4a–4d in SKILL.md) over each structured requirement; Mode B's process scoring is unchanged. Two of the four checks — INVEST and Given-When-Then — are **consumed by reference** from the canonical rubrics named below and are deliberately **not** restated here (restating would fork the canonical and break duplicate-source discipline). The two genuinely net-new artifacts — the 8-domain completeness set and the NFR category set — are authored in full below because the corpus has no canonical source for them.
+
+### 1. INVEST scoring (pointer — do not re-author)
+
+INVEST scoring applies to **story-class / Functional requirements** (keyed on the requirement's own type tag from SKILL.md Mode A step 3, **not** on any project-level methodology field). For a formal "system shall…" Waterfall requirement, INVEST is reported **`N/A — formal requirement, not a user story`** and the 8-domain completeness check (below) is primary — do not force-score Independent/Small against a compliance statement.
+
+| What | Where it lives (canonical — read this, do not copy it here) |
+|------|--------------------------------------------------------------|
+| The six INVEST dimensions (Independent, Negotiable, Valuable, Estimable, Small, Testable) — definition + validation question + failure signal + the per-dimension remediation framing | `operations/templates/requirements-template.md` § "INVEST Quality Criteria for User Stories" |
+| The scoring **mechanic**: score each dimension **1 (Met) / 0 (Not Met)**; readiness threshold is **≥ 5 of 6** criteria met; a **0 on Valuable or Testable is a hard fail** regardless of total (these two are non-negotiable) | `operations/skills/delivery-engine/references/backlog-health.md` § 2.2 "INVEST Scoring" |
+
+**Output:** a six-row pass/fail table per scored story (one row per dimension, each marked Met/Not Met) + the overall ≥ 5/6 verdict. For every dimension scored 0, draft the specific fix (push-to-resolve) using the per-dimension remediation column from `requirements-template.md` — do not just flag "fails Estimable"; state the remediation ("fails Estimable — team has not seen the vendor API; recommend a time-boxed spike, then re-score"). Each drafted remediation is a decision-class output and carries a reversibility tier per the SKILL.md Reversibility Discipline.
+
+### 2. Given-When-Then enforcement on acceptance criteria (pointer — do not re-author)
+
+| What | Where it lives (canonical — read this, do not copy it here) |
+|------|--------------------------------------------------------------|
+| The Given-When-Then (Gherkin) format and rules — one G-W-T scenario per AC; 3–7 AC per story; "Then" must be observable (reject subjective terms — "fast", "user-friendly"); negative/edge cases are separate criteria; good/poor worked examples | `operations/templates/requirements-template.md` § "Acceptance Criteria Writing Guide" |
+| The **checklist-format escape hatch** for non-behavioral requirements (configuration, data, infrastructure): `- [ ] verifiable condition` is acceptable in lieu of G-W-T | same section, "Alternative: Checklist Format" |
+
+**Enforcement:** when a **behavioral** AC is not in Given-When-Then form, **do not pass it** — reject and produce the drafted G-W-T rewrite (push-to-resolve). **Escape hatch (load-bearing):** for a non-behavioral requirement, the checklist format is acceptable — do **not** false-positive-reject a well-formed infra/data/config checklist by demanding G-W-T ceremony it does not need.
+
+### 3. The 8-domain completeness checklist (net-new — authored here)
+
+Run every structured requirement against the eight completeness domains below. Mark each domain **Covered / Partial / Gap** (reuse the three-level Pass/Partial/Fail scale defined in the Scoring Scale at the top of this file). For every **Partial** or **Gap**, draft the missing piece (DRAFT-labeled, per the REQ-014a–c push-to-resolve pattern) rather than silently leaving it blank. Surface the result as an 8-row coverage strip per requirement (or a roll-up matrix for a set). **Domain 7 (Non-functional) feeds the NFR prompt in §4.**
+
+Each domain is grounded in an existing in-corpus source (this is a reconciliation of existing canon lifted to the requirement altitude, not an invented set):
+
+| # | Completeness domain | The question the requirement must answer | Grounded in |
+|---|---------------------|------------------------------------------|-------------|
+| 1 | **Actor / role** | Who initiates or benefits from this requirement? | Mode A step 4 (actor) |
+| 2 | **Trigger / precondition** | What event or state starts it? | Mode A step 4 (trigger) + Dimension 1 (Trigger defined) |
+| 3 | **Expected behavior** | What must the system do? | Mode A step 4 (expected behavior) |
+| 4 | **Acceptance criteria** | How is "done" verified? (Given-When-Then per §2, or checklist for non-behavioral) | Mode A step 4 (AC) + Dimension 6 (Acceptance criteria defined) |
+| 5 | **Exception / error handling** | What happens when it fails? | Mode A step 4 (exception handling) + Dimension 4 (Exception Handling) |
+| 6 | **Data / inputs-outputs** | What data is consumed and produced, with source and format? | Dimension 1 (Inputs specified / Outputs defined) |
+| 7 | **Non-functional constraints** | What performance / security / reliability / etc. bounds apply? (feeds §4) | binds to the NFR set in §4 |
+| 8 | **Traceability** | Source up + design / delivery / evidence down? | Mode A "maintain the chain" + Dimension 5 (Traceability) |
+
+### 4. NFR category set + prompt-when-absent (net-new — authored here)
+
+The corpus has no canonical non-functional-requirement category taxonomy, so the set below is grounded externally to **ISO/IEC 25010 (Product Quality Model)** — the recognized international standard for software quality attributes (supersedes ISO/IEC 9126). Use these seven categories both as the domain-7 reference and as the prompt enumeration.
+
+| NFR category (ISO/IEC 25010) | Prompt the requirements author for… |
+|------------------------------|--------------------------------------|
+| **Performance efficiency** | throughput, response-time, and capacity targets |
+| **Security** | authentication / authorization, data protection, audit, compliance constraints |
+| **Reliability / Availability** | uptime target, fault tolerance, recoverability (RTO / RPO) |
+| **Usability / Accessibility** | accessibility standard (e.g., WCAG), learnability, error prevention |
+| **Compatibility / Interoperability** | integration contracts, data-exchange formats, co-existence |
+| **Maintainability** | modularity, testability, change-cost expectations |
+| **Scalability / Portability** | growth headroom, environment portability |
+
+**Prompt-when-absent rule:** after classifying requirements (SKILL.md step 3) and running the 8-domain checklist (§3), check whether the requirements **set** contains **any** requirement of type Non-Functional (or any domain-7 entry). **When the count is zero, do not pass silently** — emit a single consolidated NFR prompt enumerating the seven categories above and ask which apply, drafting `[INFERRED]` / `[ASSUMPTION – CONFIRM]` candidate NFRs where the business context implies them (e.g., a payments flow implies a Security + Performance NFR even if unstated). The prompt counts against the Max-5-questions budget as **one** question, not seven.
