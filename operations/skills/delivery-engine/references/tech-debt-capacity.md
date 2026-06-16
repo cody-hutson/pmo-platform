@@ -94,18 +94,18 @@ Rework rate = capacity consumed by rework from prior incomplete work ÷ total sp
 
 ---
 
-## Floor → Ranking Contract (consumed by #180)
+## Floor → Ranking Contract (consumed by the classification/ranking work)
 
-This section is the **contract surface** the sibling classification/prioritization work (#180, `tech-debt-classification.md`) consumes by role. #366 sets the **budget**; #180 ranks what fills it. #180 reads four named outputs from this doc and does **NOT** re-derive the floor:
+This section is the **contract surface** the sibling classification/prioritization work (`tech-debt-classification.md`) consumes by role. This doc's capacity floor sets the **budget**; the ranking work ranks what fills it. The ranking work reads four named outputs from this doc and does **NOT** re-derive the floor:
 
-| # | Output | Definition | What #180 does with it |
+| # | Output | Definition | What the ranking work does with it |
 |---|---|---|---|
-| **(a)** | **Floor %** | The per-sprint floor, by role from `sprint-defaults.md` §1.2 (the 15% non-negotiable minimum) | The target line #180 ranks items up to — never re-derived |
+| **(a)** | **Floor %** | The per-sprint floor, by role from `sprint-defaults.md` §1.2 (the 15% non-negotiable minimum) | The target line the ranking work ranks items up to — never re-derived |
 | **(b)** | **Allocation ratio** | tech-debt-allocated ÷ sprint capacity (§1) | The current fill level against the floor |
-| **(c)** | **Under-floor deficit** | `max(0, floor − allocation-ratio) × sprint capacity` — the capacity below the floor | The capacity #180's ranking must fill |
-| **(d)** | **Aged-item set** | The items >90 days (§2), each pre-flagged with its escalate / reclassify disposition | The aged-debt candidates #180 prioritizes into the deficit |
+| **(c)** | **Under-floor deficit** | `max(0, floor − allocation-ratio) × sprint capacity` — the capacity below the floor | The capacity the ranking must fill |
+| **(d)** | **Aged-item set** | The items >90 days (§2), each pre-flagged with its escalate / reclassify disposition | The aged-debt candidates the ranking work prioritizes into the deficit |
 
-**Contract semantics.** #180 ranks tech-debt items (Fowler quadrant × Cost of Delay) **to fill the under-floor deficit (c) up to the floor (a)**, drawing from the aged-item set (d) and the broader debt backlog; #180 does **not** re-derive the floor or restate the capacity discipline. The ownership seam: `tech-debt-capacity.md` owns the *budget/floor*; `tech-debt-classification.md` owns the *classification/prioritization*. #180 references (a)–(d) by role.
+**Contract semantics.** The ranking work ranks tech-debt items (Fowler quadrant × Cost of Delay) **to fill the under-floor deficit (c) up to the floor (a)**, drawing from the aged-item set (d) and the broader debt backlog; the ranking work does **not** re-derive the floor or restate the capacity discipline. The ownership seam: `tech-debt-capacity.md` owns the *budget/floor*; `tech-debt-classification.md` owns the *classification/prioritization*. The ranking work references (a)–(d) by role.
 
 ---
 
@@ -137,4 +137,4 @@ time-boxed sprints, not to the single-operator platform running the PMO.
 
 | Version | Change |
 |---------|--------|
-| v2.01 | Initial — tech-debt capacity floor (§1, allocation ratio + 🟢/🟡/🔴 floor-RAG, floor value referenced by role from `sprint-defaults.md` §1.2), aged-debt detection (§2, >90d adopted from `SKILL.md` Mode A; escalate/reclassify disposition via `raid-templates.md`), rework-rate tracking (§3, >20% alert `[ASSUMPTION – CONFIRM]` KB-C04 domain + not-computable negative path), and the floor→ranking contract for #180. Created for #366 per Stage-5 design #1218. |
+| v2.01 | Initial — tech-debt capacity floor (§1, allocation ratio + 🟢/🟡/🔴 floor-RAG, floor value referenced by role from `sprint-defaults.md` §1.2), aged-debt detection (§2, >90d adopted from `SKILL.md` Mode A; escalate/reclassify disposition via `raid-templates.md`), rework-rate tracking (§3, >20% alert `[ASSUMPTION – CONFIRM]` KB-C04 domain + not-computable negative path), and the floor→ranking contract for the classification/ranking work. Created per the Stage-5 design. |

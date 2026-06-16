@@ -653,7 +653,7 @@ structural conformance and content quality.
   force-scored. Each drafted fix carries a reversibility tier (Reversibility Discipline).
 - **Principal response vs. junior response:** Principal ships "REQ-031 (order-status
   story) — INVEST 4/6: fails Estimable (vendor API unseen — recommend a spike) and Small
-  (split into status-read + notification); AC#2 not in G-W-T — drafted rewrite below,
+  (split into status-read + notification); AC-2 not in G-W-T — drafted rewrite below,
   DRAFT," and the story is visibly not-yet-ready with a path to ready. Junior ships
   REQ-031 as a clean-looking table row with prose acceptance criteria; the missing INVEST
   verdict and malformed AC are discovered when the dev team builds to its own

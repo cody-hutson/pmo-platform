@@ -840,7 +840,7 @@ structural conformance and content quality.
   top the list gets buried under benign-but-louder items.
 - **Distinctness (do NOT merge):** this is the **classification-completeness** axis — a
   *prioritization-input* failure (a debt item ranked without its quadrant + CoD). It is distinct
-  from #366's **floor-breach** entry (a *capacity-allocation* failure — the tech-debt slice under
+  from the capacity-floor's **floor-breach** entry (a *capacity-allocation* failure — the tech-debt slice under
   the floor) and from the *raw-capacity / point-estimate* entry (un-focus-factored capacity and
   point estimates) and the *gate-advance* / *stage-skip* entries (transition-validation failures).
   All entries stay; do not merge.
@@ -864,7 +864,7 @@ Read these on first use, then as needed per mode:
 | `references/sprint-defaults.md` | Mode D (Sprint Planning) | Sprint cadence, capacity defaults, velocity handling |
 | `references/estimation-standards.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Cone of Uncertainty, planning-horizon rules, the canonical focus-factor table, buffer three-zone model, buffer-consumption RAG banding (§4.1), velocity-as-range enforcement, contingency vs. management reserve, milestone-variance (SPI) RAG (§7) |
 | `references/capacity-model.md` | Mode D (Sprint Planning), Mode E (Execution Control) | Effective-capacity formula (focus-factor × context-switch × allocation), context-switching penalties, Brooks's-Law thresholds, 60/20/20 effort split, team-stability + vendor-ramp + bus-factor (managed-team lens) + demand-supply gap RAG (the 0.85 ceiling is the shared anchor for the §4.1 buffer-consumption Red boundary; cross-refs estimation-standards.md §4.1/§7) |
-| `references/tech-debt-capacity.md` | Mode D (Sprint Planning) | Tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor value is referenced by role from sprint-defaults.md §1.2, not restated), aged-debt detection (>90d escalate/reclassify via raid-templates.md), rework-rate tracking (>20% alert `[ASSUMPTION – CONFIRM]` + not-computable negative path), and the floor→ranking contract consumed by #180 |
+| `references/tech-debt-capacity.md` | Mode D (Sprint Planning) | Tech-debt capacity-floor enforcement (allocation ratio + 🟢/🟡/🔴 floor-RAG; the floor value is referenced by role from sprint-defaults.md §1.2, not restated), aged-debt detection (>90d escalate/reclassify via raid-templates.md), rework-rate tracking (>20% alert `[ASSUMPTION – CONFIRM]` + not-computable negative path), and the floor→ranking contract consumed by the tech-debt classification/ranking reference |
 | `references/tech-debt-classification.md` | Mode D (Sprint Planning) | Tech-debt classification + prioritization — the 4 Fowler quadrants (Reckless/Prudent × Deliberate/Inadvertent), the Cost-of-Delay scoring lens (CoD components referenced from intake-governance.md §2 by role, not re-derived; per-item HIGH/MEDIUM/LOW confidence tier), and the (quadrant × CoD) lexicographic sort that ranks the tech-debt slice and fills tech-debt-capacity.md's under-floor deficit up to the floor |
 | `references/raid-templates.md` | Mode G or any RAID update | RAID, decision log, milestone plan templates |
 | `references/backlog-health.md` | Mode A (Backlog Scan) | Scoring criteria, thresholds, remediation patterns |
