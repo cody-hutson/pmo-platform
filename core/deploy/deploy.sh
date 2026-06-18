@@ -3775,7 +3775,8 @@ cmd_check() {
   # template (the resolver's "common case" rung-1 contract) — the allowlist below
   # is the explicit field set gated for default-presence (a field absent from it
   # is unchecked, NOT validated; release_class_capacity_weights is included so the
-  # risk-weighted-capacity field is gated, not merely parse-clean); (c) the legacy
+  # risk-weighted-capacity field is gated, not merely parse-clean; mode_a_parse_rate_floor
+  # is included so the G3-14 parse-rate floor field ships a default); (c) the legacy
   # operator.toml [platform].work_board alias is preserved (NOT removed) alongside
   # the new [adapters].ticketing. Warn-mode initial (flag_warn_or_issue) per the
   # shakedown posture for new checks.
@@ -3805,7 +3806,7 @@ cmd_check() {
       # is non-empty after the `=`, so the same \S assertion covers it.
       local _f
       for _f in schema_version managed_by bundle_doctrine_frame release_size_target_pts \
-                release_class_capacity_weights \
+                release_class_capacity_weights mode_a_parse_rate_floor \
                 default_release_class source_systems maintenance_posture \
                 type_mapping_overrides releases_since_calibration; do
         if ! /usr/bin/grep -qE "^[[:space:]]*${_f}[[:space:]]*=[[:space:]]*\S" "$c33_tmpl" 2>/dev/null; then
