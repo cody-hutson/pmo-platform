@@ -17,6 +17,7 @@ version: v2.02
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
+<!-- reference-durability: allow-link -->
 
 # PMO Skill Refiner
 
