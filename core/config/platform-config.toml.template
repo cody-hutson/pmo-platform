@@ -138,6 +138,13 @@ type_mapping_overrides = {}
 # release_size_target_pts carries CALIBRATE-AFTER-3). Records how many releases
 # of empirical data have accrued toward a scheduled re-calibration. Advanced by
 # the operator (Track B value set) or at a Track A re-calibration PR.
+# Shared counter — one calibration loop, two halves: the RELEASE_LOG velocity
+# instrument (the measurement half — planned-vs-delivered points, files-changed,
+# allocation actuals; see release/references/standards/release-velocity-tracking.md)
+# and release_class_capacity_weights above (the heuristic half — recalibrated
+# from the per-class delivered-vs-planned ratio after CALIBRATE-AFTER-3). Both
+# advance THIS single counter; neither defines a private one. No velocity-specific
+# key is needed — the N=3 trigger and the weight defaults already carry the policy.
 # Valid: non-negative integer count of releases observed since last calibration.
 # Default: 0
 releases_since_calibration = 0
