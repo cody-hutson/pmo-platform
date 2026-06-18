@@ -130,8 +130,8 @@ labels_to_work_class() {
   local labels="$1"
   case " $labels " in
     *" enhancement "*|*" type:feature "*|*" feature "*) echo feature ;;
-    *" protocol "*|*" cluster:process-protocol "*|*" routing-rules "*|*" tracker-schema "*) echo slack ;;
-    *" bug "*|*" structure "*|*" cluster:architecture "*|*" cluster:tech-debt "*|*" skill-update "*|*" documentation "*) echo debt ;;
+    *" protocol "*|*" cluster: process-protocol "*|*" routing-rules "*|*" tracker-schema "*) echo slack ;;
+    *" bug "*|*" structure "*|*" cluster: architecture "*|*" cluster: tech-debt "*|*" skill-update "*|*" documentation "*) echo debt ;;
     *) echo debt ;;
   esac
 }
@@ -164,11 +164,17 @@ if [[ "${1:-}" == "--self-test" ]]; then
   # planned 0 -> N/A
   R="$(ratio_round_half_up 0 0)";   [[ "$R" == "N/A" ]] || die "self-test: ratio 0/0 = $R, expected N/A"
 
-  # Test 4: work-class mapping precedence
+  # Test 4: work-class mapping precedence (cluster labels carry the canonical
+  # SPACED form per release-velocity-tracking.md §4 + core/specs/label-taxonomy.md)
   R="$(labels_to_work_class "size:m enhancement status: done")"; [[ "$R" == "feature" ]] || die "self-test: work-class(enhancement) = $R, expected feature"
-  R="$(labels_to_work_class "size:s protocol cluster:process-protocol")"; [[ "$R" == "slack" ]] || die "self-test: work-class(protocol) = $R, expected slack"
+  R="$(labels_to_work_class "size:s protocol cluster: process-protocol")"; [[ "$R" == "slack" ]] || die "self-test: work-class(protocol) = $R, expected slack"
+  # cluster-label-ONLY protocol signal (no bare 'protocol' label) — the spaced
+  # 'cluster: process-protocol' must alone resolve to slack (regression for the
+  # no-space matcher that mis-bucketed these to debt).
+  R="$(labels_to_work_class "size:m cluster: process-protocol")"; [[ "$R" == "slack" ]] || die "self-test: work-class(cluster: process-protocol only) = $R, expected slack"
   R="$(labels_to_work_class "size:l bug")"; [[ "$R" == "debt" ]] || die "self-test: work-class(bug) = $R, expected debt"
-  R="$(labels_to_work_class "size:m cluster:tech-debt")"; [[ "$R" == "debt" ]] || die "self-test: work-class(tech-debt) = $R, expected debt"
+  R="$(labels_to_work_class "size:m cluster: tech-debt")"; [[ "$R" == "debt" ]] || die "self-test: work-class(cluster: tech-debt) = $R, expected debt"
+  R="$(labels_to_work_class "size:m cluster: architecture")"; [[ "$R" == "debt" ]] || die "self-test: work-class(cluster: architecture) = $R, expected debt"
   R="$(labels_to_work_class "size:m")"; [[ "$R" == "debt" ]] || die "self-test: work-class(unlabeled) = $R default expected debt"
   # feature wins over a co-present debt/protocol signal (precedence)
   R="$(labels_to_work_class "enhancement bug protocol")"; [[ "$R" == "feature" ]] || die "self-test: work-class precedence (feature wins) = $R"
@@ -263,9 +269,9 @@ def work_class(labels):
     s = set(n.lower() for n in labels)
     if s & {"enhancement", "type:feature", "feature"}:
         return "feature"
-    if s & {"protocol", "cluster:process-protocol", "routing-rules", "tracker-schema"}:
+    if s & {"protocol", "cluster: process-protocol", "routing-rules", "tracker-schema"}:
         return "slack"
-    # bug / structure / architecture / tech-debt / skill-update / documentation -> debt; default debt
+    # bug / structure / cluster: architecture / cluster: tech-debt / skill-update / documentation -> debt; default debt
     return "debt"
 
 def ratio_half_up(delivered, planned):
