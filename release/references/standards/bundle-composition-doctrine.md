@@ -153,6 +153,7 @@ Thresholds are MEDIUM confidence — **`[CALIBRATE-AFTER-3]`** per the RELEASE_L
 
 - **(current default frame — see § 1):** SAFe team capacity heuristic — story points fit per iteration; small-batch principle (smaller batches = faster feedback = lower risk) inherited from F2 Continuous Delivery (§ 1.2 alternative frame surveyed).
 - **Composes with:** decomposition-review enforcement — G2-11 (Triage) + G3-12 (Bundle) COMPOSITE-OR predicate fires on `size:XL` OR declared decomposition hooks OR AC count ≥ 7 OR Affected Files count ≥ 5. This doctrine is **positive guidance** (target band); gate enforcement (positive guidance vs predicate firing) is the decomposition-review gate.
+- **Per-milestone enforcement:** the risk-weighted membership sum (`effective_pts`, defined in the Step 5 Risk-Weighting sub-block below) is gated by **G3-15** (`gate-criteria-spec.md § Gate 3`) at the Bundle→Planning boundary — the per-milestone-sum complement to the per-issue G2-11 / G3-12 decomposition predicate. On breach G3-15 routes to the § 4 tight-merge or the § 3 Step 5 split/merge/reframe disposition above (not a dead-end fail), reading the SAME `release_size_target_pts` band and `release_class_capacity_weights` config so the modeled target and the enforced bound are a single source.
 - **Output:** total pts + disposition + (if split) sub-slice list.
 
 #### Step 5 — Risk-Weighting (Release-Class capacity multiplier)
