@@ -13,7 +13,7 @@ description: >
   cross-skill false-positive detection). For modifying EXISTING PMO skills,
   coordinates with pmo-skill-editor. Use when the user wants to create a new
   PMO skill or iterate on an existing skill's eval/description/trigger set.
-version: v1.10
+version: v2.02
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -66,6 +66,8 @@ Three modes, sequenced as a pipeline: Interview always fires first, then Mode 2 
 | **2. Create New** | Interview + "new skill" intent | Wrap Anthropic scaffold → inject 7 PMO fields → run eval harness → register contracts → hand off |
 | **3. Refine Existing** | Interview + "refine [skill-name]" intent | Delta-focused interview → baseline eval → scope-route (refiner vs. editor vs. both) → apply changes → blind A/B → hand off |
 
+**Create New — alternative input (feeding-document consumption).** Mode 2 accepts a **filled v0.2 feeding document** as a pre-Interview input branch: when given a completed `pmo-feeding-document-v02.md` instance (14 sections), the refiner parses it and **bypasses Capture Intent / Interview Q1–Q9**, seeding the 7 PMO injection fields directly from feeding-doc sections, then rejoins the Create-New spine at the eval step. This is the role-Specialist factory path (TPM, Program Coordinator, and later role skills are authored this way). See [`## Workflow — Consume Feeding Document`](#workflow--consume-feeding-document).
+
 ## Workflow — Create New Skill
 
 Executed after Interview produces a complete packet and user intent is "new skill."
@@ -103,6 +105,63 @@ Executed after Interview produces a delta-focused packet and user intent is "ref
 8. **Hand off** — same evidence bundle as Mode 2; flag any scope that routed to pmo-skill-editor.
 
 **Boundary rule:** If a user request straddles refiner and editor scope (e.g., "add a new mode AND optimize the description"), run refiner-scope first, then explicitly delegate editor-scope to `pmo-skill-editor` as a distinct invocation with refiner output as input.
+
+## Workflow — Consume Feeding Document
+
+A **pre-Interview input branch of Mode 2 (Create New)** for authoring role-Specialist skills from a filled **feeding document**. When the operator supplies a completed v0.2 feeding document (a filled `pmo-feeding-document-v02.md` instance — all 14 sections), the refiner consumes it as a *document parse* rather than an interactive interview: it **bypasses Capture Intent and Interview Q1–Q9**, composes the persona baseline from the feeding-doc sections, seeds the 7 PMO injection fields, and **rejoins the existing Create-New spine at step 5 (run quantitative eval)**. This is the factory path the role-skill suite is built on (the TPM and Program Coordinator pilots, and every later role skill, are authored this way).
+
+This path is an *alternative entry* to Create New — it does not add a 4th mode. It reuses the entire proven Create-New pipeline downstream of the seed (eval → description-trigger optimization → regression extension → contract registration → pre-handoff gate → handoff); only steps 1–3 (scaffold-invoke + capture + validate) are replaced by the feeding-doc parse + persona-baseline composition + field seed.
+
+### When this branch fires vs. the interactive Interview
+
+- **Feeding-document consumption** fires when the operator supplies a filled v0.2 feeding document for a role-Specialist skill. The format reference is [`references/pmo-feeding-document-v02.md`](references/pmo-feeding-document-v02.md) (14 sections + 3 appendices). Use the 5 shared role-skill reference files under `operations/skills/_shared/` (behavioral-markers, anti-pattern-catalog, five-model-variations, deployment-strategies, lifecycle-gates) as the extraction substrate the feeding-doc §12 reference-depth declarations resolve against.
+- **Interactive Interview** (Mode 1 → Mode 2) fires for any new skill without a filled feeding document. The two input disciplines are distinct: Interview is interactive elicitation; consumption is a document parse that *generates* prose from declared sections.
+
+### Steps
+
+1. **Parse the feeding document.** Read the filled v0.2 instance. Validate all 14 sections are present and non-empty (this is the consumption-path analogue of the scaffold-validation gate — a missing or empty section HALTS the parse and surfaces the gap, the same way a malformed Anthropic scaffold HALTS Create-New step 3). If any section is missing, do not generate — report the gap.
+
+2. **Compose the persona baseline as one continuous opening (§3→§4→§5).** Emit the produced SKILL.md's opening as a single uninterrupted block — **not** three disjoint sections:
+   - **§3 Role Statement** → identity + the 5 elements **including the 5th element (Distinctive value)** (CS-01).
+   - **§4 Operating Principles** → the **4 mandatory principles including Anticipation**, with the 5-step selection heuristic, within a 300-word budget (CS-02).
+   - **§5 Input Handling** → context sensitivity + **≥2 org-tier coverage** (home tier + ≥1 adjacent) (CS-03).
+   - Thread **§7's Audience-framing rule** (exec / technical / mixed) as the output-discipline close.
+   This is **generation**, not interview — it composes the feeding-doc sections into continuous prose. **CS-13** is the rule that mandates the continuity; CS-01 / CS-02 / CS-03 supply the three sections' content. (Appendix A of the format reference documents the §3→§4→§5(→§7) composition contract.)
+
+3. **Seed the 7 PMO injection fields from feeding-doc sections.** Map each feeding-doc section to its injection field per the build-time CS field set below, then inject per `references/pmo-platform-template.md` (the same 7 fields, sourced from the feeding doc instead of the Interview packet).
+
+4. **Rejoin the Create-New spine at step 5.** Proceed to **Create-New step 5 (run quantitative eval)** and continue through the rest of that workflow unchanged: description-trigger optimization (step 6), regression-checks extension (step 7), contract registration (step 8), pre-handoff self-compliance checks (step 9), handoff (step 10). The consumption path adds **no** new downstream steps — it feeds the proven pipeline from a different source.
+
+### Build-time CS field set ({CS-01..CS-11, CS-13} — the 12 build-time changes)
+
+The consumption path implements the **12 build-time v0.2 field changes {CS-01, CS-02, CS-03, CS-04, CS-05, CS-06, CS-07, CS-08, CS-09, CS-10, CS-11, CS-13}**. **CS-15 (cross-boundary influence) is deferred to Phase-1 pilot calibration** — it is not a Phase-0 generator obligation. (The ticket prose labels this "CS-01…CS-13 / 13 changes"; that is read as the **13 distinct CS IDs in the canonical epic table** = the 12 build-time IDs **plus** CS-15-as-deferred, **not** a contiguous CS-01-through-CS-13 range — CS-12 and CS-14 do not exist in the table.)
+
+| CS | Feeding-doc § | What the consumption path does | Injection field / step |
+|---|---|---|---|
+| CS-01 | §3 Role Statement | Compose the 5th element (Distinctive value) into the role statement | §3→§4→§5 persona-baseline opening |
+| CS-02 | §4 Operating Principles | Enforce 4 mandatory principles (incl. Anticipation); apply the 5-step selection heuristic; 300-word budget | §3→§4→§5 opening |
+| CS-03 | §5 Input Handling | Validate ≥2 org-tier coverage (home + ≥1 adjacent) | §3→§4→§5 opening |
+| CS-04 | §6 Modes | Handle optional Analytical framework + Output specification (Path B) + Core-Behaviors transformation | Body modes section |
+| CS-05 | §7 Output Format | Inject the Audience-framing rule (exec / technical / mixed) into every output-format section | `## Output Contract` stub (field 2) |
+| CS-06 | §8 Cross-Skill | Enforce the 8-tag controlled vocabulary + `[DOMAIN_ACTION]` flag for new tags | `## Dependency Graph Node` stub (field 3) |
+| CS-07 | §9 Delivery Model | Quality-gate decision-grade variation specificity | `delivery_approach` frontmatter (field 1) |
+| CS-08 | §10 Guardrails | Inject the 9th suite-wide guardrail (Local optimization); apply detection-grade format (signal → anti-pattern → corrective) | `## Domain-Specific Failure Modes` (field 5) |
+| CS-09 | §11 Shared Rules | Include the governance-awareness portability note (validate file existence before read) | `## Evidence Quality Protocol` clause (field 4) |
+| CS-10 | §12 Reference Files | Author refs at the specified extraction depth (Formula/table · Framework · Decision rules) | reference-doc authoring |
+| CS-11 | §13 Test Prompts | Generate eval prompts per tier (see allocation below) | eval-prompt-generation step (rejoins Create-New step 5) |
+| CS-13 | §3 + Appendix A | Compose §3→§4→§5(→§7) as one continuous persona baseline block | §3→§4→§5 opening (the composition rule itself) |
+
+### Eval-prompt generation per tier (CS-11)
+
+The consumption path reads the feeding doc's **§13 declared eval tier** and generates the should-trigger + should-not-trigger prompt-pair counts that seed the preserved harness (`run_eval.py` / `run_loop.py`) at the rejoined Create-New step 5:
+
+| Eval tier | Should-trigger | Should-not-trigger | Total |
+|---|---|---|---|
+| **Full** | 5 | 5 | 10 |
+| **Standard** | 3 | 2 | 5 |
+| **Light** | 2 | 0 | 2 |
+
+The TPM and Program Coordinator pilots are both **Full** tier → **5+5** each.
 
 ## PMO Injection Points
 
@@ -307,6 +366,7 @@ Competencies the refiner is at risk for:
 ## References
 
 - `references/pmo-platform-template.md` — PMO-aware SKILL.md scaffold template (7 injection fields)
+- `references/pmo-feeding-document-v02.md` — v0.2 feeding-document format (14 sections + 3 appendices) consumed by the `## Workflow — Consume Feeding Document` path; documents each section's purpose, field semantics, quality criteria, and applicable CS change
 - `references/pmo-platform-context.md` — Platform architecture, Layer 1/2 boundary, dependency-graph schema, shared contracts
 - `references/pmo-antipatterns.md` — Catalog of 8 common PMO-skill failure modes to probe during Interview
 - `references/eval-framework.md` — Preserved eval harness invocation, variance analysis, blind A/B, description-trigger optimization
