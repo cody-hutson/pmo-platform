@@ -72,6 +72,51 @@ bundle_doctrine_frame = "F1"
 # Default: "15-25"
 release_size_target_pts = "15-25"
 
+# Risk-weighted release-capacity multipliers, keyed on the milestone's declared
+# Release Class. The bundle size-check (§ 3 Step 5) computes
+# effective_pts = round_half_up( sum(member_pts) * class_weight ) and evaluates
+# effective_pts (NOT raw points) against release_size_target_pts. This makes a
+# higher-ceremony release's raw points count for more against the same band — a
+# cross-cutting bundle of raw 20 pts resolves to effective 26 and crosses the
+# >25 "split" disposition where raw points would have read "target band." The
+# weight resolves from the milestone's "## Release Class" H2 (guaranteed present
+# by gate G3-10), falling back to default_release_class (below) when absent.
+# The class enum is CLOSED and canonical in
+# release/references/specs/release-class-taxonomy.md; this field maps each class
+# to its capacity weight, it does NOT re-define the enum. The formula, the
+# rounding mode (round-half-up), and the band relationship are canonical in
+# release/references/standards/bundle-composition-doctrine.md § 3 Step 5 — this
+# field is the single NUMERIC home for the weights; the doctrine cites it by role
+# and does NOT restate these numbers.
+# Calibration policy: CALIBRATE-AFTER-3 — these are MEDIUM-confidence seeds;
+# recalibrate from per-class delivered-vs-planned actuals after 3 releases of
+# RELEASE_LOG velocity data (Track A governed change to re-set the defaults).
+# Valid: a TOML inline table mapping each of the 4 release-class names to a
+#        positive decimal weight.
+# Default: { routine = 1.0, novel = 1.15, cross-cutting = 1.3, hotfix = 0.9 }
+release_class_capacity_weights = { routine = 1.0, novel = 1.15, cross-cutting = 1.3, hotfix = 0.9 }
+
+# Minimum acceptable release-planner Mode A combined-clean parse rate, expressed
+# as a 0.0-1.0 fraction. Gate G3-14 asserts the Mode A combined-clean parse rate
+# (issues parsing "clean" / issues with a determinate parse outcome) against this
+# floor at the Stage 3 -> 4 (Bundle -> Planning) boundary, computed over the
+# conformant-bundleable denominator (release-planner SKILL.md Step 1.5 partition
+# group 1 — improvement|bug bodies with a recognized "### Affected Files" heading;
+# type-excluded, needs-body-repair, and operator-deferred bodies are NOT in the
+# denominator). The gate reads this field by role and never restates the magnitude
+# (parameterize-over-hardcode), so a recalibration moves the floor without a
+# gate-spec edit — exactly how release_size_target_pts is consumed. The criterion,
+# the denominator, and the warn-then-enforce posture are canonical in
+# core/schemas/gate-criteria-spec.md § Gate 3 (G3-14); this field is the single
+# NUMERIC home for the floor and does NOT restate them.
+# Calibration policy: CALIBRATE-AFTER-3 — the 0.90 seed is a MEDIUM-confidence
+# value; recalibrate from observed Mode A parse-quality after 3 releases (Track A
+# governed change to re-set the default). G3-14 ships warn-then-enforce so the
+# floor calibrates before it gains teeth.
+# Valid: a decimal fraction in [0.0, 1.0].
+# Default: 0.90
+mode_a_parse_rate_floor = 0.90
+
 [release_class]
 # The default Release Class applied when a milestone description carries no
 # explicit "## Release Class" H2 section. The enum is CLOSED — 4 values — and
@@ -114,6 +159,13 @@ type_mapping_overrides = {}
 # release_size_target_pts carries CALIBRATE-AFTER-3). Records how many releases
 # of empirical data have accrued toward a scheduled re-calibration. Advanced by
 # the operator (Track B value set) or at a Track A re-calibration PR.
+# Shared counter — one calibration loop, two halves: the RELEASE_LOG velocity
+# instrument (the measurement half — planned-vs-delivered points, files-changed,
+# allocation actuals; see release/references/standards/release-velocity-tracking.md)
+# and release_class_capacity_weights above (the heuristic half — recalibrated
+# from the per-class delivered-vs-planned ratio after CALIBRATE-AFTER-3). Both
+# advance THIS single counter; neither defines a private one. No velocity-specific
+# key is needed — the N=3 trigger and the weight defaults already carry the policy.
 # Valid: non-negative integer count of releases observed since last calibration.
 # Default: 0
 releases_since_calibration = 0

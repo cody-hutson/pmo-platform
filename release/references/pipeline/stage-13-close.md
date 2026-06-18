@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Stage 13: Close
 
 > **Source:** Stage 13 design + operational-deployment compression
@@ -101,6 +102,8 @@ git checkout -b chore/v<X.Y>-stage-13-corpus-update
 
 # Edit <OPERATOR_INSTANCE_RELEASE_LOG_PATH>:
 #   - Transition v<X.Y> row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write)
+#   - Append the **Velocity:** field to the v<X.Y> visible-H4 Deployment Log block
+#     (sibling immediately AFTER **Cycle-Time:**) per Phase B-velocity below
 # Edit release/releases/RELEASE_INDEX.md:
 #   - Append v<X.Y> row at chronological-recent-first position
 # Edit release/releases/RELEASE_DIGEST.md:
@@ -134,6 +137,8 @@ gh pr view <PR> --json state,mergeCommit
 ```
 
 **Sequencing:** Stage 13 chore PR MUST land on main BEFORE Phase C C1 Milestone close. Procedure 7 Step 4 completion-verification (per the completion-verification spec) reads release-notes presence + RELEASE_LOG `VERIFIED` state + INDEX/DIGEST entries + CHANGELOG.md entry + GitHub Release existence from main; all of these are populated by this chore PR landing (Surfaces 2+3) plus Stage 12 Phase B5.5 emit (Surface 1). Milestone close runs as hub Tier-1 mechanical post-merge per the milestone-close-is-hub-Tier-1 discipline (the Stage 13 chore PR merge is the deterministic precondition; Hub closes Milestone immediately after).
+
+**Phase B-velocity — `**Velocity:**` field append (visible-H4 Deployment Log):** In the SAME Stage 13 chore PR commit that transitions the RELEASE_LOG row `DEPLOYED → VERIFIED` (Phase B1) and adds `**Outcome:**`, the Stage 13 spoke appends the `**Velocity:**` field to the v<X.Y> visible-H4 `#### Deployment Log v<X.Y>` block — sibling immediately AFTER `**Cycle-Time:**`. The field is computed by [`release/tools/compute-release-velocity.sh <version> --milestone <N> --merge-sha <MERGE_SHA>`](../../tools/compute-release-velocity.sh) (the `MERGE_SHA` captured at Stage 12 Phase B1; the milestone number is the release's bundle milestone) and embeds the returned value; if the tool cannot run in the close worktree (e.g. `gh` unavailable), the spoke manually computes the three signals from the membership and embeds them. The field schema, the label→work-class map, the N/A semantics (a release with no `size:*`-labelled membership records `Velocity: N/A`), and the N=3 recalibration linkage are codified at [`release/references/standards/release-velocity-tracking.md`](../standards/release-velocity-tracking.md). **Why Stage 13, not Stage 12:** the *delivered* points and *allocation actuals* are authoritative only once Stage 13 marks the membership closed (the same "not knowable until close" property as the outcome field). Direct-to-main is prohibited — this lands via the Stage 13 chore PR. **Cutover / grandfather:** applies to releases entering Stage 13 strictly AFTER this field's introducing-release merge SHA; **the introducing release itself is exempt** (reflexive-pipeline-loop discipline), and pre-cutover rows carry no `**Velocity:**` field (no backfill).
 
 **Phase B5.5 — CHANGELOG.md append (Surface 2 of Layer-1 dual-write):** The Stage 13 chore PR commit includes a CHANGELOG.md append at repo root — Surface 2 of the Layer-1 dual-write mechanism per [`release-notes-standard.md § Part 5`](../standards/release-notes-standard.md). The content is extracted from `release/releases/notes/v<X.Y>_RELEASE_NOTES.md` Section 6a per the §5.3 transform rule (5–15 lines, Keep-a-Changelog 1.1.0 format with `## [v<X.Y>] - YYYY-MM-DD` H2 + `### Added/Changed/...` H3 categories present). Surface 1 (GitHub Releases) was already emitted at Stage 12 Phase B5.5 per [`stage-12-execute.md § Phase B5.5`](stage-12-execute.md); Surface 3 (RELEASE_LOG VERIFIED transition) is in the same Stage 13 chore PR diff per Phase B1.
 
