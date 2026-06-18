@@ -8,6 +8,7 @@ consumers: "release/governance/release-process.md Stage 13 § velocity-tracking 
 version: v2.02
 ---
 
+<!-- reference-durability: allow-version-ref -->
 # Release Velocity Tracking
 
 ## 1. Purpose

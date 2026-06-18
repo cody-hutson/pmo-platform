@@ -229,12 +229,18 @@ done
 GH="$(find_gh)"
 [[ -n "$GH" ]] || die "gh CLI not found — required to read milestone membership labels"
 
+# Resolve the target repo from the current gh-authenticated checkout (no hardcoded
+# operator slug — an installable tool must RESOLVE the repo, not embed the author's).
+# Honors a caller-set REPO override. Never runs in --self-test (that path exits above).
+REPO="${REPO:-$("$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)}"
+[[ -n "$REPO" ]] || die "could not resolve target repo — set REPO or run inside a gh-authenticated repo"
+
 # ─── Read milestone membership (planned = all; delivered = closed) ───────────
 
 # Single batched read of the milestone's issues (number, state, labels). Per the
 # gh-background-hang reference: one foreground call, no loop. --limit set high
 # (a milestone bundle is small, but guard against silent truncation).
-MEMBERS_JSON="$("$GH" issue list --repo "${REPO:-cody-hutson/pmo-platform}" \
+MEMBERS_JSON="$("$GH" issue list --repo "$REPO" \
   --milestone "$MILESTONE" --state all --limit 500 \
   --json number,state,labels 2>/dev/null || true)"
 
@@ -321,7 +327,7 @@ ALLOC_S="$(/usr/bin/python3 -c 'import json,sys; print(json.loads(sys.argv[1])["
 
 # ─── Release Class (from the milestone description ## Release Class H2) ───────
 
-MS_BODY="$("$GH" api "repos/${REPO:-cody-hutson/pmo-platform}/milestones/$MILESTONE" --jq '.description' 2>/dev/null || true)"
+MS_BODY="$("$GH" api "repos/$REPO/milestones/$MILESTONE" --jq '.description' 2>/dev/null || true)"
 RELEASE_CLASS="$(/usr/bin/printf '%s' "$MS_BODY" \
   | /usr/bin/awk 'BEGIN{f=0} /^## Release Class/{f=1; next} /^## /{f=0} f && NF {print; exit}' \
   | /usr/bin/grep -oE 'routine|novel|cross-cutting|hotfix' | /usr/bin/head -1 || true)"
