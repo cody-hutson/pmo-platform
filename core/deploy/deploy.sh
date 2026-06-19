@@ -4155,6 +4155,93 @@ cmd_check() {
     fi
   fi
 
+  # ─── Check 36: Archived-release citation form (notes/plans cite the archive, not the active anchor) ──
+  # Forcing-function for the Stage 13 archive-sweep citation re-sweep (#48
+  # follow-on; the v1.18 miss at the v2.03 fold, fixed in 8cf06f0). When a
+  # release's Deployment-Log block is archived out of the active
+  # release/releases/RELEASE_LOG.md into logs/<keyslug>.md, its release-note and
+  # release-plan citations MUST migrate from the active-anchor form (frontmatter
+  # `links.log_anchor` + inline `../RELEASE_LOG.md#<anchor>`) to the archive form
+  # (`links.log_archive: "logs/<keyslug>.md"` + inline `../logs/<keyslug>.md`)
+  # per stage-13-close.md Phase B5.7 step 3. That rewrite is hand-driven; the
+  # failure mode is a file nobody re-touched in the sweep, so the diff-limited CI
+  # link-checker (repo-integrity.yml GATE 3, check-release-links.py --diff-base)
+  # is structurally blind to it. This full-corpus check drives from the
+  # notes/plans side and flags any file still carrying the active-anchor form
+  # once its release's block has left the active head.
+  #
+  # Archived-ness predicate (dual of Check 32 sub-assertion g): a release is
+  # archived iff `^#### Deployment Log <key>` is ABSENT from the active LOG AND a
+  # logs/<key>.md archive file exists (the second clause double-confirms, so a
+  # mis-derived key cannot manufacture a false positive). <key> = the file's
+  # `version:` frontmatter when it is a vN.M version, else the filename stem (the
+  # version-less milestone slug — the same keyslug Check 32 (g) and
+  # generate_release_index.py use). Low false-positive by construction: an ACTIVE
+  # release keeps its block in the active LOG (predicate false → not flagged
+  # though it correctly carries log_anchor), and a CORRECTLY-rewritten archived
+  # file carries no active-anchor form (trigger false → not flagged). Only an
+  # archived file still carrying the active form — exactly the v1.18 defect —
+  # trips both conditions.
+  #
+  # Scope: notes/ AND plans/ — Phase B5.7 step 3 rewrites both, so the guard
+  # covers both. Warn-mode initial per .claude/hooks/deploy-check.mode (Checks
+  # 8/9/10/14/15/18-23/25-32/34/35 precedent); flip-to-enforce after a >=3-day
+  # warn-log review with zero false positives.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 36: Archived-release citation form (notes/plans cite logs/ archive once the LOG block is archived) (#48)"
+    local c36_log="release/releases/RELEASE_LOG.md"
+    local c36_logs_dir="release/releases/logs"
+    local c36_findings=0
+    local c36_scanned=0
+    local c36_output=""
+    local c36_file c36_ver c36_key c36_forms
+    if [[ ! -f "$c36_log" ]]; then
+      flag_warn_or_issue "archived-citation-form" \
+        "$c36_log not found; cannot determine active/archived state"
+    else
+      for c36_file in release/releases/notes/*_RELEASE_NOTES.md release/releases/plans/*_RELEASE_PLAN.md; do
+        [[ -f "$c36_file" ]] || continue
+        # Active-anchor form present? frontmatter log_anchor OR inline ../RELEASE_LOG.md#
+        c36_forms=""
+        if /usr/bin/grep -qE '^[[:space:]]*log_anchor:' "$c36_file" 2>/dev/null; then
+          c36_forms="log_anchor"
+        fi
+        if /usr/bin/grep -qF '../RELEASE_LOG.md#' "$c36_file" 2>/dev/null; then
+          c36_forms="${c36_forms:+${c36_forms}+}inline ../RELEASE_LOG.md#"
+        fi
+        [[ -n "$c36_forms" ]] || continue
+        c36_scanned=$((c36_scanned + 1))
+        # Release key: version: frontmatter when vN.M, else filename stem.
+        c36_ver=$(/usr/bin/grep -m1 -E '^version:' "$c36_file" 2>/dev/null \
+                  | /usr/bin/sed -E 's/^version:[[:space:]]*//; s/^"//; s/"[[:space:]]*$//; s/[[:space:]]*$//') || c36_ver=""
+        if [[ "$c36_ver" =~ ^v[0-9]+\.[0-9]+ ]]; then
+          c36_key="$c36_ver"
+        else
+          c36_key=$(/usr/bin/basename "$c36_file" | /usr/bin/sed -E 's/_RELEASE_(NOTES|PLAN)\.md$//')
+        fi
+        # Block still in the active head? → active release, correctly cites log_anchor.
+        if /usr/bin/grep -qE "^#### Deployment Log ${c36_key//./\\.}([[:space:](]|\$)" "$c36_log" 2>/dev/null; then
+          continue
+        fi
+        # Not confirmably archived (no archive file for the derived key) → skip,
+        # so a mis-keyed file cannot become a false positive.
+        [[ -f "${c36_logs_dir}/${c36_key}.md" ]] || continue
+        c36_output+="${c36_file}: release ${c36_key} is archived (no '#### Deployment Log ${c36_key}' in active RELEASE_LOG; ${c36_logs_dir}/${c36_key}.md exists) but the file still carries the active-anchor form (${c36_forms}) — migrate to log_archive: \"logs/${c36_key}.md\" + ../logs/${c36_key}.md per stage-13-close.md Phase B5.7 step 3"$'\n'
+        c36_findings=$((c36_findings + 1))
+      done
+      if [[ $c36_findings -eq 0 ]]; then
+        log "  OK:    all $c36_scanned active-anchor-citing release file(s) reference a still-active RELEASE_LOG block"
+      else
+        flag_warn_or_issue "archived-citation-form" \
+          "$c36_findings archived release file(s) still cite the active RELEASE_LOG anchor — migrate to the logs/ archive form per stage-13-close.md Phase B5.7 step 3"
+        printf '%s' "$c36_output" | /usr/bin/head -10 | /usr/bin/sed 's/^/         /'
+        if [[ $c36_findings -gt 10 ]]; then
+          log "         ... ($((c36_findings - 10)) more)"
+        fi
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
