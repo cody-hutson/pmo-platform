@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-024 — Operations skills consume core safety-control references via-public-api, not by fork
+title: ADR-028 — Operations skills consume core safety-control references via-public-api, not by fork
 status: Accepted
 date: 2026-06-15
 release: 02-FNH-est-lifecycle-status-hardening (v2.01)
@@ -14,7 +14,7 @@ source_observations:
 
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-024 — Operations skills consume core safety-control references via-public-api, not by fork
+# ADR-028 — Operations skills consume core safety-control references via-public-api, not by fork
 
 ## Status
 
@@ -23,6 +23,13 @@ Collective Review scope-lock on 2026-06-15, reversing the Stage-4 plan's local-c
 in favor of the Stage-5 design's via-public-api recommendation. This ADR is the committed record of
 that adopted decision (convention-consistent with ADR-023's operator-adopted → ratified-at-gate
 pattern). It is authored at Stage 6 per the ADR-007 precedent of Stage-6 ADR authoring.
+
+**Renumbered 2026-06-18: ADR-024 → ADR-028.** This ADR was originally filed as ADR-024 but
+collided with the earlier `release/ADRs/ADR-024-cross-release-impact-model.md` (2026-06-13), which
+had correctly claimed 024 as the next-free slot platform-wide. Per the platform-wide-monotonic
+numbering rule (`core/ADRs/README.md` § Naming convention), the later claimant is renumbered to the
+next free slot (028); the decision content is unchanged. See #1345 (observation) and #1352
+(resolution + CI guard).
 
 ## Context
 

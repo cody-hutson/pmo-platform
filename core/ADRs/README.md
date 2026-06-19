@@ -10,6 +10,10 @@ ADRs follow the format established by ADR-005 (see [`../../release/ADRs/ADR-005-
 
 `ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 are foundational core-scope decisions migrated from an earlier governance location. ADR-001 + ADR-002 + ADR-005 (release-scope) live in [`../../release/ADRs/`](../../release/ADRs/). ADR-006..009 are module-restructure decisions.
 
+**Enforcement.** The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`), which fails any PR that introduces a duplicate ADR number or a gap in the global sequence.
+
+**Renumber log.** Core ADR-024 (`operations-consume-core-safety-controls-via-public-api`) → **ADR-028** on 2026-06-18, resolving a platform-wide collision with the earlier `release/ADRs/ADR-024-cross-release-impact-model.md` (which had correctly claimed 024). The renumbered ADR's Status section carries the full provenance.
+
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
 | ADR | Module | Source | Owner | Date |
@@ -133,18 +137,18 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** MODERATE (CHEAP pre-application; crosses to MODERATE once skills are re-classified or re-pointed under the rule).
 **File:** [ADR-023-skill-sourcing-coupling-posture.md](ADR-023-skill-sourcing-coupling-posture.md)
 
-### ADR-024 — Operations skills consume core safety-control references via-public-api, not by fork
+### ADR-028 — Operations skills consume core safety-control references via-public-api, not by fork
 
 **Status:** Accepted (operator-adopted at the v2.01 / `02-FNH-est-lifecycle-status-hardening` Collective Review scope-lock 2026-06-15; convention-consistent with ADR-023's operator-adopted → ratified-at-gate pattern; authored at Stage 6 per the ADR-007 Stage-6 ADR-authoring precedent).
 **Decision:** An operations-module skill that needs a core safety-control reference consumes it **via-public-api by role-name** — it does NOT fork (copy) the control into a module-local file. The motivating case is `weekly-status-rollup` (operations) needing the 8-signal watermelon set (W1–W8) owned by `pmo-qa-auditor` (core): the roll-up names the set by role and consumes the verdict rule by reference rather than restating it. This reverses the Stage-4 plan's local-copy "for module independence" recommendation in favor of the Stage-5 design — the `operations → core` direction is pre-authorized accepted cohesion (a markdown-doc-link, not a code-import cycle, so it creates no new edge type per ADR-007), the two docs are already bidirectionally coupled through `metric-registry.md`, and a forked green-masking control diverges the moment the owner refines a signal (and would trip the shared-reference collision check). The cross-module-consumption analogue of ADR-023 (skill ↔ Anthropic sourcing): both express one-owner-of-truth on different axes.
 **Reversibility:** MODERATE (CHEAP pre-application — it documents the posture the build already follows; crosses to MODERATE once additional operations skills cite it for their own core-control consumption; reversal is a superseding ADR plus, if a fork were ever chosen, materializing the copy and resolving the collision).
-**File:** [ADR-024-operations-consume-core-safety-controls-via-public-api.md](ADR-024-operations-consume-core-safety-controls-via-public-api.md)
+**File:** [ADR-028-operations-consume-core-safety-controls-via-public-api.md](ADR-028-operations-consume-core-safety-controls-via-public-api.md)
 
 ## Release-ops / capacity ADRs
 
 ### ADR-027 — Release-bundle risk-weighting keys on Release Class, not a new per-issue Tier field
 
-**Status:** Accepted (operator-adopted at the v2.02 / `61-bundling-capacity-and-sizing-gates` Collective Review scope-lock 2026-06-17; authored at Stage 6 per the ADR-007 / ADR-024 Stage-6 ADR-authoring precedent).
+**Status:** Accepted (operator-adopted at the v2.02 / `61-bundling-capacity-and-sizing-gates` Collective Review scope-lock 2026-06-17; authored at Stage 6 per the ADR-007 / ADR-028 Stage-6 ADR-authoring precedent).
 **Decision:** Release-bundle risk-weighting keys on the already-shipped **Release Class** (`routine`/`novel`/`cross-cutting`/`hotfix`), NOT a new per-issue Tier field (the Autonomy Tier is per-action; `size:*` is complexity). Applied as a **multiplier** — `effective_pts = round_half_up(sum(member_pts) * class_weight)` — evaluated against the existing `§ 3 Step 5` target band with zero new disposition rows. Multiplier is chosen over an additive ceremony budget (not scale-invariant) and a per-issue ceremony-tag sum (requires a net-new backlog field). Weights live as the single numeric home in `[bundling].release_class_capacity_weights`; the doctrine cites them by role (parameterize-over-hardcode). Seeds `routine 1.0 / novel 1.15 / cross-cutting 1.3 / hotfix 0.9` are MEDIUM-confidence and `[CALIBRATE-AFTER-3]`; the mechanism is HIGH-confidence.
 **Reversibility:** CHEAP at ship (additive — revert the release PR; every addition ships a default and no existing field/row/enum is mutated), trending MODERATE once a downstream size-bound enforcement gate + `release-planner` wire into `effective_pts` and the weights are recalibrated.
 **File:** [ADR-027-release-bundle-risk-weight-keys-on-release-class.md](ADR-027-release-bundle-risk-weight-keys-on-release-class.md)

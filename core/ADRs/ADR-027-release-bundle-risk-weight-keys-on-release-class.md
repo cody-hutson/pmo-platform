@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-Accepted. The operator adopted the decision at the v2.02 (`61-bundling-capacity-and-sizing-gates`) Collective Review scope-lock on 2026-06-17. This ADR is the committed record of that adopted decision, authored at Stage 6 per the ADR-007 / ADR-024 precedent of Stage-6 ADR authoring. The risk-weight *mechanism* (a multiplier keyed on Release Class) is HIGH-confidence; the seed *magnitudes* are MEDIUM-confidence and `[CALIBRATE-AFTER-3]`.
+Accepted. The operator adopted the decision at the v2.02 (`61-bundling-capacity-and-sizing-gates`) Collective Review scope-lock on 2026-06-17. This ADR is the committed record of that adopted decision, authored at Stage 6 per the ADR-007 / ADR-028 precedent of Stage-6 ADR authoring. The risk-weight *mechanism* (a multiplier keyed on Release Class) is HIGH-confidence; the seed *magnitudes* are MEDIUM-confidence and `[CALIBRATE-AFTER-3]`.
 
 ## Context
 
