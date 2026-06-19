@@ -25,6 +25,14 @@ The earlier 8-column schema (Version|Date|Class|Scope|Plan|Note|LOG|Status) and
 its #N-token "Scope" count are RETIRED — the live INDEX has no Scope column, so
 the #N-token miscount the generator was filed to fix is moot by construction.
 
+Active+archive split (#48): the "logged releases" source is the UNION of the
+active RELEASE_LOG table rows and the per-release archive files under
+release/releases/logs/*.md (each archive file reproduces its release's LOG table
+row under a `## Row` H2; see parse_archive_rows + union_logged_releases). This
+keeps RELEASE_INDEX the COMPLETE navigation surface (every release, active or
+archived) and stops find_index_orphans from exit-3'ing an archived row that has
+legitimately moved out of the active LOG head.
+
 Usage:
     python3 core/deploy/tools/generate_release_index.py
     python3 core/deploy/tools/generate_release_index.py --output-stdout
@@ -60,6 +68,15 @@ LOG_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_LOG.md"
 PLANS_DIR = WORKSPACE_ROOT / "release" / "releases" / "plans"
 NOTES_DIR = WORKSPACE_ROOT / "release" / "releases" / "notes"
 ARCHIVE_PLANS_DIR = WORKSPACE_ROOT / "release" / "releases" / "archive" / "plans"
+# Per-release LOG archive directory (active+archive split, #48). The active
+# RELEASE_LOG is bounded to its most-recent rows; older releases' rows live in
+# release/releases/logs/<keyslug>.md, each carrying a `## Row` line that reproduces
+# the release's full LOG table row. The "logged releases" source for INDEX
+# reconciliation is therefore the UNION of the active LOG table rows and these
+# archive-file rows (see parse_archive_rows), so RELEASE_INDEX legitimately keeps
+# every release — active or archived — and find_index_orphans does not exit-3 an
+# archived row out of the active LOG.
+LOGS_DIR = WORKSPACE_ROOT / "release" / "releases" / "logs"
 INDEX_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_INDEX.md"
 
 # Live LOG schema: | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
@@ -163,6 +180,74 @@ def parse_log_rows(log_text: str) -> list[dict]:
             "date": cells[7],
         })
     return rows
+
+
+def parse_archive_rows(logs_dir: Path = LOGS_DIR) -> list[dict]:
+    """Parse the `## Row` table line out of each release/releases/logs/*.md file.
+
+    The active+archive split (#48) moves older releases' rows out of the active
+    RELEASE_LOG into one archive file per release; each archive file reproduces
+    the release's full 8-column LOG table row under a `## Row` H2. This reads
+    every archive file's `## Row` line with the SAME LOG_ROW_RE + field-position
+    logic as parse_log_rows so the archive rows union seamlessly with the active
+    LOG rows. Returns [] if the archive directory is absent (pre-split state).
+
+    Each archive file is expected to carry exactly one table data row under
+    `## Row`; the first matching `| ... |` row after the heading is taken.
+    """
+    rows: list[dict] = []
+    if not logs_dir.exists():
+        return rows
+    for path in sorted(logs_dir.glob("*.md")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        in_row_section = False
+        for raw_line in text.splitlines():
+            if raw_line.startswith("## Row"):
+                in_row_section = True
+                continue
+            if not in_row_section:
+                continue
+            # A new H2 ends the Row section without a parsed row.
+            if raw_line.startswith("## ") and not raw_line.startswith("## Row"):
+                break
+            m = LOG_ROW_RE.match(raw_line)
+            if not m:
+                continue
+            cells = [c.strip() for c in m.group("cells").split("|")]
+            if len(cells) != 8:
+                continue
+            version = cells[0]
+            if not version or version == "Version" or set(version) <= set("-: "):
+                continue
+            rows.append({
+                "version": version,
+                "milestone": cells[1],
+                "release_pr": cells[3],
+                "state": cells[6],
+                "date": cells[7],
+            })
+            break  # one row per archive file
+    return rows
+
+
+def union_logged_releases(active_rows: list[dict], archive_rows: list[dict]) -> list[dict]:
+    """Union active-LOG rows with archive-file rows, keyed by Version.
+
+    Active rows win on a key collision (the active LOG is authoritative for a
+    release still in the active head). The result is the full set of logged
+    releases — active OR archived — used for both INDEX render and orphan check
+    so RELEASE_INDEX stays complete post-split.
+    """
+    seen = {r["version"] for r in active_rows}
+    merged = list(active_rows)
+    for r in archive_rows:
+        if r["version"] not in seen:
+            merged.append(r)
+            seen.add(r["version"])
+    return merged
 
 
 THEME_PLACEHOLDER = "—"
@@ -462,6 +547,52 @@ def _self_test() -> int:
         print("self-test FAIL: find_index_orphans flagged a non-orphan", file=sys.stderr)
         return 1
 
+    # ── Active+archive UNION (#48): parse_archive_rows + union_logged_releases ──
+    # Simulate the split: an active LOG carrying only v99.02, with v99.01 archived
+    # to an archive file. parse_archive_rows reads the `## Row` line; the union
+    # restores v99.01 so an INDEX carrying BOTH is orphan-free. Without the union,
+    # v99.01 would be an orphan (the exit-3 collision #48 must resolve).
+    import tempfile
+    with tempfile.TemporaryDirectory() as _td:
+        _logs = Path(_td) / "logs"
+        _logs.mkdir()
+        (_logs / "v99.01.md").write_text(
+            "# Archived Release Log — v99.01\n\n"
+            "> Active ledger: [RELEASE_LOG.md](../RELEASE_LOG.md).\n\n"
+            "## Row\n\n"
+            "| v99.01 | v99.01-self-test-a | #9999 | #100 | `deadbeef` | `v99.01` | VERIFIED | 2026-05-23 |\n\n"
+            "#### Deployment Log v99.01\n**Result:** SUCCESS\n",
+            encoding="utf-8",
+        )
+        archive_rows = parse_archive_rows(_logs)
+        if len(archive_rows) != 1 or archive_rows[0]["version"] != "v99.01" \
+                or archive_rows[0]["milestone"] != "v99.01-self-test-a" \
+                or archive_rows[0]["release_pr"] != "#100":
+            print(f"self-test FAIL: parse_archive_rows mis-parsed the ## Row line: {archive_rows}", file=sys.stderr)
+            return 1
+        active_only = [r for r in log_rows if r["version"] == "v99.02"]
+        unioned = union_logged_releases(active_only, archive_rows)
+        unioned_versions = {r["version"] for r in unioned}
+        if not {"v99.01", "v99.02"} <= unioned_versions:
+            print(f"self-test FAIL: union dropped a release: {unioned_versions}", file=sys.stderr)
+            return 1
+        # The archived v99.01 must NOT be an orphan once unioned in.
+        idx_both = [{"version": "v99.01"}, {"version": "v99.02"}]
+        if find_index_orphans(unioned, idx_both) != []:
+            print("self-test FAIL: archived row orphaned despite the union (the #48 exit-3 collision)", file=sys.stderr)
+            return 1
+        # Active rows win on key collision (union keeps the active copy).
+        dup = union_logged_releases(active_only, [{"version": "v99.02", "milestone": "STALE",
+                                                   "release_pr": "#000", "state": "X", "date": "2000-01-01"}])
+        if sum(1 for r in dup if r["version"] == "v99.02") != 1 \
+                or next(r for r in dup if r["version"] == "v99.02")["milestone"] == "STALE":
+            print("self-test FAIL: union did not let the active row win on collision", file=sys.stderr)
+            return 1
+    # Absent archive dir → empty archive rows (pre-split state is safe).
+    if parse_archive_rows(Path(_td) / "does-not-exist") != []:
+        print("self-test FAIL: parse_archive_rows on a missing dir should return []", file=sys.stderr)
+        return 1
+
     print("self-test PASSED — 6-col verifier detected 3 expected drift signatures "
           "(milestone, LOG-only, INDEX-only); version-less round-trip + Theme-skip confirmed; "
           "recent-first sort (date-desc, later-LOG-first ties, malformed-date-last) + orphan detection confirmed")
@@ -510,12 +641,18 @@ def main() -> int:
         return 3
 
     log_text = LOG_PATH.read_text(encoding="utf-8")
-    rows = parse_log_rows(log_text)
-    if not rows:
+    active_rows = parse_log_rows(log_text)
+    if not active_rows:
         # Parse failure on a resolved file = schema drift between tool and corpus,
         # a config error → exit 3 (NOT a masked exit 0/1).
         print("error: path-resolution failure — no LOG rows parsed (LOG_ROW_RE vs current schema mismatch)", file=sys.stderr)
         return 3
+    # UNION with the per-release archive rows (#48 active+archive split): the set
+    # of logged releases = active LOG table rows ∪ release/releases/logs/*.md rows.
+    # This keeps RELEASE_INDEX complete (every release backed by an active row OR
+    # an archive file) and stops find_index_orphans from exit-3'ing an archived
+    # row that is no longer in the active LOG.
+    rows = union_logged_releases(active_rows, parse_archive_rows())
 
     if args.verify:
         if not INDEX_PATH.exists():

@@ -3657,6 +3657,7 @@ cmd_check() {
     local c32_index="release/releases/RELEASE_INDEX.md"
     local c32_digest="release/releases/RELEASE_DIGEST.md"
     local c32_notes_dir="release/releases/notes"
+    local c32_logs_dir="release/releases/logs"
     local c32_allowlist=".claude/skip-release-corpus-check.txt"
     local c32_cutoff="${RELEASE_CORPUS_CHECK_CUTOFF:-v1.01}"
     # Separate, later cutover for the network/tag stricter assertions. Sentinel
@@ -3667,6 +3668,48 @@ cmd_check() {
       flag_warn_or_issue "release-corpus-completeness" \
         "$c32_log not found; cannot enumerate logged releases"
     else
+      # ── Active+archive split sub-assertions (f/h) run once, before the row loop ──
+      # Active+archive contract (#48): the in-repo RELEASE_LOG is bounded to an
+      # ACTIVE head (the most-recent ~10 version rows, gate ceiling 11) plus a
+      # 4-key frontmatter; older releases are archived to release/releases/logs/
+      # <keyslug>.md (one file per archived release, each carrying its `## Row`
+      # line + a byte-identical Deployment-Log block). Three sub-assertions guard
+      # the split: (f) active version-row count <= 11; (g) every archived
+      # version row in the active table has its logs/<key>.md file (folded into
+      # the row loop below); (h) the 4 frontmatter keys are present. All three
+      # accumulate into c32_findings/c32_output and emit via the same warn-mode
+      # flag_warn_or_issue path as the INDEX/DIGEST/NOTES assertions.
+      # KNOWN LIMITATION (scope-preserving): (g) is version-ROW-scoped (it rides
+      # the existing `^| v[0-9]` row-walk), so a missing *version-less* archive
+      # file is not gate-asserted — consistent with the check's pre-existing
+      # version-row scoping (version-less rows are already exempt from the
+      # INDEX/DIGEST/NOTES assertions).
+      local c32_split_findings=0
+      local c32_split_output=""
+
+      # (f) active version-row ceiling. The active table is the only place
+      # version rows live post-migration, so a `^| v[0-9].[0-9]` count IS the
+      # active version-row count. Ceiling 11 (AC target <=10; the 1-row grace
+      # lets a freshly-closed release sit at 11 before the next archive sweep).
+      local c32_active_rows
+      c32_active_rows=$(/usr/bin/grep -cE '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null || true)
+      c32_active_rows=${c32_active_rows:-0}
+      if (( c32_active_rows > 11 )); then
+        c32_split_output+="active RELEASE_LOG table has ${c32_active_rows} version rows (> 11 ceiling) — archive older rows to ${c32_logs_dir}/<keyslug>.md per the Stage 13 archive sweep"$'\n'
+        c32_split_findings=$((c32_split_findings + 1))
+      fi
+
+      # (h) active-LOG frontmatter schema presence (lightweight key-presence;
+      # a full YAML parse is out of scope for a bash check and unnecessary for
+      # simple scalar keys).
+      local _fm_key
+      for _fm_key in active_version_range release_count last_archive_date archive_dir; do
+        if ! /usr/bin/grep -qE "^${_fm_key}:" "$c32_log" 2>/dev/null; then
+          c32_split_output+="active RELEASE_LOG frontmatter missing key: ${_fm_key}"$'\n'
+          c32_split_findings=$((c32_split_findings + 1))
+        fi
+      done
+
       # Allowlist filter (exact version match; trailing # comment supported)
       c32_is_allowlisted() {
         local _v="$1"
@@ -3730,6 +3773,20 @@ cmd_check() {
           c32_findings=$((c32_findings + 1))
         fi
 
+        # (g) archive-completeness (active+archive split, #48). A version row
+        # whose Deployment-Log block is NOT in the active LOG is, by definition,
+        # archived — and MUST have its logs/<keyslug>.md file. (For versioned
+        # rows the keyslug IS the version key.) In the steady post-migration
+        # state every active table row keeps its block, so this never fires; it
+        # is the forward guard for the archive-sweep transition moment (a row
+        # whose block was moved out but whose archive file was not written).
+        if ! /usr/bin/grep -qE "^#### Deployment Log ${_ver//./\\.}([[:space:](]|\$)" "$c32_log" 2>/dev/null; then
+          if [[ ! -f "${c32_logs_dir}/${_ver}.md" ]]; then
+            c32_split_output+="${_ver}: Deployment-Log block absent from active LOG and no archive file ${c32_logs_dir}/${_ver}.md"$'\n'
+            c32_split_findings=$((c32_split_findings + 1))
+          fi
+        fi
+
         # Stricter post-Release-cutover assertions (tag + published Release).
         # Dormant when c32_release_cutoff is the __none__ sentinel.
         _release_eligible=0
@@ -3774,6 +3831,20 @@ cmd_check() {
         printf '%s' "$c32_output" | head -10 | sed 's/^/         /'
         if [[ $c32_findings -gt 10 ]]; then
           log "         ... ($((c32_findings - 10)) more)"
+        fi
+      fi
+
+      # ── Active+archive split sub-assertions (f/g/h) emit (#48) ──
+      # Same warn-mode path as the assertions above; reports the active-row
+      # ceiling, archive-file-completeness, and frontmatter-key findings.
+      if [[ $c32_split_findings -eq 0 ]]; then
+        log "  OK:    active+archive split intact — ${c32_active_rows} active version row(s) (<= 11), all archived version rows backed by ${c32_logs_dir}/, 4 frontmatter keys present"
+      else
+        flag_warn_or_issue "release-corpus-completeness" \
+          "$c32_split_findings active+archive split finding(s) (active-row ceiling / archive-file completeness / frontmatter keys) — see #48 active+archive contract + release/references/pipeline/stage-13-close.md § Phase B archive sweep"
+        printf '%s' "$c32_split_output" | head -10 | sed 's/^/         /'
+        if [[ $c32_split_findings -gt 10 ]]; then
+          log "         ... ($((c32_split_findings - 10)) more)"
         fi
       fi
     fi
