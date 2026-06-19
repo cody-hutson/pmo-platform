@@ -788,6 +788,64 @@ The entries below address the `snapshot-as-current-state` root failure mode at h
   output cites the snapshot as authority.
 ```
 
+```markdown
+### Chip-prompt embedded arithmetic without verification — INPUT
+
+- **Signature (observable signal):** A chip prompt enumerates a
+  pre-computed count or sum of items derived from multiple sources
+  (acceptance criteria across an issue body + sibling-issue body +
+  milestone deliverable description; sub-task count across a release;
+  verification-table row count) where the stated total does not equal
+  the sum of its own cited addends. Detection: the prompt states a
+  derivation inline (e.g., "N rows: a + b + c") and `a + b + c ≠ N`;
+  the spoke then carries reconciliation overhead, or proceeds on the
+  wrong number when the verification step is skipped.
+- **Conditional:** do NOT embed a pre-computed count or sum in a chip
+  prompt when the hub has not run the derivation against the actual
+  sources at chip-authoring time, because the arithmetic is wrong at
+  authoring time (a hub computation error, not snapshot drift) and the
+  spoke either absorbs the reconciliation cost or inherits the wrong
+  total.
+- **Root cause:** Sister failure mode `Chip-prompt summary embedded as
+  canonical content — INPUT` (above) shares the same hub-orchestration
+  root class but a DISTINCT failure mechanism: that entry is about a
+  *summary* of source content drifting from the source over time
+  (snapshot-as-current-state); THIS entry is about a *computation* of
+  source enumerations being incorrect at the moment of authoring. The
+  pressure is the hub's impulse to pre-resolve a count for spoke
+  convenience or gate-checking without executing the derivation —
+  mental arithmetic substituted for a verified count.
+- **Mitigation:** Fire the chip-prompt arithmetic discipline at
+  [`hub-spoke-bridge.md` Procedure 3 §Chip Prompt Arithmetic
+  Discipline](../../release/references/how-to/hub-spoke-bridge.md)
+  BEFORE issuing the prompt. Prefer the derivation-logic pattern —
+  reference the derivation (one row per AC; source ACs from issue body
+  A, issue body B, and the milestone deliverables; spoke verifies the
+  row count against the actual AC count) rather than a pre-computed
+  sum, so there is no embedded total to drift. If a count must be
+  embedded (spoke-side gate-checking, estimation), run the derivation
+  against the actual sources first and state the verified sum with the
+  derivation cited; if the hub cannot verify at authoring time, mark
+  the count explicitly approximate and direct the spoke to verify.
+- **Principal response vs. junior response:** Principal authors chip
+  prompts that reference derivation logic rather than a pre-computed
+  total, and — when a count is unavoidable — verifies it against the
+  sources before issuance and cites the reproduction command. Junior
+  performs the addition in-prompt, embeds the total without checking
+  it (e.g., "build a 14-row table: 11 + 3 + 4"), and pushes the
+  reconciliation onto the spoke — which either burns attention
+  reconciling the discrepancy or silently proceeds on the wrong
+  number. Originating evidence (release-lineage, depersonalized): at
+  the v11.01b Collective Review precedent a hub-authored Stage 6
+  Engineering chip prompt asserted a verification table of "14 rows:
+  11 ACs from issue body A + 3 ACs from issue body B + 4 deliverable
+  ACs from the milestone description" — the cited addends sum to 18,
+  not 14; the sub-task instruction body independently stated a third
+  divergent figure. The spoke handled it gracefully (chose the
+  comprehensive 18-row coverage and flagged for the operator at Stage
+  9), but the reconciliation consumed Engineering attention.
+```
+
 ## Relationship to Platform Guardrails
 
 Every SKILL.md now has two distinct sections:

@@ -681,7 +681,7 @@ This discipline emerged from Finding F-01 (2026-05-02), where the hub-authored c
 **Sister surfaces (same hub-orchestration root class, distinct failure mechanism):**
 - `Chip Prompt Spec-Anchor Discipline` (this file, above) — chip-prompt embeds a *summary* of canonical-source content (snapshot-as-current-state); spoke trusts the snapshot when the source has drifted.
 - `Audit snapshot as current state` (per [`failure-mode-standard.md § Hub-spoke chip-prompt examples`](../../../core/specs/failure-mode-standard.md)) — recommendation-rendering surface variant of the same snapshot-divergence root pattern.
-- This discipline (Chip Prompt Arithmetic Discipline) — chip-prompt embeds a *computation* of source enumerations; computation is wrong at authoring time (not drift over time). Distinct root mechanism: hub arithmetic error, not snapshot divergence.
+- This discipline (Chip Prompt Arithmetic Discipline) — chip-prompt embeds a *computation* of source enumerations; computation is wrong at authoring time (not drift over time). Distinct root mechanism: hub arithmetic error, not snapshot divergence. Cataloged as a 5-field failure-mode entry at [`failure-mode-standard.md § Chip-prompt embedded arithmetic without verification — INPUT`](../../../core/specs/failure-mode-standard.md).
 
 **Cutover discipline:** Applies to all releases going forward.
 
