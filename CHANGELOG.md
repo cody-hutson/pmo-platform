@@ -8,6 +8,19 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.02] - 2026-06-18
+
+The release pipeline's bundling stage now enforces capacity and sizing as gates rather than written guidance: an oversize milestone is caught and routed to a split or tighter merge, a poorly-parsing release plan is held before it advances, capacity is weighed by release ceremony, and the release log records per-release velocity. Four governance/spec/schema cards; everything is additive — no existing setting, field, or behaviour is removed or renamed.
+
+### Added
+
+- **Per-milestone size gate.** Bundle planning sums a milestone's story points and checks the total against its size band; an oversize milestone is routed to a split or a tighter merge at a named gate (G3-15) instead of proceeding. *Why it matters:* an oversize bundle is surfaced for a decision at planning time rather than discovered after the work is in flight. ([#294](https://github.com/cody-hutson/pmo-platform/issues/294))
+- **Mode-A parse-rate gate.** The release planner's dependency-graph output is held at a named gate (G3-14) until it parses at or above 90% of the eligible items, unless an operator override is recorded. *Why it matters:* a low-confidence dependency graph no longer reaches bundle and planning approval unguarded. ([#293](https://github.com/cody-hutson/pmo-platform/issues/293))
+- **Risk-weighted release-capacity model.** The bundle capacity check counts a higher-ceremony release's story points for more against the same target band, using per-release-class weights, with the rounding mode pinned and the sizing guidance consolidated into one source (ADR-027). *Why it matters:* a heavier, higher-risk release is sized closer to its real cost instead of being treated like a routine one of equal raw point count. ([#290](https://github.com/cody-hutson/pmo-platform/issues/290))
+- **Release velocity tracking.** Each release now records its planned-versus-delivered points, files changed, and work allocation in the release log, next to the existing cycle-time field. *Why it matters:* the platform accumulates the actuals it needs to re-tune the capacity weights from real delivery data after a few releases. ([#281](https://github.com/cody-hutson/pmo-platform/issues/281))
+
+[Full notes](release/releases/notes/v2.02_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.02)
+
 ## [v2.01] - 2026-06-16
 
 Seven existing skills gain enforcement with no new skill added: the delivery engine enforces estimation discipline, a 15-stage lifecycle and a 10-gate ladder and classifies tech debt; the PPM agent governs and scores intake; the tracker manager de-duplicates RAID entries; the weekly roll-up scans for projects that look green but aren't; daily status drives its colour from a formula; and the process designer and technical analyst score requirement and design quality. Every change is additive — nothing is removed or renamed.
