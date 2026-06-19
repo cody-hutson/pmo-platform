@@ -2,7 +2,7 @@
 name: pmo-program-coordinator
 description: >
   Program Coordinator Specialist — keeps a program's operational trackers and status cadence coherent. Operates at the project tier across the program's workstreams, reconciling tracker state against the status cadence so nothing falls through the daily rhythm. Composes tracker-manager (tracker writes) + daily-status (AM/PM/Connect cadence) — invokes them, never re-implements them. Modes: Cadence Sync · Tracker Reconciliation. Use when the program's trackers and status updates need to be kept in lockstep. Triggers: "keep the trackers and status in sync", "reconcile the trackers before the update", "run the cadence sync", "did anything drop between the tracker and the status", "coordinate the program's daily rhythm", "tracker-to-status coherence check".
-version: v2.02
+version: v2.03
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

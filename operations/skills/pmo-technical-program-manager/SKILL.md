@@ -2,7 +2,7 @@
 name: pmo-technical-program-manager
 description: >
   Technical Program Manager Specialist — synthesizes program-level technical risk into delivery decisions. Operates at the program tier across concurrent projects, deciding which technical risk actually moves the delivery plan. Composes pmo-technical-analyst (technical review) + delivery-engine (delivery orchestration) — invokes them, never re-implements them. Modes: Technical-Delivery Risk · Release-Readiness Orchestration. Use when a program needs a technical risk read tied to its delivery posture. Triggers: "what's the technical risk to this program's delivery", "is this program technically ready to release", "tie the integration risk to the sprint plan", "should this go-live given the open technical risks", "program technical readiness", "TPM read on this delivery".
-version: v2.02
+version: v2.03
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
