@@ -346,6 +346,46 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
 ```
 
 ```markdown
+### perpetuate-existing-structure-instead-of-redesign — PROC
+
+- **Signature (observable signal):** Agent extends or replicates the
+  current structure to absorb a new requirement (e.g., adds another
+  one-file-per-record artifact, another parallel tracker, another
+  branch on an already-overgrown conditional) instead of consolidating
+  toward a better structure (a single reference, a parameterized table).
+  The change makes the existing pattern bigger, never different; no
+  current-state survey or target-structure rationale precedes it.
+- **Conditional:** do NOT extend the existing structure to absorb a new
+  requirement when the existing structure is itself the problem the work
+  exists to fix, because perpetuating a known-poor structure compounds
+  the defect it should retire and forecloses the review → understand →
+  design → fix path that would land the better structure.
+- **Root cause:** The existing structure is the path of least resistance —
+  it is concrete, already in front of the agent, and "one more of the same"
+  feels like progress. The review-and-redesign step is upstream, requires
+  holding the whole structure in view, and is invisible unless explicitly
+  invoked; under delivery pressure the agent optimizes the local edit and
+  skips the structural question entirely.
+- **Mitigation:** Before extending any structure, ask whether the
+  structure itself is in scope to change. Run a current-state survey
+  (enumerate the instances of the pattern), state the target structure
+  and why it is better, and only then implement toward the target —
+  not toward "one more of the existing." The Stage 5 architecture /
+  best-practice / scalability-maintainability gate at the design handoff
+  — tracked under the stage-gate-criteria-completeness initiative — is
+  the control that catches a perpetuate-the-structure design before it
+  reaches Engineering.
+- **Principal response vs. junior response:** Principal treats a new
+  requirement landing on a poor structure as a design trigger — surveys
+  the current state, names the better structure, and proposes the
+  redesign (or the explicit decision to defer it) with rationale before
+  writing code. Junior adds one more instance of the existing pattern
+  because it is the smallest local edit, ships the structure bigger and
+  no better, and leaves the underlying structural defect for a later
+  reviewer to name.
+```
+
+```markdown
 ### Thin self-containment in milestone descriptions — OUT
 
 - **Signature (observable signal):** Agent writes a one-line milestone
