@@ -197,6 +197,63 @@ The platform deliberately does NOT split `improvement.yml` into per-type templat
 
 ---
 
+## 5c. The Assumption-Handoff Convention (owner + closure-path)
+
+The 5-test rule lets an intake author defer a decision with `[ASSUMPTION – CONFIRM]` (T2 design deferral, T4 file-pointer deferral, T5 risk deferral). A deferred assumption is **not** a resolved assumption — and intake never resolves it. Every `[ASSUMPTION – CONFIRM]` an intake ticket carries must name **who owns the resolution** and **how it gets closed**, so that the assumption travels downstream as a *trackable, owned item* rather than a silent open question that a later stage discovers (or worse, never discovers) for itself.
+
+This is the general form of a convention the platform already ships for one class. The bug/root-cause class proves the shape: when a defect lands with an unknown cause, [`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md) §2 has intake emit, verbatim, `[ASSUMPTION – CONFIRM] <unknown cause> — owner: root-cause — to close: RCA per core/disciplines/root-cause-analysis.md` and **stop** — it does not root-cause inline (the boundary is [ADR-016](../../../core/ADRs/ADR-016-intake-front-door-architectural-boundary.md) §3). That `owner:` / `to close:` form is the convention; this section generalizes it from the single bug/unknown-cause class to **every** intake assumption, of any test class. It does not invent a parallel mechanism — it lifts the proven one to the full intake-assumption surface.
+
+### The convention (one rule)
+
+> **Every intake `[ASSUMPTION – CONFIRM]` carries a named owning later-stage and an explicit closure path, in the form:**
+>
+> ```
+> [ASSUMPTION – CONFIRM] <the assumption stated as a confirmable claim> — owner: <named later stage / discipline> — to close: <the explicit action + where it happens>
+> ```
+>
+> Intake records the assumption; it does **not** auto-resolve it. The named owner is the stage that has the context intake lacks; the closure path is the concrete action that turns the assumption into a confirmed fact (and, by doing so, closes the item).
+
+| Field | What it states | Drawn from |
+|---|---|---|
+| `[ASSUMPTION – CONFIRM] <claim>` | The assumption phrased as a single confirmable claim — not a vague worry. | The same marker the 5-test rule already uses (T2 / T4 / T5). |
+| `owner:` | The **named** later stage or discipline that resolves it (e.g., `Stage 5 Solutioning`, `Planning`, `root-cause`, `Stage 2 Triage`). Never "later" or "someone" — a named owner is the load-bearing word. | Generalized from `owner: root-cause` in `root-cause-analysis.md` §2. |
+| `to close:` | The **explicit** action that confirms the claim and where it happens (e.g., "design selected at Stage 5 per the §5 decision table", "file path confirmed in Planning", "RCA per core/disciplines/root-cause-analysis.md"). | Generalized from `to close: RCA per …` in `root-cause-analysis.md` §2. |
+
+**Owner by test class** (the routing already implied by §2 Failure routing, now made explicit as an owner):
+
+| Assumption arises from | Typical `owner:` | Typical `to close:` |
+|---|---|---|
+| **T2** — design deferred (HOW not committed at intake) | `Stage 5 Solutioning` | "design selected at Stage 5 per the §5 WHAT/HOW table; alternatives assessed for blast radius" |
+| **T4** — file pointer deferred (`TBD — identified in Planning`) | `Planning` | "affected file(s) confirmed in Planning before Engineering picks the issue up" |
+| **T5** — cross-issue / concurrent-work risk | `Stage 2 Triage` | "conflict checked at Triage dependency-validation; native `blocked-by` mirrored if real" |
+| **bug / unknown cause** (the proven class) | `root-cause` | "RCA per core/disciplines/root-cause-analysis.md" |
+
+### Intake never auto-resolves; Triage validates closure ownership
+
+Two halves of the same contract:
+
+- **Intake side (the output contract).** An intake ticket that *guesses* the answer to its own assumption — committing a design under a T2 deferral, naming a file it has not confirmed, declaring a risk "won't happen" — has auto-resolved an assumption it has no authority to resolve. The correct output is the owned, deferred form above. This is the intake-output contract: assumptions leave intake **open and owned**, never silently closed. (Mirrors the `intake-desk` hand-off discipline: emit the owner, stop, do not perform the downstream work inline.)
+- **Triage side (the validation).** Triage validates closure ownership before bundling: every `[ASSUMPTION – CONFIRM]` on an approved-queue ticket must carry a resolvable `owner:` and a concrete `to close:`. An assumption with no owner, or a `to close:` that is not a checkable action, is a Triage self-repair finding — Triage routes it back for an owner, exactly as it routes a T2 over-definition back for WHAT framing. This is the `owner: root-cause` triage check (["Triage of a root-cause-owned assumption" — the define/triage stage routes the assumption to its owner for closure before bundling](../../../core/disciplines/root-cause-analysis.md)) generalized: triage checks **every** assumption has an owner, not only the root-cause-owned one. Triage validates the *ownership*; it does not itself confirm the assumption (that is the named owner's job at its stage). See [`release/references/pipeline/stage-02-triage.md`](../pipeline/stage-02-triage.md) §6 Outputs / §7 Stage-Transition Gate (the issue-body state Triage validates before an issue may sit in the Approved queue).
+
+### Worked intake-output example
+
+A `[Process]`-type intake ticket whose Proposed Change cannot yet name the enforcement file, with a deferred design — both assumptions carried as trackable, owned items:
+
+> **### Proposed Change**
+> Add a closure-ownership check so every intake assumption names its resolver. Enforcement surface: `[ASSUMPTION – CONFIRM] the check lives in the Triage gate vs. a deploy-check — owner: Stage 5 Solutioning — to close: mechanism selected at Stage 5 per the §5 WHAT/HOW table (gate-step vs. CI check assessed for blast radius)`. Affected file: `[ASSUMPTION – CONFIRM] exact gate file TBD — owner: Planning — to close: file path confirmed in Planning before Engineering picks the issue up`.
+>
+> **### Acceptance Criteria**
+> - Every approved-queue ticket's `[ASSUMPTION – CONFIRM]` entries carry a named `owner:` and a checkable `to close:` (verify by reading the ticket body).
+>
+> **### Risks**
+> - `[ASSUMPTION – CONFIRM] may overlap the existing G1 enforcement set if both land same release — owner: Stage 2 Triage — to close: dependency conflict checked at Triage; native blocked-by mirrored if real.`
+
+Each assumption is a *trackable, owned item*: a reviewer reading the body sees who resolves it and what action closes it, and Triage can validate that ownership before the ticket bundles — without asking the author a single question. Intake committed the WHAT and the ownership; the named owners commit the HOW at their stages.
+
+`[SOURCE: core/disciplines/root-cause-analysis.md §2 — the proven owner:/to-close: hand-off form, generalized here from the bug/unknown-cause class to the full intake-assumption surface]`
+
+---
+
 ## 6. Cross-References
 
 This guide is the doctrine. The following docs are the enforcement surfaces:
@@ -205,6 +262,8 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 |---|---|---|
 | `release/references/pipeline/stage-01-intake.md` | §5 (Path A two-tier intake) | Path A applies the tier-selection test (Proposal vs. Observation tier) — the 5-test rule informs the tier choice. |
 | `release/references/pipeline/stage-05-solutioning.md` | §5 (Phase 0 Activation Gate) | Stage 5 activates when intake correctly defers HOW per T2; this guide tells authors when to defer. |
+| `release/references/pipeline/stage-02-triage.md` | §6 (Outputs), §7 (Stage-Transition Gate) | Triage validates closure ownership before bundling — every `[ASSUMPTION – CONFIRM]` must carry a resolvable `owner:` / `to close:` per §5c; an unowned assumption is a Triage self-repair finding. |
+| `core/disciplines/root-cause-analysis.md` | §2 (trigger), §4 (invocation points) | The proven `owner:` / `to close:` form (for the bug/unknown-cause class) that §5c generalizes to every intake assumption. |
 | `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05). |
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
 | `.github/ISSUE_TEMPLATE/improvement.yml` | Description, Proposed Change fields | Field descriptions point authors to this guide for the 5-test rule. |
