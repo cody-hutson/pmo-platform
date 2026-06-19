@@ -625,6 +625,52 @@ time and preempts the block-close protocol. This is the canonical pre-condition
 statement; future D-decision authors cite this section when their D-decision relies on
 manual closure timing.
 
+**Repo-Integrity Authoring Discipline (ADR + content-modifying spokes):**
+
+A spoke that authors or edits a durable-corpus markdown file — an
+`core/ADRs/ADR-NNN-*.md`, a skill `SKILL.md`, a `references/*.md`, a governance or
+standards doc — has its changed files scanned by two PR-time gates in
+`repo-integrity.yml` (defined in [`core/rules/git-workflow.md` § Repository-Integrity
+Gates](../../../core/rules/git-workflow.md)): the **Issue-reference validity** gate
+and the **Depersonalization** gate. These are SEPARATE from, and broader than, the
+PR-body close-parser discipline above — they scan file *content*, not the PR body.
+ADR files are the common tripwire because they carry `#N` in `source_observations:`
+frontmatter and `## Status` / `## Context` provenance prose — out-of-reference-block
+locations. The discipline (apply at authoring time, not after red CI):
+
+- **Author every issue cross-reference as bare `#N`, never a full
+  `github.com/.../issues/N` URL.** The full URL embeds the operator handle (trips
+  Depersonalization) and rots on repo move; bare `#N` clears both the depersonalization
+  and the issue-ref gates in one move.
+- **Declare the file-level marker once** near the top of any ADR/skill file that
+  carries a bare `#N` outside a recognized reference block (`### Issue References` /
+  `### References` / `## Related` / `## Provenance` / `### Source(s)`): an HTML comment
+  reading `repo-integrity: allow-issue-ref`, placed after the frontmatter / before the
+  title. (`## Related ADRs` is not the recognized `## Related` slug — use the marker,
+  not heading placement.)
+- This composes with the reference-durability discipline (`git-workflow.md` §
+  Reference Durability): the durability marker family (`allow-url`) and self-describing
+  prose are the durability twin of the integrity marker.
+
+For ADR-authoring and skill-authoring chips specifically, hub adds to
+`{ADDITIONAL_READS}`:
+- `core/ADRs/README.md § Repo-integrity authoring discipline (bare #N + allow-issue-ref marker, never full URLs)`
+- `core/rules/git-workflow.md § Repository-Integrity Gates (the two gates + override markers)`
+
+The Spoke Template scope-control section gains an explicit bullet for these chips:
+- When authoring or editing any `core/ADRs/*.md`, `SKILL.md`, or `references/*.md`
+  file, reference issues as bare `#N` (never a full GitHub URL) and declare the
+  file-level `repo-integrity: allow-issue-ref` marker after the frontmatter. Apply
+  this at authoring time — do not wait for a red CI run.
+
+This codifies the discipline ADR-016's red-CI failure surfaced (#426): the ADR
+tripped both the issue-reference-validity and depersonalization gates with full
+GitHub URLs + out-of-block `#N`, was fixed reactively, and left no up-front guidance.
+8 of the repo's ADRs now carry the marker by trial-and-error — this makes the rule
+explicit so the next spoke applies it first.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Chip Prompt Spec-Anchor Discipline:**
 
 When a chip prompt references a canonical source spec (parent issue, governance file, release plan, pipeline shard, standards doc), the chip prompt MUST direct the spoke to read the source DIRECTLY rather than embedding a hub-summary of the source content. Hub summaries are snapshots of hub understanding at chip-launch time; canonical sources remain authoritative as governance evolves between chip-launch and spoke-execution. When the snapshot diverges from the source — even subtly — the spoke produces work consistent with the snapshot, not the source.

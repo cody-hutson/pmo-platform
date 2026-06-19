@@ -177,6 +177,37 @@ New ADRs go to the ADRs/ subdirectory of the module that authored the decision:
 
 Decisions affecting multiple modules but rooted in core go to `core/ADRs/` with cross-references from the consumer modules.
 
+### Repo-integrity authoring discipline
+
+ADR files cross-reference issues constantly — `source_observations:` frontmatter,
+`## Status` / `## Context` provenance lines, `## Related ADRs` — and two PR-time
+`repo-integrity.yml` gates (defined in [`core/rules/git-workflow.md` §
+Repository-Integrity Gates](../rules/git-workflow.md)) scan every changed markdown
+file. Author every ADR to satisfy them up front, not by red CI:
+
+1. **Reference issues as bare `#N`, never a full GitHub URL.** A
+   `github.com/<owner>/pmo-platform/issues/N` URL embeds the operator handle and
+   trips the **Depersonalization** gate; a bare `#N` carries no handle. Bare `#N`
+   also keeps the reference resolvable-in-repo, which the **Issue-reference
+   validity** gate requires (it rejects redirects, PR numbers, and 404s). One rule —
+   bare `#N` — clears both gates.
+2. **Declare the file-level marker once, near the top of the file.** Because ADRs
+   place `#N` in frontmatter and body prose — locations the issue-ref gate does NOT
+   treat as reference blocks (it recognizes only `### Issue References` /
+   `### References` / `## Related` / `## Provenance` / `### Source(s)`) — add the
+   marker as an HTML comment after the frontmatter and before the title:
+   `repo-integrity: allow-issue-ref` (wrapped in an HTML comment). Note `## Related
+   ADRs` is NOT the recognized `## Related` slug, so do not rely on heading
+   placement — the file-level marker is the reliable mechanism.
+3. **This composes with reference-durability** (same file, § Reference Durability):
+   lead with self-describing prose and demote a bare `#N` to a provenance footnote,
+   so the ADR still reads correctly after issues renumber or the repo moves. The
+   `## Repository-Integrity Gates` section of `git-workflow.md` is the canonical
+   worked example — it stacks all three markers at the top of the file.
+
+The same discipline applies to skill `SKILL.md` and skill `references/*.md` files,
+which are equally durable-corpus and equally scanned by both gates.
+
 ## Status enum
 
 ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions):
