@@ -6,7 +6,7 @@ issues: ["#412"]
 pr: "#424"
 links:
   plan: release/releases/plans/intake-elicitation-skill_RELEASE_PLAN.md
-  log_anchor: "#deployment-log-intake-elicitation-skill"
+  log_archive: "logs/intake-elicitation-skill.md"
 reversibility-tier: CHEAP
 themes: ["cluster:skill-modes"]
 summary: "New conversational intake skill (intake-desk) turns a half-formed idea into a correctly-typed, correctly-placed work item logged to the tracker — never a scratch file. Version-less release (no vX.Y, no git tag, no GitHub Release)."
@@ -72,7 +72,7 @@ CHEAP / HIGH confidence. The release is purely additive — a new skill director
 
 **Process note** — single-branch (D-C SINGLE) via one release PR (#424), Release Class `novel`, version-less per operator decision at Stage 4 following the `public-flip-install-blockers` precedent. Stage 5 was re-solutioned at rev 2 on the operator's PR review, folding twelve design deltas (headline: renamed `intake-elicitor` → `intake-desk`; dropped the `adr` type; one item per request with a body decomposition callout; binary AskUserQuestion confirm with clarity-based exit; altitude-as-confirmed-assumption; owned-assumption handoff; domain-adaptive technique selection; tool-agnostic process with a labeled GitHub MVP). DT/QA found 5/5 ACs PASS; Stage 13 re-confirmed 5/5 against merged main. No signed-annotated tag and no GitHub Release (version-less).
 
-For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-intake-elicitation-skill) and [the release plan](../plans/intake-elicitation-skill_RELEASE_PLAN.md).
+For full implementation detail see the [RELEASE_LOG.md entry](../logs/intake-elicitation-skill.md) and [the release plan](../plans/intake-elicitation-skill_RELEASE_PLAN.md).
 
 ### References
 

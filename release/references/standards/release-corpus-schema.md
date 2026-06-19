@@ -65,8 +65,11 @@ Validator MUST discriminate by `type:` value and apply the type-specific require
 links:
   plan: release/releases/plans/<filename>.md     # required on notes; null on plans
   note: release/releases/notes/<filename>.md     # required on plans (after note authored at Stage 13); null on plans pre-Stage-13
-  log_anchor: "#vX-Y-slug"                            # required on both — fragment ID in RELEASE_LOG.md (slug derived from version key)
+  log_anchor: "#vX-Y-slug"                            # ACTIVE releases — fragment ID in the active RELEASE_LOG.md (slug derived from version key)
+  log_archive: "logs/<keyslug>.md"                    # ARCHIVED releases — relative path to the per-release archive file (replaces log_anchor once the row is archived out of the active LOG)
 ```
+
+**`log_anchor` vs `log_archive` (active+archive split, #48):** a release carries `links.log_anchor` while its Deployment-Log block lives in the active `RELEASE_LOG.md`. When the row is archived out of the active head into `release/releases/logs/<keyslug>.md` (per the Stage 13 archive sweep — see [release-process.md § Stage 13](../../governance/release-process.md)), the Stage 13 spoke replaces `log_anchor` with `log_archive` (the relative path to the archive file), and rewrites any inline `../RELEASE_LOG.md#<anchor>` note link to `../logs/<keyslug>.md`. Exactly one of the two keys is present per release: `log_anchor` for active rows, `log_archive` for archived rows. `<keyslug>` = the version key (`v1.08`) for versioned releases or the milestone slug (`public-flip-install-blockers`) for version-less ones.
 
 Bidirectional invariant: if `plan_X.links.note` resolves to `note_Y`, then `note_Y.links.plan` MUST resolve back to `plan_X`. The schema validator enforces this round-trip on every release-corpus pair. Forward-only: pre-cutover plans without notes (or vice versa) are exempt until F-3 backfill executes.
 

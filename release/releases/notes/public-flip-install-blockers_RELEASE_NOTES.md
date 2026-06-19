@@ -6,7 +6,7 @@ issues: ["#606", "#607", "#608", "#609", "#610", "#611", "#612", "#613", "#614",
 pr: "#627"
 links:
   plan: null
-  log_anchor: "#public-flip-install-blockers"
+  log_archive: "logs/public-flip-install-blockers.md"
 reversibility-tier: CHEAP
 themes: ["cluster:bootstrap", "cluster:session", "cluster:validate", "cluster:update"]
 summary: "Fresh-install / onboarding blockers gating the private->public flip. Fixes the headline launch blocker (a fresh install deployed ZERO skills) and the no-Cowork hard-fail, plus a config-first install-path resolver (ADR-013), honored sandbox overrides, two-hash managed-section tamper detection (ADR-014), a wired update.sh no-change exit, validate-install.sh false-positive repairs, deploy.sh --check/--report fixes, count-convention reconciliation, .version reconciliation to the v3.x tag scheme, deploy-test harness hygiene, and a repaired-and-wired version-skew notifier. Version-less release (no vX.Y, no git tag); #632 folded in as a post-GO fast-follow; #265 verified no-op."

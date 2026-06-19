@@ -6,7 +6,7 @@ issues: ["#356", "#357"]
 pr: null
 links:
   note: null
-  log_anchor: "#memory-to-corpus-codification"
+  log_archive: "logs/memory-to-corpus-codification.md"
 reversibility-tier: CHEAP
 themes: ["epic:knowledge-corpus", "cluster:process-protocol", "cluster:documentation"]
 ---

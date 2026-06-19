@@ -6,7 +6,7 @@ issues: ["#1", "#345", "#346"]
 pr: null
 links:
   note: null
-  log_anchor: "#domain-aware-stage5-design"
+  log_archive: "logs/domain-aware-stage5-design.md"
 reversibility-tier: CHEAP
 themes: ["cluster:pipeline-definitions", "cluster:knowledge-architecture"]
 domain_practice: "{ source: N/A — pipeline-internal release, date: 2026-06-07, domain: governance }"

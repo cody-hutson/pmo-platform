@@ -6,7 +6,7 @@ issues: ["#314", "#169", "#130"]
 pr: "#745"
 links:
   plan: release/releases/plans/cross-reference-integrity-ci_RELEASE_PLAN.md
-  log_anchor: "#deployment-log-cross-reference-integrity-ci"
+  log_archive: "logs/cross-reference-integrity-ci.md"
 reversibility-tier: CHEAP
 themes: ["epic:governance-hygiene", "cluster:automation"]
 summary: "Three PR-time reference-integrity CI gates go live (warn-mode-initial): positional #N parity with the hook, a link-check gate, and a forward IMP-XXX / skill-count drift gate. Version-less."
@@ -63,7 +63,7 @@ CHEAP / HIGH confidence. The whole release reverses with a single `git revert -m
 
 **Process notes** — version-less identifier (operator decision at the Stage 12 gate; no `vMAJOR.MINOR`, no git tag, no GitHub Release; `.version` unchanged), `novel` release class (Deep Stage 9 review; 30-day outcome window), single-branch D-C SINGLE with the plan committed as Engineering Commit 0 and serialized per-issue commits in the #314 → #169 → #130 order. The release PR #745 merged with 21/21 CI green; the deploy was a near-no-op (zero changed skills/packages/harness — `deploy.sh --deploy` reported nothing to deploy), and the primary checkout fast-forwarded to the merge SHA `5ebec77`.
 
-For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-cross-reference-integrity-ci) and [the release plan](../plans/cross-reference-integrity-ci_RELEASE_PLAN.md).
+For full implementation detail see the [RELEASE_LOG.md entry](../logs/cross-reference-integrity-ci.md) and [the release plan](../plans/cross-reference-integrity-ci_RELEASE_PLAN.md).
 
 ### References
 
