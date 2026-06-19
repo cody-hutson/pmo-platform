@@ -8,6 +8,17 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.03] - 2026-06-18
+
+A repeatable factory for building role-scoped agent skills from a single structured "feeding document" now exists end to end, and the first two role agents built on it ship: a Technical Program Manager and a Program Coordinator. Two skill-build cards; everything is additive — no existing skill, setting, or behaviour is removed or renamed.
+
+### Added
+
+- **Two new role agents.** A Technical Program Manager agent (composes the technical-review and delivery skills) ties a program's technical risk to its delivery plan, and a Program Coordinator agent (composes the tracker and daily-status skills) keeps a program's trackers and status cadence in lockstep. *Why it matters:* you can ask for a program-level technical-readiness read or a tracker-to-status coherence check directly instead of assembling it by hand. ([#185](https://github.com/cody-hutson/pmo-platform/issues/185))
+- **Role-skill factory foundation.** The skill builder accepts a single feeding document describing a role and produces the skill from it, drawing on five new shared building-block files, with the 14-section feeding-document format locked so later role agents build against a stable contract. *Why it matters:* the next role agents arrive faster and more uniformly because the plumbing every role build depends on is in place and proven. ([#186](https://github.com/cody-hutson/pmo-platform/issues/186))
+
+[Full notes](release/releases/notes/v2.03_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.03)
+
 ## [v2.02] - 2026-06-18
 
 The release pipeline's bundling stage now enforces capacity and sizing as gates rather than written guidance: an oversize milestone is caught and routed to a split or tighter merge, a poorly-parsing release plan is held before it advances, capacity is weighed by release ceremony, and the release log records per-release velocity. Four governance/spec/schema cards; everything is additive — no existing setting, field, or behaviour is removed or renamed.
