@@ -40,6 +40,10 @@ After `gh pr merge` from within a worktree, DO NOT run `git checkout main && git
 - `git worktree remove $(pwd)` (from outside the worktree) — removes the worktree entirely
 - Create a throwaway branch: `git checkout -b claude/post-merge-cleanup-$(date +%s)` — any branch name other than main
 
+**Harness-spawned worktrees are not `EnterWorktree` sessions.** A worktree created by the spawned-session harness (under `.claude/worktrees/<name>/`) is not entered via the `EnterWorktree` tool, so `ExitWorktree` is a no-op against it — re-anchor manually (detach the HEAD or create a throwaway branch as above; prefer the `git branch -d` safety-belt over `-D` so an unmerged branch is not silently dropped). Do not depend on `ExitWorktree` to release main.
+
+**Sweep-deletion safety (removing other sessions' worktrees).** When sweeping merged-no-active-work worktrees, sessions self-reap mid-task — a worktree present at scan time may be gone moments later. So: (a) re-pull / re-list the worktree set immediately before deleting each target, never act on a stale scan; (b) gate any force-removal on a clean dirty-check; (c) verify liveness per live process rather than by lock-file presence — lock files may be ABSENT even for a live session (`lsof -a -d cwd -p <pid>` for each live session PID is the load-bearing check; an absent lock file is not evidence the worktree is free). The automated `cleanup-orphan-state.sh` path (§ PR Process step 10) implements all three; hand-rolled sweeps must honor the same three.
+
 ### Post-merge primary sync
 The primary checkout MUST always sit at `origin/main` — this is a standing invariant, not a courtesy. An unsynced primary (detached HEAD, behind, or dirty) actively breaks the user's local repo workflows; treat it as a defect to fix, not a state to work around. The invariant holds regardless of who merged the PR.
 

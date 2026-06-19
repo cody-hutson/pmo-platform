@@ -191,6 +191,12 @@ An Initiative GitHub Issue captures **tracked work + dependencies** for an initi
 
 This framework cites C13's definition; it does not redefine ADR semantics. Any ADR-related convention this framework appears to assert (e.g., the deferred-decision-stub pattern in §7.5) is a roadmap-side convention for how a roadmap references *future* ADRs, not a redefinition of ADR mechanics.
 
+### 4.5 Umbrellas are roadmap-governed, never milestoned
+
+The architected path across milestones — the umbrella for a multi-milestone initiative — is governed by a roadmap (this framework), not by a milestone. A milestone is a release-bundle of work that lands together; it is not the home for the cross-milestone capability arc. Creating a milestone *to represent the umbrella itself* is a category error: it conflates the bundling unit (§4.1 Initiative GitHub Issue / milestone — "what lands when") with the architected path (§4.2 Roadmap — "what we are trying to deliver across N milestones").
+
+The correct decomposition: the **roadmap** holds the umbrella (Now/Next/Later sequence, Capability Outcome, Sunset Criteria); the **Initiative GitHub Issue** (with its `initiative:`/`cluster:` label) aggregates the tracked sub-work; and each **milestone** bundles a release-sized slice of that work. An umbrella that has been given a milestone of its own — rather than a roadmap entry plus per-slice milestones — is mis-homed; route it back to a roadmap and let the milestones carry only the bundled slices. This is the §4.1-table boundary applied to the umbrella case: the umbrella is a Living roadmap concern, and a milestone is the wrong artifact class to carry it.
+
 ## 5. Forcing Function — Event-Bound Triggers + Calendar Fallback
 
 A Living artifact rots into a v1 snapshot without a forcing function. This framework requires every roadmap to specify **four event-bound triggers** plus a **90-day calendar staleness fallback**.
