@@ -67,6 +67,20 @@ If a preflight operation (e.g., "folder expected on main doesn't exist in my wor
 - OR `git fetch origin main` within your worktree, then `git merge origin/main`
 - OR read files via absolute path; no git state-change needed
 
+## Worktree Scope — Domain Boundary
+
+Worktrees are for **platform-engineering work** — changes that become a tracked-repo commit/PR (skill definitions, governance, references, hooks, deploy/CI, schemas). They are **not** for **operations-domain work** — the Layer-2, git-ignored operations tree (project artifacts, transcripts, communications drafts, tracker/status updates, project-processing runs). Operations-domain work runs in the operations domain **directly**, not from a platform worktree.
+
+**Why.** A worktree adds branch/path overhead — branch confusion, path-relative file ops, stale context against the operations workspace — that buys nothing when the work never touches platform code. Isolating operations artifacts inside (or framing them against) a platform branch misfiles them.
+
+**How to apply.**
+- If a session opens in a worktree but the first task is operations-domain work, say so immediately and offer to exit the worktree (`ExitWorktree`) before proceeding.
+- Default for operations-domain work: operate in the operations domain directly (never a worktree).
+- A worktree is correct only when the task produces a platform-repo change (code, skills, governance, references, hooks, CI).
+- If unsure, confirm before continuing — better to check than to run a whole operations task from the wrong working directory.
+
+This is the worktree projection of the Layer-1 (Engineering) / Layer-2 (Operations) boundary in [operations-bridge.md](operations-bridge.md); §Primary Checkout Discipline above governs worktree *mechanics*, this section governs *which domain's work belongs in a worktree at all*.
+
 ## PR Process
 1. Create feature branch from main
 2. Make changes, commit with descriptive messages
