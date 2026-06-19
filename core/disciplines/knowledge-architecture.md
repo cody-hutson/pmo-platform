@@ -160,6 +160,8 @@ This section names **which surface is the source of truth (SSOT) when a fact cou
 
 Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a different org/project ⇒ K1 ⇒ corpus-SSOT; otherwise it is K2–K5 contextual and its SSOT is the placement-model home in §3. The auto-memory store is the §3 home for K5-tacit only.
 
+**Position in the memory architecture.** This boundary is the **Knowledge cut** of the platform's four-type memory model — *Work* (active projects/tasks → operational state), *Knowledge* (domain expertise, frameworks → codified, corpus-SSOT), *People* (contacts/relationships → a net-new surface), and *Learning* (patterns/what-works → tacit/situated K5, memory-store-SSOT). Codified Knowledge is corpus-SSOT; the Learning class is memory-store-SSOT; the encode-and-evict lifecycle below is the *graduation* path between them. The architecture, the rejected alternatives, and the extensibility to the other three types are recorded in [ADR-028](../ADRs/ADR-028-memory-corpus-ssot-boundary.md); the whole model slots into the platform's broader cross-surface memory-architecture epic.
+
 <!-- repo-integrity: allow-memory-ref -->
 
 ### The two-tier SSOT assignment {#two-tier-ssot}
