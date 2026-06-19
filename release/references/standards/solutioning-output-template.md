@@ -164,6 +164,74 @@ Decisions below the threshold may be documented inline in `#### Design Decisions
 - ADR opened for non-D-class decision (audit-trail bloat)
 - ADR opened but not referenced from `#### ADR Pointers` (orphan ADR)
 
+## § 3.5 The Solutioning Pre-Read (advisory, non-binding)
+
+A Stage 5 spoke MAY post a **Solutioning pre-read** — a rich pre-implementation
+analysis comment on the **parent issue** at Stage 5 entry, to orient the
+implementing agent before Engineering picks the issue up. The pre-read is a
+**distinct artifact** from the § 3 seven-section output frame and from the § 3
+"Optional preamble": the output frame is the spoke's *deliverable* posted on the
+sub-task; the pre-read is *advisory orientation* posted on the parent issue.
+
+**The issue body remains the sole authoritative contract.** Per
+[`ticket-information-architecture.md` § Source of Truth](../specs/ticket-information-architecture.md)
+— "the issue body is the single authoritative record of what this issue IS", and
+stage-review comments form an immutable audit trail that is NOT body content —
+the pre-read NEVER modifies the issue's Acceptance Criteria, Proposed Change, or
+Affected Files. Those remain the contract. The pre-read is structurally a
+Stage-5 comment, so it already lives in the comment lane by that doc's rule; no
+downstream stage reads it as scope.
+
+**Required banner (the demarcation rule that makes the comment non-binding).**
+A pre-read MUST open with the load-bearing banner line and MUST close with a
+re-verify line:
+
+```markdown
+🧭 **Solutioning pre-read — ADVISORY, not scope**
+
+Early design analysis to orient the implementing agent. It does **not** modify
+this issue's Acceptance Criteria, Proposed Change, or Affected Files — those
+remain the contract. Treat everything below as a starting point to **verify
+against live state**, not a commitment. Line refs are as-of intake and must be
+re-checked on the current `main`.
+
+<... advisory analysis ...>
+
+*Re-verify all paths and line numbers before acting; this pre-read is advisory
+context, not the issue contract.*
+```
+
+- **Load-bearing tokens** (greppable demarcation): the literal banner string
+  `Solutioning pre-read — ADVISORY, not scope`, an explicit one-sentence "does
+  not modify AC / Proposed Change / Affected Files" statement, and the closing
+  "advisory context, not the issue contract" re-verify line. The 🧭 emoji is
+  OPTIONAL ornament — the string tokens carry the convention, so the convention
+  stays greppable without the emoji.
+- **Term disambiguation.** "ADVISORY" here means the pre-read is **non-binding
+  relative to the issue-body contract** — distinct from the adversarial-design-review
+  (RC-5) sense on the Stage-5 surface (see
+  [`pipeline/stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md)
+  Phase A6.5, where adversarial findings are "advisory" meaning **non-gating
+  relative to Collective Review**). Pre-read = non-binding vs. the body; RC-5 =
+  non-gating vs. the operator's scope-lock.
+
+**Worked example:** the operator-authored "Solutioning pre-read — ADVISORY, not
+scope" comment on issue #545 is the canonical specimen of this convention.
+
+**Mirror (intake-authority pair).** This convention governs Stage-5-*emitted*
+advisory context (non-binding; the body stays the contract). Its mirror —
+[`intake-style-guide.md`](../how-to/intake-style-guide.md) § 5c (The
+Assumption-Handoff Convention), issue #427: intake-*emitted* `[ASSUMPTION –
+CONFIRM]` assumptions, directional and owned downstream via `owner:` /
+`to close:` — governs the intake side. Same intake-authority theme, different
+emitting stage, so the two homes diverge by stage and compose by
+cross-reference. Together they complete the intake-authority
+WHAT-vs-HOW-vs-advisory boundary under epic #497.
+
+**Omission is the correct non-ceremony signal.** The pre-read is optional — a
+spoke with no rich pre-implementation analysis to convey simply does not post
+one. Omission carries no penalty.
+
 ## § 4. Composition Seams
 
 The Stage 5 output comment composes with three other standards. Each composition seam is one specific H3 section in the comment frame; the composition rule is documented here.
@@ -384,6 +452,7 @@ The template codifies the empirical pattern that emerged organically across prio
 | Version | Date | Change | Issue |
 |---|---|---|---|
 | Initial | 2026-05-24 | Initial authoring — milestone Key AC #1 deliverable; codifies the 7-section comment frame, 4 required content buckets, composition seams with R1 + Tier-A + Stage 5→6 contract, and the literal copy-paste scaffold | — |
+| — | 2026-06-19 | Add § 3.5 The Solutioning Pre-Read — advisory/non-binding convention (banner demarcation rule, sole-contract composition with the ticket-information-architecture source-of-truth rule, RC-5 term disambiguation, #545 worked example, intake-style-guide § 5c mirror) | #546 |
 
 Future revisions append rows here. Per workspace precedent (git is canonical retention), this table is a navigation aid, not a parallel snapshot.
 

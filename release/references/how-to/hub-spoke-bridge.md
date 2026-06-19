@@ -859,6 +859,27 @@ The chip uses `subagent_type: pmo-adversarial` and `isolation: "worktree"` (read
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Stage 5 Chip Pattern — Solutioning Pre-Read Discipline:**
+
+When the hub authors a Stage 5 Solutioning chip prompt AND the issue carries
+rich pre-implementation analysis worth conveying to the implementing agent, the
+chip MAY direct the spoke to post a **Solutioning pre-read** on the parent issue
+per [`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md).
+The pre-read is ADVISORY and non-binding — the issue body stays the sole
+authoritative contract (per `ticket-information-architecture.md` § Source of
+Truth, "the issue body is the single authoritative record"); no downstream stage
+reads the pre-read as scope. The instruction is OMITTED (no ceremony) when the
+issue has no rich pre-read analysis to convey — the same non-ceremony omission
+signal the Design-Exploration chip pattern uses.
+
+Required chip-prompt content — when the pre-read predicate holds, the chip MUST
+embed:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"If you have rich pre-implementation analysis to orient the implementing agent, post a Solutioning pre-read comment on the PARENT issue #N per [`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md): open with the banner `🧭 **Solutioning pre-read — ADVISORY, not scope**`, state explicitly that it does NOT modify Acceptance Criteria / Proposed Change / Affected Files (the issue body remains the sole contract), and close with a re-verify line. The pre-read is advisory context, never scope."*
+2. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/standards/solutioning-output-template.md § 3.5 (Solutioning Pre-Read — advisory/non-binding banner + worked example #545)`.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Stage 13 Chip Pattern — Release-Notes Authoring Discipline:**
 
 When the hub authors a Stage 13 Close chip prompt, the prompt MUST instruct the spoke to author `release/releases/notes/vX.Y_RELEASE_NOTES.md` per [`release-notes-standard.md`](../standards/release-notes-standard.md) (9-section format). The user-facing release note is a distinct artifact from `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` (engineering audit trail) and the release plan file (implementation audit trail) — per [`release/governance/RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) Close phase (line 53), all three artifacts are authored at Stage 13 Close. [`release-process.md` Stage 13 Outputs](../../governance/release-process.md) already specifies the gate (*"Milestone close gates on note presence + structural lint pass"*); this subsection ensures the chip-prompt-level mandate matches the spec-level requirement.

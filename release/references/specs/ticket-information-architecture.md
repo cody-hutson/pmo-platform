@@ -69,6 +69,12 @@ The issue body is the single authoritative record of what this issue IS. It is s
 - Discussion and back-and-forth — comments (conversation thread)
 - Temporal observations — comments (timestamped naturally)
 
+> **See also:** the Solutioning Pre-Read convention
+> ([`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md))
+> relies on this rule — a Stage-5 advisory pre-read posted on the parent issue
+> is a stage-review comment (non-binding context), never body content; the issue
+> body stays the sole authoritative contract.
+
 ### Dependencies Field — Typed Schema (PMBOK CPM convention)
 
 The body `### Dependencies` section supports typed dependency edges per the PMBOK CPM convention. Type prefix and offset are optional; untyped references default to `FS+0d` (finish-to-start, zero lag) and remain backward-compatible.
