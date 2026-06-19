@@ -3724,7 +3724,16 @@ cmd_check() {
       # grep exits 1 when the log carries no matching version rows; guard so the
       # empty enumeration is tolerated rather than aborting under set -e + pipefail.
       local c32_rows
-      c32_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null \
+      # Union-aware row source (#48 + DT-fix): the active+archive split moves the
+      # cutover anchor (v1.01) out of the active LOG; an active-LOG-only walk leaves
+      # the cutover-arm permanently unarmed, so the per-row INDEX/DIGEST/NOTES + (g)
+      # archive-completeness assertions run on ZERO rows (vacuous green). Source the
+      # walk from active LOG UNION the per-release archive files (logs/*.md),
+      # archive-first so a cutoff-matching row (v1.01) leads and the arm flips —
+      # matching the union the Check 23 generator (generate_release_index.py) already
+      # performs over the same split.
+      c32_rows=$( { /usr/bin/grep -hE '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_logs_dir"/*.md 2>/dev/null
+                    /usr/bin/grep -hE '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null ; } \
         | /usr/bin/awk -F ' \\| ' '{
             v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
             ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
