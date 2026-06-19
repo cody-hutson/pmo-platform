@@ -1,5 +1,22 @@
 # PMO Feeding-Document Format — v0.2
 
+## Format Lock — v0.2 (post-Phase-1)
+
+**This format is locked.** As of the **Phase 1 calibration** (the TPM + Program Coordinator pilot builds — `pmo-technical-program-manager` and `pmo-program-coordinator`), the v0.2 feeding-document format is **format locked**: it was proven on the two autonomy/complexity extremes before the role-skill factory scales up, and is now frozen.
+
+**Build-time field set (the locked set).** The locked format implements exactly the **12 build-time field changes** — **{CS-01, CS-02, CS-03, CS-04, CS-05, CS-06, CS-07, CS-08, CS-09, CS-10, CS-11, CS-13}**. This is the precise set, **not** a contiguous "CS-01…CS-13" range: **CS-12 and CS-14 do not exist** in the canonical correction table, and stating the range contiguously would freeze that imprecision into the locked format.
+
+**CS-15 (cross-boundary influence) — resolved by Phase 1 calibration.** CS-15 was deferred (canonical epic KDD-9) to Phase-1 pilot calibration; it is **not** a build-time field and is **not** promoted into the 12-field set above. The two pilots calibrated it as a **§8 (Cross-Skill Integration) refinement**, and both independently demonstrated the same finding: a thin Specialist that composes ≥2 function-skills **requires an explicit cross-boundary-influence rule** — it must declare how one composed skill's output gates or feeds another composed skill's invocation, because that influence edge is the Specialist's defining synthesis (without it the Specialist degrades into two parallel passes the operator could have run separately).
+
+- **TPM calibration case:** a `pmo-technical-analyst` risk finding gates a `delivery-engine` DoR/DoD decision — the edge must be named (finding → gate it gates → gating relationship), not absorbed into two disconnected passes.
+- **Program Coordinator calibration case:** `tracker-manager` state feeds the `daily-status` carry-forward — a disagreement between the two is a data-integrity divergence the role must surface for operator adjudication, not silently reconcile.
+
+**CS-15 resolution (recorded in the locked format):** §8 of a feeding document for a composing Specialist **must** declare the cross-boundary influence edges between its composed skills (which composed skill's output gates/feeds which other composed skill's invocation), and the produced SKILL.md must surface those edges in its `## Composition` section and the relevant modes. This is the calibrated rule the two pilots ratified; it folds into the locked format as the §8 cross-skill-integration obligation for composing Specialists. CS-15 stays excluded from the build-time CS field set.
+
+**Change discipline — post-Phase-1 changes require a governance update.** Now that the format is locked, **any change to this v0.2 feeding-document format** (a new or altered section, a new CS field, a change to the build-time set, a change to the persona-baseline composition, or to the §8 cross-boundary-influence rule) is a governance-class change: it requires a **GitHub Issue + implementation plan + operator approval** per the CLAUDE.md **"No ungoverned changes"** guardrail before it is made. The lock is enforced by **this repo note plus the No-ungoverned-changes governance rule** — the durable, version-controlled surfaces a future role-skill build reads. (The Phase-1 calibration *evidence* — what the 2 pilots taught about the format — is additionally captured operator-local in the Skills-Map CARRY-FORWARD per the Phase-1 acceptance criteria; that operator-local surface is **not** a repo-verifiable gate and is not claimed as one here — the repo note + governance rule are the enforceable lock.)
+
+---
+
 ## Usage
 
 A **feeding document** is a filled, role-specific input that drives `pmo-skill-refiner`'s **`## Workflow — Consume Feeding Document`** path (the pre-Interview input branch of Mode 2 / Create New). One filled feeding document per role-Specialist skill: it carries everything the interactive Interview Q1–Q9 would have captured, so the refiner can generate the SKILL.md by *parsing* the document rather than *interviewing* the operator.
