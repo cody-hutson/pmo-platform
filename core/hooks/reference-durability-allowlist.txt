@@ -70,6 +70,15 @@ core/schemas/entity-field-schemas.md
 # the gate's plan-path predicate covers `*_RELEASE_PLAN.md` only.
 release/releases/plans/
 
+# Per-release archive ledger + note citations (active+archive split). logs/<keyslug>.md carries
+# each archived release's moved (byte-identical) Deployment-Log block — by construction it
+# reproduces the ledger's release-scope issue refs, cutover apparatus, and active-ledger back-link;
+# same ledger-surface exemption class as release/releases/archive/ and RELEASE_LOG.md itself.
+# notes/ carries the per-release citations, incl. the archived-release logs/<key>.md links — the
+# same artifact class as plans/ that the plan-path predicate left uncovered.
+release/releases/logs/
+release/releases/notes/
+
 # A6.5 detection-predicate lines — pre-existing #N-shaped patterns on touched lines.
 # stage-02-triage.md's A6.5 management-task detection table (~lines 167-168) carries
 # #-shaped patterns the issue-ref detector cannot distinguish from a bare GitHub issue
