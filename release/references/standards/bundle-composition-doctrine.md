@@ -1,8 +1,8 @@
 ---
 title: Bundle Composition Doctrine
 type: standard
-version: v11.27
-purpose: Codifies the agent-readable methodology for deciding WHAT belongs in a given milestone and WHY those items cohere as a shippable unit — the 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + sequence rules
+version: v11.28
+purpose: Codifies the agent-readable methodology for deciding WHAT belongs in a given milestone and WHY those items cohere as a shippable unit — the 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + risk-weighted capacity model + sequence rules
 parallel_to:
   - reference/explanation/discovery-discipline.md
   - reference/specs/release-class-taxonomy.md
@@ -149,9 +149,35 @@ Total story points (XS=1 / S=2 / M=4 / L=8 / XL=16). Target **15-25 pts per slic
 
 Thresholds are MEDIUM confidence — **`[CALIBRATE-AFTER-3]`** per the RELEASE_LOG calibration trigger. Review thresholds after 3 subsequent releases close.
 
+**This point-band is the primary capacity ceiling; it governs.** The Stage 3 Bundle capacity heuristic of "5-8 issues per release" (`stage-03-bundle.md` § 5 Phase A4) is a **secondary readability/coordination heuristic, not an independent hard cap.** The two are complementary, not contradictory: a bundle within the point-band may exceed 5-8 small issues, and a bundle of 5-8 large issues may exceed the point-band — in which case the (risk-weighted) point-band governs. This is the single sizing source; Phase A4 cross-references here rather than asserting a parallel ceiling.
+
 - **(current default frame — see § 1):** SAFe team capacity heuristic — story points fit per iteration; small-batch principle (smaller batches = faster feedback = lower risk) inherited from F2 Continuous Delivery (§ 1.2 alternative frame surveyed).
 - **Composes with:** decomposition-review enforcement — G2-11 (Triage) + G3-12 (Bundle) COMPOSITE-OR predicate fires on `size:XL` OR declared decomposition hooks OR AC count ≥ 7 OR Affected Files count ≥ 5. This doctrine is **positive guidance** (target band); gate enforcement (positive guidance vs predicate firing) is the decomposition-review gate.
+- **Per-milestone enforcement:** the risk-weighted membership sum (`effective_pts`, defined in the Step 5 Risk-Weighting sub-block below) is gated by **G3-15** (`gate-criteria-spec.md § Gate 3`) at the Bundle→Planning boundary — the per-milestone-sum complement to the per-issue G2-11 / G3-12 decomposition predicate. On breach G3-15 routes to the § 4 tight-merge or the § 3 Step 5 split/merge/reframe disposition above (not a dead-end fail), reading the SAME `release_size_target_pts` band and `release_class_capacity_weights` config so the modeled target and the enforced bound are a single source.
 - **Output:** total pts + disposition + (if split) sub-slice list.
+
+#### Step 5 — Risk-Weighting (Release-Class capacity multiplier)
+
+The raw point sum measures *complexity*. A release also carries *ceremony* — coordination, review depth, and rollback risk — that scales with the milestone's Release Class (the orthogonal axis declared at Phase B3; see § 7 and the release-class taxonomy). Risk-weighting modulates the size-check so a higher-ceremony release's raw points count for more against the same band:
+
+```
+effective_pts = round_half_up( sum(member_pts) * class_weight )
+```
+
+- **`sum(member_pts)`** uses the same point scale as the size-check above (no separate scale).
+- **`class_weight`** resolves from the milestone's declared `## Release Class` (gate G3-10 guarantees the field is present and is one of the four CLOSED enum values), falling back to the configured default release class when absent. The per-class weights — `routine` the identity baseline, `novel` and `cross-cutting` weighted progressively heavier (more ceremony), `hotfix` weighted lighter than baseline (narrow but still real corrective risk) — live as the single numeric home in the `[bundling].release_class_capacity_weights` field of `core/config/platform-config.toml.template`, resolved per the 5-rung cascade. This sub-block cites those weights **by role and does not restate the numbers** (parameterize-over-hardcode); the config field carries the canonical values + the validity rule.
+- **Rounding mode is round-half-up** — definitively, at this definitional home: a `.5` result rounds away from zero (e.g., `22.5 → 23`), NOT banker's round-half-to-even. Every consumer of `effective_pts` (the size-check here, any per-milestone size-bound enforcement gate, and any velocity-instrument field that records the value) MUST take the rounding mode by reference from this sub-block and never re-derive it, so a producer and an enforcer cannot disagree at a half-integer boundary where the band edge (e.g., the 25-pt ceiling) flips disposition.
+- **`effective_pts` is evaluated against the same `[bundling].release_size_target_pts` band using the disposition table above** — no new disposition rows. The asymmetry IS the risk-weighting: a `cross-cutting` bundle whose raw points sit at the top of the target band resolves to an `effective_pts` above the ceiling and fires the ">25 split" disposition where raw points would have read "target band."
+
+**Multi-trigger class resolution** is already governed by the release-class taxonomy (a single declared class per milestone); the weight reads that one declared class, so risk-weighting adds no new resolution logic.
+
+**Capacity-altitude boundary (release-bundle ≠ delivery-team).** Release-bundle capacity (this model) sizes a release's scope-commit in story points modulated by Release Class ceremony. It is NOT delivery-team capacity: available-hours, focus-factor, and effective-capacity are owned by the delivery-engine capacity model and estimation standards at the project-delivery altitude. The two never share a value, and the `class_weight` multiplier does NOT consume or reference focus-factor. This model introduces exactly one new construct (`class_weight`) and reuses the size-check's existing point scale.
+
+**Recalibration (`[CALIBRATE-AFTER-3]`).** The `release_class_capacity_weights` defaults are MEDIUM-confidence seeds. After ≥3 releases tracked in the RELEASE_LOG velocity instrument (planned-vs-delivered, files-changed, allocation actuals), recalibrate the weights from the per-class delivered-vs-planned ratio — a class whose releases systematically over- or under-run its band signals a weight adjustment — and advance the `[calibration].releases_since_calibration` counter. The velocity instrument is the measurement half and these weights are the heuristic half of one calibration loop sharing that counter.
+
+**Enforcement layer.** This sub-block is positive guidance (it produces `effective_pts`); a per-milestone size-bound enforcement gate in the decomposition-review gate family (see § 11.8) asserts `effective_pts` against the band ceiling at the Stage 3→4 boundary and routes a breach to § 4 tight-merge or the disposition table above (not a dead-end fail). The gate reads the SAME `class_weight` config this sub-block defines, so the modeled target and the enforced bound are a single source.
+
+- **Output:** raw `sum(member_pts)` + `effective_pts` + the band disposition the effective points resolve to.
 
 ### Step 6 — Declare internal sequence
 
@@ -470,3 +496,4 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 | Version | Date | Change | Authority |
 |---|---|---|---|
 | Initial | 2026-05-25 | Initial. Promotes 7-step vertical capability slice methodology from operator memory to K1 codified-knowledge corpus. Frame: F1 SAFe Feature-Slicing + Vertical Slice (current default per platform config per operator clarification 2026-05-24; frame-pluggability discipline). Cutover REFLEXIVE-EXEMPT-ALL — the introducing release itself is exempt. | Stage 5 D-decisions; operator-CONFIRMED at Collective Review 2026-05-25 |
+| v11.28 | 2026-06-17 | Adds the § 3 Step 5 Risk-Weighting (Release-Class capacity multiplier) sub-block — `effective_pts = round_half_up(sum(member_pts) * class_weight)`, weights cited by role from `[bundling].release_class_capacity_weights` (single numeric home), round-half-up pinned at this definitional home, delivery-team-capacity boundary clause, `[CALIBRATE-AFTER-3]` recalibration linkage to the RELEASE_LOG velocity instrument, and an enforcement-layer reference to the decomposition-review gate family. Consolidates the sizing guidance: names the point-band as the governing capacity ceiling and the Stage-3 "5-8 issues" item-count as a secondary readability heuristic. Additive only; no existing rule restated. | Stage 5 Solutioning design + scope-lock; Stage 6 Engineering (release v2.02, milestone 61-bundling-capacity-and-sizing-gates) |

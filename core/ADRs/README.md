@@ -140,6 +140,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** MODERATE (CHEAP pre-application — it documents the posture the build already follows; crosses to MODERATE once additional operations skills cite it for their own core-control consumption; reversal is a superseding ADR plus, if a fork were ever chosen, materializing the copy and resolving the collision).
 **File:** [ADR-024-operations-consume-core-safety-controls-via-public-api.md](ADR-024-operations-consume-core-safety-controls-via-public-api.md)
 
+## Release-ops / capacity ADRs
+
+### ADR-027 — Release-bundle risk-weighting keys on Release Class, not a new per-issue Tier field
+
+**Status:** Accepted (operator-adopted at the v2.02 / `61-bundling-capacity-and-sizing-gates` Collective Review scope-lock 2026-06-17; authored at Stage 6 per the ADR-007 / ADR-024 Stage-6 ADR-authoring precedent).
+**Decision:** Release-bundle risk-weighting keys on the already-shipped **Release Class** (`routine`/`novel`/`cross-cutting`/`hotfix`), NOT a new per-issue Tier field (the Autonomy Tier is per-action; `size:*` is complexity). Applied as a **multiplier** — `effective_pts = round_half_up(sum(member_pts) * class_weight)` — evaluated against the existing `§ 3 Step 5` target band with zero new disposition rows. Multiplier is chosen over an additive ceremony budget (not scale-invariant) and a per-issue ceremony-tag sum (requires a net-new backlog field). Weights live as the single numeric home in `[bundling].release_class_capacity_weights`; the doctrine cites them by role (parameterize-over-hardcode). Seeds `routine 1.0 / novel 1.15 / cross-cutting 1.3 / hotfix 0.9` are MEDIUM-confidence and `[CALIBRATE-AFTER-3]`; the mechanism is HIGH-confidence.
+**Reversibility:** CHEAP at ship (additive — revert the release PR; every addition ships a default and no existing field/row/enum is mutated), trending MODERATE once a downstream size-bound enforcement gate + `release-planner` wire into `effective_pts` and the weights are recalibrated.
+**File:** [ADR-027-release-bundle-risk-weight-keys-on-release-class.md](ADR-027-release-bundle-risk-weight-keys-on-release-class.md)
+
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
 ### ADR-003 — Operating Model Composition

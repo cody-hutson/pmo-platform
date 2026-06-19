@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Stage 12: Execute
 
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
@@ -77,6 +78,8 @@ B1 Merge PR per Delivery Strategy via `gh pr merge`, then **verify and capture m
 ```
 
 **Cycle-Time field:** Emit invokes [`release/tools/compute-cycle-time.sh`](../../tools/compute-cycle-time.sh) `<version>` and embeds the returned value (or `N/A` for content-only releases that emit zero `deploy-skill`/`deploy-harness` events). Field schema, format rules (`<X>m` / `<H>h<M>m` / `N/A`), and N=3 baseline-trigger semantics codified at [`release/references/standards/deployment-cycle-time.md`](../standards/deployment-cycle-time.md). Post-baseline (N ≥ 3), the value optionally carries a parenthetical baseline-comparison suffix (e.g., `47m (-12% vs 53m baseline)`) per the standard's § 3.1. Cutover: applies to releases entering Stage 12 strictly AFTER this field's introducing-release merge SHA; **the introducing release itself is exempt** per D-DogfoodPosture (A) — reflexive-pipeline-loop discipline.
+
+**Velocity field — Stage-13 addition (forward-note):** The Stage-12 emit template above stays cycle-time-only. The sibling `**Velocity:**` field (planned-vs-delivered points + ratio, files-changed, allocation actuals, Release Class) is **appended at Stage 13**, not Stage 12 — its *delivered* and *allocation* halves are authoritative only once Stage 13 marks the membership closed. The Stage 13 chore PR adds it in the same commit that transitions the row `DEPLOYED → VERIFIED` and adds `**Outcome:**` (this mirrors how the outcome field is a Stage-13 addition to the same block). Field schema, format, and the producing tool are codified at [`release/references/standards/release-velocity-tracking.md`](../standards/release-velocity-tracking.md); the capture step lives at [`stage-13-close.md § Phase B`](stage-13-close.md).
 
 **Cutover discipline:** Applies to all releases going forward.
 
