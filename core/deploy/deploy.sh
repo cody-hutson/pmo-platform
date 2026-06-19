@@ -35,7 +35,9 @@ OPERATIONS_SKILLS=(
   file-router
   intake-desk
   pmo-process-designer
+  pmo-program-coordinator
   pmo-technical-analyst
+  pmo-technical-program-manager
   ppm-agent
   project-initiator
   tracker-manager
@@ -1499,6 +1501,16 @@ cmd_check() {
       [[ -d "$skill_dir" ]] || continue
       local skill_name
       skill_name=$(basename "$skill_dir")
+      # Non-skill shared-resource directories under skills/ are not roster
+      # members. Convention: an underscore-prefixed directory under
+      # <module>/skills/ holds shared reference content consumed by the
+      # sibling role skills, not a deployable skill (no SKILL.md, no package,
+      # no deploy.sh array entry). It carries no roster membership and must be
+      # skipped before the roster lookup. EXACT-MATCH allowlist (fail-CLOSED):
+      # only the explicitly-named "_shared" dir is exempt — a stray
+      # underscore-prefixed directory still FAILs roster-drift. To add another
+      # non-skill shared-resource dir, extend this allowlist explicitly here.
+      [[ "$skill_name" == "_shared" ]] && continue
       local found=false
       for s in "${EXPECTED_ROSTER[@]}"; do
         [[ "$skill_name" == "$s" ]] && found=true && break
