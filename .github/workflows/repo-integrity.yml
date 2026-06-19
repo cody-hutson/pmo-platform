@@ -537,3 +537,51 @@ jobs:
           fi
 
           echo ":white_check_mark: Dead-file-reference — all link/image targets in the changed delta resolve" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # GATE 4 — ADR-number integrity (one global ADR-NNN sequence across
+  #          core/ADRs + release/ADRs; fail on duplicate or gap). Whole-tree
+  #          check (not delta-scoped) — numbering is a global invariant.
+  # ---------------------------------------------------------------------------
+  adr-number-integrity:
+    name: ADR-number integrity gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Verify ADR numbers are platform-wide-unique and gap-free
+        run: |
+          set -euo pipefail
+
+          # Self-test first — prove the checker still catches duplicate / gap /
+          # malformed before trusting its verdict on the real tree.
+          python3 release/tools/check-adr-numbers.py --self-test
+
+          # Enforce the invariant across core/ADRs + release/ADRs (ONE global
+          # ADR-NNN sequence — see core/ADRs/README.md § Naming convention).
+          set +e
+          python3 release/tools/check-adr-numbers.py | tee /tmp/adr-number.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### ADR-number integrity check"
+            echo '```'
+            cat /tmp/adr-number.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$RC" -ne 0 ]; then
+            {
+              echo "## :x: ADR-number integrity gate FAILED"
+              echo ""
+              echo "ADR files in \`core/ADRs/\` and \`release/ADRs/\` share ONE global \`ADR-NNN\` sequence."
+              echo "A duplicate number or a gap was introduced. Renumber the later claimant to the next"
+              echo "free slot; see \`core/ADRs/README.md\` § Naming convention."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo ":white_check_mark: ADR-number integrity — numbers are unique and contiguous" | tee -a "$GITHUB_STEP_SUMMARY"
