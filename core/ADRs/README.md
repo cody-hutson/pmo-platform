@@ -144,6 +144,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** MODERATE (CHEAP pre-application — it documents the posture the build already follows; crosses to MODERATE once additional operations skills cite it for their own core-control consumption; reversal is a superseding ADR plus, if a fork were ever chosen, materializing the copy and resolving the collision).
 **File:** [ADR-028-operations-consume-core-safety-controls-via-public-api.md](ADR-028-operations-consume-core-safety-controls-via-public-api.md)
 
+### ADR-029 — Memory SSOT model (corpus-SSOT for codified Knowledge within the four-type memory architecture)
+
+**Status:** Accepted (interim — resolves the Knowledge↔corpus cut of a larger memory architecture; refined + ratified by the workspace owner at the v2.05 / `35-agent-discipline-codification` Stage 9 review; authored at Stage 5/6 per the ADR-007 Stage-6 ADR-authoring precedent). Renumbered from a branch-local ADR-028 — the keystone ADR collided with the operations-consume ADR that claimed 028 on main during this release's engineering window.
+**Decision:** Memory is organized by four types (Work / Knowledge / People / Learning), each with one SSOT surface under a no-shadow-SSOT invariant. This ADR resolves the Knowledge cut: codified Knowledge is corpus-SSOT; the Learning type (tacit/situated K5) is memory-store-SSOT; a Learning that generalizes into reusable Knowledge graduates into the corpus, after which its memory copy evicts to a pointer (VERIFY-CORPUS-gated, encode-then-evict). Trigger = Option C (Stage-13 Phase B-OPS executor + warn-mode deploy Check 36 backstop). The Work / People / operational SSOTs are named and deferred to the cross-surface memory-architecture cluster.
+**Reversibility:** CHEAP for the Layer-1 contract (additive doc/governance + a warn-mode check); MODERATE for the operator-side Layer-2 memory eviction.
+**File:** [ADR-029-memory-corpus-ssot-boundary.md](ADR-029-memory-corpus-ssot-boundary.md)
+
 ## Release-ops / capacity ADRs
 
 ### ADR-027 — Release-bundle risk-weighting keys on Release Class, not a new per-issue Tier field

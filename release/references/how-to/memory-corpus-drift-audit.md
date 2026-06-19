@@ -5,7 +5,7 @@
 
 > Standing how-to for auditing the auto-memory store (`~/.claude/memory/`) against the codified corpus for SSOT drift. It is the human-runnable companion to `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`) — run it on demand to reproduce what the standing backstop reports continuously.
 
-**Governing contract:** [`core/disciplines/knowledge-architecture.md` §6 Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md#memory-corpus-boundary) (the two-tier SSOT assignment, the no-shadow-SSOT invariant, the encode-and-evict lifecycle). **Decision record:** [ADR-028](../../../core/ADRs/ADR-028-memory-corpus-ssot-boundary.md). **Sibling pattern:** the single-source + enforced-rebuild deploy check on the skill↔reference surface — this is the same idea on the memory↔corpus surface.
+**Governing contract:** [`core/disciplines/knowledge-architecture.md` §6 Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md#memory-corpus-boundary) (the two-tier SSOT assignment, the no-shadow-SSOT invariant, the encode-and-evict lifecycle). **Decision record:** [ADR-029](../../../core/ADRs/ADR-029-memory-corpus-ssot-boundary.md). **Sibling pattern:** the single-source + enforced-rebuild deploy check on the skill↔reference surface — this is the same idea on the memory↔corpus surface.
 
 ---
 
@@ -108,7 +108,7 @@ This procedure is the audit half of the encode-and-evict contract; the **Stage-1
 
 <!-- repo-integrity: allow-issue-ref -->
 
-- **Contract:** `core/disciplines/knowledge-architecture.md` §6; **decision:** ADR-028.
+- **Contract:** `core/disciplines/knowledge-architecture.md` §6; **decision:** ADR-029.
 - **Standing backstop:** `core/deploy/deploy.sh` Check 36 (`memory-corpus-tie-drift`, warn-mode-initial).
 - **Executor:** `release/references/pipeline/stage-13-close.md` §5 Phase B-OPS (gate `G-CL5`).
 - **Provenance:** #530 (parent); Stage 5 spec on sub-task #1298; sibling pattern #316.

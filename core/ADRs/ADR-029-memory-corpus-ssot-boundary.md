@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-memory-ref -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-028 — Memory SSOT model — corpus-SSOT for codified Knowledge within the four-type memory architecture
+title: ADR-029 — Memory SSOT model — corpus-SSOT for codified Knowledge within the four-type memory architecture
 status: Accepted (interim — resolves the Knowledge↔corpus cut of a larger memory architecture; see § Position in the broader architecture)
 date: 2026-06-19
 release: 35-agent-discipline-codification (v2.05)
@@ -16,13 +16,15 @@ source_observations:
 
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-028 — Memory SSOT model
+# ADR-029 — Memory SSOT model
 
 ## Status
 
 **Accepted (interim).** This ADR resolves **one boundary** — the SSOT cut between codified *Knowledge* and the operator memory store — within a larger, four-type memory architecture (see [§ The memory architecture](#the-memory-architecture-organizing-model) and [§ Position in the broader architecture](#position-in-the-broader-architecture-future-direction)). The decision and its mechanism are ratified for v2.05; the surrounding architecture — a unified cross-surface read/write contract spanning all four memory types — is tracked under epic #1071 and its cluster, and this boundary is designed to **slot into** that contract when it lands.
 
 Refined and ratified by the workspace owner at the v2.05 Stage 9 review; the boundary mechanism was authored at Stage 5 Solutioning (sub-task #1298). The mechanism (corpus-SSOT for codified Knowledge, pointer-only in memory, VERIFY-CORPUS-gated eviction) is HIGH-confidence; the standing-audit backstop ships warn-mode-initial.
+
+**Numbering provenance.** Authored branch-local as ADR-028; renumbered to **ADR-029** at merge time, resolving a collision with `ADR-028-operations-consume-core-safety-controls-via-public-api` (which claimed 028 on `main` — via the ADR-024→028 renumber — during this release's engineering window). Citations in #530 and sub-task #1298 that read "ADR-028" denote this record.
 
 ## Context
 

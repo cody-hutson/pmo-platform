@@ -4078,12 +4078,12 @@ cmd_check() {
 
   # Check 36 — Memory↔corpus tie-drift (warn-mode initial, #530). Standing
   # backstop for the memory↔corpus boundary contract (knowledge-architecture.md
-  # §6 + ADR-028). The PRIMARY eviction executor is the Stage-13 Phase B-OPS
+  # §6 + ADR-029). The PRIMARY eviction executor is the Stage-13 Phase B-OPS
   # operational-deploy step (gate G-CL5); this check is the non-skippable audit
   # that catches what a forgotten Phase B-OPS manifest entry misses.
   #
   # CRITICAL: this check is READ-ONLY. A deploy validator must NEVER mutate the
-  # operator memory store (Layer-2 mutation is an over-reach per ADR-028 + the
+  # operator memory store (Layer-2 mutation is an over-reach per ADR-029 + the
   # operations-bridge boundary). It enumerates and WARNS; it deletes nothing.
   #
   # Three drift classes (knowledge-architecture.md §6 The three drift classes):
