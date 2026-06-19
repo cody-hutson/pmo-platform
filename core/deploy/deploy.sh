@@ -4076,6 +4076,92 @@ cmd_check() {
   fi
 
 
+  # Check 36 — Memory↔corpus tie-drift (warn-mode initial, #530). Standing
+  # backstop for the memory↔corpus boundary contract (knowledge-architecture.md
+  # §6 + ADR-028). The PRIMARY eviction executor is the Stage-13 Phase B-OPS
+  # operational-deploy step (gate G-CL5); this check is the non-skippable audit
+  # that catches what a forgotten Phase B-OPS manifest entry misses.
+  #
+  # CRITICAL: this check is READ-ONLY. A deploy validator must NEVER mutate the
+  # operator memory store (Layer-2 mutation is an over-reach per ADR-028 + the
+  # operations-bridge boundary). It enumerates and WARNS; it deletes nothing.
+  #
+  # Three drift classes (knowledge-architecture.md §6 The three drift classes):
+  #   deployed-but-not-evicted — a memory's #N tie is CLOSED, the corpus encoding
+  #     is present, but the memory file still exists.
+  #   dead-ref tie — a memory's #N tie no longer RESOLVES (re-versioning renumbered
+  #     it). Detected by `gh issue view` RESOLUTION-FAILURE, NEVER by digit-match
+  #     (issue-number magnitude is meaningless across a re-version; only a
+  #     resolution probe is load-bearing — the issue-body-renumber-rot lesson).
+  #   untied-encodeable — a memory matching encodeable signatures with no #N tie
+  #     and no corpus pointer (heuristic; routed for operator triage, not action).
+  #
+  # Degrades gracefully: SKIP when ~/.claude/memory/ is absent (fresh install / CI
+  # — mirror the Check 8 SKIP idiom, never FAIL); the resolution-probing classes
+  # SKIP when gh is unavailable/unauthenticated (mirror the Check 32 gh-guard).
+  # The human-runnable companion is release/references/how-to/memory-corpus-drift-audit.md.
+  # Cutover comment family-standard: applies to ./deploy.sh --check invocations
+  # on/after the introducing release's merge SHA in RELEASE_LOG.md; that release
+  # itself exempt — reflexive-pipeline-loop discipline.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 36: Memory↔corpus tie-drift (memory↔corpus boundary contract backstop) (#530)"
+    local c36_mem_dir="${HOME}/.claude/memory"
+    if [[ ! -d "$c36_mem_dir" ]]; then
+      log "  SKIP:  ~/.claude/memory not present (fresh install / CI) — no memory store to audit"
+    else
+      local c36_gh_ok="false"
+      if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        c36_gh_ok="true"
+      else
+        log "  N/A:   gh unavailable/unauthenticated — dead-ref + deployed-but-not-evicted classes skipped (untied-encodeable scan still runs)"
+      fi
+      local c36_findings=0
+      local c36_file c36_n c36_state
+      # Resolution-probing classes (require gh): dead-ref tie + deployed-but-not-evicted.
+      if [[ "$c36_gh_ok" == "true" ]]; then
+        while IFS= read -r c36_file; do
+          [[ -n "$c36_file" ]] || continue
+          # First #N tie per memory file (the eviction-pointer / issue tie).
+          c36_n=$(/usr/bin/grep -oE '#[0-9]+' "$c36_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '#') || c36_n=""
+          [[ -n "$c36_n" ]] || continue
+          # dead-ref tie: probe resolution; NEVER compare magnitude.
+          if ! gh issue view "$c36_n" --json number >/dev/null 2>&1; then
+            flag_warn_or_issue "memory-corpus-tie-drift" \
+              "dead-ref tie: $(basename "$c36_file") cites #${c36_n} which does not resolve (resolution-failure; re-tie or evict per memory-corpus-drift-audit.md §4)"
+            c36_findings=$((c36_findings + 1))
+            continue
+          fi
+          # deployed-but-not-evicted: tie CLOSED + file still present. (The corpus-
+          # presence leg is per-memory phrase-specific; the human-runnable how-to
+          # carries the per-memory ENCODED_PHRASE grep. Here a CLOSED tie with the
+          # file still present is the auditable backstop signal.)
+          c36_state=$(gh issue view "$c36_n" --json state --jq .state 2>/dev/null) || c36_state=""
+          if [[ "$c36_state" == "CLOSED" && -f "$c36_file" ]]; then
+            flag_warn_or_issue "memory-corpus-tie-drift" \
+              "deployed-but-not-evicted: $(basename "$c36_file") tie #${c36_n} is CLOSED but the memory file still exists (add to next release's Phase B-OPS manifest; verify corpus-presence per the how-to before evicting)"
+            c36_findings=$((c36_findings + 1))
+          fi
+        done < <(/usr/bin/grep -rlE '#[0-9]+' "$c36_mem_dir" 2>/dev/null || true)
+      fi
+      # untied-encodeable (local-only heuristic; routes for operator triage): a
+      # memory matching encodeable signatures with NO #N tie and NO corpus pointer.
+      while IFS= read -r c36_file; do
+        [[ -n "$c36_file" ]] || continue
+        if /usr/bin/grep -qiE 'discipline|reference|methodology|gate|protocol|standard' "$c36_file" 2>/dev/null; then
+          flag_warn_or_issue "memory-corpus-tie-drift" \
+            "untied-encodeable (candidate): $(basename "$c36_file") matches encodeable signatures with no #N tie and no corpus pointer (file an encode issue per memory-corpus-drift-audit.md §4)"
+          c36_findings=$((c36_findings + 1))
+        fi
+      done < <(/usr/bin/grep -rLE '#[0-9]+|core/|release/|CLAUDE\.md' "$c36_mem_dir" 2>/dev/null || true)
+      if [[ "$c36_findings" -eq 0 ]]; then
+        log "  OK:    memory store in contract — no tie-drift detected"
+      else
+        log "  ${c36_findings} memory↔corpus tie-drift signal(s) emitted (mode=${DEPLOY_CHECK_MODE}; deletes nothing — see knowledge-architecture.md §6)"
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
