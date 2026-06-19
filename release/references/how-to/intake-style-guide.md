@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Intake Style Guide
 
 > Canonical reference for the intake/design boundary rule (5 tests) and the WHAT-vs-HOW principle. Templates link here; Triage references this in self-repair messages; agents load this as context when authoring or evaluating intake tickets.

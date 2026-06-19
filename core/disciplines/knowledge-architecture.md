@@ -160,6 +160,8 @@ This section names **which surface is the source of truth (SSOT) when a fact cou
 
 Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a different org/project ⇒ K1 ⇒ corpus-SSOT; otherwise it is K2–K5 contextual and its SSOT is the placement-model home in §3. The auto-memory store is the §3 home for K5-tacit only.
 
+<!-- repo-integrity: allow-memory-ref -->
+
 ### The two-tier SSOT assignment {#two-tier-ssot}
 
 | Knowledge class | Tier | SSOT surface | May the auto-memory store hold it? |
@@ -202,7 +204,7 @@ Two surfaces with distinct roles (a deploy check validates — it must never mut
 - **PRIMARY executor = Stage-13 `Phase B-OPS` operational-deploy step.** The encode issue's release plan carries an operational-deployment manifest with the memory-eviction entries; Phase B-OPS executes ARCHIVE → VERIFY-CORPUS → EVICT under operator authorization. See [`stage-13-close.md` §5 Phase B-OPS](../../release/references/pipeline/stage-13-close.md) (gated by `G-CL5`, the operational-deployment-manifest-executed gate).
 - **STANDING BACKSTOP = `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`, warn-mode-initial).** The non-skippable standing audit that catches what a forgotten manifest entry misses. It runs every `./deploy.sh --check`, **deletes nothing**, and emits the three drift classes as warnings regardless of whether anyone remembered the Phase B-OPS entry. The full human-runnable procedure is [`memory-corpus-drift-audit.md`](../../release/references/how-to/memory-corpus-drift-audit.md).
 
-This is the same shape as the skill↔reference single-source contract resolved under #316 (a single-source executor + an enforced-rebuild deploy check) — applied here to the memory↔corpus surface.
+This is the same shape as the skill↔reference single-source contract (a single-source executor + an enforced-rebuild deploy check) — applied here to the memory↔corpus surface.
 
 ### The three drift classes {#drift-classes}
 

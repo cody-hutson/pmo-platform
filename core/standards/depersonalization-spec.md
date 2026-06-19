@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 ---
 title: Depersonalization Spec
 purpose: Defines the operator-identity token vocabulary and the parameterization seam through which operator-instance values resolve at workspace-setup time. Composes with (does NOT restate) universal-vs-localized-context.md.

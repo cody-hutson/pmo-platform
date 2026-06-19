@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Ticket Information Architecture
 
 Defines how GitHub Issues are structured, read, and written by agents across all 13 pipeline stages. This is the information model that ticket lifecycle, system configuration, field lifecycle, and I/O contracts implement against.

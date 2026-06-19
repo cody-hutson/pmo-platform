@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 ---
 title: Solutioning Output Template
 purpose: K1 codified-knowledge canonical template for Stage 5 Solutioning sub-task output comments — defines the 7-section H3 comment frame, the 4 required H2 content buckets (Design Decisions / Blast Radius / Feasibility Assessment / ADR Pointers), and composition seams with R1 Evidence-Grounding, Tier-A design-artifact declaration, and the Stage 5→6 boundary contract
@@ -216,17 +217,17 @@ context, not the issue contract.*
   non-gating vs. the operator's scope-lock.
 
 **Worked example:** the operator-authored "Solutioning pre-read — ADVISORY, not
-scope" comment on issue #545 is the canonical specimen of this convention.
+scope" comment on the originating intake issue is the canonical specimen of this convention.
 
 **Mirror (intake-authority pair).** This convention governs Stage-5-*emitted*
 advisory context (non-binding; the body stays the contract). Its mirror —
 [`intake-style-guide.md`](../how-to/intake-style-guide.md) § 5c (The
-Assumption-Handoff Convention), issue #427: intake-*emitted* `[ASSUMPTION –
+Assumption-Handoff Convention) — intake-*emitted* `[ASSUMPTION –
 CONFIRM]` assumptions, directional and owned downstream via `owner:` /
 `to close:` — governs the intake side. Same intake-authority theme, different
 emitting stage, so the two homes diverge by stage and compose by
 cross-reference. Together they complete the intake-authority
-WHAT-vs-HOW-vs-advisory boundary under epic #497.
+WHAT-vs-HOW-vs-advisory boundary under the intake-authority epic.
 
 **Omission is the correct non-ceremony signal.** The pre-read is optional — a
 spoke with no rich pre-implementation analysis to convey simply does not post
@@ -452,7 +453,7 @@ The template codifies the empirical pattern that emerged organically across prio
 | Version | Date | Change | Issue |
 |---|---|---|---|
 | Initial | 2026-05-24 | Initial authoring — milestone Key AC #1 deliverable; codifies the 7-section comment frame, 4 required content buckets, composition seams with R1 + Tier-A + Stage 5→6 contract, and the literal copy-paste scaffold | — |
-| — | 2026-06-19 | Add § 3.5 The Solutioning Pre-Read — advisory/non-binding convention (banner demarcation rule, sole-contract composition with the ticket-information-architecture source-of-truth rule, RC-5 term disambiguation, #545 worked example, intake-style-guide § 5c mirror) | #546 |
+| — | 2026-06-19 | Add § 3.5 The Solutioning Pre-Read — advisory/non-binding convention (banner demarcation rule, sole-contract composition with the ticket-information-architecture source-of-truth rule, RC-5 term disambiguation, worked-example specimen, intake-style-guide § 5c mirror) | v2.05 |
 
 Future revisions append rows here. Per workspace precedent (git is canonical retention), this table is a navigation aid, not a parallel snapshot.
 

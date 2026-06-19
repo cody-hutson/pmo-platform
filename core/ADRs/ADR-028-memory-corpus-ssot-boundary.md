@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
 ---
 title: ADR-028 — Memory↔corpus SSOT boundary — corpus-SSOT for codified knowledge, pointer-only in memory
 status: Accepted

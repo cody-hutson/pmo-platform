@@ -1,9 +1,11 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- repo-integrity: allow-memory-ref -->
+<!-- reference-durability: allow-link -->
 # Memory↔corpus drift audit
 
 > Standing how-to for auditing the auto-memory store (`~/.claude/memory/`) against the codified corpus for SSOT drift. It is the human-runnable companion to `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`) — run it on demand to reproduce what the standing backstop reports continuously.
 
-**Governing contract:** [`core/disciplines/knowledge-architecture.md` §6 Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md#memory-corpus-boundary) (the two-tier SSOT assignment, the no-shadow-SSOT invariant, the encode-and-evict lifecycle). **Decision record:** [ADR-028](../../../core/ADRs/ADR-028-memory-corpus-ssot-boundary.md). **Sibling pattern:** the single-source + enforced-rebuild deploy check on the skill↔reference surface (#316) — this is the same idea on the memory↔corpus surface.
+**Governing contract:** [`core/disciplines/knowledge-architecture.md` §6 Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md#memory-corpus-boundary) (the two-tier SSOT assignment, the no-shadow-SSOT invariant, the encode-and-evict lifecycle). **Decision record:** [ADR-028](../../../core/ADRs/ADR-028-memory-corpus-ssot-boundary.md). **Sibling pattern:** the single-source + enforced-rebuild deploy check on the skill↔reference surface — this is the same idea on the memory↔corpus surface.
 
 ---
 
@@ -100,7 +102,7 @@ A clean store returns no rows from §3a and only legitimate pointers from §5; a
 
 ## 6. Composition
 
-This procedure is the audit half of the encode-and-evict contract; the **Stage-13 Phase B-OPS** step (gate `G-CL5`) is the executor half. The two compose exactly as the skill↔reference single-source contract composes its procedure with its enforced-rebuild check (#316): the procedure tells you *what is out of contract*; the executor (operator-authorized, archive-first, VERIFY-CORPUS-gated) brings it back into contract.
+This procedure is the audit half of the encode-and-evict contract; the **Stage-13 Phase B-OPS** step (gate `G-CL5`) is the executor half. The two compose exactly as the skill↔reference single-source contract composes its procedure with its enforced-rebuild check: the procedure tells you *what is out of contract*; the executor (operator-authorized, archive-first, VERIFY-CORPUS-gated) brings it back into contract.
 
 ## References
 

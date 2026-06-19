@@ -4100,6 +4100,7 @@ cmd_check() {
   # — mirror the Check 8 SKIP idiom, never FAIL); the resolution-probing classes
   # SKIP when gh is unavailable/unauthenticated (mirror the Check 32 gh-guard).
   # The human-runnable companion is release/references/how-to/memory-corpus-drift-audit.md.
+  # <!-- repo-integrity: allow-memory-ref -->  Check 36 legitimately names the ~/.claude/memory store it audits.
   # Cutover comment family-standard: applies to ./deploy.sh --check invocations
   # on/after the introducing release's merge SHA in RELEASE_LOG.md; that release
   # itself exempt — reflexive-pipeline-loop discipline.
