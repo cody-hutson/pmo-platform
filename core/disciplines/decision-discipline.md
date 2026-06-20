@@ -153,6 +153,7 @@ Apply at least primitives 1 + 2 for every audit-derived recommendation. Apply pr
 
 - `release/references/standards/triage-design-rereview.md` D2 (Stage 4 Phase A0 entry currency check) — the same discipline applied at a different surface (stage entry rather than recommendation rendering). D2 fires at Stage 4 / Stage 5 entry; § 2.1.1 fires at recommendation / chip-launch surface.
 - `release/references/how-to/hub-spoke-bridge.md` Procedure 3 §Worktree discipline — adjacent operational discipline for the same hub class (chip-construction surface). The sibling sub-task codifies the chip-prompt-construction-surface variant.
+- [`reconcile-dont-annotate.md`](reconcile-dont-annotate.md) — the **edit-time twin** of this sub-mechanism. §2.1.1 governs stale-artifact *recommendations* (verify before you recommend from an aging artifact); reconcile-don't-annotate governs the stale-artifact *edit* (when you are already touching the artifact, reconcile it to current state rather than posting a correction comment and deferring). Same stale-artifact family, opposite action surface (recommend vs. edit); cross-referenced, not merged.
 
 **Consumer-agnostic wording:** This sub-mechanism applies to ANY consumer of `decision-discipline.md` — hub today; `release-planner` / `principal-engineer` skills after skill-replacement (per § 7.3 future consumers). The primitives are tool-agnostic (replace `gh` / `git` / `grep` with the consumer's available verification surface); the discipline survives consumer transition unchanged.
 
