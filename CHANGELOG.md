@@ -8,6 +8,23 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.09] - 2026-06-20
+
+Health pass on the deploy and release tooling: several checks and scripts that were silently skipping or failing opaquely now work as intended. Eleven surgical fixes to the platform's own deploy and release scripts; all additive or corrective, nothing you invoke directly and nothing you need to do.
+
+### Fixed
+
+- **A deploy check that quietly skipped its own job now runs.** The rules-mirror sync check was pointed at a folder that no longer exists, so it silently skipped instead of comparing; it now compares the real pair. *Why it matters:* a rules file drifting out of sync with its deployed copy is caught at deploy time instead of going unnoticed. ([#1104](https://github.com/cody-hutson/pmo-platform/issues/1104))
+- **Copy failures during deploy now say what actually went wrong.** A failed copy into a read-only location reported a generic message; it now reports the actionable root cause. *Why it matters:* a failed deploy points you at the fix instead of leaving you to guess. ([#984](https://github.com/cody-hutson/pmo-platform/issues/984))
+- **Repository maintenance scripts work again after the folder reorganization.** Scripts that compute release metrics, summarize release learnings, and detect change blast-radius were looking for pre-reorganization folders and quietly did nothing; they now resolve the current paths. *Why it matters:* the cleanup and reporting that runs around each release does its job instead of silently no-op-ing. ([#400](https://github.com/cody-hutson/pmo-platform/issues/400), [#758](https://github.com/cody-hutson/pmo-platform/issues/758), [#760](https://github.com/cody-hutson/pmo-platform/issues/760))
+- **The end-of-release cleanup now catches the branches it was missing.** It did not recognize version-prefixed release branches or agent worktrees; it now matches them. *Why it matters:* stale release branches and worktrees get cleaned up instead of piling up. ([#1089](https://github.com/cody-hutson/pmo-platform/issues/1089))
+
+### Added
+
+- **A framework-catalog path-resolution check** ships logged-but-not-blocking, surfacing stale catalog entries as warnings until it is later turned on to block. ([#661](https://github.com/cody-hutson/pmo-platform/issues/661))
+
+[Full notes](release/releases/notes/v2.09_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.09)
+
 ## [v2.04] - 2026-06-20
 
 Every release can now close with a structured retrospective and lessons-learned write-up, authored from a single template that ships with the platform — a blameless retrospective and a lessons-learned ceremony combined in one file. The template landed on top of a ratified decision about which release records are public capability and which are the maintainer's own local working history. This release decides that split and ships the template; physically moving the maintainer's history out of the shared copy is captured as a separate follow-up and changes nothing you observe today. Everything is additive.
