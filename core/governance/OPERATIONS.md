@@ -866,7 +866,7 @@ Execute this cycle once per day, triggered by user or automation:
 6. **Follow-up Tags** — PPM emits tags (`[DELIVERY]`, `[COMMS]`, `[TECHNICAL]`, `[CHANGE]`, `[RISK]`, `[DECISION]`) for specialist work.
 7. **Specialist Processing** — Each tagged skill processes its work in parallel.
 8. **Comms Digest** — If comms digest available, process for MSG-## entries and response tracking.
-9. **External Sync** — Jira MCP pulls ticket statuses; Confluence MCP checks for drift in FDDs/RAID logs.
+9. **External Sync** — Jira MCP pulls ticket statuses; Confluence MCP checks for drift in FDDs/RAID logs. The scheduled **Path-B external-sync** sweep (`core/standards/c3-external-sync-path-b.md`) extends this step with a scheduler, a persisted snapshot-diff, and an Evidence-Gate close-proposal path (read/poll + local-write only, clamped to `[automation].automation_level`).
 10. **Consolidated Update** — Tracker Manager prepares single change summary: what's changing, where, why, evidence.
 11. **User Approval** — User reviews summary; approves or requests modifications.
 12. **Execution** — On approval, all Document Tier 2 tracker updates written; Transcript Register status → `CLOSED`.

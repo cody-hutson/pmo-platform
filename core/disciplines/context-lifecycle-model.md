@@ -187,6 +187,7 @@ Skills and governance documents that consume this framework's state vocabulary r
 | [`operations/skills/file-router/SKILL.md`](../../operations/skills/file-router/SKILL.md) | `Context-Captured` → `Context-Structured` transition (mechanism #1) | `## Framework Reference` subsection (demonstrating consumer) |
 | [`../standards/lifecycle-states-canonical.md`](../standards/lifecycle-states-canonical.md) | All 5 Context Lifecycle states enumerated in cross-machine registry | §3 In-Scope Machines (Context Lifecycle subsection) |
 | Ambient inbox + dedup cursor (C1, v2.07) | `Context-Captured` on inbox arrival → `Context-Structured` once file-router routes+registers; the cursor (path + SHA-256 identity) skips already-`Context-Structured` files on re-scan. Consumed by the Path A scheduled intake sweep (C2). | `../standards/c1-ambient-inbox-cursor.md` §3 (state mapping) |
+| Path-B external-sync sweep (C3, v2.07) | `Context-Decided → Context-Closed` for Evidence-Gate-qualifying external-Done evidence — the close write is Document-Tier-gated (Tier-1/RAID held as proposal; Tier-2 in-`cascade_scope` auto-close at `bounded_auto`), clamped to `[automation].automation_level`. Detection automated; closure write proposed per §2. | `../standards/c3-external-sync-path-b.md` §7 (transition + Document-Tier gating) + `## Framework Reference` |
 
 ### Forward-citation consumers (future releases)
 
