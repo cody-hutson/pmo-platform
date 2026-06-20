@@ -192,6 +192,8 @@ ALL_SKILLS=(
   pmo-software-engineer
   pmo-technical-analyst
   pmo-technical-program-manager
+  pmo-tier-1-support
+  pmo-tier-2-support
   ppm-agent
   project-initiator
   prompt-builder
