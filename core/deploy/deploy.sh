@@ -49,6 +49,7 @@ RELEASE_SKILLS=(
   implementation-planner
   pmo-architect
   pmo-principal-engineer
+  pmo-qa-lead
   pmo-skill-editor
   pmo-skill-refiner
   release-executor
