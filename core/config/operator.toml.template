@@ -127,6 +127,14 @@ operator_instance_external_sync_runlog_path = ""
 # heartbeat contract. A distinct file so the two sweeps' records do not interleave.
 operator_instance_intake_sweep_runlog_path = ""
 
+# Resolves <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/evals/results
+# Consumer: the pipeline event-log writer/reader + release-analytics tools
+# (release/tools/append-pipeline-event.sh, query-pipeline-event.sh,
+# compute-cycle-time.sh, synthesize-release-learnings.sh) read the
+# pipeline-event-log.md / calibration-data.md / iteration-log.md surfaces here.
+operator_instance_evals_results_path = ""
+
 [adapters]
 # Host-adapter selectors — the four external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,

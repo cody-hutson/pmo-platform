@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # synthesize-release-learnings.sh — Release-learnings synthesizer
 # Per pmo-platform/reference/standards/pipeline-event-log-schema.md § 11.
-# Reads pmo-platform/engineering/evals/results/pipeline-event-log.md via
-# pmo-platform/engineering/tools/query-pipeline-event.sh.
+# Reads the operator-instance pipeline event log at
+# <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
+# (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/)
+# via query-pipeline-event.sh (sibling tool; it resolves the log location).
 #
 # Per the Stage 5 spec.
 #
@@ -53,7 +55,12 @@ export PATH="/usr/bin:/bin"
 # ─── Repo-relative paths ─────────────────────────────────────────────────────
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-REPO_ROOT="$( cd "$SCRIPT_DIR/../../.." && pwd )"
+# REPO_ROOT retained for resolution-block parity with the append/query event-log
+# tools; this tool delegates all log-path resolution to query-pipeline-event.sh
+# (QUERY_TOOL below), so REPO_ROOT is unused here. Two levels up — NOT three; the
+# prior `../../..` mis-anchored above the repo from a worktree (the #430-class bug).
+# shellcheck disable=SC2034
+REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 QUERY_TOOL="$SCRIPT_DIR/query-pipeline-event.sh"
 PY=/usr/bin/python3
 
