@@ -80,7 +80,7 @@ See § 4 for the resolved contract.
 
 ### Mechanism 2 — PreToolUse Hook Inheritance (Existing 5-Hook Surface)
 
-**Operative mechanism:** The 5 existing PreToolUse hooks (`block-destructive`, `block-egress`, `block-mcp-writes`, `block-credential-reads`, `block-rm-prefer-trash`) operate at SESSION level per [`bypass-mode-readiness.md § The 5 Hooks`](../rules/bypass-mode-readiness.md). The hooks read tool-call payloads from stdin; they do NOT read session-context fields (no `session_id`, no `parent_session`, no `subagent_type`). The hooks fire on the tool-call payload itself regardless of which session-class (parent or subagent) emitted the call.
+**Operative mechanism:** The 5 PreToolUse hooks most relevant to subagent tool-call interception (`block-destructive`, `block-egress`, `block-mcp-writes`, `block-credential-reads`, `block-rm-prefer-trash`) operate at SESSION level per the bypass-mode hook registry's [`§ The Hooks`](../rules/bypass-mode-readiness.md) table (the full registry is 7 bypass-mode hooks; this mechanism cites the 5 whose matchers a spawned spoke can trip). The hooks read tool-call payloads from stdin; they do NOT read session-context fields (no `session_id`, no `parent_session`, no `subagent_type`). The hooks fire on the tool-call payload itself regardless of which session-class (parent or subagent) emitted the call.
 
 **Evidence basis (LOGICAL-INFERRED, EMPIRICAL VERIFICATION DEFERRED — per adversarial finding PRF-1 / FMF-4):** The session-level enforcement model means subagent tool calls fire the same hooks transparently **by construction** — the hooks consume tool-call payloads from stdin and have no notion of caller class. However, the claim "the harness DELIVERS subagent tool calls to the hook in the first place" is not yet empirically verified by an end-to-end test. This standard prescribes a Stage 7 DT regression suite (one test per hook: subagent attempts each of the 5 hook-triggering patterns; observe blocks) as a follow-up activity. Until the empirical suite runs, treat Mechanism 2 as **LOGICAL-INFERRED-UNTIL-EMPIRICALLY-TESTED**.
 
@@ -135,7 +135,7 @@ Adding the subtype requires a governance change per [`pipeline-event-log-schema.
 > cannot read would be a false-enforcement floor. The v2.07 design (#1163)
 > triggers on the **tool-call payload** — the universal signal all hooks already
 > use — and reads the `automation_level` ceiling. The supersession decision is
-> recorded in [`ADR-030`](../ADRs/ADR-030-autonomy-ceiling-unified-payload-triggered-hook.md).
+> recorded in [`ADR-031`](../ADRs/ADR-031-autonomy-ceiling-unified-payload-triggered-hook.md).
 
 **Hook:** `.claude/hooks/block-autonomy-ceiling.sh` (shipped v2.07, #1163).
 
@@ -265,4 +265,4 @@ Applies to releases entering Stage 5 strictly AFTER the merge SHA recorded in [`
 | Version | Date | Change |
 |---|---|---|
 | monolith-cleanup | 2026-05-27 | Initial authoring (Tier-A NEW agent-process artifact); documentation + tool-restriction patterns ONLY; Deferred Hook Contract carried for follow-up release; 4-mechanism framing adopted per adversarial finding CDF-3 (consolidating original 5-layer model's Layer-1 + Layer-4 into Mechanism 1) |
-| v2.07 | 2026-06-19 | § 4 Hook Contract RESOLVED (R-C5RECON, #1163): renamed `block-subagent-tier-violation.sh` → `block-autonomy-ceiling.sh`, re-scoped the trigger from subagent-session-detection (infeasible — contradicted by § 3 Mechanism 2's "hooks do NOT read session-context fields") to the tool-call payload; Tier-0 floor + ceiling check shipped LIVE (payload-detectable Tier-0 classes only — governance-file + cross-domain writes); subagent-only approval-evidence rows (Tier-1/2/3) Phase-2 deferred; own mode file `.autonomy-mode` (warn-initial). Supersession recorded in ADR-030. |
+| v2.07 | 2026-06-19 | § 4 Hook Contract RESOLVED (R-C5RECON, #1163): renamed `block-subagent-tier-violation.sh` → `block-autonomy-ceiling.sh`, re-scoped the trigger from subagent-session-detection (infeasible — contradicted by § 3 Mechanism 2's "hooks do NOT read session-context fields") to the tool-call payload; Tier-0 floor + ceiling check shipped LIVE (payload-detectable Tier-0 classes only — governance-file + cross-domain writes); subagent-only approval-evidence rows (Tier-1/2/3) Phase-2 deferred; own mode file `.autonomy-mode` (warn-initial). Supersession recorded in ADR-031. |

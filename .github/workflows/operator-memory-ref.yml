@@ -1,5 +1,13 @@
 name: Operator-memory-reference gate
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Operator-memory-reference gate"  always-reports=yes
+#   invariant: no changed file ADDS a reference to the operator's local ~/.claude
+#              memory store (feedback_*.md, OPERATOR_INSTANCE_MEMORY, .claude/memory,
+#              observations.md) on its added lines — asserted by scanning the delta.
+#   falsification: add a line citing "feedback_read_before_edit.md" to a tracked
+#                  file -> this gate turns red on that added line.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 # Prevention layer (ties to the encode-then-remove pattern).
 #
 # Fails a PR that ADDS a reference to the operator's LOCAL ~/.claude memory store

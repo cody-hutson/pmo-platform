@@ -137,6 +137,8 @@ See `context-lifecycle-model.md` for transition diagram (§3), per-state stall d
 | `sibling_topic` | string | NO | Topic identifier for sibling-artifact grouping |
 | `origin_transcript` | string | NO | Path to the source transcript when artifact derives from one |
 
+**Schema home:** the authoritative schema definition for the artifact-instance lineage fields (`parent_artifact`, `sibling_topic`, `supersedes`) is `core/schemas/frontmatter-schema.md` (Domain A / Domain C). This §3.2 restatement is the lifecycle-vocabulary canonical source; field types, the `supersedes`/`superseded_by` inverse pair, and the lineage-vs-provenance boundary are defined there.
+
 State semantics are a forward-binding contract — the future implementation MUST use these state names verbatim. That release's Stage 13 close action: register `core/artifact-workflow-protocol.md` as an additional Consumer Registry row at §6.1; the §3.2 authoritative-source pointer (this paragraph) updates to cross-reference the new protocol doc as the operational-protocol home, while the state machine + frontmatter restated above remains the vocabulary canonical source.
 
 ### §3.3 Domain C Lifecycle

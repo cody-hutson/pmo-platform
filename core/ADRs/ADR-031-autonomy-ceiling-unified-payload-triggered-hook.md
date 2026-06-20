@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-030 — Autonomy-ceiling enforcement — unified payload-triggered hook supersedes the subagent-session-detection design
+title: ADR-031 — Autonomy-ceiling enforcement — unified payload-triggered hook supersedes the subagent-session-detection design
 status: Accepted (operator-adopted at the v2.07 / 10-ambient-intake-automation Collective Review scope-lock; authored at Stage 6 per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent)
 date: 2026-06-19
 release: 10-ambient-intake-automation (v2.07)
@@ -14,7 +14,7 @@ source_observations:
   - "C0 (#322) landed [automation].automation_level in operator.toml.template (v2.07) as a runtime-read ceiling, with a working runtime operator.toml-read precedent at core/hooks/notify-version-skew.sh."
 ---
 
-# ADR-030 — Autonomy-ceiling enforcement: unified payload-triggered hook
+# ADR-031 — Autonomy-ceiling enforcement: unified payload-triggered hook
 
 ## Status
 

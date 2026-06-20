@@ -1,5 +1,12 @@
 name: Skill-count / IMP-XXX drift
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Skill-count / IMP-XXX delta"  always-reports=yes
+#   invariant: no changed file adds a deprecated IMP-XXX reference or a hardcoded
+#              skill-count that drifts from the runtime-computed roster authority.
+#   falsification: add a line citing "IMP-042" or a stale literal skill total to a
+#                  changed markdown file -> this gate turns red on that added line.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 # Runs on EVERY pull request (no paths filter), so this required status check
 # always reports a result and never blocks a PR as required-but-absent. The
 # detector's own path globs select which changed files to scan (skill specs for

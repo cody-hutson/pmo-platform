@@ -9,7 +9,7 @@
 # no parent_session, no subagent_type") and has zero precedent in the hook suite.
 # This hook triggers on the TOOL-CALL PAYLOAD (the universal signal all hooks
 # use) and reads the resolved `automation_level` ceiling. The supersession is
-# recorded in core/ADRs/ADR-030. The §4 Tier-0/1/2/3 gating table is absorbed
+# recorded in core/ADRs/ADR-031. The §4 Tier-0/1/2/3 gating table is absorbed
 # here as the rule set; the §4 subagent-only approval-evidence rows (Tier 1/2/3)
 # are Phase-2 deferred — they need a session/approval signal the payload lacks.
 #

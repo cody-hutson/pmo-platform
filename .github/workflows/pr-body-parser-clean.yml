@@ -1,5 +1,12 @@
 name: PR body parser-clean
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Close-keyword leak detection"  always-reports=yes
+#   invariant: the PR body carries no close-family verb + #N outside the dedicated
+#              Issue References block (GitHub's lexical auto-close parser is
+#              negation-blind and section-blind), asserted by scanning the body text.
+#   falsification: write "closes #123" in the PR Summary section -> this gate red.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]
