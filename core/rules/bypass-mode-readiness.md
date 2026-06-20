@@ -45,7 +45,7 @@ These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scr
 
 ### Posture & cache — block-autonomy-ceiling.sh
 
-**Ceiling resolution (section-blind grep, pinned).** The ceiling read greps `^automation_level` line-anchored WITHOUT parsing the `[automation]` TOML section, because the key is unique repo-wide (C0 #322 survey: 0 prior occurrences) — exactly as `notify-version-skew.sh` greps `^operator_github` without parsing `[identity]`. If a second `automation_level` key is ever introduced under a different section, this resolution would need section-awareness.
+**Ceiling resolution (section-blind grep, pinned).** The ceiling read greps `^automation_level` line-anchored WITHOUT parsing the `[automation]` TOML section, because the key is unique repo-wide (the v2.07 ambient-intake C0 survey found 0 prior occurrences of `automation_level`) — exactly as `notify-version-skew.sh` greps `^operator_github` without parsing `[identity]`. If a second `automation_level` key is ever introduced under a different section, this resolution would need section-awareness.
 
 **Cache (FMF-1).** The session-stable dial is resolved ONCE at SessionStart by the sibling `prime-autonomy-ceiling-cache.sh` hook, which writes the numeric ceiling to `${HOME}/.cache/pmo-platform/autonomy-ceiling`. This PreToolUse hook reads that cache (a single file read) rather than re-resolving `operator.toml` on every tool call. If the cache is absent/unreadable, it falls back to a direct resolve so the ceiling is never silently dropped.
 
