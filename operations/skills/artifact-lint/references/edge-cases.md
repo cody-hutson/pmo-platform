@@ -18,5 +18,5 @@ The seven edge cases below are the boundary conditions the five checks must hand
 - **Never auto-resolve a break.** Cases 3 and 5 (cycle, fork) and case 4 (weak match) are always operator-decidable via the disambiguation block — the lint surfaces, the operator chooses.
 - **Skip-with-note, never silent-drop.** An artifact with neither embedded frontmatter nor a sidecar (the input-resolution tail) is listed in the report's "unscannable" section, not dropped. Case 1 (disagreement) is noted in evidence, not silently merged.
 
-### Source(s)
+### Sources
 - #334 — the artifact-lineage-graph split whose Stage-5 deferrals seed this 7-item edge-case register.

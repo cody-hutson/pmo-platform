@@ -285,6 +285,6 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 - **Does not duplicate the artifact-generator Artifact Health Check.** Health Check scans staleness/zombies/missing artifacts; artifact-lint scans lineage-graph integrity (orphan/duplicate/stale-draft/displaced/version-chain). They are complementary.
 - **Does not auto-pick a conflict resolution.** It surfaces the 3-option disambiguation block; the operator chooses.
 
-### Source(s)
+### Sources
 - #334 — the artifact-lineage-graph split (lineage frontmatter fields wired into frontmatter-schema.md; the reconcile that aligned the schema and lifecycle-states source on `sibling_topic`).
 - #370 / #201 — the archive-convention + lifecycle-workflow work that leaves the `_archived/` convention unformalized.

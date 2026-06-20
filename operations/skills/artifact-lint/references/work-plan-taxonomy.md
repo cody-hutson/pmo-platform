@@ -49,6 +49,6 @@ Notes:
 - Folder names follow the project 01-08 structure; a project that customizes folder names supplies the mapping via its project-level configuration. Absent a project mapping, the 01-08 names above are the default.
 - This table is DERIVED — a canonical-home mismatch is operator-decidable, not a hard failure, until the taxonomy is confirmed at Stage 9.
 
-### Source(s)
+### Sources
 - #334 — the artifact-lineage-graph split whose deleted split card originally defined the 17-row taxonomy; this table is the evidence-grounded reconstruction.
 - #159 — the plan-type taxonomy that seeds the Situational 7 tier.
