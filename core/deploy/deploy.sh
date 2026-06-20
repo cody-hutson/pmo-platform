@@ -1131,6 +1131,20 @@ cmd_deploy() {
   # packages/ root; harness/ at v2 root (currently empty per the Phase 3
   # account-switcher extraction).
   validate_workspace
+
+  # Regenerate the committed hook-registry index from its per-hook + cross-cutting
+  # sources (per ADR-030 #18). The canonical core/rules/bypass-mode-readiness.md is
+  # a GENERATED artifact assembled by build-hook-registry.py; regenerating it at
+  # deploy keeps the committed index fresh from sources (Check 38 verifies it
+  # stayed fresh). Best-effort — a deploy on a machine without python3 still
+  # proceeds; Check 38 surfaces any resulting staleness.
+  if [[ -f core/deploy/tools/build-hook-registry.py ]] && [[ -x /usr/bin/python3 ]]; then
+    if /usr/bin/python3 core/deploy/tools/build-hook-registry.py >/dev/null 2>&1; then
+      log "Hook-registry index regenerated from sources (core/rules/bypass-mode-readiness.md)."
+    else
+      log "WARN: hook-registry index regeneration failed; Check 38 will flag any staleness."
+    fi
+  fi
   # Resolve the Cowork install path non-fatally (detect_install_path returns 2 and
   # leaves INSTALL_PATH empty when no session resolves). A session-less machine is
   # a supported install case: the user-local ~/.claude/skills mirror still deploys.
@@ -2003,6 +2017,32 @@ cmd_check() {
         diff -u "$c9_left" "$c9_right" 2>/dev/null | head -20 | sed 's/^/         /' || true
       fi
     done
+
+    # Directory-shaped mirror set (per ADR-030 #18 hook-registry split): the
+    # bypass-mode-readiness index above mirrors 1:1 as a single MIRROR_PAIRS
+    # entry; its per-hook drop-in SOURCES under core/rules/bypass-mode-readiness/
+    # each mirror 1:1 too. Enumerate them and byte-diff each against its
+    # ~/.claude/rules/bypass-mode-readiness/<basename> counterpart, preserving the
+    # same SKIP-on-missing semantics (so the public repo, where the .claude/rules/
+    # mirror is operator-instance and absent, stays a clean SKIP — no false drift)
+    # and the same warn-mode posture.
+    if [[ -d core/rules/bypass-mode-readiness ]]; then
+      local c9_hook_src
+      for c9_hook_src in core/rules/bypass-mode-readiness/*.md; do
+        [[ -e "$c9_hook_src" ]] || continue
+        local c9_hook_mir="$DEPLOY_ROOT/.claude/rules/bypass-mode-readiness/$(basename "$c9_hook_src")"
+        if [[ ! -f "$c9_hook_src" ]] || [[ ! -f "$c9_hook_mir" ]]; then
+          log "  SKIP:  $c9_hook_src ↔ $c9_hook_mir (one or both missing)"
+          continue
+        fi
+        if diff -q "$c9_hook_src" "$c9_hook_mir" >/dev/null 2>&1; then
+          log "  OK:    $c9_hook_src ↔ $c9_hook_mir (byte-identical)"
+        else
+          flag_warn_or_issue "mirror-sync" "$c9_hook_src ↔ $c9_hook_mir divergence"
+          diff -u "$c9_hook_src" "$c9_hook_mir" 2>/dev/null | head -20 | sed 's/^/         /' || true
+        fi
+      done
+    fi
   fi
 
   # Check 10 — Editor audit-trail (per the D-Editor dual-gate; warn-mode initial)
@@ -4363,6 +4403,154 @@ cmd_check() {
       else
         log "  ${c36_findings} memory↔corpus tie-drift signal(s) emitted (mode=${DEPLOY_CHECK_MODE}; deletes nothing — see knowledge-architecture.md §6)"
       fi
+    fi
+  fi
+
+  # Check 37 — Hook-registry completeness (advisory; warn-mode initial; required at flip-to-enforce)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
+  #            (becomes required when the operator flips deploy-check.mode to enforce)
+  #   invariant: every core/hooks/block-*.sh maps to its CORRECT owning doc, and
+  #              every bypass-mode per-hook source maps back to a script AND a row
+  #              in the generated index — a bijection scoped by ownership, NOT a
+  #              forced single-file bijection (per ADR-030 + the Stage-6 ownership
+  #              caveat: block-skill-direct-edit and block-fragile-refs are owned
+  #              by their own discipline docs, not the bypass-mode registry).
+  #   falsification: add a new core/hooks/block-foo.sh with no owner entry -> Check
+  #                  37 WARNs (advisory) / FAILS (post-flip). Delete a per-hook
+  #                  source whose script still exists -> Check 37 WARNs / FAILS.
+  #
+  # This is the drift-resistance teeth ADR-030 adds: it makes the live 5/7/9
+  # registry drift (doc said "7 hooks"; subagent-security-posture said "5"; the
+  # machine registry had all 9; no check reconciled them) structurally
+  # impossible. It asserts CONTENT (the on-disk script set vs the on-disk source
+  # set vs the generated-index rows), not a proxy.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 37: Hook-registry completeness (ownership bijection)"
+    local c37_index="core/rules/bypass-mode-readiness.md"
+    local c37_src_dir="core/rules/bypass-mode-readiness"
+    # Ownership manifest: each core/hooks/block-*.sh -> its owning doc. The 7
+    # bypass-mode security hooks are owned by the bypass-mode registry (their
+    # per-hook source lives under $c37_src_dir + a row in $c37_index); the other
+    # 2 are owned by their own discipline docs and are intentionally NOT in this
+    # registry. Edit this manifest (and add the per-hook source) when a new
+    # bypass-mode hook ships.
+    local -a C37_BYPASS_HOOKS=(
+      block-credential-reads
+      block-destructive
+      block-egress
+      block-fs-boundary
+      block-mcp-writes
+      block-rm-prefer-trash
+      block-shell-injection
+    )
+    # Non-bypass-mode hooks: hook-basename:owning-doc (owner must exist on disk).
+    local -a C37_OTHER_OWNERS=(
+      "block-skill-direct-edit:core/standards/canonical-skill-structure.md"
+      "block-fragile-refs:core/standards/reference-durability-standard.md"
+    )
+    if [[ ! -d core/hooks ]] || [[ ! -f "$c37_index" ]] || [[ ! -d "$c37_src_dir" ]]; then
+      log "  SKIP:  hook scripts dir, index, or source dir absent (greenfield/partial checkout)"
+    else
+      local c37_violations=0
+      # Build the bypass-mode lookup set + the other-owner lookup set as strings.
+      local c37_bypass_set=" ${C37_BYPASS_HOOKS[*]} "
+      local c37_other_set=""
+      local _pair
+      for _pair in "${C37_OTHER_OWNERS[@]}"; do
+        c37_other_set+=" ${_pair%%:*} "
+      done
+      # (a) Every script on disk has an owner (bypass-mode OR an other-owner doc).
+      local c37_script
+      for c37_script in core/hooks/block-*.sh; do
+        [[ -e "$c37_script" ]] || continue
+        local c37_base; c37_base="$(basename "$c37_script" .sh)"
+        if [[ "$c37_bypass_set" == *" $c37_base "* ]]; then
+          # Bypass-mode hook: must have a per-hook source AND an index row.
+          if [[ ! -f "$c37_src_dir/$c37_base.md" ]]; then
+            flag_warn_or_issue "hook-registry-completeness" "bypass-mode hook $c37_base has no per-hook source at $c37_src_dir/$c37_base.md"
+            c37_violations=$((c37_violations + 1))
+          # The generated "## The Hooks" table emits one anchor-linked row per
+          # per-hook source: `[\`block-<hook>.sh\` (…)](#…)`. Assert that row exists.
+          elif ! grep -qE "\[\`?$c37_base\.sh\`? .*\]\(#" "$c37_index" 2>/dev/null; then
+            flag_warn_or_issue "hook-registry-completeness" "bypass-mode hook $c37_base has a source but no row in the generated index $c37_index (regenerate via build-hook-registry.py)"
+            c37_violations=$((c37_violations + 1))
+          fi
+        elif [[ "$c37_other_set" == *" $c37_base "* ]]; then
+          # Non-bypass-mode hook: its owning doc must exist on disk.
+          local c37_owner=""
+          for _pair in "${C37_OTHER_OWNERS[@]}"; do
+            [[ "${_pair%%:*}" == "$c37_base" ]] && c37_owner="${_pair##*:}"
+          done
+          if [[ -n "$c37_owner" ]] && [[ ! -f "$c37_owner" ]]; then
+            flag_warn_or_issue "hook-registry-completeness" "$c37_base owned by $c37_owner, but that owner doc is missing"
+            c37_violations=$((c37_violations + 1))
+          fi
+        else
+          # Script with NO owner manifest entry at all — the 5/7/9 failure mode.
+          flag_warn_or_issue "hook-registry-completeness" "$c37_base has no owner: add it to C37_BYPASS_HOOKS (+ a per-hook source) or C37_OTHER_OWNERS in deploy.sh Check 37"
+          c37_violations=$((c37_violations + 1))
+        fi
+      done
+      # (b) Reverse: every bypass-mode per-hook source maps back to a script.
+      local c37_src
+      for c37_src in "$c37_src_dir"/block-*.md; do
+        [[ -e "$c37_src" ]] || continue
+        local c37_sbase; c37_sbase="$(basename "$c37_src" .md)"
+        if [[ "$c37_bypass_set" != *" $c37_sbase "* ]]; then
+          flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src is not a registered bypass-mode hook (add $c37_sbase to C37_BYPASS_HOOKS, or remove the source)"
+          c37_violations=$((c37_violations + 1))
+        elif [[ ! -f "core/hooks/$c37_sbase.sh" ]]; then
+          flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src has no backing script core/hooks/$c37_sbase.sh"
+          c37_violations=$((c37_violations + 1))
+        fi
+      done
+      if [[ $c37_violations -eq 0 ]]; then
+        log "  OK:    ${#C37_BYPASS_HOOKS[@]} bypass-mode hooks ⇄ sources ⇄ index rows; ${#C37_OTHER_OWNERS[@]} other hooks own-doc resolved"
+      fi
+    fi
+  fi
+
+  # Check 38 — Hook-registry index freshness (required; always-enforce; enforcement-surface: deploy-time)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (a)+(b)):
+  #   posture: required   enforcement-surface: always-enforce (deploy-time)
+  #   invariant: the committed core/rules/bypass-mode-readiness.md is byte-identical
+  #              to what build-hook-registry.py regenerates from its per-hook +
+  #              cross-cutting sources (the regenerate-and-diff "verify-ci"
+  #              pattern). A stale committed generated artifact must never ship.
+  #   falsification: edit a per-hook source (e.g. add a rule row) without
+  #                  regenerating -> Check 38 FAILS (committed index drifts from
+  #                  sources). Regenerate + commit -> Check 38 GREEN.
+  #
+  # Always-enforce because the generator is deterministic — a non-empty
+  # regenerate-and-diff is unambiguous drift, not a calibration signal. This is
+  # the freshness half of ADR-030's drift-resistance (Check 37 is the
+  # completeness half). Fails LOUD if the generator can't run (missing python3 /
+  # missing generator), never silently passing a potentially-stale index.
+  log "Check 38: Hook-registry index freshness (regenerate-and-diff)"
+  local c38_gen="core/deploy/tools/build-hook-registry.py"
+  if [[ ! -f "$c38_gen" ]]; then
+    log "  FAIL:  Check 38 generator missing: $c38_gen"
+    ISSUES=$((ISSUES + 1))
+  elif [[ ! -x "/usr/bin/python3" ]]; then
+    log "  FAIL:  Check 38 — /usr/bin/python3 not executable; cannot verify index freshness"
+    ISSUES=$((ISSUES + 1))
+  else
+    local c38_out c38_rc=0
+    c38_out=$(/usr/bin/python3 "$c38_gen" --check 2>&1) || c38_rc=$?
+    if [[ $c38_rc -eq 0 ]]; then
+      log "  OK:    core/rules/bypass-mode-readiness.md is in sync with its sources"
+    elif [[ $c38_rc -eq 1 ]]; then
+      log "  FAIL:  core/rules/bypass-mode-readiness.md is STALE vs its sources — regenerate via 'python3 $c38_gen' and commit"
+      echo "$c38_out" | head -20 | sed 's/^/         /' || true
+      ISSUES=$((ISSUES + 1))
+    else
+      # exit 3 (source-resolution failure) or any other non-zero — fail loud.
+      log "  FAIL:  Check 38 generator exited $c38_rc (source-resolution failure or error)"
+      echo "$c38_out" | head -10 | sed 's/^/         /' || true
+      ISSUES=$((ISSUES + 1))
     fi
   fi
 
