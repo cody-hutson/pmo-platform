@@ -36,6 +36,7 @@ OPERATIONS_SKILLS=(
   intake-desk
   pmo-process-designer
   pmo-portfolio-manager
+  pmo-product-owner
   pmo-program-coordinator
   pmo-program-manager
   pmo-project-manager
