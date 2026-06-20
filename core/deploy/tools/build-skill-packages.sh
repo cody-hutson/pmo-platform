@@ -162,6 +162,7 @@ build_one() {
 # same roster.
 ALL_SKILLS=(
   artifact-generator
+  artifact-lint
   build-reviewer
   change-management
   comms-writer
