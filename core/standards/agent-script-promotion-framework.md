@@ -172,6 +172,7 @@ The framework catalog's per-row `canonical_doc` column drives anchor validation,
 - **Triggers fired:** T-DET (path existence is structural), T-REP (recurs at every catalog append), T-RISK (silent disablement of a governance check). Counter-signals: none — the catalog schema and the checker's semantics are stable.
 - **Promotion shape:** extend the existing version-anchor checker (or add a sibling assertion in the same deploy-check) so a non-resolving `canonical_doc` is a reported finding. Caller-type test: the deploy-check engine invokes it → **AS3**, checkpoint-wired; no agent ever has to remember to run it.
 - **Why this example:** it demonstrates checkpoint-wiring into an existing governed caller (the cheapest AS3 promotion — no new checkpoint, one new assertion) and it is the first concrete member of the §6 enforcement-tooling growth path.
+- **Status:** SHIPPED v2.09 as Check 18d in `core/deploy/tools/check-version-anchors.py` (`check_18d`) — the first concrete member of the §6 enforcement-tooling growth path. A non-resolving `canonical_doc` is now a reported finding (severity P1) flowing through the deploy.sh Check-18 case-arm, warn-mode-initial. Discovery anchor for #661.
 
 ## Failure Modes
 

@@ -16,6 +16,11 @@ parallels Check 13's TEMPLATE_SYNC_MAP) and runs three sub-checks:
        consistency check, it only fires on an actual disagreement). — severity P1.
   18c  cadence aging — rows where next_review_due (a date) <= today are overdue.
        next_review_due == 'continuous' is skipped (emerging tier). — severity P3.
+  18d  canonical_doc path resolution — for each row whose canonical_doc != '—',
+       assert the path resolves to an existing file. PRESENCE complement to 18b's
+       CONSISTENCY check: 18b silently skips a non-resolving path ("nothing to
+       assert"), which silently disables anchor checking for that row; 18d makes
+       the non-resolving path itself the finding. — severity P1.
 
 Interface:
   --catalog-path PATH    catalog markdown (default: core/specs/framework-catalog.md)
@@ -190,6 +195,32 @@ def check_18b(rows: list[dict]) -> list[dict]:
     return findings
 
 
+def check_18d(rows: list[dict]) -> list[dict]:
+    """18d — canonical_doc path-resolution presence check.
+
+    Presence complement to 18b. 18b is a *consistency* check and intentionally
+    SKIPs a non-resolving canonical_doc ("nothing to assert"), which silently
+    disables anchor checking for that row (the SP-4 defect). 18d asserts the
+    path itself resolves: every row whose canonical_doc != '—' must point at an
+    existing file. NULL_DOC rows ('—'/'-'/'') are skipped — they declare no doc.
+    """
+    findings: list[dict] = []
+    for row in rows:
+        fw = row.get("framework", "") or "(blank)"
+        doc = row.get("canonical_doc", "").strip()
+        if doc in NULL_DOC:
+            continue  # no doc declared — nothing to resolve
+        doc_path = doc if Path(doc).is_absolute() else WORKSPACE_ROOT / doc
+        if not Path(doc_path).exists():
+            findings.append({
+                "framework": fw, "check": "18d-path-resolution",
+                "detail": f"canonical_doc '{doc}' does not resolve to an existing file "
+                          f"(stale/rotted path silently disables 18b anchor checking for this row)",
+                "severity": "P1",
+            })
+    return findings
+
+
 def check_18c(rows: list[dict], today: datetime.date) -> list[dict]:
     findings: list[dict] = []
     for row in rows:
@@ -243,6 +274,7 @@ def run_all(catalog_path: Path, today: datetime.date | None = None) -> tuple[lis
         }], None
     findings: list[dict] = []
     findings += check_18a(rows)
+    findings += check_18d(rows)        # presence — non-resolving canonical_doc is the finding
     findings += check_18b(rows)
     findings += check_18c(rows, today)
     return findings, None
@@ -335,6 +367,21 @@ title: T
         ps.write_text(skipc, encoding="utf-8")
         sf, _ = run_all(ps, today=datetime.date(2026, 5, 15))
         assert not any(f["check"] == "18b-consistency" for f in sf), f"no-frontmatter doc must SKIP 18b, got: {sf}"
+
+        # 18d: a canonical_doc that does NOT resolve must FIRE 18d (and must NOT
+        # reach 18b's compare — no-file no longer silently passes).
+        missing = Path(td) / "does-not-exist.md"   # intentionally never written
+        stalepath = clean.replace(
+            "| Beta | INTERNAL | v9.0 | — | v9.0 | scope | evolving | 12mo | 2026-05-15 | continuous | Owner |",
+            f"| Beta | INTERNAL | v9.0 | {missing} | v9.0 | scope | evolving | 12mo | 2026-05-15 | continuous | Owner |",
+        )
+        psp = Path(td) / "stalepath.md"
+        psp.write_text(stalepath, encoding="utf-8")
+        spf, _ = run_all(psp, today=datetime.date(2026, 5, 15))
+        assert any(f["check"] == "18d-path-resolution" for f in spf), \
+            f"non-resolving canonical_doc must FIRE 18d, got: {spf}"
+        assert not any(f["check"] == "18b-consistency" for f in spf), \
+            f"non-resolving canonical_doc must NOT fire 18b (it fires 18d), got: {spf}"
 
     print("self-test OK")
     return 0

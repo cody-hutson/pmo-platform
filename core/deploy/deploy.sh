@@ -2665,7 +2665,9 @@ cmd_check() {
   # core/deploy/tools/check-version-anchors.py over the governed
   # registry core/specs/framework-catalog.md. Sub-checks:
   # 18a catalog completeness / 18b catalog↔doc anchor consistency / 18c cadence
-  # aging. Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
+  # aging / 18d canonical_doc path resolution (non-resolving path = finding, the
+  # presence complement to 18b's silent skip — #661). Warn-mode initial per
+  # bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15 precedent); flip-to-enforce timeline + explicit reflexive
   # self-exemption cutover codified in
   # core/standards/framework-corpus-discipline.md §8/§9.
@@ -2694,7 +2696,7 @@ cmd_check() {
         # target. Never a silent PASS (per #459 fail-loud).
         flag_warn_or_issue "framework-anchor-drift" "path-resolution failure (exit 3): $(echo "$c18_output" | head -1) — catalog target did not resolve"
       elif [[ $c18_exit -eq 0 ]]; then
-        log "  OK:    catalog complete, anchors consistent, no overdue reviews"
+        log "  OK:    catalog complete, paths resolve, anchors consistent, no overdue reviews"
       else
         local c18_findings
         c18_findings=$(echo "$c18_output" | tail -n +2 | wc -l | tr -d ' ')
