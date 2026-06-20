@@ -229,6 +229,8 @@ Stage 5 sub-task output comments follow the canonical 7-section H3 frame and 4 r
 
 For the structured boundary contract, see [schemas/stage-io-contracts.md](../../../core/schemas/stage-io-contracts.md#boundary-stage-5--stage-6).
 
+**Canonical-form applicability (per the canonical-form-application discipline under the core disciplines set):** Stage 5 produces a canonical-form-framed artifact — the ADR. When this stage authors an ADR, produce it in its canonical form (the markdown-ADR convention) OR document partial-form conformance with explicit rationale per the application protocol; do not silently leave the canonical form partial-or-absent. The frame registry and the produce-OR-document-partial protocol live in the canonical-form-application discipline.
+
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
 Metrics: all issues have design specs, ADRs resolved (closed), blast radius complete, no unresolved questions, plan updated, Mode 3/4 flags resolved.
