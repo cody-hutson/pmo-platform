@@ -158,6 +158,23 @@ Apply at least primitives 1 + 2 for every audit-derived recommendation. Apply pr
 
 **Cutover discipline:** Applies to all releases going forward.
 
+### 2.1.2 Sub-mechanism — Canonical-Form-Conformance Check
+
+**Specialization of:** Mechanism 1 (Localization Check, § 2.1). Not a new mechanism — it is the localization-check pattern applied to one specific dimension: whether a decision-class output that produces (or directs the production of) a discipline-framed artifact conforms to that artifact's canonical form, or documents a deliberate partial-form conformance with rationale.
+
+**Purpose:** Catch the canonical-form-application degradation class — canon substance applied while the canonical artifact form is partial-or-absent. When a decision produces an artifact that a registered frame governs (an ADR, a retro, a methodology design, an acceptance-test design, an exception plan), the Localization Check must additionally localize on the frame's canonical form, not only on platform context.
+
+**When this fires:** Mechanism 1 applies normally per § 3 triage. M1 fires this sub-mechanism when the decision produces, or directs Engineering to produce, an artifact governed by one of the frames in the canonical-form registry (the registry of frames and their template owners is maintained in `canonical-form-discipline.md` § 4).
+
+**Conformance check (run alongside the § 2.1 Reconciliation):**
+  - Identify the frame the produced artifact belongs to (per the canonical-form registry).
+  - Localize on its canonical form: does the output produce the canonical-form artifact, OR document partial-form conformance with explicit rationale per `canonical-form-discipline.md` § 3.3?
+  - A decision that produces a frame-governed artifact in neither canonical form NOR documented-partial form is incomplete — surface it, do not proceed on the generic heuristic.
+
+**Load-bearing test:** the check is load-bearing iff it names the specific frame, states whether canonical form was produced or partial-conformance was documented-with-rationale, and (if partial) cites the over-formalization rationale. A bare "conforms to canonical form" with no frame named and no produce-vs-document verdict is ceremony (rejected per § 5 G1).
+
+**Consumer-agnostic wording:** applies to any consumer of this framework (hub today; successor skills per § 7.3). The registry it consults lives in `canonical-form-discipline.md`; this sub-mechanism is the decision-side enforcement hook.
+
 ### 2.2 Mechanism 2 — Opposing View
 
 **Purpose:** Catch Type A weak-reasoning failures (Instance 2 doc→code naming). The consumer reaches for presentation-scaffolding reasoning instead of articulating real substantive reasoning.

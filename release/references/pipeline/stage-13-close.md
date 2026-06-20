@@ -242,6 +242,8 @@ All issues CLOSED (or documented-deferred), Milestone CLOSED, RELEASE_LOG.md sta
 
 Stage 13 does NOT produce: design decisions (Stage 5), deployment execution (Stage 12), quality assessments (Stages 7-8).
 
+**Canonical-form applicability (per the canonical-form-application discipline under the core disciplines set):** Stage 13 produces a canonical-form-framed artifact — the release close-out / lessons-learned surface (the per-release retro + lessons-learned register). When this stage produces that surface, produce it in its canonical form (the retro + lessons-learned register template) OR document partial-form conformance with explicit rationale per the application protocol; do not silently leave the canonical form partial-or-absent. The frame registry and the produce-OR-document-partial protocol live in the canonical-form-application discipline.
+
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
 Metrics (canonical IDs per [`schemas/gate-criteria-spec.md` Gate 13](../../../core/schemas/gate-criteria-spec.md#gate-13-close-readiness)): all issues CLOSED or documented-deferred (G-CL1), Milestone CLOSED (G-CL2), RELEASE_LOG.md VERIFIED (G-CL3), verification evidence persisted (G-CL4), operational deployment manifest fully executed (G-CL5), release branch deleted (structural — inherited from field-lifecycle-matrix Gate 13 Exit), carry-forward items tracked (structural — inherited).
