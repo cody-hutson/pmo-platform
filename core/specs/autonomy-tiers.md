@@ -7,6 +7,7 @@ disambiguates_from: Document Tier (CLAUDE.md File Management Protocol), Skill Ti
 source: "autonomy-tiers-and-self-repair; operator D-3 decision 2026-05-04 (explicit prefixed terminology, Tier 0-3 numbering manual→autonomous)."
 ---
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 
 # Autonomy Tier Classification
 
@@ -240,6 +241,7 @@ A Tier 1 skill (per OPERATIONS.md skill classification — e.g., comms-writer) c
 |---|---|---|
 | Future SKILL.md `autonomy_tier:` frontmatter | TBD | Per-skill self-classification using this file's tier names |
 | Future PreToolUse hooks (workspace-global) | TBD — design contract in [`subagent-security-posture.md § 4 Deferred Hook Contract`](../standards/subagent-security-posture.md) | Tier-based gating — Tier 0/1 actions blocked unless approval evidence present |
+| `core/config/operator.toml.template` `[automation].automation_level` | v2.07 | Reads this file's Tier-0 vocabulary + § Irreducible Human Tasks as the ceiling's irreducible floor (`effective = min(automation_level, per-action max)`). Advisory/soft until the C5 (#1163) PreToolUse hook lands this release (warn-mode-initial per the hook-suite shakedown convention) and the operator flips it warn→enforce; once flipped, the hook hard-blocks only the payload-detectable Tier-0 classes (governance-file + cross-domain bridge paths), while financial / account-creation / security-permission / Stage 9 / Stage 12 stay operator-irreducible by convention |
 | `platform-health-audit-framework.md` | TBD | Tier-distribution metrics (% of actions per tier across the platform) |
 | pmo-qa-auditor (or successor audit gate) | TBD | Validates skills declare `autonomy_tier:` and that observed actions match declared tier |
 
