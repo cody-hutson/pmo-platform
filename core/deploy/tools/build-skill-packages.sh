@@ -128,6 +128,7 @@ ALL_SKILLS=(
   file-router
   implementation-planner
   pmo-architect
+  pmo-business-analyst
   pmo-devops-sre
   pmo-principal-engineer
   pmo-process-designer
