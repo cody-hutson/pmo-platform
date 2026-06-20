@@ -1286,19 +1286,29 @@ cmd_deploy() {
 
       # Supplementary content (pmo-skill-refiner has agents/, scripts/, eval-viewer/, assets/, references/; prompt-builder has references/)
       if is_supplementary "$skill"; then
-        local supp_failures=false
+        # #984: capture cp stderr and surface the root cause + remediation on a
+        # read-only / undeletable install target — the same report-the-cause
+        # discipline #88 introduced for the references/ mirror (no opaque
+        # "some files failed to copy"). Happy path is byte-identical.
+        local supp_failures=false supp_cause="" supp_failed_item=""
         for item in "$source_dir"/*; do
-          local item_name
+          local item_name cp_err cp_rc=0
           item_name=$(basename "$item")
           [[ "$item_name" == "SKILL.md" ]] && continue  # Already deployed above
           if [[ -d "$item" ]]; then
-            cp -R "$item" "$INSTALL_PATH/$skill/" 2>/dev/null || supp_failures=true
+            cp_err=$(cp -R "$item" "$INSTALL_PATH/$skill/" 2>&1) && cp_rc=0 || cp_rc=$?
           elif [[ -f "$item" ]]; then
-            cp "$item" "$INSTALL_PATH/$skill/" 2>/dev/null || supp_failures=true
+            cp_err=$(cp "$item" "$INSTALL_PATH/$skill/" 2>&1) && cp_rc=0 || cp_rc=$?
+          fi
+          if [[ $cp_rc -ne 0 ]]; then
+            supp_failures=true
+            [[ -z "$supp_cause" ]] && { supp_cause="${cp_err:-cp returned $cp_rc}"; supp_failed_item="$item_name"; }
           fi
         done
         if [[ "$supp_failures" == "true" ]]; then
-          log "  WARNING:  $skill — some supplementary files failed to copy"
+          log "  WARNING:  $skill — supplementary content copy failed (first failure: $supp_failed_item)"
+          log "            cause: ${supp_cause}"
+          log "            remediation: chmod -R u+w \"$INSTALL_PATH/$skill\" && ./deploy.sh --deploy $skill  (read-only install target; derived mirror — safe to chmod)"
         else
           log "  Deployed: $skill supplementary content ($(ls -d "$source_dir"/*/ 2>/dev/null | wc -l | tr -d ' ') dirs)"
         fi
@@ -1402,6 +1412,48 @@ cmd_deploy() {
   if [[ ${#FAILURES[@]} -gt 0 ]]; then
     die "Deployment failures: ${FAILURES[*]}"
   fi
+}
+
+# ─── Mode: --check-lifecycle ─────────────────────────────────────────────────
+
+cmd_check_lifecycle() {
+  # Read-only. Single surface answering "which deploy.sh checks are retired or
+  # dormant, why, and what reactivates them." The per-check detail lives in the
+  # inline RETIRED / DORMANT comment blocks in cmd_check; this is the INDEX.
+  # Maintenance rule: add a row here whenever a check is retired (tombstoned) or
+  # parked (dormant). Keep in sync with the inline blocks — they are the SSOT for
+  # detail, this table is the SSOT for the lifecycle roster.
+  cat <<'LIFECYCLE'
+deploy.sh check lifecycle registry
+===================================
+Live check sequence: 1-14, 16-23, 25-38   (gaps: 15, 24 — both reserved)
+Next NEW top-level check number: 39
+  (15 and 24 are RETIRED-RESERVED; never reuse. Sub-checks extend an existing
+   number, e.g. 18a/18b/18c/18d, and do NOT consume a new top-level number.)
+
+CHECK  STATE     DISPOSITION                         REACTIVATION / AUTHORITY
+-----  --------  ----------------------------------  ------------------------------------
+15     RETIRED   Release-corpus cross-link integrity Authority: FX-Check15 (operator,
+                 -> operator-instance (release       2026-05-27) + harness plan section 2.4.
+                 corpus moved out of tracked tree).  Reactivate: operator may re-introduce
+                 Number reserved.                    an in-tree Check 15 if posture changes.
+                                                     Detail: inline block in cmd_check.
+24     RETIRED   Initiative-roadmap staleness scan   Authority: ADR-012 (2026-06-02) +
+                 (24a frontmatter lint / 24b 90-day  initiative-roadmap-framework.md s10.
+                 staleness) -> DELETED; roadmap      Reactivate: only if roadmap instances
+                 instances now operator-local.       return to the tracked tree. Number
+                 Number reserved (#318 took 34, not  reserved per the v1.21 release plan.
+                 24, for this reason).               Detail: inline block in cmd_check.
+11     DORMANT   Harness sync. Code complete;        Anchor: #375 (carry v1 .claude/ harness
+                 HARNESS_LIST empty since the        into v2). Auto-reactivates when
+                 account-switcher was extracted      HARNESS_LIST is non-empty.
+                 ("Phase 3").                        Detail: inline block in cmd_check.
+30     DORMANT   Slash-command quoting lint. Code    Anchor: #375 (carry v1 .claude/ harness
+                 complete; harness/*/commands/       into v2). Auto-reactivates when find
+                 absent since "Phase 3".             harness -path '*/commands/*.md'
+                                                     yields >=1 file.
+                                                     Detail: inline block in cmd_check.
+LIFECYCLE
 }
 
 # ─── Mode: --check ───────────────────────────────────────────────────────────
@@ -1969,7 +2021,7 @@ cmd_check() {
   #                  source -> this check WARNs (advisory) / FAILS (post-flip).
   #
   # Semantics per Spec Surface 5.4 + ADR-008 Consequence 2:
-  #   in-repo source `core/rules/<file>.md` OR `release/rules/release-process.md`
+  #   in-repo source `core/rules/<file>.md` OR `release/governance/release-process.md`
   #   ↔ workspace mirror `~/.claude/rules/<file>.md`
   #   (source-mirrors-to-workspace; uni-directional)
   #
@@ -1987,14 +2039,23 @@ cmd_check() {
       "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md"
       "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md"
       "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md"
-      "release/rules/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
+      "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
       "core/governance/OPERATIONS.md:operations/OPERATIONS.md"
     )
     for pair in "${MIRROR_PAIRS[@]}"; do
       local c9_left="${pair%%:*}"
       local c9_right="${pair##*:}"
-      if [[ ! -f "$c9_left" ]] || [[ ! -f "$c9_right" ]]; then
-        log "  SKIP:  $c9_left ↔ $c9_right (one or both missing)"
+      # A declared SOURCE (left, in-repo) that does not exist is a config error:
+      # a typo'd or moved path silently disables the pair's enforcement (the
+      # #1104 failure class). WARN on it — never silent-SKIP. A missing MIRROR
+      # (right, ~/.claude/rules/) is legitimately operator-instance-absent in
+      # the public repo / CI / a fresh checkout, so that stays a clean SKIP.
+      if [[ ! -f "$c9_left" ]]; then
+        flag_warn_or_issue "mirror-sync" "$c9_left: declared MIRROR_PAIRS source does not exist (typo or moved path — pair cannot be enforced)"
+        continue
+      fi
+      if [[ ! -f "$c9_right" ]]; then
+        log "  SKIP:  $c9_left ↔ $c9_right (workspace mirror absent — operator-instance)"
         continue
       fi
       # The OPERATIONS.md dual-write pair lives at two repo depths
@@ -2099,8 +2160,14 @@ cmd_check() {
   # For each artifact in HARNESS_LIST: source files (excluding config.toml
   # template + HARNESS_OPERATOR_STATE allowlist) match runtime byte-identically.
   # Slash commands at source/commands/*.md must match ~/.claude/commands/*.md.
-  # HARNESS_LIST is currently empty (account-switcher extracts at Phase 3);
-  # explicit empty-array guard per ADR-008 Rule 2 + Spec Surface 3 SKIP logging.
+  #
+  # DORMANT (not retired): HARNESS_LIST is empty because the account-switcher
+  # harness was extracted at "Phase 3"; the loop below is complete and correct.
+  # REACTIVATION ANCHOR — issue #375 (carry the v1 .claude/ harness into v2).
+  #   Condition: reactivates AUTOMATICALLY when HARNESS_LIST is non-empty (a
+  #   harness artifact is registered) — no code change required; the empty-array
+  #   guard below (ADR-008 Rule 2 + Spec Surface 3 SKIP logging) yields to the
+  #   loop the moment an artifact appears. Registry: see cmd_check_lifecycle.
   log "Check 11: Harness sync"
   if [[ ${#HARNESS_LIST[@]} -eq 0 ]]; then
     log "  SKIP:  no harness artifacts in scope (HARNESS_LIST empty per Phase 3 account-switcher extraction)"
@@ -2646,7 +2713,9 @@ cmd_check() {
   # core/deploy/tools/check-version-anchors.py over the governed
   # registry core/specs/framework-catalog.md. Sub-checks:
   # 18a catalog completeness / 18b catalog↔doc anchor consistency / 18c cadence
-  # aging. Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
+  # aging / 18d canonical_doc path resolution (non-resolving path = finding, the
+  # presence complement to 18b's silent skip — #661). Warn-mode initial per
+  # bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15 precedent); flip-to-enforce timeline + explicit reflexive
   # self-exemption cutover codified in
   # core/standards/framework-corpus-discipline.md §8/§9.
@@ -2675,7 +2744,7 @@ cmd_check() {
         # target. Never a silent PASS (per #459 fail-loud).
         flag_warn_or_issue "framework-anchor-drift" "path-resolution failure (exit 3): $(echo "$c18_output" | head -1) — catalog target did not resolve"
       elif [[ $c18_exit -eq 0 ]]; then
-        log "  OK:    catalog complete, anchors consistent, no overdue reviews"
+        log "  OK:    catalog complete, paths resolve, anchors consistent, no overdue reviews"
       else
         local c18_findings
         c18_findings=$(echo "$c18_output" | tail -n +2 | wc -l | tr -d ' ')
@@ -3164,6 +3233,24 @@ cmd_check() {
       fi
     fi
   fi
+
+  # ─── Check 24: Initiative-roadmap staleness scan — RETIRED (number reserved) ──
+  # Per ADR-012 (Roadmap-instance de-scope, 2026-06-02) + core/standards/
+  # initiative-roadmap-framework.md §10. Check 24 was the roadmap-freshness
+  # enforcement surface (24a: frontmatter schema lint; 24b: 90-day
+  # `last_reviewed:` staleness scan over the roadmap corpus). It was DELETED when
+  # initiative-roadmap *instances* moved from the tracked tree to operator-local
+  # authoring (<OPERATOR_INSTANCE_ROADMAPS_PATH>, untracked) — no in-repo roadmap
+  # corpus remains for it to scan. Roadmap freshness is now an operator-local
+  # discipline (the framework convention is retained; its in-repo enforcement is
+  # not).
+  #
+  # Check numbering: gap (24 retired) is RESERVED for citation continuity — the
+  # number is referenced by ADR-012, the roadmap framework, and the v1.21 release
+  # plan ("24 is retired-reserved"; #318's check was assigned 34 specifically
+  # because 24 was already reserved). It must NOT be reused. The next NEW
+  # top-level check number is 39 (see cmd_check_lifecycle). Mirrors the Check 15
+  # retirement precedent above.
 
   # ─── Check 25: Universal-vs-localized-context authoring guardrail ──
   # Reconciled from a Stage 6 "Check 23" to Check 25 at Stage 9 — it collided
@@ -3703,11 +3790,14 @@ cmd_check() {
   # Per the Stage 5 spec D-Lint — scans pmo-authored slash command source
   # files under harness/*/commands/*.md for unquoted `$ARGUMENTS` references in
   # Bash-execution context (a `!` exec-line per slash-command convention). The
-  # check structure is RETAINED for future-proofing (when v2 ships
-  # new harness artifacts with slash commands); harness/ at v2 root does not
-  # exist yet (account-switcher extracted at Phase 3), so the find
-  # yields zero files and the check no-ops cleanly with the "lint skipped"
-  # message.
+  # DORMANT (not retired): harness/ is absent at v2 root because the
+  # account-switcher harness was extracted at "Phase 3"; the find below yields
+  # zero files and the check no-ops cleanly via the "lint skipped" message. The
+  # scan logic is complete and correct.
+  # REACTIVATION ANCHOR — issue #375 (carry the v1 .claude/ harness into v2).
+  #   Condition: reactivates AUTOMATICALLY when `find harness -path
+  #   '*/commands/*.md'` yields >=1 file — no code change required. Registry: see
+  #   cmd_check_lifecycle.
   #
   # Source-level quoting is the pmo-author-time prevention layer; the execute-
   # time defense is the core/hooks/block-shell-injection.sh PreToolUse hook
@@ -4956,16 +5046,21 @@ main() {
       fi
       cmd_check
       ;;
+    --check-lifecycle)
+      cmd_check_lifecycle
+      exit 0
+      ;;
     --report)
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --report]"
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...] Deploy changed skills to Cowork install path (auto-detect or manual)"
       echo "  --all               Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
       echo "  --check [--warn]    Validate platform health (--warn exits 0 even with issues)"
+      echo "  --check-lifecycle   List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --report            Structured report for Stage 13 verification evidence"
       echo ""
       echo "Note: --init mode (a legacy cutover migration) was REMOVED per the"
