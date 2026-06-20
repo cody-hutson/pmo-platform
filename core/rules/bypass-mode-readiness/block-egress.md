@@ -6,7 +6,7 @@
 | Hook | `.claude/hooks/block-egress.sh` |
 | Matcher | Bash, WebFetch |
 | Scope | Credential reads via Bash, network upload (curl/wget/gh gist), network tools (nc/scp/ssh), WebFetch domain allowlist |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](../bypass-mode-readiness.md) |
 
 ### Rule registry
 
@@ -26,4 +26,4 @@
 | BLOCK-EGRESS-012 | WebFetch to `file://` / `localhost` / `127.0.0.1` |
 | BLOCK-EGRESS-013 | WebFetch to non-allowlisted domain |
 
-See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) — the Bash-branch egress verbs compose with the canonical anchor; the WebFetch-branch rules (BLOCK-EGRESS-012 / -013) are tool-name-matched, not verb-anchored.
+See [`§ Absolute-Path-Aware Verb Anchor`](../bypass-mode-readiness.md) — the Bash-branch egress verbs compose with the canonical anchor; the WebFetch-branch rules (BLOCK-EGRESS-012 / -013) are tool-name-matched, not verb-anchored.

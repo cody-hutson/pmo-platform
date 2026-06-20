@@ -69,6 +69,18 @@ CROSS_CUTTING_FRAGMENT = "_cross-cutting.md"
 # A leading reference-durability marker line on each fragment is stripped during
 # assembly (the generated index carries exactly one, emitted at the top).
 _MARKER_LINE_RE = re.compile(r"^<!--\s*reference-durability:\s*allow-link\s*-->\s*$")
+# Depth-relativization: fragments live one directory DEEPER than the generated
+# index (`core/rules/bypass-mode-readiness/<frag>.md` vs `core/rules/
+# bypass-mode-readiness.md`). A fragment's outbound relative link is authored
+# valid at fragment depth (e.g. `](../../standards/x.md)`, `](../skill-deployment.md)`,
+# `](../bypass-mode-readiness.md#a)`); in the index — one level up — each must lose
+# exactly one leading `../` (-> `](../standards/x.md)`, `](skill-deployment.md)`,
+# `](bypass-mode-readiness.md#a)`, the last being an index self-anchor). Same-dir
+# links (`](foo.md)`), pure anchors (`](#a)`), absolute paths (`](/x)`), and external
+# URLs (`](http...)`) have no leading `../` and are therefore left untouched. The
+# match is anchored on the `](` link/image-target opener so only link targets are
+# rewritten, never `../` appearing in prose.
+_FRAGMENT_LINK_UP_RE = re.compile(r"(\]\()\.\./")
 # The per-hook field table's "Scope" row, used to build the auto-generated
 # summary table. Format: `| Scope | <text> |`.
 _SCOPE_ROW_RE = re.compile(r"^\|\s*Scope\s*\|\s*(.+?)\s*\|\s*$")
@@ -77,16 +89,28 @@ _SCOPE_ROW_RE = re.compile(r"^\|\s*Scope\s*\|\s*(.+?)\s*\|\s*$")
 _HOOK_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
 
 
+def _relativize_up_one(text: str) -> str:
+    """Strip exactly one leading `../` from every markdown/image link TARGET in
+    `text`, depth-correcting fragment-authored links for the index one level up.
+
+    Only `](../…)` openers are rewritten (`](` then a single `../`); a second
+    `../` in the same target is preserved (`](../../x)` -> `](../x)`). Prose `../`,
+    same-dir targets, pure anchors, absolute paths, and external URLs are untouched.
+    """
+    return _FRAGMENT_LINK_UP_RE.sub(r"\1", text)
+
+
 def _read_fragment(path: Path) -> str:
     """Read a fragment, stripping a single leading reference-durability marker
-    line (and the blank line immediately following it, if present)."""
+    line (and the blank line immediately following it, if present), then
+    depth-relativizing its outbound links for the index one level up."""
     text = path.read_text(encoding="utf-8")
     lines = text.split("\n")
     if lines and _MARKER_LINE_RE.match(lines[0]):
         lines = lines[1:]
         if lines and lines[0].strip() == "":
             lines = lines[1:]
-    return "\n".join(lines).strip("\n")
+    return _relativize_up_one("\n".join(lines).strip("\n"))
 
 
 def discover_hook_sources(source_dir: Path) -> list[Path]:
@@ -238,7 +262,13 @@ def run_self_test() -> int:
             DURABILITY_MARKER + "\n\n## `block-alpha.sh` (BLOCK-ALPHA-001)\n\n"
             "| Field | Value |\n|---|---|\n| Scope | Alpha scope |\n\n"
             "### Rule registry\n\n| Rule ID | Description |\n|---|---|\n"
-            "| BLOCK-ALPHA-001 | alpha |\n"
+            "| BLOCK-ALPHA-001 | alpha |\n\n"
+            # Depth-strip fixtures: a two-level-up link, a sibling-dir link, an
+            # index self-anchor, plus three controls that MUST stay verbatim.
+            "See [std](../../standards/x.md), [sib](../skill-deployment.md), "
+            "[self](../bypass-mode-readiness.md#anchor); controls "
+            "[same](same-dir.md), [anc](#local), [ext](https://example.com/../y). "
+            "Prose ../ stays.\n"
         )
         (sd / "_cross-cutting.md").write_text(
             DURABILITY_MARKER + "\n\n## Related\n\nrelated.\n"
@@ -288,6 +318,18 @@ def run_self_test() -> int:
         # 6. Cross-cutting Related section is last.
         assert out1.rstrip().endswith("related."), "self-test: cross-cutting not last"
 
+        # 8. Depth-strip: each fragment-authored `](../…)` link loses EXACTLY one
+        #    leading `../` in the assembled index (one level up), while same-dir
+        #    links, pure anchors, and external URLs stay verbatim.
+        assert "[std](../standards/x.md)" in out1, "self-test: two-level link not stripped to one"
+        assert "[sib](skill-deployment.md)" in out1, "self-test: sibling-dir link not stripped to bare"
+        assert "[self](bypass-mode-readiness.md#anchor)" in out1, "self-test: index self-anchor not stripped"
+        assert "../../standards/x.md" not in out1, "self-test: a `../../` survived the strip"
+        assert "[same](same-dir.md)" in out1, "self-test: same-dir link was altered"
+        assert "[anc](#local)" in out1, "self-test: pure anchor was altered"
+        assert "[ext](https://example.com/../y)" in out1, "self-test: external URL `../` was altered"
+        assert "Prose ../ stays." in out1, "self-test: prose `../` was altered"
+
         # 7. Missing required fragment → FileNotFoundError (fail-loud, not partial).
         (sd / HEADER_FRAGMENT).unlink()
         try:
@@ -297,7 +339,7 @@ def run_self_test() -> int:
         else:
             raise AssertionError("self-test: missing header did not raise")
 
-    print("self-test OK (7 fixtures passed)")
+    print("self-test OK (8 fixtures passed)")
     return 0
 
 

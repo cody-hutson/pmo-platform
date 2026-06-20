@@ -7,9 +7,9 @@
 
 Seven PreToolUse hooks enforce security invariants that make it safe to run Claude Code in `bypassPermissions` mode (no prompts). Grounded in a 5-persona adversarial review (Red Team, SRE, Shell Engineer, UX, Governance) that identified 7 Critical and 10 High findings in the initial design.
 
-These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scripts exist in `core/hooks/` but are owned by their own discipline docs and are NOT part of this registry: `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](core/standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](core/rules/skill-deployment.md)) and `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](core/standards/reference-durability-standard.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc**, so this scoping is enforced, not merely asserted.
+These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scripts exist in `core/hooks/` but are owned by their own discipline docs and are NOT part of this registry: `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](skill-deployment.md)) and `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc**, so this scoping is enforced, not merely asserted.
 
-> **This file is GENERATED.** The canonical index `core/rules/bypass-mode-readiness.md` is assembled at deploy time by [`core/deploy/tools/build-hook-registry.py`](core/deploy/tools/build-hook-registry.py) from the per-hook source fragments under `core/rules/bypass-mode-readiness/`. Do NOT hand-edit this file — edit the per-hook source (`bypass-mode-readiness/block-<hook>.md`) or a cross-cutting fragment (`bypass-mode-readiness/_header.md`, `bypass-mode-readiness/_cross-cutting.md`) and regenerate. The `deploy.sh --check` index-freshness check fails any stale committed index; the completeness check fails any hook script missing its owner. Per [ADR-030](core/ADRs/ADR-030-hook-registry-drop-in-with-generated-index.md).
+> **This file is GENERATED.** The canonical index `core/rules/bypass-mode-readiness.md` is assembled at deploy time by [`core/deploy/tools/build-hook-registry.py`](../deploy/tools/build-hook-registry.py) from the per-hook source fragments under `core/rules/bypass-mode-readiness/`. Do NOT hand-edit this file — edit the per-hook source (`bypass-mode-readiness/block-<hook>.md`) or a cross-cutting fragment (`bypass-mode-readiness/_header.md`, `bypass-mode-readiness/_cross-cutting.md`) and regenerate. The `deploy.sh --check` index-freshness check fails any stale committed index; the completeness check fails any hook script missing its owner. Per [ADR-030](../ADRs/ADR-030-hook-registry-drop-in-with-generated-index.md).
 
 ## The Hooks
 
@@ -45,7 +45,7 @@ These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scr
 | BLOCK-CREDENTIAL-READ-005 | Read of SSH private keys outside `~/.ssh` |
 | BLOCK-CREDENTIAL-READ-006 | Read of `*.pem` / `*.key` / `*.p12` / `*.pfx` / `*.keystore` |
 
-This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-prefix bypass is structurally irrelevant to it, and it performs no path normalization (regex/prefix matchers that need no symlink/`..` resolution). See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for the ssh-agent-socket side-channel residual (this hook gates *file reads* of credential paths, not *use of a key already loaded into the OS ssh-agent socket*).
+This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-prefix bypass is structurally irrelevant to it, and it performs no path normalization (regex/prefix matchers that need no symlink/`..` resolution). See [`§ Known Limitations`](bypass-mode-readiness.md) for the ssh-agent-socket side-channel residual (this hook gates *file reads* of credential paths, not *use of a key already loaded into the OS ssh-agent socket*).
 
 ## `block-destructive.sh` (BLOCK-DESTRUCTIVE-001..023)
 
@@ -82,7 +82,7 @@ This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-pre
 | BLOCK-DESTRUCTIVE-022 | Bash subprocess script execution not in `.claude/script-execution-allowlist.txt` |
 | BLOCK-DESTRUCTIVE-023 | Mid-session setting of `CLAUDE_HOOK_BYPASS` (anti-injection) |
 
-See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) for the canonical anchor pattern (including the git-family variant declared in this hook as `ANCHOR_PREFIX_GIT`) and [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for the Write/Edit primary-write-guard `os.path.realpath` normalization posture (BSD/macOS portability).
+See [`§ Absolute-Path-Aware Verb Anchor`](bypass-mode-readiness.md) for the canonical anchor pattern (including the git-family variant declared in this hook as `ANCHOR_PREFIX_GIT`) and [`§ Known Limitations`](bypass-mode-readiness.md) for the Write/Edit primary-write-guard `os.path.realpath` normalization posture (BSD/macOS portability).
 
 ## `block-egress.sh` (BLOCK-EGRESS-001..013)
 
@@ -91,7 +91,7 @@ See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) 
 | Hook | `.claude/hooks/block-egress.sh` |
 | Matcher | Bash, WebFetch |
 | Scope | Credential reads via Bash, network upload (curl/wget/gh gist), network tools (nc/scp/ssh), WebFetch domain allowlist |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](bypass-mode-readiness.md) |
 
 ### Rule registry
 
@@ -111,7 +111,7 @@ See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) 
 | BLOCK-EGRESS-012 | WebFetch to `file://` / `localhost` / `127.0.0.1` |
 | BLOCK-EGRESS-013 | WebFetch to non-allowlisted domain |
 
-See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) — the Bash-branch egress verbs compose with the canonical anchor; the WebFetch-branch rules (BLOCK-EGRESS-012 / -013) are tool-name-matched, not verb-anchored.
+See [`§ Absolute-Path-Aware Verb Anchor`](bypass-mode-readiness.md) — the Bash-branch egress verbs compose with the canonical anchor; the WebFetch-branch rules (BLOCK-EGRESS-012 / -013) are tool-name-matched, not verb-anchored.
 
 ## `block-fs-boundary.sh` (BLOCK-FS-BOUNDARY-001..003)
 
@@ -120,7 +120,7 @@ See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) 
 | Hook | `.claude/hooks/block-fs-boundary.sh` |
 | Matcher | Bash |
 | Scope | Workspace-boundary scoping for Bash file commands beyond settings.deny coverage (cat/head/tail/sed); file-read (cat/head/tail/less/more/base64/xxd/od/hexdump/strings) + file-write (cp/mv/tee/dd) source+target; resolved-path prefix-match against `.claude/fs-boundary-allowlist.txt`; strict-policy on unresolvable tokens |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](bypass-mode-readiness.md) |
 
 Added in the modular-monolith-cleanup release. Composes with Anthropic's native `settings.deny` `Read(...)` / `Edit(...)` rules (which natively cover the Read tool, Edit/Write tools, and the recognized Bash file-command subset cat/head/tail/sed per `code.claude.com/docs/en/permissions`). This hook closes the residual Bash gap for cp / mv / tee / dd / base64 / xxd / od / hexdump / strings / less / more. Mode-gated via shared `.claude/hooks/.mode` (same file as `block-egress` + `block-mcp-writes`) — initial state `warn` per Shakedown → Enforce Transition Checklist.
 
@@ -149,9 +149,9 @@ For each target token extracted by `extract_target_tokens(verb)` (flag tokens sk
 
 **Symlink-following posture (intentional):** same as `block-rm-prefer-trash.sh` — `os.path.realpath` follows symlinks. A symlink inside an allowed root pointing to a target outside any allowed root resolves to the outside target and is blocked. This matches the strict-policy requirement: "block any file access whose resolved path is outside the allowed roots."
 
-**Absolute-path-aware verb anchor:** same anchor pattern as the other three regex-based PreToolUse hooks — file-read and file-write verbs invoked via canonical absolute-path prefix (`/bin/cat`, `/usr/bin/cp`, etc.) are detected uniformly with the verb-at-command-start form. See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md).
+**Absolute-path-aware verb anchor:** same anchor pattern as the other three regex-based PreToolUse hooks — file-read and file-write verbs invoked via canonical absolute-path prefix (`/bin/cat`, `/usr/bin/cp`, etc.) are detected uniformly with the verb-at-command-start form. See [`§ Absolute-Path-Aware Verb Anchor`](bypass-mode-readiness.md).
 
-See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for this hook's shell-redirection, nested-shell + quoted-path, and `~/Library/<unenumerated-subdirs>` settings.deny-coverage-gap residuals.
+See [`§ Known Limitations`](bypass-mode-readiness.md) for this hook's shell-redirection, nested-shell + quoted-path, and `~/Library/<unenumerated-subdirs>` settings.deny-coverage-gap residuals.
 
 ## `block-mcp-writes.sh` (BLOCK-MCP-001)
 
@@ -160,7 +160,7 @@ See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for this hook'
 | Hook | `.claude/hooks/block-mcp-writes.sh` |
 | Matcher | `mcp__*` |
 | Scope | MCP tools matching write-verb pattern, gated by allowlist |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](bypass-mode-readiness.md) |
 
 ### Rule registry
 
@@ -168,7 +168,7 @@ See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for this hook'
 |---|---|
 | BLOCK-MCP-001 | MCP write-verb tool not in `.claude/mcp-write-allowlist.txt` |
 
-This hook is tool-name-matched (`mcp__*`), not Bash-verb-anchored — the absolute-path-prefix bypass is structurally irrelevant to it. See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for the MCP-tool-UUID-churn caveat (allowlist entries tied to specific server UUIDs need re-add after reinstall/reauth).
+This hook is tool-name-matched (`mcp__*`), not Bash-verb-anchored — the absolute-path-prefix bypass is structurally irrelevant to it. See [`§ Known Limitations`](bypass-mode-readiness.md) for the MCP-tool-UUID-churn caveat (allowlist entries tied to specific server UUIDs need re-add after reinstall/reauth).
 
 ## `block-rm-prefer-trash.sh` (BLOCK-TRASH-001..003)
 
@@ -198,7 +198,7 @@ For each target token after the matched verb (flag tokens skipped):
 5. Normalize via Python `os.path.realpath` (system-default `/usr/bin/python3`). Collapses `..`/`./`, does not require path existence, and follows symlinks. Stage 5 spec referenced GNU `realpath -m`, but macOS ships BSD realpath without `-m` and `/usr/bin/realpath` is absent on this system; Python 3.9+ `os.path.realpath` is the portable equivalent.
 6. Prefix-match resolved path against `${HOME}/Claude/`.
 
-**Git subcommand exemption (broad):** Any command beginning with `git <verb>` exits 0 before verb detection runs (per the requirement #6 literal reading — version-controlled deletes have their own recoverability via git history). This exemption is broader than `git rm` / `git clean` alone and covers `git worktree remove`, `git stash drop`, `git filter-branch`, etc. — those are handled by other hooks (`block-destructive.sh`) or by git's internal mechanisms.
+**Git subcommand exemption (broad):** Any command beginning with `git <verb>` exits 0 before verb detection runs (per the requirement-6 literal reading — version-controlled deletes have their own recoverability via git history). This exemption is broader than `git rm` / `git clean` alone and covers `git worktree remove`, `git stash drop`, `git filter-branch`, etc. — those are handled by other hooks (`block-destructive.sh`) or by git's internal mechanisms.
 
 **Symlink-following posture (intentional):** `os.path.realpath` follows symlinks. A symlink inside `${HOME}/Claude/` pointing to a target outside the workspace will resolve to the outside target and be blocked. This matches the strict-policy requirement: "block any file deletion whose resolved path is outside `${HOME}/Claude/`."
 
@@ -208,7 +208,7 @@ For each target token after the matched verb (flag tokens skipped):
 2. `[ -x /opt/homebrew/opt/trash/bin/trash ]` → emit `/opt/homebrew/opt/trash/bin/trash '<abs_path>'`. Required when `trash` was installed keg-only via `brew install trash` (default Homebrew install is keg-only — `/opt/homebrew/bin/trash` is NOT created).
 3. Fallback → emit `osascript -e 'tell application "Finder" to delete POSIX file "<abs_path>"'`. Always-available on macOS 14+.
 
-See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) — this hook's `extract_target_tokens()` awk script strips the canonical absolute-path prefix before the verb-equality check, atomically coupled with the anchor regex within the hook file. See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for the nested-shell, quoted-path, other-deletion-mechanism, and pre-existing-`/usr/bin/trash` residuals.
+See [`§ Absolute-Path-Aware Verb Anchor`](bypass-mode-readiness.md) — this hook's `extract_target_tokens()` awk script strips the canonical absolute-path prefix before the verb-equality check, atomically coupled with the anchor regex within the hook file. See [`§ Known Limitations`](bypass-mode-readiness.md) for the nested-shell, quoted-path, other-deletion-mechanism, and pre-existing-`/usr/bin/trash` residuals.
 
 ## `block-shell-injection.sh` (BLOCK-SHELL-INJECTION-001..002)
 
@@ -217,7 +217,7 @@ See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md) 
 | Hook | `.claude/hooks/block-shell-injection.sh` |
 | Matcher | Bash |
 | Scope | Slash-command argument shell-injection vectors: script-execution followed by chain metachar leading into command verb, or script-execution with command substitution `$(...)` / backtick in argv |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](bypass-mode-readiness.md) |
 
 Added in the shell-injection shakedown release. Initial deploy state: warn-mode per `.claude/hooks/.mode`; flip-to-enforce after 2-3 release shakedown per the Shakedown → Enforce Transition Checklist.
 
@@ -389,7 +389,7 @@ Before flipping `.mode` from `warn` to `enforce`:
 
 ## Related
 
-- [`core/standards/subagent-security-posture.md`](core/standards/subagent-security-posture.md) — Composes-with at Mechanism 2 (hook surface). The PreToolUse hooks documented in this file operate at session level; subagent tool calls fire the same hooks transparently. The subagent-security-posture standard codifies the 4-mechanism defense-in-depth for hub-orchestrated autonomous subagent spawning.
-- [`core/standards/secrets-handling-policy.md`](core/standards/secrets-handling-policy.md) — Policy substrate (L4) declaring secret categories, storage matrix, and audit greps. This file is the L2 runtime-enforcement layer that blocks Claude-tool access to the credential paths the policy categorizes. The two compose: the policy says *where* each category lives; this file says *what blocks access* to those locations during a session.
-- [`core/standards/canonical-skill-structure.md`](core/standards/canonical-skill-structure.md) — owner of `block-skill-direct-edit.sh` (BLOCK-SKILL-EDIT-001..002), a sibling `core/hooks/` PreToolUse hook outside this bypass-mode registry.
-- [`core/standards/reference-durability-standard.md`](core/standards/reference-durability-standard.md) — owner of `block-fragile-refs.sh` (BLOCK-FRAGILE-REF-001..004), a sibling `core/hooks/` PreToolUse hook outside this bypass-mode registry.
+- [`core/standards/subagent-security-posture.md`](../standards/subagent-security-posture.md) — Composes-with at Mechanism 2 (hook surface). The PreToolUse hooks documented in this file operate at session level; subagent tool calls fire the same hooks transparently. The subagent-security-posture standard codifies the 4-mechanism defense-in-depth for hub-orchestrated autonomous subagent spawning.
+- [`core/standards/secrets-handling-policy.md`](../standards/secrets-handling-policy.md) — Policy substrate (L4) declaring secret categories, storage matrix, and audit greps. This file is the L2 runtime-enforcement layer that blocks Claude-tool access to the credential paths the policy categorizes. The two compose: the policy says *where* each category lives; this file says *what blocks access* to those locations during a session.
+- [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md) — owner of `block-skill-direct-edit.sh` (BLOCK-SKILL-EDIT-001..002), a sibling `core/hooks/` PreToolUse hook outside this bypass-mode registry.
+- [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md) — owner of `block-fragile-refs.sh` (BLOCK-FRAGILE-REF-001..004), a sibling `core/hooks/` PreToolUse hook outside this bypass-mode registry.

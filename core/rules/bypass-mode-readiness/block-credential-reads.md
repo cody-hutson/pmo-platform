@@ -19,4 +19,4 @@
 | BLOCK-CREDENTIAL-READ-005 | Read of SSH private keys outside `~/.ssh` |
 | BLOCK-CREDENTIAL-READ-006 | Read of `*.pem` / `*.key` / `*.p12` / `*.pfx` / `*.keystore` |
 
-This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-prefix bypass is structurally irrelevant to it, and it performs no path normalization (regex/prefix matchers that need no symlink/`..` resolution). See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for the ssh-agent-socket side-channel residual (this hook gates *file reads* of credential paths, not *use of a key already loaded into the OS ssh-agent socket*).
+This hook is Read-tool-matched, not Bash-verb-anchored — the absolute-path-prefix bypass is structurally irrelevant to it, and it performs no path normalization (regex/prefix matchers that need no symlink/`..` resolution). See [`§ Known Limitations`](../bypass-mode-readiness.md) for the ssh-agent-socket side-channel residual (this hook gates *file reads* of credential paths, not *use of a key already loaded into the OS ssh-agent socket*).

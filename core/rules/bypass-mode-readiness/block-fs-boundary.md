@@ -6,7 +6,7 @@
 | Hook | `.claude/hooks/block-fs-boundary.sh` |
 | Matcher | Bash |
 | Scope | Workspace-boundary scoping for Bash file commands beyond settings.deny coverage (cat/head/tail/sed); file-read (cat/head/tail/less/more/base64/xxd/od/hexdump/strings) + file-write (cp/mv/tee/dd) source+target; resolved-path prefix-match against `.claude/fs-boundary-allowlist.txt`; strict-policy on unresolvable tokens |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](../bypass-mode-readiness.md) |
 
 Added in the modular-monolith-cleanup release. Composes with Anthropic's native `settings.deny` `Read(...)` / `Edit(...)` rules (which natively cover the Read tool, Edit/Write tools, and the recognized Bash file-command subset cat/head/tail/sed per `code.claude.com/docs/en/permissions`). This hook closes the residual Bash gap for cp / mv / tee / dd / base64 / xxd / od / hexdump / strings / less / more. Mode-gated via shared `.claude/hooks/.mode` (same file as `block-egress` + `block-mcp-writes`) — initial state `warn` per Shakedown → Enforce Transition Checklist.
 
@@ -35,6 +35,6 @@ For each target token extracted by `extract_target_tokens(verb)` (flag tokens sk
 
 **Symlink-following posture (intentional):** same as `block-rm-prefer-trash.sh` — `os.path.realpath` follows symlinks. A symlink inside an allowed root pointing to a target outside any allowed root resolves to the outside target and is blocked. This matches the strict-policy requirement: "block any file access whose resolved path is outside the allowed roots."
 
-**Absolute-path-aware verb anchor:** same anchor pattern as the other three regex-based PreToolUse hooks — file-read and file-write verbs invoked via canonical absolute-path prefix (`/bin/cat`, `/usr/bin/cp`, etc.) are detected uniformly with the verb-at-command-start form. See [`§ Absolute-Path-Aware Verb Anchor`](core/rules/bypass-mode-readiness.md).
+**Absolute-path-aware verb anchor:** same anchor pattern as the other three regex-based PreToolUse hooks — file-read and file-write verbs invoked via canonical absolute-path prefix (`/bin/cat`, `/usr/bin/cp`, etc.) are detected uniformly with the verb-at-command-start form. See [`§ Absolute-Path-Aware Verb Anchor`](../bypass-mode-readiness.md).
 
-See [`§ Known Limitations`](core/rules/bypass-mode-readiness.md) for this hook's shell-redirection, nested-shell + quoted-path, and `~/Library/<unenumerated-subdirs>` settings.deny-coverage-gap residuals.
+See [`§ Known Limitations`](../bypass-mode-readiness.md) for this hook's shell-redirection, nested-shell + quoted-path, and `~/Library/<unenumerated-subdirs>` settings.deny-coverage-gap residuals.

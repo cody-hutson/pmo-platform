@@ -6,7 +6,7 @@
 | Hook | `.claude/hooks/block-shell-injection.sh` |
 | Matcher | Bash |
 | Scope | Slash-command argument shell-injection vectors: script-execution followed by chain metachar leading into command verb, or script-execution with command substitution `$(...)` / backtick in argv |
-| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](core/rules/bypass-mode-readiness.md) |
+| Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](../bypass-mode-readiness.md) |
 
 Added in the shell-injection shakedown release. Initial deploy state: warn-mode per `.claude/hooks/.mode`; flip-to-enforce after 2-3 release shakedown per the Shakedown → Enforce Transition Checklist.
 
