@@ -1679,76 +1679,59 @@ cmd_check() {
   local EXEMPTION_LIST="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skill-editor-exemption-list.txt"
   [[ -f "$EXEMPTION_LIST" ]] || EXEMPTION_LIST=".claude/skill-editor-exemption-list.txt"
 
-  # Check 6 — Canonical-structure compliance (required; always-enforce; enforcement-surface: deploy-time)
+  # Check 6 — Canonical-structure compliance (required; always-enforce; enforcement-surface: deploy-time + CI mirror)
   #
   # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
-  #   posture: required   enforcement-surface: always-enforce (deploy-time)
+  #   posture: required   enforcement-surface: always-enforce (deploy-time) +
+  #            branch-protection CI mirror (skill-canonical-structure-check.yml)
   #   invariant: every rostered SKILL.md is canonical-structure compliant (required
   #              frontmatter fields present; references/ subdir present once the
   #              D-Refs threshold is crossed; ≥3 domain-specific failure modes).
   #   falsification: remove a required frontmatter field, or drop a skill below the
   #                  3-failure-mode floor -> this check FAILS for that skill.
   #
-  # D-Refs threshold (per the D-Refs Option B decision): references/ required when
-  #   SKILL.md > 400 lines OR > 25 KB.
-  # Also enforces required frontmatter fields + failure-mode floor (≥3).
-  # Module-aware iteration via per-module arrays + resolve_skill_module().
+  # SINGLE SOURCE (per gate-efficacy-standard.md Req (b′) + the #1101 "assert
+  # content, not a re-implemented proxy" doctrine): the predicate — required
+  # frontmatter fields (name/description/version), the D-Refs threshold (>400
+  # lines OR >25600 bytes -> references/ required), and the failure-mode floor
+  # (≥3) — lives ONCE in core/deploy/tools/check-canonical-structure.sh. Both this
+  # deploy-time check AND the PR-time CI mirror invoke that one script, so the two
+  # surfaces cannot drift. The script extracts the same per-module roster arrays
+  # from THIS file at runtime (Check 5 reconciles them against disk), so its
+  # iteration set is identical to the deploy-time set this check formerly walked
+  # inline. The thresholds/fields/iteration are UNCHANGED — only their home moved
+  # to the shared invokable that closes the run-context gap (#673).
+  #
+  # The script honors the same EXEMPTION_LIST (canary-by-design D-Refs exemption,
+  # frontmatter still enforced) via PMO_INSTANCE_PATH / .claude fallback. We
+  # re-emit each per-skill line through log() and fold every FAIL into ISSUES so
+  # the STRICT summary gate behaves exactly as before.
   log "Check 6: Canonical-structure compliance"
-  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
-    local c6_module
-    c6_module=$(resolve_skill_module "$skill")
-    local c6_src="$c6_module/skills/$skill/SKILL.md"
-    if [[ ! -f "$c6_src" ]]; then
-      log "  FAIL:  $skill — SKILL.md missing"
+  local c6_script="core/deploy/tools/check-canonical-structure.sh"
+  if [[ ! -f "$c6_script" ]]; then
+    log "  FAIL:  Check 6 predicate script missing: $c6_script"
+    ISSUES=$((ISSUES + 1))
+  else
+    local c6_out c6_rc
+    c6_out=$(bash "$c6_script" 2>&1)
+    c6_rc=$?
+    local c6_line
+    while IFS= read -r c6_line; do
+      [[ -z "$c6_line" ]] && continue
+      # Suppress the script's trailing SUMMARY line (deploy.sh prints its own
+      # aggregate via the STRICT gate); surface every OK/FAIL verbatim.
+      [[ "$c6_line" == SUMMARY:* ]] && continue
+      log "  $c6_line"
+      [[ "$c6_line" == FAIL:* ]] && ISSUES=$((ISSUES + 1))
+    done <<< "$c6_out"
+    # Defensive: a non-zero exit with no parsed FAIL line (e.g. exit 3 scan-surface
+    # error emitted only to stderr-merged output) still counts as one issue so a
+    # broken predicate run never reads green.
+    if [[ $c6_rc -ne 0 ]] && ! grep -q '^FAIL:' <<< "$c6_out"; then
+      log "  FAIL:  Check 6 predicate run exited $c6_rc with no per-skill FAIL (scan-surface error)"
       ISSUES=$((ISSUES + 1))
-      continue
     fi
-
-    local c6_skill_ok=true
-
-    # Required frontmatter fields (presence)
-    for field in name description version; do
-      if ! grep -qE "^${field}:" "$c6_src"; then
-        log "  FAIL:  $skill — missing required frontmatter field '$field'"
-        ISSUES=$((ISSUES + 1))
-        c6_skill_ok=false
-      fi
-    done
-
-    # Exemption pass-through (canary-by-design)
-    if [[ -f "$EXEMPTION_LIST" ]] && grep -Fxq "$skill" "$EXEMPTION_LIST" 2>/dev/null; then
-      [[ "$c6_skill_ok" == "true" ]] && log "  OK:    $skill (exempted from threshold)"
-      continue
-    fi
-
-    # D-Refs threshold evaluation
-    local c6_lines c6_bytes c6_fm_count
-    c6_lines=$(wc -l < "$c6_src" | tr -d ' ')
-    c6_bytes=$(wc -c < "$c6_src" | tr -d ' ')
-    c6_fm_count=$(grep -cE '^### .+ — (TRIG|INPUT|PROC|OUT|HAND)[[:space:]]*$' "$c6_src" || true)
-
-    local c6_refs_required=false
-    [[ $c6_lines -gt 400 ]] && c6_refs_required=true
-    [[ $c6_bytes -gt 25600 ]] && c6_refs_required=true
-
-    if [[ "$c6_refs_required" == "true" ]]; then
-      local c6_ref_dir="$c6_module/skills/$skill/references"
-      if [[ ! -d "$c6_ref_dir" ]] || [[ -z "$(find "$c6_ref_dir" -name '*.md' -type f 2>/dev/null | head -1)" ]]; then
-        log "  FAIL:  $skill — D-Refs threshold crossed (lines=$c6_lines bytes=$c6_bytes fm=$c6_fm_count); references/ subdir missing or empty"
-        ISSUES=$((ISSUES + 1))
-        c6_skill_ok=false
-      fi
-    fi
-
-    # Failure-mode floor (per core/standards/failure-mode-standard.md + pmo-qa-auditor G7)
-    if [[ $c6_fm_count -lt 3 ]]; then
-      log "  FAIL:  $skill — ## Domain-Specific Failure Modes has $c6_fm_count entries (< 3 floor per failure-mode-standard.md)"
-      ISSUES=$((ISSUES + 1))
-      c6_skill_ok=false
-    fi
-
-    [[ "$c6_skill_ok" == "true" ]] && log "  OK:    $skill"
-  done
+  fi
 
   # Check 7 — Package-freshness (required; always-enforce; enforcement-surface: deploy-time)
   #
