@@ -132,6 +132,7 @@ ALL_SKILLS=(
   pmo-principal-engineer
   pmo-process-designer
   pmo-portfolio-manager
+  pmo-program-manager
   pmo-qa-auditor
   pmo-qa-lead
   pmo-skill-editor

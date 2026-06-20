@@ -37,6 +37,7 @@ OPERATIONS_SKILLS=(
   pmo-process-designer
   pmo-portfolio-manager
   pmo-program-coordinator
+  pmo-program-manager
   pmo-technical-analyst
   pmo-technical-program-manager
   ppm-agent
