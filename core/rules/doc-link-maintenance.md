@@ -26,10 +26,13 @@ python3 core/deploy/tools/check-doc-links.py \
   --target-paths <comma-separated-globs> \
   [--allowlist .claude/skip-doc-link-check.txt] \
   [--require-targets] \
+  [--workspace-root <path>] \
   [--output-format tsv|json|github]
 ```
 
 **Self-test:** `python3 core/deploy/tools/check-doc-links.py --self-test`
+
+**Deployed-tree validation:** `--workspace-root <path>` resolves workspace-rooted links (the `/`-prefixed and prefix-table forms) and globs against a relocated root instead of the in-repo default, so a sandboxed/deployed install tree can be validated. Precedence is `--workspace-root` > `$CLAUDE_WORKSPACE_ROOT` (the canonical workspace-root variable the hooks and `deploy.sh` already export) > the in-repo default; with neither override set the behavior is unchanged. Pair with `--require-targets` so a relocated or missing surface fails loud rather than reading GREEN.
 
 **Fail-loud on unresolved targets:** `--require-targets` treats a `--target-paths` glob entry that resolves to zero files as a path-resolution failure (exit 3) rather than a clean pass, so a relocated or typo'd scan surface cannot read GREEN. Check 14 passes this flag.
 

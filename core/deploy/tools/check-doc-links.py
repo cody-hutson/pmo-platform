@@ -45,7 +45,31 @@ import re
 import sys
 from pathlib import Path
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+# Repo-root resolution (#760). Precedence at the call site (main()):
+#   1. --workspace-root CLI flag   (explicit per-invocation override)
+#   2. CLAUDE_WORKSPACE_ROOT env   (canonical platform var — hooks/deploy.sh/release-tools)
+#   3. parents[3] from this file   (in-repo default — byte-identical to pre-#760 behavior)
+# Tiers 2+3 resolve at MODULE LOAD so cross_module_audit_helper.py (which binds
+# _cdl.WORKSPACE_ROOT at import and never goes through main()) keeps a deterministic
+# value AND transparently honors the env override. Tier 1 is threaded through main()
+# only — see resolve_target()/is_allowlisted()/expand_globs()/find_unresolved_globs()
+# optional workspace_root params.
+_DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+
+
+def resolve_workspace_root(cli_value: str | None = None) -> Path:
+    if cli_value:
+        return Path(cli_value).expanduser().resolve()
+    env_value = os.environ.get("CLAUDE_WORKSPACE_ROOT")
+    if env_value:
+        return Path(env_value).expanduser().resolve()
+    return _DEFAULT_WORKSPACE_ROOT
+
+
+# Module-level default (env → parents[3]); CLI override applied in main().
+# Name + parents[3]-when-unset semantics preserved for the
+# cross_module_audit_helper.py importer (binds _cdl.WORKSPACE_ROOT).
+WORKSPACE_ROOT = resolve_workspace_root()
 
 # Module-aware prefix tables (per Stage 5 spec Surface 5.2 +
 # adversarial-review PR-1 — split into V1 / V2 for repo-boundary
@@ -172,10 +196,15 @@ def is_internal(target: str) -> bool:
     return True
 
 
-def resolve_target(source_file: Path, target: str) -> tuple[Path, str | None]:
+def resolve_target(
+    source_file: Path, target: str, workspace_root: Path = WORKSPACE_ROOT
+) -> tuple[Path, str | None]:
     """Resolve target. Try relative-to-source first; fall back to workspace-rooted if it looks repo-rooted (matches GitHub web rendering).
 
     Return (resolved_path, anchor_or_None). Resolved path is the first variant that exists, or the relative-to-source variant if neither resolves.
+
+    workspace_root defaults to the module-level WORKSPACE_ROOT (env→parents[3]);
+    main() passes the --workspace-root CLI value for deployed-tree validation (#760).
     """
     target = target.split("?", 1)[0]
     if "#" in target:
@@ -185,12 +214,12 @@ def resolve_target(source_file: Path, target: str) -> tuple[Path, str | None]:
     if not path_part:
         return source_file, anchor
     if path_part.startswith("/"):
-        return Path(os.path.realpath(WORKSPACE_ROOT / path_part.lstrip("/"))), anchor
+        return Path(os.path.realpath(workspace_root / path_part.lstrip("/"))), anchor
     relative_candidate = Path(os.path.realpath(source_file.parent / path_part))
     if relative_candidate.exists():
         return relative_candidate, anchor
     if path_part.startswith(WORKSPACE_ROOTED_PREFIXES):
-        workspace_candidate = Path(os.path.realpath(WORKSPACE_ROOT / path_part))
+        workspace_candidate = Path(os.path.realpath(workspace_root / path_part))
         if workspace_candidate.exists():
             return workspace_candidate, anchor
         return workspace_candidate, anchor
@@ -240,9 +269,13 @@ def classify_severity(source_file: Path) -> str:
     return "P3"
 
 
-def is_allowlisted(source_file: Path, allowlist_patterns: list[str]) -> bool:
+def is_allowlisted(
+    source_file: Path,
+    allowlist_patterns: list[str],
+    workspace_root: Path = WORKSPACE_ROOT,
+) -> bool:
     try:
-        rel = str(source_file.relative_to(WORKSPACE_ROOT))
+        rel = str(source_file.relative_to(workspace_root))
     except ValueError:
         rel = str(source_file)
     for pat in allowlist_patterns:
@@ -265,19 +298,19 @@ def load_allowlist(path: Path | None) -> list[str]:
     return [line.rstrip("\n") for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
 
-def expand_globs(globs: list[str]) -> list[Path]:
+def expand_globs(globs: list[str], workspace_root: Path = WORKSPACE_ROOT) -> list[Path]:
     out: list[Path] = []
     for g in globs:
         g = g.strip()
         if not g:
             continue
-        as_path = Path(g) if Path(g).is_absolute() else WORKSPACE_ROOT / g
+        as_path = Path(g) if Path(g).is_absolute() else workspace_root / g
         if as_path.is_file():
             out.append(as_path)
         elif as_path.is_dir():
             out.extend(sorted(as_path.rglob("*.md")))
         else:
-            matches = sorted(WORKSPACE_ROOT.glob(g))
+            matches = sorted(workspace_root.glob(g))
             for m in matches:
                 if m.is_file() and m.suffix == ".md":
                     out.append(m)
@@ -286,7 +319,9 @@ def expand_globs(globs: list[str]) -> list[Path]:
     return out
 
 
-def find_unresolved_globs(globs: list[str]) -> list[str]:
+def find_unresolved_globs(
+    globs: list[str], workspace_root: Path = WORKSPACE_ROOT
+) -> list[str]:
     """Return the subset of declared glob entries that resolve to ZERO files.
 
     Mirrors expand_globs's per-entry resolution semantics (literal file, literal
@@ -302,7 +337,7 @@ def find_unresolved_globs(globs: list[str]) -> list[str]:
         g = g.strip()
         if not g:
             continue
-        as_path = Path(g) if Path(g).is_absolute() else WORKSPACE_ROOT / g
+        as_path = Path(g) if Path(g).is_absolute() else workspace_root / g
         if as_path.is_file():
             continue
         if as_path.is_dir():
@@ -310,7 +345,7 @@ def find_unresolved_globs(globs: list[str]) -> list[str]:
                 unresolved.append(g)
             continue
         matched = False
-        for m in sorted(WORKSPACE_ROOT.glob(g)):
+        for m in sorted(workspace_root.glob(g)):
             if m.is_file() and m.suffix == ".md":
                 matched = True
                 break
@@ -322,8 +357,10 @@ def find_unresolved_globs(globs: list[str]) -> list[str]:
     return unresolved
 
 
-def scan_file(source_file: Path, allowlist: list[str]) -> list[dict]:
-    if is_allowlisted(source_file, allowlist):
+def scan_file(
+    source_file: Path, allowlist: list[str], workspace_root: Path = WORKSPACE_ROOT
+) -> list[dict]:
+    if is_allowlisted(source_file, allowlist, workspace_root):
         return []
     try:
         text = source_file.read_text(encoding="utf-8", errors="replace")
@@ -333,10 +370,10 @@ def scan_file(source_file: Path, allowlist: list[str]) -> list[dict]:
     content = strip_code_blocks(lines)
     findings: list[dict] = []
     for line_no, target in extract_links(source_file, content):
-        resolved, anchor = resolve_target(source_file, target)
+        resolved, anchor = resolve_target(source_file, target, workspace_root)
         if not resolved.exists():
             try:
-                rel_source = str(source_file.relative_to(WORKSPACE_ROOT))
+                rel_source = str(source_file.relative_to(workspace_root))
             except ValueError:
                 rel_source = str(source_file)
             findings.append({
@@ -355,6 +392,7 @@ def scan_file_for_rewrite_map(
     from_path: str,
     to_path: str,
     allowlist: list[str],
+    workspace_root: Path = WORKSPACE_ROOT,
 ) -> list[dict]:
     """Scan source_file for references whose link target starts with from_path.
 
@@ -373,7 +411,7 @@ def scan_file_for_rewrite_map(
 
     Returns list of dicts with keys: source_file, line, old_path, new_path.
     """
-    if is_allowlisted(source_file, allowlist):
+    if is_allowlisted(source_file, allowlist, workspace_root):
         return []
     try:
         text = source_file.read_text(encoding="utf-8", errors="replace")
@@ -396,7 +434,7 @@ def scan_file_for_rewrite_map(
         if target_path.startswith(from_path):
             new_path = to_path + target_path[len(from_path):] + suffix
             try:
-                rel_source = str(source_file.relative_to(WORKSPACE_ROOT))
+                rel_source = str(source_file.relative_to(workspace_root))
             except ValueError:
                 rel_source = str(source_file)
             entries.append({
@@ -448,7 +486,7 @@ def emit_rewrite_map_markdown(entries: list[dict]) -> str:
 def run_self_test() -> int:
     """Sanity check: parser + resolver + rewrite-map mode + EMIT-ONLY enforcement.
 
-    8 fixtures:
+    9 fixtures:
       1. Existing: code-block exclusion + single broken ref.
       2. NEW: module-prefix-resolution (v2 prefix recognized via dual-prefix table).
       3. NEW: rewrite-map TSV output mode.
@@ -466,6 +504,12 @@ def run_self_test() -> int:
               blockquoted (`> ```...`) worked-example link are all skipped, WHILE
               a real broken ref in the SAME doc still fires (the precision probe
               that proves the exclusion is finding-removing, not gate-blinding).
+      9. NEW (#760): relocatable workspace-root + precedence chain. A /-rooted
+              link to a file that exists ONLY under a sandbox root resolves GREEN
+              when resolve_target is given that root and BROKEN under the default
+              root (proves the override re-roots /-prefixed links), AND the
+              resolve_workspace_root precedence holds: CLI > $CLAUDE_WORKSPACE_ROOT
+              > parents[3] default (hermetic — env saved/restored around the probe).
     """
     import tempfile
 
@@ -646,7 +690,61 @@ def run_self_test() -> int:
         }
         assert not leaked, f"fixture 8: excluded placeholder(s) leaked as findings: {leaked}"
 
-    print("self-test OK (8 fixtures passed)")
+    # ─── Fixture 9: relocatable workspace-root + precedence chain (#760) ────
+    # Proves (a) a relocated root actually re-roots /-prefixed links, and (b) the
+    # resolve_workspace_root precedence: CLI > $CLAUDE_WORKSPACE_ROOT > default.
+    # (a) Re-rooting proof. Build a sandbox tree whose root holds a real target
+    #     reachable ONLY via the sandbox root. A /-rooted link resolves GREEN when
+    #     resolve_target is given the sandbox root, and BROKEN under the default
+    #     root (the in-repo WORKSPACE_ROOT, where that sandbox path does not exist).
+    with tempfile.TemporaryDirectory() as td:
+        sandbox = Path(td).resolve()
+        (sandbox / "core" / "disciplines").mkdir(parents=True)
+        real_target = sandbox / "core" / "disciplines" / "real.md"
+        real_target.write_text("# real target under the sandbox root\n")
+        src = sandbox / "core" / "rules" / "test.md"
+        src.parent.mkdir(parents=True)
+        src.write_text("See [x](/core/disciplines/real.md)\n")
+        # Override → /-rooted link re-roots under the sandbox and RESOLVES.
+        resolved_override, _ = resolve_target(src, "/core/disciplines/real.md", sandbox)
+        assert resolved_override.exists(), (
+            f"fixture 9a: /-rooted link did not re-root under the override "
+            f"(resolved to {resolved_override}, expected it to exist)"
+        )
+        assert resolved_override == real_target.resolve(), (
+            f"fixture 9a: override resolved to {resolved_override}, "
+            f"expected {real_target.resolve()}"
+        )
+        # Default root → same /-rooted link points outside the sandbox and is BROKEN
+        # (the in-repo WORKSPACE_ROOT has no such sandbox path).
+        resolved_default, _ = resolve_target(src, "/core/disciplines/real.md")
+        assert not resolved_default.exists(), (
+            f"fixture 9a: /-rooted link unexpectedly resolved under the default "
+            f"root ({resolved_default}); the override is not load-bearing"
+        )
+    # (b) Precedence chain. CLI value wins outright.
+    assert resolve_workspace_root("/explicit/cli/root") == Path("/explicit/cli/root"), \
+        "fixture 9b: CLI tier did not win"
+    # env tier: set $CLAUDE_WORKSPACE_ROOT, no CLI value → env path; unset → default.
+    # Save/restore the env var so the probe is hermetic.
+    _saved_env = os.environ.get("CLAUDE_WORKSPACE_ROOT")
+    try:
+        os.environ["CLAUDE_WORKSPACE_ROOT"] = "/env/root"
+        assert resolve_workspace_root(None) == Path("/env/root"), \
+            "fixture 9b: env tier not honored when no CLI value"
+        # CLI still overrides the env when both are present.
+        assert resolve_workspace_root("/explicit/cli/root") == Path("/explicit/cli/root"), \
+            "fixture 9b: CLI did not override env when both set"
+        os.environ.pop("CLAUDE_WORKSPACE_ROOT", None)
+        assert resolve_workspace_root(None) == _DEFAULT_WORKSPACE_ROOT, \
+            "fixture 9b: default tier not used when CLI + env both absent"
+    finally:
+        if _saved_env is None:
+            os.environ.pop("CLAUDE_WORKSPACE_ROOT", None)
+        else:
+            os.environ["CLAUDE_WORKSPACE_ROOT"] = _saved_env
+
+    print("self-test OK (9 fixtures passed)")
     return 0
 
 
@@ -705,7 +803,14 @@ def main() -> int:
         action="store_true",
         help="(broken-refs mode) treat a --target-paths glob entry that resolves to ZERO files as a path-resolution failure: emit a finding to stderr and exit 3. Opt-in — callers that do not pass it keep the prior exit-0-on-empty-scan behavior. Has no effect in rewrite-map mode (EMIT-ONLY).",
     )
-    p.add_argument("--self-test", action="store_true", help="Run internal smoke test (7 fixtures) and exit")
+    p.add_argument("--self-test", action="store_true", help="Run internal smoke test (9 fixtures) and exit")
+    p.add_argument(
+        "--workspace-root",
+        help="Root to resolve workspace-rooted (/-prefixed and prefix-table) links and "
+             "globs against (deployed-tree validation, #760). Precedence: this flag > "
+             "$CLAUDE_WORKSPACE_ROOT > the in-repo default (parents[3]). Default preserves "
+             "the prior in-repo behavior.",
+    )
     # ─── Rewrite-map mode flags (per Stage 5 spec Surface 2.1) ──────
     p.add_argument(
         "--from-path",
@@ -719,6 +824,13 @@ def main() -> int:
 
     if args.self_test:
         return run_self_test()
+
+    # Resolve the workspace root for THIS invocation (#760): --workspace-root CLI
+    # flag > $CLAUDE_WORKSPACE_ROOT > in-repo parents[3] default. Threaded as an
+    # argument (not a module-global mutation) so the resolver functions stay pure
+    # and --self-test remains hermetic against the module default. Resolved AFTER
+    # the self-test early-return above so self-test keeps the module default.
+    workspace_root = resolve_workspace_root(args.workspace_root)
 
     # Mode discrimination: both flags → rewrite-map; neither → broken-refs;
     # exactly one → argparse asymmetry error (exit 2).
@@ -735,7 +847,7 @@ def main() -> int:
         return 2
 
     globs = [g.strip() for g in args.target_paths.split(",") if g.strip()]
-    files = expand_globs(globs)
+    files = expand_globs(globs, workspace_root)
     allowlist = load_allowlist(Path(args.allowlist)) if args.allowlist else []
 
     # ─── Path-resolution-failure guard (broken-refs mode, opt-in) ──────────
@@ -745,7 +857,7 @@ def main() -> int:
     # EMIT-ONLY callers and ad-hoc operator scans are unaffected. rewrite-map mode
     # returns above before reaching here, so this never fires in that mode.
     if args.require_targets and not rewrite_mode:
-        unresolved = find_unresolved_globs(globs)
+        unresolved = find_unresolved_globs(globs, workspace_root)
         if unresolved:
             print(
                 "error: --target-paths entr%s resolved to zero files (path-resolution "
@@ -760,7 +872,9 @@ def main() -> int:
         entries: list[dict] = []
         for f in files:
             entries.extend(
-                scan_file_for_rewrite_map(f, args.from_path, args.to_path, allowlist)
+                scan_file_for_rewrite_map(
+                    f, args.from_path, args.to_path, allowlist, workspace_root
+                )
             )
         if args.output_format == "json":
             out = emit_rewrite_map_json(entries)
@@ -774,7 +888,7 @@ def main() -> int:
     # ─── Broken-refs mode (default) ────────────────────────────────────────
     findings: list[dict] = []
     for f in files:
-        findings.extend(scan_file(f, allowlist))
+        findings.extend(scan_file(f, allowlist, workspace_root))
 
     if args.output_format == "tsv" or args.output_format == "markdown":
         # broken-refs mode does not support markdown; fall back to TSV
