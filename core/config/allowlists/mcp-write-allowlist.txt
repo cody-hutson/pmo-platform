@@ -12,4 +12,9 @@
 # Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
 #   ./.claude/hooks/allowlist-add.sh .claude/mcp-write-allowlist.txt '<tool-name>'
 #
+# To (re)seed this allowlist from observed session-log MCP write-tool usage, run the
+# one-shot seeding tool (AS2; not invoked at tool-call time):
+#   ./core/hooks/audit-mcp-usage.sh --output core/config/allowlists/mcp-write-allowlist.txt
+# Its WRITE_VERBS pattern MUST stay in sync with BLOCK-MCP-001 (core/hooks/block-mcp-writes.sh).
+#
 # ---
