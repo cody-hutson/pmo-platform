@@ -113,6 +113,21 @@ relationships:
 
 **Phase 2 expansion (not MVP):** `FOLLOWS_UP`, `PARTICIPATED_IN`, `ESCALATED_TO`, `AUDIENCE_OVERLAP`, plus 1 extension slot.
 
+### Lineage Fields vs. Provenance Fields
+
+The horizontal-lineage scalar fields (`parent_artifact`, `sibling_topic`, `supersedes`/`superseded_by`) record edges *between generated artifacts* so parent→child and supersede relationships survive the session that created them. They are distinct from provenance, which records the *upstream human evidence* an artifact derives from. The table below fixes the boundary so the two are never conflated.
+
+| Field | Points to | Direction | Class |
+|-------|-----------|-----------|-------|
+| `source_inputs` | Upstream human evidence (transcripts, messages, source files) | Outward from the AI/agent system | Provenance |
+| `parent_artifact` | Upstream generated artifact in the lineage graph | Horizontal within AI/agent outputs | Lineage |
+| `sibling_topic` | Scope descriptor for strict-sibling dedup match | Lateral — disambiguates siblings | Lineage |
+| `supersedes` / `superseded_by` | Sibling artifact in a dedup/version chain | Horizontal, temporal | Lineage |
+
+**Field vs. verb (composition).** These lineage entries are **scalar frontmatter keys**, NOT `relationships[]` MVP-type verbs. They **compose against** the 7 MVP relationship types above rather than extending them: a `supersedes:` scalar denotes the same edge a `type: SUPERSEDES` relationship entry expresses, but is the lightweight per-artifact carrier. No new enum value is added and the 7-MVP-type constraint is unchanged.
+
+**`source_inputs` scope note.** `source_inputs` is a separate **provenance** scope (upstream human evidence, outward) and is **not** part of this lineage field set; it is not yet defined in this schema and is listed here only to fix the lineage-vs-provenance boundary.
+
 ### Category 5: Trust
 
 | Field | Type | Required | Valid Values | Description |
@@ -179,6 +194,9 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | `approval_state` | String | No | `draft`, `under-review`, `approved`, `rejected` | Approval status for formal artifacts (plans, FDDs, test plans) |
 | `version` | String | No | Semantic version `X.Y` | Version for baselined documents |
 | `superseded_by` | String | No | Filename of replacing document | Points to the superseding file (if `lifecycle_state` = `superseded`) |
+| `supersedes` | String | No | Filename of the document this one replaces | Backward inverse of `superseded_by` — points to the prior artifact this one supersedes in a dedup/version chain. Documented inverse pair with `superseded_by` (see Lineage Fields vs. Provenance Fields). Distinct from the `SUPERSEDES` relationship verb — this is a lightweight per-artifact scalar carrier, not a `relationships[]` entry. |
+| `parent_artifact` | String | No | Path/filename of the upstream generated artifact | The upstream generated artifact in the lineage graph that this artifact derives from. Horizontal lineage within AI/agent outputs (distinct from `source_inputs` upstream human evidence — see Lineage Fields vs. Provenance Fields). |
+| `sibling_topic` | String | No | Scope descriptor string | Topic/scope descriptor that groups strict siblings for dedup matching. Lateral disambiguator within a sibling set. Verbatim-aligned with `lifecycle-states-canonical.md §3.2`. |
 
 ### Domain B — Managed Knowledge (04-Operations trackers)
 
@@ -196,6 +214,9 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | `synthesis_scope` | Array | No | List of filenames | Source files this synthesis draws from |
 | `validation_state` | String | No | `pending`, `passed`, `failed` | Agent consistency check result |
 | `promoted_from` | String | No | Filename | If promoted from another synthesis, links to predecessor |
+| `parent_artifact` | String | No | Path/filename of the upstream generated artifact | The upstream generated artifact this synthesis derives from (horizontal lineage). A lineage edge MAY point at a Domain-A baselined parent — both Domain A and Domain C carry the field so an A↔C chain resolves. See Lineage Fields vs. Provenance Fields. |
+| `sibling_topic` | String | No | Scope descriptor string | Topic/scope descriptor that groups strict siblings for dedup matching. Verbatim-aligned with `lifecycle-states-canonical.md §3.2`. |
+| `supersedes` | String | No | Filename of the artifact this one replaces | Backward inverse of `superseded_by` — points to the prior artifact this one supersedes in a dedup/version chain. Distinct from the `SUPERSEDES` relationship verb (a per-artifact scalar carrier, not a `relationships[]` entry). |
 
 ---
 
@@ -216,7 +237,7 @@ Examples:
 
 ### Sidecar Structure
 
-Identical YAML field set to embedded frontmatter. No `---` delimiters (plain YAML file).
+Identical YAML field set to embedded frontmatter. No `---` delimiters (plain YAML file). This includes the horizontal-lineage fields (`parent_artifact`, `sibling_topic`, `supersedes`): sidecar `.meta.yml` files carry them identically to embedded frontmatter, so lineage edges on non-markdown artifacts are equally grep-discoverable.
 
 ```yaml
 # Sidecar metadata for: SteerCo_2026-03-15.txt
@@ -362,6 +383,7 @@ relationships:
 - [ ] `lifecycle_state` value is valid for the file's `domain` (see Lifecycle States by Domain)
 - [ ] Trust-lifecycle consistency rules are satisfied
 - [ ] Relationship `target` values resolve to existing files in the ecosystem
+- [ ] (WARN) Lineage-field path values (`parent_artifact`, `supersedes`, `superseded_by`) resolve to existing artifacts — WARN, not BLOCK (consistent with relationship-target resolution; a dangling lineage pointer is a flag, not a hard failure)
 - [ ] Relationship `type` values are one of the 7 MVP types
 - [ ] Domain C files have `trigger_source` populated
 - [ ] Sidecar files follow the `{filename}.meta.yml` naming convention
