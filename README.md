@@ -53,8 +53,8 @@ Platform behavior is configurable from one place. Every field — what it does, 
 
 | Module | Role | More |
 |---|---|---|
-| [`operations/`](operations/README.md) | PMO operations capability — 13 skills for PMO practitioners | [Module README](operations/README.md) |
-| [`release/`](release/README.md) | Release pipeline / SDLC management — 6 skills for platform builders | [Module README](release/README.md) |
+| [`operations/`](operations/README.md) | PMO operations capability — the skill suite for PMO practitioners | [Module README](operations/README.md) |
+| [`release/`](release/README.md) | Release pipeline / SDLC management — the skill suite for platform builders | [Module README](release/README.md) |
 | [`core/`](core/README.md) | Shared kernel — hooks, schemas, shared skills, disciplines, deploy infrastructure | [Module README](core/README.md) |
 | [`docs/`](docs/) | User-facing documentation — install, getting started, workspace setup, module APIs | [Docs index](docs/) |
 
@@ -64,8 +64,8 @@ Top-level layout:
 
 ```
 pmo-platform/
-├── operations/   # PMO operations module (13 skills, governance, templates)
-├── release/      # Release pipeline module (6 skills, pipeline definitions, ADRs)
+├── operations/   # PMO operations module (skills, governance, templates)
+├── release/      # Release pipeline module (skills, pipeline definitions, ADRs)
 ├── core/         # Shared kernel (hooks, schemas, disciplines, deploy infra)
 ├── docs/         # User-facing docs (INSTALL, GETTING_STARTED, workspace-setup, module-apis)
 ├── packages/     # .skill distribution artifacts per module

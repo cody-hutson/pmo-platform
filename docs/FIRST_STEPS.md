@@ -128,7 +128,7 @@ With a project configured, the daily skills have context to work from:
 - `/daily-status` — generate an AM/PM Teams-ready update from your trackers.
 - `/comms-writer` — draft an audience-calibrated stakeholder message.
 
-The full roster (13 skills) is in [operations/README.md](../operations/README.md); the governing rules are [operations/OPERATIONS.md](../operations/OPERATIONS.md).
+The full roster is in [operations/README.md](../operations/README.md); the governing rules are [operations/OPERATIONS.md](../operations/OPERATIONS.md).
 
 ---
 

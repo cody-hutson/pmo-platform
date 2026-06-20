@@ -76,7 +76,7 @@ Re-verify at any SHA by running [`../core/deploy/tools/cross-module-audit.sh`](.
 
 ## Module contents
 
-This module hosts the release skills (`release-planner`, `release-executor`, `build-reviewer`, `implementation-planner`, `pmo-skill-editor`, `pmo-skill-refiner`), the pipeline-stage shards under `release/references/pipeline/`, the hub-spoke bridge how-to, the release-relevant standards and protocols, the release schemas, the release-governance protocol (`release/governance/RELEASE_PROTOCOL.md`), the release tools, and the release-scope ADRs.
+This module hosts the release skills — the canonical roster is the `RELEASE_SKILLS` array in [`core/deploy/deploy.sh`](../core/deploy/deploy.sh), Check 5-asserted against the on-disk `release/skills/` directories — plus the pipeline-stage shards under `release/references/pipeline/`, the hub-spoke bridge how-to, the release-relevant standards and protocols, the release schemas, the release-governance protocol (`release/governance/RELEASE_PROTOCOL.md`), the release tools, and the release-scope ADRs.
 
 ## Future-Extraction Readiness
 
