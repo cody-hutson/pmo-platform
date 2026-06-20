@@ -5,6 +5,7 @@ description: >
 version: v1.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
+delivery_approach: advisory
 ---
 
 # Artifact Lint

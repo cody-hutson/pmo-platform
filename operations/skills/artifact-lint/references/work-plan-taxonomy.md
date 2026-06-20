@@ -1,17 +1,17 @@
-> [DERIVED — pending operator confirmation at Stage 9 Collective Review; the original artifact-lineage-graph split card is deleted, this is the evidence-grounded derivation from Domain-C synthesis types + the plan-type taxonomy].
+> Operator-confirmed at Stage 9 (v2.08): the Canonical-10 + Situational-7 derivation below is accepted as the authoritative work-plan taxonomy. The original artifact-lineage-graph split card was deleted; this table is the evidence-grounded reconstruction. Provenance below.
 
 # Work-Plan Taxonomy — 17 Types
 
 This taxonomy is the lookup table the **displaced-content check (Check 4)** uses to test an artifact's `folder`/`target_folder` against its `artifact_type` canonical home, and the **per-type derivative mapping** the sibling-duplicate and version-chain checks use to reason about what a given type typically GENERATES.
 
-## Provenance (why these 17, and why DERIVED)
+## Provenance (why these 17)
 
 No literal 17-row taxonomy survives in the canonical corpus — the original artifact-lineage-graph split card that defined it was deleted (FINDING 2, Stage 5). This table is the **evidence-grounded reconstruction**:
 
 - **Canonical 10** ≡ the Domain-C synthesis `artifact_type` value set in `core/schemas/frontmatter-schema.md` (Type Taxonomy, Domain C — Synthesis): `executive-summary`, `decision-package`, `readiness-assessment`, `weekly-rollup`, `daily-status-output`, `processing-run`, `draft-communication`, `sop`, `runbook`, `analysis`. These are the artifact types the generated surface actually carries.
 - **Situational 7** ≡ the plan-type taxonomy set + the waterfall/cutover rows: `plan:comms`, `plan:training`, `plan:hypercare`, `plan:cutover`, `plan:change-management`, `plan:raid`, and `phase-gate-review-package`. These are situational deliverables that appear in waterfall/cutover-governed projects.
 
-Because the table is DERIVED, the **operator confirms it at Stage 9 Collective Review** (or supplies the original artifact-lineage-graph split). It is cheap to revise pre-merge. Until confirmed, the displaced-content check treats a canonical-home mismatch as a `[RECOMMENDED]`-tier finding (operator-decidable), not a hard assertion.
+This derivation was **operator-confirmed at Stage 9 Collective Review (v2.08)** as the authoritative taxonomy. The displaced-content check (Check 4) therefore treats a canonical-home mismatch as a firm finding — still recommend-only per the skill's Autonomy Tier 1 posture (the operator approves any move), but no longer gated behind taxonomy confirmation.
 
 ## Canonical 10 (Domain-C synthesis types)
 
@@ -47,7 +47,7 @@ For each scanned artifact, read its `artifact_type` and `folder`/`target_folder`
 Notes:
 - A type whose canonical home IS `08-Generated/` (rows 6) is never flagged as displaced while in staging.
 - Folder names follow the project 01-08 structure; a project that customizes folder names supplies the mapping via its project-level configuration. Absent a project mapping, the 01-08 names above are the default.
-- This table is DERIVED — a canonical-home mismatch is operator-decidable, not a hard failure, until the taxonomy is confirmed at Stage 9.
+- This taxonomy is operator-confirmed (Stage 9, v2.08) — a canonical-home mismatch is a firm displaced-content finding (recommend-only per Autonomy Tier 1; the operator approves any move).
 
 ### Sources
 - #334 — the artifact-lineage-graph split whose deleted split card originally defined the 17-row taxonomy; this table is the evidence-grounded reconstruction.
