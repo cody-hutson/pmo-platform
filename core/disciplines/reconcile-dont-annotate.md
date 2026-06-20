@@ -16,6 +16,8 @@ source: codification of an operator-confirmed discipline (origin issue in the Re
 
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
+<!-- repo-integrity: allow-memory-ref -->
+<!-- This doc is the corpus home that the operator memory feedback_reconcile_dont_annotate self-demotes INTO; naming that memory (and the write-into-referenced-file memory) as provenance / a composes-with sibling is the deliberately-documented exception the allow-memory-ref marker covers. -->
 
 # Reconcile-Don't-Annotate Discipline
 
