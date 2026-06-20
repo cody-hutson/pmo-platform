@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-031 — Methodology-conditional skill activation — dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
+title: ADR-033 — Methodology-conditional skill activation — dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
 status: Accepted
 date: 2026-06-20
 release: 04-ROLE-delivery-coverage (v2.09)
@@ -12,11 +12,11 @@ source_observations:
   - "pmo-release-train-engineer (#1111) Stage-5 finding D1: the shared `operations/skills/_shared/five-model-variations.md` carries 5 model variations and has a blast radius of ~5 first-order / ~265 second-order consumers; it has NO SAFe column. Forcing a 6th column to carry the RTE's SAFe parameterization would ripple across every consumer for one role's benefit."
 ---
 
-# ADR-031 — Methodology-conditional skill activation: dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
+# ADR-033 — Methodology-conditional skill activation: dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
 
 ## Status
 
-**Accepted.** Operator-adopted at the Collective Review scope-lock for `04-ROLE-delivery-coverage` (v2.09), where CR-3 (parameterization sourcing) and CR-4 (the activation convention) were ratified as the two facets of one decision and consolidated into this single ADR per the decision-discipline ceremony guard. Design authored at Stage 5 Solutioning (the `pmo-release-train-engineer` spoke, #1111); ADR materialized at Stage 6 post-build per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent. Ships in the v2.09 release PR (reviewed at Stage 9).
+**Accepted.** Operator-adopted at the Collective Review scope-lock for `04-ROLE-delivery-coverage` (v2.09), where CR-3 (parameterization sourcing) and CR-4 (the activation convention) were ratified as the two facets of one decision and consolidated into this single ADR per the decision-discipline ceremony guard. Design authored at Stage 5 Solutioning (the `pmo-release-train-engineer` spoke, #1111); ADR materialized at Stage 6 post-build per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent. Ships in the v2.09 release PR (reviewed at Stage 9). **Renumbered from a branch-local ADR-031** — main's `ADR-031-autonomy-ceiling-unified-payload-triggered-hook` claimed 031 during this release's engineering window; `check-adr-numbers.py` confirms 033 as the next gap-free number after 032 (same collision pattern ADR-029 resolved).
 
 ## Context
 

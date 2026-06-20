@@ -151,12 +151,21 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP for the Layer-1 contract (additive doc/governance + a warn-mode check); MODERATE for the operator-side Layer-2 memory eviction.
 **File:** [ADR-029-memory-corpus-ssot-boundary.md](ADR-029-memory-corpus-ssot-boundary.md)
 
-### ADR-031 — Methodology-conditional skill activation: dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
+### ADR-033 — Methodology-conditional skill activation: dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
 
-**Status:** Accepted (operator-adopted at the v2.09 / `04-ROLE-delivery-coverage` Collective Review scope-lock; authored at Stage 6 per the ADR-007 / ADR-028 / ADR-029 precedent). Consolidates CR-3 (parameterization sourcing) + CR-4 (activation convention) — two facets of one decision.
+**Status:** Accepted (operator-adopted at the v2.09 / `04-ROLE-delivery-coverage` Collective Review scope-lock; authored at Stage 6 per the ADR-007 / ADR-028 / ADR-029 precedent). Consolidates CR-3 (parameterization sourcing) + CR-4 (activation convention) — two facets of one decision. Renumbered from a branch-local ADR-031 — main's autonomy-ceiling ADR claimed 031 during this release's engineering window; `check-adr-numbers.py` confirms 033 as the next gap-free number after 032.
 **Decision:** A methodology-conditional role-Specialist gates on `delivery_approach` — ACTIVE when the configured approach matches its methodology, DORMANT with a non-fire notice otherwise, dormant-with-`[ASSUMPTION – CONFIRM]` when the field is absent (never a silent default-fire); dormant-under-non-match is correct behavior. The active skill sources its archetype parameterization from the canonical `methodology-archetype-matrix.md` row (release-side), NOT by adding a column to the high-blast-radius `_shared/five-model-variations.md`. First consumer: `pmo-release-train-engineer` (SAFe).
 **Reversibility:** CHEAP at ship, trending MODERATE as future methodology-conditional skills adopt it.
-**File:** [ADR-031-methodology-conditional-skill-activation.md](ADR-031-methodology-conditional-skill-activation.md)
+**File:** [ADR-033-methodology-conditional-skill-activation.md](ADR-033-methodology-conditional-skill-activation.md)
+
+## Distribution-architecture ADRs
+
+### ADR-032 — Release-corpus public-vs-instance split: ship the capability, keep per-release content operator-instance
+
+**Status:** Accepted (design rendered at the 62-close-out-registers Stage 5; operator-authorized design-only scope via D-1412-Scope 2026-06-19; authored at Stage 6 per the ADR-007 / ADR-017 / ADR-028 Stage-6 ADR-authoring precedent). Renumbered from a Stage-5 ADR-029 — the contiguous global sequence advanced (ADR-029/030/031 landed) during this release's engineering window; `check-adr-numbers.py` confirmed 032 as the next gap-free number.
+**Decision:** Apply ADR-017's S1-Package-vs-S3-State cut to the release corpus — the maintainer's per-release content (RELEASE_LOG body, INDEX/DIGEST, notes/, plans/) is S3 operator-instance; the mechanism (templates, schema, pipeline, tools, deploy checks) plus a thin public surface (CHANGELOG + an empty RELEASE_INDEX seed) is S1 public. The operator-instance corpus root resolves via the ADR-017 canonical `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}` resolver, NOT the ADR-017-named orphan `PMO_INSTANCE_PATH`. Removal is HEAD-only (`.gitignore` + move); git-history scrub rejected (IRREVERSIBLE, force-push denied, content non-PII). Register template public / filled content instance (the close-out-register placement rule). Migration EXECUTION deferred to a follow-up issue per D-1412-Scope.
+**Reversibility:** CHEAP (this ADR is design-only; the deferred migration is MODERATE — HEAD-only, `git revert`-reversible).
+**File:** [ADR-032-release-corpus-public-vs-instance-split.md](ADR-032-release-corpus-public-vs-instance-split.md)
 
 ## Release-ops / capacity ADRs
 

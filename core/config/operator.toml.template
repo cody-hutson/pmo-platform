@@ -98,6 +98,35 @@ operator_instance_hub_state_path = ""
 # core/standards/initiative-roadmap-framework.md.
 operator_instance_roadmaps_path = ""
 
+# Resolves <OPERATOR_INSTANCE_INBOX_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/inbox
+# Consumer: the ambient inbox drop-zone (core/standards/c1-ambient-inbox-cursor.md §1)
+# — one watched dir where transcripts/emails land for ambient ingest; the dedup
+# cursor (.cursor.json) lives here. Read by the Path A scheduled intake sweep (C2).
+operator_instance_inbox_path = ""
+
+# Resolves <OPERATOR_INSTANCE_EXTERNAL_SYNC_SNAPSHOT_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/external-sync/snapshot.json
+# Consumer: the Path-B external-sync sweep (core/standards/c3-external-sync-path-b.md §3)
+# — the persisted poll-state snapshot the sweep diffs against. Holds live external
+# IDs/statuses, so it is operator-instance and never git-tracked.
+operator_instance_external_sync_snapshot_path = ""
+
+# Resolves <OPERATOR_INSTANCE_EXTERNAL_SYNC_RUNLOG_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/external-sync/run-log.jsonl
+# Consumer: the Path-B external-sync sweep (core/standards/c3-external-sync-path-b.md §5)
+# — append-only JSONL run-record (one per sweep; carries sweep="external-sync-path-b").
+# The producer side of the C3->C4 sweep-digest/heartbeat contract.
+operator_instance_external_sync_runlog_path = ""
+
+# Resolves <OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/ambient-intake/run-log.jsonl
+# Consumer: the Path-A scheduled intake sweep (core/standards/c2-intake-sweep-path-a.md §5)
+# — append-only JSONL run-record (one per sweep; carries sweep="intake-path-a").
+# Field-aligned to the Path-B run-record; the producer side of the C2->C4 sweep-digest/
+# heartbeat contract. A distinct file so the two sweeps' records do not interleave.
+operator_instance_intake_sweep_runlog_path = ""
+
 [adapters]
 # Host-adapter selectors — the four external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,
@@ -178,3 +207,49 @@ comms_platform = ""
 # Default: "Scrum" (the prior implicit "sprint-centric Agile" default made
 #          explicit, per the methodology-parameterization keystone).
 default_delivery_approach = "Scrum"
+
+[automation]
+# Ambient-intake automation governor — the single operator dial that governs how
+# much the platform does on its own during ambient intake (scheduled transcript /
+# email ingest + external-tracker sync). This is the C0 keystone every ambient-
+# intake child (C1–C6) clamps to.
+#
+# CEILING SEMANTIC: this is a CEILING, not a switch. The effective autonomy of any
+# single action is `effective = min(automation_level, per-action max)` — the dial
+# can only LOWER a per-action autonomy ceiling, never RAISE one above what that
+# action independently permits. Setting it high does not force any high-stakes
+# action to run unattended.
+#
+# IRREDUCIBLE TIER-0 FLOOR: certain actions NEVER unlock at ANY level — they always
+# stop for the operator regardless of this setting. The canonical irreducible set is
+# `core/specs/autonomy-tiers.md` § Irreducible Human Tasks (financial transactions,
+# account creation, security-permission modification, Stage 9 GO/NO-GO, Stage 12
+# Execute authorization, governance-file modification, cross-domain bridge writes,
+# destructive ops outside the workspace). RAID-Log closes are a Document Tier 1
+# stakeholder-facing write and likewise never auto-close at any level.
+#
+# ENFORCEMENT POSTURE: this dial is ADVISORY/soft today — skills read it and self-
+# limit, but nothing mechanically blocks an over-ceiling action. The C5 PreToolUse
+# enforcement hook (#1163), which lands in THIS release (v2.07), is what makes the
+# ceiling mechanically enforceable; per the hook-suite shakedown convention C5 ships
+# WARN-MODE-INITIAL (it reports an over-ceiling action but does not block), and the
+# operator FLIPS it from warn to enforce after the shakedown window. Once flipped to
+# enforce, the hook HARD-BLOCKS the payload-detectable Tier-0 classes — governance-
+# file writes and cross-domain bridge paths — because those are decidable from the
+# tool-call payload. The remaining irreducible classes (financial transactions,
+# account creation, security-permission modification, and the Stage 9 / Stage 12
+# gates) stay OPERATOR-IRREDUCIBLE by convention: they are not mechanically
+# detectable from a tool payload, so they rely on the standing convention above, not
+# the hook. So: advisory now → warn-mode when C5 lands this release → hard-blocking
+# (payload-detectable Tier-0 only) once the operator flips to enforce. Do NOT read
+# this dial as "now hard-enforced" unqualified.
+#
+# PLAIN-LANGUAGE LABELS (set it without TOML/tier knowledge):
+#   off          = "Off"               — platform proposes nothing on its own; you drive every cycle.
+#   recommend    = "Brief me"          — platform drafts/surfaces, you approve before anything is written.
+#   bounded_auto = "Handle the routine" — platform auto-handles low-stakes routine within declared scope;
+#                                          high-stakes + the irreducible Tier-0 set still stop for you.
+#
+# Valid: "off" | "recommend" | "bounded_auto"
+# Default: "recommend" (on — drafts/surfaces for your review; nothing auto-written).
+automation_level = "recommend"

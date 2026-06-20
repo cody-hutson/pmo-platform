@@ -8,6 +8,31 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.07] - 2026-06-20
+
+The daily processing cycle no longer has to be launched by hand. Scheduled sweeps watch an inbox and your trackers — capturing, classifying, and proposing updates — all bounded by a single plain-language dial (`off` / `recommend` / `bounded_auto`) you set in your config; the dial is a ceiling, and the human-only decisions stay human-only no matter where you set it. A consolidated daily digest reports what every sweep did, with a heartbeat so a sweep that quietly stops can't go unnoticed, and a new runtime guardrail enforces the ceiling (shipped logged-but-not-blocking; you turn it on after a short trial). This release requires action: run `update.sh`, set your `automation_level`, and later flip `.autonomy-mode` from `warn` to `enforce`.
+
+### Added
+
+- **One dial controls how far ambient automation can act.** A new `automation_level` setting (`off` / `recommend` / `bounded_auto`) in your config is a ceiling on everything the automation does — any action's real permission is the lower of your dial and that action's own limit. *Why it matters:* you govern the autonomy of the whole intake pipeline from one place, and the human-only decisions are never unlocked. ([#322](https://github.com/cody-hutson/pmo-platform/issues/322))
+- **Intake can run on a schedule.** Scheduled sweeps watch an inbox and your transcripts/emails (Path A) and your Jira/Confluence/Smartsheet trackers (Path B), proposing tracker closes only when the supporting evidence is present. *Why it matters:* routine processing happens on a cadence without you launching it, and a close never fires without its evidence. ([#1160](https://github.com/cody-hutson/pmo-platform/issues/1160), [#1161](https://github.com/cody-hutson/pmo-platform/issues/1161))
+- **A watched inbox no longer ingests the same thing twice.** The inbox drop-zone tracks what it has already seen with a content fingerprint. *Why it matters:* dropping a file in for processing is safe to repeat. ([#1159](https://github.com/cody-hutson/pmo-platform/issues/1159))
+- **One daily digest reports every sweep, with a heartbeat.** All sweep activity rolls up into the daily status digest, which carries a sweep-health heartbeat. *Why it matters:* a sweep that silently stops shows up as a missing heartbeat instead of going unnoticed. ([#1162](https://github.com/cody-hutson/pmo-platform/issues/1162))
+- **A runtime guardrail enforces the ceiling.** A new check inspects each action against your dial and blocks anything above the ceiling in the highest-stakes categories (governance and cross-domain changes); it ships logged-but-not-blocking until you flip it on (ADR-031). *Why it matters:* the dial actually stops above-ceiling actions once enforced, not just advises. ([#1163](https://github.com/cody-hutson/pmo-platform/issues/1163))
+
+[Full notes](release/releases/notes/v2.07_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.07)
+
+## [v2.08] - 2026-06-20
+
+The platform's generated-artifact surface — the staging area where AI-generated artifacts land and the folders they get promoted into — now has a lineage graph and a graph-integrity lint. Generated artifacts can record which artifact they came from and which they replace, and a new recommend-only skill scans that surface for duplicates, orphans, stale drafts, displaced files, and version chains, surfacing each for operator approval instead of letting them silently pile up. The lint never moves or deletes anything — every action it proposes is operator-approved. Everything is additive: a new skill and new optional metadata fields, with no existing field, file, or behaviour removed or renamed.
+
+### Added
+
+- **A lineage graph for generated artifacts.** Generated artifacts can now record their lineage with three optional fields — which artifact they derive from, a grouping topic for near-duplicate detection, and which artifact they supersede — across both formal-baseline and synthesis artifacts, with a clear table separating lineage (links between generated artifacts) from provenance (the upstream human evidence). *Why it matters:* parent-child and replacement relationships between AI-generated artifacts now survive the session that created them, so duplicates and superseded versions can be detected later. ([#334](https://github.com/cody-hutson/pmo-platform/issues/334))
+- **A recommend-only lint for the generated-artifact surface.** A new skill scans the staging area and promoted folders and runs five graph-integrity checks — orphan, sibling-duplicate, stale-draft, displaced-content, and version-chain — staging a single report with a proposed action and an undo-cost rating for each finding. It performs no file moves and no deletes; the operator approves every action. *Why it matters:* duplicate, orphaned, stale, or misfiled generated artifacts are surfaced for review instead of silently accumulating. ([#1165](https://github.com/cody-hutson/pmo-platform/issues/1165))
+
+[Full notes](release/releases/notes/v2.08_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.08)
+
 ## [v2.06] - 2026-06-20
 
 The platform's automated integrity checks now carry a written contract: a passing check must confirm the real thing it claims by inspecting actual content, never a stand-in signal — starting with a package-freshness check that compared file timestamps (which an ordinary checkout silently resets) and now compares the package's contents. The hook documentation was also restructured so two changes to the platform's security hooks can land at once without colliding. Four cards; everything is additive — no existing rule, setting, or behaviour is removed or renamed. A follow-up point release (v2.06.1) repaired two deploy-script detection bugs the new content checks exposed.

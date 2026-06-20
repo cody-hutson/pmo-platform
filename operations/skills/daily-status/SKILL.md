@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v2.06
+version: v2.07
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -60,6 +60,16 @@ Before generating any status update, read these files in order:
    - These are referenced **by role; their threshold values are not restated here**
      (duplicate-source-discipline — each band has exactly one canonical owner). Read the live
      band from the source row at compute time; never fork a local copy.
+7. **Ambient intake-sweep run-log** — `<OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>`
+   (default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/ambient-intake/run-log.jsonl`).
+   Read **only when rendering the Ambient Sweep Digest** (see `## Ambient Sweep Digest`).
+   Append-only JSONL; read the latest record (last line). Absent → the sweep is "not
+   configured" (not a failure). Producer schema: `core/standards/c2-intake-sweep-path-a.md`.
+8. **Ambient external-sync run-log** — `<OPERATOR_INSTANCE_EXTERNAL_SYNC_RUNLOG_PATH>`
+   (default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/external-sync/run-log.jsonl`).
+   Read **only when rendering the Ambient Sweep Digest**. Append-only JSONL; read the latest
+   record (last line). Absent → "not configured." Producer schema:
+   `core/standards/c3-external-sync-path-b.md`.
 
 ## Update Types
 
@@ -148,6 +158,108 @@ Buffer-consumption zone, and Metric-anomaly flag — plus the **REQUIRED** negat
 a color, never default to GREEN on absent input) lives in
 `references/rag-variance-buffer.md`. Read it whenever a status update will carry any of
 these figures.
+
+## Ambient Sweep Digest
+
+When the ambient intake and external-sync sweeps are configured, roll their outcomes into
+the AM/PM daily-status output as ONE consolidated block: a **digest** of what the sweeps
+did, a **heartbeat** of each sweep's health, and the **held-for-approval** queue of actions
+the sweeps proposed but did not execute. This is the operator's single morning briefing for
+the ambient automation — a single read instead of scattered outputs, and a heartbeat that
+makes a silent sweep failure impossible because its absence shows up as a MISSED row.
+
+This block is **read-only synthesis** — it reads the two run-logs (Inputs 7 and 8) and
+renders their state; it writes nothing new, calls no MCP, mutates no external system. Like
+`## RAG, Variance & Buffer Status`, it **surfaces, it does not recommend**: every held
+proposal is the *sweep's* proposal, attributed to the sweep, never a first-person
+recommendation by this skill. That preserves the `## Reversibility Scope` opt-out. The
+field-level reader detail — the run-record field-mapping, the four-state derivation, and
+the degradation rules — lives in `references/ambient-sweep-digest.md`; this section states
+the operational contract and the per-mode wiring.
+
+**Document-Tier classification (load-bearing — two tiers, kept distinct).** The digest
+REPORT is a **Document-Tier-2 daily-status output (auto-write)** per
+`core/governance/OPERATIONS.md` section Operational Artifacts — it inherits the Daily Status
+Log's Tier-2 classification and adds **no separate approval gate for the digest itself**; it
+rides the existing Post-Generation Actions flow. The held PROPOSALS the digest surfaces stay
+**Autonomy Tier 1** (`core/specs/autonomy-tiers.md` Tier 1 — Recommend): the operator
+approves the underlying action separately, at the sweep / tracker surface, not at the
+digest. The digest auto-writes the *visibility* of the held queue; it never auto-executes
+the *held actions*.
+
+### Sweep heartbeat
+
+For EACH configured sweep, render one heartbeat line from the latest run-record in that
+sweep's run-log. Compute the state in two steps — fresh-vs-stale FIRST, then read
+`status` / `empty`:
+
+- **✅ RAN-OK** — fresh `run_id` within the cadence window, `status: ok`, `empty: false`.
+- **◽ RAN-EMPTY** — fresh `run_id`, `status: ok`, `empty: true` (ran, found zero work — a
+  liveness signal, NOT a failure, NOT a silence).
+- **⚠️ RAN-PARTIAL / ❌ RAN-ERROR** — fresh `run_id`, `status: partial` / `error`,
+  `errors[]` populated (render `errors[]` verbatim).
+- **⛔ DID-NOT-RUN (MISSED)** — no `run_id` newer than the expected-cadence window. The
+  sweep did not fire; render an explicit MISSED row regardless of the stale record's
+  `status`.
+
+Each line carries: **Last run** (`finished_at`, fallback `run_id`), the **status glyph**,
+the **counts** (processed / skipped / error per the field-mapping in
+`references/ambient-sweep-digest.md`), and any **failures** (`errors[]` verbatim). The
+expected-cadence window is the sweep's **registered cadence** read as a parameter — never a
+hardcoded fixed window (parameterize-over-hardcode); if the cadence is unknown at render
+time, default to one daily-processing cycle and flag the assumption. RAN-EMPTY versus MISSED
+is the load-bearing "ran-and-found-nothing versus did-not-run" distinction.
+
+### Sweep intake & reconciliation summary
+
+A compact rollup of what the sweeps DID, read from the same run-records (not re-derived):
+
+- **Path-A (intake):** `files_processed` advanced this run, `files_skipped` (cursor-hit
+  dedup), and the `escalations[]` stall strings the intake sweep emits (each citing its
+  mechanism number).
+- **Path-B (external-sync):** `drift_total`, `proposals_emitted` (reconciliation
+  proposals), and `auto_closed` (Tier-2 in-scope Evidence-Gate closes that executed).
+
+### Held for your approval
+
+The actions the sweeps PROPOSED but HELD at the `automation_level` ceiling — read from each
+run-record's `proposals_held` count and the proposal evidence strings the sweeps emit.
+Render an operator-actionable list so the operator can approve them: "N actions the ambient
+sweeps proposed but held at your `automation_level` — approve to apply." Attribute each held
+action to its sweep and its disposition: "held at `recommend`" for items a higher dial would
+clear, versus "held — requires your approval (never auto)" for the permanently-held
+irreducible set (RAID and Document-Tier-1 stakeholder closes). This is the autonomy-tiers
+Tier-1 surface-for-approval — the digest makes the held queue visible; it does not approve
+or execute it.
+
+### Per-mode wiring
+
+| Mode | Heartbeat | Intake / reconciliation summary | Held-for-approval |
+|------|-----------|---------------------------------|-------------------|
+| **AM Status Update** | Render the full heartbeat (all sweeps — last-run + counts + failures + MISSED rows); the morning briefing is the primary digest surface. | Render the overnight rollup since the last AM digest. | Render the held queue; the operator triages it at the morning connect. |
+| **PM Status Update** | Render the heartbeat DELTA versus the AM digest (new runs / newly-missed / newly-errored). | Render the day's incremental rollup. | Render NEW held items since AM, plus a count of still-pending. |
+| **Daily Connect Prep** | Surface the heartbeat as a PMO-internal **prep-note OUTSIDE the Teams-ready body** (same placement as the anomaly-flag / unprocessed-Comms prep-notes) — automation health is operator-internal, not channel content. | Surface as a prep-note. | Surface the held queue as a prep-note so the operator walks in knowing what needs approval. |
+
+**Teams-ready versus PMO-internal placement (load-bearing).** The heartbeat and
+held-proposals are PMO-internal operational signal — they render in the working surface (the
+Daily Status Log or a prep-note), NOT inside the under-40-line Teams-ready body, and they
+obey the `## Output Rules` **No internal IDs in stakeholder output** rule. The Teams-ready
+body stays the team's carry-forward state; the digest is the operator's automation-health
+read.
+
+**Negative paths (REQUIRED — never fail silently, never block the AM/PM generation).**
+
+- **Run-log file absent** → render "ambient sweep: not configured" (the sweep was never
+  installed). Do NOT error, do NOT block the update — a sweep never set up is not a missed
+  run.
+- **Run-log present but empty** (zero records) → "ambient sweep: no runs recorded yet."
+- **Run-log present, latest record stale** → ⛔ MISSED row (the anti-silent-failure surface).
+- **Malformed / unparseable latest record** → "ambient sweep: run-log unreadable — check
+  the path" and flag it; never silently drop a corrupted run-log — a corrupted run-log is
+  itself a signal.
+- **Held queue present but length budget tight** → drop rollup detail before dropping the
+  held queue; the held queue is the operator's action list, the rollup is context. Always
+  surface the held count even when detail is trimmed.
 
 ## Post-Generation Actions
 
@@ -395,6 +507,82 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
   row) — registry rule: watch milestone, flag at next status," and the color matches reality.
   Junior writes "schedule 🟢 — on track," the milestone is measurably behind, and the watermelon
   surfaces a week later when the slip can no longer be hidden.
+
+### Heartbeat reports a stale run-record as the current run — INPUT
+
+- **Signature (observable signal):** The Ambient Sweep Digest heartbeat shows
+  a sweep as ✅ RAN-OK with yesterday's (or older) `finished_at`, because the
+  reader took the latest line of the run-log as "the current run" without
+  checking it against the expected-cadence window — so a sweep that has not
+  fired since yesterday renders as healthy.
+- **Conditional:** do NOT render a heartbeat as RAN-OK from the latest run-record alone when that record's `finished_at` predates the sweep's expected-cadence window, because a sweep that silently stopped firing leaves its last (successful) record as the newest line — reading "latest line = current run" masks the exact did-not-run failure the heartbeat exists to expose.
+- **Root cause:** The run-log is append-only and the latest line is the natural
+  "current state" read; the staleness comparison (latest `finished_at` vs. the
+  registered cadence) is an extra step that feels redundant when a record is
+  present and its `status` is `ok`. Presence of a record is conflated with
+  freshness of a record.
+- **Mitigation:** Compute the heartbeat state in two steps: first compare the
+  latest `run_id` / `finished_at` against the sweep's registered cadence window —
+  if stale, render ⛔ DID-NOT-RUN (MISSED) regardless of the stale record's
+  `status`; only if fresh, read `status` / `empty` to pick RAN-OK / RAN-EMPTY /
+  RAN-ERROR. Never let a present-but-old `status: ok` record render as the
+  current run.
+- **Principal response vs. junior response:** Principal renders "intake sweep ⛔
+  MISSED — last ran 2026-06-18 09:02, expected daily" and the operator chases the
+  stalled scheduler. Junior renders "intake sweep ✅ last ran 2026-06-18" with no
+  freshness check; the operator reads it as green, the sweep has been dead for two
+  days, and the unprocessed inbox surfaces a week later.
+
+### Ran-empty sweep rendered as a failure (or as a silence) — PROC
+
+- **Signature (observable signal):** A sweep whose latest record is `status: ok`
+  with `empty: true` is rendered either as an error/warning (treating "found
+  nothing" as a fault) or is omitted from the digest entirely (treating "nothing
+  to report" as "nothing to render") — both collapse the three valid states
+  (RAN-OK / RAN-EMPTY / DID-NOT-RUN) into a binary.
+- **Conditional:** do NOT render a sweep with `empty: true` as an error or omit it from the heartbeat when its `status` is `ok`, because `empty` is the deliberate "ran and found zero work" signal that proves the sweep is alive — dropping or red-flagging it destroys the very distinction (ran-empty vs. did-not-run) the heartbeat was built to carry.
+- **Root cause:** "Empty" reads as "nothing happened," and nothing-happened
+  reads as either a problem or a non-event; the `empty` flag's role as a positive
+  liveness signal (the sweep fired, the inbox/external state was simply quiet) is
+  easy to miss when the rendering logic optimizes for "show me what changed."
+- **Mitigation:** Render `empty: true` + `status: ok` as its own explicit ◽
+  RAN-EMPTY state ("intake sweep ◽ ran 09:01 — no new files"), distinct from both
+  RAN-ERROR and DID-NOT-RUN. The heartbeat always shows every configured sweep,
+  including the quiet ones — absence from the heartbeat means "not configured,"
+  never "ran empty."
+- **Principal response vs. junior response:** Principal shows the quiet sweep as
+  RAN-EMPTY so the operator sees it fired and stayed quiet by design. Junior hides
+  the empty sweep ("nothing to show"); the operator cannot tell the difference
+  between a healthy-but-quiet sweep and a dead one, and the heartbeat's anti-silent-
+  failure guarantee is silently defeated.
+
+### Held proposals dropped from the roll-up at the automation ceiling — HAND
+
+- **Signature (observable signal):** The digest renders the intake/reconciliation
+  summary (what the sweeps did) but omits the `### Held for your approval` queue,
+  or renders `proposals_held: 0` when the run-records carry held items — so actions
+  the sweeps proposed-but-held at the `automation_level` ceiling never reach the
+  operator, and the held queue grows invisibly.
+- **Conditional:** do NOT render the sweep digest without the held-proposals queue when any run-record carries `proposals_held > 0`, because held proposals are the Tier-1 surface-for-approval items the operator must act on — dropping them from the roll-up means the sweep's clamped-back actions stall forever with no one prompted to approve them, the opposite of the dial's "brief me then I decide" contract.
+- **Root cause:** The "what the sweeps did" rollup (executed actions) is the
+  satisfying, concrete part of the digest; the "what the sweeps held" queue
+  (un-executed proposals) is easy to treat as secondary and drop under the under-40-line
+  pressure, especially since held items did not change any state. The surface-for-
+  approval obligation (autonomy-tiers Tier-1) is collapsed into "only report what
+  happened."
+- **Mitigation:** The held-proposals subsection is mandatory whenever any read
+  run-record has `proposals_held > 0` — render it with each held action attributed
+  to its sweep and its disposition ("held at `recommend`" vs. "held — never auto").
+  When dropping content to fit the length budget, drop rollup detail before dropping
+  the held queue; the held queue is the operator's action list, the rollup is
+  context. Surface the held count even when detail is trimmed ("4 actions held for
+  approval — see Daily Status Log").
+- **Principal response vs. junior response:** Principal renders "4 actions held
+  for your approval: 2 tracker reconciliations (held at `recommend`), 1 RAID close
+  (held — never auto), 1 register write" and the operator clears the queue. Junior
+  renders the rollup and trims the held queue as "secondary"; the held proposals
+  pile up across days, and the ambient automation's whole point — surface for one-
+  click approval — is quietly lost.
 
 ## Multi-Project Support
 

@@ -50,6 +50,14 @@ These four are the seam onboarding writes operator choices into. Finer-grained p
 
 This is only the global default + resolver fallback. The enum, validation, and Custom block are canonical in [`core/schemas/project-schema.md`](../core/schemas/project-schema.md) and [`release/references/specs/methodology-parameterization-v1.md`](../release/references/specs/methodology-parameterization-v1.md). A project's own `delivery_approach` overrides this.
 
+### `[automation]` — ambient-intake automation governor
+
+| Field | What it sets | Allowed values | Default |
+|---|---|---|---|
+| `automation_level` | the single dial that governs how much the platform does on its own during ambient intake (scheduled transcript / email ingest + external-tracker sync) — a **ceiling**, not a switch: `effective = min(automation_level, per-action max)` | `off` ("Off" — proposes nothing) · `recommend` ("Brief me" — drafts/surfaces, you approve before any write) · `bounded_auto` ("Handle the routine" — auto-handles low-stakes routine within scope) | `recommend` |
+
+A ceiling can only LOWER a per-action autonomy, never raise one. The irreducible Tier-0 set (financial / account-creation / security-permission / governance-file / cross-domain bridge / Stage 9 / Stage 12, plus RAID-Log closes) never unlocks at any level — canonical list in [`core/specs/autonomy-tiers.md`](../core/specs/autonomy-tiers.md) § Irreducible Human Tasks. **Enforcement posture:** advisory/soft today; the C5 PreToolUse hook lands in this release warn-mode-initial (reports, does not block), and the operator flips it warn→enforce after the shakedown window. Once flipped, the hook hard-blocks only the payload-detectable Tier-0 classes (governance-file + cross-domain bridge paths); the remaining irreducible classes stay operator-irreducible by convention. Canonical detail: the field comments in [`core/config/operator.toml.template`](../core/config/operator.toml.template).
+
 ### `[platform]` — legacy adapter selectors (deprecated alias)
 
 | Field | Status | Notes |
