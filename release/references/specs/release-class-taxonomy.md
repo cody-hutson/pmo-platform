@@ -162,7 +162,7 @@ The Outcome Statement (release-outcome-statement-template.md) and Release Class 
 
 Release Class composes with two future-roadmap siblings:
 - **Operator-touchpoint inventory + phase-out schema** (future): when shipped, the inventory will enumerate the operator-engagement points per release class so the per-class density column (Light/Standard/Tight) becomes auditable per-engagement-touchpoint, not just declaratively.
-- **Pipeline-wide shadow→warn→enforce convention** (LIVE — [`progressive-rollout-convention.md`](../../../core/standards/progressive-rollout-convention.md)): the convention provides a uniform graduation path (`shadow → warn → enforce → removed`) applicable to per-class checks (e.g., a hotfix-only gate may enter shadow at first hotfix release, warn at second, enforce at third). A per-class check cites the convention for its phase vocabulary rather than re-defining it.
+- **Pipeline-wide shadow→warn→enforce convention** (LIVE — `core/standards/progressive-rollout-convention.md`): the convention provides a uniform graduation path (`shadow → warn → enforce → removed`) applicable to per-class checks (e.g., a hotfix-only gate may enter shadow at first hotfix release, warn at second, enforce at third). A per-class check cites the convention for its phase vocabulary rather than re-defining it.
 
 This doctrine reserves the composition surface; future siblings populate it. No action required now.
 

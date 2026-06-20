@@ -171,7 +171,7 @@ This convention canonicalizes three conventions; each carries the 2-part artifac
 
 ---
 
-### Source(s)
+### Sources
 
 - `#164` — parent task: establish a pipeline-wide shadow→warn→enforce rollout convention (this file is its AC1/AC2/AC4 deliverable). Milestone `71-autonomy-phaseout-foundation`.
 - `#165` — companion task: operator-touchpoint inventory + phase-out plan schema; its `current_phase` field consumes this convention's phase enum (the E1 consistency contract, #164 AC5).
