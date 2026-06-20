@@ -38,6 +38,8 @@ Adopt a **methodology-conditional skill-activation convention** with two coupled
 
    Dormant-under-non-matching-config is **correct behavior, not a defect** (a DT/QA acceptance criterion, not a bug). The convention is reusable: future methodology-specific roles (other SAFe roles, Kanban-specific roles, etc.) gate the same way. It composes with role-boundary deconfliction — the RTE's dormancy under Scrum *plus* its primary-role/trigger boundary against `pmo-scrum-master` (team-process, Scrum-default) and `pmo-program-manager` (delivery-accountability, methodology-general) together prevent cross-fire.
 
+   **Conditional is the exception; adaptive is the rule.** This ADR governs only the *conditional* mode — a methodology-**exclusive** role (one with no meaning outside its methodology, like the SAFe RTE) going dormant. It does NOT govern the common case. The **default is adaptive**: a skill stays always-active and *renders the selected methodology's view by nature* (Scrum sprint framing vs SAFe PI framing vs Kanban flow) through the **work-organization-mapping framework** ([`core/disciplines/work-organization-mapping-framework.md`](../disciplines/work-organization-mapping-framework.md)) — the Layer-3 consumer of `delivery_approach`. Use conditional activation (this ADR) ONLY when the role itself is methodology-exclusive; use adaptive rendering (the framework) for every skill that merely varies its output by methodology. Mis-applying the gate to an adaptive skill would wrongly *silence* a skill that should simply adapt — the failure mode this distinction exists to prevent.
+
 2. **Release-side methodology-row sourcing.** The active RTE consumes its SAFe parameterization from the **SAFe row of `release/references/specs/methodology-archetype-matrix.md`** (the per-archetype matrix that already carries per-archetype rows) — it does **NOT** add a column to the high-blast-radius shared `_shared/five-model-variations.md`. The skill "renders the SAFe view by nature" from the canonical archetype row; it does not fork or restate the parameterization. This is the same one-owner-of-truth posture as ADR-028 (consume by reference from the canonical owner, do not fork).
 
 ## Consequences
@@ -64,3 +66,16 @@ Adopt a **methodology-conditional skill-activation convention** with two coupled
 - [ADR-004](ADR-004-five-function-spine.md) — the archetype × stage matrix that defines the methodology archetypes (SAFe among them) the gate keys on.
 - [ADR-022](ADR-022-platform-config-vs-operator-toml-split.md) — `operator.toml` is the environment/identity surface that carries the `delivery_approach` selector this convention reads.
 - [ADR-028](ADR-028-operations-consume-core-safety-controls-via-public-api.md) — consume-by-reference-from-the-canonical-owner posture; the release-side-row sourcing is the same one-owner-of-truth principle applied to methodology parameterization.
+- [`work-organization-mapping-framework.md`](../disciplines/work-organization-mapping-framework.md) — the **adaptive** complement to this ADR's **conditional** mode: the Layer-3 framework by which always-active skills render the selected methodology's view. This ADR is the exception; that framework is the rule.
+
+## Architecture context
+
+This activation pattern is one node in a **toolkit × methodology × adapter** architecture that is currently logged across several artifacts but not yet unified under one trunk (see the `architecture-overview` linkage gap noted at the 04-ROLE-delivery-coverage Collective Review). The four participating layers and their canonical homes:
+
+| Layer | Canonical home | This ADR's relation |
+|---|---|---|
+| **Methodology selection** | `operator.toml` `delivery_approach` ([ADR-022](ADR-022-platform-config-vs-operator-toml-split.md)) | the config value this ADR's gate reads |
+| **Methodology definitions** | [`methodology-archetype-matrix.md`](../../release/references/specs/methodology-archetype-matrix.md) + `methodology-parameterization-v1.md` ([ADR-004](ADR-004-five-function-spine.md)) | the SAFe row the active skill sources from |
+| **Skills follow methodology** | adaptive → `work-organization-mapping-framework.md`; conditional → **this ADR** | this ADR is the conditional half |
+| **Plug-and-play host adapters** | `operator.toml` `[adapters]` (selectors; implementations roadmapped under the PORT-Adapters epic) | orthogonal — *which* host tools a skill leverages, independent of *which* methodology it renders |
+| **Domain best-practice toolkit** | `core/standards/domain-best-practices/` | orthogonal quality axis — *what good looks like* in a domain, independent of methodology |
