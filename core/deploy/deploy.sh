@@ -268,7 +268,7 @@ remove_mirror_subtree() {
 }
 
 validate_workspace() {
-  # E-05: Confirm script is running from pmo-platform-v2 repo root.
+  # E-05: Confirm script is running from pmo-platform repo root.
   # Checks for the 3-module skeleton (operations/, release/, core/) plus
   # CLAUDE.md OR core/CLAUDE.md.template.
   # The template variant accommodates both contexts:
@@ -276,10 +276,10 @@ validate_workspace() {
   #     operator's workspace root, depersonalized at install-time)
   #   - operator workspace (CLAUDE.md present at workspace root)
   if [[ ! -f CLAUDE.md ]] && [[ ! -f core/CLAUDE.md.template ]]; then
-    die "Must run from pmo-platform-v2 repo root. CLAUDE.md (or core/CLAUDE.md.template) not found."
+    die "Must run from pmo-platform repo root. CLAUDE.md (or core/CLAUDE.md.template) not found."
   fi
   if [[ ! -d core ]] || [[ ! -d release ]] || [[ ! -d operations ]]; then
-    die "Must run from pmo-platform-v2 repo root. 3-module skeleton (core/, release/, operations/) not found."
+    die "Must run from pmo-platform repo root. 3-module skeleton (core/, release/, operations/) not found."
   fi
 }
 
