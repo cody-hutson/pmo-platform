@@ -1,9 +1,10 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 # Subagent Security Posture — Hub-Orchestrated Autonomous Spawning
 
 **Origin:** monolith-cleanup release
 **Tier:** K1 codified-knowledge corpus per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md)
-**Primary consumers:** Hub Procedure 3 Spoke Launch (per [`hub-spoke-bridge.md § Spoke Launch Mechanisms`](../../release/references/how-to/hub-spoke-bridge.md)); all `.claude/agents/*.md` definitions; future PreToolUse hook (deferred per § Deferred Hook Contract)
+**Primary consumers:** Hub Procedure 3 Spoke Launch (per [`hub-spoke-bridge.md § Spoke Launch Mechanisms`](../../release/references/how-to/hub-spoke-bridge.md)); all `.claude/agents/*.md` definitions; the autonomy-ceiling PreToolUse hook `block-autonomy-ceiling.sh` (§ 4 Hook Contract — RESOLVED in v2.07)
 **Secondary consumers:** [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) (composes-with at hook-layer seam); [`autonomy-tiers.md § Outbound consumers`](../specs/autonomy-tiers.md) (cites this doc as the named outbound consumer)
 **Status:** Canonical
 **Introduced:** monolith-cleanup release
@@ -16,13 +17,19 @@ The shift from `spawn_task` chip-launched spokes to in-session Agent-tool orches
 
 This standard **codifies** the security posture that protects autonomous subagent execution. It does **not** introduce new enforcement at this release — the operative enforcement surface (frontmatter `tools:` enumeration + the 5 PreToolUse hooks + the Recursion-Prohibited preamble + the Return Value escape path) already exists as the de facto state of the platform. This release makes that posture canonical in writing; it does not add new gates.
 
-**Release scope (documentation only):**
+**Release scope (monolith-cleanup, documentation only):**
 - 4 operative mechanisms documented as the canonical security model
 - 1 deferred mechanism (Autonomy-Tier-aware PreToolUse hook) carried in this doc as a **contract** for a follow-up release to implement
 - Cross-reference appends in 4 sibling files (no enforcement change)
 
-**Deferred to follow-up release:**
-- `block-subagent-tier-violation.sh` PreToolUse hook implementation (the named outbound consumer per [`autonomy-tiers.md § Outbound consumers`](../specs/autonomy-tiers.md))
+**v2.07 update — the deferred Hook Contract is RESOLVED:** the Autonomy-Tier-aware
+PreToolUse hook shipped in v2.07 as **`block-autonomy-ceiling.sh`** (#1163),
+**payload-triggered** (NOT subagent-session-detection — that trigger was infeasible;
+see § 4). It enforces the irreducible-Tier-0 floor + the `automation_level` ceiling.
+See § 4 for the resolved contract.
+
+**Still deferred (Phase 2):**
+- The subagent-only approval-evidence gating rows of the § 4 rule table (Tier-1/2/3 "ALLOW only if approval evidence / cascade_scope / standing authorization") — they need a session/approval signal the tool-call payload does not carry (the same unavailable-signal problem that sank the subagent-session trigger). Revisitable when/if `subagent_type` + an approval-evidence input become readable.
 - `pipeline-event-log.md` `event_subtype: subagent-invocation` substrate extension (closed-enum governance change)
 - One-time empirical verification suite (Stage 7 DT regression cases) for both hook-inheritance and frontmatter-enforcement claims
 
@@ -69,7 +76,7 @@ This standard **codifies** the security posture that protects autonomous subagen
 
 **Enforcement contract (per Stage 5 D-ToolRestrictionContract):** Frontmatter `tools:` is treated as **DECLARATIVE-AT-MINIMUM**. Anthropic upstream Agent-tool semantics for the `tools:` field are non-canonical at the time of writing — whether the harness STRUCTURALLY refuses tool calls outside the list, or whether the list is operator-facing documentation only, is empirically undetermined. Defense-in-depth requires BOTH frontmatter declaration AND Mechanism 2 hook enforcement.
 
-**Empirical-verification gap (per adversarial finding PRF-2):** Whether Mechanism 1 is structurally enforced or merely documentary is **answerable** by an unprivileged out-of-list tool-call probe (e.g., a read-only spoke attempting a benign `Write` to a temp file). The test is **NOT** a security probe; it is a boundary-interrogation test. This standard prescribes the empirical test as a Stage 7 DT regression case in a follow-up release (deferred per § 4 Deferred Hook Contract scope-bound).
+**Empirical-verification gap (per adversarial finding PRF-2):** Whether Mechanism 1 is structurally enforced or merely documentary is **answerable** by an unprivileged out-of-list tool-call probe (e.g., a read-only spoke attempting a benign `Write` to a temp file). The test is **NOT** a security probe; it is a boundary-interrogation test. This standard prescribes the empirical test as a Stage 7 DT regression case in a follow-up release (scope-bound to the § 4 Hook Contract).
 
 ### Mechanism 2 — PreToolUse Hook Inheritance (Existing 5-Hook Surface)
 
@@ -116,26 +123,62 @@ Adding the subtype requires a governance change per [`pipeline-event-log-schema.
 
 ---
 
-## § 4. Deferred Hook Contract (for Follow-Up Release)
+## § 4. Hook Contract (RESOLVED in v2.07 — `block-autonomy-ceiling.sh`)
 
-**Proposed hook:** `.claude/hooks/block-subagent-tier-violation.sh`
+> **Supersession (R-C5RECON, v2.07):** This section originally proposed
+> `block-subagent-tier-violation.sh`, triggered on **subagent-session detection
+> via session context**. That design was **infeasible against the actual hook
+> input** — § 3 Mechanism 2 of THIS document states the hooks "do NOT read
+> session-context fields (no `session_id`, no `parent_session`, no
+> `subagent_type`)", and the empirical hook survey found zero hooks in the suite
+> reading any session/subagent field. A hook triggered on a signal the hook layer
+> cannot read would be a false-enforcement floor. The v2.07 design (#1163)
+> triggers on the **tool-call payload** — the universal signal all hooks already
+> use — and reads the `automation_level` ceiling. The supersession decision is
+> recorded in [`ADR-030`](../ADRs/ADR-030-autonomy-ceiling-unified-payload-triggered-hook.md).
 
-**Trigger:** PreToolUse on any tool call from a subagent session (detected via session context).
+**Hook:** `.claude/hooks/block-autonomy-ceiling.sh` (shipped v2.07, #1163).
+
+**Trigger:** PreToolUse on any **mutation tool call** — matchers `Bash`, `Write`,
+`Edit`, `mcp__.*`. (Read / WebFetch are non-mutating and out of scope.) Fires on
+the tool-call payload, NOT on session context — so it gates parent-session AND
+subagent-session calls identically (per § 2's baseline row, the hook surface
+includes parent-session calls), without depending on the unreadable
+`subagent_type` field.
+
+**Reads:** `automation_level` from `operator.toml` (the runtime-read precedent —
+`notify-version-skew.sh`), resolved ONCE at SessionStart by
+`prime-autonomy-ceiling-cache.sh` and cached at
+`${HOME}/.cache/pmo-platform/autonomy-ceiling`; the PreToolUse hook reads the
+cache (a single file read), falling back to a direct resolve when the cache is
+absent. The numeric ceiling maps `{off:0, recommend:1, bounded_auto:2}`.
 
 **Rule contract (Autonomy-Tier-aware gating per [`autonomy-tiers.md § Outbound consumers`](../specs/autonomy-tiers.md)):**
 
-| Action class | Hook posture |
-|---|---|
-| **Tier 0 (Manual / Irreducible Human Tasks)** | BLOCK regardless of session context (operator-only by definition; subagents have NO authority) |
-| **Tier 1 (Recommend / drafts)** | ALLOW only if approval-evidence comment present on parent sub-task |
-| **Tier 2 (Bounded Auto / `cascade_scope`)** | ALLOW only if action target is within declared `cascade_scope` of upstream Tier 1 artifact |
-| **Tier 3 (Autonomous / standing authorization)** | ALLOW only if standing-authorization clause is named in spoke prompt prelude |
+| Action class | Hook posture | v2.07 status |
+|---|---|---|
+| **Tier 0 (Manual / Irreducible Human Tasks)** | BLOCK regardless of `automation_level` AND regardless of mode (always-enforce class, mirrors `block-rm-prefer-trash` permanence). Checked FIRST. | **LIVE** — but only for the **payload-detectable** subset: governance-file writes + cross-domain bridge writes (resolved from the Write/Edit `file_path` + `cwd`). Financial / account-creation / security-permission and the Stage 9 / Stage 12 gates are NOT mechanically detectable from a tool payload — they stay **operator-irreducible by convention**, documented but not hook-enforced. Item 8 (destructive outside the workspace) is already owned by `block-rm-prefer-trash` BLOCK-TRASH-001/003 — C5 does NOT duplicate it. |
+| **Ceiling check (all mutations)** | Block (mode-gated) iff the action's required tier EXCEEDS the resolved ceiling (`effective = min(ceiling, required)`). **Permissive default: an unmapped action is ALLOWED** — C5 gates every mutation, so a deny-default would break the platform; the un-gated action still runs through the existing safety hooks. Required tier comes from a conservative declared-mapping table seeded from `autonomy-tiers.md` observable indicators (governance path → Tier 0; `08-Generated/` staging → Tier 2; stakeholder-facing write → Tier 1; `mcp__*` write-verb → Tier 1). | **LIVE** under the hook's own mode (warn-initial). |
+| **Tier 1 (Recommend / drafts)** — subagent approval-evidence row | ALLOW only if approval-evidence comment present on parent sub-task | **Phase-2 deferred** — needs a session/approval signal the payload lacks |
+| **Tier 2 (Bounded Auto / `cascade_scope`)** — subagent row | ALLOW only if action target is within declared `cascade_scope` of upstream Tier 1 artifact | **Phase-2 deferred** — same unavailable signal |
+| **Tier 3 (Autonomous / standing authorization)** — subagent row | ALLOW only if standing-authorization clause is named in spoke prompt prelude | **Phase-2 deferred** — same unavailable signal |
 
-**Initial posture:** warn-mode per `.claude/hooks/.mode` convention; logs to `.claude/hooks/subagent-tier-warn-log.jsonl`. Flip-to-enforce after 2-3 release shakedown per [`bypass-mode-readiness.md § Shakedown → Enforce Transition Checklist`](../rules/bypass-mode-readiness.md).
+**Initial posture:** warn-mode via the hook's **OWN** mode file
+`.claude/hooks/.autonomy-mode` (NOT the shared `.mode` — C5 has the highest
+false-positive risk of any hook, so its shakedown→enforce lifecycle is decoupled
+from the shared-`.mode` cohort; ships `.autonomy-mode.template` = `warn`). The
+ceiling check logs to `.claude/hooks/autonomy-warn-log.jsonl` in warn-mode and
+exits 0; the Tier-0 floor always blocks regardless of mode. Flip-to-enforce after
+2-3 release shakedown per [`bypass-mode-readiness.md § Shakedown → Enforce
+Transition Checklist`](../rules/bypass-mode-readiness.md). **Do NOT read the dial
+as "now hard-enforced" unqualified** — the ceiling check is hard only after the
+operator flips this hook warn→enforce; the Tier-0 floor is live for the
+payload-detectable classes only.
 
-**Status:** DEFERRED to follow-up release. Implementation NOT in this release.
+**Status:** RESOLVED in v2.07 (#1163). Tier-0 floor + ceiling check shipped; the
+subagent-only approval-evidence rows (Tier-1/2/3 above) are Phase-2 deferred.
 
-**Follow-up filing recommendation:** Stage 13 Close spoke files a carry-forward `improvement.yml` issue referencing this contract section, with labels `cluster: security`, `protocol`, `size:L`. Target follow-up milestone TBD at next-release planning.
+**Follow-up filing recommendation:** Stage 13 Close spoke files a carry-forward `improvement.yml` issue for the Phase-2 subagent-approval-evidence gating (when `subagent_type` + an approval-evidence input become readable; pairs with the `pipeline-event-log.md` `event_subtype: subagent-invocation` substrate extension), with labels `cluster: security`, `protocol`, `size:L`. Target follow-up milestone TBD at next-release planning.
 
 ### Counter-design considered (per adversarial finding CDF-2): Deploy-time `tools:` conformance check
 
@@ -154,7 +197,7 @@ This counter-design sidesteps the unknown-upstream-semantic gap entirely: regard
 | Standard | Composition direction |
 |---|---|
 | [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) | Composes-with at Mechanism 2 (subagent inherits hook surface); cross-referenced from that file's § Related |
-| [`autonomy-tiers.md`](../specs/autonomy-tiers.md) | This doc IS the named outbound consumer of "Future PreToolUse hooks — Tier-based gating" — autonomy-tiers.md § Outbound consumers updated to cite this doc |
+| [`autonomy-tiers.md`](../specs/autonomy-tiers.md) | This doc IS the named outbound consumer of "Future PreToolUse hooks — Tier-based gating"; § 4's contract is REALIZED in v2.07 as `block-autonomy-ceiling.sh` (#1163) — autonomy-tiers.md § Outbound consumers annotates the "Future PreToolUse hooks" row with the resolved hook name + payload trigger |
 | [`hub-spoke-bridge.md § Spoke Launch Mechanisms`](../../release/references/how-to/hub-spoke-bridge.md) | This doc is the security-posture documentation cross-referenced from § Spoke Launch Mechanisms |
 | [`agent-handoff-framework.md`](agent-handoff-framework.md) | Composes-with at Mechanism 3 (handoff manifest carries persona; persona binds to tools) |
 | [`decision-discipline.md`](../disciplines/decision-discipline.md) | Composes-with at Mechanism 1 (cascade rules inform recursion-prohibition; FM-3 self-elevation is the canonical anti-pattern) |
@@ -202,7 +245,7 @@ This counter-design sidesteps the unknown-upstream-semantic gap entirely: regard
 ## § 7. Cross-Reference
 
 - [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) — Mechanism 2 hook surface authority; `BLOCK-DESTRUCTIVE-023` anti-injection rule; CLAUDE_HOOK_BYPASS escape hatch semantics
-- [`autonomy-tiers.md`](../specs/autonomy-tiers.md) — Tier classification (0/1/2/3) + named outbound consumer relationship for the Deferred Hook Contract (§ 4)
+- [`autonomy-tiers.md`](../specs/autonomy-tiers.md) — Tier classification (0/1/2/3) + named outbound consumer relationship for the § 4 Hook Contract (RESOLVED v2.07 as `block-autonomy-ceiling.sh`)
 - [`hub-spoke-bridge.md`](../../release/references/how-to/hub-spoke-bridge.md) — § Spoke Launch Mechanisms (Mechanism 1 frontmatter + Mechanism 4 escape-path); § Recursion prohibited (Mechanism 1 prose recap); § Return Value to Hub (Mechanism 4 closed-enum)
 - [`agent-handoff-framework.md`](agent-handoff-framework.md) — Handoff manifest persona binding (composes with Mechanism 1 persona-to-tools binding)
 - [`decision-discipline.md`](../disciplines/decision-discipline.md) — FM-3 self-elevation anti-pattern parent
@@ -222,3 +265,4 @@ Applies to releases entering Stage 5 strictly AFTER the merge SHA recorded in [`
 | Version | Date | Change |
 |---|---|---|
 | monolith-cleanup | 2026-05-27 | Initial authoring (Tier-A NEW agent-process artifact); documentation + tool-restriction patterns ONLY; Deferred Hook Contract carried for follow-up release; 4-mechanism framing adopted per adversarial finding CDF-3 (consolidating original 5-layer model's Layer-1 + Layer-4 into Mechanism 1) |
+| v2.07 | 2026-06-19 | § 4 Hook Contract RESOLVED (R-C5RECON, #1163): renamed `block-subagent-tier-violation.sh` → `block-autonomy-ceiling.sh`, re-scoped the trigger from subagent-session-detection (infeasible — contradicted by § 3 Mechanism 2's "hooks do NOT read session-context fields") to the tool-call payload; Tier-0 floor + ceiling check shipped LIVE (payload-detectable Tier-0 classes only — governance-file + cross-domain writes); subagent-only approval-evidence rows (Tier-1/2/3) Phase-2 deferred; own mode file `.autonomy-mode` (warn-initial). Supersession recorded in ADR-030. |
