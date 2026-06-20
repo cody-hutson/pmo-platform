@@ -8,6 +8,17 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.08] - 2026-06-20
+
+The platform's generated-artifact surface — the staging area where AI-generated artifacts land and the folders they get promoted into — now has a lineage graph and a graph-integrity lint. Generated artifacts can record which artifact they came from and which they replace, and a new recommend-only skill scans that surface for duplicates, orphans, stale drafts, displaced files, and version chains, surfacing each for operator approval instead of letting them silently pile up. The lint never moves or deletes anything — every action it proposes is operator-approved. Everything is additive: a new skill and new optional metadata fields, with no existing field, file, or behaviour removed or renamed.
+
+### Added
+
+- **A lineage graph for generated artifacts.** Generated artifacts can now record their lineage with three optional fields — which artifact they derive from, a grouping topic for near-duplicate detection, and which artifact they supersede — across both formal-baseline and synthesis artifacts, with a clear table separating lineage (links between generated artifacts) from provenance (the upstream human evidence). *Why it matters:* parent-child and replacement relationships between AI-generated artifacts now survive the session that created them, so duplicates and superseded versions can be detected later. ([#334](https://github.com/cody-hutson/pmo-platform/issues/334))
+- **A recommend-only lint for the generated-artifact surface.** A new skill scans the staging area and promoted folders and runs five graph-integrity checks — orphan, sibling-duplicate, stale-draft, displaced-content, and version-chain — staging a single report with a proposed action and an undo-cost rating for each finding. It performs no file moves and no deletes; the operator approves every action. *Why it matters:* duplicate, orphaned, stale, or misfiled generated artifacts are surfaced for review instead of silently accumulating. ([#1165](https://github.com/cody-hutson/pmo-platform/issues/1165))
+
+[Full notes](release/releases/notes/v2.08_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.08)
+
 ## [v2.06] - 2026-06-20
 
 The platform's automated integrity checks now carry a written contract: a passing check must confirm the real thing it claims by inspecting actual content, never a stand-in signal — starting with a package-freshness check that compared file timestamps (which an ordinary checkout silently resets) and now compares the package's contents. The hook documentation was also restructured so two changes to the platform's security hooks can land at once without colliding. Four cards; everything is additive — no existing rule, setting, or behaviour is removed or renamed. A follow-up point release (v2.06.1) repaired two deploy-script detection bugs the new content checks exposed.
