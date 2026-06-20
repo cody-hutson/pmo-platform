@@ -167,7 +167,7 @@ Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canar
 - [`block-shell-injection.sh`](../core/hooks/block-shell-injection.sh) — block shell-injection patterns in slash-command arguments.
 - [`block-skill-direct-edit.sh`](../core/hooks/block-skill-direct-edit.sh) — gate skill-edit invocations through `pmo-skill-editor`.
 - [`allowlist-add.sh`](../core/hooks/allowlist-add.sh) — atomic allowlist append helper.
-- [`audit-mcp-usage.sh`](../core/hooks/audit-mcp-usage.sh) — MCP-usage audit logging.
+- [`audit-mcp-usage.sh`](../core/hooks/audit-mcp-usage.sh) — one-shot seeder for the MCP write-tool allowlist (not a tool-call-time hook).
 - [`notify-version-skew.sh`](../core/hooks/notify-version-skew.sh) — SessionStart notice when local `.version` lags the latest published release.
 
 **Disciplines** ([`core/disciplines/`](../core/disciplines/)):

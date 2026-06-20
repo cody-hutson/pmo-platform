@@ -55,6 +55,7 @@ Pattern C requires text-pattern detection (semantic, not structural) and is out 
 python3 core/deploy/tools/check-doc-links.py \
   --target-paths <comma-separated-globs> \
   [--allowlist .claude/skip-doc-link-check.txt] \
+  [--workspace-root <path>] \
   [--output-format tsv|json|github] \
   [--exclude-code-blocks]
 
@@ -65,6 +66,8 @@ Categories: broken-cross-ref, broken-anchor, deleted-target
 Severity: P1 (must-fix), P2 (should-fix), P3 (informational)
 Exit codes: 0 = no broken refs, 1 = broken refs found
 ```
+
+**Deployed-tree validation:** `--workspace-root <path>` resolves workspace-rooted links and globs against a relocated root instead of the in-repo default, so a sandboxed/deployed install tree can be validated. Precedence: `--workspace-root` > `$CLAUDE_WORKSPACE_ROOT` (the canonical workspace-root variable) > the in-repo default; with neither override set the behavior is unchanged. Pair with `--require-targets` so a relocated/missing surface fails loud (exit 3) rather than reading GREEN.
 
 **Path resolution:** Inline `[text](path)` and reference-style `[text][label]` are both parsed. Relative paths anchor on the source file's directory and normalize via `os.path.realpath`. Workspace-rooted-style paths (starting with `pmo-platform/`, `.claude/`, `projects/`, `memory/`) get a fallback resolution against workspace root — matches GitHub web rendering semantics. Fenced code blocks (` ``` ` and `~~~`) are excluded from link extraction.
 

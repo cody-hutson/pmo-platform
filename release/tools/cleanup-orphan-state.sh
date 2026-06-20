@@ -18,7 +18,9 @@
 # Flags:
 #   SCOPE (one of, default --all):
 #     --release-close <slug>   Outcome 1 only — scope to one release
-#     --spawn-task             Outcome 2 only — claude/* orphans
+#                              (matches release/<slug>, release/vX.Y-<slug>, and the
+#                               sibling chore/<slug>-* / chore/vX.Y-<slug>-* branches)
+#     --spawn-task             Outcome 2 only — claude/* and agent-* orphans
 #     --historical             Outcome 3 only — all merged-no-active-work
 #     --all                    All 3 outcomes (default)
 #   MODE (one of, default --dry-run):
@@ -401,7 +403,7 @@ classify_remote() {
 
 classify_worktree() {
   local path="$1" branch="$2"
-  local status="clean" disk action="REMOVE" cand_phys existing
+  local status="clean" disk action="REMOVE" cand_phys existing detached_ahead
 
   # Dedup guard (v1.11 operator scope call): under the default --all scope,
   # detect_spawn_task and detect_historical can both row the same worktree;
@@ -444,6 +446,27 @@ classify_worktree() {
     action="SKIP — protected branch"
   elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then
     action="SKIP — branch not fully merged"
+  elif [[ -z "$branch" && "$FORCE" != "1" ]] && [[ -d "$path" ]] \
+       && { detached_ahead=$(git -C "$path" rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..HEAD" 2>/dev/null || echo "?"); [[ "$detached_ahead" != "0" ]]; }; then
+    # EDIT 5 (operator-locked BROAD, v2.09): the branch not-merged clauses above are
+    # [[ -n "$branch" ]]-guarded, so a detached-HEAD worktree (empty branch — the
+    # common case for agent-* trees) bypasses the merge gate entirely and would
+    # classify REMOVE, discarding the only checkout pointing at possibly-unmerged
+    # work. This clause closes that data-loss class for ALL detached worktrees
+    # (not just agent-*): a detached tree whose HEAD has commits not in
+    # origin/main — or whose count cannot be computed ("?" ≠ "0") → fail-closed —
+    # is preserved. Strictly additive (adds SKIPs, never new removals). The
+    # distinct counted reason surfaces the retained set + per-tree ahead-count
+    # (no silent skip), mirroring the "unique commits exist ($unique)" branch idiom.
+    # Force-overridable: gated on FORCE != 1 so `--apply --force` re-promotes the
+    # tree to REMOVE (operator escape hatch for a reviewed backlog); deliberately
+    # NOT in the SELF/LIVE never-override set.
+    # Merge-strategy note: this test assumes a merge-commit strategy (this repo
+    # merges via merge-commits, so a merged tree returns rev-list origin/main..HEAD
+    # = 0 → auto-REMOVE; only genuinely-unmerged work SKIPs, bounding the backlog).
+    # If squash-merge is ever adopted, switch to content-aware detection
+    # (git cherry / patch-id) to avoid a false-positive pileup.
+    action="SKIP — detached, unmerged commits (${detached_ahead})"
   fi
 
   if [[ "$action" == "REMOVE" && "$ORACLE_STATE" != "ok" ]]; then
@@ -458,10 +481,21 @@ detect_release_close() {
   [[ -z "$slug" ]] && return 0
   refresh_wt_snapshot
   local b
-  for b in $(git for-each-ref "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" --format='%(refname:short)' 2>/dev/null); do
+  # Match both the bare slug form (release/<slug>) AND the version-prefixed form
+  # (release/vX.Y-<slug>) — release branches are routinely version-prefixed when a
+  # release re-versions mid-flight. The added pattern is anchored on the literal
+  # `v…-` separator so the slug can only appear in the post-version segment, never
+  # mid-string (a leading wildcard `*${slug}*` was rejected — substring-match hazard).
+  for b in $(git for-each-ref \
+      "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" \
+      "refs/heads/release/v*-${slug}*" "refs/heads/chore/v*-${slug}*" \
+      --format='%(refname:short)' 2>/dev/null); do
     classify_local "$b" 0
   done
-  for b in $(git ls-remote --heads "$REMOTE_NAME" "release/${slug}*" "chore/${slug}*" 2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||'); do
+  for b in $(git ls-remote --heads "$REMOTE_NAME" \
+      "release/${slug}*" "chore/${slug}*" \
+      "release/v*-${slug}*" "chore/v*-${slug}*" \
+      2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||'); do
     classify_remote "$b"
   done
   while IFS= read -r line; do
@@ -472,7 +506,7 @@ detect_release_close() {
     wbranch="${next#refs/heads/}"
     [[ -z "$wbranch" || "$wbranch" == "$next" ]] && continue
     case "$wbranch" in
-      release/${slug}*|chore/${slug}*) classify_worktree "$wpath" "$wbranch" ;;
+      release/${slug}*|chore/${slug}*|release/v*-${slug}*|chore/v*-${slug}*) classify_worktree "$wpath" "$wbranch" ;;
     esac
   done <<<"$WT_SNAPSHOT"
 }
@@ -488,10 +522,21 @@ detect_spawn_task() {
   done
   while IFS= read -r line; do
     [[ "$line" =~ ^worktree[[:space:]](.*)$ ]] || continue
-    local wpath="${BASH_REMATCH[1]}" wbranch=""
+    local wpath="${BASH_REMATCH[1]}" wbranch="" wbase=""
     wbranch=$(branch_for_worktree "$wpath")
     wbranch="${wbranch#refs/heads/}"
-    case "$wbranch" in claude/*) classify_worktree "$wpath" "$wbranch" ;; esac
+    wbase="${wpath##*/}"                       # path basename: agent-<hash> / claude-<name>
+    # claude/* spawn_task worktrees (branch-keyed, unchanged) OR agent-* Agent-tool
+    # worktrees (path-keyed: live evidence shows most agent-* trees are detached →
+    # no branch to match on). Both lineages route through the unchanged
+    # classify_worktree so every liveness / dirty / SELF / primary gate is
+    # preserved verbatim. The ::: separator is a literal that cannot appear in a
+    # refname or a worktree basename; the dedup guard (classify_worktree :410)
+    # rows a tree matching both lineages exactly once.
+    case "$wbranch:::$wbase" in
+      claude/*:::*)  classify_worktree "$wpath" "$wbranch" ;;
+      *:::agent-*)   classify_worktree "$wpath" "$wbranch" ;;
+    esac
   done <<<"$WT_SNAPSHOT"
 }
 
@@ -1234,6 +1279,117 @@ selftest_fixed_point() {
   return 0
 }
 
+# v2.09 EDIT 7 — version-prefixed release-branch fixture (covers EDIT 1/2/3).
+# detect_release_close's bare pattern release/${slug}* cannot match a
+# version-prefixed branch release/vX.Y-<slug> (the version token precedes the
+# slug). EDIT 1/2/3 add the anchored pattern release/v*-${slug}*. This fixture
+# creates a throwaway release/v0.0-<slug> branch at origin/main (0 unique
+# commits → REMOVE-eligible, fully-merged so `git branch -D` cleans it) and
+# asserts --release-close <slug> ENUMERATES it (its name appears in the JSON
+# local_branches). Before the fix the run reported zero local branches — the
+# documented Stage-4 defect. Net-zero teardown via git porcelain.
+selftest_version_prefix_release() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: version-prefix check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs slug branch out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-vp-$$"
+  branch="release/v0.0-${slug}"            # version-prefixed: bare release/${slug}* would MISS this
+  if is_protected "$branch"; then
+    echo "self-test: version-prefix check SKIPPED — operator protect-list matches '$branch'" >&2
+    return 0
+  fi
+  if ! git branch "$branch" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: version-prefix check SKIPPED — could not create throwaway branch '$branch'" >&2
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: version-prefix check FAILED — inner --release-close dry-run exited non-zero" >&2
+  elif ! grep -F "\"name\":\"${branch}\"" <<<"$out" >/dev/null; then
+    echo "self-test: version-prefix check FAILED — version-prefixed branch '$branch' NOT enumerated by --release-close (EDIT 1/2/3 regression)" >&2
+    fail=1
+  fi
+
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: version-prefix check PASS — release/vX.Y-<slug> enumerated by --release-close" >&2
+  return 0
+}
+
+# v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
+# EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
+# Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
+# match) is swept. EDIT 5 adds the detached-unmerged merge gate in
+# classify_worktree. Two throwaway DETACHED worktrees whose dir basename is
+# agent-* (so the path-keyed arm reaches them):
+#   (1) at origin/main exactly (0 ahead, clean, not-live) → REMOVE — proves the
+#       agent-* path arm classifies a sweepable tree.
+#   (2) at origin/main + 1 throwaway commit (1 ahead, clean, not-live) →
+#       "SKIP — detached, unmerged commits (1)" — proves EDIT 5 closes the
+#       headless-tree data-loss class with the distinct counted reason.
+# --spawn-task is workspace-wide; the fixtures assert only on their own paths.
+# Net-zero teardown via `git worktree remove --force`.
+selftest_agent_detached_sweep() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: agent-* sweep check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs base wt_rm wt_skip out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: agent-* sweep check SKIPPED — could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    return 0
+  fi
+  # Dir basename MUST be agent-* so the path-keyed *:::agent-* arm reaches it.
+  wt_rm="${REPO_ROOT}/.claude/worktrees/agent-selftest-rm-$$"
+  wt_skip="${REPO_ROOT}/.claude/worktrees/agent-selftest-um-$$"
+
+  # (1) detached at origin/main (0 ahead) — REMOVE-eligible
+  if ! git worktree add --detach "$wt_rm" "$base" >/dev/null 2>&1; then
+    echo "self-test: agent-* sweep check SKIPPED — could not create detached worktree (1)" >&2
+    return 0
+  fi
+  # (2) detached at origin/main + 1 throwaway commit (1 ahead) — EDIT 5 SKIP
+  if ! git worktree add --detach "$wt_skip" "$base" >/dev/null 2>&1; then
+    echo "self-test: agent-* sweep check SKIPPED — could not create detached worktree (2)" >&2
+    git worktree remove --force "$wt_rm" >/dev/null 2>&1 || true
+    return 0
+  fi
+  if ! git -C "$wt_skip" commit --allow-empty -m "cleanup-selftest detached-unmerged fixture $$" >/dev/null 2>&1; then
+    echo "self-test: agent-* sweep check SKIPPED — could not add throwaway commit to detached worktree (2)" >&2
+    git worktree remove --force "$wt_rm" >/dev/null 2>&1 || true
+    git worktree remove --force "$wt_skip" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$("$script_abs" --spawn-task --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: agent-* sweep check FAILED — inner --spawn-task dry-run exited non-zero" >&2
+  else
+    # (1) the clean+merged+not-live detached agent-* tree must be reached AND REMOVE.
+    if ! grep -F "\"path\":\"${wt_rm}\"" <<<"$out" | grep -q '"action":"REMOVE"'; then
+      echo "self-test: agent-* sweep check FAILED — detached agent-* tree not classified REMOVE (EDIT 4 path arm regression)" >&2
+      fail=1
+    fi
+    # (2) the detached tree with an unmerged commit must SKIP with the counted reason.
+    if ! grep -F "\"path\":\"${wt_skip}\"" <<<"$out" | grep -q '"action":"SKIP — detached, unmerged commits (1)"'; then
+      echo "self-test: agent-* sweep check FAILED — detached-unmerged agent-* tree not SKIPPED with counted reason (EDIT 5 regression)" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree remove --force "$wt_rm" >/dev/null 2>&1 || true
+  git worktree remove --force "$wt_skip" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: agent-* sweep check PASS — detached agent-* tree REMOVE; detached-unmerged tree SKIP (N)" >&2
+  return 0
+}
+
 # Regression guard for the exit-141-at-scale defect (SIGPIPE on a worktree-list
 # generator whose consumer closes the read end early, fatal under set -o pipefail).
 # Two layers:
@@ -1289,6 +1445,10 @@ self_test() {
   selftest_liveness_gate
   echo "self-test: exercising fixed-point apply (worktree + freed branch in one run)..." >&2
   selftest_fixed_point
+  echo "self-test: exercising version-prefixed release matcher (release/vX.Y-<slug>; EDIT 1/2/3)..." >&2
+  selftest_version_prefix_release
+  echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
+  selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
   selftest_no_live_worktree_pipes
   echo "self-test: PASS" >&2

@@ -221,13 +221,13 @@ The CLI replaces the manual `grep -rln` step that previously lived in spoke prom
 
 ## 8. Mirror-pair handling
 
-The CLI auto-detects mirror pairs by **path topology**: any file present in BOTH `core/rules/<basename>` AND `core/rules/<basename>` is registered as a mirror pair at scan time. By default, when the target is one half of a mirror pair, the CLI suppresses references to its partner from `first_order` and records the count in `stats.filtered_mirrors` (detail in `filtered_mirrors_detail`).
+The CLI detects mirror pairs from a **canonical table** (a faithful shadow of `core/deploy/deploy.sh` Check 9 `MIRROR_PAIRS`): any file whose repo-relative path matches a source entry in that table (`core/rules/<f>`, `release/governance/release-process.md`, or `core/governance/OPERATIONS.md`) is registered as a mirror pair against its partner (`.claude/rules/<f>` deploy mirror, or `operations/OPERATIONS.md`) at scan time. By default, when the target is one half of a mirror pair, the CLI suppresses references to its partner from `first_order` and records the count in `stats.filtered_mirrors` (detail in `filtered_mirrors_detail`).
 
-**Why suppress?** The mirror pair is enforced byte-identical by `core/deploy/deploy.sh --check` Check 9. A reference from `release/governance/release-process.md` to `release/governance/release-process.md` (or vice versa) is a structural artifact of the mirror discipline, not an organic dependency. Suppressing it cleans the signal.
+**Why suppress?** The mirror pair is enforced byte-identical by `core/deploy/deploy.sh --check` Check 9. A reference between a mirror source and its deploy-target partner (e.g., `release/governance/release-process.md` and `.claude/rules/release-process.md`) is a structural artifact of the mirror discipline, not an organic dependency. Suppressing it cleans the signal.
 
 **When to use `--include-mirrors`:** Forensic operator review — auditing whether mirror partners reference each other in unexpected ways, or whether the mirror discipline is leaking. The `filtered_mirrors_detail` array is also populated even when filtering is on, so the operator can see what was hidden.
 
-**Source of truth:** [`core/rules/skill-deployment.md`](../../../core/rules/skill-deployment.md) and [`core/rules/harness-deployment.md`](../../../core/rules/harness-deployment.md) define the mirror discipline. `core/deploy/deploy.sh --check` Check 9 enforces it. The CLI's auto-detection picks up any pair present in both directories — including pairs not yet enforced by Check 9 (forward-compatible).
+**Source of truth:** [`core/rules/skill-deployment.md`](../../../core/rules/skill-deployment.md) and [`core/rules/harness-deployment.md`](../../../core/rules/harness-deployment.md) define the mirror discipline. The enumerated pair topology is `core/deploy/deploy.sh` Check 9 `MIRROR_PAIRS`, which Check 9 also enforces byte-identical. The CLI's `detect_mirror_pairs` mirrors that table (emitting a row per pair whose in-repo source exists), so the two stay in lockstep — see §10 for the keep-in-sync rule.
 
 ---
 
@@ -236,7 +236,7 @@ The CLI auto-detects mirror pairs by **path topology**: any file present in BOTH
 - **Markdown link parsing only.** The CLI does not parse YAML frontmatter cross-references (e.g., `consumed-by:` fields in SKILL.md). If a skill ecosystem grows to depend on structured frontmatter, future v2 schema may add a `frontmatter_references` field.
 - **Code-block false positives possible but rare.** A path mentioned inside a fenced code block ( ``` ) is still captured. Sampling on `release-process.md` shows <5% false-positive rate. Operator verification of each finding is cheap (re-run the grep manually).
 - **Performance ceiling.** Bash + grep degrades non-linearly past ~2000 files. Current repo (~600 markdown files) is well within bounds (first-order <1s, second-order at N=2 ~5-10s). If the repo grows 5x, migration to Python+tree-sitter+DAG-construction is the planned escape; schema v1 is preserved across migrations.
-- **Mirror-pair detection is path-topology only.** A pair of files that share basename in `core/rules/` and `core/rules/` is treated as a mirror, regardless of byte-identity. Intentional but documented: byte-identity enforcement is `deploy.sh --check` Check 9's job, not the CLI's.
+- **Mirror-pair detection is canonical-table driven.** A pair listed in the canonical mirror table (e.g., `core/rules/<f>` ↔ `.claude/rules/<f>`) is treated as a mirror, regardless of byte-identity. Intentional but documented: byte-identity enforcement is `deploy.sh --check` Check 9's job, not the CLI's.
 - **Symlinks not followed.** The CLI scans the source tree as-stored on disk.
 - **Cross-repo references not detected.** Any reference outside `--root` is invisible. If skills/external repos consume PMO files, this is not captured.
 
@@ -244,7 +244,7 @@ The CLI auto-detects mirror pairs by **path topology**: any file present in BOTH
 
 ## 10. Maintenance
 
-- **Adding new mirror pairs:** Zero CLI changes. Auto-detection picks up any new pair at next invocation. Ensure `core/deploy/deploy.sh --check` Check 9 enforces byte-identity for the new pair.
+- **Adding new mirror pairs:** Add the pair to BOTH `core/deploy/deploy.sh` Check 9 `MIRROR_PAIRS` and the mirror table in `blast-radius.sh::detect_mirror_pairs` (keep the two in sync — the CLI table is a faithful shadow of the canonical Check 9 array, not an auto-detector). Check 9 enforces byte-identity for the new pair.
 - **Adding new scanned file types:** Edit the `SCANNED_TYPES` array in `blast-radius.sh` and commit per standard release process.
 - **Adding new default exclusions:** Edit the `DEFAULT_EXCLUSIONS` array in `blast-radius.sh`. Prefer operator-passed `--exclude` flags over hardcoded defaults when the exclusion is contextual.
 - **Schema bumps to v2:** Backward-incompatible changes (renaming fields, restructuring arrays) require a 1-release transition window where v1 readers and v2 readers must coexist. Document v1→v2 migration in `blast-radius-protocol-v2-migration.md` at the time of the bump.
@@ -256,7 +256,7 @@ The CLI auto-detects mirror pairs by **path topology**: any file present in BOTH
 
 - [`release/references/pipeline/stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) — Stage 5 Phase A §A3 cross-reference (canonical consumer)
 - [`release/references/pipeline/stage-04-planning.md`](../pipeline/stage-04-planning.md) — Stage 4 A4 Cross-PR Overlap Audit (canonical consumer)
-- [`core/rules/skill-deployment.md`](../../../core/rules/skill-deployment.md) — Mirror-pair source of truth (`core/rules/` ↔ `core/rules/`)
+- [`core/rules/skill-deployment.md`](../../../core/rules/skill-deployment.md) — Mirror-pair source of truth (`core/rules/<f>` ↔ `.claude/rules/<f>`; canonical table at `core/deploy/deploy.sh` Check 9)
 - [`core/rules/harness-deployment.md`](../../../core/rules/harness-deployment.md) — Mirror discipline for harness artifacts
 - [`core/rules/bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) — Hook layer + allowlist maintenance
 - [`release/references/how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) — Spoke prompt templates citing this CLI

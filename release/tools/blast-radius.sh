@@ -385,27 +385,46 @@ build_scan_list() {
 
 # ---------------------------------------------------------------------------
 # Mirror-pair auto-detection
-# Writes mirror partner mapping to MIRROR_MAP_FILE (format: "<a>\t<b>")
+# Writes mirror partner mapping to MIRROR_MAP_FILE (format: "<a>\t<b>").
+#
+# Topology source of truth: core/deploy/deploy.sh Check 9 MIRROR_PAIRS. Keep
+# this table in sync with that array. Each entry is the repo-relative SOURCE
+# path; the second column is its canonical mirror partner.
+#
+# Reachability note: most mirrors deploy OUTWARD to $HOME/.claude/rules/, which
+# is OUTSIDE the scanned REPO_ROOT and therefore never appears as a referrer in
+# the scan list. We register those rows so --include-mirrors / filtered_mirrors
+# reflect the true topology and TSV rows always name two distinct paths; in-scan
+# suppression only ever bites the repo-internal pair (core/governance/OPERATIONS.md
+# <-> operations/OPERATIONS.md). A row is emitted only when its SOURCE exists in
+# REPO_ROOT, so deploy-target-only halves never fabricate rows.
 # ---------------------------------------------------------------------------
 detect_mirror_pairs() {
   MIRROR_MAP_FILE="$WORK_DIR/mirror-pairs.tsv"
   : > "$MIRROR_MAP_FILE"
 
-  if [ ! -d "$REPO_ROOT/.claude/rules" ]; then
-    return
-  fi
-  if [ ! -d "$REPO_ROOT/pmo-platform/engineering/rules" ]; then
-    return
-  fi
+  # <source-rel>\t<mirror-rel> — mirror of deploy.sh MIRROR_PAIRS (Check 9).
+  # release-process.md source is release/governance/ (per #1104 correction).
+  local -a pairs=(
+    "core/rules/skill-deployment.md	.claude/rules/skill-deployment.md"
+    "core/rules/bypass-mode-readiness.md	.claude/rules/bypass-mode-readiness.md"
+    "core/rules/harness-deployment.md	.claude/rules/harness-deployment.md"
+    "core/rules/doc-link-maintenance.md	.claude/rules/doc-link-maintenance.md"
+    "core/rules/operations-bridge.md	.claude/rules/operations-bridge.md"
+    "core/rules/git-workflow.md	.claude/rules/git-workflow.md"
+    "core/rules/governance-files.md	.claude/rules/governance-files.md"
+    "release/governance/release-process.md	.claude/rules/release-process.md"
+    "core/governance/OPERATIONS.md	operations/OPERATIONS.md"
+  )
 
-  local f bn mirror
-  for f in "$REPO_ROOT/.claude/rules"/*.md; do
-    [ -f "$f" ] || continue
-    bn="$(basename "$f")"
-    mirror="$REPO_ROOT/pmo-platform/engineering/rules/${bn}"
-    if [ -f "$mirror" ]; then
-      printf '.claude/rules/%s\tpmo-platform/engineering/rules/%s\n' \
-        "$bn" "$bn" >> "$MIRROR_MAP_FILE"
+  local entry src mir
+  for entry in "${pairs[@]}"; do
+    src="${entry%%$'\t'*}"
+    mir="${entry##*$'\t'}"
+    # Emit only when the in-repo SOURCE exists; mirror half may live at the
+    # deploy target (outside REPO_ROOT) and is recorded for topology fidelity.
+    if [ -f "$REPO_ROOT/$src" ]; then
+      printf '%s\t%s\n' "$src" "$mir" >> "$MIRROR_MAP_FILE"
     fi
   done
 }
