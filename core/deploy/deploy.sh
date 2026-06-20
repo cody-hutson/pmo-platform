@@ -38,6 +38,7 @@ OPERATIONS_SKILLS=(
   pmo-portfolio-manager
   pmo-program-coordinator
   pmo-program-manager
+  pmo-release-train-engineer
   pmo-technical-analyst
   pmo-technical-program-manager
   ppm-agent

@@ -135,6 +135,7 @@ ALL_SKILLS=(
   pmo-program-manager
   pmo-qa-auditor
   pmo-qa-lead
+  pmo-release-train-engineer
   pmo-skill-editor
   pmo-skill-refiner
   pmo-software-engineer
