@@ -4435,13 +4435,14 @@ cmd_check() {
     log "Check 37: Hook-registry completeness (ownership bijection)"
     local c37_index="core/rules/bypass-mode-readiness.md"
     local c37_src_dir="core/rules/bypass-mode-readiness"
-    # Ownership manifest: each core/hooks/block-*.sh -> its owning doc. The 7
+    # Ownership manifest: each core/hooks/block-*.sh -> its owning doc. The 8
     # bypass-mode security hooks are owned by the bypass-mode registry (their
     # per-hook source lives under $c37_src_dir + a row in $c37_index); the other
     # 2 are owned by their own discipline docs and are intentionally NOT in this
     # registry. Edit this manifest (and add the per-hook source) when a new
     # bypass-mode hook ships.
     local -a C37_BYPASS_HOOKS=(
+      block-autonomy-ceiling
       block-credential-reads
       block-destructive
       block-egress

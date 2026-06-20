@@ -5,9 +5,9 @@
 
 ## Purpose
 
-Seven PreToolUse hooks enforce security invariants that make it safe to run Claude Code in `bypassPermissions` mode (no prompts). Grounded in a 5-persona adversarial review (Red Team, SRE, Shell Engineer, UX, Governance) that identified 7 Critical and 10 High findings in the initial design.
+Eight PreToolUse hooks enforce security invariants that make it safe to run Claude Code in `bypassPermissions` mode (no prompts). Grounded in a 5-persona adversarial review (Red Team, SRE, Shell Engineer, UX, Governance) that identified 7 Critical and 10 High findings in the initial design.
 
-These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scripts exist in `core/hooks/` but are owned by their own discipline docs and are NOT part of this registry: `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](skill-deployment.md)) and `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc**, so this scoping is enforced, not merely asserted.
+These eight are the **bypass-mode security hooks**. Two further `block-*.sh` scripts exist in `core/hooks/` but are owned by their own discipline docs and are NOT part of this registry: `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](skill-deployment.md)) and `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc**, so this scoping is enforced, not merely asserted.
 
 > **This file is GENERATED.** The canonical index `core/rules/bypass-mode-readiness.md` is assembled at deploy time by [`core/deploy/tools/build-hook-registry.py`](../deploy/tools/build-hook-registry.py) from the per-hook source fragments under `core/rules/bypass-mode-readiness/`. Do NOT hand-edit this file — edit the per-hook source (`bypass-mode-readiness/block-<hook>.md`) or a cross-cutting fragment (`bypass-mode-readiness/_header.md`, `bypass-mode-readiness/_cross-cutting.md`) and regenerate. The `deploy.sh --check` index-freshness check fails any stale committed index; the completeness check fails any hook script missing its owner. Per [ADR-030](../ADRs/ADR-030-hook-registry-drop-in-with-generated-index.md).
 
@@ -17,6 +17,7 @@ These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scr
 
 | Hook | Scope |
 |---|---|
+| [`block-autonomy-ceiling.sh` (BLOCK-AUTONOMY-001..099)](#block-autonomy-ceilingsh-block-autonomy-001099) | Autonomy-tier ceiling enforcement: an irreducible Tier-0 always-block floor (governance-file writes + cross-domain bridge writes) plus a ceiling check that blocks an action whose required Autonomy Tier exceeds the resolved `[automation].automation_level`. Composes with (does not duplicate) the destructive / fs-boundary / rm safety hooks — it adds the autonomy-tier dimension they do not gate. |
 | [`block-credential-reads.sh` (BLOCK-CREDENTIAL-READ-001..006)](#block-credential-readssh-block-credential-read-001006) | Claude Read-tool access to ~/.ssh, ~/.aws, ~/.config/gh, .env variants, id_rsa, *.pem, *.key |
 | [`block-destructive.sh` (BLOCK-DESTRUCTIVE-001..023)](#block-destructivesh-block-destructive-001023) | Destructive git ops, rm -rf catastrophic paths, primary-write guard, tamper resistance, script-exec ban |
 | [`block-egress.sh` (BLOCK-EGRESS-001..013)](#block-egresssh-block-egress-001013) | Credential reads via Bash, network upload (curl/wget/gh gist), network tools (nc/scp/ssh), WebFetch domain allowlist |
@@ -24,6 +25,33 @@ These seven are the **bypass-mode security hooks**. Two further `block-*.sh` scr
 | [`block-mcp-writes.sh` (BLOCK-MCP-001)](#block-mcp-writessh-block-mcp-001) | MCP tools matching write-verb pattern, gated by allowlist |
 | [`block-rm-prefer-trash.sh` (BLOCK-TRASH-001..003)](#block-rm-prefer-trashsh-block-trash-001003) | Workspace-scoped deletion containment; `rm`/`rmdir`/`unlink`/`trash`/`osascript` Trash-verb whose resolved path is outside `${HOME}/Claude/` or unresolvable under strict policy; `rm` inside workspace redirects to Trash via auto-detected command |
 | [`block-shell-injection.sh` (BLOCK-SHELL-INJECTION-001..002)](#block-shell-injectionsh-block-shell-injection-001002) | Slash-command argument shell-injection vectors: script-execution followed by chain metachar leading into command verb, or script-execution with command substitution `$(...)` / backtick in argv |
+
+## `block-autonomy-ceiling.sh` (BLOCK-AUTONOMY-001..099)
+
+| Field | Value |
+|---|---|
+| Hook | `.claude/hooks/block-autonomy-ceiling.sh` |
+| Matcher | Bash, Write, Edit, `mcp__.*` |
+| Scope | Autonomy-tier ceiling enforcement: an irreducible Tier-0 always-block floor (governance-file writes + cross-domain bridge writes) plus a ceiling check that blocks an action whose required Autonomy Tier exceeds the resolved `[automation].automation_level`. Composes with (does not duplicate) the destructive / fs-boundary / rm safety hooks — it adds the autonomy-tier dimension they do not gate. |
+| Mode | Split posture. The Tier-0 floor (`BLOCK-AUTONOMY-001`/`002`) is **always-block LIVE** — mode- AND level-independent (mirrors `block-destructive` / `block-rm-prefer-trash` permanence) for the payload-detectable classes only. The ceiling check (`BLOCK-AUTONOMY-003`) is gated by this hook's **OWN** mode file `.autonomy-mode` (warn / enforce / off), NOT the shared `.claude/hooks/.mode`; ships **warn-mode-initial** because it gates every mutation (highest false-positive risk in the suite). Permissive default: an unmapped action is treated at-or-below ceiling and ALLOWED. |
+
+### Rule registry
+
+| Rule ID | Description |
+|---|---|
+| BLOCK-AUTONOMY-001 | Governance-file modification (Write/Edit) — resolved path matching `CLAUDE.md`, `OPERATIONS.md`, `RELEASE_PROTOCOL.md`, any `SKILL.md`, `.claude/settings.json`, or any file under `.claude/hooks/` or `.claude/rules/`. Irreducible Tier-0 (operator-only per "No ungoverned changes"); always-blocks regardless of `automation_level` and without the worktree exemption `BLOCK-DESTRUCTIVE-019` carves out (governance edits are operator-irreducible regardless of cwd) |
+| BLOCK-AUTONOMY-002 | Cross-domain bridge write (Write/Edit) — Layer separation: a `pmo-platform/` cwd writing into `projects/`, or a `projects/` cwd writing into `pmo-platform/`, detected by cwd-domain ↔ target-domain mismatch against the two domain roots under the workspace. Irreducible Tier-0; always-blocks regardless of `automation_level` |
+| BLOCK-AUTONOMY-003 | Ceiling violation — the action's required Autonomy Tier (computed from a conservative declared-mapping table) EXCEEDS the resolved `[automation].automation_level` ceiling (effective = `min(ceiling, required)`). Mode-gated by `.autonomy-mode` (warn-initial); at/below the ceiling → allow |
+
+### Posture & cache — block-autonomy-ceiling.sh
+
+**Ceiling resolution (section-blind grep, pinned).** The ceiling read greps `^automation_level` line-anchored WITHOUT parsing the `[automation]` TOML section, because the key is unique repo-wide (the v2.07 ambient-intake C0 survey found 0 prior occurrences of `automation_level`) — exactly as `notify-version-skew.sh` greps `^operator_github` without parsing `[identity]`. If a second `automation_level` key is ever introduced under a different section, this resolution would need section-awareness.
+
+**Cache (FMF-1).** The session-stable dial is resolved ONCE at SessionStart by the sibling `prime-autonomy-ceiling-cache.sh` hook, which writes the numeric ceiling to `${HOME}/.cache/pmo-platform/autonomy-ceiling`. This PreToolUse hook reads that cache (a single file read) rather than re-resolving `operator.toml` on every tool call. If the cache is absent/unreadable, it falls back to a direct resolve so the ceiling is never silently dropped.
+
+**Enforcement-surface caveat (do NOT read as "now hard-enforced" unqualified).** The Tier-0 floor is LIVE always for the payload-detectable classes ONLY (governance-file + cross-domain bridge writes). Financial / account-creation / security-permission actions and the Stage 9 / Stage 12 gates are NOT mechanically detectable from a tool payload — they remain OPERATOR-IRREDUCIBLE by convention, not by this hook. The ceiling check is hard-enforced only after the operator flips `.autonomy-mode` from warn → enforce post-shakedown.
+
+**Design source.** `core/standards/subagent-security-posture.md § 4 Hook Contract` (RESOLVED in v2.07 — this hook IS that contract's realization); the supersession of the original subagent-session-detection design is recorded in [`ADR-031`](../ADRs/ADR-031-autonomy-ceiling-unified-payload-triggered-hook.md). See [`§ Warn-Mode Initial`](bypass-mode-readiness.md) for the shakedown posture and [`§ CLAUDE_HOOK_BYPASS Escape Hatch`](bypass-mode-readiness.md) for the operator escape semantics this hook honors.
 
 ## `block-credential-reads.sh` (BLOCK-CREDENTIAL-READ-001..006)
 

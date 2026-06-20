@@ -4,6 +4,8 @@
 > **Companion source:** [`../standards/lifecycle-states-canonical.md`](../standards/lifecycle-states-canonical.md) — cross-machine state-name registry.
 > **Reversibility tier:** CHEAP / Confidence: HIGH — single-file governance doc; `git revert` restores prior state.
 
+<!-- repo-integrity: allow-issue-ref -->
+
 ---
 
 ## §1 Purpose
@@ -184,6 +186,9 @@ Skills and governance documents that consume this framework's state vocabulary r
 |---|---|---|
 | [`operations/skills/file-router/SKILL.md`](../../operations/skills/file-router/SKILL.md) | `Context-Captured` → `Context-Structured` transition (mechanism #1) | `## Framework Reference` subsection (demonstrating consumer) |
 | [`../standards/lifecycle-states-canonical.md`](../standards/lifecycle-states-canonical.md) | All 5 Context Lifecycle states enumerated in cross-machine registry | §3 In-Scope Machines (Context Lifecycle subsection) |
+| Ambient inbox + dedup cursor (C1, v2.07) | `Context-Captured` on inbox arrival → `Context-Structured` once file-router routes+registers; the cursor (path + SHA-256 identity) skips already-`Context-Structured` files on re-scan. Consumed by the Path A scheduled intake sweep (C2). | `../standards/c1-ambient-inbox-cursor.md` §3 (state mapping) |
+| Path-B external-sync sweep (C3, v2.07) | `Context-Decided → Context-Closed` for Evidence-Gate-qualifying external-Done evidence — the close write is Document-Tier-gated (Tier-1/RAID held as proposal; Tier-2 in-`cascade_scope` auto-close at `bounded_auto`), clamped to `[automation].automation_level`. Detection automated; closure write proposed per §2. | `../standards/c3-external-sync-path-b.md` §7 (transition + Document-Tier gating) + `## Framework Reference` |
+| Path-A scheduled intake sweep (C2, v2.07) | Drives `Context-Captured → Context-Structured` (file-router classify + register, mechanism 1) over the C1 inbox + cursor (skips already-`Context-Structured` files); advances toward `Context-Reviewed`/`Context-Decided` via PPM Triage (mechanism 6) + Tracker Manager (mechanism 15); emits §4-threshold / §5-mechanism-numbered stall escalations (mechanism 5 step-2, mechanism 12 step-15, mechanism 15 tagged-not-written). Clamped to `[automation].automation_level`. | `../standards/c2-intake-sweep-path-a.md` §4 (state vocabulary + thresholds + mechanism numbers) + `## Framework Reference` |
 
 ### Forward-citation consumers (future releases)
 
@@ -194,7 +199,7 @@ These consumers are designed but not yet authored. They will register here when 
 | Future file-router ingest+KB consumer | TBD | `Context-Captured` and `Context-Structured` state metadata on routed files (soft outbound contract) |
 | ppm-agent | TBD | Emit `Context-Reviewed` state transition signal when triage completes |
 | artifact-generator | TBD | Emit `Context-Decided` state transition signal when staged-artifact promotion happens |
-| Daily-sweep automation | TBD | All states — implementation of §6 specification |
+| Daily-sweep automation | v2.07 (governor) / impl C2+C4 | All states (§6 impl). Clamps to `operator.toml [automation].automation_level` (the C0 ambient-intake governor dial) as its autonomy ceiling — `effective = min(automation_level, per-action max)`; never unlocks the irreducible Tier-0 set per `core/specs/autonomy-tiers.md` § Irreducible Human Tasks |
 | PROJECT.md template lifecycle dashboard | TBD | All states — per-project rollup |
 
 ---

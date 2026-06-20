@@ -858,7 +858,7 @@ Execute this cycle once per day, triggered by user or automation:
    - **(e) Release sync:** RELEASE_LOG.md latest version matches RELEASE_PROTOCOL.md status line.
    - **(f) Governance file presence:** All expected files exist in `Projects/_governance/`: OPERATIONS.md, PORTFOLIO.md, SESSION_STATE.md, RELEASE_PROTOCOL.md, CORRECTIONS.md, Releases/RELEASE_LOG.md. Missing or relocated governance files = **critical drift** — block processing until resolved.
    Flag discrepancies as `⚠️ DRIFT DETECTED:` with proposed correction. Critical drift blocks processing; moderate/low drift is flagged and processing continues.
-1. **File Intake** — Check for new files from Google Drive (MCP), user uploads, Jira exports.
+1. **File Intake** — Check for new files from Google Drive (MCP), user uploads, Jira exports. The scheduled **Path-A intake sweep** (`core/standards/c2-intake-sweep-path-a.md`) is the automation half of this cycle — it drives intake steps 1-6 + 15 over the ambient inbox on a cadence, reading the dedup cursor to skip already-ingested files, clamped to `[automation].automation_level` (no Tier-1 mutation at `recommend`).
 2. **Transcript Surfacing** — Resurface `UNASSIGNED` / `PENDING` transcripts from Transcript Register (>3 business days escalates).
 3. **File Classification** — File Router (when active) classifies new files by pattern; routes to correct folder.
 4. **PPM Triage** — PPM Agent processes all new/unprocessed transcripts against Daily Status Log carry-forward.
@@ -866,7 +866,7 @@ Execute this cycle once per day, triggered by user or automation:
 6. **Follow-up Tags** — PPM emits tags (`[DELIVERY]`, `[COMMS]`, `[TECHNICAL]`, `[CHANGE]`, `[RISK]`, `[DECISION]`) for specialist work.
 7. **Specialist Processing** — Each tagged skill processes its work in parallel.
 8. **Comms Digest** — If comms digest available, process for MSG-## entries and response tracking.
-9. **External Sync** — Jira MCP pulls ticket statuses; Confluence MCP checks for drift in FDDs/RAID logs.
+9. **External Sync** — Jira MCP pulls ticket statuses; Confluence MCP checks for drift in FDDs/RAID logs. The scheduled **Path-B external-sync** sweep (`core/standards/c3-external-sync-path-b.md`) extends this step with a scheduler, a persisted snapshot-diff, and an Evidence-Gate close-proposal path (read/poll + local-write only, clamped to `[automation].automation_level`).
 10. **Consolidated Update** — Tracker Manager prepares single change summary: what's changing, where, why, evidence.
 11. **User Approval** — User reviews summary; approves or requests modifications.
 12. **Execution** — On approval, all Document Tier 2 tracker updates written; Transcript Register status → `CLOSED`.
