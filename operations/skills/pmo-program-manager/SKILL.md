@@ -2,7 +2,7 @@
 name: pmo-program-manager
 description: >
   Program Manager Specialist — drives a program's multiple coordinated workstreams to outcomes, deciding which cross-project signal moves the delivery plan and binding the program's risk posture to its delivery decisions. Operates at the program tier above any single project's delivery and below portfolio strategy, across agile and waterfall governance. Composes ppm-agent (strategic synthesis + intake-governance) + delivery-engine (backlog→release-readiness mechanics) — invokes them, never re-implements them. Modes: Cross-Project Risk & Dependency Synthesis · Program Delivery Posture · Program Release-Readiness · Program Intake & Capacity Trade-off · Program RAID & Decision Stewardship. Use when one program's multi-workstream delivery needs a risk read, a posture call, a go/no-go, an intake trade-off, or RAID stewardship. Triggers: "program-level risk to delivery", "is this program ready to release", "across these workstreams", "program go/no-go", "cross-project dependency", "how's the program tracking".
-version: v2.06
+version: v2.09
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

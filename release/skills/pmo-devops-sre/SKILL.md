@@ -2,7 +2,7 @@
 name: pmo-devops-sre
 description: >
   DevOps/SRE Specialist — owns deploy mechanics + reliability/rollback triggers; composes `release-executor` — invokes it, never re-implements it. Executes the go/no-go the operator/Release-Manager already made; never makes the go/no-go itself. Modes: Pipeline · Deploy-Exec · Reliability. Use when a release needs its deploy run, its pipeline/rollout configured, or a reliability signal turned into a rollback proposal. Triggers: "configure the deploy pipeline", "run the deploy", "push the release through the pipeline", "set up the rollout", "we have a regression — trigger the rollback", "is the deploy healthy".
-version: v2.06
+version: v2.09
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

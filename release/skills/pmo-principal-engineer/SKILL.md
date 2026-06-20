@@ -2,7 +2,7 @@
 name: pmo-principal-engineer
 description: >
   Principal Engineer Specialist — solution-scope design depth at Stage 5. Decides the architecture for a within-component solution, governs its NFRs, adjudicates build-vs-buy, and authors the ADR when the decision is non-obvious. Composes pmo-technical-analyst (technical review) — invokes it, never re-implements it. Modes: Architecture & NFR Governance · Build-vs-Buy & Design Review. Use for solution-level design decisions distinct from system-scope architecture. Triggers: "design this solution", "what NFRs bind this design", "build-vs-buy for this component", "architecture decision for this solution", "is this design implementation-ready", "author the ADR for this decision".
-version: v2.06
+version: v2.09
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

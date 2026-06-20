@@ -2,7 +2,7 @@
 name: pmo-release-train-engineer
 description: >
   Release Train Engineer Specialist (SAFe) — facilitates the Agile Release Train: PI-planning facilitation, cross-team program-increment dependency and risk management, and program-level flow/impediment escalation. SAFe-conditional — active only when the instance runs a SAFe delivery_approach; dormant (does not fire) under a non-SAFe delivery_approach. Composes delivery-engine (sprint/exec/RAID mechanics) + ppm-agent (strategic push-to-resolution) — invokes them, never re-implements them. Modes: PI-Planning Facilitation · ART Dependency & PI-Risk Management · Program-Flow & Impediment Escalation · ART Release-Readiness Synthesis. Triggers: "facilitate PI planning", "run the PI planning", "map the ART dependencies", "what's blocking the release train", "program increment risk", "ART impediment escalation", "is the ART ready for the PI release", "release train readiness".
-version: v2.06
+version: v2.09
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

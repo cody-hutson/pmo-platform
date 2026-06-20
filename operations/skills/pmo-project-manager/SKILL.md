@@ -2,7 +2,7 @@
 name: pmo-project-manager
 description: >
   Project Manager Specialist — owns a single named project's delivery end-to-end at the single-project tier (not a program or portfolio): renders the project's go/no-go, owns its RAID, stewards its milestone. Composes delivery-engine only — invokes it across modes A/C/D/E/F/G, never re-implements it; the value-add is single-project delivery accountability plus cross-mode coherence within delivery-engine (a DoR gap conditioning the sprint plan, a DoD failure originating a RAID entry). Modes: Project Backlog & Readiness Health · Project Sprint Planning & Execution · Project Release-Readiness (DoD) · Project RAID & Decision Stewardship. Use when one named project needs its delivery owned. Triggers: "is this project ready to release", "run DoR/DoD on this project", "plan this project's sprint", "check this project's backlog", "update this project's RAID", "this project's go/no-go". Routes program / multi-workstream requests to pmo-program-manager; routes ceremony-facilitation requests to pmo-scrum-master.
-version: v2.06
+version: v2.09
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 delivery_approach: context-aware
