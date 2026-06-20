@@ -196,7 +196,7 @@ These consumers are designed but not yet authored. They will register here when 
 | Future file-router ingest+KB consumer | TBD | `Context-Captured` and `Context-Structured` state metadata on routed files (soft outbound contract) |
 | ppm-agent | TBD | Emit `Context-Reviewed` state transition signal when triage completes |
 | artifact-generator | TBD | Emit `Context-Decided` state transition signal when staged-artifact promotion happens |
-| Daily-sweep automation | v2.07 (governor) / impl C2+C4 | All states (§6 impl). Clamps to `operator.toml [automation].automation_level` (C0 #322) as its autonomy ceiling — `effective = min(automation_level, per-action max)`; never unlocks the irreducible Tier-0 set per [`../specs/autonomy-tiers.md`](../specs/autonomy-tiers.md) § Irreducible Human Tasks |
+| Daily-sweep automation | v2.07 (governor) / impl C2+C4 | All states (§6 impl). Clamps to `operator.toml [automation].automation_level` (the C0 ambient-intake governor dial) as its autonomy ceiling — `effective = min(automation_level, per-action max)`; never unlocks the irreducible Tier-0 set per `core/specs/autonomy-tiers.md` § Irreducible Human Tasks |
 | PROJECT.md template lifecycle dashboard | TBD | All states — per-project rollup |
 
 ---
