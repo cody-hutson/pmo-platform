@@ -42,6 +42,7 @@ OPERATIONS_SKILLS=(
   pmo-program-manager
   pmo-project-manager
   pmo-release-train-engineer
+  pmo-scrum-master
   pmo-technical-analyst
   pmo-technical-program-manager
   ppm-agent
