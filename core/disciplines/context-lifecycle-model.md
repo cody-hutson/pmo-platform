@@ -186,6 +186,7 @@ Skills and governance documents that consume this framework's state vocabulary r
 |---|---|---|
 | [`operations/skills/file-router/SKILL.md`](../../operations/skills/file-router/SKILL.md) | `Context-Captured` → `Context-Structured` transition (mechanism #1) | `## Framework Reference` subsection (demonstrating consumer) |
 | [`../standards/lifecycle-states-canonical.md`](../standards/lifecycle-states-canonical.md) | All 5 Context Lifecycle states enumerated in cross-machine registry | §3 In-Scope Machines (Context Lifecycle subsection) |
+| Ambient inbox + dedup cursor (C1, v2.07) | `Context-Captured` on inbox arrival → `Context-Structured` once file-router routes+registers; the cursor (path + SHA-256 identity) skips already-`Context-Structured` files on re-scan. Consumed by the Path A scheduled intake sweep (C2). | `../standards/c1-ambient-inbox-cursor.md` §3 (state mapping) |
 
 ### Forward-citation consumers (future releases)
 

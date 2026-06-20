@@ -98,6 +98,13 @@ operator_instance_hub_state_path = ""
 # core/standards/initiative-roadmap-framework.md.
 operator_instance_roadmaps_path = ""
 
+# Resolves <OPERATOR_INSTANCE_INBOX_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/inbox
+# Consumer: the ambient inbox drop-zone (core/standards/c1-ambient-inbox-cursor.md §1)
+# — one watched dir where transcripts/emails land for ambient ingest; the dedup
+# cursor (.cursor.json) lives here. Read by the Path A scheduled intake sweep (C2).
+operator_instance_inbox_path = ""
+
 [adapters]
 # Host-adapter selectors — the four external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,
