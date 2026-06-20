@@ -35,7 +35,7 @@ Transcripts and emails land here for ambient ingest. The directory is operator c
 ## 3. State mapping (context-lifecycle-model.md §2 — verbatim object-typed names)
 - `Context-Captured` — set on arrival (§2 entry: "File present (user upload, MCP sync, drop)").
 - `Context-Structured` — set once routed + registered (§2 entry: "Routing complete + register
-  entry written"); reached via file-router classify+route (mechanism #1, the
+  entry written"); reached via file-router classify+route (mechanism 1, the
   Context-Captured → Context-Structured transition).
 The cursor writes ONLY these two §2 values during the inbox lifecycle; downstream states
 (`Context-Reviewed` / `Context-Decided` / `Context-Closed`) are out of C1 scope.
@@ -51,7 +51,7 @@ The cursor writes ONLY these two §2 values during the inbox lifecycle; downstre
 ## 5. Orphan-sweep fallback (C1 does NOT replace it)
 Files that bypass the inbox (dropped at workspace root, routed directly to a project folder)
 are caught by the existing Orphan Detection: OPERATIONS.md §Daily Processing Cycle step 15
-+ context-lifecycle-model.md §5 mechanism #12 (allocated to the Context-Captured stall).
++ context-lifecycle-model.md §5 mechanism 12 (allocated to the Context-Captured stall).
 The inbox is the fast, dedup-aware path; the orphan sweep is the catch-all for bypass.
 Both mechanisms compose; neither supersedes the other.
 
