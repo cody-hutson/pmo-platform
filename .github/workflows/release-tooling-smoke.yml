@@ -1,5 +1,14 @@
 name: Release tooling smoke
 
+# gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: the Stage 13 close-out automation runs (self-test + offline smoke)
+#              when release tooling or the RELEASE_LOG schema changes — asserted
+#              behaviorally by executing the script's checks.
+#   falsification: on a PR touching the close-out tooling, break a corpus path the
+#                  script asserts -> the closeout-smoke job fails; on an unrelated
+#                  PR it is skipped and absence is treated as pass.
+# Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
+
 # Smoke-tests the Stage 13 close-out automation on any PR that touches release
 # tooling (or the RELEASE_LOG schema), so the script cannot rot unexercised — the
 # exact failure mode where stale paths / a stale column index / de-identification

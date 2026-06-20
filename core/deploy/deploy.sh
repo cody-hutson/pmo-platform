@@ -372,6 +372,103 @@ resolve_skill_module() {
   die "resolve_skill_module: skill '${skill}' not in any per-module array (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS/CANARY_SKILLS) — add to deploy.sh or fix invocation"
 }
 
+skill_content_hash() {
+  # Rebuild-stable content-manifest hash of a .skill (or any zip) archive.
+  #
+  # Per the gate-efficacy standard (core/standards/gate-efficacy-standard.md)
+  # Requirement (a) — assert by content, not by proxy. Check 7's prior mtime
+  # compare was a proxy: `touch` (or a fresh `git checkout`, which equalizes all
+  # timestamps) made a stale package pass a green gate. This helper asserts the
+  # CONTENT instead.
+  #
+  # Why not hash the .skill bytes directly: the archive is ZIP_DEFLATED and its
+  # envelope embeds per-entry mtimes + carries rglob member ordering, so a clean
+  # rebuild from byte-identical source yields a DIFFERENT raw archive hash — a
+  # raw-byte hash would false-FAIL every legitimate rebuild. Instead, hash a
+  # canonical manifest of the archive's CONTENT: for each member, the line
+  # "<sha256-of-member-bytes>  <arcname>", sorted by arcname under LC_ALL=C, then
+  # SHA-256 of that manifest blob. Properties: order-stable (LC_ALL=C sort),
+  # envelope-independent (extracts members; ignores zip mtime/ordering),
+  # content-addressed (any member-byte change OR member rename ⇒ different hash).
+  #
+  # Portability: shasum -a 256, unzip, find, sort (LC_ALL=C), mktemp -d are all
+  # BSD/macOS-native — no sha256sum (GNU/coreutils, not guaranteed on stock
+  # macOS), no GNU `sort -z`.
+  #
+  # Args:  $1 — path to the .skill (zip) archive.
+  # Echoes: the 64-hex content-manifest hash, or nothing on failure (empty
+  #         string — caller treats empty as "could not hash").
+  local pkg="$1" tmp rc=0
+  [[ -f "$pkg" ]] || { echo ""; return 1; }
+  tmp="$(mktemp -d)" || { echo ""; return 1; }
+  if ! unzip -q -o "$pkg" -d "$tmp" >/dev/null 2>&1; then
+    rm -rf "$tmp"
+    echo ""
+    return 1
+  fi
+  # Subshell isolates the cd; the manifest pipeline never aborts the caller.
+  (
+    cd "$tmp" || exit 1
+    find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+      printf '%s  %s\n' "$(shasum -a 256 "$f" | cut -d' ' -f1)" "${f#./}"
+    done
+  ) | shasum -a 256 | cut -d' ' -f1 || rc=1
+  rm -rf "$tmp"
+  return $rc
+}
+
+build_skill_to_dir() {
+  # Stage a skill + inject canonicals + emit a .skill into an arbitrary output
+  # dir WITHOUT touching the committed packages/<skill>.skill. This is the
+  # in-process equivalent of build-skill-packages.sh build_one(), reused by
+  # Check 7's content verdict (stage a rebuild, hash it, compare to the
+  # committed baseline). Kept byte-aligned with build_one(): same staging, same
+  # TEMPLATE_SYNC_MAP injection via resolve_template_sync_source(), same packager.
+  #
+  # Args:
+  #   $1 — skill name
+  #   $2 — module (operations|release|core) — caller already resolved it
+  #   $3 — output dir (the .skill lands at $3/<skill>.skill)
+  # Returns: 0 on success; non-zero on any staging/inject/packager failure.
+  local skill="$1" module="$2" out_dir="$3"
+  local source_dir="$module/skills/$skill"
+  [[ -d "$source_dir" ]] || return 1
+  [[ -x "/usr/bin/python3" ]] || return 1
+
+  local stage_dir
+  stage_dir="$(mktemp -d)" || return 1
+  cp -R "$source_dir" "$stage_dir/$skill" || { rm -rf "$stage_dir"; return 1; }
+
+  # Inject canonicals per TEMPLATE_SYNC_MAP entries that target this skill.
+  local entry m_skill m_rest m_canonical m_target_rel canonical_source
+  for entry in "${TEMPLATE_SYNC_MAP[@]}"; do
+    m_skill="${entry%%:*}"
+    m_rest="${entry#*:}"
+    m_canonical="${m_rest%%:*}"
+    m_target_rel="${m_rest#*:}"
+    [[ "$m_skill" != "$skill" ]] && continue
+    canonical_source=$(resolve_template_sync_source "$m_canonical")
+    if [[ ! -f "$canonical_source" ]]; then
+      rm -rf "$stage_dir"
+      return 1
+    fi
+    mkdir -p "$(dirname "$stage_dir/$skill/$m_target_rel")"
+    cp "$canonical_source" "$stage_dir/$skill/$m_target_rel" || { rm -rf "$stage_dir"; return 1; }
+  done
+
+  # Invoke the per-skill packager from the pmo-skill-refiner module so its
+  # `from scripts.quick_validate` import resolves. Emit into out_dir.
+  local repo_root rc=0
+  repo_root="$(pwd)"
+  mkdir -p "$out_dir"
+  (
+    cd release/skills/pmo-skill-refiner || exit 1
+    /usr/bin/python3 -m scripts.package_skill "$stage_dir/$skill" "$out_dir"
+  ) >/dev/null 2>&1 || rc=1
+  rm -rf "$stage_dir"
+  return $rc
+}
+
 # ─── Platform-config rung-reader (adapter-config-foundation, #22) ─────────────
 # resolve_platform_config <field> [<project-path>]
 #
@@ -1582,7 +1679,16 @@ cmd_check() {
   local EXEMPTION_LIST="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skill-editor-exemption-list.txt"
   [[ -f "$EXEMPTION_LIST" ]] || EXEMPTION_LIST=".claude/skill-editor-exemption-list.txt"
 
-  # Check 6 — Canonical-structure compliance (always-enforce; per skill-discipline §2)
+  # Check 6 — Canonical-structure compliance (required; always-enforce; enforcement-surface: deploy-time)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: required   enforcement-surface: always-enforce (deploy-time)
+  #   invariant: every rostered SKILL.md is canonical-structure compliant (required
+  #              frontmatter fields present; references/ subdir present once the
+  #              D-Refs threshold is crossed; ≥3 domain-specific failure modes).
+  #   falsification: remove a required frontmatter field, or drop a skill below the
+  #                  3-failure-mode floor -> this check FAILS for that skill.
+  #
   # D-Refs threshold (per the D-Refs Option B decision): references/ required when
   #   SKILL.md > 400 lines OR > 25 KB.
   # Also enforces required frontmatter fields + failure-mode floor (≥3).
@@ -1644,15 +1750,48 @@ cmd_check() {
     [[ "$c6_skill_ok" == "true" ]] && log "  OK:    $skill"
   done
 
-  # Check 7 — Package-freshness (always-enforce; per the package-freshness spec Part A)
-  # Asserts every per-module skill has a .skill package at packages/ root and
-  # the package is not older than any source file under the skill directory.
-  log "Check 7: Package freshness"
+  # Check 7 — Package-freshness (required; always-enforce; enforcement-surface: deploy-time)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md):
+  #   posture: required   enforcement-surface: always-enforce (deploy-time)
+  #   invariant: every rostered skill's .skill package reflects current source
+  #              content (the committed package == what source would build now).
+  #   falsification: mutate one source byte without rebuilding the package → FAIL;
+  #                  `touch` the package alone (content unchanged) → stays GREEN.
+  #
+  # ASSERT-BY-CONTENT, NOT BY PROXY (Requirement (a)). The prior mechanism
+  # compared file mtimes — a proxy that diverges from content: `touch
+  # packages/<skill>.skill` made a stale package pass, and a fresh `git checkout`
+  # (which equalizes all timestamps) passed regardless of content (the originating
+  # false-confidence). The verdict now rests on the rebuild-stable
+  # content-manifest hash (skill_content_hash) of a STAGED REBUILD of source,
+  # compared against the committed content baseline sidecar
+  # (packages/<skill>.skill.sha256). Because the comparison is content-based and
+  # mtime-independent, a committed-stale package is caught even on a fresh
+  # checkout where every mtime is equal.
+  #
+  # The mtime compare is retained only as a cheap, non-verdict-bearing PRE-FILTER
+  # (the standard's escape valve): it can short-circuit to a fast PASS when the
+  # baseline already matches AND nothing under source is newer than the package,
+  # avoiding the rebuild in the common clean case. It NEVER substitutes for the
+  # content verdict — when anything is ambiguous (source newer, baseline mismatch,
+  # or the fast-path's preconditions unmet) the staged-rebuild content compare is
+  # the deciding step.
+  #
+  # python3 / packager absent → the staged-rebuild verdict cannot run; the check
+  # degrades to the baseline-vs-live-package content compare alone (still content,
+  # not mtime) and logs the degraded scope (matches the graceful-skip posture of
+  # Checks 14/18/20/23).
+  log "Check 7: Package freshness (content-manifest hash)"
+  local c7_can_rebuild=true
+  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
+  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
   for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
     local c7_module
     c7_module=$(resolve_skill_module "$skill")
     local c7_src_dir="$c7_module/skills/$skill"
     local c7_pkg="packages/${skill}.skill"
+    local c7_sidecar="packages/${skill}.skill.sha256"
 
     if [[ ! -f "$c7_pkg" ]]; then
       log "  FAIL:  $skill — .skill package missing"
@@ -1660,16 +1799,89 @@ cmd_check() {
       continue
     fi
 
-    # BSD stat -f '%m' (macOS native)
-    local c7_newest_src c7_pkg_mtime
+    # Live package's content-manifest hash (content of what is committed).
+    local c7_live_hash
+    c7_live_hash=$(skill_content_hash "$c7_pkg")
+    if [[ -z "$c7_live_hash" ]]; then
+      log "  FAIL:  $skill — could not compute package content hash (corrupt archive or missing unzip/shasum)"
+      ISSUES=$((ISSUES + 1))
+      continue
+    fi
+
+    # Committed content baseline (sidecar). Its absence is a freshness gap — the
+    # sidecar must be emitted at build time (build-skill-packages.sh) and
+    # committed alongside the package.
+    if [[ ! -f "$c7_sidecar" ]]; then
+      log "  FAIL:  $skill — content baseline sidecar missing ($c7_sidecar); rebuild via core/deploy/tools/build-skill-packages.sh $skill"
+      ISSUES=$((ISSUES + 1))
+      continue
+    fi
+    local c7_baseline
+    c7_baseline=$(tr -d '[:space:]' < "$c7_sidecar" 2>/dev/null)
+
+    # Tamper/corruption check: the committed package's content must match its
+    # committed baseline. A `touch` leaves content identical, so the live hash
+    # still matches the baseline (touch → GREEN). A post-build edit to the
+    # package bytes (without re-emitting the sidecar) flips this red.
+    if [[ "$c7_live_hash" != "$c7_baseline" ]]; then
+      log "  FAIL:  $skill — package content hash ($c7_live_hash) != committed baseline ($c7_baseline); package tampered or sidecar stale — rebuild via core/deploy/tools/build-skill-packages.sh $skill"
+      ISSUES=$((ISSUES + 1))
+      continue
+    fi
+
+    # mtime PRE-FILTER (cheap, non-verdict): is anything under source newer than
+    # the committed package? If not, AND the baseline already matched above, the
+    # common clean case can fast-PASS without a rebuild.
+    local c7_newest_src c7_pkg_mtime c7_src_newer=false
     c7_newest_src=$(find "$c7_src_dir" -type f -not -path '*/.*' -exec stat -f '%m' {} \; 2>/dev/null | sort -n | tail -1)
     c7_pkg_mtime=$(stat -f '%m' "$c7_pkg" 2>/dev/null)
-
     if [[ -n "$c7_newest_src" && -n "$c7_pkg_mtime" && "$c7_newest_src" -gt "$c7_pkg_mtime" ]]; then
-      log "  FAIL:  $skill — source newer than package (rebuild via python3 -m scripts.package_skill)"
-      ISSUES=$((ISSUES + 1))
+      c7_src_newer=true
+    fi
+
+    # CONTENT VERDICT: stage a rebuild of source and compare its content hash to
+    # the committed baseline. This is the load-bearing freshness assertion —
+    # mtime-independent, so it catches a committed-stale package on a fresh
+    # checkout. Run it whenever a rebuild is available; the result decides.
+    if [[ "$c7_can_rebuild" == "true" ]]; then
+      local c7_tmp_pkgdir c7_rebuilt_pkg c7_rebuilt_hash
+      c7_tmp_pkgdir="$(mktemp -d)"
+      # build-skill-packages.sh writes packages/<skill>.skill at REPO_ROOT, so
+      # redirect its output dir via the packager directly into a temp dir to
+      # avoid clobbering the committed package. We stage source + inject
+      # canonicals exactly as build_one() does, then emit into the temp dir.
+      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
+        c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
+        c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
+        if [[ -z "$c7_rebuilt_hash" ]]; then
+          log "  WARN:  $skill — rebuild produced no hashable package; falling back to baseline-vs-package content compare (PASS, baseline matched)"
+          log "  OK:    $skill (content baseline verified; staged-rebuild inconclusive)"
+        elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
+          log "  FAIL:  $skill — source content changed since build (rebuilt hash $c7_rebuilt_hash != committed baseline $c7_baseline); rebuild via core/deploy/tools/build-skill-packages.sh $skill"
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  OK:    $skill (content current — staged rebuild matches committed baseline)"
+        fi
+      else
+        log "  WARN:  $skill — staged rebuild failed to run; falling back to baseline-vs-package content compare"
+        if [[ "$c7_src_newer" == "true" ]]; then
+          log "  FAIL:  $skill — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh $skill"
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  OK:    $skill (content baseline verified; rebuild unavailable, mtime shows no source change)"
+        fi
+      fi
+      rm -rf "$c7_tmp_pkgdir"
     else
-      log "  OK:    $skill"
+      # Degraded: no rebuild available. The baseline-vs-live-package content
+      # compare already passed; fall back on the mtime pre-filter as the only
+      # available source-change signal (still better than nothing; logged).
+      if [[ "$c7_src_newer" == "true" ]]; then
+        log "  FAIL:  $skill — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh $skill"
+        ISSUES=$((ISSUES + 1))
+      else
+        log "  OK:    $skill (content baseline verified; rebuild unavailable [python3/unzip], mtime shows no source change)"
+      fi
     fi
   done
 
@@ -1743,7 +1955,16 @@ cmd_check() {
     fi
   fi
 
-  # Check 9 — Mirror-pair sync (warn-mode initial)
+  # Check 9 — Mirror-pair sync (advisory; warn-mode initial; required at flip-to-enforce)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
+  #            (becomes required when the operator flips deploy-check.mode to enforce)
+  #   invariant: every workspace rules-mirror file (~/.claude/rules/<file>.md) is
+  #              byte-identical to its in-repo source (modulo the OPERATIONS.md
+  #              depth-adjusted-link normalization) — asserted by diff -q.
+  #   falsification: edit a workspace mirror so it diverges from its core/rules/
+  #                  source -> this check WARNs (advisory) / FAILS (post-flip).
   #
   # Semantics per Spec Surface 5.4 + ADR-008 Consequence 2:
   #   in-repo source `core/rules/<file>.md` OR `release/rules/release-process.md`

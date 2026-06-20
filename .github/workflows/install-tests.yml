@@ -1,5 +1,13 @@
 name: Install tests
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)"  always-reports=yes
+#   invariant: install.sh / deploy.sh / setup-workspace.sh and the security hooks
+#              behave correctly end-to-end against /tmp sandboxes — asserted
+#              behaviorally by running the test harnesses (not by file inspection).
+#   falsification: break an install.sh exit-code propagation path -> the
+#                  install-regression job fails.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 # Three jobs:
 #
 # shell-tests — runs the full deploy-test harness under core/deploy/tests/
