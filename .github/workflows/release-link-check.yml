@@ -1,5 +1,14 @@
 name: Release link check
 
+# gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: every intra-repo link in release/**/*.md resolves — asserted by
+#              check-release-links.py over the changed release corpus.
+#   falsification: on a PR that touches release/**/*.md, add "[x](missing.md)" ->
+#                  this gate fails; on a PR touching no release path it is skipped
+#                  and absence is treated as pass (never blocks required-but-absent).
+# Path-filtered (paths: release/**), so it is ADVISORY by skip-semantics: GitHub may
+# report it absent on an unrelated PR, and absence MUST NOT block. (Per gate-efficacy-standard.md (b).)
+
 on:
   pull_request:
     paths:

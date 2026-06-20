@@ -1,5 +1,15 @@
 name: Repository integrity
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Depersonalization gate","Issue-reference validity gate","Dead-file-reference gate"  always-reports=yes
+#   invariant: no changed file introduces operator/collaborator personal data in
+#              the C6 domains (depersonalization), an unresolvable or mis-placed
+#              issue reference (issue-ref), or a dead markdown file/anchor link
+#              (dead-file-ref). All three assert by scanning changed-file content.
+#   falsification: add the operator name/email to a core/ file -> depersonalization
+#                  red; add "#999999" outside a reference block -> issue-ref red;
+#                  add "[x](missing.md)" -> dead-file-ref red.
+# (Three gates, three checks; posture per core/standards/gate-efficacy-standard.md (b).)
+
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
 # files -> teach-block -> exit 1). PER-GATE SCOPE: there is NO single shared

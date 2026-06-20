@@ -1,0 +1,143 @@
+name: Skill canonical-structure check
+
+# gate-efficacy: posture=advisory  enforcement=warn-mode-initial  always-reports=yes
+#   invariant: every rostered skill SKILL.md is canonical-structure compliant —
+#              required frontmatter (name/description/version), a non-empty
+#              references/ once the D-Refs threshold (>400 lines OR >25600 bytes)
+#              is crossed, and >=3 domain-specific failure-mode entries.
+#   falsification: remove a required frontmatter field from a rostered skill, or
+#                  push a SKILL.md over the D-Refs threshold without a references/
+#                  dir -> this gate turns red (warns now; fails on flip-to-enforce).
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirements (b) + (b').)
+#
+# CI MIRROR of deploy.sh Check 6 (issue #673 — closes the run-context detection
+# gap). Check 6 is always-enforce *per run* but had NO automatic run surface:
+# deploy.sh --check is never invoked in CI or on a push to main, so four red-state
+# violations sat on main across multiple releases without any failing check (the
+# #673 root cause, conclusively run-context — the predicate + iteration were
+# already correct, proven byte-identical since v1.09). Per gate-efficacy-standard
+# Requirement (b'), a deploy-time-only check cannot block a merge and is therefore
+# only *advisory* until a CI mirror exists; this workflow IS that mirror.
+#
+# SINGLE SOURCE OF TRUTH with the deploy-time check: both invoke the SAME
+# predicate script (core/deploy/tools/check-canonical-structure.sh) over the SAME
+# roster (extracted from deploy.sh at runtime). No re-implemented copy of the
+# thresholds/fields here — that re-implementation would itself be the drift
+# surface #1101 exists to kill. The deploy-time check is the operator-machine
+# safety net; this CI mirror is the pre-merge gate.
+#
+# Runs on EVERY pull request (no paths filter), so this status check always
+# reports a result and never sits required-but-absent on a shared release PR; a PR
+# that changes no skill still scans the whole roster identically (canonical-
+# structure compliance is a whole-roster property, not a changed-files one). Also
+# runs on push to main as a post-merge guard (mirrors link-check.yml).
+#
+# Posture: WARN-MODE INITIAL per core/rules/bypass-mode-readiness.md (the Check 6
+# D-Refs / project-initiator and now daily-status reconciliations are the
+# shakedown population; the executing release reconciles every live Check-6 red
+# before flip so the first post-merge PR does not red-light — the R-3 latent-
+# finding risk #673 names). Flip to enforce by setting WARN_MODE: 'false' below
+# (one-line change) once the operator closes the shakedown per
+# bypass-mode-readiness.md § Shakedown -> Enforce Transition Checklist; at flip
+# the gate-efficacy header's posture token also moves advisory -> required.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  skill-canonical-structure:
+    name: Skill canonical-structure (Check 6 mirror)
+    runs-on: ubuntu-latest
+    env:
+      # Flip to 'false' to make a canonical-structure violation fail the PR
+      # (enforce mode). 'true' = warn-mode-initial: annotate + pass. See header.
+      WARN_MODE: 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Detector precision probe (predicate self-test)
+        run: |
+          set -euo pipefail
+          # A warn-mode scan is blind to a detector regression (it would pass an
+          # empty/broken result), so the predicate's self-test is a HARD gate
+          # independent of WARN_MODE: a regression in the frontmatter / D-Refs /
+          # failure-mode-floor logic, or in the roster extraction, fails the PR.
+          # Mirrors the precision-probe step in link-check.yml /
+          # skill-count-imp-check.yml / reference-durability.yml.
+          bash core/deploy/tools/check-canonical-structure.sh --self-test
+
+      - name: Scan the rostered skills for canonical-structure violations
+        run: |
+          set -uo pipefail
+
+          # Same predicate script + same deploy.sh-extracted roster as deploy.sh
+          # Check 6 (single source of truth). Capture stdout (per-skill OK/FAIL
+          # lines + SUMMARY) and the exit code without tripping set -e.
+          set +e
+          OUTPUT=$(bash core/deploy/tools/check-canonical-structure.sh 2>&1)
+          EXIT=$?
+          set -e
+
+          # Always echo the raw verdict lines into the log.
+          printf '%s\n' "$OUTPUT"
+
+          if [ "$EXIT" -eq 3 ]; then
+            # Scan-surface error (roster could not be extracted, or a roster
+            # skill's SKILL.md is missing) is ALWAYS hard-fail, independent of
+            # WARN_MODE — a relocated/restructured source tree means the gate ran
+            # against nothing and must not read green (fail-loud contract,
+            # mirrors the exit-3 path in link-check.yml / skill-count-imp-check.yml).
+            {
+              echo "## :x: Skill canonical-structure check — scan-surface error"
+              echo ""
+              echo "The Check-6 predicate could not extract the skill roster from"
+              echo "\`core/deploy/deploy.sh\`, or a rostered skill's \`SKILL.md\` is"
+              echo "missing. This is a fail-loud condition independent of warn-mode."
+              echo ""
+              echo '```'
+              printf '%s\n' "$OUTPUT"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+
+          if [ "$EXIT" -eq 0 ]; then
+            echo ":white_check_mark: Skill canonical-structure — every rostered skill is canonical-structure compliant" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # EXIT == 1 -> one or more canonical-structure violations.
+          {
+            echo "## :warning: Skill canonical-structure check — violation(s) found"
+            echo ""
+            echo "One or more rostered skills are not canonical-structure compliant."
+            echo "Each FAIL line below names the skill and the failing predicate"
+            echo "(missing frontmatter field, D-Refs threshold crossed without a"
+            echo "non-empty \`references/\` dir, or fewer than 3 failure-mode entries)."
+            echo ""
+            echo '```'
+            printf '%s\n' "$OUTPUT"
+            echo '```'
+            echo "### Remediation"
+            echo ""
+            echo "- **Missing frontmatter field (\`name\`/\`description\`/\`version\`):** add the field to the SKILL.md frontmatter (route a migrated skill through \`pmo-skill-editor\`)."
+            echo "- **D-Refs threshold crossed without \`references/\`:** extract a substantial cohesive section into \`<module>/skills/<skill>/references/<name>.md\` (so the dir is present + non-empty), ideally bringing SKILL.md back under 400 lines / 25600 bytes. Route migrated skills through \`pmo-skill-editor\` (Mode A)."
+            echo "- **Below the 3-failure-mode floor:** add domain-specific failure-mode entries per \`core/standards/failure-mode-standard.md\` (5-field template, one of the TRIG/INPUT/PROC/OUT/HAND category tags)."
+            echo ""
+            echo "This gate is the PR-time mirror of \`deploy.sh\` Check 6. The predicate is single-sourced at \`core/deploy/tools/check-canonical-structure.sh\`; the deploy-time check and this mirror invoke the same script. See \`core/rules/skill-deployment.md\` and \`core/standards/gate-efficacy-standard.md\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "_Warn-mode-initial: reported, not blocking. Flip to enforce by setting \`WARN_MODE: 'false'\` per \`core/rules/bypass-mode-readiness.md\` § Shakedown -> Enforce Transition Checklist._" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning::skill-canonical-structure findings present; WARN_MODE is on, not failing the PR (flip to enforce once the warn-window is clean)."
+            exit 0
+          fi
+          exit 1
