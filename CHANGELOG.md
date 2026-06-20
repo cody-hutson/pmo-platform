@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.10] - 2026-06-20
+
+Two agent editing disciplines are codified — canonical-form application and reconcile-don't-annotate — wired into the decision discipline.
+
+[Full notes](release/releases/notes/v2.10_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.10)
+
 ## [v2.09] - 2026-06-20
 
 Health pass on the deploy and release tooling: several checks and scripts that were silently skipping or failing opaquely now work as intended. Eleven surgical fixes to the platform's own deploy and release scripts; all additive or corrective, nothing you invoke directly and nothing you need to do.
