@@ -278,7 +278,7 @@ Stage 12 does NOT produce: quality assessments (Stages 7-8), design decisions (S
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics (canonical IDs per [`schemas/gate-criteria-spec.md` Gate 12](../../../core/schemas/gate-criteria-spec.md#gate-12-execute-readiness)): PR MERGED (G-EX1), tag exists (G-EX2), all S-2 deployments completed with zero diff (G-EX3), deployment log appended (G-EX4), release row in RELEASE_LOG.md (G-EX5), all verification PASS (G-EX6), no Layer 2 leakage (G-EX7), deferred items documented (G-EX8).
+Metrics (canonical IDs per [`schemas/gate-criteria-spec.md` Gate 12](../../../core/schemas/gate-criteria-spec.md#gate-12-execute-readiness)): PR MERGED (G-EX1), tag exists (G-EX2), all S-2 deployments completed with zero diff (G-EX3), deployment log appended (G-EX4), release row in RELEASE_LOG.md (G-EX5), all verification PASS (G-EX6), no Layer 2 leakage (G-EX7), deferred items documented (G-EX8); incoming deferred items accounted (every mid-pipeline item whose Target stage = this stage — including items passed through the PLATFORM-SATISFIED Stage 10/11 compression — is picked up or re-deferred with rationale per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md); G-EX8 separately covers the release-boundary "Deferred items list").
 Judgment (1-5): execution fidelity, deployment completeness, verification thoroughness, audit trail quality, handoff readiness.
 Gate output: PROCEED to Stage 13 / HOLD (investigate before Close).
 

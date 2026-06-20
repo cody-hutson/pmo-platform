@@ -78,7 +78,7 @@ Engineering does NOT produce: design decisions (Stage 5), test plans beyond inhe
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics: all issues have commits, all sub-tasks closed, PR created with metadata and evidence, deployed copies synced, verification complete (all PASS or explained), plan updated, zero undocumented deviations, layer boundary compliance.
+Metrics: all issues have commits, all sub-tasks closed, PR created with metadata and evidence, deployed copies synced, verification complete (all PASS or explained), plan updated, zero undocumented deviations, layer boundary compliance; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
 Judgment (1-5): implementation fidelity, convention compliance, verification thoroughness, deviation handling, PR reviewability.
 Calibration: sub-task accuracy, deviation count by severity, verification coverage, escape rate, cycle time, self-review effectiveness.
 

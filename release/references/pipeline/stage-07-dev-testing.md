@@ -120,7 +120,7 @@ Stage 7 does NOT produce: design decisions (Stage 5), acceptance verdicts (Stage
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics: all files reviewed, all AC checked, no unresolved Blockers, quality scores ≥ threshold (or override documented), escape rate logged, report posted.
+Metrics: all files reviewed, all AC checked, no unresolved Blockers, quality scores ≥ threshold (or override documented), escape rate logged, report posted; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
 Judgment (1-5): review thoroughness, finding quality, independence (escape count > 0 expected), report clarity.
 Calibration: precision tracking, escape-to-QA rate, time-to-complete. Threshold adjustment after 3+ releases.
 

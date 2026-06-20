@@ -150,7 +150,7 @@ Stage 8 does NOT produce: quality scores (Stage 7), design decisions (Stage 5), 
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics: all AC checked, acceptance matrix complete, no unresolved Blocker findings, escape detection performed, iteration count logged, report posted.
+Metrics: all AC checked, acceptance matrix complete, no unresolved Blocker findings, escape detection performed, iteration count logged, report posted; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
 Judgment (1-5): AC coverage thoroughness, evidence quality, fitness assessment, escape detection, report clarity.
 Calibration: ambiguous AC rate, QA escapes to Stage 9, iteration count. Threshold adjustment after 3+ releases.
 
