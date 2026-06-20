@@ -8,6 +8,17 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.04] - 2026-06-20
+
+Every release can now close with a structured retrospective and lessons-learned write-up, authored from a single template that ships with the platform — a blameless retrospective and a lessons-learned ceremony combined in one file. The template landed on top of a ratified decision about which release records are public capability and which are the maintainer's own local working history. This release decides that split and ships the template; physically moving the maintainer's history out of the shared copy is captured as a separate follow-up and changes nothing you observe today. Everything is additive.
+
+### Added
+
+- **A close-out retrospective template.** Each release can be closed with one combined template that walks a blameless retrospective (what went well, what we learned, what we'd change) and a lessons-learned write-up (situation, outcome, lessons, next-cycle actions). *Why it matters:* the end-of-release reflection has a ready structure to fill in instead of being assembled from scratch or skipped. ([#360](https://github.com/cody-hutson/pmo-platform/issues/360), [#361](https://github.com/cody-hutson/pmo-platform/issues/361))
+- **A decided home for each release record.** The close-out step names the template and states that the filled-in copy is written to your own local workspace, not committed to the shared platform (ADR-032). *Why it matters:* your release reflections stay local, and a fresh install ships the blank template without anyone else's release history. ([#1412](https://github.com/cody-hutson/pmo-platform/issues/1412))
+
+[Full notes](release/releases/notes/v2.04_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.04)
+
 ## [v2.07] - 2026-06-20
 
 The daily processing cycle no longer has to be launched by hand. Scheduled sweeps watch an inbox and your trackers — capturing, classifying, and proposing updates — all bounded by a single plain-language dial (`off` / `recommend` / `bounded_auto`) you set in your config; the dial is a ceiling, and the human-only decisions stay human-only no matter where you set it. A consolidated daily digest reports what every sweep did, with a heartbeat so a sweep that quietly stops can't go unnoticed, and a new runtime guardrail enforces the ceiling (shipped logged-but-not-blocking; you turn it on after a short trial). This release requires action: run `update.sh`, set your `automation_level`, and later flip `.autonomy-mode` from `warn` to `enforce`.
