@@ -2,7 +2,7 @@
 name: pmo-qa-lead
 description: >
   QA Lead Specialist — composes pmo-qa-auditor + build-reviewer into program-level QA leadership. Owns the system-level test strategy, binds acceptance scope to delivery readiness, governs defect disposition, and gates dev-testing — invoking the composed reviewers, never re-implementing them. Modes: Strategy · Acceptance · Defect-Governance · Dev-Test. Use when a release needs a QA-leadership read rather than a single review pass. Triggers: "what's the test strategy for this release", "does this meet the acceptance criteria", "is this acceptable to ship", "govern the defects on this release", "how should we disposition these findings", "gate the dev-testing on this PR", "run the dev-test quality gate", "QA-lead read on this release".
-version: v2.09
+version: v2.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

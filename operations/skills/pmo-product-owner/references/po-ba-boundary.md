@@ -17,7 +17,7 @@ Because the split is only legitimate while all three conjuncts hold, a future ed
 
 ## The cross-fire risk and its guard
 
-Trigger collision between `pmo-product-owner` and `pmo-business-analyst` is the single highest-risk failure for this pair (tracked as R-DECONF in the v2.09 Stage 4 release plan; the two are evaluated **together** at Stage 7 Dev Testing). The risk is concrete: both roles compose `pmo-process-designer` Mode A (story/requirement authoring), so a phrase like "work on the requirements" or "write up these stories" surface-matches both skill descriptions.
+Trigger collision between `pmo-product-owner` and `pmo-business-analyst` is the single highest-risk failure for this pair (tracked as R-DECONF in the v2.11 Stage 4 release plan; the two are evaluated **together** at Stage 7 Dev Testing). The risk is concrete: both roles compose `pmo-process-designer` Mode A (story/requirement authoring), so a phrase like "work on the requirements" or "write up these stories" surface-matches both skill descriptions.
 
 The guard is the **decision-vs-documentation axis** encoded in the SKILL.md `## Mode Selection` shared-verb disambiguation table. A shared-verb request routes by which side of that axis its *primary need* falls on — deciding/accepting value (PO) versus eliciting/documenting/tracing the requirement (BA). When a request is genuinely mixed, the PO names the split and takes only the value/priority/acceptance half, deferring the documentation/traceability half to `pmo-business-analyst`. This behavior is also encoded as the SKILL.md mandatory cross-fire failure mode (`Cross-fires with business-analyst on the shared compose-pair — TRIG`).
 

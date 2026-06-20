@@ -4,7 +4,7 @@
 title: ADR-033 — Methodology-conditional skill activation — dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
 status: Accepted
 date: 2026-06-20
-release: 04-ROLE-delivery-coverage (v2.09)
+release: 04-ROLE-delivery-coverage (v2.11)
 deciders: "Workspace owner (operator-adopted at the 04-ROLE-delivery-coverage Collective Review scope-lock); design authored at Stage 5 Solutioning (the pmo-release-train-engineer spoke); ADR materialized at Stage 6 per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent"
 tags: [architecture, skills, methodology, delivery-approach, conditional-activation, dormant-gating, role-specialist, safe, parameterization, blast-radius, reversibility]
 source_observations:
@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-**Accepted.** Operator-adopted at the Collective Review scope-lock for `04-ROLE-delivery-coverage` (v2.09), where CR-3 (parameterization sourcing) and CR-4 (the activation convention) were ratified as the two facets of one decision and consolidated into this single ADR per the decision-discipline ceremony guard. Design authored at Stage 5 Solutioning (the `pmo-release-train-engineer` spoke, #1111); ADR materialized at Stage 6 post-build per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent. Ships in the v2.09 release PR (reviewed at Stage 9). **Renumbered from a branch-local ADR-031** — main's `ADR-031-autonomy-ceiling-unified-payload-triggered-hook` claimed 031 during this release's engineering window; `check-adr-numbers.py` confirms 033 as the next gap-free number after 032 (same collision pattern ADR-029 resolved).
+**Accepted.** Operator-adopted at the Collective Review scope-lock for `04-ROLE-delivery-coverage` (v2.11), where CR-3 (parameterization sourcing) and CR-4 (the activation convention) were ratified as the two facets of one decision and consolidated into this single ADR per the decision-discipline ceremony guard. Design authored at Stage 5 Solutioning (the `pmo-release-train-engineer` spoke, #1111); ADR materialized at Stage 6 post-build per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent. Ships in the v2.11 release PR (reviewed at Stage 9). **Renumbered from a branch-local ADR-031** — main's `ADR-031-autonomy-ceiling-unified-payload-triggered-hook` claimed 031 during this release's engineering window; `check-adr-numbers.py` confirms 033 as the next gap-free number after 032 (same collision pattern ADR-029 resolved).
 
 ## Context
 
@@ -58,7 +58,7 @@ Adopt a **methodology-conditional skill-activation convention** with two coupled
 
 ## Reversibility
 
-**CHEAP** at ship — additive (a new convention doc-pattern + the RTE's invocation gate + a canonical-row reference); revert the v2.09 release PR and nothing else depends on it yet. Trends **MODERATE** as future methodology-conditional skills adopt the convention and cite this ADR. **Confidence: HIGH** on the diagnosis (both findings are directly grounded in the RTE Stage-5 survey) / **HIGH** on the recommendation (the canonical-row sourcing mirrors the established ADR-028 posture; the dormant-gating is the minimal correct off-state).
+**CHEAP** at ship — additive (a new convention doc-pattern + the RTE's invocation gate + a canonical-row reference); revert the v2.11 release PR and nothing else depends on it yet. Trends **MODERATE** as future methodology-conditional skills adopt the convention and cite this ADR. **Confidence: HIGH** on the diagnosis (both findings are directly grounded in the RTE Stage-5 survey) / **HIGH** on the recommendation (the canonical-row sourcing mirrors the established ADR-028 posture; the dormant-gating is the minimal correct off-state).
 
 ## Related ADRs
 

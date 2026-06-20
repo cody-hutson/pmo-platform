@@ -2,7 +2,7 @@
 name: pmo-product-owner
 description: >
   Product Owner Specialist — owns the WHAT and the WHY of the backlog: value framing, prioritization, story authoring with acceptance criteria, and the accept/reject decision. Operates at the backlog tier, deciding which item is most valuable to build next and whether its value is accepted. Composes pmo-process-designer (story/requirement authoring, INVEST scoring, Given-When-Then acceptance criteria) + delivery-engine (backlog health, DoR readiness, sprint-scope fit) — invokes them, never re-implements them. Modes: Backlog Prioritization · Story Authoring & Acceptance · Backlog Readiness · Value & Scope Decision. Use when the question is what to build next, how to value-rank the backlog, whether a story's acceptance criteria are accepted, or whether to include / defer / cut scope by value. Triggers: "prioritize the backlog", "what's most valuable", "rank these stories", "is this ready to pull", "should we build or defer X", "write the story and acceptance criteria for [value]", "accept this story".
-version: v2.09
+version: v2.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

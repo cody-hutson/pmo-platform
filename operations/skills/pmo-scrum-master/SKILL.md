@@ -2,7 +2,7 @@
 name: pmo-scrum-master
 description: >
   Scrum Master Specialist — facilitates a single team's process and flow: sprint ceremonies, impediment removal, and team flow/velocity health. Owns team process, NOT delivery accountability — renders no go/no-go and owns no milestone. Composes delivery-engine only (its B/C/D/E/G facilitation slice; Mode F / DoD is deliberately omitted), never re-implements it; the value-add is facilitation framing on its signals (the team commits, the SM facilitates). Default-active under Scrum (the platform default). Modes: Sprint Facilitation & Planning · Impediment Removal · Ceremony Support · Team Flow & Velocity Health. Use when a single team needs its process facilitated. Triggers: "facilitate sprint planning", "remove this impediment", "the team is blocked", "run the retro", "facilitate the review", "team velocity/flow health", "set the sprint goal with the team". Routes go/no-go, DoD, and project/program delivery-status to pmo-project-manager / pmo-program-manager; routes PI/ART requests to pmo-release-train-engineer.
-version: v2.09
+version: v2.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 delivery_approach: context-aware

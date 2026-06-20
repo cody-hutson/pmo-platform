@@ -2,7 +2,7 @@
 name: pmo-principal-engineer
 description: >
   Principal Engineer Specialist — solution-scope design depth at Stage 5. Decides the architecture for a within-component solution, governs its NFRs, adjudicates build-vs-buy, and authors the ADR when the decision is non-obvious. Composes pmo-technical-analyst (technical review) — invokes it, never re-implements it. Modes: Architecture & NFR Governance · Build-vs-Buy & Design Review. Use for solution-level design decisions distinct from system-scope architecture. Triggers: "design this solution", "what NFRs bind this design", "build-vs-buy for this component", "architecture decision for this solution", "is this design implementation-ready", "author the ADR for this decision".
-version: v2.09
+version: v2.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -80,7 +80,7 @@ If the trigger is ambiguous between the two modes (the request names both an arc
 
 Three boundaries keep this Specialist's trigger surface and write-scope disjoint from its neighbors, so no false cross-fire:
 
-**(a) Principal Engineer (SOLUTION-scope) vs `pmo-architect` (SYSTEM-scope).** The cut is the **component boundary**: the Principal Engineer owns *within-component* design depth (the structure, NFRs, and ADR for one solution — "how should THIS solution be built and what bounds it?"); `pmo-architect` owns *across-component* design (system topology, cross-system integration, the system-level ADR). A request naming "this solution" / "this component's design / NFRs" routes here; one naming "the system" / "integration across systems" / "system topology" routes to `pmo-architect`. Composition runs the other way: `pmo-architect` **composes** the Principal Engineer for each component's within-component depth, then adds the cross-component synthesis. `pmo-architect` ships alongside this skill in v2.09 and composes it for within-component depth — the seam is live, not forward-stated.
+**(a) Principal Engineer (SOLUTION-scope) vs `pmo-architect` (SYSTEM-scope).** The cut is the **component boundary**: the Principal Engineer owns *within-component* design depth (the structure, NFRs, and ADR for one solution — "how should THIS solution be built and what bounds it?"); `pmo-architect` owns *across-component* design (system topology, cross-system integration, the system-level ADR). A request naming "this solution" / "this component's design / NFRs" routes here; one naming "the system" / "integration across systems" / "system topology" routes to `pmo-architect`. Composition runs the other way: `pmo-architect` **composes** the Principal Engineer for each component's within-component depth, then adds the cross-component synthesis. `pmo-architect` ships alongside this skill in v2.11 and composes it for within-component depth — the seam is live, not forward-stated.
 
 **(b) Principal Engineer (decides) vs `pmo-technical-analyst` (reviews — composed, not absorbed).** Their verbs are disjoint: `pmo-technical-analyst` *reviews* (surfaces risks, scores the FDD, enforces the ADR-immutability / rollback-trigger gates at review time); the Principal Engineer *decides* the architecture, *sets* the NFR thresholds, *renders* the build-vs-buy verdict, and *authors* the ADR. Its trigger surface ("design / decide / NFR-govern / author-ADR") is disjoint from `pmo-technical-analyst`'s ("review this FDD / architecture / integration"). Invoking a review mode is not a cross-fire — it is the composition contract.
 
@@ -105,7 +105,7 @@ Five output requirements hold on every emission:
 ## Dependency Graph Node
 
 - **Composes (invokes, never absorbs):** `pmo-technical-analyst` (Modes A / B / C / E).
-- **Composed-by:** the system-scope `pmo-architect` Specialist (invokes this skill for within-component design depth, then adds the cross-component synthesis). Ships in v2.09 alongside this skill.
+- **Composed-by:** the system-scope `pmo-architect` Specialist (invokes this skill for within-component design depth, then adds the cross-component synthesis). Ships in v2.11 alongside this skill.
 - **Coordinates with:** `pmo-qa-auditor` (quality review of design-decision outputs — G4 reversibility, G7 failure-mode discipline), `build-reviewer` (production-readiness review of the design once built).
 - **Cross-skill handoff tags** are drawn from the controlled handoff vocabulary; any new tag carries the `[DOMAIN_ACTION]` flag for review rather than being introduced silently. Composition edges are skill→skill (invocation), never role→role (absorption).
 

@@ -2,7 +2,7 @@
 name: pmo-software-engineer
 description: >
   Software Engineer Specialist — executes end-to-end Stage-6 Engineering; turns an approved implementation plan into executed change, verification, and a PR. Composes implementation-planner (RT-classification + Edit-ready spec generation from a findings register) — invokes it, never re-implements it. Mode: Development. Input is scoped to an executable plan / findings register; a bare ticket with no plan routes to planning first. Use when an approved plan or findings register is ready to build. Triggers: "implement this plan", "execute the remediation plan", "engineer this change", "run the Stage-6 build", "turn this plan into a PR".
-version: v2.09
+version: v2.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
