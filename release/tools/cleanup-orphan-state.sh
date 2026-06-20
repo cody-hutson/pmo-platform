@@ -18,7 +18,9 @@
 # Flags:
 #   SCOPE (one of, default --all):
 #     --release-close <slug>   Outcome 1 only — scope to one release
-#     --spawn-task             Outcome 2 only — claude/* orphans
+#                              (matches release/<slug>, release/vX.Y-<slug>, and the
+#                               sibling chore/<slug>-* / chore/vX.Y-<slug>-* branches)
+#     --spawn-task             Outcome 2 only — claude/* and agent-* orphans
 #     --historical             Outcome 3 only — all merged-no-active-work
 #     --all                    All 3 outcomes (default)
 #   MODE (one of, default --dry-run):
@@ -401,7 +403,7 @@ classify_remote() {
 
 classify_worktree() {
   local path="$1" branch="$2"
-  local status="clean" disk action="REMOVE" cand_phys existing
+  local status="clean" disk action="REMOVE" cand_phys existing detached_ahead
 
   # Dedup guard (v1.11 operator scope call): under the default --all scope,
   # detect_spawn_task and detect_historical can both row the same worktree;
@@ -444,6 +446,27 @@ classify_worktree() {
     action="SKIP — protected branch"
   elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then
     action="SKIP — branch not fully merged"
+  elif [[ -z "$branch" && "$FORCE" != "1" ]] && [[ -d "$path" ]] \
+       && { detached_ahead=$(git -C "$path" rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..HEAD" 2>/dev/null || echo "?"); [[ "$detached_ahead" != "0" ]]; }; then
+    # EDIT 5 (operator-locked BROAD, v2.09): the branch not-merged clauses above are
+    # [[ -n "$branch" ]]-guarded, so a detached-HEAD worktree (empty branch — the
+    # common case for agent-* trees) bypasses the merge gate entirely and would
+    # classify REMOVE, discarding the only checkout pointing at possibly-unmerged
+    # work. This clause closes that data-loss class for ALL detached worktrees
+    # (not just agent-*): a detached tree whose HEAD has commits not in
+    # origin/main — or whose count cannot be computed ("?" ≠ "0") → fail-closed —
+    # is preserved. Strictly additive (adds SKIPs, never new removals). The
+    # distinct counted reason surfaces the retained set + per-tree ahead-count
+    # (no silent skip), mirroring the "unique commits exist ($unique)" branch idiom.
+    # Force-overridable: gated on FORCE != 1 so `--apply --force` re-promotes the
+    # tree to REMOVE (operator escape hatch for a reviewed backlog); deliberately
+    # NOT in the SELF/LIVE never-override set.
+    # Merge-strategy note: this test assumes a merge-commit strategy (this repo
+    # merges via merge-commits, so a merged tree returns rev-list origin/main..HEAD
+    # = 0 → auto-REMOVE; only genuinely-unmerged work SKIPs, bounding the backlog).
+    # If squash-merge is ever adopted, switch to content-aware detection
+    # (git cherry / patch-id) to avoid a false-positive pileup.
+    action="SKIP — detached, unmerged commits (${detached_ahead})"
   fi
 
   if [[ "$action" == "REMOVE" && "$ORACLE_STATE" != "ok" ]]; then
@@ -458,10 +481,21 @@ detect_release_close() {
   [[ -z "$slug" ]] && return 0
   refresh_wt_snapshot
   local b
-  for b in $(git for-each-ref "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" --format='%(refname:short)' 2>/dev/null); do
+  # Match both the bare slug form (release/<slug>) AND the version-prefixed form
+  # (release/vX.Y-<slug>) — release branches are routinely version-prefixed when a
+  # release re-versions mid-flight. The added pattern is anchored on the literal
+  # `v…-` separator so the slug can only appear in the post-version segment, never
+  # mid-string (a leading wildcard `*${slug}*` was rejected — substring-match hazard).
+  for b in $(git for-each-ref \
+      "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" \
+      "refs/heads/release/v*-${slug}*" "refs/heads/chore/v*-${slug}*" \
+      --format='%(refname:short)' 2>/dev/null); do
     classify_local "$b" 0
   done
-  for b in $(git ls-remote --heads "$REMOTE_NAME" "release/${slug}*" "chore/${slug}*" 2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||'); do
+  for b in $(git ls-remote --heads "$REMOTE_NAME" \
+      "release/${slug}*" "chore/${slug}*" \
+      "release/v*-${slug}*" "chore/v*-${slug}*" \
+      2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||'); do
     classify_remote "$b"
   done
   while IFS= read -r line; do
@@ -472,7 +506,7 @@ detect_release_close() {
     wbranch="${next#refs/heads/}"
     [[ -z "$wbranch" || "$wbranch" == "$next" ]] && continue
     case "$wbranch" in
-      release/${slug}*|chore/${slug}*) classify_worktree "$wpath" "$wbranch" ;;
+      release/${slug}*|chore/${slug}*|release/v*-${slug}*|chore/v*-${slug}*) classify_worktree "$wpath" "$wbranch" ;;
     esac
   done <<<"$WT_SNAPSHOT"
 }
@@ -488,10 +522,21 @@ detect_spawn_task() {
   done
   while IFS= read -r line; do
     [[ "$line" =~ ^worktree[[:space:]](.*)$ ]] || continue
-    local wpath="${BASH_REMATCH[1]}" wbranch=""
+    local wpath="${BASH_REMATCH[1]}" wbranch="" wbase=""
     wbranch=$(branch_for_worktree "$wpath")
     wbranch="${wbranch#refs/heads/}"
-    case "$wbranch" in claude/*) classify_worktree "$wpath" "$wbranch" ;; esac
+    wbase="${wpath##*/}"                       # path basename: agent-<hash> / claude-<name>
+    # claude/* spawn_task worktrees (branch-keyed, unchanged) OR agent-* Agent-tool
+    # worktrees (path-keyed: live evidence shows most agent-* trees are detached →
+    # no branch to match on). Both lineages route through the unchanged
+    # classify_worktree so every liveness / dirty / SELF / primary gate is
+    # preserved verbatim. The ::: separator is a literal that cannot appear in a
+    # refname or a worktree basename; the dedup guard (classify_worktree :410)
+    # rows a tree matching both lineages exactly once.
+    case "$wbranch:::$wbase" in
+      claude/*:::*)  classify_worktree "$wpath" "$wbranch" ;;
+      *:::agent-*)   classify_worktree "$wpath" "$wbranch" ;;
+    esac
   done <<<"$WT_SNAPSHOT"
 }
 
