@@ -52,6 +52,7 @@ RELEASE_SKILLS=(
   pmo-qa-lead
   pmo-skill-editor
   pmo-skill-refiner
+  pmo-software-engineer
   release-executor
   release-planner
 )

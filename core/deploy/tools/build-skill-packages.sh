@@ -62,7 +62,7 @@ resolve_skill_module() {
   local skill="$1"
   case "$skill" in
     eval-writer|pmo-qa-auditor|prompt-builder) echo "core" ;;
-    pmo-architect|pmo-skill-refiner|pmo-skill-refiner-selftest-canary|pmo-skill-editor|build-reviewer|release-executor|release-planner|implementation-planner|pmo-principal-engineer|pmo-qa-lead) echo "release" ;;
+    pmo-architect|pmo-skill-refiner|pmo-skill-refiner-selftest-canary|pmo-skill-editor|pmo-software-engineer|build-reviewer|release-executor|release-planner|implementation-planner|pmo-principal-engineer|pmo-qa-lead) echo "release" ;;
     *) echo "operations" ;;
   esac
 }
@@ -116,7 +116,7 @@ build_one() {
   ) || return 1
 }
 
-# Default skill list (all 21 invocation skills; canary excluded from packaging)
+# Default skill list (all 22 invocation skills; canary excluded from packaging)
 ALL_SKILLS=(
   artifact-generator
   build-reviewer
@@ -134,6 +134,7 @@ ALL_SKILLS=(
   pmo-qa-lead
   pmo-skill-editor
   pmo-skill-refiner
+  pmo-software-engineer
   pmo-technical-analyst
   ppm-agent
   project-initiator
