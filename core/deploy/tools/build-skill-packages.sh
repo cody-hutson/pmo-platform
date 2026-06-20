@@ -62,7 +62,7 @@ resolve_skill_module() {
   local skill="$1"
   case "$skill" in
     eval-writer|pmo-qa-auditor|prompt-builder) echo "core" ;;
-    pmo-skill-refiner|pmo-skill-refiner-selftest-canary|pmo-skill-editor|build-reviewer|release-executor|release-planner|implementation-planner) echo "release" ;;
+    pmo-architect|pmo-devops-sre|pmo-skill-refiner|pmo-skill-refiner-selftest-canary|pmo-skill-editor|pmo-software-engineer|build-reviewer|release-executor|release-planner|implementation-planner|pmo-principal-engineer|pmo-qa-lead) echo "release" ;;
     *) echo "operations" ;;
   esac
 }
@@ -172,11 +172,23 @@ ALL_SKILLS=(
   file-router
   implementation-planner
   intake-desk
+  pmo-architect
+  pmo-business-analyst
+  pmo-devops-sre
+  pmo-portfolio-manager
+  pmo-principal-engineer
   pmo-process-designer
+  pmo-product-owner
   pmo-program-coordinator
+  pmo-program-manager
+  pmo-project-manager
   pmo-qa-auditor
+  pmo-qa-lead
+  pmo-release-train-engineer
+  pmo-scrum-master
   pmo-skill-editor
   pmo-skill-refiner
+  pmo-software-engineer
   pmo-technical-analyst
   pmo-technical-program-manager
   ppm-agent

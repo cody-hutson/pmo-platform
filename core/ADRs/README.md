@@ -151,6 +151,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP for the Layer-1 contract (additive doc/governance + a warn-mode check); MODERATE for the operator-side Layer-2 memory eviction.
 **File:** [ADR-029-memory-corpus-ssot-boundary.md](ADR-029-memory-corpus-ssot-boundary.md)
 
+### ADR-033 — Methodology-conditional skill activation: dormant-under-non-matching-delivery-approach + release-side methodology-row sourcing
+
+**Status:** Accepted (operator-adopted at the v2.11 / `04-ROLE-delivery-coverage` Collective Review scope-lock; authored at Stage 6 per the ADR-007 / ADR-028 / ADR-029 precedent). Consolidates CR-3 (parameterization sourcing) + CR-4 (activation convention) — two facets of one decision. Renumbered from a branch-local ADR-031 — main's autonomy-ceiling ADR claimed 031 during this release's engineering window; `check-adr-numbers.py` confirms 033 as the next gap-free number after 032.
+**Decision:** A methodology-conditional role-Specialist gates on `delivery_approach` — ACTIVE when the configured approach matches its methodology, DORMANT with a non-fire notice otherwise, dormant-with-`[ASSUMPTION – CONFIRM]` when the field is absent (never a silent default-fire); dormant-under-non-match is correct behavior. The active skill sources its archetype parameterization from the canonical `methodology-archetype-matrix.md` row (release-side), NOT by adding a column to the high-blast-radius `_shared/five-model-variations.md`. First consumer: `pmo-release-train-engineer` (SAFe).
+**Reversibility:** CHEAP at ship, trending MODERATE as future methodology-conditional skills adopt it.
+**File:** [ADR-033-methodology-conditional-skill-activation.md](ADR-033-methodology-conditional-skill-activation.md)
+
 ## Distribution-architecture ADRs
 
 ### ADR-032 — Release-corpus public-vs-instance split: ship the capability, keep per-release content operator-instance

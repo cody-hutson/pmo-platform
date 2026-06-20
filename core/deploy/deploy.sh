@@ -35,8 +35,15 @@ OPERATIONS_SKILLS=(
   delivery-engine
   file-router
   intake-desk
+  pmo-business-analyst
   pmo-process-designer
+  pmo-portfolio-manager
+  pmo-product-owner
   pmo-program-coordinator
+  pmo-program-manager
+  pmo-project-manager
+  pmo-release-train-engineer
+  pmo-scrum-master
   pmo-technical-analyst
   pmo-technical-program-manager
   ppm-agent
@@ -48,8 +55,13 @@ OPERATIONS_SKILLS=(
 RELEASE_SKILLS=(
   build-reviewer
   implementation-planner
+  pmo-architect
+  pmo-devops-sre
+  pmo-principal-engineer
+  pmo-qa-lead
   pmo-skill-editor
   pmo-skill-refiner
+  pmo-software-engineer
   release-executor
   release-planner
 )

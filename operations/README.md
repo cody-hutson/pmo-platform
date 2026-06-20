@@ -84,7 +84,7 @@ Re-verify at any SHA by running [`../core/deploy/tools/cross-module-audit.sh`](.
 
 ## Module contents
 
-This module hosts the operations skills (`artifact-generator`, `change-management`, `comms-writer`, `daily-status`, `delivery-engine`, `file-router`, `intake-desk`, `pmo-process-designer`, `pmo-technical-analyst`, `ppm-agent`, `project-initiator`, `tracker-manager`, `weekly-status-rollup`) and the operations governance file (`operations/OPERATIONS.md`).
+This module hosts the operations skills — the canonical roster is the `OPERATIONS_SKILLS` array in [`core/deploy/deploy.sh`](../core/deploy/deploy.sh), which `deploy.sh --check` Check 5 asserts against the on-disk `operations/skills/` directories (so the roster cannot silently drift) — and the operations governance file (`operations/OPERATIONS.md`).
 
 ## Future-Extraction Readiness
 
