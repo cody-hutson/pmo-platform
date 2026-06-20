@@ -17,6 +17,15 @@
 # referenced as quoted shell vars (never interpolated into run:) per the Actions
 # injection-hardening guidance.
 name: Commit-message depersonalization
+
+# gate-efficacy: posture=required  enforcement=branch-protection:"Commit-message depersonalization gate"  always-reports=yes
+#   invariant: no commit message in the PR range carries personal data (a generic
+#              personal-email domain, a macOS home path, or a suffixed private-repo
+#              slug) in its body, trailers, or author/committer identity — asserted
+#              by scanning every commit message in the base..head range.
+#   falsification: add a commit whose trailer co-author is an @gmail.com address ->
+#                  this gate turns red (redacted) on that commit.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 on:
   pull_request:
     branches: [main]

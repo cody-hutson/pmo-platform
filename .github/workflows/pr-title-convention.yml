@@ -1,5 +1,14 @@
 name: PR title convention
 
+# gate-efficacy: posture=advisory  enforcement=warn-mode-initial  always-reports=yes
+#   invariant: the PR title follows "type(scope): summary (#N)" grammar with a
+#              reference-only #N, asserted by parsing the title string.
+#   falsification: open a PR titled "fixed the thing" (no type/scope) -> reported
+#                  in the run summary (warn-mode; does not block until flip-to-enforce).
+# Note: ships WARN-MODE-INITIAL per the title-convention transition window (the
+# legacy bare "vX.Y: ..." shorthand is given a grace period), so posture is
+# advisory until the operator flips it to required. (Per gate-efficacy-standard.md (b).)
+
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize, ready_for_review]

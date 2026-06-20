@@ -67,6 +67,30 @@ resolve_skill_module() {
   esac
 }
 
+# Rebuild-stable content-manifest hash of a .skill archive (BYTE-ALIGNED with
+# deploy.sh skill_content_hash). Per the gate-efficacy standard Requirement (a):
+# the .skill envelope embeds per-entry mtimes + member ordering, so a raw archive
+# hash is NOT rebuild-stable. Hash a canonical manifest of the CONTENT instead:
+# per member "<sha256-of-bytes>  <arcname>", sorted by arcname under LC_ALL=C,
+# then SHA-256 of that blob. This is the baseline Check 7 compares a staged
+# rebuild against. Portable primitives only (shasum -a 256, unzip, find, sort).
+skill_content_hash() {
+  local pkg="$1" tmp rc=0
+  [[ -f "$pkg" ]] || { echo ""; return 1; }
+  tmp="$(mktemp -d)" || { echo ""; return 1; }
+  if ! unzip -q -o "$pkg" -d "$tmp" >/dev/null 2>&1; then
+    rm -rf "$tmp"; echo ""; return 1
+  fi
+  (
+    cd "$tmp" || exit 1
+    find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+      printf '%s  %s\n' "$(shasum -a 256 "$f" | cut -d' ' -f1)" "${f#./}"
+    done
+  ) | shasum -a 256 | cut -d' ' -f1 || rc=1
+  rm -rf "$tmp"
+  return $rc
+}
+
 # Build a single skill's .skill package
 build_one() {
   local skill="$1"
@@ -114,9 +138,28 @@ build_one() {
     cd release/skills/pmo-skill-refiner
     python3 -m scripts.package_skill "$tmp_dir/$skill" "$REPO_ROOT/packages/"
   ) || return 1
+
+  # Emit the committed content baseline sidecar (gate-efficacy Requirement (a)):
+  # the rebuild-stable content-manifest hash of the just-built package. Check 7
+  # compares a staged rebuild's content hash against this committed value, so the
+  # sidecar MUST be committed alongside the .skill. A bare hash (no filename) so
+  # it is path-portable.
+  local built_pkg="$REPO_ROOT/packages/${skill}.skill"
+  local content_hash
+  content_hash=$(skill_content_hash "$built_pkg")
+  if [[ -z "$content_hash" ]]; then
+    echo "ERROR: could not compute content hash for $built_pkg (sidecar not written)" >&2
+    return 1
+  fi
+  printf '%s\n' "$content_hash" > "$REPO_ROOT/packages/${skill}.skill.sha256"
 }
 
-# Default skill list (all 21 invocation skills; canary excluded from packaging)
+# Default skill list — the full deployed roster (canary excluded from packaging).
+# MUST mirror deploy.sh's per-module arrays (OPERATIONS_SKILLS + RELEASE_SKILLS +
+# CORE_SKILLS) so every package that Check 7 iterates gets a rebuilt package AND
+# a regenerated content-baseline sidecar. Check 5 asserts the deploy.sh arrays
+# match the on-disk skill dirs; this list is the package-build projection of that
+# same roster.
 ALL_SKILLS=(
   artifact-generator
   artifact-lint
@@ -128,11 +171,14 @@ ALL_SKILLS=(
   eval-writer
   file-router
   implementation-planner
+  intake-desk
   pmo-process-designer
+  pmo-program-coordinator
   pmo-qa-auditor
   pmo-skill-editor
   pmo-skill-refiner
   pmo-technical-analyst
+  pmo-technical-program-manager
   ppm-agent
   project-initiator
   prompt-builder

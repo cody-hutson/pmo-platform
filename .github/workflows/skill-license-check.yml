@@ -1,5 +1,13 @@
 name: Skill license check
 
+# gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: every .skill package carries the canonical BSL LICENSE member —
+#              asserted by check-skill-licenses.py over the changed packages.
+#   falsification: on a PR touching packages/**, strip the LICENSE from a .skill ->
+#                  this gate fails; on a PR touching no package path it is skipped
+#                  and absence is treated as pass.
+# Path-filtered (paths: packages/**), so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
+
 on:
   pull_request:
     paths:

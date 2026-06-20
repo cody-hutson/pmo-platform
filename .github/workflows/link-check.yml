@@ -1,5 +1,12 @@
 name: Doc-link check
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Cross-reference integrity (governance + reference + rules + skills)"  always-reports=yes
+#   invariant: every internal markdown link in the governance/reference/rules/skill
+#              corpus resolves (target file + anchor) — asserted by the shared
+#              check-doc-links.py primitive over the same --target-paths as Check 14.
+#   falsification: add "[x](does-not-exist.md)" to a governance doc -> this gate red.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 # PR-time cross-reference-integrity gate (issue #169) — promotes the deploy-time
 # Check-14 primitive (core/deploy/tools/check-doc-links.py) to a PR gate, so a
 # broken outbound markdown reference in the governance / reference / rules-mirror
