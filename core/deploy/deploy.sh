@@ -1969,7 +1969,7 @@ cmd_check() {
   #                  source -> this check WARNs (advisory) / FAILS (post-flip).
   #
   # Semantics per Spec Surface 5.4 + ADR-008 Consequence 2:
-  #   in-repo source `core/rules/<file>.md` OR `release/rules/release-process.md`
+  #   in-repo source `core/rules/<file>.md` OR `release/governance/release-process.md`
   #   ↔ workspace mirror `~/.claude/rules/<file>.md`
   #   (source-mirrors-to-workspace; uni-directional)
   #
@@ -1987,14 +1987,23 @@ cmd_check() {
       "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md"
       "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md"
       "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md"
-      "release/rules/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
+      "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
       "core/governance/OPERATIONS.md:operations/OPERATIONS.md"
     )
     for pair in "${MIRROR_PAIRS[@]}"; do
       local c9_left="${pair%%:*}"
       local c9_right="${pair##*:}"
-      if [[ ! -f "$c9_left" ]] || [[ ! -f "$c9_right" ]]; then
-        log "  SKIP:  $c9_left ↔ $c9_right (one or both missing)"
+      # A declared SOURCE (left, in-repo) that does not exist is a config error:
+      # a typo'd or moved path silently disables the pair's enforcement (the
+      # #1104 failure class). WARN on it — never silent-SKIP. A missing MIRROR
+      # (right, ~/.claude/rules/) is legitimately operator-instance-absent in
+      # the public repo / CI / a fresh checkout, so that stays a clean SKIP.
+      if [[ ! -f "$c9_left" ]]; then
+        flag_warn_or_issue "mirror-sync" "$c9_left: declared MIRROR_PAIRS source does not exist (typo or moved path — pair cannot be enforced)"
+        continue
+      fi
+      if [[ ! -f "$c9_right" ]]; then
+        log "  SKIP:  $c9_left ↔ $c9_right (workspace mirror absent — operator-instance)"
         continue
       fi
       # The OPERATIONS.md dual-write pair lives at two repo depths
