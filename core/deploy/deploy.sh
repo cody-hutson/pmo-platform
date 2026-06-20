@@ -1286,19 +1286,29 @@ cmd_deploy() {
 
       # Supplementary content (pmo-skill-refiner has agents/, scripts/, eval-viewer/, assets/, references/; prompt-builder has references/)
       if is_supplementary "$skill"; then
-        local supp_failures=false
+        # #984: capture cp stderr and surface the root cause + remediation on a
+        # read-only / undeletable install target — the same report-the-cause
+        # discipline #88 introduced for the references/ mirror (no opaque
+        # "some files failed to copy"). Happy path is byte-identical.
+        local supp_failures=false supp_cause="" supp_failed_item=""
         for item in "$source_dir"/*; do
-          local item_name
+          local item_name cp_err cp_rc=0
           item_name=$(basename "$item")
           [[ "$item_name" == "SKILL.md" ]] && continue  # Already deployed above
           if [[ -d "$item" ]]; then
-            cp -R "$item" "$INSTALL_PATH/$skill/" 2>/dev/null || supp_failures=true
+            cp_err=$(cp -R "$item" "$INSTALL_PATH/$skill/" 2>&1) && cp_rc=0 || cp_rc=$?
           elif [[ -f "$item" ]]; then
-            cp "$item" "$INSTALL_PATH/$skill/" 2>/dev/null || supp_failures=true
+            cp_err=$(cp "$item" "$INSTALL_PATH/$skill/" 2>&1) && cp_rc=0 || cp_rc=$?
+          fi
+          if [[ $cp_rc -ne 0 ]]; then
+            supp_failures=true
+            [[ -z "$supp_cause" ]] && { supp_cause="${cp_err:-cp returned $cp_rc}"; supp_failed_item="$item_name"; }
           fi
         done
         if [[ "$supp_failures" == "true" ]]; then
-          log "  WARNING:  $skill — some supplementary files failed to copy"
+          log "  WARNING:  $skill — supplementary content copy failed (first failure: $supp_failed_item)"
+          log "            cause: ${supp_cause}"
+          log "            remediation: chmod -R u+w \"$INSTALL_PATH/$skill\" && ./deploy.sh --deploy $skill  (read-only install target; derived mirror — safe to chmod)"
         else
           log "  Deployed: $skill supplementary content ($(ls -d "$source_dir"/*/ 2>/dev/null | wc -l | tr -d ' ') dirs)"
         fi
