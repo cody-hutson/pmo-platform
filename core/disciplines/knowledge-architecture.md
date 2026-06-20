@@ -3,10 +3,11 @@ title: Knowledge Architecture & Taxonomy
 purpose: 5-tier knowledge classification + the orthogonal universality/authorship axes + the placement model (incl. the parameterization seam) + a bounded local-context leakage register for the PMO platform corpus
 type: reference
 reversibility: CHEAP / Confidence HIGH
-consumers: "corpus-curation.md, applicability-framework.md, km-protocols.md (forward-only — relocated via 2026-05-19 capacity-audit merge)"
+consumers: "corpus-curation.md, applicability-framework.md, km-protocols.md (forward-only — relocated via 2026-05-19 capacity-audit merge); CLAUDE.md §Universal Preferences (Single-source-of-truth for knowledge); memory-corpus-drift-audit.md; deploy.sh Check 36"
 glossary_anchor: "umbrella body Glossary (canonical knowledge-tier terms — verbatim source for §1)"
 ---
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 
 # Knowledge Architecture & Taxonomy
 
@@ -150,3 +151,71 @@ The model's load-bearing concept, consumed by . The **K1↔K2/K3 boundary** is e
 | Universal-Protocol vs Localized-Context separation (audit + standard) | The audit + enforcement standard **consumes** this doc's universality axis. This doc = the *model*; the standard = the *audit + enforcement standard* on it. **Out of scope here.** | **Do NOT action.** Boundary stated to prevent future duplication. |
 | ** / [`operating-model.md`](../disciplines/operating-model.md)** — K2 model home | This doc's placement model assigns the K2 *model* to `operating-model.md`; K2 *values* are CLAUDE.md parameters. | Compose, do not restate. |
 | **[`terminology-glossary.md`](../specs/terminology-glossary.md)** — disjoint methodology glossary | Carries Area/Domain/Function/Process/Stage/WBS/Scope — **no** knowledge-tier terms. No collision, no redefinition risk. | Cross-reference; redefine nothing. |
+
+---
+
+## §6 Memory↔corpus boundary {#memory-corpus-boundary}
+
+This section names **which surface is the source of truth (SSOT) when a fact could appear in two places** — the auto-memory store or the codified corpus — and **how knowledge moves from memory into the corpus reliably**. It is a pure consumer of [§1](#five-tier-classification) and [§3](#placement-model): it adds no taxonomy. §3 owns *where each tier lives*; §6 owns *which surface is authoritative when a fact could live in two, and how it migrates*. This respects single-home discipline — the SSOT assignment below is a projection of the §3 "Authoritative home" column onto the auto-memory store specifically, and the routing test is the existing §1 Q1 universality classifier.
+
+Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a different org/project ⇒ K1 ⇒ corpus-SSOT; otherwise it is K2–K5 contextual and its SSOT is the placement-model home in §3. The auto-memory store is the §3 home for K5-tacit only.
+
+**Position in the memory architecture.** This boundary is the **Knowledge cut** of the platform's four-type memory model — *Work* (active projects/tasks → operational state), *Knowledge* (domain expertise, frameworks → codified, corpus-SSOT), *People* (contacts/relationships → a net-new surface), and *Learning* (patterns/what-works → tacit/situated K5, memory-store-SSOT). Codified Knowledge is corpus-SSOT; the Learning class is memory-store-SSOT; the encode-and-evict lifecycle below is the *graduation* path between them. The architecture, the rejected alternatives, and the extensibility to the other three types are recorded in [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md); the whole model slots into the platform's broader cross-surface memory-architecture epic.
+
+<!-- repo-integrity: allow-memory-ref -->
+
+### The two-tier SSOT assignment {#two-tier-ssot}
+
+| Knowledge class | Tier | SSOT surface | May the auto-memory store hold it? |
+|---|---|---|---|
+| Local / situated — operator identity & attribution, accounts/systems, instance projects, local-machine config, corrections-to-the-agent | K5 (+ operator-config) | **auto-memory store** (`~/.claude/memory/`) for tacit/corrective K5; `operator.toml` + `CLAUDE.md §Workspace Owner` + `projects/` for K2/K3/K4 config/state | **K5 tacit: YES (SSOT).** K2/K3/K4: NO — their SSOT is the operator-local toolkit home; a memory copy is mis-homed. |
+| Toolkit-encodeable / codified — general disciplines, reusable references, gate/CI behavior, methodology | K1 | **corpus** (`core/`, `release/skills/*/SKILL.md` + `references/`, `core/rules/`, `CLAUDE.md`) | **Only as a temporary eviction-pointer** tied to a live encode issue; the rule TEXT lives in the corpus, never as a full copy in memory. |
+
+### The no-shadow-SSOT invariant {#no-shadow-ssot}
+
+> **No-shadow-SSOT invariant.** A fact has exactly one source of truth. The auto-memory store is the SSOT for tacit/situated K5 knowledge (and the staging surface for a temporary eviction-pointer); it is **never** a second source of truth for knowledge whose SSOT is the codified corpus or an operator-local toolkit home. A memory entry that holds a full copy of a codified rule is a *shadow SSOT* — it can drift from the corpus, and an agent reading the memory copy lets memory silently override governance. Shadow SSOTs are prohibited: codified knowledge appears in memory only as a pointer to its corpus home (a temporary eviction-pointer while an encode issue is in flight, or a durable cross-reference), never as a duplicate of the governed text.
+
+### Encode-and-evict lifecycle {#encode-and-evict}
+
+Knowledge moves from the auto-memory store into the corpus through four phases. Ordering is **structurally enforced** — the VERIFY-CORPUS gate makes corpus-presence a *precondition of eviction*, so encode-then-evict cannot invert:
+
+```
+ENCODE        the codification issue's PR writes the rule text into its corpus home
+              (Layer-1, git) and lands on main.  [Stage 6–12 of the encode issue's release]
+   │
+ARCHIVE       at the encode issue's Stage-13 Phase B-OPS, the full memory-file body(ies)
+              + index line(s) + any ledger row are pasted verbatim into the Stage-13
+              sub-task comment (recoverable record) — BEFORE any deletion.
+   │
+VERIFY-CORPUS confirm the corpus home actually contains the rule (grep the encoded
+              heading/phrase on main).  Gate: eviction does NOT proceed if the corpus
+              write is absent — this is the guard against "issue closed before corpus
+              write" content-loss.
+   │
+EVICT         move the memory file(s) to Trash (CHEAP-recoverable, not rm), remove the
+              MEMORY.md index line(s), retire the eviction-pointer/ledger row.
+              Post-state verification: file-absence + index-absence + pointer-absence.
+```
+
+**Why encode-then-evict is mandatory.** A naive "issue CLOSED → delete memory" loses content when the close preceded the corpus write — a close-keyword can fire on a PR that did not actually carry the encoding. The VERIFY-CORPUS gate makes the corpus-presence check a precondition of eviction, so the ordering cannot invert; the ARCHIVE-first step makes even an erroneous eviction CHEAP-reversible.
+
+### Trigger + audit {#trigger-and-audit}
+
+Two surfaces with distinct roles (a deploy check validates — it must never mutate the operator memory store; the operational-deploy step executes under operator authorization):
+
+- **PRIMARY executor = Stage-13 `Phase B-OPS` operational-deploy step.** The encode issue's release plan carries an operational-deployment manifest with the memory-eviction entries; Phase B-OPS executes ARCHIVE → VERIFY-CORPUS → EVICT under operator authorization. See [`stage-13-close.md` §5 Phase B-OPS](../../release/references/pipeline/stage-13-close.md) (gated by `G-CL5`, the operational-deployment-manifest-executed gate).
+- **STANDING BACKSTOP = `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`, warn-mode-initial).** The non-skippable standing audit that catches what a forgotten manifest entry misses. It runs every `./deploy.sh --check`, **deletes nothing**, and emits the three drift classes as warnings regardless of whether anyone remembered the Phase B-OPS entry. The full human-runnable procedure is [`memory-corpus-drift-audit.md`](../../release/references/how-to/memory-corpus-drift-audit.md).
+
+This is the same shape as the skill↔reference single-source contract (a single-source executor + an enforced-rebuild deploy check) — applied here to the memory↔corpus surface.
+
+### The three drift classes {#drift-classes}
+
+The drift audit treats issue-number identity as **fragile** (re-versioning renumbers issues): a dead reference is detected by **reference-resolution-failure**, **never** by digit-match (e.g. never "is this issue number below the current max"). Only a resolution probe (`gh issue view N`) is load-bearing.
+
+| Class | Definition | Detection (reproducible) |
+|---|---|---|
+| **deployed-but-not-evicted** | a memory's tied issue is CLOSED, corpus encoding present on main, but the memory file still exists | for each memory with a `#N` tie → `gh issue view N --json state` == CLOSED **AND** corpus grep of the encoded phrase succeeds **AND** memory file still present ⇒ flag |
+| **dead-ref tie** | a memory's eviction-pointer cites an issue # that no longer resolves (re-versioning renumbered it away) | for each `#N` tie → `gh issue view N` returns **NOT_FOUND / resolution-failure** ⇒ flag. NEVER digit-match — only a resolution probe is load-bearing, per the issue-body-renumber-rot lesson |
+| **untied-encodeable** | a memory the Q1 classifier marks K1-encodeable but carrying no issue tie and no corpus pointer | heuristic surface: memory whose body matches encodeable signatures (discipline/reference/methodology) with no `#N` and no corpus-path pointer ⇒ flag for operator routing (file an encode issue) |
+
+The decision record for this boundary — the rejected memory-as-cache alternative, the Option-C trigger choice, and the encode-then-evict ordering guarantee — is [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md).

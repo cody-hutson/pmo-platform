@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Ticket Information Architecture
 
 Defines how GitHub Issues are structured, read, and written by agents across all 13 pipeline stages. This is the information model that ticket lifecycle, system configuration, field lifecycle, and I/O contracts implement against.
@@ -68,6 +69,12 @@ The issue body is the single authoritative record of what this issue IS. It is s
 - Execution evidence — comments, linked to specific runs
 - Discussion and back-and-forth — comments (conversation thread)
 - Temporal observations — comments (timestamped naturally)
+
+> **See also:** the Solutioning Pre-Read convention
+> ([`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md))
+> relies on this rule — a Stage-5 advisory pre-read posted on the parent issue
+> is a stage-review comment (non-binding context), never body content; the issue
+> body stays the sole authoritative contract.
 
 ### Dependencies Field — Typed Schema (PMBOK CPM convention)
 

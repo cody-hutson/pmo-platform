@@ -90,6 +90,8 @@ B-OPS2 File propagation: execute per mechanism (S-2-copy: `cp source target`; co
 B-OPS3 Schema migration: execute per manifest specification (add fields, update templates in Layer 2 artifacts). Record changes.
 B-OPS4 Deployment verification: diff-based for file propagation (zero diff = PASS), content assertion for schema migration (target contains expected elements). Append results to release plan Verification Evidence.
 
+Memory-eviction manifest entries are VERIFY-CORPUS-gated per [`knowledge-architecture.md` §6 Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md#memory-corpus-boundary): eviction (ARCHIVE → VERIFY-CORPUS → EVICT) does NOT proceed until the corpus encoding is confirmed present on `main`, so a memory is never evicted before its content lands (encode-then-evict).
+
 Concurrency: Cowork opens for B-OPS2/B-OPS3, closes before C1. Per operations-bridge.md.
 
 **Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations to main-tracked release-corpus governance files (`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `release/releases/RELEASE_INDEX.md` new row; `release/releases/RELEASE_DIGEST.md` new entry; `release/releases/notes/vX.Y_RELEASE_NOTES.md` new file; `CHANGELOG.md` at repo root — Surface 2 of Layer-1 dual-write) ship via a single Stage 13 chore PR — never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the Stage 13 release-corpus updates into one atomic main-landing.

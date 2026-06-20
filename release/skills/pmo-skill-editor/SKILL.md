@@ -475,6 +475,8 @@ manifest must name it. Mode B must cover it. "I didn't check" is not acceptable.
 
 **Editor-audit-trail trailer required on migrated-skill commits.** Every Mode A commit touching a SKILL.md whose frontmatter carries `skill_discipline_migrated_v10_2: true` must include a `Skill-Editor-Audit-Trail:` trailer in the commit message body. `deploy.sh --check` Check 10 inspects this trailer on the last non-merge commit touching the SKILL.md; missing trailer produces a warn-mode finding (warn/enforce mode per `core/hooks/deploy-check.mode`). Applies to every Mode A commit touching a migrated SKILL.md.
 
+**Never self-create the `.editor-session` sentinel to satisfy the Gate-2 hook.** The `block-skill-direct-edit` PreToolUse hook (Gate 2) looks for a `<skill-dir>/.editor-session` marker before allowing a Write/Edit to a migrated SKILL.md. That marker exists to prove a genuine `pmo-skill-editor` session is driving the edit — fabricating it to clear the gate is a bypass, and the Auto Mode classifier flags a self-created sentinel as exactly that. The mode determines the correct response: when the hook is in **warn-mode** it logs and does not block, so proceed with the edit normally (no sentinel needed); when the hook is in **enforce-mode** and blocks, do NOT synthesize a sentinel — escalate via the Hook-Blocked → User-Side Handoff convention (cite the hook + rule ID, present the user-side path, state the post-execution verification) and leave the edit undone until cleared. A hook block is a signal to route the work correctly, never a thing to route around.
+
 **Description character limit: 1024.** Validate before packaging. This caused a real
 packaging failure in Phase 4 (a documented friction-log entry). Catch at edit time.
 
