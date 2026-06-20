@@ -989,21 +989,25 @@ detect_changed_skills() {
   while IFS= read -r skill; do
     [[ -n "$skill" ]] && CHANGED_SKILLS+=("$skill")
   done < <(git diff --name-only "$diff_base"..HEAD -- 'operations/skills/' 'release/skills/' 'core/skills/' 2>/dev/null | \
-    sed -n 's|\(operations\|release\|core\)/skills/\([^/]*\)/.*|\2|p' | sort -u)
+    sed -n 's|[^/]*/skills/\([^/]*\)/.*|\1|p' | sort -u)
 
   # Changed packages — `packages/` at v2 root (no module nesting per the v2 root layout).
+  # The `\.skill$` anchor is load-bearing: it matches `<name>.skill` only at end-of-name,
+  # so the content-hash sidecars `<name>.skill.sha256` (Check 7 baselines) are NOT mis-parsed
+  # into phantom `<name>.sha256` package names. (Unanchored, `packages/foo.skill.sha256`
+  # yielded `foo.sha256` → a copy of the non-existent `foo.sha256.skill` failed the deploy.)
   CHANGED_PACKAGES=()
   while IFS= read -r pkg; do
     [[ -n "$pkg" ]] && CHANGED_PACKAGES+=("$pkg")
   done < <(git diff --name-only "$diff_base"..HEAD -- 'packages/' 2>/dev/null | \
-    sed -n 's|packages/\(.*\)\.skill|\1|p' | sort -u)
+    sed -n 's|packages/\(.*\)\.skill$|\1|p' | sort -u)
 
   # E-03: Deleted skills (module-aware capture across the 3 subtrees).
   DELETED_SKILLS=()
   while IFS= read -r skill; do
     [[ -n "$skill" ]] && DELETED_SKILLS+=("$skill")
   done < <(git diff --diff-filter=D --name-only "$diff_base"..HEAD -- 'operations/skills/' 'release/skills/' 'core/skills/' 2>/dev/null | \
-    sed -n 's|\(operations\|release\|core\)/skills/\([^/]*\)/.*|\2|p' | sort -u)
+    sed -n 's|[^/]*/skills/\([^/]*\)/.*|\1|p' | sort -u)
 
   # Changed harness artifacts (harness/ does NOT exist at v2 root —
   # account-switcher extracts to its own repo at Phase 3). The diff
