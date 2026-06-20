@@ -28,6 +28,7 @@ set -euo pipefail
 #                        deployed-vs-"custom" off-by-one.)
 OPERATIONS_SKILLS=(
   artifact-generator
+  artifact-lint
   change-management
   comms-writer
   daily-status

@@ -119,6 +119,7 @@ build_one() {
 # Default skill list (all 21 invocation skills; canary excluded from packaging)
 ALL_SKILLS=(
   artifact-generator
+  artifact-lint
   build-reviewer
   change-management
   comms-writer
