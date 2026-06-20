@@ -130,6 +130,15 @@ QA Pass 1 → Route findings per lanes → Lane actions executed (Lane 2 trigger
 
 **Phase E — Human Review (Tier 3):** 3 verdicts — ACCEPT (all AC met, fitness confirmed), CONDITIONAL ACCEPT (minor gaps with documented rationale), REJECT (AC gaps requiring Engineering rework) / HOLD (scope question requiring Planning review). For each finding, apply the **Finding Disposition Decision Framework** to render disposition (fix-now / defer / accept); a CONDITIONAL ACCEPT covering a `NOT MET` or AC-blocking `PARTIAL` criterion MUST carry an Operator Override Record per that framework's Step 0.
 
+##### Phase E3 — REJECT/HOLD upstream re-scope routing (requirements-clarity vs implementation)
+
+A Phase E REJECT/HOLD splits on whether the gap is an **implementation defect** or a **requirements-clarity / premise problem** — the two route to different upstream stages:
+
+- **Implementation REJECT** (the AC is sound; the build does not meet it) → **Engineering rework** via the existing Lane 2 → QA Return to Dev Testing path (§ Phase C). Release-state: HOLD until the rework lands and re-review passes.
+- **Requirements-clarity REJECT / HOLD** (the AC itself is stale, ambiguous, subsumed, or premise-invalid — the scope question Phase E names as HOLD) → the **Tier 0 — Premise Rejection** protocol, NOT Engineering. Per [`release/governance/release-process.md` § Inter-Stage Feedback Protocol → Tier 0 — Premise Rejection](../../governance/release-process.md), the operator chooses among **(A) Return to Triage**, **(B) Override + proceed with deviation log**, or **(C) Defer to next release**; the underlying finding is the **C3 (should-be-challenged)** classification per [`triage-design-rereview.md`](../standards/triage-design-rereview.md) § 3. **Artifact on REJECT:** the spoke posts the **Tier 0 escalation block** ([`triage-design-rereview.md`](../standards/triage-design-rereview.md) § 9 template) on the **parent issue** (not the sub-task) and HOLDS the sub-task open; **re-entry** is Triage re-running with the re-review evidence as input (it may re-bundle into the same Milestone or be excluded), which re-enters this pipeline at Stage 4. This is the WHEN/WHO routing for a premise-level REJECT, distinct from the Finding Disposition Decision Framework above (which keys the fix-now/defer/accept disposition of an in-scope NOT-MET AC).
+
+**Release-state on either REJECT = HOLD until resolved.** This subsection **cites** the Tier-0 protocol and the disposition framework; it does not restate them (duplicate-source-discipline) — the authoritative routing options, escalation-block template, and re-entry mechanics live in `release-process.md` § Inter-Stage Feedback Protocol and `triage-design-rereview.md` §§ 3/9.
+
 **Ticket lifecycle:** Claim: set Stage→8-QATesting. Execute: A-E. Resolve: post acceptance report, route per verdict. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md).
 
 **Framework dimensions touched:** Handoff (QA return to DT protocol); Tracking (acceptance sign-off). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
