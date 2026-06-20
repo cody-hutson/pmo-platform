@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.05] - 2026-06-19
+
+A cluster of working agreements that had guided the platform's agents from session to session now live in the platform's own rules, and a new architecture decision defines how knowledge moves from an agent's memory into the durable corpus — and how the redundant copy is cleaned up once it lands.
+
+[Full notes](release/releases/notes/v2.05_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.05)
+
 ## [v2.03] - 2026-06-18
 
 A repeatable factory for building role-scoped agent skills from a single structured "feeding document" now exists end to end, and the first two role agents built on it ship: a Technical Program Manager and a Program Coordinator. Two skill-build cards; everything is additive — no existing skill, setting, or behaviour is removed or renamed.
