@@ -119,6 +119,14 @@ operator_instance_external_sync_snapshot_path = ""
 # The producer side of the C3->C4 sweep-digest/heartbeat contract.
 operator_instance_external_sync_runlog_path = ""
 
+# Resolves <OPERATOR_INSTANCE_INTAKE_SWEEP_RUNLOG_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/ambient-intake/run-log.jsonl
+# Consumer: the Path-A scheduled intake sweep (core/standards/c2-intake-sweep-path-a.md §5)
+# — append-only JSONL run-record (one per sweep; carries sweep="intake-path-a").
+# Field-aligned to the Path-B run-record; the producer side of the C2->C4 sweep-digest/
+# heartbeat contract. A distinct file so the two sweeps' records do not interleave.
+operator_instance_intake_sweep_runlog_path = ""
+
 [adapters]
 # Host-adapter selectors — the four external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,
