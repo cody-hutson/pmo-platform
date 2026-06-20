@@ -36,6 +36,7 @@ OPERATIONS_SKILLS=(
   file-router
   intake-desk
   pmo-business-analyst
+  pmo-knowledge-manager
   pmo-process-designer
   pmo-portfolio-manager
   pmo-product-owner

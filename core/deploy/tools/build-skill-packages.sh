@@ -175,6 +175,7 @@ ALL_SKILLS=(
   pmo-architect
   pmo-business-analyst
   pmo-devops-sre
+  pmo-knowledge-manager
   pmo-portfolio-manager
   pmo-principal-engineer
   pmo-process-designer
