@@ -6,7 +6,6 @@ version: v1.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
-<!-- repo-integrity: allow-issue-ref -->
 
 # Artifact Lint
 
@@ -44,7 +43,7 @@ This skill operates at **Autonomy Tier 1 — Recommend** per `core/specs/autonom
 - `09-Prototype/` — prototype scratch space; artifacts here are intentionally exploratory and are NOT part of the governed generated surface.
 - `_templates/` — template source files (e.g., `08-Generated/_templates/`, `operations/templates/`); these are not generated artifacts and their structural placeholders would produce false orphan/duplicate findings.
 
-The exclusion is honored on every run. **Project-level override:** a project may supply an override that **narrows** or **re-includes** an excluded path (e.g., a project that wants `09-Prototype/` scanned read-only for a one-off audit). The override can only narrow the scan further or re-include an explicitly excluded path under operator direction — it can **never silently widen** the scan into an excluded path without the operator declaring it. Absent an override, `09-Prototype/` and `_templates/` are never scanned. The `_archived/` folder (e.g., `08-Generated/_archived/`) is scanned **read-only** for edge-case 7 (an archived artifact still cited as a live parent) and never receives a move/delete recommendation as a hard target — the archive convention is unformalized (tracked under the archive-convention work, bare `#370`/`#201`), so `_archived/` is a read-only signal source, not a destination the lint writes to.
+The exclusion is honored on every run. **Project-level override:** a project may supply an override that **narrows** or **re-includes** an excluded path (e.g., a project that wants `09-Prototype/` scanned read-only for a one-off audit). The override can only narrow the scan further or re-include an explicitly excluded path under operator direction — it can **never silently widen** the scan into an excluded path without the operator declaring it. Absent an override, `09-Prototype/` and `_templates/` are never scanned. The `_archived/` folder (e.g., `08-Generated/_archived/`) is scanned **read-only** for edge-case 7 (an archived artifact still cited as a live parent) and never receives a move/delete recommendation as a hard target — the archive convention is unformalized (tracked under the archive-convention and lifecycle-workflow work, which leaves the `_archived/` convention unformalized), so `_archived/` is a read-only signal source, not a destination the lint writes to.
 
 ## The Lineage Fields This Lint Reads
 
@@ -102,7 +101,7 @@ The sibling-duplicate check (Check 2) keys on a **strict-match composite key**:
 key = parent_artifact + artifact_type + sibling_topic   (sibling_topic compared case-insensitively)
 ```
 
-Two artifacts are strict siblings (duplicate candidates) when all three components match and neither carries a `supersedes`/`superseded_by` edge connecting them. The field is **`sibling_topic`**, NOT `topic` — the #334 reconcile aligned the schema and lifecycle-states source on `sibling_topic` (see `frontmatter-schema.md` Domain A/Domain C and `lifecycle-states-canonical.md §3.2`).
+Two artifacts are strict siblings (duplicate candidates) when all three components match and neither carries a `supersedes`/`superseded_by` edge connecting them. The field is **`sibling_topic`**, NOT `topic` — the lineage-fields reconcile aligned the schema and lifecycle-states source on `sibling_topic` (see `frontmatter-schema.md` Domain A/Domain C and `lifecycle-states-canonical.md §3.2`).
 
 **Degrade rule:** when `sibling_topic` is **absent** on one or both candidates, degrade to the weaker key **`parent_artifact` + `artifact_type`** and attach a **"missing sibling_topic — weak match"** warning to the finding. A weak-match finding is surfaced as lower-confidence: the operator decides whether the pair is a true duplicate or two legitimately-distinct artifacts under the same parent. Never auto-merge a weak match.
 
@@ -285,3 +284,7 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 - **Does not run the orphan-state cleanup script.** `cleanup-orphan-state.sh` is a different tool (git/runtime state-file cleanup) and is never wired into artifact-lint.
 - **Does not duplicate the artifact-generator Artifact Health Check.** Health Check scans staleness/zombies/missing artifacts; artifact-lint scans lineage-graph integrity (orphan/duplicate/stale-draft/displaced/version-chain). They are complementary.
 - **Does not auto-pick a conflict resolution.** It surfaces the 3-option disambiguation block; the operator chooses.
+
+### Source(s)
+- #334 — the artifact-lineage-graph split (lineage frontmatter fields wired into frontmatter-schema.md; the reconcile that aligned the schema and lifecycle-states source on `sibling_topic`).
+- #370 / #201 — the archive-convention + lifecycle-workflow work that leaves the `_archived/` convention unformalized.

@@ -1,6 +1,6 @@
 # Artifact Lint — Edge-Case Register
 
-The seven edge cases below are the boundary conditions the five checks must handle without producing a false finding or a wrong recommendation. Each names the situation, the correct handling, and which check it touches. These carry forward from the #334 Stage-5 deferrals (the 7-item edge-case register).
+The seven edge cases below are the boundary conditions the five checks must handle without producing a false finding or a wrong recommendation. Each names the situation, the correct handling, and which check it touches. These carry forward from the artifact-lineage-graph Stage-5 deferrals (the 7-item edge-case register).
 
 | # | Edge case | Touches | Correct handling |
 |---|---|---|---|
@@ -17,3 +17,6 @@ The seven edge cases below are the boundary conditions the five checks must hand
 - **Read-only resolution against excluded/archived paths.** Cases 2 and 7 require resolving a `parent_artifact` pointer *into* an excluded or archived path to avoid a false orphan — but resolution is read-only and never generates findings *about* the excluded/archived artifact itself.
 - **Never auto-resolve a break.** Cases 3 and 5 (cycle, fork) and case 4 (weak match) are always operator-decidable via the disambiguation block — the lint surfaces, the operator chooses.
 - **Skip-with-note, never silent-drop.** An artifact with neither embedded frontmatter nor a sidecar (the input-resolution tail) is listed in the report's "unscannable" section, not dropped. Case 1 (disagreement) is noted in evidence, not silently merged.
+
+### Source(s)
+- #334 — the artifact-lineage-graph split whose Stage-5 deferrals seed this 7-item edge-case register.

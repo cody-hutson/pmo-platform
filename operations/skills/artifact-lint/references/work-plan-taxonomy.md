@@ -1,4 +1,4 @@
-> [DERIVED — pending operator confirmation at Stage 9 Collective Review; the original #334 split card is deleted, this is the evidence-grounded derivation from Domain-C synthesis types + #159 plan_types].
+> [DERIVED — pending operator confirmation at Stage 9 Collective Review; the original artifact-lineage-graph split card is deleted, this is the evidence-grounded derivation from Domain-C synthesis types + the plan-type taxonomy].
 
 # Work-Plan Taxonomy — 17 Types
 
@@ -6,12 +6,12 @@ This taxonomy is the lookup table the **displaced-content check (Check 4)** uses
 
 ## Provenance (why these 17, and why DERIVED)
 
-No literal 17-row taxonomy survives in the canonical corpus — the original #334 split card that defined it was deleted (FINDING 2, Stage 5). This table is the **evidence-grounded reconstruction**:
+No literal 17-row taxonomy survives in the canonical corpus — the original artifact-lineage-graph split card that defined it was deleted (FINDING 2, Stage 5). This table is the **evidence-grounded reconstruction**:
 
 - **Canonical 10** ≡ the Domain-C synthesis `artifact_type` value set in `core/schemas/frontmatter-schema.md` (Type Taxonomy, Domain C — Synthesis): `executive-summary`, `decision-package`, `readiness-assessment`, `weekly-rollup`, `daily-status-output`, `processing-run`, `draft-communication`, `sop`, `runbook`, `analysis`. These are the artifact types the generated surface actually carries.
-- **Situational 7** ≡ the `#159` plan_type set + the waterfall/cutover rows: `plan:comms`, `plan:training`, `plan:hypercare`, `plan:cutover`, `plan:change-management`, `plan:raid`, and `phase-gate-review-package`. These are situational deliverables that appear in waterfall/cutover-governed projects.
+- **Situational 7** ≡ the plan-type taxonomy set + the waterfall/cutover rows: `plan:comms`, `plan:training`, `plan:hypercare`, `plan:cutover`, `plan:change-management`, `plan:raid`, and `phase-gate-review-package`. These are situational deliverables that appear in waterfall/cutover-governed projects.
 
-Because the table is DERIVED, the **operator confirms it at Stage 9 Collective Review** (or supplies the original #334 split). It is cheap to revise pre-merge. Until confirmed, the displaced-content check treats a canonical-home mismatch as a `[RECOMMENDED]`-tier finding (operator-decidable), not a hard assertion.
+Because the table is DERIVED, the **operator confirms it at Stage 9 Collective Review** (or supplies the original artifact-lineage-graph split). It is cheap to revise pre-merge. Until confirmed, the displaced-content check treats a canonical-home mismatch as a `[RECOMMENDED]`-tier finding (operator-decidable), not a hard assertion.
 
 ## Canonical 10 (Domain-C synthesis types)
 
@@ -28,7 +28,7 @@ Because the table is DERIVED, the **operator confirms it at Stage 9 Collective R
 | 9 | `runbook` | Synthesis (C) | an `sop` or an architecture/FDD | operational checklists | `07-Reference/` |
 | 10 | `analysis` | Synthesis (C) | source transcript(s) / export(s) | a `decision-package`; an `executive-summary` | `08-Generated/` then `01-Governance/` |
 
-## Situational 7 (#159 plan_types + waterfall/cutover)
+## Situational 7 (plan-type taxonomy + waterfall/cutover)
 
 | # | artifact_type | Tier | Expected parent_artifact class | Typical GENERATES derivative | Canonical target folder |
 |---|---|---|---|---|---|
@@ -48,3 +48,7 @@ Notes:
 - A type whose canonical home IS `08-Generated/` (rows 6) is never flagged as displaced while in staging.
 - Folder names follow the project 01-08 structure; a project that customizes folder names supplies the mapping via its project-level configuration. Absent a project mapping, the 01-08 names above are the default.
 - This table is DERIVED — a canonical-home mismatch is operator-decidable, not a hard failure, until the taxonomy is confirmed at Stage 9.
+
+### Source(s)
+- #334 — the artifact-lineage-graph split whose deleted split card originally defined the 17-row taxonomy; this table is the evidence-grounded reconstruction.
+- #159 — the plan-type taxonomy that seeds the Situational 7 tier.
