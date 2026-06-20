@@ -80,6 +80,12 @@ Process weight scales with tier. The lighter the tier, the less ceremony; the he
 
 **Interaction with existing CLAUDE.md guardrails:** The "No ungoverned changes" guardrail in CLAUDE.md already treats governance-file changes as IRREVERSIBLE-class work (GitHub Issue + plan + approval + dry-run + snapshot). This protocol generalizes that pattern — governance files are not the only IRREVERSIBLE surface; the tier vocabulary is the universal mechanism. `[SOURCE: CLAUDE.md § Quality Standards — "No ungoverned changes"]`
 
+### In-place bias — prefer the lower-tier fix
+
+When a fix can be done in place, do not propose a repository move, clean-room rebuild, or rip-and-replace as the remedy. The bias is a tier-selection rule, not a preference: an in-place edit is typically CHEAP or MODERATE, while a move/rebuild/replace pulls the work up to EXPENSIVE or IRREVERSIBLE (it discards history, breaks references, and forces re-validation of everything downstream). Reaching for the big move when the in-place edit would do inflates the reversibility tier — and an over-proposed migration reads as a deferral technique, substituting a large reversible-looking project for the small fix actually asked for.
+
+The test is **what the change does to existing state**, not how large the operation looks: an edit that rewrites content in place — including a history rewrite that operates on the existing repository rather than relocating it — stays in-place and keeps its lower tier. A *move* is relocating the work to a new home (new repo, new tree, fresh seed) and abandoning the old one; that is the higher-tier path and is justified only when an in-place fix is genuinely impossible, not merely when it is faster to start fresh. Default to the in-place fix at its true (lower) tier; escalate to a move only with the EXPENSIVE/IRREVERSIBLE ceremony the higher tier requires and an explicit statement of why in-place was rejected.
+
 ## Application to Skill Outputs
 
 ### Decision-class outputs (in scope)

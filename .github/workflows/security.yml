@@ -1,5 +1,13 @@
 name: Security
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Workflow SAST (actionlint)","Python SAST (bandit)","Python deps (pip-audit)","Secret scanning (gitleaks)"  always-reports=yes
+#   invariant: no workflow-injection / Python-SAST finding, no vulnerable pinned
+#              dependency, and no committed secret — asserted by running the SAST
+#              and secret-scanning tools over repository content.
+#   falsification: commit a high-entropy AWS-key-shaped string -> the gitleaks job
+#                  fails; add an actionlint-flagged injection pattern -> actionlint fails.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 on:
   push:
     branches: [main]

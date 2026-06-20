@@ -40,6 +40,10 @@ After `gh pr merge` from within a worktree, DO NOT run `git checkout main && git
 - `git worktree remove $(pwd)` (from outside the worktree) — removes the worktree entirely
 - Create a throwaway branch: `git checkout -b claude/post-merge-cleanup-$(date +%s)` — any branch name other than main
 
+**Harness-spawned worktrees are not `EnterWorktree` sessions.** A worktree created by the spawned-session harness (under `.claude/worktrees/<name>/`) is not entered via the `EnterWorktree` tool, so `ExitWorktree` is a no-op against it — re-anchor manually (detach the HEAD or create a throwaway branch as above; prefer the `git branch -d` safety-belt over `-D` so an unmerged branch is not silently dropped). Do not depend on `ExitWorktree` to release main.
+
+**Sweep-deletion safety (removing other sessions' worktrees).** When sweeping merged-no-active-work worktrees, sessions self-reap mid-task — a worktree present at scan time may be gone moments later. So: (a) re-pull / re-list the worktree set immediately before deleting each target, never act on a stale scan; (b) gate any force-removal on a clean dirty-check; (c) verify liveness per live process rather than by lock-file presence — lock files may be ABSENT even for a live session (`lsof -a -d cwd -p <pid>` for each live session PID is the load-bearing check; an absent lock file is not evidence the worktree is free). The automated `cleanup-orphan-state.sh` path (§ PR Process step 10) implements all three; hand-rolled sweeps must honor the same three.
+
 ### Post-merge primary sync
 The primary checkout MUST always sit at `origin/main` — this is a standing invariant, not a courtesy. An unsynced primary (detached HEAD, behind, or dirty) actively breaks the user's local repo workflows; treat it as a defect to fix, not a state to work around. The invariant holds regardless of who merged the PR.
 
@@ -62,6 +66,20 @@ If a preflight operation (e.g., "folder expected on main doesn't exist in my wor
 - Use `git -C ${HOME}/Claude fetch origin main` (fetches without cd, without touching branches)
 - OR `git fetch origin main` within your worktree, then `git merge origin/main`
 - OR read files via absolute path; no git state-change needed
+
+## Worktree Scope — Domain Boundary
+
+Worktrees are for **platform-engineering work** — changes that become a tracked-repo commit/PR (skill definitions, governance, references, hooks, deploy/CI, schemas). They are **not** for **operations-domain work** — the Layer-2, git-ignored operations tree (project artifacts, transcripts, communications drafts, tracker/status updates, project-processing runs). Operations-domain work runs in the operations domain **directly**, not from a platform worktree.
+
+**Why.** A worktree adds branch/path overhead — branch confusion, path-relative file ops, stale context against the operations workspace — that buys nothing when the work never touches platform code. Isolating operations artifacts inside (or framing them against) a platform branch misfiles them.
+
+**How to apply.**
+- If a session opens in a worktree but the first task is operations-domain work, say so immediately and offer to exit the worktree (`ExitWorktree`) before proceeding.
+- Default for operations-domain work: operate in the operations domain directly (never a worktree).
+- A worktree is correct only when the task produces a platform-repo change (code, skills, governance, references, hooks, CI).
+- If unsure, confirm before continuing — better to check than to run a whole operations task from the wrong working directory.
+
+This is the worktree projection of the Layer-1 (Engineering) / Layer-2 (Operations) boundary in [operations-bridge.md](operations-bridge.md); §Primary Checkout Discipline above governs worktree *mechanics*, this section governs *which domain's work belongs in a worktree at all*.
 
 ## PR Process
 1. Create feature branch from main

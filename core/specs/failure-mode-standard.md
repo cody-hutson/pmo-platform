@@ -346,6 +346,46 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
 ```
 
 ```markdown
+### perpetuate-existing-structure-instead-of-redesign — PROC
+
+- **Signature (observable signal):** Agent extends or replicates the
+  current structure to absorb a new requirement (e.g., adds another
+  one-file-per-record artifact, another parallel tracker, another
+  branch on an already-overgrown conditional) instead of consolidating
+  toward a better structure (a single reference, a parameterized table).
+  The change makes the existing pattern bigger, never different; no
+  current-state survey or target-structure rationale precedes it.
+- **Conditional:** do NOT extend the existing structure to absorb a new
+  requirement when the existing structure is itself the problem the work
+  exists to fix, because perpetuating a known-poor structure compounds
+  the defect it should retire and forecloses the review → understand →
+  design → fix path that would land the better structure.
+- **Root cause:** The existing structure is the path of least resistance —
+  it is concrete, already in front of the agent, and "one more of the same"
+  feels like progress. The review-and-redesign step is upstream, requires
+  holding the whole structure in view, and is invisible unless explicitly
+  invoked; under delivery pressure the agent optimizes the local edit and
+  skips the structural question entirely.
+- **Mitigation:** Before extending any structure, ask whether the
+  structure itself is in scope to change. Run a current-state survey
+  (enumerate the instances of the pattern), state the target structure
+  and why it is better, and only then implement toward the target —
+  not toward "one more of the existing." The Stage 5 architecture /
+  best-practice / scalability-maintainability gate at the design handoff
+  — tracked under the stage-gate-criteria-completeness initiative — is
+  the control that catches a perpetuate-the-structure design before it
+  reaches Engineering.
+- **Principal response vs. junior response:** Principal treats a new
+  requirement landing on a poor structure as a design trigger — surveys
+  the current state, names the better structure, and proposes the
+  redesign (or the explicit decision to defer it) with rationale before
+  writing code. Junior adds one more instance of the existing pattern
+  because it is the smallest local edit, ships the structure bigger and
+  no better, and leaves the underlying structural defect for a later
+  reviewer to name.
+```
+
+```markdown
 ### Thin self-containment in milestone descriptions — OUT
 
 - **Signature (observable signal):** Agent writes a one-line milestone
@@ -746,6 +786,64 @@ The entries below address the `snapshot-as-current-state` root failure mode at h
   against a snapshot that has drifted from current source content
   — and the hub inherits the drift downstream when the spoke's
   output cites the snapshot as authority.
+```
+
+```markdown
+### Chip-prompt embedded arithmetic without verification — INPUT
+
+- **Signature (observable signal):** A chip prompt enumerates a
+  pre-computed count or sum of items derived from multiple sources
+  (acceptance criteria across an issue body + sibling-issue body +
+  milestone deliverable description; sub-task count across a release;
+  verification-table row count) where the stated total does not equal
+  the sum of its own cited addends. Detection: the prompt states a
+  derivation inline (e.g., "N rows: a + b + c") and `a + b + c ≠ N`;
+  the spoke then carries reconciliation overhead, or proceeds on the
+  wrong number when the verification step is skipped.
+- **Conditional:** do NOT embed a pre-computed count or sum in a chip
+  prompt when the hub has not run the derivation against the actual
+  sources at chip-authoring time, because the arithmetic is wrong at
+  authoring time (a hub computation error, not snapshot drift) and the
+  spoke either absorbs the reconciliation cost or inherits the wrong
+  total.
+- **Root cause:** Sister failure mode `Chip-prompt summary embedded as
+  canonical content — INPUT` (above) shares the same hub-orchestration
+  root class but a DISTINCT failure mechanism: that entry is about a
+  *summary* of source content drifting from the source over time
+  (snapshot-as-current-state); THIS entry is about a *computation* of
+  source enumerations being incorrect at the moment of authoring. The
+  pressure is the hub's impulse to pre-resolve a count for spoke
+  convenience or gate-checking without executing the derivation —
+  mental arithmetic substituted for a verified count.
+- **Mitigation:** Fire the chip-prompt arithmetic discipline at
+  [`hub-spoke-bridge.md` Procedure 3 §Chip Prompt Arithmetic
+  Discipline](../../release/references/how-to/hub-spoke-bridge.md)
+  BEFORE issuing the prompt. Prefer the derivation-logic pattern —
+  reference the derivation (one row per AC; source ACs from issue body
+  A, issue body B, and the milestone deliverables; spoke verifies the
+  row count against the actual AC count) rather than a pre-computed
+  sum, so there is no embedded total to drift. If a count must be
+  embedded (spoke-side gate-checking, estimation), run the derivation
+  against the actual sources first and state the verified sum with the
+  derivation cited; if the hub cannot verify at authoring time, mark
+  the count explicitly approximate and direct the spoke to verify.
+- **Principal response vs. junior response:** Principal authors chip
+  prompts that reference derivation logic rather than a pre-computed
+  total, and — when a count is unavoidable — verifies it against the
+  sources before issuance and cites the reproduction command. Junior
+  performs the addition in-prompt, embeds the total without checking
+  it (e.g., "build a 14-row table: 11 + 3 + 4"), and pushes the
+  reconciliation onto the spoke — which either burns attention
+  reconciling the discrepancy or silently proceeds on the wrong
+  number. Originating evidence (release-lineage, depersonalized): at
+  the v11.01b Collective Review precedent a hub-authored Stage 6
+  Engineering chip prompt asserted a verification table of "14 rows:
+  11 ACs from issue body A + 3 ACs from issue body B + 4 deliverable
+  ACs from the milestone description" — the cited addends sum to 18,
+  not 14; the sub-task instruction body independently stated a third
+  divergent figure. The spoke handled it gracefully (chose the
+  comprehensive 18-row coverage and flagged for the operator at Stage
+  9), but the reconciliation consumed Engineering attention.
 ```
 
 ## Relationship to Platform Guardrails

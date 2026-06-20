@@ -290,8 +290,8 @@ This protocol provides L4 **primitives** (state names, field names, trigger prim
 | `target_folder` field | NO | DEFINES (instance target location) | — | — |
 | `project` / `program` fields | NO | DEFINES | — | — |
 | `confidence` field | NO | DEFINES (`HIGH` \| `MEDIUM` \| `LOW`) | — | — |
-| `parent_artifact` / `topic` fields | NO | — | — | DEFINES (artifact-to-artifact lineage on instances) |
-| `supersedes` / `superseded_by` field NAMES | **DEFINES** (template versioning chain) | — | — | **DEFINES** (artifact lineage on instances) — **SHARED FIELD NAME, DUAL SEMANTICS** (see drift-prevention rule 5) |
+| `parent_artifact` / `sibling_topic` fields | NO | — | — | DEFINES (artifact-to-artifact lineage on instances); the authoritative schema home for these instance-lineage fields is `core/schemas/frontmatter-schema.md` (Domain A / Domain C) |
+| `supersedes` / `superseded_by` field NAMES | **DEFINES** (template versioning chain) | — | — | **DEFINES** (artifact lineage on instances) — **SHARED FIELD NAME, DUAL SEMANTICS** (see drift-prevention rule 5); the instance-lineage scalar semantics are authoritatively defined in `core/schemas/frontmatter-schema.md` (Domain A / Domain C) |
 | `template_family` / `domain` / `canonical_path` / `owner` / `canon` / `canon_compat` / `version` fields | DEFINES (L4-only, not in any consumer) | — | — | — |
 
 ### §8.2 Drift-prevention rules
@@ -304,7 +304,7 @@ This protocol provides L4 **primitives** (state names, field names, trigger prim
 
 ### §8.3 Single load-bearing ambiguity flag
 
-**`supersedes` / `superseded_by` SHARED field name with .** L4 uses these fields for template versioning chains (template v1 → template v2).  uses the same field names for instance-to-instance lineage (instance A supersedes instance B in a version-iteration chain). Same field name, parallel semantics in two scopes (template versioning vs instance lineage). **Resolution:** documentation discipline per drift-prevention rule 5 above — both protocols MUST flag the dual semantics in their respective docs. No naming conflict (the file scope distinguishes); only documentation discipline is required.
+**`supersedes` / `superseded_by` SHARED field name with the artifact-instance lineage schema.** L4 uses these fields for template versioning chains (template v1 → template v2). The instance-lineage schema (authoritatively defined in `core/schemas/frontmatter-schema.md`, Domain A / Domain C) uses the same field names for instance-to-instance lineage (instance A supersedes instance B in a version-iteration chain). Same field name, parallel semantics in two scopes (template versioning vs instance lineage). **Resolution:** documentation discipline per drift-prevention rule 5 above — both this protocol and the frontmatter schema MUST flag the dual semantics in their respective docs. No naming conflict (the file scope distinguishes — templates at `operations/templates/`; instances at `projects/*/08-Generated/`); only documentation discipline is required.
 
 ## §9 Lineage Graph
 
@@ -333,7 +333,7 @@ Future lineage entries are added at the L4 Stage 6 commit that promotes any subs
 
 ### §9.3 Future location pointer
 
-The full artifact-lineage graph (covering both template lineage AND instance lineage with `parent_artifact:` / `topic:` fields) ships in a dedicated file (per a dedicated follow-up scope). At that point, this §9 will be updated with a supersede pointer to the new location, and the template-lineage rows may migrate. Until then, this §9 is the authoritative template-lineage record.
+The full artifact-lineage graph (covering both template lineage AND instance lineage with `parent_artifact:` / `sibling_topic:` fields) ships in a dedicated file (per a dedicated follow-up scope). At that point, this §9 will be updated with a supersede pointer to the new location, and the template-lineage rows may migrate. Until then, this §9 is the authoritative template-lineage record.
 
 ## §10 References
 

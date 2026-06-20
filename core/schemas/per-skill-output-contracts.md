@@ -1029,6 +1029,60 @@ Severity: [Critical / Major / Minor]
 
 ---
 
+## Skill 13: Artifact Lint (Tier 1 — Generated-Surface Graph Integrity)
+
+### Output Contract (Staged Report — 4 Required Sections)
+
+Artifact Lint produces a single staged report at `08-Generated/artifact-lint-YYYY-MM-DD.md` (itself a Domain-C `analysis` artifact with an `artifact_state: DRAFT` header). The report has four required sections.
+
+| Section | Content | Format | Notes |
+|---------|---------|--------|-------|
+| 1. Scope | In-scope surface (08-Generated/ + promoted 01-07), honored exclusions (09-Prototype/, _templates/; read-only _archived/), artifacts-scanned count, unscannable list | Structured block | The exclusion + override posture is stated every run |
+| 2. Findings | Five check sub-sections — orphan, sibling duplicate, stale draft, displaced content, version chain — each a table of findings | One table per check | Empty checks reported explicitly as "none" (honest no-finding signal), never omitted |
+| 3. Summary | Total finding count + the recommend-only assertion ("no file moves performed; user approves each action") | Structured line | The Tier-1 no-auto-mutation statement |
+| 4. Metadata header | artifact-generator-format frontmatter (artifact_type: analysis, target_folder, confidence, created, source, dependencies, reversibility, artifact_state: DRAFT) | YAML frontmatter | The report stages like any Domain-C artifact |
+
+### Required Elements
+
+**Five checks, each recommend-only:** orphan (dangling/empty-source), sibling duplicate (strict-key match), stale draft (dual state-read + age threshold), displaced content (folder-vs-canonical-home), version chain (ordered chain + break detection). Each finding cites the frontmatter evidence that triggered it.
+
+**Dual state-read:** every state-keyed finding (stale draft, version chain) reads `artifact_state` primary → `lifecycle_state` fallback, and records which field fired in the evidence.
+
+**Strict-match dedup key:** `parent_artifact + artifact_type + sibling_topic` (case-insensitive on sibling_topic), degrading to `parent_artifact + artifact_type` with a "missing sibling_topic — weak match" warning.
+
+**No auto-mutation:** the report is the ONLY write. No scanned artifact is moved, renamed, archived, or deleted by the lint — every action is operator-approved (Autonomy Tier 1).
+
+### Reversibility Tier + Confidence
+
+Output class → default tier + confidence (per `../specs/reversibility-protocol.md`):
+
+| Output class | Tier | Confidence |
+|---|---|---|
+| The lint report itself; stale-draft refresh; "mark distinct" outcome | CHEAP | HIGH (staged draft, revertable) |
+| Archive / add-supersedes-edge / correct-folder / promote recommendations | MODERATE | HIGH (strict-key) / MEDIUM-LOW (weak match) |
+| Merge recommendation on a promoted+consumed artifact | EXPENSIVE | per evidence strength |
+
+Every finding carries tier + confidence explicitly. No unlabeled recommendations (pmo-qa-auditor G4).
+
+### Evidence Labels
+
+All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal Preferences. A finding's triggering frontmatter values are `[SOURCE]`; a proposed action is `[RECOMMENDED]`; an inferred chain ordering over incomplete edges is `[INFERRED]`. Never fabricate a `parent_artifact` value — an unknown upstream anchor is surfaced as an orphan finding, not invented.
+
+### Failure-Mode Conformance (G7)
+
+`artifact-lint/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with the 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings. (Ships with 5: dual-state-read INPUT, version-chain-as-duplicate OUT, auto-execute PROC, excluded-path TRIG, cleanup-tool-conflation HAND.)
+
+### Validation Checklist (QA Gate)
+- [ ] Report staged at `08-Generated/artifact-lint-YYYY-MM-DD.md` with the artifact-generator metadata header
+- [ ] Scope block names the in-scope surface, the exclusions, and the unscannable list
+- [ ] All five check sub-sections present (empty ones reported as "none")
+- [ ] Every finding cites frontmatter evidence and carries a reversibility tier + confidence
+- [ ] Dual state-read applied on stale-draft + version-chain findings
+- [ ] Version variants routed to version-chain, NOT flagged as duplicates
+- [ ] Recommend-only — report states no file moves performed; user approves each action
+
+---
+
 ## Appendix: RAID Entry Prefix Reference
 
 | Skill | Prefix | Example |

@@ -8,6 +8,25 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.06] - 2026-06-20
+
+The platform's automated integrity checks now carry a written contract: a passing check must confirm the real thing it claims by inspecting actual content, never a stand-in signal — starting with a package-freshness check that compared file timestamps (which an ordinary checkout silently resets) and now compares the package's contents. The hook documentation was also restructured so two changes to the platform's security hooks can land at once without colliding. Four cards; everything is additive — no existing rule, setting, or behaviour is removed or renamed. A follow-up point release (v2.06.1) repaired two deploy-script detection bugs the new content checks exposed.
+
+### Added
+
+- **Gate-efficacy contract for automated checks.** Every integrity check now must confirm what it claims by inspecting the real content behind it, and must state whether it blocks a change or is advisory; the package-freshness check was converted from a timestamp comparison to a content comparison. *Why it matters:* a check that passes is now a check you can trust — a stale package can no longer slip through green. ([#1101](https://github.com/cody-hutson/pmo-platform/issues/1101))
+- **Skill-structure check now also runs on every pull request.** A structural check that previously ran only at deploy time now runs in continuous integration too, sharing a single source so the two cannot disagree. *Why it matters:* a structural problem in a skill is caught at the pull-request stage instead of a later deploy. ([#673](https://github.com/cody-hutson/pmo-platform/issues/673))
+- **Per-hook security-hook documentation with a generated index.** The security-hook reference moved from one large shared file to one small file per hook, with the combined reference rebuilt automatically and a check that flags any hook left undocumented (ADR-030). *Why it matters:* two hardening changes can now land at the same time without colliding on one file, and the hook list can no longer drift out of sync with the hooks that exist. ([#18](https://github.com/cody-hutson/pmo-platform/issues/18))
+- **Recorded decision against a redundant pre-commit layer.** A spike evaluated adding a pre-commit safety layer and concluded it is not needed, since the protections are already enforced earlier; closed with a residual-risk note rather than code. *Why it matters:* the platform records the deliberate non-change instead of leaving the question open. ([#90](https://github.com/cody-hutson/pmo-platform/issues/90))
+
+[Full notes](release/releases/notes/v2.06_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.06)
+
+## [v2.05] - 2026-06-19
+
+A cluster of working agreements that had guided the platform's agents from session to session now live in the platform's own rules, and a new architecture decision defines how knowledge moves from an agent's memory into the durable corpus — and how the redundant copy is cleaned up once it lands.
+
+[Full notes](release/releases/notes/v2.05_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.05)
+
 ## [v2.03] - 2026-06-18
 
 A repeatable factory for building role-scoped agent skills from a single structured "feeding document" now exists end to end, and the first two role agents built on it ship: a Technical Program Manager and a Program Coordinator. Two skill-build cards; everything is additive — no existing skill, setting, or behaviour is removed or renamed.

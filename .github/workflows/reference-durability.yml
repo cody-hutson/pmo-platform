@@ -1,5 +1,13 @@
 name: Reference durability
 
+# gate-efficacy: posture=required  enforcement=branch-protection:"Durable-corpus fragile-reference delta"  always-reports=yes
+#   invariant: no durable-corpus change adds a fragile reference (markdown link
+#              sequence, version-cutover apparatus, mis-placed/empty bare issue
+#              ref, or raw github.com issue/pull/milestone URL) on its added lines.
+#   falsification: add a markdown link sequence or a version-cutover clause to a
+#                  durable-corpus file in a PR -> this gate turns red on that line.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+
 # Runs on EVERY pull request (no paths filter), so this required status check always
 # reports a result and never blocks a PR as required-but-absent. The job's internal
 # is_durable() predicate selects which changed files to scan, so a PR that changes no

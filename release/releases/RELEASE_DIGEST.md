@@ -157,3 +157,13 @@ Single-issue release (#187) landing the platform's governed answer to script-pro
 ### v1.01 (2026-06-01) — Pipeline-discipline capability slice
 
 5 issues addressing intake protocol gaps + Stage 12 tag policy + Stage 4 cross-PR audit divergence + Stage 13 close discipline. Re-classified from `routine` to `cross-cutting` at Stage 5 Collective Review (R-A scope expansion). Symmetric content-shape intake routing (#66), signed-annotated tag corpus alignment across 7 file locations (#101 — first reflexive consumer of own prescription), mid-pipeline divergence checkpoint with G-PR8 verdict at Stage 9 Phase A6.5 (#105), intake AC temporal-discipline / Anti-pattern D (#237), AC-Drift Handling Protocol with 3-verdict closed enum (#274). D-C SINGLE branch topology; one release PR (#460); signed-annotated `v1.01` tag (ED25519). Reflexive cutover discipline preserved across 3 protocol-shipping subjects.
+
+## v2.* — (arc TBD; rename at major-prefix maturation)
+
+
+### Releases
+
+| Version | Date | Headline |
+|---------|------|----------|
+| v2.05 | 2026-06-19 | **Agent-discipline codification + the memory↔corpus SSOT boundary (ADR-029)** — a cross-cutting cluster of 10 issues promotes working agreements (read-before-edit, in-place bias, flag≠consent, AskUserQuestion timing, +) from operator memory into the durable corpus; the keystone frames a four-type memory architecture (Work / Knowledge / People / Learning) and fixes the Knowledge↔corpus SSOT cut with an encode-and-evict graduation lifecycle plus a warn-mode drift audit. Additive doc/governance; CHEAP / `git revert -m 1`. |
+| v2.06 | 2026-06-20 | **CI/deploy gate trustworthiness + parallel-PR safety (gate-efficacy standard + ADR-030)** — a cross-cutting hardening so a green automated-assertion gate *means* its claimed invariant holds: the keystone gate-efficacy standard requires every `deploy.sh --check` + workflow gate to **assert by content not proxy**, **self-declare required-vs-advisory**, and be **auditable for false-confidence + coverage-gap** (#1101 — Check 7 freshness converted `mtime`→content-manifest-hash, required/advisory across 14 workflows); a Check-6 CI mirror sharing one predicate closes the run-context detection gap (#673); and ADR-030 breaks the bypass-mode hook monolith into per-hook drop-in sources + a generated-and-committed index with a warn-mode completeness check (Check 37) + always-enforce freshness check (Check 38), ending the parallel-PR cascade-conflict class and the 5/7/9 registry drift (#18). A pre-commit-layer spike closed NOT-needed (#90). Additive standard + checks + doc restructure; CHEAP / `git revert -m 1`. Hotfix v2.06.1 repaired two `--deploy` detection bugs (#1475). |

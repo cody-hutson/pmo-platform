@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 ---
 title: Depersonalization Spec
 purpose: Defines the operator-identity token vocabulary and the parameterization seam through which operator-instance values resolve at workspace-setup time. Composes with (does NOT restate) universal-vs-localized-context.md.
@@ -109,3 +110,13 @@ Compose, do not restate. Each row names a doc this standard touches and the acti
 | [`universal-vs-localized-context.md`](universal-vs-localized-context.md) | Owns the DC1-DC4 audit dimensions + § 6 disposition rubric. | **Cite only.** This spec consumes DC1-DC4 + the 4-class rubric verbatim. |
 | [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | Owns the K1-K5 tier classifier + parameterization seam principle. | **Cite only.** § 1 token set is keyed to the K1↔K2/K3 seam. |
 | [`duplicate-source-discipline.md`](duplicate-source-discipline.md) | Register-or-remove. The reason this spec cites the upstream standards instead of restating them. | Comply. |
+
+---
+
+## §6 Audit method — extract binary archives before scanning
+
+A depersonalization (or PII) audit MUST extract and scan the contents of binary archives, not just the source tree around them. `git grep` and any plain-text scan read compressed archives as opaque bytes: a `.skill` package, `.zip`, or other archived artifact that embeds an operator value passes a text scan as a **false clean**, because the identifying string is inside the compressed payload and never matched.
+
+The audit is incomplete until every archived artifact has been (a) extracted to a scratch location, (b) scanned for the full token set in §1 plus any PII categories in scope, and (c) confirmed to have been built freshly from already-scrubbed source. A package built before its source was scrubbed can still carry the old values even though the source tree reads clean — so "the source grep is clean" does not certify the artifacts. Re-build from scrubbed source, then extract-and-scan the rebuilt artifact, before declaring the surface clean.
+
+This composes with the leakage rubric owned by [`universal-vs-localized-context.md`](universal-vs-localized-context.md) (the rubric defines *what* is a leak; this section defines the *extraction step* an archive-bearing audit must add so the rubric is actually applied to compressed content).

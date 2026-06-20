@@ -625,6 +625,52 @@ time and preempts the block-close protocol. This is the canonical pre-condition
 statement; future D-decision authors cite this section when their D-decision relies on
 manual closure timing.
 
+**Repo-Integrity Authoring Discipline (ADR + content-modifying spokes):**
+
+A spoke that authors or edits a durable-corpus markdown file — an
+`core/ADRs/ADR-NNN-*.md`, a skill `SKILL.md`, a `references/*.md`, a governance or
+standards doc — has its changed files scanned by two PR-time gates in
+`repo-integrity.yml` (defined in [`core/rules/git-workflow.md` § Repository-Integrity
+Gates](../../../core/rules/git-workflow.md)): the **Issue-reference validity** gate
+and the **Depersonalization** gate. These are SEPARATE from, and broader than, the
+PR-body close-parser discipline above — they scan file *content*, not the PR body.
+ADR files are the common tripwire because they carry `#N` in `source_observations:`
+frontmatter and `## Status` / `## Context` provenance prose — out-of-reference-block
+locations. The discipline (apply at authoring time, not after red CI):
+
+- **Author every issue cross-reference as bare `#N`, never a full
+  `github.com/.../issues/N` URL.** The full URL embeds the operator handle (trips
+  Depersonalization) and rots on repo move; bare `#N` clears both the depersonalization
+  and the issue-ref gates in one move.
+- **Declare the file-level marker once** near the top of any ADR/skill file that
+  carries a bare `#N` outside a recognized reference block (`### Issue References` /
+  `### References` / `## Related` / `## Provenance` / `### Source(s)`): an HTML comment
+  reading `repo-integrity: allow-issue-ref`, placed after the frontmatter / before the
+  title. (`## Related ADRs` is not the recognized `## Related` slug — use the marker,
+  not heading placement.)
+- This composes with the reference-durability discipline (`git-workflow.md` §
+  Reference Durability): the durability marker family (`allow-url`) and self-describing
+  prose are the durability twin of the integrity marker.
+
+For ADR-authoring and skill-authoring chips specifically, hub adds to
+`{ADDITIONAL_READS}`:
+- `core/ADRs/README.md § Repo-integrity authoring discipline (bare #N + allow-issue-ref marker, never full URLs)`
+- `core/rules/git-workflow.md § Repository-Integrity Gates (the two gates + override markers)`
+
+The Spoke Template scope-control section gains an explicit bullet for these chips:
+- When authoring or editing any `core/ADRs/*.md`, `SKILL.md`, or `references/*.md`
+  file, reference issues as bare `#N` (never a full GitHub URL) and declare the
+  file-level `repo-integrity: allow-issue-ref` marker after the frontmatter. Apply
+  this at authoring time — do not wait for a red CI run.
+
+This codifies the discipline ADR-016's red-CI failure surfaced (#426): the ADR
+tripped both the issue-reference-validity and depersonalization gates with full
+GitHub URLs + out-of-block `#N`, was fixed reactively, and left no up-front guidance.
+8 of the repo's ADRs now carry the marker by trial-and-error — this makes the rule
+explicit so the next spoke applies it first.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Chip Prompt Spec-Anchor Discipline:**
 
 When a chip prompt references a canonical source spec (parent issue, governance file, release plan, pipeline shard, standards doc), the chip prompt MUST direct the spoke to read the source DIRECTLY rather than embedding a hub-summary of the source content. Hub summaries are snapshots of hub understanding at chip-launch time; canonical sources remain authoritative as governance evolves between chip-launch and spoke-execution. When the snapshot diverges from the source — even subtly — the spoke produces work consistent with the snapshot, not the source.
@@ -681,7 +727,7 @@ This discipline emerged from Finding F-01 (2026-05-02), where the hub-authored c
 **Sister surfaces (same hub-orchestration root class, distinct failure mechanism):**
 - `Chip Prompt Spec-Anchor Discipline` (this file, above) — chip-prompt embeds a *summary* of canonical-source content (snapshot-as-current-state); spoke trusts the snapshot when the source has drifted.
 - `Audit snapshot as current state` (per [`failure-mode-standard.md § Hub-spoke chip-prompt examples`](../../../core/specs/failure-mode-standard.md)) — recommendation-rendering surface variant of the same snapshot-divergence root pattern.
-- This discipline (Chip Prompt Arithmetic Discipline) — chip-prompt embeds a *computation* of source enumerations; computation is wrong at authoring time (not drift over time). Distinct root mechanism: hub arithmetic error, not snapshot divergence.
+- This discipline (Chip Prompt Arithmetic Discipline) — chip-prompt embeds a *computation* of source enumerations; computation is wrong at authoring time (not drift over time). Distinct root mechanism: hub arithmetic error, not snapshot divergence. Cataloged as a 5-field failure-mode entry at [`failure-mode-standard.md § Chip-prompt embedded arithmetic without verification — INPUT`](../../../core/specs/failure-mode-standard.md).
 
 **Cutover discipline:** Applies to all releases going forward.
 
@@ -810,6 +856,27 @@ Required chip-prompt content — Stage 5 adversarial-review chip prompts MUST em
 The pairing composes with  Stage 5 spec at: D-RoleMechanism (NEW persona + NEW agent definition `.claude/agents/pmo-adversarial.md`) preserves structural independence — different `subagent_type` value → different session lifecycle → no shared session memory; D-ReviewerScope (UNIFORM — every Stage 5 output) matches the Phase 0 all-or-nothing activation posture; D-OutputContract (3 structured-list outputs) matches the AC#3 verbatim 3-axis requirement; D-CompositionWith985 (NEW `RC-5-adversarial-design-review` Catalog entry) preserves [`review-composition-framework.md`](../../../core/standards/review-composition-framework.md) § 7.1 forcing-function compliance.
 
 The chip uses `subagent_type: pmo-adversarial` and `isolation: "worktree"` (read-only review spoke — no file writes, but defensive worktree isolation per Stage 5 spoke convention). Model: `opus` (per `.claude/agents/pmo-adversarial.md` frontmatter default + the workspace's designated-model preference for principal-grade review).
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Stage 5 Chip Pattern — Solutioning Pre-Read Discipline:**
+
+When the hub authors a Stage 5 Solutioning chip prompt AND the issue carries
+rich pre-implementation analysis worth conveying to the implementing agent, the
+chip MAY direct the spoke to post a **Solutioning pre-read** on the parent issue
+per [`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md).
+The pre-read is ADVISORY and non-binding — the issue body stays the sole
+authoritative contract (per `ticket-information-architecture.md` § Source of
+Truth, "the issue body is the single authoritative record"); no downstream stage
+reads the pre-read as scope. The instruction is OMITTED (no ceremony) when the
+issue has no rich pre-read analysis to convey — the same non-ceremony omission
+signal the Design-Exploration chip pattern uses.
+
+Required chip-prompt content — when the pre-read predicate holds, the chip MUST
+embed:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"If you have rich pre-implementation analysis to orient the implementing agent, post a Solutioning pre-read comment on the PARENT issue #N per [`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md): open with the banner `🧭 **Solutioning pre-read — ADVISORY, not scope**`, state explicitly that it does NOT modify Acceptance Criteria / Proposed Change / Affected Files (the issue body remains the sole contract), and close with a re-verify line. The pre-read is advisory context, never scope."*
+2. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/standards/solutioning-output-template.md § 3.5 (Solutioning Pre-Read — advisory/non-binding banner + worked example #545)`.
 
 **Cutover discipline:** Applies to all releases going forward.
 
