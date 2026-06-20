@@ -36,7 +36,7 @@ This Specialist **composes** one function-skill — [`release-executor`](../rele
 
 **Worked detail.** The per-mode invocation/autonomy mapping, the full decision-vs-execution boundary ledger, and worked Mode 2 / Mode 3 output frames are carried in [`references/composition-contract-devops-sre.md`](references/composition-contract-devops-sre.md) — this SKILL.md is the authoritative contract; that file elaborates it.
 
-**Future deconfliction sibling — `pmo-release-manager` (#213/#214, not built here).** A future Release-Manager Specialist will own the **go/no-go decision** (#214 Go/No-Go preparation / evidence-compilation) and the **release-tail orchestration** (#213 deployment-execution *capability* at the Release-Manager altitude, close-out). It and `pmo-devops-sre` are a **named collision surface** — both compose `release-executor`, and both speak about deploys. The line is **decision-vs-execution**: the Release Manager *decides go/no-go + orchestrates the tail*; DevOps/SRE *runs the deploy mechanics + owns the reliability/rollback triggers*. The pair **must be trigger-deconflicted at Stage 7** when `pmo-release-manager` is built; this SKILL.md records the seam now so it survives to then. (See `## Dependency Graph Node`.)
+**Future deconfliction sibling — `pmo-release-manager` (not built here).** A future Release-Manager Specialist will own the **go/no-go decision** (Go/No-Go preparation / evidence-compilation) and the **release-tail orchestration** (deployment-execution *capability* at the Release-Manager altitude, close-out). It and `pmo-devops-sre` are a **named collision surface** — both compose `release-executor`, and both speak about deploys. The line is **decision-vs-execution**: the Release Manager *decides go/no-go + orchestrates the tail*; DevOps/SRE *runs the deploy mechanics + owns the reliability/rollback triggers*. The pair **must be trigger-deconflicted at Stage 7** when `pmo-release-manager` is built; this SKILL.md records the seam now so it survives to then. (See `## Dependency Graph Node`.)
 
 ## Mode Selection
 
@@ -121,7 +121,7 @@ Five output requirements hold on every emission: (1) the audience is named and t
 
 - **Composes (invokes, never absorbs):** `release-executor` (Modes A Execute / B Verify / C Rollback — **NOT** Mode D Close, which is release-tail reserved for the future Release Manager).
 - **Coordinates with:** `pmo-qa-auditor` (quality review of this Specialist's outputs); upstream `pmo-software-engineer` / `pmo-principal-engineer` (Stage-6 build / Stage-5 design that feed the deploy).
-- **Future deconfliction sibling:** `pmo-release-manager` (#213/#214, not built in this release) — the **decision-vs-execution** line (this skill = deploy mechanics + reliability/rollback triggers; the Release Manager = go/no-go decision + release-tail/close-out). To be trigger-deconflicted as a pair at Stage 7 when the Release Manager ships.
+- **Future deconfliction sibling:** `pmo-release-manager` (not built in this release) — the **decision-vs-execution** line (this skill = deploy mechanics + reliability/rollback triggers; the Release Manager = go/no-go decision + release-tail/close-out). To be trigger-deconflicted as a pair at Stage 7 when the Release Manager ships.
 - **Upstream invokers:** the operator directly; a release-orchestration context (hub) that needs a deploy run, a pipeline configured, or a reliability signal triaged.
 - Composition edges are skill→skill (invocation), never role→role (absorption); depth ≤ 2 (C1) — this Specialist does not chain `release-executor` onward into a third skill.
 
@@ -239,11 +239,11 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 - **Signature (observable signal):** pmo-devops-sre fires on a request that is actually a
   go/no-go / release-readiness / "is this safe to ship" / "compile the go-no-go evidence"
   ask, and produces a ship decision or evidence-compilation output — work that belongs to
-  the future `pmo-release-manager` (#214) decision surface, not to DevOps/SRE.
+  the future `pmo-release-manager` decision surface, not to DevOps/SRE.
 - **Conditional:** do NOT render a go/no-go decision or release-readiness verdict in
   pmo-devops-sre when the request is a ship-decision / evidence-compilation ask, because the
   decision-vs-execution boundary assigns the go/no-go DECISION and release-tail orchestration
-  to the Release Manager (#213/#214) — DevOps/SRE executes the decision the operator/RM made;
+  to the Release Manager — DevOps/SRE executes the decision the operator/RM made;
   it does not make it (the skill-boundary 3-conjunct test: distinct primary role).
 - **Root cause:** Both roles compose `release-executor` and both speak about deploys, so a
   ship-decision request superficially matches the deploy-execution trigger surface; the
