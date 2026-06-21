@@ -32,6 +32,22 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Domain
+      description: "Optional. The work *domain* this change targets — orthogonal to Category (which classifies how the change is governed). Lets a software / website / ERP / data / code-review ticket be filed honestly. Leave unset for governance-corpus work or pick `Governance`. Does not affect the `[Category]:` title prefix."
+      options:
+        - Software
+        - Website
+        - ERP
+        - Data
+        - Code Review
+        - Governance
+        - Other
+    validations:
+      required: false
+
   - type: textarea
     id: description
     attributes:
