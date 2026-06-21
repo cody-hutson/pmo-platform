@@ -23,6 +23,21 @@
 #     --spawn-task             Outcome 2 only — claude/* and agent-* orphans
 #     --historical             Outcome 3 only — all merged-no-active-work
 #     --all                    All 3 outcomes (default)
+#     --reap-orphan-tags       Outcome 4 (re-version recovery) — reap the orphaned git
+#                              tag of an ABANDONED version. SEPARATE opt-in scope: it is
+#                              NOT run by --all / --release-close (a reap needs ledger
+#                              authority + double opt-in). Reads the re-version ledger
+#                              (RELEASE_REVERSIONS.md) for rows with disposition=
+#                              tag-orphaned, reaps each (non-force git push --delete +
+#                              git tag -d), and writes the row back (disposition→
+#                              tag-reaped, reaped_ref). Also reports stale-version corpus
+#                              rows needing the runbook's R-3 roll-forward (report-only —
+#                              never edits corpus prose). See
+#                              release/references/how-to/re-version-recovery.md.
+#         --abandoned <tag>    Pre-ledger explicit authority — reap THIS tag (the only
+#                              path that does not require a ledger row). Never inferred.
+#         --ledger <path>      Point at a re-version ledger other than the default
+#                              (release/releases/RELEASE_REVERSIONS.md).
 #   MODE (one of, default --dry-run):
 #     --dry-run                Enumerate + report; no mutation (default)
 #     --apply                  Execute removals after enumeration (opt-in). The apply
@@ -51,18 +66,30 @@
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
-#                              stale-ref prune + SELF-guard, liveness, and fixed-point
-#                              fixtures (via isolated throwaway branches + synthetic
-#                              survivor candidate + synthetic live holder, net-zero
-#                              state); exit 0 on success
+#                              stale-ref prune + SELF-guard, liveness, fixed-point, and
+#                              orphan-tag-reap fixtures (via isolated throwaway branches /
+#                              a PID-scoped FIXTURE bare remote / a throwaway ledger +
+#                              synthetic survivor candidate + synthetic live holder,
+#                              net-zero state; the reap NEVER touches the real origin);
+#                              exit 0 on success
 #
 # Hook compatibility (verified per Stage 5 spec §Evidence-Grounding):
 #   - All deletions via git porcelain (broad exemption per Hub Decision 1) —
 #     incl. `git remote prune <remote>` (local-tracking-ref reconciliation only;
-#     read-only against the server, no server-side ref deletion)
+#     read-only against the server, no server-side ref deletion) and, for the
+#     re-version-recovery reap, `git push --delete <remote> <tag>` + `git tag -d <tag>`
+#     (NON-FORCE — a forward removal of a ref, NOT a history rewrite; confirmed not in
+#     the destructive-action hook's blocked set, which blocks only force-push forms:
+#     `grep -nE 'push.*(-d|--delete)|tag[[:space:]]+-d' core/hooks/block-destructive.sh`
+#     returns 0 across all rules, and the settings.json deny array carries no tag/delete
+#     entry — only `git push --force`/`-f`)
 #   - gh api -X DELETE git/refs/heads/* permitted via the egress allowlist
 #   - lsof is read-only inspection, invoked by absolute path (PATH pin intact)
-#   - Zero rm/rmdir/unlink usage
+#   - Zero rm/rmdir/unlink in the PRODUCTION mutation path (the ledger write-back uses an
+#     awk-into-variable here-string rewrite, no temp file). The --self-test path uses a
+#     bounded, PID-scoped `/bin/rm` to tear down its own fixture remote/ledger in a
+#     `<tmpdir>/cleanup-selftest-<pid>` dir (mirrors deploy.sh's guarded bounded-rm
+#     precedent) — never a workspace, repo, or origin path.
 #
 # Exit codes: 0 = success, 1 = validation failure, 2 = workspace-boundary check failed
 #
@@ -113,12 +140,25 @@ MAIN_BRANCH="main"
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
-SCOPE="all"               # all | release-close | spawn-task | historical
+SCOPE="all"               # all | release-close | spawn-task | historical | reap-orphan-tags
 MILESTONE_SLUG=""
 MODE="dry-run"            # dry-run | apply
 OUTPUT="markdown"         # markdown | json
 FORCE=0
 SELF_TEST=0
+
+# Re-version recovery (--reap-orphan-tags scope). The reaper consumes the
+# machine-readable re-version ledger to learn which abandoned-version tags an
+# AUTHORITY has declared orphaned, then reaps them (non-force git push --delete +
+# git tag -d) and writes the outcome back. Abandonment is NEVER inferred — only the
+# ledger's `disposition = tag-orphaned` rows or an explicit --abandoned <tag>
+# authorize a reap. Field names + the disposition enum are #1679's frozen schema
+# (RELEASE_REVERSIONS.md): the reaper READS disposition / abandoned_version /
+# abandoned_tag_pushed / merge_sha and WRITES the two mutable cells disposition
+# (→ tag-reaped) and reaped_ref, keyed on (slug, abandoned_version), header-resolved.
+LEDGER_PATH="${REVERSION_LEDGER:-$REPO_ROOT/release/releases/RELEASE_REVERSIONS.md}"
+ABANDONED_ARG=""          # explicit pre-ledger authority (one tag); never inferred
+RELEASE_LOG_PATH="$REPO_ROOT/release/releases/RELEASE_LOG.md"
 
 # Always-protected names (never touched regardless of protect-list state)
 PROTECTED_ALWAYS=("$MAIN_BRANCH" "master" "HEAD")
@@ -126,7 +166,7 @@ PROTECTED_ALWAYS=("$MAIN_BRANCH" "master" "HEAD")
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,42p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,74p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -561,6 +601,202 @@ detect_historical() {
   done <<<"$WT_SNAPSHOT"
 }
 
+# ─── Orphan-tag + abandoned-version-row detection (--reap-orphan-tags) ────────
+#
+# A fourth outcome class: an orphaned git tag of an ABANDONED version. It reuses
+# the script's classify → apply → verify → report skeleton, but on a separate
+# accumulator (TAG_CANDIDATES) and a separate, opt-in scope — it does NOT run in
+# the default --all / --release-close close path (a reap needs ledger authority +
+# double opt-in). Authority is the #1679 re-version ledger or an explicit
+# --abandoned <tag>; abandonment is never inferred from "not the latest version."
+#
+# Record per TAG_CANDIDATES entry (TAB-separated, action LAST so the in-place
+# rewrite idiom `${r%$'\t'*}$'\t'<new>` used everywhere else applies unchanged):
+#   tag <TAB> slug <TAB> reshipped_as <TAB> merge_sha <TAB> action
+TAG_CANDIDATES=()
+STALE_VERSION_ROWS=()     # slug<TAB>abandoned_version<TAB>final_version (R-3 runbook pointers; report-only)
+
+# Resolve a column's 0-based index from a markdown pipe-table header line by NAME,
+# not ordinal — robust to the column-order changes the closeout-tooling rework
+# (RELEASE_LOG state/date reorder) introduces, so this reader cannot drift against
+# it. Header is the first `| a | b | … |` line in the file. Prints the index or
+# nothing (caller treats empty as "column absent"). Cells are trimmed of spaces.
+table_col_index() {
+  local file="$1" want="$2"
+  [[ -r "$file" ]] || return 0
+  awk -F'|' -v want="$want" '
+    /^\|/ {
+      for (i = 1; i <= NF; i++) { c = $i; gsub(/^[ \t]+|[ \t]+$/, "", c); if (c == want) { print i - 1; exit } }
+      exit   # only inspect the first table row (the header)
+    }' "$file"
+}
+
+# Read a single cell from a markdown data row by header-resolved column index.
+# row = the raw `| … |` line; idx = 0-based index from table_col_index. Trims spaces.
+table_cell() {
+  local row="$1" idx="$2"
+  awk -F'|' -v i="$((idx + 1))" '{ c = $i; gsub(/^[ \t]+|[ \t]+$/, "", c); print c }' <<<"$row"
+}
+
+# Is this a ledger DATA row (a re-version entry), not the header / separator / prose?
+# A data row starts with `|`, is not a `---` separator, and its first NON-EMPTY cell is
+# not the literal `slug` (the header). Inspecting the first non-empty cell — rather than a
+# fixed column index — is robust to the leading-`|` table form (where awk -F'|' makes
+# field 1 empty) AND to header column reordering.
+_is_ledger_data_row() {
+  [[ "$1" == \|* ]] || return 1
+  case "$1" in *---*) return 1 ;; esac
+  local first
+  first=$(awk -F'|' '{ for (i=1;i<=NF;i++){ c=$i; gsub(/^[ \t]+|[ \t]+$/,"",c); if (c!="") { print c; exit } } }' <<<"$1")
+  [[ -n "$first" && "$first" != "slug" ]]
+}
+
+# Look up a ledger cell for a (slug, abandoned_version) row, by header-resolved column.
+# Echoes the cell value, or empty if the row/column is absent. The composite key is
+# (slug, abandoned_version) per the ledger's frozen grain (one row per abandoned ver).
+ledger_cell_for() {
+  local slug="$1" ver="$2" col="$3" ci si vi line
+  [[ -r "$LEDGER_PATH" ]] || return 0
+  ci=$(table_col_index "$LEDGER_PATH" "$col");                  [[ -n "$ci" ]] || return 0
+  si=$(table_col_index "$LEDGER_PATH" "slug")
+  vi=$(table_col_index "$LEDGER_PATH" "abandoned_version")
+  [[ -n "$si" && -n "$vi" ]] || return 0
+  while IFS= read -r line; do
+    _is_ledger_data_row "$line" || continue
+    [[ "$(table_cell "$line" "$si")" == "$slug" ]] || continue
+    [[ "$(table_cell "$line" "$vi")" == "$ver" ]] || continue
+    table_cell "$line" "$ci"; return 0
+  done < "$LEDGER_PATH"
+  return 0     # not found — explicit (a while-read loop returns 1 at EOF; set -e trap)
+}
+
+# Load the abandonment authority into ABANDONED_SET as tag<TAB>slug records.
+# Priority: the #1679 ledger (every row with disposition=tag-orphaned AND no
+# reaped_ref yet — equivalently abandoned_tag_pushed=true, unreaped), THEN an
+# explicit --abandoned <tag> (slug unknown → empty). Never infers abandonment.
+ABANDONED_SET=()
+load_abandonment_authority() {
+  ABANDONED_SET=()
+  local di si vi ai ri line disp slug ver pushed reaped
+  if [[ -r "$LEDGER_PATH" ]]; then
+    di=$(table_col_index "$LEDGER_PATH" "disposition")
+    si=$(table_col_index "$LEDGER_PATH" "slug")
+    vi=$(table_col_index "$LEDGER_PATH" "abandoned_version")
+    ai=$(table_col_index "$LEDGER_PATH" "abandoned_tag_pushed")
+    ri=$(table_col_index "$LEDGER_PATH" "reaped_ref")
+    if [[ -n "$di" && -n "$si" && -n "$vi" ]]; then
+      while IFS= read -r line; do
+        _is_ledger_data_row "$line" || continue
+        disp=$(table_cell "$line" "$di")
+        [[ "$disp" == "tag-orphaned" ]] || continue          # the reap-authority disposition
+        slug=$(table_cell "$line" "$si"); ver=$(table_cell "$line" "$vi")
+        # Defensive cross-checks against the frozen enum's field mapping:
+        if [[ -n "$ai" ]]; then pushed=$(table_cell "$line" "$ai"); [[ "$pushed" == "true" ]] || continue; fi
+        if [[ -n "$ri" ]]; then reaped=$(table_cell "$line" "$ri"); [[ -z "$reaped" || "$reaped" == "—" ]] || continue; fi
+        ABANDONED_SET+=("${ver}	${slug}")
+      done < "$LEDGER_PATH"
+    fi
+  fi
+  [[ -n "$ABANDONED_ARG" ]] && ABANDONED_SET+=("${ABANDONED_ARG}	")   # explicit, slug unknown
+  return 0     # explicit — the trailing [[ … ]] && … returns 1 when ABANDONED_ARG is empty (set -e trap)
+}
+
+# Is <tag> a canonical (live) Tag-column value of a RELEASE_LOG row? Header-resolved
+# (NOT `^| <tag> |`) so the v1.03 row — which carries literal text in three cells —
+# cannot false-match. A tag that is canonical for a live row is NEVER reaped, even if
+# wrongly declared abandoned (it is typically the sibling release that won the slot).
+tag_is_canonical_release() {
+  local tag="$1" ti line cell
+  [[ -r "$RELEASE_LOG_PATH" ]] || return 1
+  ti=$(table_col_index "$RELEASE_LOG_PATH" "Tag"); [[ -n "$ti" ]] || return 1
+  while IFS= read -r line; do
+    [[ "$line" == \|* ]] || continue
+    case "$line" in *---*) continue ;; esac
+    cell=$(table_cell "$line" "$ti")
+    [[ "$cell" == "Tag" ]] && continue       # header
+    [[ "$cell" == "$tag" ]] && return 0
+  done < "$RELEASE_LOG_PATH"
+  return 1
+}
+
+# Classify one authority-declared-abandoned tag: REMOVE if it is genuinely an orphan
+# on origin, else a counted SKIP reason. Guards (in order): authority gate (must be in
+# ABANDONED_SET — held by construction here), canonical-version guard, on-origin probe
+# (idempotency). reshipped_as/merge_sha come from the ledger row (the re-create source
+# for a wrongly-reaped tag).
+classify_tag() {
+  local tag="$1" slug="$2" action="REMOVE" on_origin reshipped="?" merge_sha="?"
+  if [[ -n "$slug" ]]; then
+    reshipped=$(ledger_cell_for "$slug" "$tag" "final_version"); [[ -n "$reshipped" ]] || reshipped="?"
+    merge_sha=$(ledger_cell_for "$slug" "$tag" "merge_sha");     [[ -n "$merge_sha" ]] || merge_sha="?"
+  fi
+  # Guard 1 — canonical-version guard: refuse to reap a tag that is the live canonical
+  # Tag of a RELEASE_LOG row (the abandoned version of one release is often the live
+  # tag of the sibling that won the slot).
+  if tag_is_canonical_release "$tag"; then
+    action="SKIP — canonical version of a live RELEASE_LOG row (not an orphan)"
+  fi
+  # Guard 2 — idempotency: already absent from origin → nothing to reap.
+  if [[ "$action" == "REMOVE" ]]; then
+    on_origin=$(git ls-remote --tags "$REMOTE_NAME" "refs/tags/${tag}" 2>/dev/null | grep -c "refs/tags/${tag}$" || true)
+    [[ -z "$on_origin" ]] && on_origin=0
+    [[ "$on_origin" == "0" ]] && action="SKIP — already absent from origin (nothing to reap)"
+  fi
+  TAG_CANDIDATES+=("${tag}	${slug:-?}	${reshipped}	${merge_sha}	${action}")
+}
+
+# Report-only: flag a RELEASE_LOG row that needs the R-3 corpus roll-forward — i.e. THE
+# ABANDONING RELEASE'S OWN row still carries the abandoned version in its Version cell
+# (it never got restamped to its final version). Keyed on (Milestone-slug, Version) so it
+# does NOT false-fire on the SIBLING row that legitimately SHIPPED the version (the
+# abandoned version of one release is usually the live Tag of the sibling that won the
+# slot — that sibling's row is canonical, not stale). Excludes the `unrecoverable`
+# historical case (its RELEASE_LOG version is correct by design). NEVER edits corpus prose.
+detect_stale_version_rows() {
+  STALE_VERSION_ROWS=()
+  [[ -r "$LEDGER_PATH" && -r "$RELEASE_LOG_PATH" ]] || return 0
+  local vi si fi line slug ver final
+  local lvi lmi lline lver lmile
+  vi=$(table_col_index "$LEDGER_PATH" "abandoned_version")
+  si=$(table_col_index "$LEDGER_PATH" "slug")
+  fi=$(table_col_index "$LEDGER_PATH" "final_version")
+  lvi=$(table_col_index "$RELEASE_LOG_PATH" "Version")
+  lmi=$(table_col_index "$RELEASE_LOG_PATH" "Milestone")
+  [[ -n "$vi" && -n "$si" && -n "$lvi" && -n "$lmi" ]] || return 0
+  while IFS= read -r line; do
+    _is_ledger_data_row "$line" || continue
+    ver=$(table_cell "$line" "$vi"); slug=$(table_cell "$line" "$si"); final=$(table_cell "$line" "$fi")
+    [[ -n "$ver" && -n "$slug" ]] || continue
+    [[ "$final" == "unrecoverable" ]] && continue          # historical case — version is correct by design
+    [[ "$final" == "$ver" ]] && continue                   # final == abandoned (round-trip settled back) — not stale
+    # Flag ONLY the abandoning release's OWN row (Milestone == slug) if its Version cell
+    # still carries the abandoned version (i.e. it was never rolled forward to `final`).
+    while IFS= read -r lline; do
+      [[ "$lline" == \|* ]] || continue
+      case "$lline" in *---*) continue ;; esac
+      lmile=$(table_cell "$lline" "$lmi"); lver=$(table_cell "$lline" "$lvi")
+      [[ "$lver" == "Version" ]] && continue               # header
+      if [[ "$lmile" == "$slug" && "$lver" == "$ver" ]]; then
+        STALE_VERSION_ROWS+=("${slug}	${ver}	${final:-?}")
+        break
+      fi
+    done < "$RELEASE_LOG_PATH"
+  done < "$LEDGER_PATH"
+  return 0     # explicit — a while-read loop returns 1 at EOF (set -e trap)
+}
+
+detect_orphan_tags() {
+  load_abandonment_authority
+  local rec tag slug
+  for rec in "${ABANDONED_SET[@]:-}"; do
+    [[ -z "$rec" ]] && continue
+    tag=$(awk -F'\t' '{print $1}' <<<"$rec"); slug=$(awk -F'\t' '{print $2}' <<<"$rec")
+    [[ -n "$tag" ]] && classify_tag "$tag" "$slug"
+  done
+  detect_stale_version_rows
+  return 0     # explicit — keep the detector set -e-safe regardless of the last call's status
+}
+
 # ─── Output ──────────────────────────────────────────────────────────────────
 
 emit_markdown() {
@@ -667,6 +903,35 @@ EOF
     echo "$r" | awk -F'\t' '{printf "| `%s` | %s | %s | %s | %s |\n",$1,$2,$3,$4,$5}'
   done
   echo
+  # Orphan-tag reaping + stale-version-row pointers (--reap-orphan-tags scope only).
+  if [[ "$SCOPE" == "reap-orphan-tags" ]]; then
+    cat <<EOF
+## Detail — Orphan tags ${MODE/apply/reaped}
+
+| Abandoned tag | Slug | Reshipped as | Merge SHA (re-create source) | Action |
+|---|---|---|---|---|
+EOF
+    for r in "${TAG_CANDIDATES[@]:-}"; do
+      [[ -z "$r" ]] && continue
+      echo "$r" | awk -F'\t' '{printf "| `%s` | %s | %s | `%s` | %s |\n",$1,$2,$3,$4,$5}'
+    done
+    echo
+    cat <<EOF
+## Detail — Stale-version corpus rows (runbook R-3 roll-forward needed)
+
+_Report-only — the tool never edits corpus prose. A row below has a RELEASE_LOG
+Version cell still naming an abandoned version; restamp it forward per the
+re-version recovery runbook (Step 1, R-3)._
+
+| Slug | Abandoned version (in RELEASE_LOG) | Canonical version it should carry |
+|---|---|---|
+EOF
+    for r in "${STALE_VERSION_ROWS[@]:-}"; do
+      [[ -z "$r" ]] && continue
+      echo "$r" | awk -F'\t' '{printf "| %s | %s | %s |\n",$1,$2,$3}'
+    done
+    echo
+  fi
   echo "## Totals"
   echo "- $((lr + rr)) branches $noun, $((lc + rc - lr - rr - bfails)) skipped, $wr worktrees $noun, ≈${disk_total} MB $recov$([[ "$MODE" == "apply" ]] && echo ", $pc stale tracking ref(s) pruned")"
   if [[ "$MODE" == "apply" && $((bfails + wfails)) -gt 0 ]]; then
@@ -729,6 +994,20 @@ emit_json() {
     [[ $first -eq 0 ]] && printf ',\n'; first=0
     # shellcheck disable=SC2016  # single-quoted printf FORMAT; $REMOTE_NAME/$ref are args
     printf '    "%s/%s"' "$REMOTE_NAME" "$ref"
+  done
+  printf '\n  ],\n  "orphan_tags":[\n'
+  first=1
+  for r in "${TAG_CANDIDATES[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    [[ $first -eq 0 ]] && printf ',\n'; first=0
+    awk -F'\t' '{printf "    {\"tag\":\"%s\",\"slug\":\"%s\",\"reshipped_as\":\"%s\",\"merge_sha\":\"%s\",\"action\":\"%s\"}",$1,$2,$3,$4,$5}' <<<"$r"
+  done
+  printf '\n  ],\n  "stale_version_rows":[\n'
+  first=1
+  for r in "${STALE_VERSION_ROWS[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    [[ $first -eq 0 ]] && printf ',\n'; first=0
+    awk -F'\t' '{printf "    {\"slug\":\"%s\",\"abandoned_version\":\"%s\",\"canonical_version\":\"%s\"}",$1,$2,$3}' <<<"$r"
   done
   printf '\n  ]\n}\n'
 }
@@ -822,6 +1101,140 @@ apply_removals() {
     fi
   done
 
+  return 0
+}
+
+# ─── Orphan-tag reap (--reap-orphan-tags apply) ──────────────────────────────
+#
+# Reap = delete the abandoned-version orphan tag on origin (non-force) THEN locally.
+# Non-force `git push --delete` / `git tag -d` are git porcelain and are NOT in the
+# destructive-action hook's blocked set (only force-push forms are) — a tag delete is
+# a forward removal of a ref, not a history rewrite. Two safety properties this loop
+# enforces that a borrowed branch-delete pattern does not:
+#   (1) TWO-SURFACE ORDERING — origin first, local ONLY on origin success. A `git tag
+#       -d` that ran past a failed origin delete would leave origin and local
+#       divergent (origin keeps the tag, local loses it). So the local delete is GATED
+#       on the origin delete succeeding — never `|| true` past a failed origin delete.
+#   (2) REFUSED vs network-FAILED — a policy refusal (tag protected / in use) means
+#       STOP; a transport failure (origin unreachable) is retry-safe and idempotent.
+#       They are recorded distinctly, not collapsed into one "FAILED".
+# Double opt-in: an actual reap needs --apply AND --force (a tag delete is
+# MODERATE-reversibility), the same gate the existing branch -D path uses. On success,
+# transitions the ledger row to tag-reaped + writes reaped_ref (consumer → producer).
+reap_orphan_tags() {
+  echo "── Reap phase — deleting authority-declared-abandoned orphan tags (non-force) ──" >&2
+  local r tag slug action idx out rc
+  idx=-1
+  for r in "${TAG_CANDIDATES[@]:-}"; do
+    ((idx++)) || true
+    [[ -z "$r" ]] && continue
+    tag=$(awk -F'\t' '{print $1}' <<<"$r"); slug=$(awk -F'\t' '{print $2}' <<<"$r")
+    action=$(awk -F'\t' '{print $5}' <<<"$r")
+    [[ "$action" != "REMOVE" ]] && { echo "SKIPPED tag $tag — $action" >&2; continue; }
+    # Double opt-in: --force required (MODERATE-reversibility — re-pushable but
+    # transiently breaks any reference that resolved the tag).
+    if [[ "$FORCE" != "1" ]]; then
+      echo "SKIPPED tag $tag — reap requires --apply --force (double opt-in; tag delete is MODERATE-reversible)" >&2
+      TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — needs --force"
+      continue
+    fi
+    # Surface 1: origin. Capture stderr so REFUSED can be discriminated from a
+    # transport failure. NON-FORCE delete (git push --delete) — never +refspec.
+    rc=0
+    out=$(git push --delete "$REMOTE_NAME" "refs/tags/${tag}" 2>&1) || rc=$?
+    printf '%s\n' "$out" | sed 's/^/  git: /' >&2
+    if [[ "$rc" -eq 0 ]]; then
+      # Surface 2: local — ONLY after origin succeeded (avoids origin/local divergence).
+      git tag -d "$tag" >/dev/null 2>&1 || true
+      echo "PASS tag $tag reaped from origin + local" >&2
+      TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
+      [[ -n "$slug" && "$slug" != "?" ]] && ledger_mark_reaped "$slug" "$tag"
+    elif printf '%s' "$out" | grep -qiE 'remote rejected|protected|denied|permission|refusing|pre-receive|hook declined'; then
+      echo "FAIL tag $tag — push --delete REFUSED (policy/protection); stop — do not retry" >&2
+      TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REFUSED — push --delete rejected (policy/protection)"
+    else
+      # Transport / unreachable-origin / unknown-non-policy: retry-safe, idempotent.
+      # Local tag is intentionally LEFT in place — the ledger-authoritative state is
+      # "tag on origin"; a local-only delete would create divergence.
+      echo "FAIL tag $tag — push --delete FAILED (network/transport); retry when origin is reachable" >&2
+      TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — network/transport (retry-safe)"
+    fi
+  done
+  return 0
+}
+
+# Post-reap verification (AC4: never silently claim success). Re-probe origin for each
+# tag the reap rewrote to REMOVED; a survivor (still on origin) is reclassified, so the
+# report never asserts a reap that did not hold. Runs in --apply only; returns 0.
+verify_tag_apply() {
+  local r tag idx survivors=0 on_origin
+  idx=-1
+  for r in "${TAG_CANDIDATES[@]:-}"; do
+    ((idx++)) || true
+    [[ -z "$r" ]] && continue
+    [[ "$(awk -F'\t' '{print $5}' <<<"$r")" != "REMOVED" ]] && continue
+    tag=$(awk -F'\t' '{print $1}' <<<"$r")
+    on_origin=$(git ls-remote --tags "$REMOTE_NAME" "refs/tags/${tag}" 2>/dev/null | grep -c "refs/tags/${tag}$" || true)
+    [[ -z "$on_origin" ]] && on_origin=0
+    if [[ "$on_origin" != "0" ]]; then
+      echo "SKIPPED-VERIFY tag $tag — reported REMOVED but still present on origin" >&2
+      TAG_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIPPED — survived apply (still on origin)"
+      ((survivors++)) || true
+    fi
+  done
+  if [[ "$survivors" -eq 0 ]]; then
+    echo "PASS tag-verify — every reaped tag confirmed gone from origin (zero survivors)" >&2
+  else
+    echo "WARN tag-verify — $survivors tag(s) reported REMOVED but survived; reclassified SKIPPED" >&2
+  fi
+  return 0
+}
+
+# Write-back (consumer → producer): transition the matched ledger row IN PLACE,
+# mutating ONLY the two cells #1679's frozen schema permits — disposition (→ tag-reaped)
+# and reaped_ref — keyed on (slug, abandoned_version), header-resolved. Honors the
+# ledger's append-only invariant: exactly ONE row changes; no row is added or removed;
+# no other cell is touched. reaped_ref is set to the current HEAD short SHA (the cleanup
+# commit reference) when it is not already set.
+ledger_mark_reaped() {
+  local slug="$1" ver="$2"
+  [[ -w "$LEDGER_PATH" ]] || { echo "WARN ledger-writeback — $LEDGER_PATH not writable; skipped" >&2; return 0; }
+  local di ri si vi ncol ref
+  di=$(table_col_index "$LEDGER_PATH" "disposition")
+  ri=$(table_col_index "$LEDGER_PATH" "reaped_ref")
+  si=$(table_col_index "$LEDGER_PATH" "slug")
+  vi=$(table_col_index "$LEDGER_PATH" "abandoned_version")
+  if [[ -z "$di" || -z "$ri" || -z "$si" || -z "$vi" ]]; then
+    echo "WARN ledger-writeback — could not resolve disposition/reaped_ref columns; skipped" >&2
+    return 0
+  fi
+  ncol=$(awk -F'|' '/^\|/ {print NF; exit}' "$LEDGER_PATH")     # field count incl. the empty edges
+  ref=$(git rev-parse --short HEAD 2>/dev/null || echo "reaped")
+  # Transform into a variable (here-string back to the same path) — NO temp file, NO
+  # rm/mv, preserving the script's "zero rm/rmdir/unlink" contract. awk exits 3 when no
+  # row matched, so a non-match leaves the ledger byte-for-byte unchanged.
+  local rewritten rc=0
+  rewritten=$(awk -F'|' -v OFS='|' \
+      -v slug="$slug" -v ver="$ver" -v di="$((di + 1))" -v ri="$((ri + 1))" \
+      -v si="$((si + 1))" -v vi="$((vi + 1))" -v ref="$ref" -v nf="$ncol" '
+    function trim(s){ gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    {
+      # Rewrite ONLY a single matching DATA row; pass everything else through verbatim.
+      if ($0 ~ /^\|/ && NF == nf && trim($si) == slug && trim($vi) == ver && trim($di) == "tag-orphaned") {
+        $di = " tag-reaped "
+        $ri = " " ref " "
+        changed = 1
+      }
+      print
+    }
+    END { if (!changed) exit 3 }
+  ' "$LEDGER_PATH") || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
+    printf '%s\n' "$rewritten" > "$LEDGER_PATH"     # in-place content replace; no rm/mv
+    echo "PASS ledger-writeback — ($slug, $ver) → disposition=tag-reaped, reaped_ref=$ref" >&2
+  else
+    echo "WARN ledger-writeback — no matching tag-orphaned row for ($slug, $ver); ledger unchanged" >&2
+  fi
   return 0
 }
 
@@ -1428,6 +1841,194 @@ selftest_no_live_worktree_pipes() {
   return 0
 }
 
+# Orphan-tag reap fixtures (T-1..T-9). HERMETIC: never touches the real origin. The
+# real-reap / verify-after cases (T-3/T-7) run `git push --delete` and `git ls-remote`
+# against a PID-scoped FIXTURE BARE REMOTE (a local `git init --bare`), with REMOTE_NAME
+# temporarily repointed at it — so the reap primitive is observed FIRING against a
+# throwaway, not assumed and not aimed at origin. Classification/guard/write-back cases
+# run in-process on injected state + a throwaway ledger (LEDGER_PATH override). Net-zero:
+# the fixture remote + its tag + the throwaway ledger are removed on every exit path.
+selftest_orphan_tag_reap() {
+  local base saved_remote="$REMOTE_NAME" saved_ledger="$LEDGER_PATH" saved_log="$RELEASE_LOG_PATH"
+  local saved_force="$FORCE" saved_aband="$ABANDONED_ARG" saved_scope="$SCOPE" saved_mode="$MODE"
+  # Fixtures live in a PID-scoped dir under the system temp — NOT under the repo (a
+  # linked worktree's `.git` is a gitdir-pointer FILE, not a directory) and NOT origin.
+  local fix_base="${TMPDIR:-/tmp}/cleanup-selftest-$$"
+  local fix_remote_dir="${fix_base}/reap-remote" fix_ledger fix_log
+  local fail=0 tag="cleanup-selftest-rv-$$" slug="cleanup-selftest-slug-$$" action
+  base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: orphan-tag reap check SKIPPED — no HEAD commit" >&2
+    return 0
+  fi
+  if ! mkdir -p "$fix_base" >/dev/null 2>&1; then
+    echo "self-test: orphan-tag reap check SKIPPED — could not create fixture dir '$fix_base'" >&2
+    return 0
+  fi
+
+  # ── Throwaway ledger (a single tag-orphaned row the reader must authorize) ──
+  fix_ledger="${fix_base}/ledger.md"
+  fix_log="${fix_base}/release-log.md"
+  {
+    echo '| slug | abandoned_version | final_version | claimed_versions | abandoned_tag_pushed | merge_sha | collided_with | resolved_at_stage | disposition | residual_labels | reaped_ref | date |'
+    echo '|---|---|---|---|---|---|---|---|---|---|---|---|'
+    echo "| ${slug} | ${tag} | v9.99 | ${tag} → v9.99 | true | ${base} | — | S12 | tag-orphaned | branch retains label | — | 2026-06-21 |"
+  } > "$fix_ledger"
+  # Throwaway RELEASE_LOG: one canonical row whose Tag is a DIFFERENT fixture tag, used
+  # by the canonical-version guard (T-5). Header-keyed so column order is irrelevant.
+  {
+    echo '| Version | Milestone | Issues | Merge SHA | Tag | State | Date |'
+    echo '|---|---|---|---|---|---|---|'
+    echo "| v8.88 | canon-${slug} | #1 | ${base} | cleanup-selftest-canon-$$ | VERIFIED | 2026-06-21 |"
+  } > "$fix_log"
+
+  # ── T-1: authority gate — NO authority (no ledger row, no --abandoned) = no reap ──
+  LEDGER_PATH="/nonexistent-$$"; RELEASE_LOG_PATH="$fix_log"; ABANDONED_ARG=""; TAG_CANDIDATES=(); ABANDONED_SET=()
+  detect_orphan_tags >/dev/null 2>&1 || true
+  if [[ "${#TAG_CANDIDATES[@]}" -ne 0 ]]; then
+    echo "self-test: orphan-tag reap check FAILED — T-1: a tag was classified with NO abandonment authority" >&2; fail=1
+  fi
+
+  # ── T-2: declared-abandoned via ledger → REMOVE in dry-run (mutates nothing) ──
+  # (Probe origin via a fixture remote with the tag present so on-origin != 0.)
+  # Lightweight tag via plumbing (git update-ref) — config-immune (the operator may set
+  # tag.gpgsign=true, which makes `git tag <name> <sha>` demand an annotation message).
+  if git init --bare -q "$fix_remote_dir" >/dev/null 2>&1 \
+     && git push -q "$fix_remote_dir" "HEAD:refs/heads/selftest-base-$$" >/dev/null 2>&1 \
+     && git update-ref "refs/tags/${tag}" "$base" >/dev/null 2>&1 \
+     && git push -q "$fix_remote_dir" "refs/tags/${tag}" >/dev/null 2>&1; then
+    REMOTE_NAME="$fix_remote_dir"; LEDGER_PATH="$fix_ledger"; RELEASE_LOG_PATH="$fix_log"; ABANDONED_ARG=""
+    TAG_CANDIDATES=(); ABANDONED_SET=()
+    detect_orphan_tags >/dev/null 2>&1 || true
+    action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+    if [[ "$action" != "REMOVE" ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-2: ledger-declared on-origin tag not classified REMOVE (got '$action')" >&2; fail=1
+    fi
+    # dry-run must mutate nothing — the tag is still on the fixture remote.
+    if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+      echo "self-test: orphan-tag reap check FAILED — T-2: dry-run deleted the tag (must not mutate)" >&2; fail=1
+    fi
+
+    # ── T-4: double-opt-in — --apply WITHOUT --force → SKIP, not deleted ──
+    FORCE=0; reap_orphan_tags >/dev/null 2>&1 || true
+    action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+    if [[ "$action" != "SKIP — needs --force" ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-4: --apply without --force did not SKIP (got '$action')" >&2; fail=1
+    fi
+    if ! git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+      echo "self-test: orphan-tag reap check FAILED — T-4: tag deleted without --force (double opt-in breached)" >&2; fail=1
+    fi
+
+    # ── T-3: REAP actually deletes (reproduction-and-observe) — --apply --force ──
+    # Re-classify (the prior reap rewrote the row to SKIP), then reap with force.
+    LEDGER_PATH="$fix_ledger"; TAG_CANDIDATES=(); ABANDONED_SET=(); detect_orphan_tags >/dev/null 2>&1 || true
+    FORCE=1; reap_orphan_tags >/dev/null 2>&1 || true
+    action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+    if [[ "$action" != "REMOVED" ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-3: reap did not report REMOVED (got '$action')" >&2; fail=1
+    fi
+    # OBSERVE the absence on the fixture remote (the load-bearing assertion).
+    if git ls-remote --tags "$fix_remote_dir" "refs/tags/${tag}" 2>/dev/null | grep -q "refs/tags/${tag}$"; then
+      echo "self-test: orphan-tag reap check FAILED — T-3: tag still present on fixture remote after reap" >&2; fail=1
+    fi
+    # Local tag must be gone too (two-surface).
+    if git show-ref --tags --verify --quiet "refs/tags/${tag}"; then
+      echo "self-test: orphan-tag reap check FAILED — T-3: local tag survived the reap" >&2; fail=1
+    fi
+    # T-9 (write-back): the throwaway ledger row transitioned to tag-reaped + reaped_ref set,
+    # EXACTLY one row, ONLY the two cells (assert disposition flipped and reaped_ref non-empty,
+    # and row/column counts unchanged).
+    if ! grep -q '| tag-reaped |' "$fix_ledger"; then
+      echo "self-test: orphan-tag reap check FAILED — T-9: ledger disposition not transitioned to tag-reaped" >&2; fail=1
+    fi
+    if grep -q '| tag-orphaned |' "$fix_ledger"; then
+      echo "self-test: orphan-tag reap check FAILED — T-9: ledger still carries tag-orphaned (in-place transition failed)" >&2; fail=1
+    fi
+    if [[ "$(grep -c '^|' "$fix_ledger")" -ne 3 ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-9: ledger row count changed (append-only invariant breached)" >&2; fail=1
+    fi
+
+    # ── T-6: idempotency — re-classify the now-absent tag → SKIP already-absent ──
+    LEDGER_PATH="$fix_ledger"; TAG_CANDIDATES=(); ABANDONED_SET=(); detect_orphan_tags >/dev/null 2>&1 || true
+    # The ledger row is now tag-reaped (not tag-orphaned) → no authority → no candidate.
+    if [[ "${#TAG_CANDIDATES[@]}" -ne 0 ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-6: a reaped (tag-reaped) row was re-authorized for reap" >&2; fail=1
+    fi
+    # Idempotency via explicit --abandoned on the already-absent tag → SKIP already-absent.
+    ABANDONED_ARG="$tag"; LEDGER_PATH="/nonexistent-$$"; TAG_CANDIDATES=(); ABANDONED_SET=(); detect_orphan_tags >/dev/null 2>&1 || true
+    action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+    if [[ "$action" != "SKIP — already absent from origin (nothing to reap)" ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-6: already-absent tag not SKIPPED idempotently (got '$action')" >&2; fail=1
+    fi
+    ABANDONED_ARG=""
+
+    # ── T-7: verify-after never silently claims success ──
+    # Push the tag back, inject a TAG_CANDIDATE pre-marked REMOVED, run verify — it must
+    # reclassify (the tag survived on the fixture remote).
+    git update-ref "refs/tags/${tag}" "$base" >/dev/null 2>&1 || true
+    git push -q "$fix_remote_dir" "refs/tags/${tag}" >/dev/null 2>&1 || true
+    TAG_CANDIDATES=("${tag}	${slug}	v9.99	${base}	REMOVED")
+    verify_tag_apply >/dev/null 2>&1 || true
+    action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+    if [[ "$action" != "SKIPPED — survived apply (still on origin)" ]]; then
+      echo "self-test: orphan-tag reap check FAILED — T-7: verify-after did not reclassify a surviving tag (got '$action')" >&2; fail=1
+    fi
+    git tag -d "$tag" >/dev/null 2>&1 || true
+  else
+    echo "self-test: orphan-tag reap check SKIPPED (T-2/T-3/T-4/T-6/T-7) — could not set up fixture remote" >&2
+  fi
+
+  # ── T-5: canonical-version guard — a tag that IS a live RELEASE_LOG Tag is never reaped ──
+  REMOTE_NAME="$saved_remote"   # canonical check is corpus-only; remote irrelevant
+  ABANDONED_ARG="cleanup-selftest-canon-$$"; LEDGER_PATH="/nonexistent-$$"; RELEASE_LOG_PATH="$fix_log"
+  TAG_CANDIDATES=(); ABANDONED_SET=(); detect_orphan_tags >/dev/null 2>&1 || true
+  action=$(awk -F'\t' '{print $5}' <<<"${TAG_CANDIDATES[0]:-}")
+  if [[ "$action" != "SKIP — canonical version of a live RELEASE_LOG row (not an orphan)" ]]; then
+    echo "self-test: orphan-tag reap check FAILED — T-5: canonical-guard did not refuse a live-Tag value (got '$action')" >&2; fail=1
+  fi
+
+  # ── T-8: stale-version-row detection (report-only; never edits prose) ──
+  # The throwaway ledger names abandoned=${tag}, slug=${slug}, final=v9.99. Seed the
+  # ABANDONING RELEASE'S OWN RELEASE_LOG row (Milestone == ${slug}) still carrying the
+  # abandoned version in Version → it must surface in STALE_VERSION_ROWS (keyed on
+  # (Milestone-slug, Version)), prose untouched. Also seed a SIBLING row (different
+  # Milestone) carrying the same version → it must NOT be flagged (false-positive guard).
+  {
+    echo '| Version | Milestone | Issues | Merge SHA | Tag | State | Date |'
+    echo '|---|---|---|---|---|---|---|'
+    echo "| ${tag} | ${slug} | #2 | ${base} | sometag | VERIFIED | 2026-06-21 |"
+    echo "| ${tag} | sibling-${slug} | #3 | ${base} | ${tag} | VERIFIED | 2026-06-21 |"
+  } > "$fix_log"
+  LEDGER_PATH="$fix_ledger"; RELEASE_LOG_PATH="$fix_log"; ABANDONED_ARG=""; TAG_CANDIDATES=(); ABANDONED_SET=(); STALE_VERSION_ROWS=()
+  detect_orphan_tags >/dev/null 2>&1 || true
+  if ! printf '%s\n' "${STALE_VERSION_ROWS[@]:-}" | grep -q "^${slug}	${tag}	"; then
+    echo "self-test: orphan-tag reap check FAILED — T-8: abandoning-release stale row not flagged for R-3 roll-forward" >&2; fail=1
+  fi
+  # False-positive guard: the sibling row (Milestone=sibling-${slug}) must NOT be flagged.
+  if printf '%s\n' "${STALE_VERSION_ROWS[@]:-}" | grep -q "^sibling-${slug}	"; then
+    echo "self-test: orphan-tag reap check FAILED — T-8: sibling canonical row wrongly flagged as stale (false positive)" >&2; fail=1
+  fi
+  if ! grep -q "| ${tag} | ${slug} |" "$fix_log"; then
+    echo "self-test: orphan-tag reap check FAILED — T-8: stale-version detector mutated the RELEASE_LOG (must be report-only)" >&2; fail=1
+  fi
+
+  # ── Teardown (bounded; PID-scoped fixture only — never the real origin) ──
+  REMOTE_NAME="$saved_remote"; LEDGER_PATH="$saved_ledger"; RELEASE_LOG_PATH="$saved_log"
+  FORCE="$saved_force"; ABANDONED_ARG="$saved_aband"; SCOPE="$saved_scope"; MODE="$saved_mode"
+  TAG_CANDIDATES=(); ABANDONED_SET=(); STALE_VERSION_ROWS=()
+  git tag -d "$tag" >/dev/null 2>&1 || true
+  # Bounded fixture cleanup — PID-scoped single dir under the system temp; mirrors
+  # deploy.sh's guarded bounded-rm. The case-guard refuses any path not matching the
+  # exact `<tmp>/cleanup-selftest-<pid>` shape (defense against an unset/odd fix_base).
+  case "$fix_base" in
+    "${TMPDIR:-/tmp}/cleanup-selftest-$$") /bin/rm -rf "$fix_base" 2>/dev/null || true ;;
+  esac
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: orphan-tag reap check PASS — T-1 authority gate / T-2 dry-run / T-3 real-reap-observed / T-4 double-opt-in / T-5 canonical-guard / T-6 idempotency / T-7 verify-after / T-8 stale-row report-only / T-9 ledger write-back" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -1451,6 +2052,8 @@ self_test() {
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
   selftest_no_live_worktree_pipes
+  echo "self-test: exercising orphan-tag reap (authority gate, real-reap-observed, double-opt-in, canonical-guard, verify-after, ledger write-back)..." >&2
+  selftest_orphan_tag_reap
   echo "self-test: PASS" >&2
   exit 0
 }
@@ -1462,6 +2065,9 @@ while [[ $# -gt 0 ]]; do
     --release-close) SCOPE="release-close"; MILESTONE_SLUG="${2:-}"; shift 2 ;;
     --spawn-task)    SCOPE="spawn-task"; shift ;;
     --historical)    SCOPE="historical"; shift ;;
+    --reap-orphan-tags) SCOPE="reap-orphan-tags"; shift ;;
+    --abandoned)     ABANDONED_ARG="${2:-}"; shift 2 ;;
+    --ledger)        LEDGER_PATH="${2:-}"; shift 2 ;;
     --all)           SCOPE="all"; shift ;;
     --dry-run)       MODE="dry-run"; shift ;;
     --apply)         MODE="apply"; shift ;;
@@ -1476,6 +2082,7 @@ done
 
 [[ "$FORCE" == "1" && "$MODE" != "apply" ]] && die "--force requires --apply (double opt-in)"
 [[ "$SCOPE" == "release-close" && -z "$MILESTONE_SLUG" ]] && die "--release-close requires a milestone slug"
+[[ -n "$ABANDONED_ARG" && "$SCOPE" != "reap-orphan-tags" ]] && die "--abandoned requires --reap-orphan-tags"
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -1492,6 +2099,7 @@ case "$SCOPE" in
   release-close) detect_release_close "$MILESTONE_SLUG" ;;
   spawn-task)    detect_spawn_task ;;
   historical)    detect_historical ;;
+  reap-orphan-tags) detect_orphan_tags ;;
 esac
 
 # Apply BEFORE emitting, FOUR phases in order: (1) apply_removals rewrites candidate
@@ -1504,11 +2112,24 @@ esac
 # All four run in --apply only and return 0 so emit still runs after them under
 # set -e. Plain `if` (not `[[ … ]] && …`) keeps control flow obvious and immune to
 # set -e short-circuit semantics.
-if [[ "$MODE" == "apply" ]]; then
+#
+# The branch/worktree four-phase fixed point is GUARDED OFF the reap scope: the tag
+# reap is a separate accumulator (TAG_CANDIDATES) with no interaction with the
+# branch/worktree fixed point, so it runs as a SCOPE-GATED SIBLING (below) with its own
+# tag-verify — NOT nested in this block. This keeps the default --all / --release-close
+# close path reap-free (a reap needs ledger authority + double opt-in).
+if [[ "$MODE" == "apply" && "$SCOPE" != "reap-orphan-tags" ]]; then
   apply_removals
   resolve_freed_branches
   verify_apply
   prune_remote_tracking
+fi
+
+# Reap sibling — scope-gated, with its own verify (AC4). Only the --reap-orphan-tags
+# scope ever reaps; the reap requires --apply (and, inside reap_orphan_tags, --force).
+if [[ "$MODE" == "apply" && "$SCOPE" == "reap-orphan-tags" ]]; then
+  reap_orphan_tags
+  verify_tag_apply
 fi
 
 case "$OUTPUT" in
