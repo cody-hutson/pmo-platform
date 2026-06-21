@@ -86,3 +86,12 @@ release/tools/automated-closeout.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/version-grammar.sh
 ./release/tools/version-grammar.sh
 release/tools/version-grammar.sh
+# claim-version.sh — the GitHub/git adapter's version-claim impl (Stage 12
+# atomic claim + ref-CAS retry). It is EXECUTED at Stage 12 Phase B3 and may be
+# SOURCED by the freeness-detection / observability slices to reuse the adapter
+# operations (anchor/claimed_set/atomic_claim/lineage), so all four forms (incl.
+# source/.) are allowlisted (BLOCK-DESTRUCTIVE-022 gates both execution + source).
+[PMO_PLATFORM_ROOT]/release/tools/claim-version.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
+./release/tools/claim-version.sh
+release/tools/claim-version.sh

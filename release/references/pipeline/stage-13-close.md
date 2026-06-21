@@ -154,7 +154,7 @@ gh pr view <PR> --json state,mergeCommit
 ```
 Stage 12 — Execute (per pipeline/stage-12-execute.md)
 ├── Phase B1 — Merge release PR + capture MERGE_SHA
-├── Phase B3 — git tag -a -m "v<X.Y>-<milestone-slug> — <N> issues; release SHA = merge of PR #<n>" v<X.Y> "$MERGE_SHA" + git push origin v<X.Y>
+├── Phase B3 — claim-version.sh --sha "$MERGE_SHA" --bump <bump-class> (atomic version claim + ref-CAS retry; pushes the signed tag, version computed at claim time)
 ├── Phase B5 — Stage 12 chore PR: RELEASE_LOG row at DEPLOYED state
 │   └── chore PR merged + Phase B merge verification PASS
 └── Phase B5.5 — SURFACE 1 EMIT (NEW per Layer-1 dual-write)
