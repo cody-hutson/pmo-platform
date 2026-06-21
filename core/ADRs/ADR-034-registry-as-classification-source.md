@@ -4,7 +4,7 @@
 title: ADR-034 — Registry as classification source — the core/ logical skill registry is a single central markdown index, registration is a central-index row (never a SKILL.md frontmatter field), and only role-Specialists register
 status: Proposed
 date: 2026-06-20
-release: 05-ROLE-sustain-coverage-router (v2.12)
+release: 05-ROLE-sustain-coverage-router (v2.15)
 deciders: "operator + Stage 5 Solutioning spoke"
 tags: [architecture, skills, registry, classification-source, role-specialist, router, central-index, core-module, parameterization, carry-forward, reversibility]
 source_observations:
@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Drafted at Stage 5 Solutioning for the registry-foundation work item of the `05-ROLE-sustain-coverage-router` (v2.12) release and materialized at Stage 6 alongside the registry it governs. Flips to **Accepted** at the v2.12 Collective Review scope-lock — the release activates Stage 5 with two or more Solutioning issues, so Collective Review is the ratification gate, consistent with how ADR-019 set its own status. The decision is recorded as Proposed (not Accepted) at authoring time precisely because that ratification gate has not yet run.
+**Proposed.** Drafted at Stage 5 Solutioning for the registry-foundation work item of the `05-ROLE-sustain-coverage-router` (v2.15) release and materialized at Stage 6 alongside the registry it governs. Flips to **Accepted** at the v2.15 Collective Review scope-lock — the release activates Stage 5 with two or more Solutioning issues, so Collective Review is the ratification gate, consistent with how ADR-019 set its own status. The decision is recorded as Proposed (not Accepted) at authoring time precisely because that ratification gate has not yet run.
 
 ## Context
 
@@ -72,5 +72,5 @@ Adopt the **registry-as-classification-source** model, with five coupled parts:
 
 ### Source(s)
 
-- The registry-foundation work item of the `05-ROLE-sustain-coverage-router` (v2.12) release — establish the `core/` logical skill registry; references the foundation work item (#1564) and the capstone router story (#181) that consumes the registry. The Stage 4 release plan (`release/releases/plans/v2.12_RELEASE_PLAN.md`) carries the dependency graph, contention map, and the Risk R6 (novel registry schema) that recommended this ADR.
+- The registry-foundation work item of the `05-ROLE-sustain-coverage-router` (v2.15) release — establish the `core/` logical skill registry; references the foundation work item (#1564) and the capstone router story (#181) that consumes the registry. The Stage 4 release plan (`release/releases/plans/v2.15_RELEASE_PLAN.md`) carries the dependency graph, contention map, and the Risk R6 (novel registry schema) that recommended this ADR.
 - The central-index precedent: `core/schemas/per-skill-output-contracts.md` — a central per-skill index keyed by skill, consumed by path, carrying no per-skill frontmatter field; the proven pattern this decision adopts for the role-routing surface.

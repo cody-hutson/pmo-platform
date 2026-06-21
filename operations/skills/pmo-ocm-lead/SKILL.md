@@ -2,7 +2,7 @@
 name: pmo-ocm-lead
 description: >
   Organizational Change Management (OCM) Lead Specialist — emulates an OCM Lead driving a go-live's organizational change end-to-end by composing the change-management function-skill across the full lifecycle. Composes change-management (impact · training · readiness · hypercare · adoption · comms) — invokes it through the core/ registry skill-chain, never re-implements it (ADR-019). Modes: Change Impact · Training & Adoption · Readiness Go/No-Go · Hypercare & Adoption Outcome · Change Comms Program. Use when the platform should act as the OCM lead, run or own the change program for a go-live, or drive organizational change as one coherent workflow. Triggers: "act as OCM lead", "run the change program", "own the change for this go-live", "drive organizational change", "lead the org change for this rollout", "manage the change end-to-end".
-version: v2.12
+version: v2.15
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true

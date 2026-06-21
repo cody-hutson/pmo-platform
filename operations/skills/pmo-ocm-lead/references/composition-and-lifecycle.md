@@ -5,7 +5,7 @@ This reference holds the granular composition contract for `pmo-ocm-lead`: the v
 
 ## 1. Mode → composed `change-management` mode map (with evidence)
 
-Every `pmo-ocm-lead` mode is a **role-level orchestration** over one or more `change-management` modes, invoked through the `core/` registry skill-chain (ADR-007) — never inline-reimplemented. The composed `change-management` modes are owned by `change-management`; the line citations below pin the live source as of the v2.12 build.
+Every `pmo-ocm-lead` mode is a **role-level orchestration** over one or more `change-management` modes, invoked through the `core/` registry skill-chain (ADR-007) — never inline-reimplemented. The composed `change-management` modes are owned by `change-management`; the line citations below pin the live source as of the v2.15 build.
 
 | pmo-ocm-lead mode | Composes `change-management` mode(s) | Evidence (`change-management/SKILL.md`) |
 |---|---|---|

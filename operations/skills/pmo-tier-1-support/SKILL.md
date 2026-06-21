@@ -2,7 +2,7 @@
 name: pmo-tier-1-support
 description: >
   First-line support Specialist — triages an incoming issue, resolves known/documented issues from runbooks and FAQs, and escalates anything out of first-line scope to pmo-tier-2-support with a structured Escalation Handoff Record. Owns no RCA — a novel problem is escalated, never root-caused inline. Composes artifact-generator (triage record + the EHR artifact) and hands genuinely-new intake to intake-desk — invokes them via the core/ registry skill-chain, never re-implements them (ADR-019). Modes: Triage · Resolve-Known · Escalate. Use when the question is a first-contact known-issue lookup or a triage. Triggers: "first-line support", "tier 1 support", "how do I…", "is this a known issue", "triage this issue", "what's the status of this issue", "is there a fix for this".
-version: v2.12
+version: v2.15
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true

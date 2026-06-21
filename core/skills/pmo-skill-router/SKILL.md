@@ -7,7 +7,7 @@ description: >
   trigger surface. No hardcoded skill list; routing changes by editing the
   registry, never the router. Use when a role-shaped request needs to be routed
   to the right PMO role-Specialist, or "which role skill handles this".
-version: v2.12
+version: v2.15
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true

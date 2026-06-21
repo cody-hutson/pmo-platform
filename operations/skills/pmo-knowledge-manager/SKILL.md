@@ -2,7 +2,7 @@
 name: pmo-knowledge-manager
 description: >
   Knowledge Manager Specialist — captures, structures, routes, and stewards project knowledge assets (lessons learned, runbooks, decision records, reference docs) so they land in their governed home, not as two disconnected generate-then-route steps. Composes artifact-generator (produces/stages the asset) + file-router (classifies + routes it to its governed home) — invokes them via the core/ registry skill-chain, never re-implements them (ADR-019). Modes: Capture · Structure/Steward · Route/File · Knowledge-Gap Audit. Use when you want the platform to act as the Knowledge Manager. Triggers: "act as knowledge manager", "capture this as a knowledge asset", "steward the knowledge base", "file this lesson learned", "build the runbook and file it", "where does this knowledge go", "what knowledge are we missing".
-version: v2.12
+version: v2.15
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true

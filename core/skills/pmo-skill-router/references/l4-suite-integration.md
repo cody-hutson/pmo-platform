@@ -19,7 +19,7 @@ The harness is grounded in [`../../eval-writer/SKILL.md`](../../eval-writer/SKIL
 ### Pass bar (hub-resolved)
 
 - **Per-query binary score:** routed `name` == expected `name` → **PASS**; else **FAIL**.
-- **Aggregate bar: firm 90%** (the Stage 9 hub resolution of the open design question). The skill-suite epic's Decision 10 sets a "90% trigger-accuracy threshold, **adaptive based on pilot results**"; the hub fixed the v2.12 L4 at the **firm 90% aggregate** bar. Any pilot-adjusted bar must be **recorded with rationale**, never applied silently.
+- **Aggregate bar: firm 90%** (the Stage 9 hub resolution of the open design question). The skill-suite epic's Decision 10 sets a "90% trigger-accuracy threshold, **adaptive based on pilot results**"; the hub fixed the v2.15 L4 at the **firm 90% aggregate** bar. Any pilot-adjusted bar must be **recorded with rationale**, never applied silently.
 - **Sub-90% on a *confusable cluster* (C1–C6) → trigger-deconfliction finding, NOT a router defect.** The router classifies on the prose it is given; if two rows' `trigger surface` are not separable, the fix is **sharpening the registry rows** (or the source `description:`), not patching router logic. This lets the router pass the build gate while the deconfliction finding routes back to the registry rows — honoring both the firm bar and the epic Decision-10 adaptive clause.
 
 ### Count allocation (≥50; recommend 60 for headroom)

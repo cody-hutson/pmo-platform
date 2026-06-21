@@ -2,7 +2,7 @@
 name: pmo-tier-2-support
 description: >
   Escalation/RCA support Specialist — consumes the pmo-tier-1-support Escalation Handoff Record, performs a structured root-cause analysis, drives the issue to resolution, and authors/updates a runbook so it becomes first-line-resolvable. Owns the RCA method (invokes core/disciplines/root-cause-analysis.md, never redefines it); composes artifact-generator (runbook + RCA record), routes via file-router / pmo-knowledge-manager (persist to the knowledge base), and intake-desk (tracked work items) — invokes them via the core/ registry skill-chain (ADR-019). Modes: RCA · Drive-to-Resolution · Runbook-Authorship. Use for an escalated or novel problem that needs a causal explanation. Triggers: "tier 2 support", "escalated issue", "root cause this", "RCA", "write a runbook for this", "why did this break", "this keeps happening — why".
-version: v2.12
+version: v2.15
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true

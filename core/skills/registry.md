@@ -46,7 +46,7 @@ Sorted by module (operations, then release), then by name. Each `name` links to 
 | [`pmo-release-manager`](../../release/skills/pmo-release-manager/SKILL.md) | release | Owns the release tail at the Release-Manager altitude: the go/no-go decision, deploy authorization, and close-out — composing `release-planner` + `release-executor`, never re-implementing them. Use when a release needs its tail driven end-to-end: go/no-go evidence assembled, the deploy driven, or the release closed out. Distinct from the deploy-mechanics/reliability `pmo-devops-sre` (boundary: decision-vs-execution). | Go/No-Go Evidence · Deploy Execution · Close-out |
 | [`pmo-software-engineer`](../../release/skills/pmo-software-engineer/SKILL.md) | release | Executes end-to-end Stage-6 Engineering — turns an approved implementation plan or findings register into executed change, verification, and a PR. Use when an approved plan or findings register is ready to build; a bare ticket with no plan routes to planning first. | Development |
 
-> **Roster note.** The suite reaches its full **19 role-Specialist** roster at v2.12 GA — the **14 prior-wave** role-Specialists (9 operations + 5 release) plus the 5 v2.12 role-Specialists (`pmo-release-manager`, `pmo-tier-1-support`, `pmo-tier-2-support`, `pmo-ocm-lead`, `pmo-knowledge-manager`). All 19 rows are present in the table above.
+> **Roster note.** The suite reaches its full **19 role-Specialist** roster at v2.15 GA — the **14 prior-wave** role-Specialists (9 operations + 5 release) plus the 5 v2.15 role-Specialists (`pmo-release-manager`, `pmo-tier-1-support`, `pmo-tier-2-support`, `pmo-ocm-lead`, `pmo-knowledge-manager`). All 19 rows are present in the table above.
 
 ## What qualifies
 
