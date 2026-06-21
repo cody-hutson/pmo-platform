@@ -3,7 +3,7 @@
 # Progressive-Rollout Convention — pipeline-wide
 
 **Tier:** K1 codified-knowledge corpus per [knowledge-architecture.md](../disciplines/knowledge-architecture.md).
-**Status:** LIVE (milestone `71-autonomy-phaseout-foundation`, v2.12).
+**Status:** LIVE (milestone `71-autonomy-phaseout-foundation`, v2.14).
 **Owns:** the canonical phase enum, the per-phase 4-element contract, and the in-platform audit table for progressive rollout of a governance mechanism.
 
 ## Purpose
@@ -80,7 +80,7 @@ This table records every existing in-platform rollout usage against the canonica
 
 **Modal finding (stated plainly):** the platform's modal rollout machinery is a **2-state-plus-off** ladder. The only 3-state usage is the release-executor's, and **nothing realizes the 4th (`removed`) phase**. This convention is forward-looking — it defines the full ≥4-phase ladder; existing usages are graded against it and found PARTIAL, with the gap recorded honestly rather than rounded toward "conformant." This is the audit-baseline + verify-before-recommend disciplines applied: record what IS realized, name what is NOT, round in neither direction.
 
-**Audit-baseline:** the four rows above were re-verified LIVE at commit `f7eee93` (the v2.12 branch baseline, 2026-06-20) — `.mode.template` = `warn`, all four shared-`.mode` hooks present, `deploy-check.mode.template` = `warn`, `.autonomy-mode.template` present, and zero `removed`/`retired`/`sunset` rollout-phase occurrences corpus-wide. Re-check the substrate before relying on the verdicts in a later release.
+**Audit-baseline:** the four rows above were re-verified LIVE at commit `f7eee93` (the v2.14 branch baseline, 2026-06-20) — `.mode.template` = `warn`, all four shared-`.mode` hooks present, `deploy-check.mode.template` = `warn`, `.autonomy-mode.template` present, and zero `removed`/`retired`/`sunset` rollout-phase occurrences corpus-wide. Re-check the substrate before relying on the verdicts in a later release.
 
 ## Composition with the autonomy framework
 
