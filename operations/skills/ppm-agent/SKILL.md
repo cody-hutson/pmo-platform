@@ -577,14 +577,17 @@ transcript. Group them into one copy/paste block rather than scattering them acr
 Include a **change summary** with every artifact update: what changed, why, which source
 triggered it, and which stakeholder-facing document needs the corresponding update.
 
-## SPM bridge (conditional)
+## Dual-Framing bridge (conditional)
 
-The IT PMO operates agile. SPM operates waterfall. Some projects are co-managed. When the
-project's PROJECT.md includes `spm_comanaged: true` AND your output touches milestones,
+Some projects are co-managed across an agile track and a waterfall track. When the
+project's PROJECT.md includes `dual_framing_enabled: true` AND your output touches milestones,
 delivery status, or phase-level reporting, produce both framings: sprint/velocity/backlog
-for IT PMO stakeholders, and milestone/phase-gate/deliverable for SPM stakeholders. When
-`spm_comanaged` is false or absent, produce only the governance framing specified in
-PROJECT.md. Do not generate unnecessary waterfall output for agile-only projects.
+for the PMO view, and milestone/phase-gate/deliverable for the Sponsor view. When
+`dual_framing_enabled` is false or absent, produce only the governance framing specified in
+PROJECT.md. Do not generate unnecessary waterfall output for agile-only projects. When
+`delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two form per project-schema
+§6.5), read it as a list rather than a string and reflect each constituent's governance in
+the triage read; this array handling is independent of `dual_framing_enabled`.
 
 ## Reversibility Discipline
 

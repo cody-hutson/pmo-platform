@@ -279,8 +279,10 @@ SteerCo preparation, any [COMMS] tag for status reporting.
    and decisions surfaced, timeline-centric.
 4. For SteerCo: structured with health indicators, key decisions, risks,
    timeline, and specific asks.
-5. SPM bridge: when PROJECT.md includes `spm_comanaged: true`, produce both agile and
-   waterfall versions from the same underlying data.
+5. Dual-Framing bridge: when PROJECT.md includes `dual_framing_enabled: true`, produce both agile and
+   waterfall versions from the same underlying data. When `delivery_approach` is a 2-element
+   array `[A, B]` (the Hybrid-Two form per project-schema §6.5), read it as a list (not a
+   string) and pick the per-surface cadence from each constituent.
 
 ### Communications Tracker integration
 
@@ -309,9 +311,9 @@ verdict is not declared until all five are satisfied.
 3. **Readiness gate.** Every output declares **READY FOR SEND** or **NOT READY** with
    specific gap labels. This binds the owned-generation exec brief and stakeholder email
    identically to the primary types — there is no relaxed gate for owned generation.
-4. **SPM Bridge.** When PROJECT.md carries `spm_comanaged: true`, produce dual Agile +
+4. **Dual-Framing Bridge.** When PROJECT.md carries `dual_framing_enabled: true`, produce dual Agile +
    Waterfall framings from the same underlying data. Applies to announcements, executive
-   briefs, and any milestone-touching output. (Mechanics in [§ SPM bridge (conditional)](#spm-bridge-conditional) below.)
+   briefs, and any milestone-touching output. (Mechanics in [§ Dual-Framing bridge (conditional)](#dual-framing-bridge-conditional) below.)
 5. **Project-context awareness.** Read PROJECT.md and the operational trackers for dates,
    owners, and statuses before drafting; never invent; surface source conflicts as drift
    rather than silently resolving or generalizing them.
@@ -347,7 +349,7 @@ Verification against the compliance rules. Brief — one line per check.
 
 ### 5. Audience notes (when relevant)
 Any audience-specific considerations: "[COLLEAGUE_G] will want the milestone view;
-include the SPM bridge table." Or: "This goes to vendors — remove internal
+include the Dual-Framing bridge table." Or: "This goes to vendors — remove internal
 references to budget constraints."
 
 ### 6. Alternative versions (when applicable)
@@ -416,16 +418,16 @@ AskUserQuestion suppression semantics and per-skill three-tier classification
 (always / ambiguous / never ask). This Contract section declares the interface;
 the protocol implements the mode behavior.
 
-## SPM bridge (conditional)
+## Dual-Framing bridge (conditional)
 
-When PROJECT.md includes `spm_comanaged: true`:
-- IT PMO stakeholders get sprint/velocity/backlog framing.
-- SPM stakeholders get milestone/phase-gate/deliverable framing.
+When PROJECT.md includes `dual_framing_enabled: true`:
+- PMO view gets sprint/velocity/backlog framing.
+- Sponsor view gets milestone/phase-gate/deliverable framing.
 - When both audiences receive the same communication, produce both framings
   as labeled sections within a single document.
 - Detect the audience and apply the right framing.
 
-When PROJECT.md does NOT include `spm_comanaged: true`, produce agile-only
+When PROJECT.md does NOT include `dual_framing_enabled: true`, produce agile-only
 communications unless explicitly asked to include waterfall framing.
 
 ## Dual output rule

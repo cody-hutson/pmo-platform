@@ -128,7 +128,7 @@ time-boxed sprints, not to the single-operator platform running the PMO.
   (Waterfall/PRINCE2) tracks, where tech-debt paydown is phase-scheduled rather than
   sprint-allocated (calibrate via the `delivery_approach` enum per §1).
 - **On conflict:** `decision-discipline.md` M1 (contextual localization); co-manifestation
-  when `spm_comanaged: true` — produce both the agile floor framing and the phase-gate
+  when `dual_framing_enabled: true` — produce both the agile floor framing and the phase-gate
   framing rather than forcing one.
 
 ---

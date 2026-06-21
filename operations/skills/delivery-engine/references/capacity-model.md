@@ -318,7 +318,7 @@ running the PMO.
   **CI-4** for the velocity-dependent thresholds (§6) on non-time-boxed (Waterfall/PRINCE2)
   tracks.
 - **On conflict:** `decision-discipline.md` M1 (contextual localization); co-manifestation
-  when `spm_comanaged: true` — produce both the agile capacity framing and the
+  when `dual_framing_enabled: true` — produce both the agile capacity framing and the
   phase-gate framing rather than forcing one.
 
 ---
