@@ -70,6 +70,32 @@ Named gates inherit all structural checks from the corresponding [field-lifecycl
 
 **Applies-to column triple semantics:** `req` = criterion applies; check field per template schema. `adapt:<adapter-id>` = criterion applies but field is lexically/semantically translated per the Adapter Block below. `n/a` = criterion does not apply (the field does not exist on this template). `conv` = criterion is a Bundle prerequisite; issue must be converted to `improvement.yml` before this gate evaluates (raised at Stage 3 Phase A1 per the Template-Conversion Rule in § Gate 3).
 
+### G1 Enforcement-Layer Split
+
+The `auto` Automation tag on a G1 criterion conflates **two distinct enforcement surfaces** that fire at different times against different inputs. Naming them apart is the durable policy this subsection records, so no future reader treats "form-required" and "gate-checked" as the same thing:
+
+- **Layer-A — Form HARD-STOP** (intake-time, submission-blocking). The intake template's `validations: required: true` flag on a field. It blocks a **blank form input** at issue-creation time. It is **presence-only** — it cannot inspect content (an evidence label vs. a sentence of prose, a file path vs. a directory). The surface is the `.github/ISSUE_TEMPLATE/*.yml` field set. A HARD-STOP fires the moment the author clicks Submit on an empty required field; it is the earliest and cheapest enforcement point.
+- **Layer-B — Gate SOFT-WARN** (post-creation, content-validating). The `deploy.sh --check` Check 22 per-issue evaluation against a created issue **body**. It validates **content** — structural criteria emit a FAIL (gate-checked), judgment criteria emit a non-gating RECOMMEND. It runs over the `status: bundled` population, after the form already accepted the submission, so it catches what the form structurally cannot.
+
+The `structural | judgment` partition already in the **Check** column IS the HARD-STOP / SOFT-WARN seam — it is read off, not invented. `structural` criteria are gate-checked (FAIL-capable at Layer-B); `judgment` criteria are recommend-flagged (advisory at Layer-B, never FAIL). Whether a criterion is *also* Layer-A form-required is a separate axis (a field can be presence-required at the form yet content-checked at the gate, or gate-checked only).
+
+| Criterion | Layer-A form-required? | Layer-B (gate) | Enforcement class |
+|---|---|---|---|
+| G1-01 title prefix | — (title string, not a body field) | structural FAIL | HARD-STOP (gate) |
+| G1-02 description actionable | presence (`required: true`) | recommend-flag | SOFT-WARN |
+| G1-03 evidence label | presence (`required: true`) | structural FAIL | HARD-STOP |
+| G1-04 proposed-change specificity | presence (`required: true`) | recommend-flag | SOFT-WARN |
+| G1-05a AC structural pattern | presence (`required: true`) | structural FAIL | HARD-STOP (gate) |
+| G1-05b AC judgment | — | recommend-flag | SOFT-WARN |
+| G1-06 priority (body) | **NO — `required: false`** (label-based priority is NOT expected; body is canonical) | structural FAIL (body anchor) | SOFT-WARN (gate) |
+| G1-07 status/stage anchors | — (auto-label) | auto-fix | HARD-STOP (anchor) |
+| G1-08 implementability | — | recommend-flag | SOFT-WARN |
+| G1-09 label↔template | — (validation) | structural FAIL | HARD-STOP (gate) |
+
+**G1-06 is gate-checked, not form-required.** The Priority field is `required: false` on `improvement.yml` by design: priority is **body-canonical** — authored in the body `### Priority` field per G1-06, validated against full backlog context at **G2-01**, and mirrored to the GitHub Projects Priority field at **G2-12**. There is no `priority:` label surface, so G1-06's "label-based priority is NOT expected" stands, and a `status: approved` issue with no priority label is conformance, not a defect. Holding Priority at `required: false` is therefore the correct Layer-A posture (the body anchor is still gate-checked at Layer-B). See the Priority-Model block below for the full body-canonical / Projects-mirror / label-not-a-surface model and the G2-12 sync criterion.
+
+**Why both layers exist.** Layer-A delivers the intake-time hard-stop on blank required fields the moment they are submitted — earlier and cheaper than any post-creation sweep. Layer-B then validates the content the form structurally cannot inspect. The two are complementary, not redundant: removing Layer-A pushes a blank-field defect downstream to a gate re-edit cycle; removing Layer-B lets a present-but-empty-of-content field pass intake. The `### Priority` field is the explicit exception that proves the rule — present at Layer-B (body anchor gate-checked), deliberately absent from Layer-A (form-optional), because its canonical home is the body, not a required form slot.
+
 ### Template Detection Logic (consumed by G1-09 + by all template-aware gates)
 
 Step 1 (primary): Read the intake-tier label.
@@ -486,7 +512,15 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 1.14
+**Schema version:** 1.15
+
+**v1.15 changes (non-breaking — minor; additive only):**
+
+- Added the **G1 Enforcement-Layer Split** subsection under § Gate 1 (after the G1 criteria table, before Template Detection Logic): names the two enforcement surfaces the `auto` Automation tag conflates — **Layer-A Form HARD-STOP** (intake template `validations: required: true`, presence-only, submission-blocking) vs. **Layer-B Gate SOFT-WARN** (`deploy.sh --check` Check 22, content-validating, structural FAIL / judgment RECOMMEND) — plus the 9-row enforcement-class table mapping each G1 criterion to its Layer-A form-required posture, Layer-B gate behavior, and HARD-STOP/SOFT-WARN class. The table is read off the existing `structural | judgment` **Check**-column partition; it introduces no new criterion and no ID. Records as durable policy that **G1-06 priority is gate-checked, NOT form-required** (`required: false` is correct because priority is body-canonical per G1-06 — validated at G2-01, mirrored to Projects at G2-12 — and "label-based priority is NOT expected"), cross-linking the Priority-Model block (added v1.14) and the G2-12 sync criterion.
+- **No criterion row changed; no `validations: required:` change implied.** The subsection documents the existing form/gate split as policy — it does not alter G1-06 or any other criterion, and the intake templates' required-field sets are already aligned with the Layer-A column (the live `improvement.yml` 7-required set stands; `### Priority` stays `required: false`).
+- Composes with the `deploy.sh` Check 22 extension shipped alongside this schema change (#27 Stage 6): Check 22 now evaluates all 9 G1 criteria — enforces the 5 structural (G1-01/03/05a/06/09, FAIL-capable at Layer-B) and recommend-flags the 4 judgment (G1-02/04/05b/08, advisory, never FAIL) — and Check 22's `g1-enforcement` mode is decoupled to a dedicated `g1-enforcement.mode` file (falling back to the shared `deploy-check.mode`), shipping in **warn**. The warn→enforce flip is deferred to a follow-on after the shakedown window.
+- Schema bump v1.14 → v1.15 (non-breaking minor; additive only). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no change — the new subsection is documentation of the existing partition. Existing G1-01..G1-09 / G2-01..G2-12 / G3-01..G3-15 + G-BR1..G-BR4 + G-PR1..G-PR9 + G-EX1..G-EX8 + G-CL1..G-CL8 IDs unchanged; no ID renumber, no column/type change.
+- **Cutover discipline (v1.15 additions):** the G1 Enforcement-Layer Split is policy documentation effective immediately; the Layer-B Check 22 evaluation of G1-05a + the judgment recommend-pass apply to issues evaluated by `deploy.sh --check` strictly AFTER this change's introducing-release merge SHA recorded in the release log; pre-cutover evaluations are grandfathered; the introducing release itself is exempt (reflexive-pipeline-loop discipline).
 
 **v1.14 changes (non-breaking — minor; additive only):**
 
