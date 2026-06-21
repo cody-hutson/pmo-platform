@@ -8,6 +8,8 @@ consumers: "release/governance/release-process.md Stage 13 § Deferred item disp
 version: v12.12
 ---
 
+<!-- reference-durability: allow-link -->
+
 # Deferred Item Tracking
 
 ## 1. Purpose
