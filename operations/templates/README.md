@@ -31,7 +31,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 | `milestone-tracker-template.md` | Planning | PMBOK 7 |
 | `raid-log-template.csv` | Uncertainty | PMBOK 7 |
 | `transcript-register-template.md` | Project Work | PMBOK 7 |
-| `spm-bridge-template.md` | Development Approach + Lifecycle | PMBOK 7 (hybrid Agile↔Waterfall) |
+| `dual-framing-bridge-template.md` | Development Approach + Lifecycle | PMBOK 7 (hybrid Agile↔Waterfall) |
 | `sprint-tracker-template.md` | Delivery | PMBOK 7 (Agile track) |
 | `project-md-template.md` (promoted from skill via D-CanonicalPromote) | Project Work | PMBOK 7 (PROJECT.md scaffolding) |
 | `requirements-template.md` (promoted from skill via D-CanonicalPromote) | Planning | PMBOK 7 (requirements decomposition) |

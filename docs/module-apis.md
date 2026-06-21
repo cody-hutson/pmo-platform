@@ -50,7 +50,7 @@
 
 ### Public templates
 
-[`operations/templates/`](../operations/templates/) ships 14 canonical templates: RAID Log, Project Plan, Test Plan, FRD, FDD, Comms Plan, Training Plan, PMO_Platform_Template, hypercare-plan, raid-log-template, communications-tracker-template, open-meetings-tracker-template, key-terms-glossary-template, spm-bridge-template, milestone-tracker-template, sprint-tracker-template, transcript-register-template, daily-status-log-template, daily-status-update-framework-template, executive-status-report-prompt-template, raid-templates, requirements-template, project-md-template.
+[`operations/templates/`](../operations/templates/) ships 14 canonical templates: RAID Log, Project Plan, Test Plan, FRD, FDD, Comms Plan, Training Plan, PMO_Platform_Template, hypercare-plan, raid-log-template, communications-tracker-template, open-meetings-tracker-template, key-terms-glossary-template, dual-framing-bridge-template, milestone-tracker-template, sprint-tracker-template, transcript-register-template, daily-status-log-template, daily-status-update-framework-template, executive-status-report-prompt-template, raid-templates, requirements-template, project-md-template.
 
 ### Cross-module dependencies
 

@@ -117,7 +117,7 @@ capacity effort-split — a different concept that shares the same digits.)
 | `{{PROJECT_PREFIX}}_Milestone_Tracker.md` | Phase-gate milestone tracking with evidence. | Initialized — empty |
 {{ENDIF}}
 {{IF DUAL_FRAMING_ENABLED == Yes}}
-| `{{PROJECT_PREFIX}}_SPM_Bridge.md` | Milestone-to-sprint mapping, dual-frame status. | Initialized — empty |
+| `{{PROJECT_PREFIX}}_Dual_Framing_Bridge.md` | Milestone-to-sprint mapping, dual-frame status. | Initialized — empty |
 {{ENDIF}}
 
 ## Governance Links

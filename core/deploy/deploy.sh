@@ -194,7 +194,7 @@ TEMPLATE_SYNC_MAP=(
   "project-initiator:milestone-tracker-template.md:references/templates/milestone-tracker-template.md"
   "project-initiator:open-meetings-tracker-template.md:references/templates/open-meetings-tracker-template.md"
   "project-initiator:raid-log-template.csv:references/templates/raid-log-template.csv"
-  "project-initiator:spm-bridge-template.md:references/templates/spm-bridge-template.md"
+  "project-initiator:dual-framing-bridge-template.md:references/templates/dual-framing-bridge-template.md"
   "project-initiator:sprint-tracker-template.md:references/templates/sprint-tracker-template.md"
   "project-initiator:transcript-register-template.md:references/templates/transcript-register-template.md"
   "project-initiator:project-md-template.md:references/project-md-template.md"

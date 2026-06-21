@@ -48,7 +48,7 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 
 | Artifact Family | Description | Current Canonical PMO Template | Gap? |
 |---|---|---|---|
-| SPM Bridge | Hybrid Agile↔Waterfall delivery-framing dual-output | `operations/templates/spm-bridge-template.md` | No |
+| Dual-Framing Bridge | Hybrid Agile↔Waterfall delivery-framing dual-output | `operations/templates/dual-framing-bridge-template.md` | No |
 
 ### §3.4 Planning
 
