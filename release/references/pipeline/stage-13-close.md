@@ -8,6 +8,8 @@
 ## 1. Purpose
 Finalize the release — verify issue closure, execute operational deployment to Layer 2, close the Milestone, update RELEASE_LOG.md, persist verification evidence, and clean up the release branch. Milestone close gates on ALL deployment (git-native + operational) being verified.
 
+**Host-operation adapter seam.** The host operations in close-out — `gh issue close`, Milestone close, `gh release view`, and the `git` / `gh` branch-cleanup operations — are provided by the **repo-host adapter** selected by `operator.toml [adapters].repo_host` (see [`docs/platform-config-reference.md`](../../../docs/platform-config-reference.md) and [`repo-host-adapter-versioning.md`](../../../core/standards/repo-host-adapter-versioning.md)). A new host-touching close-out step extends that seam rather than inlining a host tool as *the* canonical mechanism — a host-binding leak per [`knowledge-architecture.md`](../../../core/disciplines/knowledge-architecture.md) §4.1.
+
 ## 2. Reference Model Alignment
 
 | Ref Model Attribute | Part 6 Definition | Our Implementation | Compression Note |
