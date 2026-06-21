@@ -243,7 +243,7 @@ After updating PORTFOLIO.md (Step 5), validate the write before proceeding:
 Produce a checklist of actions the user must take in parallel systems. This is NOT optional —
 it ensures the PMO workspace stays in sync with team tools.
 
-**For Agile / Hybrid (IT PMO):**
+**For Agile / Hybrid:**
 - [ ] Verify Confluence space `[key]` exists and is accessible
 - [ ] Create project overview page in Confluence (or verify existing)
 - [ ] Create FDD folder in Confluence space
@@ -450,7 +450,7 @@ Read `Projects/_governance/PORTFOLIO.md` and update:
 
 Produce a checklist of actions the user must take in parallel systems:
 
-**For Agile / Hybrid (IT PMO):**
+**For Agile / Hybrid:**
 - [ ] Archive or close Jira project `[key]` (or mark sprint board inactive)
 - [ ] Archive Confluence space `[key]` (or move pages to archive section)
 - [ ] Remove/archive Google Drive transcript folder

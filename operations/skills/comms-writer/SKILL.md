@@ -275,7 +275,7 @@ SteerCo preparation, any [COMMS] tag for status reporting.
 **What you produce**:
 1. Audience-specific framing (see audience profiles).
 2. For IT leadership ([COLLEAGUE_A]): concise, decision-focused, 1 page max.
-3. For COO/SPM ([COLLEAGUE_G], [COLLEAGUE_F]): milestone-level, waterfall framing, risks
+3. For COO/sponsor ([COLLEAGUE_G], [COLLEAGUE_F]): milestone-level, waterfall framing, risks
    and decisions surfaced, timeline-centric.
 4. For SteerCo: structured with health indicators, key decisions, risks,
    timeline, and specific asks.

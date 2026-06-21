@@ -209,7 +209,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
    - Option A: Full scope with overtime/risk acceptance
    - Option B: Reduced scope with specific items deferred and rationale
    - Option C: Scope with dependency assumptions called out
-6. Bridge to SPM (if co-managed): if any sprint items map to waterfall milestones, note
+6. Produce the dual-framing bridge (if co-managed): if any sprint items map to waterfall milestones, note
    the milestone impact and produce both framings
 
 **Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), the **tech-debt rank** — each tech-debt item with its Fowler quadrant (or `unclassified`) and its CoD value + HIGH/MEDIUM/LOW confidence tier, the slice sorted by (quadrant × CoD), and the top-ranked items filling the under-floor deficit up to the floor (or a deferred-fill note + recommendation when the floor/deficit are not computed), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation, a Reckless/Inadvertent pattern, and a declared PM floor-override).
@@ -619,7 +619,7 @@ structural conformance and content quality.
   Do not generate unnecessary waterfall output for agile-only projects.
 - **Principal response vs. junior response:** Principal verifies the flag, produces both
   framings, and labels each section with its target audience. Junior ships agile-only,
-  the SPM lead asks for the milestone view at SteerCo, and the agent has to redo the
+  the waterfall/sponsor lead asks for the milestone view at SteerCo, and the agent has to redo the
   work.
 
 ### Velocity history consumed without window qualification — INPUT

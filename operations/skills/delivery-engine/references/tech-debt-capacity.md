@@ -120,7 +120,7 @@ time-boxed sprints, not to the single-operator platform running the PMO.
 - **Applies when:** the capacity being floored/aged/rework-tracked is that of a **managed
   delivery team** (`org_scale ∈ {small-team, multi-team}`) on a time-boxed track
   (`delivery_approach ∈ {Scrum, XP, SAFe, Hybrid (iterative), Custom (timeboxed)}`) — the
-  agile/SPM squads a TPM plans for in Mode D.
+  agile squads a TPM plans for in Mode D.
 - **Contraindicated when:** **CI-5** — do **NOT** apply the floor-RAG, aged-debt disposition,
   or rework-rate alert to the **single-operator PMO's own throughput** (the operator is not a
   sprint team; the platform's own improvement allocation is governed by its release process,

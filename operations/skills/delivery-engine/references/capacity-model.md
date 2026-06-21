@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Models the *effective* delivery capacity of a **managed delivery team** — the agile/SPM
+Models the *effective* delivery capacity of a **managed delivery team** — the agile
 squads a TPM plans for — accounting for context-switching across concurrent projects,
 team-growth drag, effort allocation, team stability, vendor ramp-up, staffing-concentration
 (bus-factor) risk, and the demand-versus-supply gap. It is read by the delivery-engine
@@ -309,7 +309,7 @@ running the PMO.
 
 - **Universality:** contextual            # org-scale axis + methodology axis
 - **Applies when:** the capacity being modeled is that of a **managed delivery team**
-  (`org_scale ∈ {small-team, multi-team}` for the team under management) — the agile/SPM
+  (`org_scale ∈ {small-team, multi-team}` for the team under management) — the agile
   squads a TPM plans for.
 - **Contraindicated when:** **CI-5** — do **NOT** apply concurrent-project context-switching
   penalties (§3), the demand-supply RAG bands (§9), or the team-allocation split (§5) to the
