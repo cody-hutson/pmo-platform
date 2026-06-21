@@ -79,3 +79,26 @@ release/tools/query-pipeline-event.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh
+# version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
+# source it, so all four invocation forms (incl. source/.) must be allowlisted
+# (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
+[PMO_PLATFORM_ROOT]/release/tools/version-grammar.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/version-grammar.sh
+./release/tools/version-grammar.sh
+release/tools/version-grammar.sh
+# FM-3 (#1677): deploy.sh Check 41 sources this lib via an ABSOLUTE $_audit_src_root
+# path (a `pwd`-derived BASH_SOURCE root), which only the token-expanded variant
+# above can match — and only if the token resolves to that exact absolute root. A
+# generic suffix glob guarantees the `source "$_audit_src_root/release/tools/version-grammar.sh"`
+# invocation is never BLOCK-DESTRUCTIVE-022-blocked regardless of the checkout
+# location / clone-dir name (primary checkout, any worktree, or a downstream clone).
+*/release/tools/version-grammar.sh
+# claim-version.sh — the GitHub/git adapter's version-claim impl (Stage 12
+# atomic claim + ref-CAS retry). It is EXECUTED at Stage 12 Phase B3 and may be
+# SOURCED by the freeness-detection / observability slices to reuse the adapter
+# operations (anchor/claimed_set/atomic_claim/lineage), so all four forms (incl.
+# source/.) are allowlisted (BLOCK-DESTRUCTIVE-022 gates both execution + source).
+[PMO_PLATFORM_ROOT]/release/tools/claim-version.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
+./release/tools/claim-version.sh
+release/tools/claim-version.sh

@@ -8,6 +8,29 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.17] - 2026-06-21
+
+### Added
+
+- **Abstraction-altitude forcing function (Stage 4/5).** Every new capability is now interrogated for its abstraction altitude — does it extend an existing platform seam (`[adapters]`, a module boundary, a config surface), or solve point-wise? — as a forcing function rather than aspirational prose. A Stage-4 obligation requires naming the seam a structural design extends (or justifying a point solution with a cited seam-search); design-exploration gains an `altitude` distinctness axis (point-fix / extend-seam / new-abstraction) with a ≥2-band rule on new-mechanism designs; and a blocking design-review §4.7 seam-composition gate fails a design that does not discharge the seam question.
+- **`HOST-BINDING-LEAK` leakage class + detector.** Hardcoding a host tool (`gh` / `git` / a host API) as *the* canonical mechanism in universal governance — where the operation belongs behind an adapter seam — is now a registered leakage class (the host-axis sibling of the path-portability class), with a warn-mode `deploy.sh` Check 42 detector.
+
+### Changed
+
+- The Stage-5 adversarial design review may now flag a pre-decided premise that sits at the wrong abstraction altitude as an advisory finding (with an explicit no-autonomous-reversal guard), routed to Collective Review — opening the one previously-estopped independent surface that can see a mis-framed premise.
+- The `release/` pipeline specs now cross-reference the `[adapters].repo_host` host-operation seam, making it discoverable from within the release module.
+
+## [v2.16] - 2026-06-21
+
+A release now claims its version number atomically when it merges instead of reserving it early, so two releases in flight can no longer silently collide on a number.
+
+### Added
+- **Releases claim their version at the finish line.** A release's version number is now claimed atomically at the merge tag (defer-to-merge + compare-and-swap against the live published set) instead of reserved at Stage 4, so when two releases are open at once neither silently overwrites the other's slot. *Why it matters:* a release you are shipping can no longer quietly lose its version to a faster one that merged first — the number it ends up with is the number that actually got locked. ([#1697](https://github.com/cody-hutson/pmo-platform/issues/1697), [#1675](https://github.com/cody-hutson/pmo-platform/issues/1675), [#1673](https://github.com/cody-hutson/pmo-platform/issues/1673))
+- **Version-claiming is defined host-agnostically.** The mechanism is a config-selected `repo_host` adapter exposing four operations (anchor / claimed-set / atomic-claim / lineage), with GitHub/git shipped as the v1 reference adapter and other hosts gated on their own adapter tickets. *Why it matters:* the determinism contract is tool-agnostic, so the platform is not hard-wired to one release host. ([#1676](https://github.com/cody-hutson/pmo-platform/issues/1676), [#65](https://github.com/cody-hutson/pmo-platform/issues/65), [#66](https://github.com/cody-hutson/pmo-platform/issues/66), [#1674](https://github.com/cody-hutson/pmo-platform/issues/1674))
+- **Collisions are now detectable and auditable.** A pre-merge CI freeness gate flags a contended version before merge, a machine-readable re-version ledger records every collision, and a recovery doctrine covers reclaiming the next free number. *Why it matters:* if two releases still race for the same number, the loser is told to recompute and re-claim rather than silently overwriting, and the event is on the record. ([#769](https://github.com/cody-hutson/pmo-platform/issues/769), [#1008](https://github.com/cody-hutson/pmo-platform/issues/1008), [#1677](https://github.com/cody-hutson/pmo-platform/issues/1677), [#1678](https://github.com/cody-hutson/pmo-platform/issues/1678), [#1679](https://github.com/cody-hutson/pmo-platform/issues/1679), [#1092](https://github.com/cody-hutson/pmo-platform/issues/1092))
+
+[Full notes](release/releases/notes/v2.16_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.16)
+
 ## [v2.15] - 2026-06-20
 
 The PMO role-Specialist suite is now GA — five Release-to-Sustain role agents and a capstone router that sends a role-shaped request to the Specialist that owns it.

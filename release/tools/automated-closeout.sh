@@ -152,6 +152,7 @@ fi
 RELEASE_LOG="$REPO_ROOT/release/releases/RELEASE_LOG.md"
 RELEASE_INDEX="$REPO_ROOT/release/releases/RELEASE_INDEX.md"
 RELEASE_DIGEST="$REPO_ROOT/release/releases/RELEASE_DIGEST.md"
+RELEASE_REVERSIONS="$REPO_ROOT/release/releases/RELEASE_REVERSIONS.md"
 RELEASE_NOTES_DIR="$REPO_ROOT/release/releases/notes"
 RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
@@ -174,6 +175,9 @@ OUTPUT="markdown"        # markdown | json
 WITH_PATTERN_SCAN=0
 SELF_TEST=0
 CHECK_PATHS=0            # offline corpus-path resolution probe (CI smoke gate)
+REVERSION_SPEC=""        # --reversion "<final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>"
+                         # set ONLY when this release re-versioned mid-pipeline;
+                         # empty => phase_append_reversions records N/A (common path)
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -625,6 +629,149 @@ PY
   return 0
 }
 
+# ─── Phase 8.5: append_reversions (#1679 — machine-readable re-version ledger) ─
+#
+# Appends row(s) to RELEASE_REVERSIONS.md — the append-only re-version ledger —
+# ONE row per ABANDONED version, ONLY when this release re-versioned mid-pipeline.
+# The common no-collision release records `N/A` and writes nothing (non-ceremony,
+# mirroring the phase_bump_version version-less SKIP + the phase_append_changelog
+# pre-CHANGELOG SKIP idioms).
+#
+# Re-version input is EXPLICIT (the honest manual path — the prose-only Stage 12
+# Deployment Log carries no structured re-version field to auto-detect from):
+#   --reversion "<final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>"
+# where <claimed-seq> is the full ordered claim sequence joined by " -> " (or "->"),
+# e.g. "v2.12 -> v2.14 -> v2.12". The phase DERIVES the abandoned-version set
+# positionally — DISTINCT versions of claimed-seq[0:-1] that differ from <final>,
+# de-duplicated — so a round-trip v2.12 -> v2.14 -> v2.12 (final v2.12) yields the
+# single abandoned version v2.14, KEEPING v2.12 as final (the set-minus-is-wrong fix).
+#
+# disposition is grounded, not asserted: for each abandoned version the phase probes
+# `git ls-remote --tags origin <abandoned>` — ABSENT or canonical-elsewhere => `none`
+# (no orphan to reap; the reaper's canonical-version guard would refuse it anyway);
+# present-and-not-canonical => `tag-orphaned` (the reaper READS this). `unknown`
+# abandoned_tag_pushed maps to `unrecoverable` only via an explicit pre-instrumentation
+# marker, never inferred here.
+#
+# Idempotent: a (slug, abandoned_version) row already present is skipped. Append is
+# chronological-recent-first (below the `|---` separator), matching the sibling
+# corpus surfaces. The consumer (recovery doctrine) transitions disposition/reaped_ref
+# in place; this producer ONLY appends.
+phase_append_reversions() {
+  local slug="$STATE_MILESTONE_SLUG"
+  [[ -z "$slug" ]] && slug="$VERSION"
+
+  # (1) No-reversion common path — record N/A, write nothing (non-ceremony).
+  if [[ -z "$REVERSION_SPEC" ]]; then
+    mark_phase "append_reversions" "N/A" "no re-version this release (RELEASE_REVERSIONS.md untouched)"
+    return 0
+  fi
+
+  # (2) Parse the explicit --reversion spec.
+  #     <final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>
+  local rv_final rv_seq rv_sha rv_collided rv_stage rv_residual
+  IFS='|' read -r rv_final rv_seq rv_sha rv_collided rv_stage rv_residual <<<"$REVERSION_SPEC"
+  rv_collided="${rv_collided:-—}"
+  rv_stage="${rv_stage:-S12}"
+  rv_residual="${rv_residual:-—}"
+  rv_sha="${rv_sha:-—}"
+  if [[ -z "$rv_final" || -z "$rv_seq" ]]; then
+    mark_phase "append_reversions" "FAIL" "--reversion needs at least <final>|<claimed-seq> (got '$REVERSION_SPEC')"
+    return 3
+  fi
+
+  # (3) Derive the abandoned-version set positionally (claimed[0:-1], distinct,
+  #     != final). Python keeps the round-trip semantics unambiguous + order-stable.
+  local abandoned_list
+  abandoned_list="$(/usr/bin/python3 - "$rv_final" "$rv_seq" <<'PY'
+import sys, re
+final, seq = sys.argv[1], sys.argv[2]
+# Split on the arrow separator (tolerate "->" with or without surrounding spaces).
+parts = [p.strip() for p in re.split(r'\s*->\s*', seq) if p.strip()]
+# Abandoned = distinct members of the sequence EXCLUDING its last element, != final.
+seen, out = set(), []
+for v in parts[:-1]:
+    if v != final and v not in seen:
+        seen.add(v); out.append(v)
+print("\n".join(out))
+PY
+)"
+  if [[ -z "$abandoned_list" ]]; then
+    # A claim sequence whose only non-final entries equal the final (degenerate) —
+    # nothing was actually abandoned. Record N/A rather than an empty row.
+    mark_phase "append_reversions" "N/A" "claim sequence '$rv_seq' abandoned no version distinct from final '$rv_final'"
+    return 0
+  fi
+
+  # Normalize the claimed sequence to the canonical " → " arrow for the row payload.
+  local rv_seq_disp
+  rv_seq_disp="$(/usr/bin/python3 - "$rv_seq" <<'PY'
+import sys, re
+parts = [p.strip() for p in re.split(r'\s*->\s*', sys.argv[1]) if p.strip()]
+print(" → ".join(parts))
+PY
+)"
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    local n_rows; n_rows="$(/usr/bin/printf '%s\n' "$abandoned_list" | /usr/bin/grep -c . 2>/dev/null || true)"; n_rows="${n_rows:-0}"
+    mark_phase "append_reversions" "DRY-RUN" "would append ${n_rows} row(s) to RELEASE_REVERSIONS.md for slug '$slug' (abandoned: $(/usr/bin/printf '%s' "$abandoned_list" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//'); final $rv_final)"
+    return 0
+  fi
+
+  # (4) Apply — one row per abandoned version, idempotent on (slug, abandoned_version),
+  #     disposition grounded by a tag probe. Each abandoned version is processed in turn.
+  local date_str; date_str="$(date_today)"
+  local appended=0 abv
+  while IFS= read -r abv; do
+    [[ -z "$abv" ]] && continue
+    # Idempotency: skip if (slug, abandoned_version) row already present.
+    if /usr/bin/grep -qE "^\| ${slug} \| ${abv} \|" "$RELEASE_REVERSIONS" 2>/dev/null; then
+      continue
+    fi
+    # disposition grounding: probe origin for the abandoned tag.
+    local on_origin disp tag_pushed
+    on_origin="$(git ls-remote --tags "${REMOTE_NAME:-origin}" "refs/tags/${abv}" 2>/dev/null | /usr/bin/grep -c "refs/tags/${abv}$" 2>/dev/null || true)"; on_origin="${on_origin:-0}"
+    if [[ "$on_origin" -gt 0 ]]; then
+      # Present on origin. If it is the canonical Tag of a live RELEASE_LOG row, it
+      # belongs to a sibling (never reap) => disposition none. Otherwise an orphan
+      # of THIS release awaiting the reaper => tag-orphaned.
+      if /usr/bin/grep -qE "^\| ${abv} \|" "$RELEASE_LOG" 2>/dev/null \
+         || /usr/bin/grep -qE "\| \`?${abv}\`? \| (VERIFIED|DEPLOYED) \|" "$RELEASE_LOG" 2>/dev/null; then
+        disp="none"; tag_pushed="false"
+      else
+        disp="tag-orphaned"; tag_pushed="true"
+      fi
+    else
+      disp="none"; tag_pushed="false"
+    fi
+    # Hand-append below the first `|---` separator (chronological-recent-first).
+    /usr/bin/python3 - "$RELEASE_REVERSIONS" "$slug" "$abv" "$rv_final" "$rv_seq_disp" "$tag_pushed" "$rv_sha" "$rv_collided" "$rv_stage" "$disp" "$rv_residual" "$date_str" <<'PY'
+import sys
+path, slug, abv, final, seq, pushed, sha, collided, stage, disp, residual, date = sys.argv[1:13]
+with open(path, "r", encoding="utf-8") as f:
+    lines = f.read().splitlines()
+row = f"| {slug} | {abv} | {final} | {seq} | {pushed} | {sha} | {collided} | {stage} | {disp} | {residual} | — | {date} |"
+out, inserted = [], False
+for line in lines:
+    out.append(line)
+    if (not inserted) and line.startswith("|---"):
+        out.append(row); inserted = True
+if not inserted:
+    out.append(row)
+with open(path, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+PY
+    appended=$((appended+1))
+  done <<<"$abandoned_list"
+
+  if [[ "$appended" -eq 0 ]]; then
+    mark_phase "append_reversions" "SKIPPED" "all abandoned-version rows for $slug already present (idempotent)"
+    return 0
+  fi
+  mark_phase "append_reversions" "PASS" "appended ${appended} re-version row(s) for $slug (final $rv_final)"
+  return 0
+}
+
 # ─── Phase 9: scaffold_release_notes (D5 — SCAFFOLD-ONLY) ────────────────────
 
 phase_scaffold_release_notes() {
@@ -894,6 +1041,7 @@ ${VERSION} Stage 13 close-out chore PR — release-corpus updates per pipeline/s
 | release/releases/RELEASE_LOG.md | EDIT | Transition ${slug} row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write) |
 | release/releases/RELEASE_INDEX.md | EDIT | Append ${slug} row per D6 |
 | release/releases/RELEASE_DIGEST.md | EDIT | Append ${slug} entry under v$(extract_major "$VERSION").* family per D6 |
+| release/releases/RELEASE_REVERSIONS.md | EDIT | Append re-version row(s) — one per abandoned version — ONLY when this release re-versioned mid-pipeline (N/A on the common no-collision path) |
 | release/releases/notes/${VERSION}_RELEASE_NOTES.md | NEW | Scaffolded per release-notes-standard.md Part 1 Template; operator-filled prose |
 | CHANGELOG.md | EDIT | Prepend ## [${slug}] - YYYY-MM-DD section per Keep-a-Changelog 1.1.0 (Surface 2 of Layer-1 dual-write — SKIPPED if CHANGELOG.md absent) |
 | .version | EDIT | Stamp repo-root .version source-of-truth to ${VERSION} (release-cut-owned; read by the SessionStart version-skew hook — SKIPPED if version-less) |
@@ -933,6 +1081,7 @@ phase_commit_chore_pr() {
     "release/releases/RELEASE_LOG.md"
     "release/releases/RELEASE_INDEX.md"
     "release/releases/RELEASE_DIGEST.md"
+    "release/releases/RELEASE_REVERSIONS.md"
     "release/releases/notes/${VERSION}_RELEASE_NOTES.md"
     "CHANGELOG.md"
     ".version"
@@ -1307,7 +1456,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest scaffold_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -1414,6 +1563,89 @@ self_test() {
 
   /bin/rm -rf "$_bv_tmp" 2>/dev/null || true
   REPO_ROOT="$_bv_saved_root"; MODE="$_bv_saved_mode"; VERSION="$_bv_saved_version"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 1c: phase_append_reversions (#1679) — offline, hermetic. Drives the phase
+  # against a sandbox RELEASE_REVERSIONS + RELEASE_LOG and asserts the N/A common
+  # path, the round-trip derivation (the set-minus-is-wrong fix), the multi-abandoned
+  # fan-out, idempotency, and the dry-run no-write — plus a query self-check that the
+  # numerator grep counts every row it writes (the dotted/leading-digit/uppercase-slug
+  # AC verification). The tag probe is offline: the sandbox REPO_ROOT is not a git
+  # repo, so `git ls-remote` fails => on_origin=0 => disposition `none` (the expected
+  # value for every post-instrumentation fixture).
+  local _rv_saved_root="$REPO_ROOT" _rv_saved_mode="$MODE" _rv_saved_version="$VERSION"
+  local _rv_saved_slug="$STATE_MILESTONE_SLUG" _rv_saved_log="$RELEASE_LOG" _rv_saved_rev="$RELEASE_REVERSIONS"
+  local _rv_saved_spec="$REVERSION_SPEC"
+  local _rv_tmp; _rv_tmp="$(/usr/bin/mktemp -d -t reversions-selftest.XXXXXX)"
+  REPO_ROOT="$_rv_tmp"; MODE="apply"; VERSION="v9.99"
+  RELEASE_REVERSIONS="$_rv_tmp/RELEASE_REVERSIONS.md"
+  RELEASE_LOG="$_rv_tmp/RELEASE_LOG.md"
+  /bin/cat > "$RELEASE_REVERSIONS" <<'EOF'
+# RELEASE_REVERSIONS
+| slug | abandoned_version | final_version | claimed_versions | abandoned_tag_pushed | merge_sha | collided_with | resolved_at_stage | disposition | residual_labels | reaped_ref | date |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+EOF
+  /usr/bin/printf '# RELEASE_LOG\n' > "$RELEASE_LOG"
+  local _rv_rows
+
+  # (a) no --reversion → N/A, file untouched (common no-collision path)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  STATE_MILESTONE_SLUG="some-clean-release"; REVERSION_SPEC=""
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: phase_append_reversions should be N/A with no --reversion, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| [A-Za-z0-9.-]+ \| v' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: phase_append_reversions N/A path must write no rows, got $_rv_rows"; failures=$((failures+1)); }
+
+  # (b) round-trip v2.12 → v2.14 → v2.12 (final v2.12) → exactly ONE row,
+  #     abandoned_version=v2.14, final_version=v2.12 (the set-minus-is-wrong fix).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  STATE_MILESTONE_SLUG="round-trip-release"
+  REVERSION_SPEC="v2.12|v2.12 -> v2.14 -> v2.12|deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|sibling@v2.14|S12|branch named v2.12"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == PASS\|* ]] || { echo "FAIL: phase_append_reversions round-trip should PASS, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| round-trip-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: round-trip must yield exactly 1 row, got $_rv_rows"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| round-trip-release \| v2\.14 \| v2\.12 \|' "$RELEASE_REVERSIONS" || { echo "FAIL: round-trip row must be abandoned=v2.14 final=v2.12 (set-minus-is-wrong fix)"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| round-trip-release \| v2\.12 \|' "$RELEASE_REVERSIONS" && { echo "FAIL: round-trip must NOT record v2.12 as abandoned (it is the final)"; failures=$((failures+1)); }
+
+  # (c) multi-abandoned: v1.18 → v1.19 → v1.20 (final v1.20) → TWO rows (v1.18, v1.19)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  STATE_MILESTONE_SLUG="multi-abandoned-release"
+  REVERSION_SPEC="v1.20|v1.18 -> v1.19 -> v1.20|cafebabecafebabecafebabecafebabecafebabe|a@v1.18,b@v1.19|S12|legacy branch"
+  phase_append_reversions >/dev/null 2>&1
+  _rv_rows="$(/usr/bin/grep -cE '^\| multi-abandoned-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 2 ]] || { echo "FAIL: multi-abandoned must yield 2 rows (v1.18,v1.19), got $_rv_rows"; failures=$((failures+1)); }
+
+  # (d) idempotency — re-run the round-trip spec → no new row, SKIPPED
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  STATE_MILESTONE_SLUG="round-trip-release"
+  REVERSION_SPEC="v2.12|v2.12 -> v2.14 -> v2.12|deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|sibling@v2.14|S12|branch named v2.12"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_reversions re-run must be SKIPPED (idempotent), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| round-trip-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the round-trip row, got $_rv_rows"; failures=$((failures+1)); }
+
+  # (e) dry-run → DRY-RUN, no write
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; STATE_MILESTONE_SLUG="dry-run-release"
+  REVERSION_SPEC="v3.01|v3.00 -> v3.01|0000000000000000000000000000000000000000|x@v3.00|S12|—"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: phase_append_reversions should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| dry-run-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: dry-run must NOT write a row"; failures=$((failures+1)); }
+
+  # (f) query self-check (the AC: collision rate measurable) — every written row is
+  #     counted by the numerator grep, INCLUDING a dotted + leading-digit + uppercase
+  #     slug (the FMF-2 class). Append such a row directly and assert the count rises.
+  MODE="apply"
+  /usr/bin/printf '| v1.03-Bundle-AND-related | v1.03 | unrecoverable | v1.03 → (unknown) | unknown | (unrecoverable) | — | pre-merge | unrecoverable | lost | — | 2026-06-02 |\n' >> "$RELEASE_REVERSIONS"
+  local _rv_total; _rv_total="$(/usr/bin/grep -cE '^\| [A-Za-z0-9.-]+ \| v' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_total="${_rv_total:-0}"
+  # rows so far: 1 round-trip + 2 multi-abandoned + 1 dotted/uppercase = 4
+  [[ "$_rv_total" -eq 4 ]] || { echo "FAIL: numerator grep must count all 4 written rows incl. dotted/uppercase slug, got $_rv_total"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_rv_tmp" 2>/dev/null || true
+  REPO_ROOT="$_rv_saved_root"; MODE="$_rv_saved_mode"; VERSION="$_rv_saved_version"
+  STATE_MILESTONE_SLUG="$_rv_saved_slug"; RELEASE_LOG="$_rv_saved_log"; RELEASE_REVERSIONS="$_rv_saved_rev"
+  REVERSION_SPEC="$_rv_saved_spec"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 2: extract_major
@@ -1532,6 +1764,7 @@ self_test() {
   echo "self-test: PASS" >&2
   echo "  validate_version + extract_major validated" >&2
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
+  echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
   echo "  extract_row_state + extract_milestone_slug validated" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
@@ -1600,6 +1833,7 @@ while [[ $# -gt 0 ]]; do
     --markdown) OUTPUT="markdown"; shift ;;
     --json) OUTPUT="json"; shift ;;
     --with-pattern-scan) WITH_PATTERN_SCAN=1; shift ;;
+    --reversion) REVERSION_SPEC="$2"; shift 2 ;;
     --self-test) SELF_TEST=1; shift ;;
     --check-paths) CHECK_PATHS=1; shift ;;
     --help|-h) usage ;;
@@ -1628,6 +1862,7 @@ phase_create_chore_branch || { generate_report; exit 3; }
 phase_transition_release_log || { generate_report; exit 3; }
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
+phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
 phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
