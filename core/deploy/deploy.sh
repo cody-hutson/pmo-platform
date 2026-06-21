@@ -63,6 +63,7 @@ RELEASE_SKILLS=(
   pmo-devops-sre
   pmo-principal-engineer
   pmo-qa-lead
+  pmo-release-manager
   pmo-skill-editor
   pmo-skill-refiner
   pmo-software-engineer
