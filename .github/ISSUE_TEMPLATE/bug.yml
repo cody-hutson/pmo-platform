@@ -85,10 +85,10 @@ body:
         (b) **Explicit "None"** — write exactly: `None — no documentation impact (rationale: <one phrase>)`.
         The rationale phrase is mandatory; bare `None` fails the Stage 13 Close gate (G-CL8).
 
-        **Scope:** K1 codified corpus only — `.claude/rules/`, `pmo-platform/reference/`, `pmo-platform/governance/`,
-        `pmo-platform/skills/*/SKILL.md` + `references/`, `CLAUDE.md`. A bug fix in a documented behavior IS a doc-impact.
+        **Scope:** K1 codified corpus only — `core/rules/`, `core/specs/` + `release/references/`, `core/governance/`,
+        `{operations,release,core}/skills/*/SKILL.md` + `references/`, `CLAUDE.md`. A bug fix in a documented behavior IS a doc-impact.
       placeholder: |
-        pmo-platform/skills/<skill>/SKILL.md | update | fix changes output schema documented in §Output Format
+        operations/skills/<skill>/SKILL.md | update | fix changes output schema documented in §Output Format
 
         — OR —
 
