@@ -7,6 +7,7 @@ consumers: "release/references/pipeline/stage-05-solutioning.md Phase A4 (cited 
 parallel_to: "solutioning-output-template.md (sibling release-pipeline Stage-5 process standard — that one owns the OUTPUT comment frame, this one owns the generation→narrowing micro-protocol); triage-design-rereview.md (sibling release-pipeline Stage-5 standard)"
 ---
 <!-- reference-durability: allow-version-ref -->
+<!-- reference-durability: allow-link -->
 
 # Design-Exploration Protocol — Stage 5 Phase A4 Micro-Protocol
 
