@@ -22,6 +22,7 @@ ADRs follow the format established by [ADR-005](ADR-005-append-pattern-aware-cro
 | [ADR-024](ADR-024-cross-release-impact-model.md) | Cross-release impact model: structural-blast-radius axis (F1–F6 ref-form sweep) + GO baseline-currency | Accepted | 2026-06-14 | cross-release-impact-model |
 | [ADR-025](ADR-025-sior-escalation-canonicalization.md) | SIOR escalation canonicalization: single-source protocol doc + link-reference consumption | Accepted | 2026-06-13 | sior-escalation-discipline-across-the-comms-triage-technical |
 | [ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md) | Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key | Proposed | 2026-06-13 | parallel-launch-quota-budget-gate |
+| [ADR-036](ADR-036-version-claim-determinism.md) | Deterministic version-claiming: a host-agnostic capability (slug-primary, defer-to-claim, atomic CAS) bound to a config-selected `repo_host` adapter | Accepted | 2026-06-21 | release-version-claim-determinism |
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, ADR-024, ADR-025, and ADR-026 are authored natively in the modular-monolith layout.
 
@@ -61,8 +62,9 @@ ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + ope
 | ADR-024 | release | authored at Stage 6 (2026-06-14) |
 | ADR-025 | release | authored at Stage 6 (2026-06-13) |
 | ADR-026 | release | authored at Stage 6 (2026-06-13) |
+| ADR-036 | release | authored at Stage 6 (2026-06-21) |
 
-> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them.
+> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them. ADR-027 through ADR-035 are core-scope and indexed in the core README; ADR-036 resumes the release-scoped thread after them.
 
 ## Authoring new ADRs
 
