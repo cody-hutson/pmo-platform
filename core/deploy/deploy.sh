@@ -1998,7 +1998,7 @@ cmd_check() {
   # touching any other check's behavior — every other check keeps reading
   # $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged.
   #
-  # Decoupling contract (per #27 Stage 6 scope expansion, sub-task #1647): the
+  # Decoupling contract (per the g1-enforcement mode-decoupling scope): the
   # g1-enforcement check (Check 22) resolves its mode via this helper from a
   # dedicated `g1-enforcement.mode` file; with no such file present it falls back
   # to the shared mode → warn (the current default). The warn→enforce flip is
@@ -2034,7 +2034,7 @@ cmd_check() {
         ISSUES=$((ISSUES + 1))
         ;;
       warn)
-        log "  WARN:  $check_id — $detail (warn-mode; flip g1-enforcement.mode to 'enforce' after shakedown — see #27 follow-on)"
+        log "  WARN:  $check_id — $detail (warn-mode; flip g1-enforcement.mode to 'enforce' after the shakedown window)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         local _detail_escaped="${detail//\\/\\\\}"
@@ -3075,7 +3075,7 @@ cmd_check() {
   # Stage 2 Triage was the only early stage with zero tooling enforcement.
   #
   # Scope decision rendered Option 3 (check-only): ship Layer (b) detection-
-  # only enforcement. Intake-scope RATIFIED bundled-only (#27 Stage 5): the
+  # only enforcement. Intake-scope RATIFIED bundled-only: the
   # population stays open `status: bundled` — Check 22 is NOT extended to
   # `status: proposed`. The earlier "intake-time hook (Layer a)" deferral's
   # reopening condition is unmet (warn-log empty), and Layer-A form-required
@@ -3123,7 +3123,7 @@ cmd_check() {
   #   them as advisory RECOMMENDs (not FAILs) honors the "right tool, right
   #   time" framing — they never gate-block routine intake.
   #
-  # MODE DECOUPLING (#27 Stage 6 scope expansion, sub-task #1647): this check's
+  # MODE DECOUPLING (g1-enforcement mode-decoupling scope): this check's
   # mode is RESOLVED via resolve_check_mode "g1-enforcement" into
   # $G1_ENFORCEMENT_MODE at Check 22 start — reading a dedicated
   # `g1-enforcement.mode` file (operator-instance path, same fallback pattern
@@ -3132,8 +3132,8 @@ cmd_check() {
   # INDEPENDENTLY of the ~12-check shared-mode cohort. Every OTHER check still
   # reads $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged. With no
   # `g1-enforcement.mode` file present, this check falls back to the shared
-  # mode → warn (the current default). The warn→enforce flip is DEFERRED to
-  # follow-on #1686 (after the ≥3-day shakedown); this release ships WARN. Mode
+  # mode → warn (the current default). The warn→enforce flip is DEFERRED to a
+  # follow-on (after the ≥3-day shakedown); this release ships WARN. Mode
   # files are operator-instance runtime state and are NOT committed.
   #
   # Template Detection Logic — pragmatic body-marker variant:
@@ -3162,8 +3162,8 @@ cmd_check() {
   # configured the bundled-issue query returns an empty set and it no-ops.
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
-  # 8/9/10/14/15/18/19/20/21 precedent); flip-to-enforce DEFERRED to follow-on
-  # #1686 after ≥3-day warn-log review with zero false positives — flipped via
+  # 8/9/10/14/15/18/19/20/21 precedent); flip-to-enforce DEFERRED to a follow-on
+  # after ≥3-day warn-log review with zero false positives — flipped via
   # the dedicated `g1-enforcement.mode` file (NOT the shared deploy-check.mode),
   # so this check graduates independently of the shared-mode cohort. Operator
   # may consider adding Layers (a) intake-time hook and (c) scheduled cadence
