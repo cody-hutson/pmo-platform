@@ -2,31 +2,61 @@
 
 ## Purpose
 
-This reference defines the **three-cycle progressive-rollout model** the executor
-applies to governance rules and to the quality-gate ladder. A new governance rule
-should not flip straight to blocking in-flight releases the day it ships. Instead it
-advances through three cycles — **shadow → warn → enforce** — so the operator observes
-its real hit-rate against live releases before it ever halts one. The `## Quality-Gate
-Ladder` section in `SKILL.md` is the canonical definition of the gates this model wraps;
-this reference is the canonical definition of the rollout cycles, the per-rule
-`rollout-cycle` attribute, the outcome-log persistence surface, and the operator-gated
-advance procedure.
+This reference defines the **executor realization** of the platform's progressive-rollout
+convention — how the executor applies the rollout phases to governance rules and to the
+quality-gate ladder. A new governance rule should not flip straight to blocking in-flight
+releases the day it ships. Instead it advances through the rollout phases so the operator
+observes its real hit-rate against live releases before it ever halts one.
+
+**Canonical source for the phase enum and the per-phase contract:**
+`core/standards/progressive-rollout-convention.md`.
+That pipeline-wide convention OWNS the phase enum (`shadow → warn → enforce → removed`)
+and the per-phase 4-element contract (observable behavior · telemetry contract · advance
+criteria · retreat trigger). This reference does **not** re-define that vocabulary (per the
+duplicate-source register-or-remove rule in `core/standards/duplicate-source-discipline.md`
+the enum lives in exactly one canonical home — the convention); it cites the convention for
+the phase definitions and owns the **executor-specific machinery**: the per-rule / per-gate
+`rollout-cycle` attribute, the executor's `would-fail` dispatch, the JSONL outcome-log
+persistence surface, the gate-ladder short-circuit seam, and the operator-gated advance
+procedure as the executor runs it. The `## Quality-Gate Ladder` section in `SKILL.md` is the
+canonical definition of the gates this model wraps.
+
+> **Executor scope note (3 of 4 phases).** The executor's `rollout-cycle` attribute ranges
+> over the first three phases — `shadow`, `warn`, `enforce` — because the executor dispatches
+> a *running* mechanism's `would-fail` verdict. The convention's terminal fourth phase,
+> `removed` (decommission), is not an executor `rollout-cycle` value: a `removed` mechanism
+> no longer runs, so there is no verdict to dispatch. The executor reference is therefore a
+> 3-of-4 realization of the 4-phase convention; the `removed` phase is owned by the
+> convention and the touchpoint phase-out schema, not dispatched here.
 
 This is a **generalization of a pattern the platform already runs**, not a new scheme —
-see the "Precedent and non-divergence" section below. The single net-new addition is the
-`shadow` cycle (silent observation), which the existing two-state precedent does not have.
+see the "Precedent and non-divergence" section below. The single net-new addition the
+executor model contributed over the prior two-state precedent is the `shadow` cycle (silent
+observation); the convention then lifted that vocabulary pipeline-wide and added the
+terminal `removed` phase.
 
-## The three-cycle model
+## Executor dispatch by phase (`shadow` / `warn` / `enforce`)
+
+The phase enum and the per-phase contract are defined canonically in
+`core/standards/progressive-rollout-convention.md`
+— read it for the authoritative observable-behavior / telemetry / advance-criteria /
+retreat-trigger contract of each phase. This section is the **executor-specific dispatch**:
+how the executor turns a rule's or gate's `rollout-cycle` value into a run-time action.
 
 A rule or gate evaluated by the executor reports a **verdict** — `pass` or `would-fail`
-(the rule's predicate found a violation). The rule's `rollout-cycle` decides what the
-executor *does* with a `would-fail` verdict:
+(the rule's predicate found a violation). The rule's `rollout-cycle` (one of the convention's
+first three phases) decides what the executor *does* with a `would-fail` verdict:
 
-| Cycle | Executor behavior on a `would-fail` verdict | Blocks the release? | Operator-visible at run time? | Persists the hit? |
+| Phase (`rollout-cycle`) | Executor behavior on a `would-fail` verdict | Blocks the release? | Operator-visible at run time? | Persists the hit? |
 |---|---|---|---|---|
 | `shadow` | Evaluate the rule, append a hit line to the rule's outcome-log, continue **silently** | No | No — silent; log only | Yes (`cycle: "shadow"`) |
 | `warn` | Evaluate, **emit an operator-facing notice** at run time, AND append a hit line | No | Yes — notice in the run output | Yes (`cycle: "warn"`) |
 | `enforce` | Evaluate; on a `would-fail` verdict **block** (and, inside the gate ladder, short-circuit) with the rule's actionable finding | Yes | Yes — hard stop | A blocked release is its own record; logging is optional |
+
+This dispatch table is the executor's realization of the convention's per-phase **observable
+behavior** element, specialized to the release-execution context (the action being gated is a
+release; the short-circuit is over the quality-gate ladder Tiers). It does not restate the
+convention's telemetry / advance / retreat contract — that lives in the convention.
 
 A `pass` verdict is a no-op in every cycle: the rule found no violation, nothing is
 logged, nothing is surfaced, the release proceeds.
@@ -42,7 +72,10 @@ The operator-facing notice a `warn`-cycle hit emits at run time reads:
 Every governance rule and every gate the executor evaluates carries a `rollout-cycle`
 attribute the executor reads at evaluation time to choose log-only / notice / block.
 
-- **Allowed values:** `shadow`, `warn`, `enforce`.
+- **Allowed values:** `shadow`, `warn`, `enforce` — the first three phases of the canonical
+  enum in `core/standards/progressive-rollout-convention.md`.
+  The terminal `removed` phase is not a `rollout-cycle` value (a decommissioned mechanism
+  has no `would-fail` verdict to dispatch — see the Executor scope note in Purpose).
 - **Default:** `enforce`. A rule that declares no `rollout-cycle` keeps its full blocking
   teeth — adoption of this model is **behavior-preserving** for every existing rule, and
   the gate ladder ships every gate at `enforce`.
@@ -149,6 +182,11 @@ attribute change (see the Advance Checklist).
 
 ## Advance Checklist (shadow → warn → enforce)
 
+This checklist is the executor's concrete operationalization of the convention's per-phase
+**advance-criteria** element (see `core/standards/progressive-rollout-convention.md`
+§ "The per-phase contract" and § "Advance is an operator decision") — the convention states
+the criteria; this checklist is how the executor walks them step by step.
+
 Advancement is an **operator decision, never auto-promoted by hit-count.** Auto-promotion
 by a numeric hit threshold is a deliberate non-goal: a low hit-count does not establish
 that the remaining hits are false positives, and the operator's judgement on the log is the
@@ -178,27 +216,21 @@ non-blocking observation immediately.
 
 ## Precedent and non-divergence
 
-This model is a generalization of two patterns already in the corpus — it deliberately does
-**not** invent a divergent scheme:
+The full precedent survey — the platform's pre-existing rollout ladders, why the enum is a
+lift of established vocabulary rather than a new scheme, and the rejection of
+`dark / canary / GA` — is in the canonical `core/standards/progressive-rollout-convention.md`
+§ "Evidence-Grounding" and § "The phase enum (canonical)". This reference does not restate
+that argument.
 
-- **The hook-layer mode file.** The platform's security-hook layer already runs an
-  `enforce` / `warn` / `off` mode for several hooks, with per-hook `*-warn-log.jsonl`
-  persistence and a "Shakedown → Enforce Transition Checklist" as the advance gate. The
-  Hook Layer Reference under the core rules set is the canonical description. This model
-  reuses that mode vocabulary, that persistence location and shape, and that advance-gate
-  pattern.
-- **Per-criterion warn-to-enforce in the gate-criteria spec.** The platform's gate-criteria
-  schema already rolls individual criteria out `warn → enforce` with dedicated
-  `core/hooks/<name>-warn-log.jsonl` files and the same shakedown checklist as the flip
-  authority. This model formalizes that ad-hoc inline disposition into the named
-  `rollout-cycle` attribute.
-
-The single net-new element is the **`shadow` cycle** — silent, persisted-but-not-surfaced
-observation — which neither precedent carries (their `warn` is operator-reviewable after
-the fact, so it cannot serve as the silent-observation tier). Everything else — the
-persistence convention, the advance-checklist shape, the inline-attribute home, the
-fail-safe-to-`enforce` default — is reused verbatim from the precedents so an operator
-brings existing muscle-memory to it.
+The executor-scoped point that remains here: the executor's realization **reuses the
+precedents' shapes verbatim** so an operator brings existing muscle-memory to it — the
+per-rule `*-log.jsonl` persistence location and format, the inline-attribute home (the
+`rollout-cycle` column on the gate table), the operator-gated advance-checklist shape, and
+the fail-safe-to-`enforce` default all mirror the security-hook `.mode` family and the
+gate-criteria per-criterion `warn → enforce` rollout. The executor model's one contribution
+over those two-state precedents was the **`shadow`** cycle (silent, persisted-but-not-
+surfaced observation); the convention subsequently lifted `shadow/warn/enforce` to pipeline
+scope and added the terminal `removed` phase the executor does not dispatch.
 
 ## Out of scope
 
