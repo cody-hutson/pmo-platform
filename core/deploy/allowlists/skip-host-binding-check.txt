@@ -1,0 +1,14 @@
+# Allowlist for the host-binding-leak detector (deploy.sh Check 34 +
+# core/deploy/tools/check-host-binding.py). One path or glob per line; trailing
+# slash = directory prefix; `#` = comment.
+#
+# These files legitimately DESCRIBE the host-binding pattern (the §4.1 detection-
+# signature exclusions: a reference adapter documenting its own host binding, and
+# the discipline-defining files that quote the leak as a teaching example). They
+# TEACH the discipline; they do not PRESCRIBE gh/git as the canonical mechanism.
+# Adjudicated legitimate per knowledge-architecture.md §4.1.
+core/standards/repo-host-adapter-versioning.md
+core/disciplines/knowledge-architecture.md
+release/references/standards/design-exploration.md
+release/references/templates/design-review-checklist.md
+core/standards/planning-solutioning-handoff.md

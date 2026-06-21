@@ -5372,6 +5372,51 @@ cmd_check() {
     esac
   fi
 
+  # Check 42 — Host-binding leak detector (warn-mode initial)
+  #
+  # Flags a host tool (gh / git / a host API) prescribed as THE canonical
+  # mechanism in K1-tier governance, where the operation belongs behind the
+  # operator.toml [adapters] seam — the HOST-BINDING-LEAK leakage class registered
+  # in core/disciplines/knowledge-architecture.md §4.1 (the host-axis sibling of
+  # the path-portability class). Signal-not-verdict: the primitive emits candidate
+  # lines (a prescriptive-mechanism marker + a host token in proximity, outside
+  # fenced code blocks); the prescription-vs-teaching adjudication (§4.1 exclusions:
+  # a reference adapter documenting its binding; an illustrative host command) is
+  # the review act. Discipline-defining files that legitimately quote the pattern
+  # are allowlisted (tracked: core/deploy/allowlists/skip-host-binding-check.txt).
+  #
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks 8/9/10/14/25
+  # precedent); the introducing release is itself exempt (reflexive-pipeline-loop —
+  # a rule cannot fire on its own deploy). Flip-to-enforce after a ≥3-day warn-log
+  # review via .claude/hooks/deploy-check.mode (shared cohort) or a dedicated
+  # host-binding-leak.mode file (resolve_check_mode, independent graduation).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 42: Host-binding leak detector (K1-tier gh/git-as-prescribed-mechanism)"
+    local c42_script="core/deploy/tools/check-host-binding.py"
+    local c42_allowlist="core/deploy/allowlists/skip-host-binding-check.txt"
+    if [[ ! -f "$c42_script" ]]; then
+      flag_warn_or_issue "host-binding-leak" "primitive script missing: $c42_script"
+    else
+      local c42_targets="core/governance/**/*.md,release/governance/**/*.md,core/disciplines/**/*.md,core/standards/**/*.md,core/specs/**/*.md,core/schemas/**/*.md,release/references/**/*.md,core/rules/**/*.md,core/skills/**/SKILL.md,operations/skills/**/SKILL.md,release/skills/**/SKILL.md,core/skills/**/references/*.md,operations/skills/**/references/*.md,release/skills/**/references/*.md"
+      local c42_output c42_exit=0
+      c42_output=$(/usr/bin/python3 "$c42_script" --target-paths "$c42_targets" --allowlist "$c42_allowlist" 2>&1) || c42_exit=$?
+      if [[ $c42_exit -eq 3 ]]; then
+        flag_warn_or_issue "host-binding-leak" "path-resolution failure (exit 3): $(echo "$c42_output" | head -1) — a --target-paths glob resolved to zero files (relocated/typo'd scan surface); fix the glob list in this check"
+      elif [[ $c42_exit -eq 0 ]]; then
+        local c42_n
+        c42_n=$(echo "$c42_output" | head -1 | awk '{print $2}')
+        if [[ "${c42_n:-0}" -gt 0 ]]; then
+          flag_warn_or_issue "host-binding-leak" "$c42_n candidate host-binding leak(s) — gh/git prescribed as the canonical mechanism in K1 governance; lift to the [adapters] seam per core/disciplines/knowledge-architecture.md §4.1, or allowlist a legitimate reference-adapter/teaching file"
+          echo "$c42_output" | tail -n +2 | head -10 | sed 's/^/         /' || true
+        else
+          log "  OK:    no host-binding leak candidates in K1-tier governance"
+        fi
+      else
+        flag_warn_or_issue "host-binding-leak" "detector errored (exit $c42_exit): $(echo "$c42_output" | head -1)"
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
