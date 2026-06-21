@@ -186,6 +186,17 @@ read PROJECT.md → parse delivery_approach field:
     → parameterize behavior from: lifecycle + ceremonies + artifacts + cadence
     → produce methodology-native output
 
+  CASE 1-ARRAY: delivery_approach is a 2-element array [A, B]   (the Hybrid-Two form):
+    → read the matrix row for EACH of A and B
+    → produce dual-framed output: one native section per constituent (A-framing + B-framing),
+      parameterized from each row's lifecycle + ceremonies + artifacts + cadence
+    → take the UNION of track-specific primitives per work-organization-mapping-framework § 2.5
+      (Hybrid = "each track maps per its constituent archetype, union of both")
+    → log [methodology-branch: CASE 1-ARRAY constituents=A,B]
+    → dominance on a contested output surface: the phased constituent governs milestone/gate
+      framing; the timeboxed/continuous constituent governs iteration/flow framing — render
+      BOTH side-by-side (the union default); never silently pick one
+
   CASE 2: delivery_approach == Custom AND base_archetype != null:
     → read custom_methodology_definition block
     → start from matrix row for base_archetype as DEFAULT
@@ -200,6 +211,14 @@ read PROJECT.md → parse delivery_approach field:
       → DO NOT silently default to Scrum or any other archetype
 ```
 
+#### CASE 1-ARRAY — the Hybrid-Two array form {#case-1-array}
+
+When `delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two form — see the array worked example and its validation trace in [`schemas/project-schema.md` § 6.5](../../../core/schemas/project-schema.md)), the consumer reads the matrix row for **each** of A and B and produces **dual-framed output** — one native section per constituent (an A-framing and a B-framing), each parameterized from its own row's lifecycle / ceremonies / artifacts / cadence. The ceremonies and artifacts the consumer emits are the **union** of the two constituents' primitives, exactly the per-track mapping [`work-organization-mapping-framework.md` § 2.5](../../../core/disciplines/work-organization-mapping-framework.md) already defines for the Hybrid row (*"each track maps per its constituent archetype, union of both"*). This branch **references** §2.5; it does not re-found it. The consumer logs `[methodology-branch: CASE 1-ARRAY constituents=A,B]`.
+
+**Semantic-merge / dominance.** The union is the default: where two output surfaces are distinct (a milestone roll-up vs. an iteration burn-down) the consumer renders **both**. When a *single* output position needs one cadence (e.g. a single roll-up date), the surfaces do not collide because they are owned by different constituents — the **phased constituent governs milestone / gate framing** and the **timeboxed or continuous constituent governs iteration / flow framing**. Where both constituents could legitimately claim one surface, the consumer renders both **side-by-side** (the union default); it **never silently picks one**. This is the §2.5 union made operational.
+
+The array form is **methodology classification only** — it does not imply co-management. A consumer reading `[A, B]` MUST still read `dual_framing_enabled` (the orthogonal trigger, project-schema § 7) before deciding whether to *additionally* emit the Dual-Framing Bridge co-management output. The two native constituent framings (this branch) and the Dual-Framing Bridge (the `dual_framing_enabled` trigger) are independent: a `[Scrum, Waterfall]` project with `dual_framing_enabled: false` emits two native framings and no co-management bridge.
+
 ### 5.1 Step-by-step for skill authors
 
 1. **Read `delivery_approach` first.** Treat it as the primary methodology signal. Skills MAY cache the value for the duration of the invocation but MUST NOT cache across invocations (the field is project-level mutable).
@@ -208,6 +227,7 @@ read PROJECT.md → parse delivery_approach field:
 4. **Inherit from base in CASE 2.** When `base_archetype` is populated in a Custom block, start from that archetype's matrix row as default; override only the fields the custom block specifies differently. This gives Custom-with-base variants coherent archetype framing with targeted deviation.
 5. **Use the block directly in CASE 3.** When `base_archetype: null`, there is no archetype to fall back to. Use the block's lifecycle / ceremonies / artifacts / cadence directly. If they are insufficient for the skill's parameterization, emit methodology-agnostic output WITH CAVEAT — do NOT silently default.
 6. **Log the branch taken.** Skills SHOULD log the consumption branch taken in debug output (e.g., `[methodology-branch: CASE 2 base=Kanban]`). This aids debugging and operator review of skill behavior on edge-case projects.
+7. **Branch CASE 1-ARRAY when `delivery_approach` is a `[A, B]` array.** Read the matrix row for **each** constituent, emit one native section per constituent (union of primitives per [`work-organization-mapping-framework.md` § 2.5](../../../core/disciplines/work-organization-mapping-framework.md)), apply the phased-governs-gates / timeboxed-governs-iterations dominance rule on contested surfaces, render both side-by-side rather than silently picking, and log `[methodology-branch: CASE 1-ARRAY constituents=A,B]`. The array is a methodology classification only — read `dual_framing_enabled` separately to decide whether to additionally emit the Dual-Framing Bridge. See the [CASE 1-ARRAY](#case-1-array) sub-branch above.
 
 ### 5.2 Pickup-readiness test (AC-R3 gate)
 
@@ -216,6 +236,7 @@ A methodology-aware role-skill author reading ONLY this document + [`schemas/pro
 - Given a project with `delivery_approach: Scrum`, skill produces sprint-native output using the matrix Scrum row.
 - Given a project with `delivery_approach: Custom / name: Scrumban / base_archetype: Kanban`, skill produces Custom-tuned output starting from Kanban matrix row + overriding cadence per block.
 - Given a project with `delivery_approach: Custom / name: "Shape Up" / base_archetype: null`, skill produces output using the block's lifecycle/ceremonies/artifacts/cadence directly; if skill lacks Shape-Up-specific templates, skill emits methodology-agnostic output with caveat `"Custom methodology 'Shape Up' has no archetype fallback; output is methodology-agnostic"`.
+- Given a project with `delivery_approach: [Scrum, Kanban]` (the Hybrid-Two array — validates via the project-schema § 6.5 array branch: 2 distinct members, both in the 6-set), skill takes **CASE 1-ARRAY**: it reads the Scrum and Kanban matrix rows, emits a Scrum-native section (sprint cadence, sprint ceremonies) **and** a Kanban-native section (continuous flow, WIP-limited pull) as the union of both, applies the dominance rule on any contested surface (here neither constituent is phased, so milestone/gate framing is absent and both contribute iteration/flow framing rendered side-by-side), logs `[methodology-branch: CASE 1-ARRAY constituents=Scrum,Kanban]`, and reads `dual_framing_enabled` separately before deciding whether to additionally emit the Dual-Framing Bridge.
 
 Stage 9 operator verifies pickup-readiness per AC-R3.
 
