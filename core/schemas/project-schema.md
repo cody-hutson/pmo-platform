@@ -239,7 +239,7 @@ delivery_approach: Hybrid
 
 **Validation trace:** V1 ✓, V2 ✓ (`Hybrid`), V3 N/A, V4 ✓, V5-V12 N/A.
 
-**Reconciliation note.** The two fields are **orthogonal**, and this example shows them combined: `delivery_approach: Hybrid` is the methodology classification (a two-archetype combination), while `dual_framing_enabled: true` is the *separate, orthogonal* operational co-management dual-framing trigger. Co-management is NOT implied by `Hybrid` — a Hybrid project with `dual_framing_enabled: false` is equally valid (two native framings, no co-management output), and a single-archetype project may set `dual_framing_enabled: true` independently. This combination is the legacy SPM co-managed shape, but it is a *configuration*, not the definition of Hybrid — see §7 Collision Check. (A legacy `PROJECT.md` carrying `spm_comanaged: true` is accepted via the Mode C shim and reads identically — §7.)
+**Reconciliation note.** The two fields are **orthogonal**, and this example shows them combined: `delivery_approach: Hybrid` is the methodology classification (a two-archetype combination), while `dual_framing_enabled: true` is the *separate, orthogonal* operational co-management dual-framing trigger. Co-management is NOT implied by `Hybrid` — a Hybrid project with `dual_framing_enabled: false` is equally valid (two native framings, no co-management output), and a single-archetype project may set `dual_framing_enabled: true` independently. This combination is the legacy co-managed shape, but it is a *configuration*, not the definition of Hybrid — see §7 Collision Check. (A legacy `PROJECT.md` carrying `spm_comanaged: true` is accepted via the Mode C shim and reads identically — §7.)
 
 ### 6.3 Custom — Scrumban (base_archetype: Kanban)
 
@@ -336,7 +336,7 @@ The dual-framing co-management trigger is named **`dual_framing_enabled`**. It w
 
 The two fields are **orthogonal and combine freely** — co-management is no longer implied by, and does not imply, the Hybrid classification:
 
-- `delivery_approach: Hybrid` + `dual_framing_enabled: true` — a two-archetype project that *additionally* runs the co-management dual-framing output (the legacy SPM co-managed shape, now expressed as an explicit combination rather than a coupled default).
+- `delivery_approach: Hybrid` + `dual_framing_enabled: true` — a two-archetype project that *additionally* runs the co-management dual-framing output (the legacy co-managed shape, now expressed as an explicit combination rather than a coupled default).
 - `delivery_approach: Hybrid` + `dual_framing_enabled: false` (or absent) — a two-archetype project reported in both native framings, with no co-management output. **Valid.**
 - `dual_framing_enabled: true` + `delivery_approach: Scrum` (or any non-Hybrid) — a single-archetype project that runs the co-management dual-framing output independently of methodology. **Valid** under the decoupled model — this is NOT a misconfiguration to "correct" toward Hybrid. (`project-initiator` Mode C no longer flags this combination as a configuration-validation candidate.)
 - `dual_framing_enabled: false` (or absent) + non-Hybrid — single-methodology project, no dual-framing.

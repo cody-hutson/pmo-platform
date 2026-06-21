@@ -262,7 +262,7 @@ To classify any file: (1) check the Layer table above — if listed, use that la
 Token budget order: (1) analysis and judgment, (2) file output, (3) copy/paste block for target system when requested. File is the primary deliverable.
 
 ### Dual-Framing Bridge (Conditional)
-Activates only when `dual_framing_enabled: true` in PROJECT.md. When active, milestone-touching outputs produce dual framings: Agile (sprint/velocity) and Waterfall (milestone/phase-gate).
+Activates only when `dual_framing_enabled: true` in PROJECT.md. When active, milestone-touching outputs produce dual framings: Agile (sprint/velocity) and Waterfall (milestone/phase-gate). The co-managing partner-team identity and its sync targets (e.g., the Smartsheet grid and SharePoint folder backing the Waterfall framing) are **operator-local config** (K4 — set per project in the operator's own PROJECT.md / instance config), not part of this tracked template; the template names no specific partner organization.
 
 ## File Management Protocol
 

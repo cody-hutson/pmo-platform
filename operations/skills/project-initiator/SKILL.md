@@ -253,7 +253,7 @@ it ensures the PMO workspace stays in sync with team tools.
 - [ ] Invite team members to Confluence space
 - [ ] Upload initial documents to appropriate Confluence folders
 
-**For Waterfall (SPM):**
+**For the Waterfall (Sponsor) track:**
 - [ ] Create SharePoint project folder (or verify existing)
 - [ ] Create milestone tracker in Smartsheet (or verify existing)
 - [ ] Set up Google Drive transcript folder (or verify Sembly routing)
@@ -262,9 +262,9 @@ it ensures the PMO workspace stays in sync with team tools.
 
 **For Hybrid (both):**
 - All Agile items above, PLUS:
-- [ ] Create SharePoint folder for SPM deliverables
+- [ ] Create SharePoint folder for the sponsor deliverables
 - [ ] Verify Smartsheet milestone tracker accessible
-- [ ] Confirm SPM reporting cadence with SPM stakeholder
+- [ ] Confirm the reporting cadence with the sponsor stakeholder
 
 **MCP Connector Configuration:**
 - [ ] Verify Jira MCP connector has access to `[project key]` (if Agile/Hybrid)
@@ -458,7 +458,7 @@ Produce a checklist of actions the user must take in parallel systems:
 - [ ] Notify stakeholders of project closure (use Comms Writer if needed)
 - [ ] Remove MCP connector access if project-specific
 
-**For Waterfall (SPM):**
+**For the Waterfall (Sponsor) track:**
 - [ ] Archive SharePoint project folder
 - [ ] Close or archive Smartsheet milestone tracker
 - [ ] Remove/archive Google Drive transcript folder
@@ -569,7 +569,7 @@ structural conformance and content quality.
   data or confirms the assumption before scaffold completion.
 - **Principal response vs. junior response:** Principal labels every non-input field and
   surfaces the assumption list in the Step 8 summary. Junior fills the blanks with
-  plausible defaults (SPM default stakeholder names, guessed go-live date, assumed
+  plausible defaults (sponsor default stakeholder names, guessed go-live date, assumed
   governance model) and ships a PROJECT.md that reads as authoritative but is half
   invented.
 

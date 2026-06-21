@@ -362,7 +362,7 @@ Because they are orthogonal, every combination is valid:
 
 | `delivery_approach` | `dual_framing_enabled` | Interpretation |
 |---|---|---|
-| `Hybrid` (or a two-archetype array) | `true` | Two-archetype project that *additionally* runs the co-management dual-framing output (the legacy SPM co-managed shape) |
+| `Hybrid` (or a two-archetype array) | `true` | Two-archetype project that *additionally* runs the co-management dual-framing output (the legacy co-managed shape) |
 | `Hybrid` (or a two-archetype array) | `false` | Two-archetype project in both native framings — no co-management bridge |
 | Non-Hybrid | `true` | Single-archetype project running co-management dual-framing **independently of methodology** — a valid configuration, no longer flagged for review |
 | Non-Hybrid | `false` | Single-methodology project — no dual-framing |
@@ -1025,7 +1025,7 @@ confluence_page_ids:                       # FDD, RAID, processes
   - "123457"    # FDD Index
   - "123458"    # Process Flows
 gdrive_folder: "1aB2cD3eF4gH5i..."        # Google Drive folder ID for transcripts
-spm_comanaged: false                       # True if Smartsheet + SPM bridge active
+spm_comanaged: false                       # True if Smartsheet + dual-framing bridge active
 spm_sharepoint_folder: null                # SharePoint path if spm_comanaged=true
 spm_smartsheet_id: null                    # Smartsheet grid ID if spm_comanaged=true
 ```
