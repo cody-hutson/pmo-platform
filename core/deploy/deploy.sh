@@ -247,6 +247,218 @@ log() {
   echo "[$(date +%H:%M:%S)] $1"
 }
 
+# ─── Version-freeness (Check 41 / --check-version-freeness) — #1677 ───────────
+# The pre-merge freeness predicate, factored to TOP LEVEL so it is shared by two
+# surfaces with ONE body (DD1): the lifecycle Check 41 (inside cmd_check, routing
+# the verdict through flag_warn_or_issue / version-freeness.mode) and the
+# --check-version-freeness probe (cmd_check_version_freeness, mapping the verdict
+# to an exit code for the CI merge gate). Neither re-encodes the grammar — the
+# comparator is SOURCED from version-grammar.sh (#1676 SSOT); these helpers add NO
+# version parser (DD2 / Stage-5 adversarial review FM-1 "no 4th parser").
+#
+# NOTE (set -e isolation): claim-version.sh's adapter ops (claimed_set/anchor/
+# compute_next_free) are NOT sourced here — sourcing claim-version.sh applies
+# `set -euo pipefail` to the caller, which would abort cmd_check (it runs WITHOUT
+# set -e so a failing check increments ISSUES instead of aborting). version-grammar.sh
+# is pure (defines functions only, no set -e leak — verified) so ONLY it is sourced;
+# the claimed_set assembly is deploy-local I/O here (the Stage-5 spec's explicit
+# allowance: "the comparator is the part that must be SSOT-shared; the claimed_set
+# assembly is deploy-local I/O"). The I/O mirrors Check 39's published-Release anchor.
+
+# _vf_freeness_core <candidate> <claimed_tag>...
+#   THE VERDICT CONTRACT (identical decision to release/tools/test_version_freeness.sh
+#   and to the founding #1676 reference FREENESS). Pure: no host I/O; the candidate
+#   and the claimed_set members are passed in. Requires version_canonical/version_cmp
+#   to already be in scope (the caller sources version-grammar.sh). Echoes EXACTLY
+#   one verdict token (+ optional detail) on stdout:
+#     FREE                          candidate canonical, collides with no member
+#     NOT_FREE <tag>                candidate tuple-equals <tag> (collision)
+#     UNDECIDABLE <reason>:<value>  malformed candidate OR a non-canonical claimed
+#                                   tag the grammar cannot order — FAIL-CLOSED
+#                                   (DD4 / FM-3): NOT a silent `continue`.
+#   Comparison is version_cmp (the SSOT integer-triple comparator) so the
+#   hotfix-vs-minor case (v2.06.1 vs v2.07) is decided correctly.
+_vf_freeness_core() {
+  local candidate="$1"; shift
+  if ! version_canonical "$candidate"; then
+    printf 'UNDECIDABLE malformed-candidate:%s\n' "$candidate"
+    return 0
+  fi
+  local t
+  for t in "$@"; do
+    [[ -n "$t" ]] || continue
+    if ! version_canonical "$t"; then
+      printf 'UNDECIDABLE non-canonical-tag:%s\n' "$t"
+      return 0
+    fi
+    if [[ "$(version_cmp "$candidate" "$t")" == "0" ]]; then
+      printf 'NOT_FREE %s\n' "$t"
+      return 0
+    fi
+  done
+  printf 'FREE\n'
+}
+
+# _vf_build_claimed_set  — echo the claimed_set, one canonical version per line.
+#   The union (DD3): published GitHub Release tags U origin signed tags U RELEASE_LOG
+#   rows in DEPLOYED-not-VERIFIED state. This is deploy-local I/O (the SAME sources
+#   claim-version.sh::claimed_set reads, re-expressed here without the set -e leak).
+#   Reads AUDIT_REPO + _audit_src_root (resolved at deploy.sh load). Network calls
+#   are guarded so an offline run yields a partial/empty set (the caller decides the
+#   surface-split: offline = N/A on lifecycle, fail-closed at the merge gate).
+#   Output is grammar-filtered (canonical only) but NOT orphan-filtered here — the
+#   core fail-closes on any non-canonical member, which is the stricter posture the
+#   merge gate wants (an orphan v3.x tag that parses canonical is simply a member
+#   that will not tuple-collide with a v2.x candidate; a NON-canonical tag triggers
+#   the fail-closed path, by design).
+_vf_build_claimed_set() {
+  local repo="$1"
+  {
+    # (1) published Release tags (the authoritative anchor, same as Check 39).
+    if [[ -n "$repo" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+      gh api "repos/${repo}/releases" --paginate --jq '.[].tag_name' 2>/dev/null || true
+    fi
+    # (2) origin signed tags.
+    git -C "${_audit_src_root:-.}" ls-remote --tags origin 2>/dev/null \
+      | sed -e 's#.*refs/tags/##' -e 's/\^{}$//' || true
+    # (3) RELEASE_LOG rows in DEPLOYED (tag-pushed-but-Release-unpublished) state.
+    local _log="${_audit_src_root:-.}/release/releases/RELEASE_LOG.md"
+    if [[ -f "$_log" ]]; then
+      awk -F'|' '
+        /^\|/ {
+          ver=$2; st=$7
+          gsub(/^[ \t]+|[ \t]+$/, "", ver)
+          gsub(/^[ \t]+|[ \t]+$/, "", st)
+          if (st == "DEPLOYED" && ver ~ /^v[0-9]/) print ver
+        }
+      ' "$_log" 2>/dev/null || true
+    fi
+  } | sed '/^$/d' | sort -u
+}
+
+# _vf_resolve_candidate  — echo the claim-time candidate version, or empty if no
+#   release-claim context is resolvable (-> the check SKIPs cleanly; absence is not
+#   drift, same posture as Check 40's operator-local SKIP). Resolution order:
+#     1. PMO_VERSION_FREENESS_CANDIDATE env — explicit injection (CI matrix / a
+#        Stage-12 pre-flight that already knows the candidate / the DT harness).
+#     2. PMO_VERSION_FREENESS_BUMP env (major|minor|patch) [+ PMO_VERSION_FREENESS_PATCH_BASE]
+#        — derive next-free via claim-version.sh --dry-run, run as a SUBPROCESS
+#        (a child bash; its `set -euo pipefail` cannot leak into cmd_check) so the
+#        allocator is the ONE #1675/#1673 implementation, never re-derived here (CD-3).
+#     3. else empty (no claim context — greenfield / a normal lifecycle --check).
+#   The allocator is NEVER re-implemented inline (CD-3): when a bump-class is given,
+#   the canonical claim-version.sh computes the next-free candidate.
+_vf_resolve_candidate() {
+  local repo="$1"
+  # (1) explicit candidate.
+  if [[ -n "${PMO_VERSION_FREENESS_CANDIDATE:-}" ]]; then
+    printf '%s' "${PMO_VERSION_FREENESS_CANDIDATE}"
+    return 0
+  fi
+  # (2) bump-class -> claim-version.sh --dry-run (subprocess; no set -e leak).
+  #     The allocator is the ONE #1675/#1673 implementation; never re-derived here.
+  #     If the dry-run yields a NON-canonical value (e.g. the allocator could not
+  #     resolve the anchor), treat it as "no usable candidate" -> empty -> the check
+  #     SKIPs rather than asserting on a malformed value. This output validation is
+  #     defensive: an earlier stub-seam leak that let the self-test seams override
+  #     real host I/O on a normal load (so --dry-run read empty fixtures) has since
+  #     been fixed in claim-version.sh; the guard remains as a safety net against any
+  #     future allocator regression. The explicit PMO_VERSION_FREENESS_CANDIDATE path
+  #     (1) is the exact, always-correct surface the CI gate + the operator use.
+  if [[ -n "${PMO_VERSION_FREENESS_BUMP:-}" ]]; then
+    local _claim="${_audit_src_root:-.}/release/tools/claim-version.sh"
+    if [[ -f "$_claim" ]]; then
+      local _args=(--sha HEAD --bump "${PMO_VERSION_FREENESS_BUMP}" --dry-run)
+      [[ -n "${PMO_VERSION_FREENESS_PATCH_BASE:-}" ]] && _args+=(--patch-base "${PMO_VERSION_FREENESS_PATCH_BASE}")
+      local _derived
+      _derived="$(CLAIM_REPO="$repo" bash "$_claim" "${_args[@]}" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+      # Only return a value that LOOKS like a version (v<digit>...); else empty.
+      if [[ "$_derived" =~ ^v[0-9]+\.[0-9]+ ]]; then
+        printf '%s' "$_derived"
+      fi
+      return 0
+    fi
+  fi
+  # (3) no claim context.
+  printf ''
+}
+
+# _vf_compute_verdict  — the shared orchestrator (DD1: ONE body, two surfaces).
+#   Sources the SSOT comparator, resolves the candidate, builds the claimed_set,
+#   and echoes one of these protocol lines on stdout (the CALLER maps it to a
+#   warn-emit OR an exit code — the verdict is decoupled from the emit, FM-2):
+#     SKIP <reason>          no claim context / lib absent on lifecycle surface
+#     NA <reason>            anchor merely offline on the lifecycle surface
+#     FREE <candidate>       candidate is free
+#     NOT_FREE <candidate> <tag>   collision
+#     UNDECIDABLE <candidate> <reason>   fail-closed (DD4/FM-3)
+#   $1 = surface: "lifecycle" (offline anchor -> NA) or "gate" (offline anchor ->
+#   UNDECIDABLE / fail-closed — the merge gate cannot certify freeness blind).
+_vf_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local lib="${_audit_src_root:-}/release/tools/version-grammar.sh"
+
+  # SSOT comparator must be sourceable. Absent -> SKIP on lifecycle (the lib lands
+  # with #1676; pre-#1676 it is absent), fail-closed at the gate (cannot decide).
+  if [[ -z "${_audit_src_root:-}" || ! -f "$lib" ]]; then
+    if [[ "$surface" == "gate" ]]; then
+      printf 'UNDECIDABLE - ssot-comparator-missing:%s\n' "$lib"
+    else
+      printf 'SKIP version-grammar.sh (#1676 SSOT comparator) not present — freeness undecidable on this surface\n'
+    fi
+    return 0
+  fi
+  # Source the SSOT (empty positional so its --self-test does not fire on our $1).
+  # shellcheck source=/dev/null
+  source "$lib" ""
+
+  # Resolve the candidate. No claim context -> SKIP (absence is not drift).
+  local candidate
+  candidate="$(_vf_resolve_candidate "${AUDIT_REPO:-}")"
+  if [[ -z "$candidate" ]]; then
+    printf 'SKIP no release-claim context (set PMO_VERSION_FREENESS_CANDIDATE or _BUMP to assert freeness) — not drift\n'
+    return 0
+  fi
+
+  # Offline-anchor surface split (DD4). At the GATE surface, a missing published-
+  # Release anchor is fail-closed (the merge gate must not certify freeness blind).
+  # On the LIFECYCLE surface, a merely-offline anchor degrades to NA (never-FAIL),
+  # mirroring Check 39/32 — no merge is imminent. origin tags + RELEASE_LOG still
+  # contribute to claimed_set offline; the gate's strictness is about the network
+  # anchor it cannot reach.
+  local anchor_offline=0
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1 || [[ -z "${AUDIT_REPO:-}" ]]; then
+    anchor_offline=1
+  fi
+  if [[ "$anchor_offline" -eq 1 && "$surface" == "gate" ]]; then
+    printf 'UNDECIDABLE %s anchor-unreachable-at-merge-gate (gh offline/unauth or AUDIT_REPO empty) — fail-closed\n' "$candidate"
+    return 0
+  fi
+  if [[ "$anchor_offline" -eq 1 && "$surface" == "lifecycle" ]]; then
+    printf 'NA %s published-Release anchor unavailable (gh offline/unauth or AUDIT_REPO empty) — reuses Check 39/32 offline SKIP semantics\n' "$candidate"
+    return 0
+  fi
+
+  # Build claimed_set (deploy-local I/O) and decide freeness via the SSOT core.
+  local claimed claimed_arr=()
+  claimed="$(_vf_build_claimed_set "${AUDIT_REPO:-}")"
+  if [[ -n "$claimed" ]]; then
+    local _l
+    while IFS= read -r _l; do [[ -n "$_l" ]] && claimed_arr+=("$_l"); done <<<"$claimed"
+  fi
+
+  local core
+  core="$(_vf_freeness_core "$candidate" "${claimed_arr[@]+"${claimed_arr[@]}"}")"
+  local tok="${core%% *}"
+  local rest="${core#"$tok"}"; rest="${rest# }"
+  case "$tok" in
+    FREE)        printf 'FREE %s\n' "$candidate" ;;
+    NOT_FREE)    printf 'NOT_FREE %s %s\n' "$candidate" "$rest" ;;
+    UNDECIDABLE) printf 'UNDECIDABLE %s %s\n' "$candidate" "$rest" ;;
+    *)           printf 'UNDECIDABLE %s unexpected-core-verdict:%s\n' "$candidate" "$core" ;;
+  esac
+}
+
 # Remove a derived-mirror subtree, self-healing read-only orphans and
 # failing loud (never silently) when removal is impossible. Returns 0 if the
 # path is gone after the call, non-zero (with an actionable error logged) if not.
@@ -5070,6 +5282,96 @@ cmd_check() {
     fi
   fi
 
+  # Check 41 — Pre-merge version-freeness (advisory; warn-mode initial; #1677)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (a)+(b)):
+  #   posture: advisory   enforcement-surface: version-freeness.mode warn-window
+  #            (becomes required when the operator flips version-freeness.mode -> enforce;
+  #             the Stage-12 CI gate version-freeness.yml is the merge-blocking surface)
+  #   invariant: the claim-time candidate version (computed from the release plan's
+  #              bump-class) is NOT already present in the claimed_set (published
+  #              Release tags U signed origin tags U in-flight DEPLOYED-not-VERIFIED
+  #              RELEASE_LOG rows) — i.e. the version the merge will claim is still
+  #              free, asserted BEFORE merge so a collision never lands with stale
+  #              labels (pre-empts the Stage-12 Phase B3 reactive tag-push rejection).
+  #   falsification: set PMO_VERSION_FREENESS_CANDIDATE to a published Release tag
+  #                  (e.g. candidate v2.15 while v2.15 is published) -> Check 41 FAILS
+  #                  (enforce) / WARNs (warn-mode). A free candidate -> GREEN.
+  #
+  # ANCHOR CHOICE (Stage-5 Evidence-Grounding, #1677): the claimed_set's published-
+  # Release members are read from gh api repos/<o>/<r>/releases (the SAME anchor
+  # Check 39 + the #1673 allocation rule use), NOT git-describe (returns the merge
+  # base on a feature branch) and NOT `git tag --sort=-version:refname` (returns the
+  # orphan v3.x lineage). Grammar/comparison is the SSOT version-grammar.sh (#1676)
+  # comparator — this check adds NO version parser of its own (avoids the FM-1
+  # 4th-parser drift). The candidate is derived by claim-version.sh (#1675/#1673
+  # allocator) run as a subprocess, never re-implemented inline (CD-3).
+  #
+  # FAIL-CLOSED at the merge gate (DD4 / FM-3): a non-canonical existing tag, an
+  # unreachable anchor at the CI merge-gate, or a malformed candidate => UNDECIDABLE
+  # -> the gate BLOCKS. The lifecycle --check surface (this check) degrades a merely-
+  # offline anchor to N/A (never-FAIL), mirroring Check 39/32 (no merge is imminent
+  # here). The verdict is computed by the shared _vf_compute_verdict body (DD1) so
+  # the CI probe (--check-version-freeness) and this lifecycle check cannot diverge.
+  #
+  # Candidate-derivation INPUT (slug-primary, founding ADR #1697): absent a resolvable
+  # release-claim context (no PMO_VERSION_FREENESS_* and no plan), SKIP cleanly
+  # (absence is not drift) — same posture as Check 40's operator-local SKIP.
+  local VERSION_FREENESS_MODE; VERSION_FREENESS_MODE="$(resolve_check_mode "version-freeness")"
+  if [[ "$VERSION_FREENESS_MODE" != "off" ]]; then
+    log "Check 41: Pre-merge version-freeness (claim-time candidate vs claimed_set) (#1677)"
+    local c41_verdict c41_tok c41_cand c41_detail
+    c41_verdict="$(_vf_compute_verdict "lifecycle")"
+    c41_tok="${c41_verdict%% *}"
+    case "$c41_tok" in
+      SKIP)
+        log "  SKIP:  ${c41_verdict#SKIP }"
+        ;;
+      NA)
+        # Offline anchor on the lifecycle surface — never-FAIL (Check 39/32 posture).
+        log "  N/A:   ${c41_verdict#NA }"
+        ;;
+      FREE)
+        c41_cand="${c41_verdict#FREE }"
+        log "  OK:    candidate $c41_cand is free (not in claimed_set)"
+        ;;
+      NOT_FREE)
+        # "NOT_FREE <candidate> <colliding-tag>"
+        c41_detail="${c41_verdict#NOT_FREE }"
+        # version-freeness.mode is its OWN per-check mode file (resolve_check_mode),
+        # decoupled from the shared cohort; but flag_warn_or_issue switches on the
+        # shared $DEPLOY_CHECK_MODE. Honor the per-check resolution: only FAIL (++ISSUES)
+        # when THIS check's resolved mode is enforce; otherwise WARN regardless of the
+        # shared mode, so version-freeness graduates independently.
+        if [[ "$VERSION_FREENESS_MODE" == "enforce" ]]; then
+          flag_warn_or_issue "version-freeness" \
+            "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
+          [[ "$DEPLOY_CHECK_MODE" == "enforce" ]] || { ISSUES=$((ISSUES + 1)); log "  FAIL:  version-freeness — candidate $c41_detail already claimed (per-check enforce)"; }
+        else
+          flag_warn_or_issue "version-freeness" \
+            "candidate $c41_detail already claimed — re-version BEFORE merge; a Stage-12 Phase B3 tag push would be rejected after the merge lands with stale labels"
+        fi
+        ;;
+      UNDECIDABLE)
+        # "UNDECIDABLE <candidate> <reason>" — fail-closed semantics bind the merge
+        # gate (the probe); on the lifecycle surface this is reported (WARN/enforce
+        # per the per-check mode) so the operator sees the untaggable state early.
+        c41_detail="${c41_verdict#UNDECIDABLE }"
+        if [[ "$VERSION_FREENESS_MODE" == "enforce" ]]; then
+          flag_warn_or_issue "version-freeness" \
+            "freeness undecidable ($c41_detail) — fail-closed; operator must resolve the untaggable state before merge"
+          [[ "$DEPLOY_CHECK_MODE" == "enforce" ]] || { ISSUES=$((ISSUES + 1)); log "  FAIL:  version-freeness — undecidable ($c41_detail) (per-check enforce)"; }
+        else
+          flag_warn_or_issue "version-freeness" \
+            "freeness undecidable ($c41_detail) — fail-closed at the merge gate; operator must resolve the untaggable state before merge"
+        fi
+        ;;
+      *)
+        flag_warn_or_issue "version-freeness" "unexpected verdict: $c41_verdict"
+        ;;
+    esac
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
@@ -5083,6 +5385,64 @@ cmd_check() {
       exit 0
     fi
   fi
+}
+
+# ─── Mode: --check-version-freeness (the CI merge-gate probe) — #1677 ─────────
+#
+# Runs ONLY the version-freeness verdict (not the full --check suite) and maps the
+# verdict to an EXIT CODE — the verdict->exit contract the CI merge gate depends on
+# (Stage-5 adversarial review FM-2). The exit is VERDICT-DRIVEN, decoupled from the
+# lifecycle surface's warn-mode emit: a collision or an undecidable result red-exits
+# even during the warn-mode calibration window, so the CI gate (version-freeness.yml)
+# blocks on exactly the cases DD4 must block. Warn-mode-vs-enforce at the CI surface
+# is decided by the workflow's committed `.github/version-freeness.enforce` sentinel
+# (it swallows this exit 1 into a non-blocking report during calibration) — this
+# probe always reports the TRUE verdict via its exit code.
+#
+# Surface = "gate": a merely-offline published-Release anchor is FAIL-CLOSED here
+# (the merge gate must not certify freeness blind), NOT degraded to N/A (that
+# degradation is the lifecycle --check surface's posture only).
+#
+#   exit 0  — FREE, or SKIP (no claim context — nothing to assert; an unrelated PR).
+#   exit 1  — NOT_FREE (collision) OR UNDECIDABLE (fail-closed: non-canonical tag,
+#             malformed candidate, or anchor unreachable at the gate).
+cmd_check_version_freeness() {
+  validate_workspace
+  detect_install_path || true
+
+  local verdict tok
+  verdict="$(_vf_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    FREE)
+      log "version-freeness: ${verdict#FREE } is free (not in claimed_set) — OK"
+      exit 0
+      ;;
+    SKIP)
+      log "version-freeness: SKIP — ${verdict#SKIP } (no version-claim surface to assert; not a collision)"
+      exit 0
+      ;;
+    NOT_FREE)
+      log "version-freeness: NOT_FREE — ${verdict#NOT_FREE }"
+      log "  Re-version BEFORE merge: a Stage-12 Phase B3 signed-tag push would be rejected AFTER the merge lands with stale labels."
+      exit 1
+      ;;
+    UNDECIDABLE)
+      log "version-freeness: UNDECIDABLE (fail-closed) — ${verdict#UNDECIDABLE }"
+      log "  The merge gate cannot certify freeness; operator must resolve the untaggable state before merge."
+      exit 1
+      ;;
+    NA)
+      # Should not occur at the gate surface (gate fail-closes offline); treat as
+      # fail-closed defensively rather than greening on an unexpected N/A.
+      log "version-freeness: NA at gate surface (unexpected) — fail-closed: ${verdict#NA }"
+      exit 1
+      ;;
+    *)
+      log "version-freeness: unexpected verdict '$verdict' — fail-closed"
+      exit 1
+      ;;
+  esac
 }
 
 # ─── Mode: --report ──────────────────────────────────────────────────────────
@@ -5522,18 +5882,27 @@ main() {
       cmd_check_lifecycle
       exit 0
       ;;
+    --check-version-freeness)
+      # Single-check CI merge-gate probe (#1677): runs ONLY Check 41's freeness
+      # verdict and exits per the verdict (0 FREE/SKIP, 1 NOT_FREE/UNDECIDABLE —
+      # fail-closed). The version-freeness logic ALSO fires inside the full --check
+      # suite (Check 41, gated on version-freeness.mode) — one shared body
+      # (_vf_compute_verdict), no copy. Used by .github/workflows/version-freeness.yml.
+      cmd_check_version_freeness
+      ;;
     --report)
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --report]"
       echo ""
       echo "Modes:"
-      echo "  --deploy [skill...] Deploy changed skills to Cowork install path (auto-detect or manual)"
-      echo "  --all               Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
-      echo "  --check [--warn]    Validate platform health (--warn exits 0 even with issues)"
-      echo "  --check-lifecycle   List retired/dormant checks + dispositions + reactivation anchors"
-      echo "  --report            Structured report for Stage 13 verification evidence"
+      echo "  --deploy [skill...]        Deploy changed skills to Cowork install path (auto-detect or manual)"
+      echo "  --all                      Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
+      echo "  --check [--warn]           Validate platform health (--warn exits 0 even with issues)"
+      echo "  --check-lifecycle          List retired/dormant checks + dispositions + reactivation anchors"
+      echo "  --check-version-freeness   Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
+      echo "  --report                   Structured report for Stage 13 verification evidence"
       echo ""
       echo "Note: --init mode (a legacy cutover migration) was REMOVED per the"
       echo "      Stage 5 spec §1.7. v2 ships with the target layout; no migration needed."

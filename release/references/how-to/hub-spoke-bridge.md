@@ -179,6 +179,13 @@ Release planning runs once per Milestone at release scope (all issues) before an
 
 - **Single-branch topology** (D-C SINGLE — default): The plan file is committed on the release branch as **Engineering Commit 0** (the first commit on the release branch produced by the first per-issue Stage 6 Engineering spoke). Until that first Engineering commit lands, the Stage 4 sub-task comment is the working reference.
 
+  **Commit-0 version re-verify (FIRST Engineering spoke only, immediately before writing the plan file as Engineering Commit 0).** The version selected at D-Version (recommendation time, Stage 4) may have been claimed by a concurrent release in the window between selection and now — the originating incident surfaced exactly this way (a concurrent release shipped the recommended version; the collision was caught only when the Engineering spoke fetched fresh authoritative refs before the plan-file write). Before authoring `release/releases/plans/<slug>_RELEASE_PLAN.md`, the first Engineering spoke re-runs the authoritative-version-selection check:
+    1. `git fetch --tags origin && git fetch origin main` — refresh authoritative host state at Commit-0 time.
+    2. Recompute next-free for the plan's bump-class per the D-Version authoritative-version-selection procedure (§ Recurring D-decisions) — the host-agnostic allocation rule consuming the adapter's `anchor()` + `claimed_set()` by name; any ledger input read via `git show origin/main:<ledger-path>`, never the worktree copy.
+    3. If the planned version is NOT in the claimed set AND equals the recomputed next-free → **PROCEED**: write the plan file. Else → **HALT**: do NOT overwrite a shipped version's plan file. Post a Tier 2 `[SCOPE CHANGE]` comment on the parent sub-task per `release-process.md` § Inter-Stage Feedback Protocol, naming the planned version, the recomputed next-free, and the colliding tag/ledger row; the operator re-renders D-Version against current state.
+
+     The Commit-0 re-verify is a **single detect-and-HALT** — it does NOT auto-recompute-and-retry. On HALT it hands to the operator, who re-renders D-Version; the spoke then re-runs this same single re-verify against the operator's new value. Bounded retry on sustained contention is the atomic-claim rung's job at the tag (Stage 12), not this rung's. This is detection rung 1 (earliest); it composes with — does not replace — the Stage 9 mid-pipeline divergence re-check (file-divergence axis), the Stage 12 pre-merge freeness check, and the atomic version claim.
+
 - **Option-A topology** (D-C OPTION-A — per-issue branches + per-issue PRs per Procedure 6 early-merge precedent): The plan file is committed via a dedicated **Stage 4 release-plan chore PR** authored by the hub from the approved Stage 4 sub-task comment. Mechanics:
   1. Hub copies the Stage 4 sub-task comment content into a new file at `release/releases/plans/vX.Y_RELEASE_PLAN.md`.
   2. Hub creates branch `chore/vX.Y-stage-4-release-plan` off `main`.
@@ -357,6 +364,84 @@ Recommendation: spoke recommendation per trigger evidence
 ```
 
 Cutover discipline for D-ReleaseClass: applies to all releases going forward.
+
+```
+#### D-Version: What version does this release claim?
+Gate input: Spoke-recommended next-free version, computed at
+  recommendation time against AUTHORITATIVE host state (never local
+  refs / a stale worktree), per the authoritative-version-selection
+  procedure below. The concrete number is provisional-display: the
+  founding architecture (defer-to-merge — see the version-claim
+  determinism ADR recorded on the Version-Claim Determinism
+  milestone) binds the number only at the atomic claim moment; the
+  durable declaration at plan time is the bump-class.
+Gate decision: Operator renders the version identity — (A) accept
+  the spoke-recommended next-free, (B) version-less milestone
+  (theme-named; no tag claimed at Stage 12), or (C) operator-
+  specified override (e.g. when a concurrent release is known to be
+  claiming the recommended slot).
+Blocks: release branch name (release/<slug>), plan-file path, the
+  Stage 12 atomic version claim, and any version: frontmatter the
+  release writes.
+Upstream compatibility: N/A — version identity is PMO platform
+  internal; no Anthropic upstream surface. Upstream compatibility
+  check does not apply. (When the version feeds a skill version:
+  field, that field's upstream posture is owned by the D-decision
+  that edits the skill, not by D-Version.)
+Reversibility / Confidence: CHEAP pre-Engineering (recommendation
+  only); MODERATE after Engineering Commit 0 (identity propagates
+  into branch name, plan-file path, frontmatter) / HIGH.
+Recommendation: spoke recommendation = next-free per the procedure
+  below.
+
+Authoritative-version-selection procedure (run at recommendation
+time; re-run at Engineering Commit 0 before the plan file is
+written — see Procedure 0 § Canonical location):
+  1. The next-free computation is the host-agnostic version-
+     allocation rule (RELEASE_PROTOCOL.md § Versioning): the lowest
+     version at or above the bump-class floor not present in the
+     claimed set. The floor derives from the bump-class
+     (major/minor/patch) per that rule's Bump-Class Selection Guide.
+  2. That rule consumes the repository-host adapter operations
+     anchor() and claimed_set() BY NAME (the operation interface is
+     defined in core/standards/repo-host-adapter-versioning.md). The
+     hub does NOT inline a host mechanism here: anchor() returns the
+     highest claimed version in the mainline lineage (orphan
+     lineages excluded — the adapter's responsibility, not the
+     hub's), and claimed_set() returns every currently-claimed and
+     in-flight version the candidate must avoid. Do NOT re-derive
+     the anchor or re-enumerate the claimed-set membership in this
+     block — the adapter owns "how"; the hub calls the named ops.
+  3. AUTHORITATIVE-STATE read discipline (the hub's obligation when
+     it asks the adapter for these values): the adapter operations
+     MUST read authoritative host state, never local refs or a stale
+     worktree. Before invoking the selection, refresh authoritative
+     state:
+       git fetch --tags origin
+     — a bare local `git tag` list is NOT authoritative: a
+       concurrently-shipped tag is invisible without the fetch (the
+       originating defect — a concurrent release shipped the
+       recommended version from a local-tag-list selection). Any
+       release-ledger input to claimed_set() is read at the remote
+       tip, never the worktree copy:
+       git show origin/main:<ledger-path>
+     — a stale-worktree ledger read was the second half of the
+       originating defect; `git show origin/main:` reads the
+       authoritative tip regardless of how far behind the worktree
+       is. (This is the same authoritative-refs discipline the
+       Session-Start sync and the Primary-Checkout comparison
+       already mandate in core/rules/git-workflow.md — D-Version is
+       the version-touching hub decision that applies it.)
+This procedure is the EARLIEST freeness rung; it composes with — it
+does not replace — the pre-merge freeness gate, the CI freeness
+gate, and the atomic ref-claim (anchor()/claimed_set() reads back
+the same single claim the adapter's atomic_claim() arbitrates at
+merge), which are the later rungs on this milestone, and with the
+Stage 9 mid-pipeline divergence checks (which guard the file-
+divergence axis — a different question from version-freeness).
+```
+
+Cutover discipline for D-Version: applies to all releases going forward.
 
 ---
 
@@ -821,12 +906,13 @@ Required chip-prompt content — Stage 7/8/9 chip prompts MUST embed these three
 1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block):
    - **Stage 7/8 (Tier 1 informational):** *"At stage entry, run mid-pipeline divergence re-check: `git fetch origin main && git log <release-branch-base>..origin/main --oneline -- $(cat <release-plan-files-list>)`. If output non-empty: post Tier 1 [ADJUST] comment on parent sub-task naming the diverged commits + affected files; continue chip work. Do NOT HALT — Stage 9 Phase A6.5 is the HALT-eligible boundary."*
    - **Stage 9 (Tier 2 HALT-eligible):** *"At Phase A6.5 (between Phase A6 Release Readiness Scan and Phase A7 Goal-Conformance Check), run mid-pipeline divergence re-check per stage 7/8 form. Three verdicts: CLEAN (zero commits) → record G-PR8=CLEAN, advance to Phase A7; DIVERGED-RELEASE-FILES-UNTOUCHED (commits exist but no release-plan file touched) → record G-PR8=DIVERGED-RELEASE-FILES-UNTOUCHED + informational note in Plan Review comment, advance to Phase A7; DIVERGED-RELEASE-FILES-TOUCHED (commits touch release-plan files) → HALT pre-GO via Tier 2 [SCOPE CHANGE] per [`release-process.md § Inter-Stage Feedback Protocol`](../../governance/release-process.md), do not proceed to Phase B GO."*
+   - **Stage 9 — version dimension (advisory; ALSO run at Phase A6.5):** *"After the file-dimension verdict above, run the version-freeness dimension. Resolve the release version via the version-claim adapter (do NOT re-derive the anchor or re-encode the claimed-set union — host mechanism lives only inside the adapter per `core/standards/repo-host-adapter-versioning.md` § 4): `CLAIM_REPO=\"$(gh repo view --json nameWithOwner -q .nameWithOwner)\" release/tools/claim-version.sh --bump <bump-class> [--patch-base v<X.Y>] --sha \"$(git rev-parse origin/main)\" --dry-run`, which computes next-free against the adapter's anchor()/claimed_set() (published Release tags ∪ origin signed tags ∪ in-flight DEPLOYED-not-VERIFIED RELEASE_LOG rows, orphan-filtered, integer-tuple compared) WITHOUT pushing. FREE (dry-run next-free == carried provisional-display) → record version-freeness=FREE; TAKEN (dry-run next-free advanced past the carried version) → record version-freeness=TAKEN + recomputed next-free in the Plan Review comment + Decision Briefing as a re-version signal. ADVISORY ONLY — do NOT HALT the GO on the version dimension (the version is not claimed until Stage 12; the HALT-eligible version stop is Stage 12 Phase A.5.6). The file dimension (G-PR8) retains its HALT-eligibility independently; this version dimension composes with G-PR9's Δversion/<claim-key> staleness token (relative-to-baseline) as the absolute now-claimed predicate — no duplicate gate."*
 
 2. **Output deliverables block** (entry in the chip's required-deliverables list):
    - **Stage 7/8:** *"Mid-pipeline divergence re-check verdict: CLEAN / DIVERGED-with-informational-note. Diverged commits enumerated when non-empty."*
-   - **Stage 9:** *"Mid-pipeline divergence re-check verdict (G-PR8): CLEAN / DIVERGED-RELEASE-FILES-UNTOUCHED / DIVERGED-RELEASE-FILES-TOUCHED. If TOUCHED, Tier 2 [SCOPE CHANGE] block posted and HALT recorded."*
+   - **Stage 9:** *"Mid-pipeline divergence re-check verdict (G-PR8): CLEAN / DIVERGED-RELEASE-FILES-UNTOUCHED / DIVERGED-RELEASE-FILES-TOUCHED. If TOUCHED, Tier 2 [SCOPE CHANGE] block posted and HALT recorded. Version-freeness verdict (advisory): FREE / TAKEN; if TAKEN, the recomputed next-free version is recorded in the Plan Review comment + Decision Briefing as a re-version signal (no HALT — the version dimension is advisory at Stage 9)."*
 
-3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/governance/release-process.md § Mid-Pipeline Divergence Re-Check (G-PR8 — Phase A6.5)`, `release/references/pipeline/stage-09-plan-review.md § Phase A6.5`, `release/references/pipeline/stage-04-planning.md § Cross-PR Overlap Audit (A4 extension) — Baseline-pin temporal limitation`.
+3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/governance/release-process.md § Mid-Pipeline Divergence Re-Check (G-PR8 — Phase A6.5)`, `release/references/pipeline/stage-09-plan-review.md § Phase A6.5`, `release/references/pipeline/stage-04-planning.md § Cross-PR Overlap Audit (A4 extension) — Baseline-pin temporal limitation`, `release/references/pipeline/stage-12-execute.md § Phase A.5.6 (version-freeness pre-merge HALT)`, `core/standards/repo-host-adapter-versioning.md § 4 (version-claim adapter operations — anchor()/claimed_set(); adapter discipline)`.
 
 **Empirical motivation:** a Stage 12 sub-task — Stage 4 A4 audit reported "zero open-PR collision" at baseline `302bc0a`; a structural Diátaxis reorg merged POST-audit (tip `ad756c6`) touching `implementation-execution-pattern.md` + 3 mirror-pair files. Detection occurred only at Stage 12 Phase A.5 (`mergeable:CONFLICTING/DIRTY`) — voiding the Stage 9 GO (`8387f46`) and forcing full re-baseline. The Stage 9 Phase A6.5 check codified here would have surfaced the merge BEFORE the Stage 9 GO and prevented the void event.
 
@@ -925,6 +1011,8 @@ Required chip-prompt content — Stage 13 chip prompts MUST embed these three ad
 3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/pipeline/stage-13-close.md § Phase B commit mechanism (chore-PR pattern + bash exemplar + cutover)`, `release/references/pipeline/stage-13-close.md § Phase B-velocity (**Velocity:** field append + compute-release-velocity.sh + grandfather)`, `release/references/standards/release-velocity-tracking.md (field schema + label→work-class map + N/A semantics + N=3 recalibration linkage)`, `release/references/pipeline/stage-13-close.md § Phase B5.5 (CHANGELOG append + idempotency)`, `release/references/pipeline/stage-13-close.md § Phase B5.6 (Surface 1 verification)`, `release/references/pipeline/stage-13-close.md § Phase B5.7 (.version stamp + idempotency + version-less SKIP)`, `release/references/standards/release-notes-standard.md § Part 5 §5.3 (per-surface length + format conventions)`
 
 This discipline composes with three sibling Stage 13 chip-pattern subsections: Release-Notes Authoring (existing) ensures the spoke authors `v<X.Y>_RELEASE_NOTES.md`; Audit-Class Synthesis (existing, audit-class only) ensures the spoke files SUMMARY-derived stabilization Issues; Release-Corpus Chore-PR Discipline (this subsection) ensures all the above artifacts land via one Stage 13 chore PR pre-close. Procedure 7 Step 4 completion-verification reads RELEASE_NOTES presence + RELEASE_LOG `VERIFIED` state + INDEX/DIGEST entries from main — all populated by this chore PR landing. Step 4 gate-passage proof comment records the verification result on the Stage 13 sub-task BEFORE the operator's Milestone close action. The triad FOUNDATION → VERIFIES → PROVES holds: this subsection is the Stage-13-side FOUNDATION.
+
+**Concurrent-close conflict resolution:** When two releases' Stage-13 chore PRs are open at the same time, the second-to-merge hits a git merge conflict on all four append-only ledgers (CHANGELOG / RELEASE_INDEX / RELEASE_DIGEST / RELEASE_LOG). Resolve it deterministically per [`pipeline/stage-13-close.md § Concurrent Stage-13 corpus conflict resolution`](../pipeline/stage-13-close.md) — additive ledgers take both entries preserving landing order (never re-sort), and the `RELEASE_LOG` status column reconciles per-row over the `DEPLOYED < VERIFIED` lattice (never a blanket side-pick, which writes a false audit record). The cross-referenced doctrine lives in this same Procedure-3 chip-pattern region (the Release-Corpus Chore-PR Discipline subsection) that Procedure 7 Step 4 completion-verification consumes; a hub authoring a Stage 13 chip for a release that may close concurrently SHOULD add it to the chip's `{ADDITIONAL_READS}`.
 
 Empirical motivation: a Stage 13 chore PR (2026-05-16) is the canonical worked example; an earlier chore PR (2026-05-15) is the historical operator-precedent.
 
