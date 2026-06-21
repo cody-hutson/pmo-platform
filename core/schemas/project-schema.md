@@ -38,7 +38,7 @@ project_owner: string                      # REQUIRED — primary accountable ow
 status: ACTIVE | CLOSING | CLOSED          # REQUIRED — lifecycle state (per CLAUDE.md Project Lifecycle)
 
 # Dual-framing co-management trigger (decoupled from delivery_approach — orthogonal)
-dual_framing_enabled: bool                 # OPTIONAL — true triggers dual Agile/Waterfall co-management framing (CLAUDE.md § SPM Bridge). Legacy key `spm_comanaged` is accepted via the project-initiator Mode C deprecation shim — see §7.
+dual_framing_enabled: bool                 # OPTIONAL — true triggers dual Agile/Waterfall co-management framing (CLAUDE.md § Dual-Framing Bridge). Legacy key `spm_comanaged` is accepted via the project-initiator Mode C deprecation shim — see §7.
 
 # Methodology classification — NEW
 delivery_approach: Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom
@@ -57,7 +57,7 @@ custom_methodology_definition:
   notes: string                            # OPTIONAL — rationale + known trade-offs
 
 # Other per-project fields (per existing skill conventions — not introduced by )
-# ... e.g., stakeholder roster, go-live date, systems, governance model, SPM Bridge section trigger ...
+# ... e.g., stakeholder roster, go-live date, systems, governance model, Dual-Framing Bridge section trigger ...
 ---
 ```
 
@@ -90,7 +90,7 @@ Enum: `ACTIVE` | `CLOSING` | `CLOSED`. Lifecycle state per `CLAUDE.md § Project
 
 ### `dual_framing_enabled`
 
-Boolean. When `true`, activates the **SPM Bridge** — dual Agile/Waterfall co-management framing across outputs from `ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`. `[SOURCE]` — `CLAUDE.md § SPM Bridge (Conditional)` lines 155-157.
+Boolean. When `true`, activates the **Dual-Framing Bridge** — dual Agile/Waterfall co-management framing across outputs from `ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`. `[SOURCE]` — `CLAUDE.md § Dual-Framing Bridge (Conditional)` lines 155-157.
 
 This field is the dual-framing co-management trigger, **orthogonal** to `delivery_approach`: it is **NOT implied by, and does not imply, `delivery_approach: Hybrid`** — see §7 Collision Check for reconciliation rules. The trigger is the operational co-management dual-framing capability; `Hybrid` (and the `[A, B]` array form) is a methodology classification — the two combine freely.
 
@@ -329,7 +329,7 @@ The dual-framing co-management trigger is named **`dual_framing_enabled`**. It w
 
 | Field | Role | Consumer |
 |---|---|---|
-| `dual_framing_enabled: bool` | Triggers dual-framing SPM Bridge output (Agile + Waterfall) — operational co-management dual-framing binary, independent of methodology. (Legacy alias: `spm_comanaged` — accepted via the Mode C shim.) | `CLAUDE.md § SPM Bridge`; `delivery-engine` Mode D bridge step |
+| `dual_framing_enabled: bool` | Triggers Dual-Framing Bridge output (Agile + Waterfall) — operational co-management dual-framing binary, independent of methodology. (Legacy alias: `spm_comanaged` — accepted via the Mode C shim.) | `CLAUDE.md § Dual-Framing Bridge`; `delivery-engine` Mode D bridge step |
 | `delivery_approach: Hybrid` | Classifies project methodology as a user-configurable two-archetype combination `[A, B]` reported in both native framings — a classification only, saying nothing about co-management | All methodology-aware role-skills |
 
 ### Reconciliation Rule
@@ -351,7 +351,7 @@ This is a rename + back-compat shim, **not** the deferred `spm_comanaged`↔`Hyb
 - (b) keep `dual_framing_enabled` as the authoritative trigger and `delivery_approach: Hybrid` as the methodological tag (current model),
 - (c) introduce a reconciliation validator that enforces alignment between the two fields.
 
-See [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to SPM Bridge`](../governance/OPERATIONS.md) for the operational posture.
+See [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../governance/OPERATIONS.md) for the operational posture.
 
 ### Current PROJECT.md format note
 
@@ -386,7 +386,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 **Governance consumers:**
 
 - [`OPERATIONS.md § Methodology Awareness Protocol`](../governance/OPERATIONS.md) — Rules 1-3 mandate that skills read `delivery_approach` + consult the matrix + handle Custom via typed extension.
-- [`CLAUDE.md § SPM Bridge (Conditional)`](<OPERATOR_INSTANCE_CLAUDE_MD>) — reads the dual-framing trigger `dual_framing_enabled` (legacy `spm_comanaged` accepted via the Mode C shim); not yet refit to read `delivery_approach: Hybrid` (future consolidation scope).
+- [`CLAUDE.md § Dual-Framing Bridge (Conditional)`](<OPERATOR_INSTANCE_CLAUDE_MD>) — reads the dual-framing trigger `dual_framing_enabled` (legacy `spm_comanaged` accepted via the Mode C shim); not yet refit to read `delivery_approach: Hybrid` (future consolidation scope).
 
 **Downstream (future) consumers:**
 
@@ -401,7 +401,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 | 1 | 13 skills consume PROJECT.md | `[SOURCE]` `grep -l 'PROJECT\.md' release/skills/**/SKILL.md` 2026-04-24 (blast radius §6.1) |
 | 2 | `delivery-engine` Mode D + Mode E presuppose sprints | `[SOURCE]` `operations/skills/delivery-engine/SKILL.md:170-215` |
 | 3 | `project-initiator` binary Agile/Hybrid vs. Waterfall branch | `[SOURCE]` `operations/skills/project-initiator/SKILL.md:190-193` |
-| 4 | `CLAUDE.md § SPM Bridge` uses legacy `spm_comanaged` binary | `[SOURCE]` `CLAUDE.md:155-157` |
+| 4 | `CLAUDE.md § Dual-Framing Bridge` uses legacy `spm_comanaged` binary | `[SOURCE]` `CLAUDE.md:155-157` |
 | 5 | Existing PROJECT.md files use markdown key-value format | `[SOURCE]` inspection of `projects/[PROJECT_KEY] Implementation/PROJECT.md` 2026-04-24 |
 | 6 | AC-R2 block-completeness operationalization | `[SOURCE]` Stage 5 spec §1 + AC-R2 locked text |
 

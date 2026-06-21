@@ -263,12 +263,12 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) 5
 - **Mitigation.** Route novel methodologies through `delivery_approach: Custom` with a populated block. If the variant recurs, elevate per §4.4 governance-promotion rule — operator authority required.
 - **Principal vs. junior.** Principal flags novel variants as Custom-block candidates; logs occurrence toward emergence rule. Junior silently extends the enum to accommodate the first novel case.
 
-## 7. Relationship to SPM Bridge (Conditional)
+## 7. Relationship to Dual-Framing Bridge (Conditional)
 
 The legacy `spm_comanaged: true` binary **remains operative** and is NOT deprecated by the introduction of `delivery_approach`. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
 
 - `delivery_approach` is the **methodology classification** — a single archetype, or (for Hybrid) a user-configurable two-archetype combination `[A, B]` reported in both native framings. It says nothing about co-management.
-- `spm_comanaged: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the SPM Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
+- `spm_comanaged: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the Dual-Framing Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
 
 Because they are orthogonal, every combination is meaningful:
 
@@ -281,7 +281,7 @@ Because they are orthogonal, every combination is meaningful:
 
 The "Hybrid + `spm_comanaged: true`" row is the **legacy SPM co-managed shape**, but it is a *configuration*, not the definition of Hybrid: co-management is no longer implied by the classification. Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `spm_comanaged` before producing output — the two fields independently determine the methodology framing and whether co-management dual-framing is active.
 
-**Deprecation timeline.** Consolidation of `spm_comanaged` with `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE currently. See [`schemas/project-schema.md § 7 Migration Notes`](../../../core/schemas/project-schema.md) and [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to SPM Bridge`](../../../core/governance/OPERATIONS.md).
+**Deprecation timeline.** Consolidation of `spm_comanaged` with `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE currently. See [`schemas/project-schema.md § 7 Migration Notes`](../../../core/schemas/project-schema.md) and [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../../../core/governance/OPERATIONS.md).
 
 ## 8. Versioning
 
