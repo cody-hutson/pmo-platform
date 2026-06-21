@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.17] - 2026-06-21
+
+### Added
+
+- **Abstraction-altitude forcing function (Stage 4/5).** Every new capability is now interrogated for its abstraction altitude — does it extend an existing platform seam (`[adapters]`, a module boundary, a config surface), or solve point-wise? — as a forcing function rather than aspirational prose. A Stage-4 obligation requires naming the seam a structural design extends (or justifying a point solution with a cited seam-search); design-exploration gains an `altitude` distinctness axis (point-fix / extend-seam / new-abstraction) with a ≥2-band rule on new-mechanism designs; and a blocking design-review §4.7 seam-composition gate fails a design that does not discharge the seam question.
+- **`HOST-BINDING-LEAK` leakage class + detector.** Hardcoding a host tool (`gh` / `git` / a host API) as *the* canonical mechanism in universal governance — where the operation belongs behind an adapter seam — is now a registered leakage class (the host-axis sibling of the path-portability class), with a warn-mode `deploy.sh` Check 42 detector.
+
+### Changed
+
+- The Stage-5 adversarial design review may now flag a pre-decided premise that sits at the wrong abstraction altitude as an advisory finding (with an explicit no-autonomous-reversal guard), routed to Collective Review — opening the one previously-estopped independent surface that can see a mis-framed premise.
+- The `release/` pipeline specs now cross-reference the `[adapters].repo_host` host-operation seam, making it discoverable from within the release module.
+
 ## [v2.16] - 2026-06-21
 
 A release now claims its version number atomically when it merges instead of reserving it early, so two releases in flight can no longer silently collide on a number.
