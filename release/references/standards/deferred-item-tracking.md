@@ -1,12 +1,14 @@
 ---
 title: Deferred Item Tracking
-purpose: K1 codified-knowledge standard for the Stage 13 close-out disposition of issues bundled-but-not-closed at release close — comment-trail pointer mechanism + extension of Phase A2 from one-bullet to enumerated procedure
+purpose: K1 codified-knowledge standard for the Stage 13 close-out disposition of issues bundled-but-not-closed at release close — comment-trail pointer mechanism + extension of Phase A2 from one-bullet to enumerated procedure; ALSO (§13) mid-pipeline cross-stage deferral-validity criteria, per-gate "Deferred Items" accounting, ownership-transfer protocol, and a staleness rule for items deferred between stages mid-release
 type: standard
 parallel_to: ticket-information-architecture.md (the Stage 2 defer protocol this composes with at the release-boundary), label-taxonomy.md (the `status: deferred` label this consumes — zero new labels), release-corpus-schema.md (the chore-PR carrier this writes the disposition summary into)
 reversibility: CHEAP (forward-only protocol; pre-cutover releases exempt; comment-trail is append-only and would not require migration if a future release supplements with a body-field surface)
-consumers: "release/governance/release-process.md Stage 13 § Deferred item disposition (capture surface); pipeline/stage-13-close.md Phase A2 (procedure consumer); automated-closeout.sh (label-keyed query read-surface — `gh issue list --milestone X.Y --label \"status: deferred\"`); release-executor Mode D / D-FormFactor (B) (inherits the read pattern via script wrapping)"
+consumers: "release/governance/release-process.md Stage 13 § Deferred item disposition (capture surface); pipeline/stage-13-close.md Phase A2 (procedure consumer); automated-closeout.sh (label-keyed query read-surface — `gh issue list --milestone X.Y --label \"status: deferred\"`); release-executor Mode D / D-FormFactor (B) (inherits the read pattern via script wrapping); pipeline/stage-05..12 §7 Stage-Transition Gate (the per-gate 'incoming deferred items accounted' clause per §13.8 — gated shards stage-05/06/07/08/09/12 carry it on the §7 Metrics line, PLATFORM-SATISFIED shards stage-10/11 carry the pass-through note); core/schemas/gate-evaluation-spec.md Assessment Output Template (cited render surface for the §13.8 evidence row, not edited)"
 version: v12.12
 ---
+
+<!-- reference-durability: allow-link -->
 
 # Deferred Item Tracking
 
@@ -187,8 +189,119 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), 
 | Originating precedent | Cowork Execution Runbook precedent | Cowork Execution Runbook update deferred post-merge — the post-merge defer precedent |
 | Source Stage 5 spec | Stage 5 Solutioning canonical spec | Stage 5 Solutioning canonical spec (relayed from mis-routed sibling ticket) |
 
+## 13. Cross-stage deferral validity (mid-pipeline)
+
+### 13.1 Scope + relationship to the release-boundary case (§1–§12) and Tier-0..3
+
+§1–§12 above govern the **release-boundary** deferral — an issue bundled into a release but not closed at Stage 13. This section governs the **mid-pipeline** case the release-boundary scope explicitly excludes (§1 Out of scope, "mid-pipeline (Stage 4/5/6/7) deferrals"): a unit of in-scope work that a stage consciously moves to a *later named stage* of the same in-flight release (e.g., a Stage 5 design defers a sub-concern to Stage 7 implementation).
+
+This section **cites, does not restate**, two existing surfaces per [`duplicate-source-discipline.md`](../../../core/standards/duplicate-source-discipline.md):
+
+- **The release-boundary procedure (§1–§12 of this file) is the Stage-13 instance** of deferral. A mid-pipeline deferred item that survives to release close stops being a §13 item and becomes a §1–§12 `status: deferred` release-boundary defer (the terminal handoff — §13.6). §13 does not re-specify the label, the comment-template, or the de-milestone steps; it points to §1–§12 for them.
+- **The Tier-0..3 Inter-Stage Feedback Protocol** in [`release-process.md`](../../governance/release-process.md) § Inter-Stage Feedback Protocol is the **escalation channel**, not a deferral mechanism. A valid mid-pipeline deferral is *not* an escalation — it is in-scope work consciously sequenced later. §13 routes *into* Tier-0..3 only when a deferral fails the validity test (§13.3) or goes stale (§13.7); it does not define a new escalation ladder.
+
+The two adjacent gate surfaces §13 must **not collide with**: the Stage-12→13 boundary "Deferred items list" ([`stage-io-contracts.md`](../../../core/schemas/stage-io-contracts.md) + `gate-criteria-spec.md` G-EX8) is *release-boundary* accounting at one boundary; §13.8's accounting is *per-gate incoming* accounting at every mid-pipeline boundary. Distinct scope, cross-referenced — not duplicated.
+
+### 13.2 What a mid-pipeline deferral IS (and is not)
+
+| | |
+|---|---|
+| **IS** | A unit of work inside an issue's accepted scope, consciously moved from the stage that surfaced it to a specific later stage of the **same in-flight release**, recorded at the deferring gate with a rationale, an owner stage, and a target stage. |
+| **IS NOT** | (a) A **scope cut** — work silently dropped with no target stage ("we'll probably never need it"). That is a rationalized scope-gap → route to Tier-0..3, not a deferral. (b) An **escalation** — a premise problem or scope change pushed *upstream*. That is Tier-0..3. (c) A **release-boundary defer** — an issue bundled-but-not-closed at Stage 13. That is §1–§12. (d) A **Stage 2 pre-bundle defer** — `status: deferred` applied at Triage before bundling. That is [`ticket-information-architecture.md`](../specs/ticket-information-architecture.md) § Stage 2 Triage. |
+
+### 13.3 Valid-vs-rationalized test
+
+A mid-pipeline deferral is **VALID** only if **all four** gates hold. If **any** gate fails, the item is a **scope-gap rationalized away** and must instead route to the Tier-0..3 protocol — Tier 1 [ADJUST] if locally fixable within the deferring stage, Tier 2 [SCOPE CHANGE] if the issue set / scope must move (operator decision).
+
+| # | Gate (must ALL hold for VALID) | Failure signal (→ rationalized scope-gap) |
+|---|---|---|
+| **V1** | **In-scope, consciously sequenced.** The deferred work is within the issue's accepted scope and is being moved to a *later named stage*, not dropped. | "We'll probably never need it" / no target stage named → the work is being silently **cut**, not deferred. |
+| **V2** | **Named owner stage.** A specific downstream stage (or the next release's Stage 2) is identified as the pickup point. | "Someone later" / target = "TBD" → no owner = no accountability = a scope-gap. |
+| **V3** | **Does not block a downstream AC.** No acceptance criterion of *this* release depends on the deferred work being done *before* the stage that owns that AC. | A downstream AC cannot be satisfied without the deferred work → deferral would ship an unverifiable AC. **Must escalate (Tier-0..3), not defer.** |
+| **V4** | **Recorded with rationale at the deferring gate.** The deferral is written into the deferring stage's sub-task output with a one-line rationale + target stage, so the §13.8 accounting row can pick it up. | Undocumented → invisible to the next gate → silent backlog accumulation (the exact failure this section targets). |
+
+This mirrors — by deliberate analogy, **cited not copied** — the release-boundary file's § 9 anti-pattern "defer ≠ close" and FM4 "defer ≠ terminal-archive": at the release boundary the question is *defer vs. close*; mid-pipeline the question is *valid-defer vs. rationalized-cut*. Same disposition-honesty principle, different temporal anchor.
+
+### 13.4 Deferral record — owner + target stage + tracking locus
+
+When a mid-pipeline deferral is **created**, the deferring stage writes it into **its own sub-task output comment**, as a one-row-per-item table under the canonical section frame:
+
+```markdown
+**Deferred (mid-pipeline) — from Stage <D>:**
+| Item | Rationale (1 line) | Target stage | Owner (pickup stage) | Blocks downstream AC? | Recorded |
+|---|---|---|---|---|---|
+| <what is deferred> | <why now-is-not-the-time> | Stage <T> | Stage <T> spoke | NO (V3 verified) | <YYYY-MM-DD> |
+```
+
+`Blocks downstream AC?` MUST read `NO` for every row — a `YES` means V3 failed and the item was never a valid deferral (it should have escalated). The `Recorded` date resolves at posting time via `date -u +%Y-%m-%d` — the same runtime-resolution discipline § 4 already uses for the comment template (cited, not re-specified). The tracking locus is the append-only sub-task comment trail — **no new label, no body field, no new pipeline-event subtype** (the same single-canonical-source posture as § 5).
+
+### 13.5 Not-blocking-downstream-AC rule
+
+V3 is restated here as a standalone gate because it is the one validity criterion whose violation is *unrecoverable at the boundary*: a deferral that blocks a downstream AC, if allowed through, ships a release whose AC cannot be verified when its owning stage runs. The rule: **a unit of work may be deferred only if no acceptance criterion of the current release depends on that work being complete before the stage that owns the AC executes.** If the dependency exists, the item is not deferrable — it is either done now or the AC/scope is renegotiated through Tier 2 [SCOPE CHANGE]. The §13.8 accounting row's `Blocks downstream AC?` column is the per-gate enforcement surface for this rule.
+
+### 13.6 Ownership-transfer protocol
+
+When the pipeline reaches a stage that is the `Target stage` of an open mid-pipeline deferred item, that stage's spoke MUST, at gate entry, do **one** of:
+
+- **(a) Pick it up** — execute the deferred work and mark the item *resolved* in its own sub-task output (note the originating deferral record).
+- **(b) Re-defer** — only if V1–V4 still hold for a **new, later** target stage; record a fresh deferral record (§13.4) with the new target. A re-defer is itself subject to the staleness rule (§13.7).
+
+The transfer is tracked **in the sub-task comment trail** — the same append-only audit-trail mechanism the release-boundary case uses (cited from § 5 / § 6, not re-specified); no new label or body field is introduced. A target stage that silently drops an incoming deferred item (neither picks up nor re-defers) is the AP3 anti-pattern (§13.10).
+
+**Terminal handoff to the release-boundary case.** The terminal owner of any item that survives mid-pipeline to release close is **the next release's Stage 2 Triage**: at Stage 13 the item becomes a `status: deferred` release-boundary defer and the **release-boundary procedure (§1–§12) takes over** — enumerate → label → de-milestone → comment trail → Stage 2 re-entry (§ 6). This is the explicit seam from the mid-pipeline case (§13) to the shipped release-boundary case (§1–§12).
+
+### 13.7 Staleness rule
+
+A mid-pipeline deferred item is **STALE** when the pipeline has advanced to **within N=2 stages of its target stage** and the item is still unresolved (example: target = Stage 9; pipeline now at Stage 7 → 2 stages out → flag). On stale-flag, the holding gate routes the item into the **existing Tier-0..3 protocol** (it does **not** invent a new ladder):
+
+- **Tier 1 [ADJUST]** — if the item can still be absorbed by its target stage with a plan-note.
+- **Tier 2 [SCOPE CHANGE]** — if staleness means the item now needs operator re-scoping (absorb / defer-to-next-release / drop).
+
+The threshold is authored as **`N=2 [CALIBRATE-AFTER-3]`**. **N=2 is grounded in the platform's established "downstream tolerance before forcing an escalation" convention** — the default iteration cap of 2 in [`handoff-coordinator-spec.md`](../../../core/schemas/handoff-coordinator-spec.md) § Boundary-Specific Iteration Caps ("Two re-entries signal a systemic upstream issue; escalating forces a plan revisit"). The staleness decision is the same shape — *how much slack before forcing the item into the operator-visible escalation channel* — so it inherits the same N=2 default rather than inventing a number. (N=1 gives no runway to absorb or re-scope before the target gate; N=3 is the DT↔Engineering boundary-specific exception, not the general default, and would over-fire on routine forward-sequenced deferrals.) The `[CALIBRATE-AFTER-3]` marker — matching the existing calibration-marker discipline in `release-process.md` — lets the threshold tune against observed mid-pipeline-deferral data without a re-design.
+
+### 13.8 Stage-transition-gate "Deferred Items" accounting row
+
+Each mid-pipeline stage gate, at entry, **accounts for items deferred *into* it** (whose `Target stage` = this stage). The accounting **requirement** is expressed as a one-clause extension to the existing `## 7. Stage-Transition Gate` `Metrics:` line of each mid-pipeline shard — the canonical Gates-4+ criteria surface (Path B per [`gate-evaluation-spec.md`](../../../core/schemas/gate-evaluation-spec.md) § Boundary Source Mapping, where each `pipeline/stage-NN-*.md` §7 Metrics line is parsed as the gate's pass conditions). The canonical clause, identical across shards:
+
+```
+... ; incoming deferred items accounted (every item whose Target stage = this stage,
+per deferred-item-tracking.md §13, is picked up or re-deferred with rationale —
+zero unaccounted incoming deferrals).
+```
+
+The runtime **evidence row** the spoke fills reuses the existing `gate-evaluation-spec.md` Assessment Output Template Metrics table (`| Metric | Threshold | Actual | Result |`) — **this section cites that template as the render surface and does not edit it** (single-source: the template owns the row format; §13.8 owns the metric definition):
+
+```markdown
+| Incoming deferred items accounted | =100% | <picked-up-or-re-deferred>/<incoming> | PASS/FAIL |
+```
+
+**PLATFORM-SATISFIED stages (10 Dry Run, 11 Snapshot)** have no `## 7. Stage-Transition Gate` and therefore no per-gate accounting to perform: incoming mid-pipeline deferrals pass *through* the compressed Stage 9→12 path to the **next real gate (Stage 12 Execute)**, which carries the accounting clause. Those two shards record this pass-through explicitly (a one-line note at the stage body) rather than a fabricated gate.
+
+This accounting is distinct from the Stage-12→13 release-boundary "Deferred items list" (G-EX8): G-EX8 accounts for release-boundary defers at the *Execute→Close* boundary; §13.8 accounts for mid-pipeline defers arriving at *every* mid-pipeline gate. Cross-referenced, not duplicated (§13.1).
+
+### 13.9 Composition + forward-compat (the deferred-re-evaluation-cadence seam)
+
+This section is the **definition + per-gate-accounting + staleness** half of the cross-stage deferral surface. The **recurring re-evaluation cadence** half — a scheduled sweep that periodically resurfaces open deferred items for re-evaluation — is a separate, sequenced work item that **composes** with this one as follows:
+
+- **§13 owns:** the *definition* of a cross-stage deferred item (§13.3 validity test), its *record format* (§13.4), the *per-gate accounting* (§13.8), the *ownership-transfer* (§13.6), and the *staleness flag + threshold* (§13.7).
+- **The cadence work owns:** the *recurring trigger* that periodically re-surfaces open deferred items. That cadence **consumes** §13.7's staleness signal — §13.7 *produces* the flag; the cadence is the scheduled process that *reads* it and schedules re-evaluation. The cadence cites §13 for "what a deferred item is" rather than redefining it.
+
+Forward-compat: §13 adds no schema field, no label, and no pipeline-event subtype, so a future cadence surface composes additively. If a future release introduces a body-field surface for deferral state (the § 5 alternative A), §13's comment-trail records coexist with it exactly as § 8 describes for the release-boundary case (body carries current-state, comments carry history).
+
+### 13.10 Anti-Patterns
+
+Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), the following are **NOT** valid uses of the mid-pipeline deferral protocol. Each uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior) and a category tag (TRIG / INPUT / PROC / OUT / HAND). These are distinct from the § 11 release-boundary failure modes (which govern the Stage-13 §1–§12 case).
+
+| # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
+|---|---|---|---|---|---|---|
+| **AP1** | **PROC** | Deferring work that blocks a downstream AC (V3 violation) | When a stage wants to move work to a later stage, do NOT defer it if any current-release AC depends on that work completing before the stage that owns the AC — that ships an unverifiable AC | "It's almost done, the later stage can finish it" optimism that ignores the AC→stage dependency; the gap only surfaces when the owning stage cannot verify its AC | §13.3 V3 + §13.5 make not-blocking-AC a hard validity gate; §13.8's `Blocks downstream AC?` column forces a `NO`; a `YES` routes to Tier 2 [SCOPE CHANGE] instead | Principal: checks V3 against the release's AC set, escalates via Tier 2 when a dependency exists. Junior: defers anyway → the target stage's gate fails AC verification, the release stalls mid-pipeline, the "deferral" is unwound under time pressure |
+| **AP2** | **OUT** | Recording a deferral with target = "TBD" / "later" / no named owner stage (V2 violation) | When writing the §13.4 deferral record, do NOT leave the Target/Owner stage unnamed — an unnamed target is a silent scope-cut wearing a deferral's label | "I'll figure out where it lands later" — but no named pickup point means no gate ever accounts for it (§13.8 keys on `Target stage`), so it evaporates | §13.3 V2 requires a named owner stage; §13.4's table has no nullable Target/Owner column; §13.8 accounting cannot pick up an item with no target | Principal: names the specific target stage (or "next release Stage 2") before recording; if none can be named, treats it as a cut and routes to Tier-0..3. Junior: records "Target: TBD" → no gate claims it → the item silently disappears from the pipeline, re-surfaces later as a "new" gap |
+| **AP3** | **HAND** | A target stage silently dropping an incoming deferred item (no §13.6 pickup or re-defer) | When the pipeline reaches a stage that is an open item's `Target stage`, that stage's spoke must NOT proceed without either picking the item up or re-deferring it with a fresh record | "It wasn't in my sub-task instructions, so it's not my job" — the handoff is invisible unless the receiving gate actively reads incoming deferrals (§13.8) | §13.6 makes pickup-or-re-defer mandatory at the target gate; §13.8's accounting clause makes "zero unaccounted incoming deferrals" a gate pass condition, so a silent drop fails the gate | Principal: at gate entry, enumerates items whose Target = this stage and dispositions each (pick up / re-defer). Junior: ignores the incoming deferral because it is not in the immediate task list → the item is lost at the handoff, the §13.8 accounting row reads FAIL or is never filled |
+| **AP4** | **TRIG** | Routing a valid deferral through Tier 2 [SCOPE CHANGE] as if it were an escalation (over-escalation) | When all of V1–V4 hold, do NOT push the item upstream through the Tier-0..3 escalation channel — a valid deferral is in-scope sequencing, not a scope change | "Anything that changes when work happens is a scope decision the operator must make" conflation of *sequencing* with *scope* — but valid deferral is a stage-local Tier-1-or-below act | §13.1 + §13.2 separate deferral (in-scope sequencing) from escalation (Tier-0..3); §13.3 routes to Tier-0..3 only on a *failed* validity gate or §13.7 staleness, not on a valid defer | Principal: records a valid deferral inline (§13.4) and proceeds; escalates only on a failed gate or staleness. Junior: escalates every deferral to the operator as a scope change → escalation-channel noise, operator decision-fatigue, the in-scope sequencing the pipeline is designed to handle autonomously gets bottlenecked on human gates |
+
 ## Version History
 
 | Version | Date | Change |
 |---|---|---|
 |  | 2026-05-23 | Initial authoring |
+| v2.13 | 2026-06-20 | Add § 13 Cross-stage deferral validity (mid-pipeline) — valid-vs-rationalized test, deferral record, not-blocking-AC rule, ownership-transfer, staleness rule (N=2 [CALIBRATE-AFTER-3]), per-gate "Deferred Items" accounting clause across the mid-pipeline shard gates; cites §1–§12 as the Stage-13 instance + Tier-0..3 as the escalation channel |

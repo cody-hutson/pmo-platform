@@ -7,6 +7,8 @@
 ## 1. Purpose
 Capture pre-change state for rollback capability. **How the platform satisfies this:** Git history automatically preserves every prior state. The commit immediately before the merge IS the snapshot. `git revert` restores any prior state without manual intervention.
 
+**Deferred Items (mid-pipeline) — pass-through:** This stage is PLATFORM-SATISFIED and exposes no `## 7. Stage-Transition Gate`, so it performs no per-gate "Deferred Items" accounting. Any mid-pipeline deferred item whose target stage falls at or after this point passes through the compressed Stage 9→12 path to the next real gate (Stage 12 Execute), which carries the incoming-deferred-items accounting clause per deferred-item-tracking.md §13.8.
+
 ## 2. Reference Model Alignment
 
 | Ref Model Attribute | Part 6 Definition | Our Implementation | Satisfaction Mechanism |

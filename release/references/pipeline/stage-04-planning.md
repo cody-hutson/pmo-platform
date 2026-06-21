@@ -140,6 +140,20 @@ The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaff
 
 The committed release-plan file is durable corpus and is governed by the reference-durability standard under the core standards set: state the plan's rules and decisions unconditionally and inline, summarize referenced content rather than linking to it, and confine any unavoidable bare issue reference to a designated reference block with an inline summary. A release-plan version label in the plan's own title is a narrative release identifier, not a load-bearing reference. The reference-durability hook flags violations when the plan file is written.
 
+### Verification-Plan AC→method mapping
+
+Planning maps each in-scope issue's acceptance criteria to a verification-method class, which the per-issue Verification table (the `release-planner` plan template's § Verification Plan → `### Per-Issue Verification` table, columns `Issue | Verification Method | Expected Result`) then records. The recognized method classes mirror the G1-05a admissible AC-predicate patterns:
+
+| AC predicate class | Verification method class | Example |
+|---|---|---|
+| file-path+state (G1-05a pattern b) | file-content / system-state assertion | `grep -q '<pattern>' <file>` |
+| explicit `predicate:` (G1-05a pattern c) | evaluate the predicate expression against current state | re-run the cited expression |
+| **behavioral/domain (G1-05a pattern d)** | **the AC's *declared* verification method** — a gate-eval / reproduction-and-observe / judge-rubric / cross-output-coherence run, as declared in the AC's `method:` field | run the declared method against its fixture/target |
+
+A behavioral/domain AC's verification method is whatever its `method:` field declares; Planning records the declared method as the issue's Verification Method even when the executor for that method is not yet built. This block names the recognized method classes; it does not restate the per-issue table — that table is owned by the plan template's § Verification Plan and is populated per release.
+
+**Declared, verification deferred (honesty note).** A behavioral/domain AC may be admitted with its verification method **declared** even before an executor for that method exists. Declaration is what makes the AC honest at intake/planning; building and running the executor is a separate, later concern (Stage 7/8). A declared-but-not-yet-executable method is a valid method for gate purposes — it is recorded, surfaced, and tracked, not silently dropped or lossily rewritten. This is the canonical statement of the note; the G1-05a and G3-05 self-repair cells in `core/schemas/gate-criteria-spec.md` carry the short inline form and defer here for the full rationale.
+
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
 Metrics: dep satisfaction, file coverage verified, change spec completeness, contention resolved, risk register populated, verification plan complete, Delivery Strategy specified, routing decision made.
