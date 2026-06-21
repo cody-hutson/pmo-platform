@@ -8,6 +8,14 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.14] - 2026-06-21
+
+### Added
+- **Progressive-rollout convention.** One named convention now governs how a pipeline change is introduced, watched, enforced, and eventually retired (`shadow → warn → enforce → removed`), lifted from scattered per-mechanism homes into a single canonical document. *Why it matters:* the language and structure for rolling out and sunsetting a change are consistent instead of reinvented each time. ([#164](https://github.com/cody-hutson/pmo-platform/issues/164))
+- **Touchpoint + phase-out schema.** A schema for inventorying every place a human is still in the loop and planning each one's retirement (with FMEA risk fields), plus a non-blocking deploy check that validates a local instance's structure. *Why it matters:* phase-out planning has a defined structure, and a malformed inventory surfaces as a warning rather than passing silently. ([#165](https://github.com/cody-hutson/pmo-platform/issues/165))
+
+[Full notes](release/releases/notes/v2.14_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.14)
+
 ## [v2.13] - 2026-06-20
 
 Finding-disposition and deferral handling become uniform across the pipeline — behavioral acceptance criteria survive the gates intact, requirements-clarity rejects route upstream, and deferred items gain validity criteria plus a re-evaluation cadence.
