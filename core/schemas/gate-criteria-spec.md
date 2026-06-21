@@ -123,6 +123,20 @@ Step 3 (reconcile):
 | G1-08 | Pickup-blocking undefined terms | Agent scans issue body for jargon, abbreviations, cross-issue references, and Skills-Map terminology. A term is "undefined" if it lacks (a) an inline parenthetical definition, (b) a `#N` issue reference, or (c) a markdown link to a governance doc that defines it. If undefined count > 3, return to author: "G1-08: The following terms would require a fresh Claude Code session to ask clarifying questions. Define inline or cite governance: [list]." |
 | G1-09 | Label-body mismatch detected | Per the Template Detection Logic block: emit `G1-09 FAIL: label=<X>, body=<Y>` payload. Two remediation paths (operator decision): **(a) Relabel** — change intake-tier label to match the body's structural template; **(b) Rewrite body** — rewrite body to match the existing label's template schema. For zero / multiple intake-tier labels: apply correct single intake-tier label per `pipeline/stage-01-intake.md` § Routing + `intake-style-guide.md` § 2 (5-test rule). |
 
+### Priority-Model block (referenced from G1-06 / G2-01 / G2-12)
+
+Priority lives on **two coexisting surfaces** with one canonical source — stated here once so no future reader re-derives a false "missing-label" gap. The model is symmetric to the Decision-Date treatment (body-authored, Projects-field-mirrored at G2-06).
+
+| Surface | Role | Where validated | Notes |
+|---|---|---|---|
+| Body `### Priority` field (P1-P4; `### Severity` for bug.yml, P-level digit canonical per Adapter G1-06-Bug) | **Canonical source.** | **G1-06** (structural presence at intake) → **G2-01** (validated against full backlog context at Triage) | This is the authored intake expectation per G1-06. **G1-06 is unchanged by the field-first model.** |
+| GitHub Projects Priority field | **Queryable mirror**, body-derived, written at Triage. | **G2-12** (set + consistent with the body P-level; queryable via Projects API, not parsed from comment text) | The mirror exists for downstream automation that prefers a Projects-API field query over body parsing. |
+| `priority:` label | **NOT a surface.** No `priority:` label exists in the taxonomy. | — | G1-06 states "label-based priority is NOT expected." Do NOT add a priority label; do NOT enforce one. A `status: approved` issue with no `priority:` label is **conformance**, not a defect. |
+
+**Canonical-source rule (body wins on mismatch).** When the Projects Priority field and the body `### Priority` P-level disagree, the body is authoritative: G2-12 self-repair re-derives the Projects field from the body P-level, never the reverse. The body→field direction is the only direction this model syncs.
+
+**Scope note (avoids the historical stale-reference confusion).** Priority is validated at **G2-01** (and present at **G1-06**), mirrored to the Projects field at **G2-12**. It is **not** validated at **G2-04** — G2-04 is *dependency-reference validity* (`Dependencies reference valid open issues or "None"`), an unrelated criterion. Any text implying "G2-04 = priority validation" is incorrect.
+
 ---
 
 ## Gate 2: Workflow Readiness
@@ -134,7 +148,7 @@ Step 3 (reconcile):
 
 | ID | Criterion | Type | Check | Automation | improvement | bug | observation |
 |---|---|---|---|---|---|---|---|
-| G2-01 | Priority validated against full backlog context | field | judgment | recommend | `req` | `adapt:G2-01-Bug` | `conv` (must convert before bundling — Priority field missing) |
+| G2-01 | Body `### Priority` P-level (the canonical priority surface per G1-06; `### Severity` for bug.yml) validated against full backlog context. Validates the **body** field — not a label (none exists) and not the Projects mirror (that is G2-12). Per the Priority-Model block above. | field | judgment | recommend | `req` | `adapt:G2-01-Bug` | `conv` (must convert before bundling — Priority field missing) |
 | G2-02 | Category label matches content | anchor | judgment | recommend | `req` | `req` (auto-applied `bug` label) | `conv` (observation has no category) |
 | G2-03 | No unresolved duplicates or subsumption conflicts | validation | structural | auto | `req` | `req` | `req` |
 | G2-04 | Dependencies reference valid open issues or "None" | field | structural | auto | `req` | `n/a` (no Dependencies field in bug.yml) | `n/a` (no Dependencies field) |
@@ -145,6 +159,7 @@ Step 3 (reconcile):
 | G2-09 | No unflagged synthesis-candidate pairs against the open Proposed/Approved set. Candidate pair = candidate issue + any open Proposed/Approved issue sharing (a) `cluster:*` label AND (b) ≥1 explicit cross-reference edge (Dependencies-field reciprocity OR shared upstream parent `#N` cited in both Dependencies fields). For each candidate pair: routing decision recorded (fold / decompose-into-roadmap / keep-separate-with-rationale / defer-for-coordination). Per Similarity Composite-Signal Detection block below. | validation | judgment | recommend | `req` | `req` | `req` |
 | G2-10 | Size-driven decomposition routing recorded when `size:XL` label applied. For `size:XL`: routing decision recorded (decompose-into-slice / split-into-sub-issues / approve-as-is-with-risk-note / defer-for-pre-bundle-analysis). For `size:L`: informational flag only (no routing decision required at G2-10; carry forward to G3-09). For `size:M` / `size:S` / `size:XS`: exempt. | validation | judgment | recommend | `req` | `req` | `req` |
 | G2-11 | Decomposition-review routing recorded when ANY oversize predicate matches (COMPOSITE-OR: **P1** `size:XL` label applied OR **P2** issue body cites declared decomposition hooks — at least 1 occurrence of literal `Decomposition hook` OR enumerated scope-split pattern `(a) ... (b) ... (c)` inside Notes/Proposed Change sections OR **P3** AC count ≥ 7 OR Affected Files count ≥ 5). For each matching predicate set: routing decision recorded per the 3-outcome enum — **kept-as-one with rationale** (operator records 1-line rationale naming the predicate(s) that fired + why issue is genuinely atomic despite firing) / **split per fission protocol** ( — invokes [fission-convention.md](../../release/references/protocols/fission-convention.md) Procedure Steps 1-4: parent body Fissions-into annotation + per-child creation + Fission Comment + parent close-as-fissioned OR convert-to-tracking) / **escalate** (Tier 2 [SCOPE CHANGE] per [`release-process.md`](../../release/governance/release-process.md) § Inter-Stage Feedback Protocol — issue stays in `status: proposed` until operator-rendered disposition). G2-11 SUBSUMES G2-10 when its predicate fires (one routing decision under G2-11 — NOT one routing under G2-10 plus a second routing under G2-11). G2-11 PASSES trivially when no predicate fires. Per Composite-OR Oversize Predicate block below. | validation | judgment | recommend | `req` | `req` | `req` |
+| G2-12 | Projects Priority field set and consistent with the body `### Priority` P-level (queryable via Projects API, not parsed from comment text). The body `### Priority` field is canonical (validated at G2-01, per G1-06); the GitHub Projects Priority field is its queryable mirror, written at Triage. G2-12 asserts the mirror exists and its P-level digit (1-4) matches the body P-level. **Body wins on mismatch** — self-repair re-derives the Projects field from the confirmed body P-level, never the reverse. Modeled on G2-06 (Decision Date in the Projects Date field), the in-corpus field-first precedent. Per the Priority-Model block in § Gate 1 (body-canonical · Projects-field queryable-mirror · label-NOT-a-surface). | anchor | structural | auto | `req` | `adapt:G2-12-Bug` | `conv` (no Priority field — converts before bundling) |
 
 ### Composite-OR Oversize Predicate (referenced from G2-11 / G3-12 criterion bodies)
 
@@ -179,6 +194,8 @@ P3_FILES=$(echo "$BODY" | grep -cE '^`?(\.claude|pmo-platform|projects)/')
 ### Gate 2 Adapter Blocks
 
 **Adapter G2-01-Bug:** validate Severity (not Priority) against full backlog context — semantic equivalence per Adapter G1-06-Bug (P-level digit canonical).
+
+**Adapter G2-12-Bug:** bug.yml has `### Severity` (P1-Blocker / P2-Material / P3-Annoyance / P4-Cosmetic) in lieu of `### Priority`; G2-12 asserts the Projects Priority field's P-level digit (1-4) matches the body **Severity** P-level. Semantic equivalence per Adapter G1-06-Bug — the P-level digit is canonical, not the field name or qualifier word. Body (Severity) wins on mismatch, identical to the improvement (Priority) branch.
 
 **G2-04 augmentation — Native-Dep Mirror (post-validation):**
 
@@ -223,6 +240,7 @@ Soft-language exclusion: "related to" / "similar to" / "see also" in body text i
 | G2-09 | Candidate pair detected with no routing decision | Surface candidate pair to operator with detection evidence (cluster overlap, edge axis specifics). Present 4 routing options (A fold / B decompose-into-roadmap / C keep-separate-with-rationale / D defer-for-coordination); operator renders. Record decision in Triage decision comment per § Phase B Output State Semantics + apply outcome-specific labels per [subsumption-convention.md](../../release/references/protocols/subsumption-convention.md). |
 | G2-10 | size:XL ticket with no decomposition-routing decision | Surface size:XL ticket to operator with decomposition options (A decompose-into-slice / B split-into-sub-issues / C approve-as-is-with-risk-note / D defer-for-pre-bundle-analysis); operator renders. Record decision in Triage decision comment + ticket body Notes/Risks per outcome. size:L cross-stage informational flag posted as advisory comment; no required decision. |
 | G2-11 | Oversize predicate (P1 `size:XL` OR P2 declared-decomposition-hook OR P3 AC ≥ 7 OR P3 files ≥ 5) fired with no 3-outcome routing decision recorded | Surface predicate-firing evidence to operator with the matched predicate(s) and the 3-outcome enum (A kept-as-one with rationale / B split per [fission-convention.md](../../release/references/protocols/fission-convention.md) / C escalate per Tier 2 [SCOPE CHANGE]); operator renders. Record decision in Triage decision comment per § Phase B Output State Semantics. On SPLIT outcome: invoke fission-convention.md Procedure Steps 1-4 (parent body Fissions-into annotation + per-child creation + Fission Comment + parent close-as-fissioned OR convert-to-tracking per its D-ParentDisposition). On KEPT-AS-ONE outcome: record 1-line rationale naming the predicate(s) that fired. On ESCALATE outcome: flag hub for operator decision per Inter-Stage Feedback Protocol Tier 2; issue stays in `status: proposed` until operator-rendered disposition. |
+| G2-12 | Projects Priority field unset, OR set to a P-level inconsistent with the body `### Priority` (Severity for bug) P-level | Auto-set the GitHub Projects Priority field from the confirmed body P-level (the `gh project item-edit … --field-id [OPERATOR_PROJECTS_VIEW_FIELD_ID] --single-select-option-id <P-LEVEL_OPTION_ID>` write at CER Resolve — the Priority Projects-field write that already exists, per `release/references/pipeline/stage-02-triage.md` § Phase B B2a + [github-projects-guide.md § Field IDs](../disciplines/github-projects-guide.md#field-ids-for-agent-integration)). **Body wins on mismatch** — re-derive the Projects field from the body P-level, never edit the body to match the field. On Projects API failure: gate fails; CER Resolve produces a documented failure outcome (does not silently auto-pass), mirroring the G2-06 Decision-Date forcing-function posture. |
 
 ---
 
@@ -468,7 +486,17 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 1.13
+**Schema version:** 1.14
+
+**v1.14 changes (non-breaking — minor; additive only):**
+
+- Added **G2-12** (Projects Priority field set + consistent with the body `### Priority` P-level; queryable via Projects API, not parsed from comment text) to Gate 2. 1 new `anchor` / `structural` / `auto` criterion + 1 self-repair row + Adapter G2-12-Bug (Severity P-level mapping). Modeled on **G2-06** (Decision Date in the Projects Date field), the in-corpus field-first precedent: the body field is canonical, the Projects field is its queryable mirror, written at Triage. **Body wins on mismatch** — self-repair re-derives the Projects field from the confirmed body P-level, never the reverse. Closes the not-yet-gate-backed `Priority (Projects)` mirror cell in `field-lifecycle-matrix.md`.
+- Added the **Priority-Model block** under § Gate 1 (referenced from G1-06 / G2-01 / G2-12): a 3-row table fixing the two coexisting priority surfaces (body `### Priority` = canonical; GitHub Projects Priority field = queryable mirror) + the explicit non-surface (`priority:` label — none exists; G1-06's "label-based priority is NOT expected" stands; a label-free `status: approved` issue is conformance, not a defect) + the body-wins canonical-source rule + a scope note that priority is **not** validated at G2-04.
+- Reconciled the **G2-01** criterion wording to name the body `### Priority` P-level explicitly as the validated surface (per G1-06) — disambiguates body vs. label vs. the G2-12 Projects mirror. Criterion type/check/automation columns unchanged (`field` / `judgment` / `recommend`); not a new criterion.
+- **Corrected the stale "G2-04 = priority validation" framing** (no in-file text asserted it, but the Priority-Model block now states the correct mapping unconditionally so no future reader re-derives the false gap): G2-04 is *dependency-reference validity*; priority is present at G1-06 and validated at G2-01. **G2-04's own criterion row is unchanged.**
+- **G1-06 and `deploy.sh` Check 22 are unchanged** — priority stays body-canonical at intake; this release only adds the G2 Projects-mirror sync gate, it does not alter the G1 body-priority anchor.
+- Schema bump v1.13 → v1.14 (non-breaking minor; additive only). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) treat G2-12 + the Priority-Model block as additive. Existing G1-01..G1-09 / G2-01..G2-11 / G3-01..G3-15 + G-BR1..G-BR4 + G-PR1..G-PR9 + G-EX1..G-EX8 + G-CL1..G-CL8 IDs unchanged (G2-12 is the v1.14 addition); no ID renumber, no column/type change.
+- **Cutover discipline (v1.14 additions):** G2-12 applies to issues entering Stage 2 Triage strictly AFTER this criterion's introducing-release merge SHA recorded in the release log; pre-cutover issues are grandfathered; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new gate).
 
 **v1.13 changes (non-breaking — minor; additive only):**
 
