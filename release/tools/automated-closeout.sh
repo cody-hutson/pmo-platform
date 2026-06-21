@@ -461,13 +461,17 @@ phase_transition_release_log() {
   fi
 
   # Use Python for in-place text edit (avoids BSD-sed -i incompatibility).
+  # Schema-agnostic: match the row whose Milestone column is <slug> (any field
+  # position) and flip its `| DEPLOYED |` state field to VERIFIED — works for the
+  # legacy 5-column schema (slug field 1, State trailing) AND the current 8-column
+  # schema (slug field 2, Date column trailing the State field).
   /usr/bin/python3 - "$RELEASE_LOG" "$slug" <<'PY'
 import sys, re
 log_path, slug = sys.argv[1], sys.argv[2]
 with open(log_path, "r", encoding="utf-8") as f:
     txt = f.read()
-# Replace ONLY the trailing pipe-state on the line that begins with `| <slug> |`
-pat = re.compile(r"(^\| " + re.escape(slug) + r" \|.*\| )DEPLOYED( \|$)", re.MULTILINE)
+# Match the row carrying `| <slug> |` (any field) and flip its `| DEPLOYED |` state field.
+pat = re.compile(r"(^\|.*\| " + re.escape(slug) + r" \|.*\| )DEPLOYED( \|)", re.MULTILINE)
 new_txt, n = pat.subn(r"\1VERIFIED\2", txt, count=1)
 if n != 1:
     print(f"ERROR: expected 1 row match for slug='{slug}', got {n}", file=sys.stderr)
@@ -475,6 +479,10 @@ if n != 1:
 with open(log_path, "w", encoding="utf-8") as f:
     f.write(new_txt)
 PY
+  if [[ $? -ne 0 ]]; then
+    mark_phase "transition_release_log" "FAIL" "RELEASE_LOG DEPLOYED→VERIFIED transition matched no row for slug=$slug (regex/schema mismatch)"
+    return 3
+  fi
 
   STATE_LOG_ROW_STATE="VERIFIED"
   mark_phase "transition_release_log" "PASS" "transitioned $slug row DEPLOYED → VERIFIED"
