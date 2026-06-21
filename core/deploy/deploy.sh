@@ -37,6 +37,7 @@ OPERATIONS_SKILLS=(
   intake-desk
   pmo-business-analyst
   pmo-knowledge-manager
+  pmo-ocm-lead
   pmo-process-designer
   pmo-portfolio-manager
   pmo-product-owner
