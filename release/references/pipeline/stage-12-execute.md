@@ -6,6 +6,8 @@
 ## 1. Purpose
 Deploy the release — merge the approved PR to main, tag the version, deploy changed files to their installed locations, and log deployment evidence — so the platform reflects the approved changes and the audit trail is complete.
 
+**Host-operation adapter seam.** The non-version host operations in this stage — `gh pr merge` (Phase B1), `gh release create` (Phase B5.5), and the `git` / `gh` branch-and-issue operations — are provided by the **repo-host adapter** selected by `operator.toml [adapters].repo_host` (see [`docs/platform-config-reference.md`](../../../docs/platform-config-reference.md) and [`repo-host-adapter-versioning.md`](../../../core/standards/repo-host-adapter-versioning.md)), exactly as the version-claim mechanics already compose with the adapter at Phase A.5.6 and Phase B3. A new host-touching step extends that seam rather than inlining a host tool as *the* canonical mechanism — a host-binding leak per [`knowledge-architecture.md`](../../../core/disciplines/knowledge-architecture.md) §4.1.
+
 ## 2. Reference Model Alignment
 
 | Ref Model Attribute | Part 6 Definition | Our Implementation | Compression Note |
