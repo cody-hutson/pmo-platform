@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.13] - 2026-06-20
+
+Finding-disposition and deferral handling become uniform across the pipeline — behavioral acceptance criteria survive the gates intact, requirements-clarity rejects route upstream, and deferred items gain validity criteria plus a re-evaluation cadence.
+
+[Full notes](release/releases/notes/v2.13_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.13)
+
 ## [v2.11] - 2026-06-20
 
 Twelve principal-level role-Specialist agents — Product Owner, Business Analyst, Program/Project/Portfolio Manager, Scrum Master, Release Train Engineer, Principal/Software Engineer, Architect, QA Lead, DevOps/SRE — each composing the platform's existing function-skills.
