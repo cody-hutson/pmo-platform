@@ -244,9 +244,11 @@ find_log_row() {
 #     (e.g. v3.18-corpus-integrity-enforcement).
 #   - Legacy 5-column schema `| Milestone | Date | … |`: the slug is field 1.
 # Resolution rule (position-independent): the slug is the FIRST field that looks
-# like a version key carrying a hyphenated slug suffix — it begins `v<MAJOR>.<MINOR>`
-# (optional letter / -N qualifier) AND contains a `-<alpha…>` slug tail. A bare
-# Version field (v3.18) has no slug tail, so it is skipped.
+# like a milestone slug — EITHER a version-prefixed key `v<MAJOR>.<MINOR>` (optional
+# letter / -N qualifier) carrying a `-<alpha…>` slug tail (e.g. v3.18-corpus-integrity),
+# OR an NN-prefixed Epic-Readiness-Playbook slug `<digits>-<alpha…>`
+# (e.g. 63-finding-disposition-discipline). A bare Version field (v3.18) has no slug
+# tail, and the trailing date column (2026-06-20) is digits-hyphen-digits, so both are skipped.
 # Fallback (defensive): if no field matches (a pure-version row with no slug column),
 # return field 1 stripped — preserving the prior behavior.
 extract_milestone_slug() {
@@ -260,8 +262,9 @@ extract_milestone_slug() {
         gsub(/^[ \t|]+|[ \t]+$/, "", f)
         if (f == "") continue
         if (field1 == "") field1 = f
-        # version key (vMAJOR.MINOR[letter][-N]) followed by a hyphenated slug tail
-        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/) { print f; exit }
+        # version-prefixed slug (vMAJOR.MINOR[letter][-N]) followed by a hyphenated slug tail,
+        # OR an NN-prefixed Epic-Readiness-Playbook milestone slug (e.g. 63-finding-disposition-discipline).
+        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/ || f ~ /^[0-9]+-[A-Za-z]/) { print f; exit }
       }
       # Fallback: no hyphenated-slug field found — emit field 1 (legacy/pure-version).
       print field1
