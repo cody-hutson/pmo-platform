@@ -179,6 +179,13 @@ Release planning runs once per Milestone at release scope (all issues) before an
 
 - **Single-branch topology** (D-C SINGLE — default): The plan file is committed on the release branch as **Engineering Commit 0** (the first commit on the release branch produced by the first per-issue Stage 6 Engineering spoke). Until that first Engineering commit lands, the Stage 4 sub-task comment is the working reference.
 
+  **Commit-0 version re-verify (FIRST Engineering spoke only, immediately before writing the plan file as Engineering Commit 0).** The version selected at D-Version (recommendation time, Stage 4) may have been claimed by a concurrent release in the window between selection and now — the originating incident surfaced exactly this way (a concurrent release shipped the recommended version; the collision was caught only when the Engineering spoke fetched fresh authoritative refs before the plan-file write). Before authoring `release/releases/plans/<slug>_RELEASE_PLAN.md`, the first Engineering spoke re-runs the authoritative-version-selection check:
+    1. `git fetch --tags origin && git fetch origin main` — refresh authoritative host state at Commit-0 time.
+    2. Recompute next-free for the plan's bump-class per the D-Version authoritative-version-selection procedure (§ Recurring D-decisions) — the host-agnostic allocation rule consuming the adapter's `anchor()` + `claimed_set()` by name; any ledger input read via `git show origin/main:<ledger-path>`, never the worktree copy.
+    3. If the planned version is NOT in the claimed set AND equals the recomputed next-free → **PROCEED**: write the plan file. Else → **HALT**: do NOT overwrite a shipped version's plan file. Post a Tier 2 `[SCOPE CHANGE]` comment on the parent sub-task per `release-process.md` § Inter-Stage Feedback Protocol, naming the planned version, the recomputed next-free, and the colliding tag/ledger row; the operator re-renders D-Version against current state.
+
+     The Commit-0 re-verify is a **single detect-and-HALT** — it does NOT auto-recompute-and-retry. On HALT it hands to the operator, who re-renders D-Version; the spoke then re-runs this same single re-verify against the operator's new value. Bounded retry on sustained contention is the atomic-claim rung's job at the tag (Stage 12), not this rung's. This is detection rung 1 (earliest); it composes with — does not replace — the Stage 9 mid-pipeline divergence re-check (file-divergence axis), the Stage 12 pre-merge freeness check, and the atomic version claim.
+
 - **Option-A topology** (D-C OPTION-A — per-issue branches + per-issue PRs per Procedure 6 early-merge precedent): The plan file is committed via a dedicated **Stage 4 release-plan chore PR** authored by the hub from the approved Stage 4 sub-task comment. Mechanics:
   1. Hub copies the Stage 4 sub-task comment content into a new file at `release/releases/plans/vX.Y_RELEASE_PLAN.md`.
   2. Hub creates branch `chore/vX.Y-stage-4-release-plan` off `main`.
@@ -357,6 +364,84 @@ Recommendation: spoke recommendation per trigger evidence
 ```
 
 Cutover discipline for D-ReleaseClass: applies to all releases going forward.
+
+```
+#### D-Version: What version does this release claim?
+Gate input: Spoke-recommended next-free version, computed at
+  recommendation time against AUTHORITATIVE host state (never local
+  refs / a stale worktree), per the authoritative-version-selection
+  procedure below. The concrete number is provisional-display: the
+  founding architecture (defer-to-merge — see the version-claim
+  determinism ADR recorded on the Version-Claim Determinism
+  milestone) binds the number only at the atomic claim moment; the
+  durable declaration at plan time is the bump-class.
+Gate decision: Operator renders the version identity — (A) accept
+  the spoke-recommended next-free, (B) version-less milestone
+  (theme-named; no tag claimed at Stage 12), or (C) operator-
+  specified override (e.g. when a concurrent release is known to be
+  claiming the recommended slot).
+Blocks: release branch name (release/<slug>), plan-file path, the
+  Stage 12 atomic version claim, and any version: frontmatter the
+  release writes.
+Upstream compatibility: N/A — version identity is PMO platform
+  internal; no Anthropic upstream surface. Upstream compatibility
+  check does not apply. (When the version feeds a skill version:
+  field, that field's upstream posture is owned by the D-decision
+  that edits the skill, not by D-Version.)
+Reversibility / Confidence: CHEAP pre-Engineering (recommendation
+  only); MODERATE after Engineering Commit 0 (identity propagates
+  into branch name, plan-file path, frontmatter) / HIGH.
+Recommendation: spoke recommendation = next-free per the procedure
+  below.
+
+Authoritative-version-selection procedure (run at recommendation
+time; re-run at Engineering Commit 0 before the plan file is
+written — see Procedure 0 § Canonical location):
+  1. The next-free computation is the host-agnostic version-
+     allocation rule (RELEASE_PROTOCOL.md § Versioning): the lowest
+     version at or above the bump-class floor not present in the
+     claimed set. The floor derives from the bump-class
+     (major/minor/patch) per that rule's Bump-Class Selection Guide.
+  2. That rule consumes the repository-host adapter operations
+     anchor() and claimed_set() BY NAME (the operation interface is
+     defined in core/standards/repo-host-adapter-versioning.md). The
+     hub does NOT inline a host mechanism here: anchor() returns the
+     highest claimed version in the mainline lineage (orphan
+     lineages excluded — the adapter's responsibility, not the
+     hub's), and claimed_set() returns every currently-claimed and
+     in-flight version the candidate must avoid. Do NOT re-derive
+     the anchor or re-enumerate the claimed-set membership in this
+     block — the adapter owns "how"; the hub calls the named ops.
+  3. AUTHORITATIVE-STATE read discipline (the hub's obligation when
+     it asks the adapter for these values): the adapter operations
+     MUST read authoritative host state, never local refs or a stale
+     worktree. Before invoking the selection, refresh authoritative
+     state:
+       git fetch --tags origin
+     — a bare local `git tag` list is NOT authoritative: a
+       concurrently-shipped tag is invisible without the fetch (the
+       originating defect — a concurrent release shipped the
+       recommended version from a local-tag-list selection). Any
+       release-ledger input to claimed_set() is read at the remote
+       tip, never the worktree copy:
+       git show origin/main:<ledger-path>
+     — a stale-worktree ledger read was the second half of the
+       originating defect; `git show origin/main:` reads the
+       authoritative tip regardless of how far behind the worktree
+       is. (This is the same authoritative-refs discipline the
+       Session-Start sync and the Primary-Checkout comparison
+       already mandate in core/rules/git-workflow.md — D-Version is
+       the version-touching hub decision that applies it.)
+This procedure is the EARLIEST freeness rung; it composes with — it
+does not replace — the pre-merge freeness gate, the CI freeness
+gate, and the atomic ref-claim (anchor()/claimed_set() reads back
+the same single claim the adapter's atomic_claim() arbitrates at
+merge), which are the later rungs on this milestone, and with the
+Stage 9 mid-pipeline divergence checks (which guard the file-
+divergence axis — a different question from version-freeness).
+```
+
+Cutover discipline for D-Version: applies to all releases going forward.
 
 ---
 
