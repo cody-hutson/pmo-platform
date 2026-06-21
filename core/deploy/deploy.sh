@@ -4662,6 +4662,89 @@ cmd_check() {
     fi
   fi
 
+  # Check 39 — Touchpoint-inventory instance structural validation (warn-mode initial)
+  #
+  # Validates an operator-local touchpoint-inventory + phase-out-plan instance
+  # against the schema at core/schemas/touchpoint-phaseout-schema.md (the
+  # 71-autonomy-phaseout-foundation deliverable, #165). Structural only —
+  # field/section presence + enum shape, NOT the content of the operator's
+  # phase-out judgment (advancement stays an operator decision per the
+  # progressive-rollout convention).
+  #
+  # SKIP-WHEN-ABSENT: the instance is operator-local and git-ignored (the
+  # *.governance/roadmaps/ + personal/ seam per ADR-012 / ADR-035), so it does
+  # NOT exist in a fresh clone or in CI. Mirroring Check 13's "deploy never run
+  # → skip, don't double-fail" posture, this check SKIPs cleanly when no
+  # instance file is present; absence is not drift.
+  #
+  # Warn-mode initial: routed through flag_warn_or_issue / deploy-check.mode
+  # (the Checks 8-10 / 14 / 15 / 18-23 precedent) so it dogfoods the shadow/warn
+  # phase of the very convention this release ships. Flip deploy-check.mode to
+  # 'enforce' after the shakedown window.
+  log "Check 39: Touchpoint-inventory instance structural validation"
+  if [[ "$DEPLOY_CHECK_MODE" == "off" ]]; then
+    log "  SKIP:  deploy-check.mode = off"
+  else
+    # Resolve the operator-local instance. Primary: the operator-instance base
+    # (env-var-aware, same resolution as the warn-log / mode file above); a
+    # roadmaps-tree fallback is also accepted. Filename is stable per the schema.
+    local c39_base="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}"
+    local c39_file=""
+    local c39_candidate
+    for c39_candidate in \
+      "$c39_base/touchpoint-inventory.md" \
+      "$c39_base/governance/roadmaps/touchpoint-inventory.md" \
+      "$c39_base/roadmaps/touchpoint-inventory.md"; do
+      if [[ -f "$c39_candidate" ]]; then c39_file="$c39_candidate"; break; fi
+    done
+
+    if [[ -z "$c39_file" ]]; then
+      # Operator-local instance absent (fresh clone / CI / un-populated) — skip
+      # cleanly. Schema presence is verified separately (the file is in-repo).
+      log "  SKIP:  no operator-local touchpoint-inventory instance present (operator-local / git-ignored — not drift)"
+    elif [[ ! -f "core/schemas/touchpoint-phaseout-schema.md" ]]; then
+      # Instance present but schema missing — that IS a real structural fault.
+      flag_warn_or_issue "touchpoint-schema" \
+        "instance present ($c39_file) but schema core/schemas/touchpoint-phaseout-schema.md is missing"
+    else
+      # Structural validation: required field tokens + enum shape. Greps are
+      # tolerant (|| true) so a legitimate no-match cannot abort the run.
+      local c39_problems=0
+
+      # P1/P5: required field tokens present somewhere in the instance.
+      local c39_tok
+      for c39_tok in touchpoint_id stage current_phase reversibility_tier autonomy_tier \
+                     irreducible_human automation_candidate success_criteria slo risks rollback_path; do
+        if ! grep -q "$c39_tok" "$c39_file" 2>/dev/null; then
+          flag_warn_or_issue "touchpoint-schema" "required field '$c39_tok' not found in instance ($c39_file)"
+          c39_problems=$((c39_problems + 1))
+        fi
+      done
+
+      # P2: any current_phase / target_phase value must be in the #164 enum.
+      # Flag a line that assigns a phase value outside {shadow,warn,enforce,removed}.
+      local c39_badphase
+      c39_badphase=$(grep -inE '(current_phase|target_phase)[^A-Za-z0-9]+(dark|canary|ga|retired|sunset|live|active|on)\b' "$c39_file" 2>/dev/null | head -3 || true)
+      if [[ -n "$c39_badphase" ]]; then
+        flag_warn_or_issue "touchpoint-schema" "current_phase/target_phase value outside the {shadow,warn,enforce,removed} enum in $c39_file"
+        c39_problems=$((c39_problems + 1))
+      fi
+
+      # P6 (FMEA shape): if risks are present, the FMEA sub-fields should appear.
+      local c39_fmea_tok
+      for c39_fmea_tok in severity likelihood detectability; do
+        if grep -qi 'risks' "$c39_file" 2>/dev/null && ! grep -qi "$c39_fmea_tok" "$c39_file" 2>/dev/null; then
+          flag_warn_or_issue "touchpoint-schema" "FMEA sub-field '$c39_fmea_tok' not found despite risks present ($c39_file)"
+          c39_problems=$((c39_problems + 1))
+        fi
+      done
+
+      if [[ $c39_problems -eq 0 ]]; then
+        log "  OK:    touchpoint-inventory instance structurally valid ($c39_file)"
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
