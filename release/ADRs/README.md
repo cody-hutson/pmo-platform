@@ -8,7 +8,7 @@ ADRs follow the format established by [ADR-005](ADR-005-append-pattern-aware-cro
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
 
 ## Release-scoped ADRs
 
@@ -23,6 +23,7 @@ ADRs follow the format established by [ADR-005](ADR-005-append-pattern-aware-cro
 | [ADR-025](ADR-025-sior-escalation-canonicalization.md) | SIOR escalation canonicalization: single-source protocol doc + link-reference consumption | Accepted | 2026-06-13 | sior-escalation-discipline-across-the-comms-triage-technical |
 | [ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md) | Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key | Proposed | 2026-06-13 | parallel-launch-quota-budget-gate |
 | [ADR-036](ADR-036-version-claim-determinism.md) | Deterministic version-claiming: a host-agnostic capability (slug-primary, defer-to-claim, atomic CAS) bound to a config-selected `repo_host` adapter | Accepted | 2026-06-21 | release-version-claim-determinism |
+| [ADR-037](ADR-037-version-slot-cross-release-contended-axis.md) | Version slot as a cross-release contended axis (extends ADR-024): version-slot virtual-path token on the unchanged `serialize()` predicate | Proposed | 2026-06-21 | release-version-claim-determinism |
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, ADR-024, ADR-025, and ADR-026 are authored natively in the modular-monolith layout.
 
@@ -40,6 +41,10 @@ ADR-001 (cross-PR overlap audit baseline) ──extends──> ADR-005 (append-p
 ADR-002 (modular pipeline stages split)
         │
         └─── consumed by per-stage-shard-standard.md and release/references/pipeline/* (13 stage shards + README)
+
+ADR-024 (cross-release impact model) ──extends──> ADR-037 (version slot as a cross-release contended axis)
+        │
+        └─── ADR-037 adds the version-slot virtual-path token to the unchanged serialize() predicate (mechanics in stage-03-bundle.md §A9.6.1 Step 2a); slug-anchored to the version-claim-determinism founding ADR (ADR-036)
 ```
 
 ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + open PRs at audit-start commit SHA) when the open-PR set is empty at audit time. ADR-005 extends ADR-001 with append-pattern detection (`overlap_class` enum: `append-pattern` / `line-range-overlap` / `single-pr`) — files with `overlap_class = append-pattern` are informational only since append-pattern PRs almost never conflict at merge time. ADR-002 records the architectural decision to split the legacy monolithic `pipeline-stages.md` into 13 self-contained per-stage shards.
@@ -63,8 +68,9 @@ ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + ope
 | ADR-025 | release | authored at Stage 6 (2026-06-13) |
 | ADR-026 | release | authored at Stage 6 (2026-06-13) |
 | ADR-036 | release | authored at Stage 6 (2026-06-21) |
+| ADR-037 | release | authored at Stage 6 (2026-06-21) |
 
-> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them. ADR-027 through ADR-035 are core-scope and indexed in the core README; ADR-036 resumes the release-scoped thread after them.
+> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them. ADR-027 through ADR-035 are core-scope and indexed in the core README; ADR-036 and ADR-037 resume the release-scoped thread after them.
 
 ## Authoring new ADRs
 
