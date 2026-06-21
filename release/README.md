@@ -19,6 +19,7 @@ Skills exposed to other modules and to consumers:
 | `implementation-planner` | invocation | Converts build-reviewer findings into remediation plans |
 | `pmo-skill-editor` | invocation | Edit/audit/regression-test any skill |
 | `pmo-skill-refiner` | invocation | Create/refine PMO-platform skills (wraps Anthropic scaffolder) |
+| `pmo-release-manager` | invocation | Release Manager Specialist — owns the release tail (go/no-go, deploy authorization, close-out); composes release-planner + release-executor |
 
 Canary (not part of Public API, source-only): `pmo-skill-refiner-selftest-canary`.
 

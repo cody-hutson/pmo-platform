@@ -20,8 +20,12 @@ Skills exposed to other modules and to consumers:
 | `delivery-engine` | invocation | Backlog → release-readiness; DoR/DoD gates; sprint planning |
 | `file-router` | invocation | Classifies and routes incoming files in PMO workspace |
 | `intake-desk` | invocation | Conversational intake front door — elicits typed, level-aware work items from a raw idea |
+| `pmo-knowledge-manager` | invocation | Knowledge Manager Specialist — captures/structures/routes/stewards knowledge assets (composes artifact-generator + file-router) |
+| `pmo-ocm-lead` | invocation | OCM Lead Specialist — sequences a go-live's change program impact→training→readiness→hypercare (composes change-management) |
 | `pmo-process-designer` | invocation | Converts business context into structured requirements/processes |
 | `pmo-technical-analyst` | invocation | Reviews technical artifacts (FDDs, integration specs) with TPM judgment |
+| `pmo-tier-1-support` | invocation | Tier-1 Support Specialist — first-line triage; resolves from known issue/runbook or escalates to tier-2 |
+| `pmo-tier-2-support` | invocation | Tier-2 Support Specialist — root-causes escalated issues + authors the runbook (RCA + knowledge-loop close) |
 | `ppm-agent` | invocation | Strategic PMO brain — pushes actionable items to resolution |
 | `project-initiator` | invocation | Project lifecycle scaffolding (init + closure) |
 | `tracker-manager` | invocation | Generic update engine for operational trackers |
