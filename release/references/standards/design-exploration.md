@@ -32,7 +32,19 @@ Structure the output as a candidate table:
 | Approach B | … | … |
 | Approach C | … | … |
 
-**The "distinct" test (borrowed from the adversarial counter-design axes for consistency):** each candidate must differ from the others on at least one of {mechanism, blast radius, reversibility, placement}. Two candidates that differ only cosmetically are one candidate — collapse them and generate a genuinely different third. The test is what prevents straw-alternative retrofitting: a straw alternative fails the distinctness test because it was constructed to be dominated, not to be different.
+**The "distinct" test (borrowed from the adversarial counter-design axes for consistency):** each candidate must differ from the others on at least one of {mechanism, blast radius, reversibility, placement, **altitude**}. Two candidates that differ only cosmetically are one candidate — collapse them and generate a genuinely different third. The test is what prevents straw-alternative retrofitting: a straw alternative fails the distinctness test because it was constructed to be dominated, not to be different.
+
+**The `altitude` axis (abstraction altitude / seam-composition).** A candidate's *altitude* is how high it solves the problem relative to the platform's existing seams. The three bands:
+
+| Band | Meaning | Example shape |
+|---|---|---|
+| **point-fix** | solves this instance directly; introduces or hardcodes a concrete mechanism with no reusable seam | a host-concrete `gh`/`git` call inlined into capability logic |
+| **extend-seam** | extends an *existing* platform seam — an `[adapters]` selector, a module boundary, a config surface — so the solution composes with what already exists | add a value to `operator.toml [adapters]`; add an operation to an existing adapter interface |
+| **new-abstraction** | introduces a *new* seam/abstraction the platform did not have, because no existing seam fits and the capability warrants its own boundary | define a new adapter interface + its config selector |
+
+Altitude is the axis the {mechanism, blast radius, reversibility, placement} set could not see: three candidates can share an identical (wrong) altitude — all three host-concrete point-fixes — while differing on mechanism, and all pass the old distinctness test. The `altitude` axis surfaces that shared-altitude blindness.
+
+**The ≥2-band rule (fires when a new mechanism is introduced).** When the design choice **introduces a new mechanism** (not merely tuning an existing one), the ≥3 candidates MUST span **at least two of the three altitude bands**. A candidate set that is uniformly point-fix (or uniformly any single band) fails the rule — generate a candidate at a different altitude (typically the extend-seam candidate that asks "is there an existing seam this composes with?"). The rule's purpose is precisely to force the seam-extension alternative into the generated set so the narrowing step (§3) and the trade-off matrix (§4) can weigh it, rather than never seeing it. The seam-extension candidate is exactly the one the design-review seam-composition gate ([`design-review-checklist.md`](../templates/design-review-checklist.md) Section 4) will later require the chosen design to have considered. **Omission (the non-ceremony signal):** the ≥2-band rule does NOT fire when the design tunes an existing mechanism without introducing a new one (no new mechanism = no altitude choice to make) — record a one-line "no new mechanism; ≥2-band rule N/A" rather than manufacturing a band spread.
 
 A mind-map framing is the recommended generation aid: start from the problem at the center, branch to mechanism families, and expand each family into a concrete candidate. The deliverable is the candidate table, not the mind-map itself.
 
@@ -79,40 +91,40 @@ This protocol is **A4's opening move**, not a replacement for A4. The Phase A4 s
 - **With Phase A5 (ADR drafting):** the matrix's strongest losing candidate becomes the ADR's opposing view; the kill-reasons from Step 2 become the ADR's "alternatives considered and rejected" content. The ADR is richer because the generation history is real.
 - **With Phase A6.5 (independent adversarial design review):** the adversarial reviewer's counter-design findings are downstream and independent of this protocol. A counter-design the reviewer proposes that this protocol's Step 1 already generated and Step 2 eliminated is answered by the recorded kill-reason; a counter-design that this protocol did NOT generate is a signal that Step 1's divergence was too narrow — a legitimate adversarial finding the reviewer should raise. The two compose: this protocol widens generation up front; the adversarial review tests whether the widening was wide enough.
 
-## 6. AC5 Worked Example — generation → elimination → matrix
+## 6. AC5 Worked Example — generation → elimination → matrix (altitude-diverging)
 
-This worked example uses **this protocol's own milestone's home-selection decision** as the case (self-demonstrating, zero contention with any other file — the same self-demonstration pattern the corpus-curation standard uses for its source-taxonomy table). The decision: where does this very `design-exploration.md` file live?
+This worked example uses the **version-claim-determinism decision** as its case — the real design the platform made when it needed deterministic, collision-free version claims (recorded in [`repo-host-adapter-versioning.md`](../../../core/standards/repo-host-adapter-versioning.md)). It is chosen because its three candidates diverge on **altitude** (not merely placement), demonstrating the §2 `altitude` axis and the ≥2-band rule end-to-end. The decision: *how does a release claim a collision-free version number across concurrent releases?* — a design choice that **introduces a new mechanism**, so the ≥2-band rule fires.
 
 **Step 1 — Divergent generation (mind-map → candidate table):**
 
-| Candidate | One-line mechanism | Seed rationale |
-|---|---|---|
-| `core/disciplines/` | place it beside the universal cross-module disciplines (decision / discovery / review / corpus-curation / applicability / knowledge-architecture) | it is a design discipline |
-| `core/standards/` | place it beside the universal K1 standards (design-artifact, evidence-grounding, framework-corpus) | it is a standard |
-| `release/references/standards/` | place it beside the release-pipeline process standards (solutioning-output-template, triage-design-rereview) | it is Stage-5 process machinery |
+| Candidate | One-line mechanism | Altitude band | Seed rationale |
+|---|---|---|---|
+| Inline `gh`/`git` version-claim | inline the `gh api releases/latest` + signed-tag-push compare-and-swap directly into the release pipeline's claim step | **point-fix** | it works against the actual host today; least code |
+| `[adapters].repo_host` version-claim interface | define the claim as four host-agnostic operations (`anchor` / `claimed_set` / `atomic_claim` / `lineage`) behind the **existing** `operator.toml [adapters].repo_host` selector | **extend-seam** | the `[adapters]` seam already exists ([ADR-022](../../../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md)); the capability is host-agnostic, the host is not |
+| New `version-authority` service abstraction | introduce a standalone version-authority module with its own contract, independent of the repo-host adapter | **new-abstraction** | maximal decoupling; a dedicated home for all version arbitration |
 
-The three candidates pass the distinctness test — they differ on **placement** (and on the implied **blast radius** of cross-module vs release-local consumption).
+The three candidates pass the distinctness test on **altitude** (point-fix vs. extend-seam vs. new-abstraction), and span **three** bands — the ≥2-band rule (which fires because a new mechanism is introduced) is satisfied.
 
 **Step 2 — Convergent narrowing (elimination against hard constraints):**
 
 | Candidate | Eliminated? | Kill-reason (the breached hard constraint) |
 |---|---|---|
-| `core/disciplines/` | eliminated | governance conformance: the `core/disciplines/` home is reserved for *universal cross-module disciplines* consumed across operations AND release modules; this protocol is consumed ONLY by Stage-5 release spokes, so placing it there mis-states its scope (a placement-model breach) |
-| `core/standards/` | survives | — |
-| `release/references/standards/` | survives | — |
+| Inline `gh`/`git` version-claim | eliminated | governance conformance: hardcodes a host tool as *the* canonical mechanism in universal release governance where an adapter seam exists — a **host-binding leak** per [`knowledge-architecture.md`](../../../core/disciplines/knowledge-architecture.md) §4; couples the version-claim capability to one host with no portability seam |
+| `[adapters].repo_host` interface | survives | — |
+| New `version-authority` abstraction | eliminated | blast-radius ceiling: a whole new module + contract exceeds the change's risk budget when an existing seam (`[adapters].repo_host`) already provides the exact boundary; new-abstraction altitude is *too high* here (a structural-tier solution where an extend-seam solution suffices) |
 
-One candidate eliminated on a constraint breach; two survivors proceed. (Note this is elimination, not scoring — `core/disciplines/` did not "score lower," it breached the placement-scope constraint.)
+Two candidates eliminated on constraint breaches — one for being **too low** (point-fix host-binding leak), one for being **too high** (unjustified new abstraction); the surviving candidate sits at the correct **extend-seam** altitude. (Note this is elimination on constraint breach, not scoring: the inline candidate did not "score lower," it breached the host-binding/governance-conformance constraint.) Per §3 this leaves a single survivor after constraints — a forced approach *at that altitude* — so the design proceeds to specification; the matrix below is shown for completeness to contrast the eliminated altitudes.
 
-**Step 3 — Trade-off matrix (the two survivors):**
+**Step 3 — Trade-off matrix (the surviving candidate vs. its strongest losing altitude):**
 
-| Surviving candidate | Reversibility | Confidence | Blast radius | Upstream-compat |
+| Candidate | Reversibility | Confidence | Blast radius | Upstream-compat |
 |---|---|---|---|---|
-| `core/standards/` | MODERATE (cross-refs would need a sweep to move later) | HIGH | wider — implies cross-module kernel consumption | fine, but over-broad for a release-local tool |
-| `release/references/standards/` | MODERATE | HIGH | narrow — release-pipeline-local, matches actual consumers | exact: sibling to `solutioning-output-template.md`, the existing Stage-5 output standard |
+| `[adapters].repo_host` interface (extend-seam) | MODERATE (one config-selector binding + an interface spec) | HIGH | narrow — composes with the existing adapter table; one adapter (GitHub/git v1) implements it | exact: faithful to [ADR-017](../../../core/ADRs/ADR-017-distribution-architecture.md) §S2 / [ADR-022](../../../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md) (operator.toml as adapters home) |
+| New `version-authority` abstraction (new-abstraction) | EXPENSIVE (a new module + contract to unwind) | MED | wide — a new platform surface every release consumes | over-built for a host-bound concern |
 
-**Decision:** `release/references/standards/design-exploration.md` — it is consumed only by Stage-5 release spokes (activation is Phase A4; its peer is the Stage-5 output-template standard already in that directory), and the narrow release-local blast radius matches the actual consumer set. The matrix's losing candidate (`core/standards/`) and the reason it lost (over-broad scope for a release-local tool) is exactly the opposing-view content the ADR carries.
+**Decision:** the `[adapters].repo_host` extend-seam candidate — a host-agnostic four-operation interface behind the **existing** `[adapters]` seam, with a GitHub/git v1 reference adapter. The matrix's strongest losing candidate (`version-authority` new-abstraction) and the reason it lost (over-built; an existing seam already provides the boundary) is the opposing-view content the ADR carries; the eliminated point-fix's kill-reason (host-binding leak) is the "alternatives considered and rejected" content.
 
-This worked example demonstrates all three steps end-to-end on a real decision the milestone actually made.
+This worked example demonstrates all three steps end-to-end on a real decision, and — unlike a placement-only example — exercises the `altitude` axis directly: the candidates diverge on abstraction altitude, the ≥2-band rule fires (new mechanism) and is satisfied (three bands present), and the narrowing kills both a too-low (point-fix) and a too-high (new-abstraction) candidate to land at the correct extend-seam altitude. It is the inverse of the actual version-claim-determinism history, where the host-concrete point-fix was *not* eliminated because no altitude axis forced the extend-seam candidate into the generated set — the exact gap this axis closes.
 
 ## 7. Process-flow artifact (Tier-A)
 
@@ -162,6 +174,8 @@ This protocol defines an agent-process flow with a gate (the elimination step) a
                                                        │ surviving approach out (A4)    │
                                                        └────────────────────────────────┘
 ```
+
+*Diagram note: the Step-1 box abbreviates the distinctness axes for width; per §2 the test now spans five — `{mechanism, blast radius, reversibility, placement, altitude}` — with the ≥2-altitude-band rule when a design introduces a new mechanism.*
 
 This artifact is declared in the release plan's "Tier-A activated design artifacts" section, where the Stage 13 close-out reads it to scope artifact-refresh detection.
 
