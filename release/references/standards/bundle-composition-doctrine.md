@@ -221,14 +221,38 @@ Milestone titles follow: **`v<MAJOR>.<NN-padded>-<capability-slug>`**.
 
 | Component | Format | Example |
 |---|---|---|
-| `<MAJOR>` | Integer; signals work-mode | `1` (a foundation track), `2` (a later work-mode track) |
+| `<MAJOR>` | Integer; a major bump is a deliberate work-mode re-baseline on the single active track, not a chronological generation counter | `1`, then the `2` re-baseline |
 | `<NN-padded>` | 2-digit zero-padded minor; lexical sort stability at >9 items per major | `04` (NOT `4`) |
 | `<capability-slug>` | Hyphenated lowercase capability name from Step 1 output | `pipeline-fitness-foundation` |
 | **Composite** | All three joined by `.` and `-` | `v1.04-pipeline-fitness-foundation` |
 
 **Padding rationale.** 2-digit padding ensures lexical sort matches numeric sort even when minor count crosses 9. `v1.10` sorts lexically AFTER `v1.09` (correct); without padding, `v1.10` sorts BEFORE `v1.2` (incorrect). The slice methodology (operator memory) ratified this convention; observed across the platform's milestones.
 
-**Major-version semantics.** Major version signals **work-mode transitions**, not chronological order — each major-version track maps to a distinct work-mode (e.g., a foundation track, then later tracks for successive work-modes). Releases may deploy out of numeric sequence due to parallel work (see [`RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>) § Deploy Order for chronological timeline). New theme-axes get new major-version tracks per § 6.
+### 5.1 Slot allocation
+
+A milestone's `v<MAJOR>.<NN>` number is the **next free minor within the active major**, computed at claim time against the authoritative version landscape — the set of versions already claimed in the mainline's lineage (released tags plus any number held by an in-flight release that will reach the mainline). The lowest minor not in that set is the allocated slot.
+
+The number is **intent-to-bump while the release is in the pipeline, and claimed atomically at the merge** — it is not bound when the milestone is created. Planning records a provisional display number for human readability; the concrete number is fixed only when the release tags, by recomputing next-free at that instant. The allocation rule itself (what "next free" means, against which authoritative refs) and the atomic claim-at-merge mechanism are specified by the founding version-claim-determinism Architecture Decision Record and the version-allocation rule in the Release Protocol; this section states the *allocation semantics* a bundle author relies on and does not re-specify that mechanism.
+
+Two freeness checks bracket the allocation: a planning-time check when the provisional number is first recorded, and a pre-merge check at execution. A collision detected at either point is resolved by re-versioning up (§ 5.3), not by overwriting an existing claim.
+
+### 5.2 Numeric order is not ship order (chronological caveat)
+
+A milestone's version number records the slot it was allocated, **not its position in chronological ship order**. Because minors are allocated next-free at claim time and releases run pipelines of different lengths, a higher-numbered release may merge — and therefore tag and ship — before a lower-numbered one when work proceeds in parallel. Reading a version number as "this shipped after every lower number" is therefore unsound.
+
+The runtime guarantee is the inverse: **ship order equals merge order equals tag order**. A release ships when it merges to the mainline, and it claims its number at that same merge, so the tag sequence reflects the actual order things shipped — but that order is not required to be numerically monotonic. Monotonicity holds *per claim at the tag* (each claim takes a then-free number), not across the order releases entered the pipeline. The parallel-release sequencing rules that make merge order the single ordering authority are defined in the Sequence Rules of this doctrine (§ 9); the chronological deploy timeline is recorded in the release log.
+
+### 5.3 Reservation and renumbering
+
+- **No early reservation.** A number is not held before it is claimed. There is no "reserved but unbuilt" window — the slot is taken at the merge, and only then. This is what keeps a long-running pipeline from blocking a number it has not yet earned.
+- **Renumbering is forward-only on collision.** When a claim collides — another release took the intended number first — the release re-versions **up** to the next free number at execution, never down and never over an existing claim. Re-versioning up is a normal, expected event under parallel work, not an incident; the release log shows real instances of a release moving up one or more minors when its intended slot was taken before it merged.
+- **No retroactive milestone renaming.** Once a milestone carries its number, that number is not changed after the fact to "fix" chronological order or close a numbering gap. Numbering gaps (from abandoned or re-versioned claims) are permanent and benign. Legacy milestones predating this convention are likewise left as-is (§ 5.4, § 10).
+
+### 5.4 Major-version semantics
+
+Major version signals a **work-mode re-baseline on the single active track**, not chronological order and not a set of concurrent theme-tracks. The platform currently runs **one active track**: minors increment within a major, and a major bump (e.g., the `v1.x` line followed by the `v2.x` re-baseline) is a deliberate re-baseline event, not the opening of a second track that runs alongside the first. Releases may deploy out of numeric sequence due to parallel work within the active track (§ 5.2); the chronological deploy timeline is recorded in the release log.
+
+The naming scheme *permits* a future major track for a genuinely distinct work-mode (the § 6 New-Track Placement Rationale governs when one is opened), but that is a possible future shape, not current allocation — there are zero concurrent theme-tracks today. Treat any prose elsewhere describing "a major-version track per work-mode" as describing this permitted future capability, not an active multi-track convention.
 
 **Legacy milestones grandfathered.** Milestones created before this convention used single-digit unpadded minor — grandfathered per § 10 Cutover. Do not retro-rename.
 
@@ -450,6 +474,15 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 
 **Boundary:** doc-impact declarations remain a doc-impact-owned field; doctrine reads them as input during Step 3-4 dep walk. No bidirectional cite required.
 
+### 11.10 Numbering convention ⊥ skill version field — [`version-field-semantics.md`](../../../core/standards/version-field-semantics.md)
+
+| This doctrine § 5 | version-field-semantics.md |
+|---|---|
+| Allocates the milestone's `v<MAJOR>.<MINOR>` slot (next-free-at-claim) and states why numeric order is not ship order | Defines the `version:` frontmatter field in every PMO SKILL.md — the release tag a skill was validated against |
+| Owns milestone *slot allocation* (§ 5.1) and the chronological caveat (§ 5.2) | Owns the skill-version *marker*; carries a thin caveat pointing back here |
+
+**Boundary:** two distinct conventions over the same `vX.Y` string — this doctrine owns how a milestone's number is *allocated*; version-field-semantics owns what a skill's `version:` field *means*. A skill's `version:` records the platform release tag it was validated against, not a chronological ordinal; the allocation and ship-order semantics behind that tag live here. The runtime parallel-release sequencing that makes merge order the ordering authority is owned by the Sequence Rules (§ 9, extended by the forthcoming parallel-release semantics subsection), not by either of these two surfaces.
+
 ## 12. Cross-Reference
 
 **Sibling K1 standards (parallel-to):**
@@ -497,3 +530,4 @@ The doctrine composes with the nine sibling Stage 5 outputs by **referencing the
 |---|---|---|---|
 | Initial | 2026-05-25 | Initial. Promotes 7-step vertical capability slice methodology from operator memory to K1 codified-knowledge corpus. Frame: F1 SAFe Feature-Slicing + Vertical Slice (current default per platform config per operator clarification 2026-05-24; frame-pluggability discipline). Cutover REFLEXIVE-EXEMPT-ALL — the introducing release itself is exempt. | Stage 5 D-decisions; operator-CONFIRMED at Collective Review 2026-05-25 |
 | v11.28 | 2026-06-17 | Adds the § 3 Step 5 Risk-Weighting (Release-Class capacity multiplier) sub-block — `effective_pts = round_half_up(sum(member_pts) * class_weight)`, weights cited by role from `[bundling].release_class_capacity_weights` (single numeric home), round-half-up pinned at this definitional home, delivery-team-capacity boundary clause, `[CALIBRATE-AFTER-3]` recalibration linkage to the RELEASE_LOG velocity instrument, and an enforcement-layer reference to the decomposition-review gate family. Consolidates the sizing guidance: names the point-band as the governing capacity ceiling and the Stage-3 "5-8 issues" item-count as a secondary readability heuristic. Additive only; no existing rule restated. | Stage 5 Solutioning design + scope-lock; Stage 6 Engineering (release v2.02, milestone 61-bundling-capacity-and-sizing-gates) |
+| — | 2026-06-21 | Hardens § 5 milestone numbering semantics: promotes the previously-parenthetical chronological rule to named sub-sections — § 5.1 Slot allocation (next-free-within-active-major, intent-to-bump in pipeline, claimed atomically at merge, cross-referencing the founding version-claim-determinism ADR + the Release Protocol allocation rule for the mechanism), § 5.2 Numeric order is not ship order (a version number is not a chronological ordinal; ship order = merge order = tag order; runtime sequencing owned by § 9), § 5.3 Reservation and renumbering (no early reservation; forward-only re-version-up on collision; no retroactive renaming). Reconciles the stale multi-track gloss in the `<MAJOR>` row + § 5.4 Major-version semantics to a single active track (major = work-mode re-baseline; multi-track is permitted-future, not active). Adds § 11.10 boundary row (numbering convention ⊥ skill `version:` field). Cross-references the forthcoming parallel-release semantics subsection (§ 9) by name. Additive + one normative→informative gloss reconciliation; no existing rule restated. | Stage 5 Solutioning + Collective Review scope-lock (numbering doctrine home prevails); Stage 6 Engineering (milestone release-version-claim-determinism) |

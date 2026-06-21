@@ -31,6 +31,8 @@ Disallowed: `v1.2.1` (no patch level — skills sync with platform minor version
 
 **Canary sentinel:** `-canary` suffix allowed for `pmo-skill-refiner-selftest-canary` per ADR-04. No other skill may use a sentinel suffix.
 
+**Chronological caveat.** This `version:` value is a *platform release tag*, and platform release tags are allocated at claim time and may ship out of numeric order: under parallel releases a higher-numbered release can merge and tag before a lower-numbered one. A skill's `version:` therefore marks the release it was validated against — not a chronological position in a sequence — so reading one skill's number as "edited after" another's lower number is unsound. How a release's `vMAJOR.MINOR` number is allocated (next-free-at-claim) and why numeric order is not ship order are defined by the milestone numbering convention in the Bundle Composition Doctrine; the runtime rule that ship order equals merge order equals tag order is defined by the parallel-release sequencing rules in that same doctrine.
+
 ## Bump Rules
 
 Version bumps on **material edit**:
@@ -138,6 +140,7 @@ This contract governs every SKILL.md edit going forward. Reverting the contract 
 | Version | Date | Changes |
 |---|---|---|
 | 1.0 | 2026-04-22 | Initial release per the Skill Discipline. Defines field semantics, format regex, bump rules, dual-gate maintenance protocol, backfill policy. |
+| 1.1 | 2026-06-21 | Adds the § Format chronological caveat: a skill's `version:` marks the release it was validated against, not a chronological ordinal, because release tags are allocated at claim time and may ship out of numeric order under parallel releases. Names the Bundle Composition Doctrine numbering convention + parallel-release sequencing rules as the homes for allocation and ship-order semantics. Prose-only, additive; the field, regex, and dual-gate are unchanged (Check 6 unaffected). |
 
 ---
 
