@@ -1,0 +1,126 @@
+name: Version freeness (pre-merge collision gate)
+
+# gate-efficacy: posture=advisory(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: the version the merge will claim (computed from the release plan's
+#              bump-class, or an explicit candidate) is not already in the
+#              claimed_set (published Release tags U signed origin tags U in-flight
+#              DEPLOYED-not-VERIFIED RELEASE_LOG rows) — asserted BEFORE merge so a
+#              collision never lands with stale labels, pre-empting the Stage-12
+#              Phase B3 reactive tag-push rejection.
+#   falsification: on a PR whose candidate equals a published Release tag (inject
+#                  PMO_VERSION_FREENESS_CANDIDATE=<a published tag>) -> this gate
+#                  reports the collision (warn-mode: summary + exit 0; enforce:
+#                  red + exit 1). A free candidate, or no claim context -> green.
+# Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
+# block. Ships warn-mode-initial (reports, does not block) until the operator flips
+# to enforce by committing the enforce sentinel (.github/version-freeness.enforce).
+# (Per core/standards/gate-efficacy-standard.md (b); warn-mode-initial per
+# core/rules/git-workflow.md § Repository-Integrity Gates.)
+#
+# This is the AUTOMATED/CI sibling of the manual Stage-9-A6.5 / Stage-12-Phase-A.5
+# pre-merge freeness check. PREVENTION is the claim mechanism (claim-version.sh);
+# this gate is DETECT (founding ADR clause 4). The deploy.sh Check 41 body is the
+# single engine — this workflow is a THIN caller of `deploy.sh --check-version-freeness`,
+# never a re-encoded predicate (no version parser lives in this YAML).
+#
+# Platform: macos-latest. deploy.sh resolves `gh` at the Homebrew/Intel locations
+# the macOS image carries; mirrors release-tooling-smoke.yml + install-tests.yml.
+#
+# Security: consumes NO untrusted github.event.* input (no PR/issue/comment bodies,
+# no head refs in run: blocks). Every run: block is a static invocation against
+# workspace files + the repo's own published-Release / tag API; the only injected
+# values are GH_TOKEN (the standard run token) and the static bump-class literal.
+
+on:
+  pull_request:
+    paths:
+      # Version-claiming surfaces: a PR that could change the claimed version or the
+      # claim machinery. Tuned to the slug-primary plan + the freeness engine.
+      - 'release/releases/RELEASE_LOG.md'
+      - 'release/tools/version-grammar.sh'
+      - 'release/tools/claim-version.sh'
+      - 'core/deploy/deploy.sh'
+      - '.github/workflows/version-freeness.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'release/releases/RELEASE_LOG.md'
+      - 'release/tools/version-grammar.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  version-freeness:
+    name: Pre-merge version-freeness gate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0          # need the full tag set for claimed_set (git ls-remote also used)
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          uname -s
+          command -v bash
+          command -v git
+          command -v gh || echo "::warning::gh not on PATH — merge-gate freeness will fail-closed (DD4)"
+
+      - name: Resolve enforce-vs-warn mode
+        id: mode
+        # Warn-mode-initial: the gate reports but does not block until an enforce
+        # sentinel lands. The sentinel is a COMMITTED marker (the one deviation from
+        # the operator-instance deploy-check.mode pattern — CI cannot read operator-
+        # instance state, so the switch must be in-repo). Absence => warn.
+        run: |
+          set -euo pipefail
+          if [ -f .github/version-freeness.enforce ]; then
+            echo "enforce=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::version-freeness gate in ENFORCE mode (a collision/undecidable will block the merge)"
+          else
+            echo "enforce=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::version-freeness gate in WARN mode (reports only; add .github/version-freeness.enforce to block)"
+          fi
+
+      - name: Run version-freeness check (single check, via the deploy.sh engine)
+        id: check
+        # THIN caller of the single engine. --check-version-freeness runs ONLY the
+        # Check 41 freeness verdict and exits per the VERDICT (0 FREE/SKIP, 1
+        # NOT_FREE/UNDECIDABLE — fail-closed at the gate surface, FM-2). The candidate
+        # is derived from the platform's usual bump-class (minor); if the allocator
+        # cannot resolve it the probe SKIPs (exit 0) rather than false-failing — the
+        # gate is wired + ready and actively blocks once a real candidate collides.
+        # An operator/release pre-flight can inject PMO_VERSION_FREENESS_CANDIDATE to
+        # assert a specific claim-time version.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PMO_VERSION_FREENESS_BUMP: minor
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(bash core/deploy/deploy.sh --check-version-freeness 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Gate decision (warn-mode-initial)
+        run: |
+          set -euo pipefail
+          RC="${{ steps.check.outputs.rc }}"
+          ENFORCE="${{ steps.mode.outputs.enforce }}"
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: version-freeness: candidate is free (or no version-claim surface to assert)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: version-freeness gate detected a collision (or undecidable freeness)"
+            echo ""
+            echo "The version this PR's merge would claim is already in the claimed_set, OR freeness could not be decided (fail-closed)."
+            echo "Re-version BEFORE merge — a Stage-12 Phase B3 signed-tag push would otherwise be rejected AFTER the merge lands with stale labels."
+            echo "See the check output above for the colliding tag / undecidable reason."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$ENFORCE" = "true" ]; then exit 1; fi
+          echo "::warning::version-freeness collision reported in WARN mode — not blocking (add .github/version-freeness.enforce to enforce)"
+          exit 0

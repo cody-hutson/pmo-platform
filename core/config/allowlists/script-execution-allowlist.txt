@@ -86,6 +86,13 @@ release/tools/automated-closeout.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/version-grammar.sh
 ./release/tools/version-grammar.sh
 release/tools/version-grammar.sh
+# FM-3 (#1677): deploy.sh Check 41 sources this lib via an ABSOLUTE $_audit_src_root
+# path (a `pwd`-derived BASH_SOURCE root), which only the token-expanded variant
+# above can match — and only if the token resolves to that exact absolute root. A
+# generic suffix glob guarantees the `source "$_audit_src_root/release/tools/version-grammar.sh"`
+# invocation is never BLOCK-DESTRUCTIVE-022-blocked regardless of the checkout
+# location / clone-dir name (primary checkout, any worktree, or a downstream clone).
+*/release/tools/version-grammar.sh
 # claim-version.sh — the GitHub/git adapter's version-claim impl (Stage 12
 # atomic claim + ref-CAS retry). It is EXECUTED at Stage 12 Phase B3 and may be
 # SOURCED by the freeness-detection / observability slices to reuse the adapter
