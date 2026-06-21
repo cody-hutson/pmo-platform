@@ -16,6 +16,7 @@
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
+#   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll mergeStateStatus per Stage 12 Phase A.6 pattern
@@ -244,9 +245,11 @@ find_log_row() {
 #     (e.g. v3.18-corpus-integrity-enforcement).
 #   - Legacy 5-column schema `| Milestone | Date | … |`: the slug is field 1.
 # Resolution rule (position-independent): the slug is the FIRST field that looks
-# like a version key carrying a hyphenated slug suffix — it begins `v<MAJOR>.<MINOR>`
-# (optional letter / -N qualifier) AND contains a `-<alpha…>` slug tail. A bare
-# Version field (v3.18) has no slug tail, so it is skipped.
+# like a milestone slug — EITHER a version-prefixed key `v<MAJOR>.<MINOR>` (optional
+# letter / -N qualifier) carrying a `-<alpha…>` slug tail (e.g. v3.18-corpus-integrity),
+# OR an NN-prefixed Epic-Readiness-Playbook slug `<digits>-<alpha…>`
+# (e.g. 63-finding-disposition-discipline). A bare Version field (v3.18) has no slug
+# tail, and the trailing date column (2026-06-20) is digits-hyphen-digits, so both are skipped.
 # Fallback (defensive): if no field matches (a pure-version row with no slug column),
 # return field 1 stripped — preserving the prior behavior.
 extract_milestone_slug() {
@@ -260,8 +263,9 @@ extract_milestone_slug() {
         gsub(/^[ \t|]+|[ \t]+$/, "", f)
         if (f == "") continue
         if (field1 == "") field1 = f
-        # version key (vMAJOR.MINOR[letter][-N]) followed by a hyphenated slug tail
-        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/) { print f; exit }
+        # version-prefixed slug (vMAJOR.MINOR[letter][-N]) followed by a hyphenated slug tail,
+        # OR an NN-prefixed Epic-Readiness-Playbook milestone slug (e.g. 63-finding-disposition-discipline).
+        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/ || f ~ /^[0-9]+-[A-Za-z]/) { print f; exit }
       }
       # Fallback: no hyphenated-slug field found — emit field 1 (legacy/pure-version).
       print field1
@@ -458,13 +462,17 @@ phase_transition_release_log() {
   fi
 
   # Use Python for in-place text edit (avoids BSD-sed -i incompatibility).
+  # Schema-agnostic: match the row whose Milestone column is <slug> (any field
+  # position) and flip its `| DEPLOYED |` state field to VERIFIED — works for the
+  # legacy 5-column schema (slug field 1, State trailing) AND the current 8-column
+  # schema (slug field 2, Date column trailing the State field).
   /usr/bin/python3 - "$RELEASE_LOG" "$slug" <<'PY'
 import sys, re
 log_path, slug = sys.argv[1], sys.argv[2]
 with open(log_path, "r", encoding="utf-8") as f:
     txt = f.read()
-# Replace ONLY the trailing pipe-state on the line that begins with `| <slug> |`
-pat = re.compile(r"(^\| " + re.escape(slug) + r" \|.*\| )DEPLOYED( \|$)", re.MULTILINE)
+# Match the row carrying `| <slug> |` (any field) and flip its `| DEPLOYED |` state field.
+pat = re.compile(r"(^\|.*\| " + re.escape(slug) + r" \|.*\| )DEPLOYED( \|)", re.MULTILINE)
 new_txt, n = pat.subn(r"\1VERIFIED\2", txt, count=1)
 if n != 1:
     print(f"ERROR: expected 1 row match for slug='{slug}', got {n}", file=sys.stderr)
@@ -472,6 +480,10 @@ if n != 1:
 with open(log_path, "w", encoding="utf-8") as f:
     f.write(new_txt)
 PY
+  if [[ $? -ne 0 ]]; then
+    mark_phase "transition_release_log" "FAIL" "RELEASE_LOG DEPLOYED→VERIFIED transition matched no row for slug=$slug (regex/schema mismatch)"
+    return 3
+  fi
 
   STATE_LOG_ROW_STATE="VERIFIED"
   mark_phase "transition_release_log" "PASS" "transitioned $slug row DEPLOYED → VERIFIED"
@@ -796,6 +808,70 @@ PY
   return 0
 }
 
+# ─── Phase 9.6: bump_version ─────────────────────────────────────────────────
+#
+# Stamp the repo-root .version source-of-truth to $VERSION on a *versioned*
+# release, so the SessionStart version-skew hook (core/hooks/notify-version-skew.sh)
+# reads the shipped version instead of a frozen stale one. .version is the
+# platform's version source-of-truth; nothing in the release pipeline previously
+# owned its bump, so it survived as an unwritten manual habit that became
+# permanently absent once Stage 13 was automated (#1643 — PROC + HAND class).
+#
+# SKIP-with-PASS for version-less / non-vX.Y $VERSION (D-A: recorded log line) —
+# mirrors the phase_append_changelog pre-CHANGELOG SKIP idiom. There is nothing
+# to stamp for a version-less release, so the file is intentionally left untouched
+# and the no-op is made auditable rather than silent.
+#   NOTE: line ~1501 `validate_version "$VERSION" || die` means the script
+#   normally never reaches this phase with an invalid $VERSION; the in-phase SKIP
+#   guard is defensive + forward-compatible (and is what --self-test / the
+#   regression test exercise when invoking the phase directly).
+# Idempotent: no-op if .version already == $VERSION (re-run safe; satisfies AC-2).
+# Write mechanism: printf to a temp file + mv (atomic; single trailing-newline
+# line — the exact shape the hook's `head -1 | tr -d '[:space:]'` expects).
+# Staging: this phase WRITES but does not `git add`; staging happens in
+# phase_commit_chore_pr via the files=() array (write/stage separation the script
+# already uses for the other corpus surfaces).
+phase_bump_version() {
+  local version_file="$REPO_ROOT/.version"
+
+  # (1) SKIP gate — version-less / non-vX.Y $VERSION (D-A: explicit recorded line).
+  if ! validate_version "$VERSION"; then
+    mark_phase "bump_version" "SKIPPED" \
+      "version-less / non-vX.Y release ('$VERSION'): .version intentionally left untouched (no version to stamp)"
+    return 0
+  fi
+
+  # (2) Defensive: source file must exist (advisory — mirror snapshot consumers).
+  if [[ ! -f "$version_file" ]]; then
+    mark_phase "bump_version" "SKIPPED" ".version not present at repo root; nothing to stamp"
+    return 0
+  fi
+
+  # (3) Idempotency guard — already at target.
+  local current
+  current="$(/usr/bin/head -1 "$version_file" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
+  if [[ "$current" == "$VERSION" ]]; then
+    mark_phase "bump_version" "SKIPPED" ".version already == $VERSION (idempotency guard)"
+    return 0
+  fi
+
+  # (4) Dry-run preview.
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "bump_version" "DRY-RUN" "would write .version: '$current' -> '$VERSION' (staged in commit_chore_pr)"
+    return 0
+  fi
+
+  # (5) Apply — write atomically (printf to temp + mv keeps a single clean line).
+  if /usr/bin/printf '%s\n' "$VERSION" > "${version_file}.tmp" 2>/dev/null \
+     && /bin/mv "${version_file}.tmp" "$version_file" 2>/dev/null; then
+    mark_phase "bump_version" "PASS" "wrote .version: '$current' -> '$VERSION' (staged by commit_chore_pr files[])"
+    return 0
+  fi
+  /bin/rm -f "${version_file}.tmp" 2>/dev/null || true
+  mark_phase "bump_version" "FAIL" "failed to write .version"
+  return 3
+}
+
 # ─── Phase 10-12: commit_chore_pr / create_chore_pr / await_merge ────────────
 
 build_chore_pr_body() {
@@ -820,6 +896,7 @@ ${VERSION} Stage 13 close-out chore PR — release-corpus updates per pipeline/s
 | release/releases/RELEASE_DIGEST.md | EDIT | Append ${slug} entry under v$(extract_major "$VERSION").* family per D6 |
 | release/releases/notes/${VERSION}_RELEASE_NOTES.md | NEW | Scaffolded per release-notes-standard.md Part 1 Template; operator-filled prose |
 | CHANGELOG.md | EDIT | Prepend ## [${slug}] - YYYY-MM-DD section per Keep-a-Changelog 1.1.0 (Surface 2 of Layer-1 dual-write — SKIPPED if CHANGELOG.md absent) |
+| .version | EDIT | Stamp repo-root .version source-of-truth to ${VERSION} (release-cut-owned; read by the SessionStart version-skew hook — SKIPPED if version-less) |
 
 ## Deferred items
 
@@ -848,7 +925,7 @@ EOF
 
 phase_commit_chore_pr() {
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_NOTES.md CHANGELOG.md (if present) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
+    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
   fi
 
@@ -858,6 +935,7 @@ phase_commit_chore_pr() {
     "release/releases/RELEASE_DIGEST.md"
     "release/releases/notes/${VERSION}_RELEASE_NOTES.md"
     "CHANGELOG.md"
+    ".version"
   )
 
   # Stage only files that actually exist + have changes
@@ -870,7 +948,7 @@ phase_commit_chore_pr() {
   done
 
   if [[ -z "$($GIT -C "$REPO_ROOT" diff --staged --name-only 2>/dev/null)" ]]; then
-    mark_phase "commit_chore_pr" "SKIPPED" "nothing staged — phases 6-9 + 9.5 were no-op (already up-to-date)"
+    mark_phase "commit_chore_pr" "SKIPPED" "nothing staged — phases 6-9 + 9.5 + 9.6 were no-op (already up-to-date)"
     return 0
   fi
 
@@ -1229,7 +1307,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest scaffold_release_notes append_changelog commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest scaffold_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -1299,6 +1377,44 @@ self_test() {
   validate_version "v2.04b-1" || { echo "FAIL: validate_version v2.04b-1"; failures=$((failures+1)); }
   ! validate_version "2.12" || { echo "FAIL: validate_version should reject 2.12 (no v prefix)"; failures=$((failures+1)); }
   ! validate_version "" || { echo "FAIL: validate_version should reject empty"; failures=$((failures+1)); }
+
+  # Test 1b: phase_bump_version (#1643) — offline, hermetic. Drives the phase
+  # against a sandbox REPO_ROOT/.version and asserts the SKIP/apply/idempotency
+  # branches via the recorded mark_phase outcome (get_phase "bump_version").
+  local _bv_saved_root="$REPO_ROOT" _bv_saved_mode="$MODE" _bv_saved_version="$VERSION"
+  local _bv_tmp; _bv_tmp="$(/usr/bin/mktemp -d -t bumpver-selftest.XXXXXX)"
+  REPO_ROOT="$_bv_tmp"; MODE="apply"
+  /usr/bin/printf 'v2.08\n' > "$_bv_tmp/.version"
+
+  # (a) version-less / non-vX.Y $VERSION → SKIPPED, .version untouched (D-A line)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  VERSION="release-version-stamping"
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == SKIPPED\|* ]] || { echo "FAIL: phase_bump_version should SKIP for version-less \$VERSION, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/head -1 "$_bv_tmp/.version")" == "v2.08" ]] || { echo "FAIL: phase_bump_version must leave .version untouched for version-less release"; failures=$((failures+1)); }
+
+  # (b) versioned $VERSION, current != target → PASS, .version written
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  VERSION="v2.11"
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == PASS\|* ]] || { echo "FAIL: phase_bump_version should PASS (apply) for versioned \$VERSION, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/head -1 "$_bv_tmp/.version")" == "v2.11" ]] || { echo "FAIL: phase_bump_version must write .version=v2.11, got '$(/usr/bin/head -1 "$_bv_tmp/.version")'"; failures=$((failures+1)); }
+
+  # (c) idempotency — re-run at target → SKIPPED, no churn
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == SKIPPED\|* ]] || { echo "FAIL: phase_bump_version should SKIP on idempotent re-run, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+
+  # (d) dry-run preview → DRY-RUN, no write
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /usr/bin/printf 'v2.08\n' > "$_bv_tmp/.version"; MODE="dry-run"
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == DRY-RUN\|* ]] || { echo "FAIL: phase_bump_version should DRY-RUN preview, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/head -1 "$_bv_tmp/.version")" == "v2.08" ]] || { echo "FAIL: phase_bump_version dry-run must NOT write .version"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_bv_tmp" 2>/dev/null || true
+  REPO_ROOT="$_bv_saved_root"; MODE="$_bv_saved_mode"; VERSION="$_bv_saved_version"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 2: extract_major
   [[ "$(extract_major v2.12)" == "v2" ]] || { echo "FAIL: extract_major v2.12 should be v2"; failures=$((failures+1)); }
@@ -1415,6 +1531,7 @@ self_test() {
 
   echo "self-test: PASS" >&2
   echo "  validate_version + extract_major validated" >&2
+  echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
   echo "  extract_row_state + extract_milestone_slug validated" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
@@ -1513,6 +1630,7 @@ phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
+phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }

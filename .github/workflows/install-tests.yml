@@ -24,6 +24,9 @@ name: Install tests
 #                                  two-hash tamper units (pytest; 25 tests)
 #   - test_notify_version_skew.sh  SessionStart version-skew hook resolution
 #                                  (both layouts x skew/equal + reaches-compare proof)
+#   - test_version_stamping.sh     .version release-cut ownership: phase_bump_version
+#                                  stage/skip/idempotency + Check 39 signed-minor-
+#                                  distance verdict algorithm (#1643)
 #
 # hook-tests — runs the 8 core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -124,6 +127,9 @@ jobs:
 
       - name: Run version-skew hook regression (test_notify_version_skew.sh)
         run: bash core/deploy/tests/test_notify_version_skew.sh
+
+      - name: Run version-stamping regression (test_version_stamping.sh)
+        run: bash core/deploy/tests/test_version_stamping.sh
 
   hook-tests:
     name: Hook test harness (macOS)

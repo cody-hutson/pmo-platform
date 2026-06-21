@@ -100,7 +100,36 @@ def parse_toml(path: Path) -> dict:
     return result
 
 
-def resolve_tokens(operator_toml_path: Path, override_toml_path: Optional[Path] = None) -> dict[str, str]:
+def resolve_repo_root(cli_value: Optional[str] = None) -> str:
+    """Resolve the pmo-platform repo root for the [PMO_PLATFORM_ROOT] token.
+
+    Precedence (mirrors resolve_workspace_root in
+    core/deploy/tools/check-doc-links.py):
+      1. cli_value          — explicit --repo-root (sandboxed tests / overrides)
+      2. PMO_PLATFORM_ROOT   — env override
+      3. self-location       — Path(__file__).resolve().parents[2]
+
+    Tier 3 is the install-safety anchor: compose.py lives at
+    <repo>/core/deploy/compose.py and is never copied out of the repo (it is not
+    a composition surface), so parents[2] is ALWAYS the repo root being composed
+    — at install time (setup-workspace.sh sources the lib from --source-repo) and
+    at update time (update.sh from its own repo root) alike. Because this tier can
+    never be absent, the [PMO_PLATFORM_ROOT] token can never survive
+    unsubstituted into a deployed file.
+    """
+    if cli_value:
+        return str(Path(cli_value).expanduser().resolve())
+    env_value = os.environ.get("PMO_PLATFORM_ROOT")
+    if env_value:
+        return str(Path(env_value).expanduser().resolve())
+    return str(Path(__file__).resolve().parents[2])
+
+
+def resolve_tokens(
+    operator_toml_path: Path,
+    override_toml_path: Optional[Path] = None,
+    repo_root: Optional[str] = None,
+) -> dict[str, str]:
     """Resolve operator.toml (+ optional override) into the token dictionary the primitives consume."""
     token_values: dict[str, str] = {}
     sources = [operator_toml_path]
@@ -123,6 +152,7 @@ def resolve_tokens(operator_toml_path: Path, override_toml_path: Optional[Path] 
     home = os.environ.get("HOME", "")
     token_values.setdefault("[OPERATOR_HOMEDIR_PATH]", home)
     token_values.setdefault("[CLAUDE_WORKSPACE_ROOT]", os.path.join(home, "Claude"))
+    token_values.setdefault("[PMO_PLATFORM_ROOT]", resolve_repo_root(repo_root))
     return token_values
 
 
@@ -275,10 +305,11 @@ def regen_one_file(
     override_toml_path: Optional[Path],
     tokens_flag: str,
     source_sha: str,
+    repo_root: Optional[str] = None,
 ) -> None:
     """Extract OPERATOR ADDITIONS from current target, then write new target with them preserved."""
     preserved = extract_operator_additions(target_path)
-    tokens = resolve_tokens(operator_toml_path, override_toml_path)
+    tokens = resolve_tokens(operator_toml_path, override_toml_path, repo_root)
     write_managed_file(source_path, target_path, tokens, preserved, source_sha, tokens_flag)
 
 
@@ -305,6 +336,7 @@ def _cli_write(args: argparse.Namespace) -> int:
     tokens = resolve_tokens(
         Path(args.operator_toml),
         Path(args.override_toml) if args.override_toml else None,
+        args.repo_root or None,
     )
     write_managed_file(
         source_path=Path(args.source),
@@ -325,6 +357,7 @@ def _cli_regen(args: argparse.Namespace) -> int:
         override_toml_path=Path(args.override_toml) if args.override_toml else None,
         tokens_flag=args.tokens_flag,
         source_sha=args.source_sha,
+        repo_root=args.repo_root or None,
     )
     return 0
 
@@ -351,6 +384,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         p.add_argument("--override-toml", default=""),
         p.add_argument("--tokens-flag", choices=["tokens", "raw"], required=True),
         p.add_argument("--source-sha", required=True),
+        p.add_argument(
+            "--repo-root",
+            default="",
+            help="Repo root for the [PMO_PLATFORM_ROOT] token. Precedence: this "
+                 "flag > $PMO_PLATFORM_ROOT > compose.py self-location "
+                 "(parents[2]). Default (empty) uses self-location, which is "
+                 "correct for every real install/update invocation.",
+        ),
     )
 
     wrt = subparsers.add_parser("write", help="Write a managed file with provided preserved-additions")

@@ -22,5 +22,6 @@
 | [../schemas/routing-rules.md](../schemas/routing-rules.md) | File classification + routing rules |
 | [../schemas/sqlite-index-schema.md](../schemas/sqlite-index-schema.md) | Document-ecosystem SQLite cache schema |
 | [../schemas/stage-io-contracts.md](../schemas/stage-io-contracts.md) | Per-stage required input/output artifact contracts |
+| [../schemas/touchpoint-phaseout-schema.md](../schemas/touchpoint-phaseout-schema.md) | Operator-touchpoint inventory + phase-out-plan schema (autonomy phase-out grammar) |
 | [../schemas/tracker-schemas.md](../schemas/tracker-schemas.md) | PMO operational tracker schemas (RAID, comms, meetings, …) |
 | [../schemas/work-item-type-schema.md](../schemas/work-item-type-schema.md) | Declarative work-item type-pack meta-schema (the grammar for declaring kinds) |

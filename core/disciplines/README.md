@@ -41,6 +41,9 @@ These are parallel — each governs a distinct activity-class at a distinct temp
 | [discovery-discipline.md](discovery-discipline.md) | Discovery | "What should this be? What don't we know?" | Before the artifact exists |
 | [decision-discipline.md](decision-discipline.md) | Decision | "What should we choose?" | At the recommendation point |
 | [review-discipline-principles.md](review-discipline-principles.md) | Review | "Is this correct?" | After the artifact exists |
+
+Decision sub-mechanism (not a peer activity-class — an edit-time twin of `decision-discipline.md` §2.1.1):
+- [reconcile-dont-annotate.md](reconcile-dont-annotate.md) — when editing an artifact that carries stale/contradictory state, reconcile it to current state rather than annotating-and-deferring. The edit-time twin of verify-before-recommend (§2.1.1).
 | [root-cause-analysis.md](root-cause-analysis.md) | RCA | "Why did this fail?" | After a defect/failure surfaces (activity-exit) |
 | [autonomous-execution-model.md](autonomous-execution-model.md) | Self-repair | "What can be retried, escalated, rolled back?" | During pipeline execution between gates |
 | [three-gulfs-methodology.md](three-gulfs-methodology.md) | Diagnosis | "Intent / Execution / Evaluation — where is the gap?" | At skill creation, improvement, eval design |

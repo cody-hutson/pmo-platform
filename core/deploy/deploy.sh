@@ -274,7 +274,7 @@ remove_mirror_subtree() {
 }
 
 validate_workspace() {
-  # E-05: Confirm script is running from pmo-platform-v2 repo root.
+  # E-05: Confirm script is running from pmo-platform repo root.
   # Checks for the 3-module skeleton (operations/, release/, core/) plus
   # CLAUDE.md OR core/CLAUDE.md.template.
   # The template variant accommodates both contexts:
@@ -282,10 +282,10 @@ validate_workspace() {
   #     operator's workspace root, depersonalized at install-time)
   #   - operator workspace (CLAUDE.md present at workspace root)
   if [[ ! -f CLAUDE.md ]] && [[ ! -f core/CLAUDE.md.template ]]; then
-    die "Must run from pmo-platform-v2 repo root. CLAUDE.md (or core/CLAUDE.md.template) not found."
+    die "Must run from pmo-platform repo root. CLAUDE.md (or core/CLAUDE.md.template) not found."
   fi
   if [[ ! -d core ]] || [[ ! -d release ]] || [[ ! -d operations ]]; then
-    die "Must run from pmo-platform-v2 repo root. 3-module skeleton (core/, release/, operations/) not found."
+    die "Must run from pmo-platform repo root. 3-module skeleton (core/, release/, operations/) not found."
   fi
 }
 
@@ -4668,6 +4668,170 @@ cmd_check() {
     fi
   fi
 
+  # Check 39 — Platform .version drift vs latest published Release (advisory; warn-mode initial; #1643)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (a)+(b)):
+  #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
+  #            (becomes required when the operator flips deploy-check.mode to enforce)
+  #   invariant: the repo-root .version (the platform's version source-of-truth, read
+  #              by the SessionStart version-skew hook core/hooks/notify-version-skew.sh)
+  #              equals the tag_name of the latest PUBLISHED GitHub Release — the SAME
+  #              value the hook compares against — so the "update available" banner is
+  #              accurate and clears after update.sh.
+  #   falsification: set .version to a value >=2 published-minors behind latest
+  #                  (e.g. v2.08 while latest published is v2.11) -> Check 39 FAILS
+  #                  (warn-mode: WARN + jsonl). Set .version == latest published -> GREEN.
+  #
+  # ANCHOR CHOICE (Stage-5 Evidence-Grounding, #1661): anchor on the latest PUBLISHED
+  # Release (gh api repos/<o>/<r>/releases/latest --jq .tag_name — the hook's exact
+  # query), NOT git-describe/semver-max. Rationale: the hook compares .version to the
+  # published Release; for this check to assert the invariant the bug actually binds
+  # ("banner clears"), it MUST anchor on the same value the hook does. git describe
+  # tracks tags (incl. tagged-but-unpublished tags ahead of the published Release) and
+  # `git tag --sort=-version:refname | head -1` returns an orphan v3.x lineage — both
+  # would red-CI legitimate v2.x releases. A git-describe sub-signal is used ONLY to
+  # classify the legitimate Stage-12->13 tagged-not-yet-published WARN window.
+  #
+  # Offline/unauth: N/A (never FAIL), mirroring Check 32's gh-guard (absent vs unreachable).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 39: Platform .version drift vs latest published GitHub Release (#1643)"
+    local c39_version_file="$_audit_src_root/.version"
+    if [[ -z "$_audit_src_root" || ! -f "$c39_version_file" ]]; then
+      log "  N/A:   .version not present at repo root — nothing to anchor (re-pathing or non-repo context)"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  N/A:   Check 39 published-release anchor unavailable (gh not on PATH) — reuses Check 32 offline SKIP semantics"
+    elif ! gh auth status >/dev/null 2>&1; then
+      log "  N/A:   Check 39 published-release anchor unavailable (gh unauthenticated/offline) — reuses Check 32 offline SKIP semantics"
+    elif [[ -z "$AUDIT_REPO" ]]; then
+      log "  N/A:   Check 39 cannot resolve owner/repo (AUDIT_REPO empty) — published-release anchor unavailable"
+    else
+      local c39_local c39_anchor c39_nearest
+      c39_local="$(/usr/bin/head -1 "$c39_version_file" 2>/dev/null | tr -d '[:space:]')"
+      # Anchor (network) — the hook's exact contract: latest PUBLISHED Release tag.
+      c39_anchor="$(gh api "repos/${AUDIT_REPO}/releases/latest" --jq '.tag_name' 2>/dev/null | tr -d '[:space:]')"
+      # WARN-window sub-signal (offline) — nearest mainline tag, orphan-excluded defensively.
+      c39_nearest="$(git -C "$_audit_src_root" describe --tags --abbrev=0 --exclude='v3.*' 2>/dev/null | tr -d '[:space:]' || true)"
+
+      if [[ -z "$c39_anchor" ]]; then
+        log "  N/A:   no published GitHub Release found for $AUDIT_REPO (releases/latest empty) — anchor unavailable"
+      elif [[ -z "$c39_local" ]]; then
+        flag_warn_or_issue "version-stamp-skew" ".version at repo root is empty/unreadable — cannot compare to latest published Release $c39_anchor"
+      else
+        # Parse vMAJOR.MINOR from local + anchor (tolerate letter/-N qualifiers: vX.Y[...]).
+        local c39_l_maj c39_l_min c39_a_maj c39_a_min
+        c39_l_maj="$(/usr/bin/printf '%s' "$c39_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
+        c39_l_min="$(/usr/bin/printf '%s' "$c39_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
+        c39_a_maj="$(/usr/bin/printf '%s' "$c39_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
+        c39_a_min="$(/usr/bin/printf '%s' "$c39_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
+
+        if [[ -z "$c39_l_maj" || -z "$c39_a_maj" ]]; then
+          flag_warn_or_issue "version-stamp-skew" ".version ('$c39_local') or latest-Release ('$c39_anchor') is not a parseable vMAJOR.MINOR — cannot assert version-stamp invariant"
+        elif [[ "$c39_local" == "$c39_anchor" ]]; then
+          log "  OK:    .version ($c39_local) == latest published Release ($c39_anchor) — version-skew banner clears"
+        elif [[ "$c39_l_maj" != "$c39_a_maj" ]]; then
+          # Different major-lineage — always FAIL (e.g. .version=v3.x vs published v2.x).
+          flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is a different major-lineage than the latest published Release ($c39_anchor) — wrong version source-of-truth; bump at release cut per stage-13-close.md Phase B5.7"
+        else
+          # Same lineage — compute signed minor distance. Force base-10 (10#…) so a
+          # zero-padded minor like 08/09 is not mis-parsed as invalid octal.
+          local c39_dist=$(( 10#$c39_l_min - 10#$c39_a_min ))
+          local c39_abs=${c39_dist#-}
+          if [[ "$c39_abs" -le 1 ]]; then
+            # Legitimate Stage-12->13 window: exactly one published-minor apart. The
+            # nearest-tag sub-signal disambiguates the tag-ahead/not-yet-published case.
+            flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is 1 published-minor from latest published Release ($c39_anchor); nearest mainline tag=${c39_nearest:-unknown} — legitimate Stage-12->13 window OR a pending bump; stamp .version at Stage 13 close per stage-13-close.md Phase B5.7"
+          else
+            # >=2 minors behind/ahead — the bug state. FAIL.
+            flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is $c39_abs published-minors from the latest published Release ($c39_anchor) — the version source-of-truth is stale; the version-skew banner will not clear. Bump .version at release cut (stage-13-close.md Phase B5.7 / automated-closeout.sh phase_bump_version)"
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  # Check 40 — Touchpoint-inventory instance structural validation (warn-mode initial)
+  #
+  # Validates an operator-local touchpoint-inventory + phase-out-plan instance
+  # against the schema at core/schemas/touchpoint-phaseout-schema.md (the
+  # 71-autonomy-phaseout-foundation deliverable, #165). Structural only —
+  # field/section presence + enum shape, NOT the content of the operator's
+  # phase-out judgment (advancement stays an operator decision per the
+  # progressive-rollout convention).
+  #
+  # SKIP-WHEN-ABSENT: the instance is operator-local and git-ignored (the
+  # *.governance/roadmaps/ + personal/ seam per ADR-012), so it does
+  # NOT exist in a fresh clone or in CI. Mirroring Check 13's "deploy never run
+  # → skip, don't double-fail" posture, this check SKIPs cleanly when no
+  # instance file is present; absence is not drift.
+  #
+  # Warn-mode initial: routed through flag_warn_or_issue / deploy-check.mode
+  # (the Checks 8-10 / 14 / 15 / 18-23 precedent) so it dogfoods the shadow/warn
+  # phase of the very convention this release ships. Flip deploy-check.mode to
+  # 'enforce' after the shakedown window.
+  log "Check 40: Touchpoint-inventory instance structural validation"
+  if [[ "$DEPLOY_CHECK_MODE" == "off" ]]; then
+    log "  SKIP:  deploy-check.mode = off"
+  else
+    # Resolve the operator-local instance. Primary: the operator-instance base
+    # (env-var-aware, same resolution as the warn-log / mode file above); a
+    # roadmaps-tree fallback is also accepted. Filename is stable per the schema.
+    local c40_base="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}"
+    local c40_file=""
+    local c40_candidate
+    for c40_candidate in \
+      "$c40_base/touchpoint-inventory.md" \
+      "$c40_base/governance/roadmaps/touchpoint-inventory.md" \
+      "$c40_base/roadmaps/touchpoint-inventory.md"; do
+      if [[ -f "$c40_candidate" ]]; then c40_file="$c40_candidate"; break; fi
+    done
+
+    if [[ -z "$c40_file" ]]; then
+      # Operator-local instance absent (fresh clone / CI / un-populated) — skip
+      # cleanly. Schema presence is verified separately (the file is in-repo).
+      log "  SKIP:  no operator-local touchpoint-inventory instance present (operator-local / git-ignored — not drift)"
+    elif [[ ! -f "core/schemas/touchpoint-phaseout-schema.md" ]]; then
+      # Instance present but schema missing — that IS a real structural fault.
+      flag_warn_or_issue "touchpoint-schema" \
+        "instance present ($c40_file) but schema core/schemas/touchpoint-phaseout-schema.md is missing"
+    else
+      # Structural validation: required field tokens + enum shape. Greps are
+      # tolerant (|| true) so a legitimate no-match cannot abort the run.
+      local c40_problems=0
+
+      # P1/P5: required field tokens present somewhere in the instance.
+      local c40_tok
+      for c40_tok in touchpoint_id stage current_phase reversibility_tier autonomy_tier \
+                     irreducible_human automation_candidate success_criteria slo risks rollback_path; do
+        if ! grep -q "$c40_tok" "$c40_file" 2>/dev/null; then
+          flag_warn_or_issue "touchpoint-schema" "required field '$c40_tok' not found in instance ($c40_file)"
+          c40_problems=$((c40_problems + 1))
+        fi
+      done
+
+      # P2: any current_phase / target_phase value must be in the #164 enum.
+      # Flag a line that assigns a phase value outside {shadow,warn,enforce,removed}.
+      local c40_badphase
+      c40_badphase=$(grep -inE '(current_phase|target_phase)[^A-Za-z0-9]+(dark|canary|ga|retired|sunset|live|active|on)\b' "$c40_file" 2>/dev/null | head -3 || true)
+      if [[ -n "$c40_badphase" ]]; then
+        flag_warn_or_issue "touchpoint-schema" "current_phase/target_phase value outside the {shadow,warn,enforce,removed} enum in $c40_file"
+        c40_problems=$((c40_problems + 1))
+      fi
+
+      # P6 (FMEA shape): if risks are present, the FMEA sub-fields should appear.
+      local c40_fmea_tok
+      for c40_fmea_tok in severity likelihood detectability; do
+        if grep -qi 'risks' "$c40_file" 2>/dev/null && ! grep -qi "$c40_fmea_tok" "$c40_file" 2>/dev/null; then
+          flag_warn_or_issue "touchpoint-schema" "FMEA sub-field '$c40_fmea_tok' not found despite risks present ($c40_file)"
+          c40_problems=$((c40_problems + 1))
+        fi
+      done
+
+      if [[ $c40_problems -eq 0 ]]; then
+        log "  OK:    touchpoint-inventory instance structurally valid ($c40_file)"
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
@@ -5029,6 +5193,58 @@ cmd_report() {
     echo "[FAIL] mode-invocation-drift — ${c35r_findings} of ${c35r_scanned} multi-mode skill(s) lack a recognizable mode-enum — see release/references/how-to/hub-spoke-bridge.md § Procedure 3 Spoke Template \`### Mode Provenance\`"
     FAIL=$((FAIL + 1))
     printf '%s' "$c35r_output" | /usr/bin/sed 's/^/  /' || true
+  fi
+  echo ""
+
+  # --- Platform .version drift vs latest published Release (Check 39) ---
+  # Mirrors cmd_check's Check 39 (#1643) into report PASS/FAIL form. As with Checks
+  # 16/17/18, the report uses unvarnished enforce-mode semantics regardless of
+  # cmd_check warn-mode — the "what would happen in enforce-mode" view, suitable for
+  # Stage 13 evidence. Anchor = latest PUBLISHED Release (the version-skew hook's own
+  # query). Offline/unauth or no published Release => N/A (counted PASS — not a
+  # finding; matches the Check 32 N/A-never-FAIL idiom). >=2 published-minors apart or
+  # different major-lineage => FAIL; exactly 1 apart (Stage-12->13 window) => PASS.
+  echo "--- Platform .version drift vs latest published Release (Check 39) ---"
+  local c39r_version_file="$_audit_src_root/.version"
+  if [[ -z "$_audit_src_root" || ! -f "$c39r_version_file" ]]; then
+    echo "[PASS] version-stamp-skew — N/A: .version not present at repo root (no anchor)"
+    PASS=$((PASS + 1))
+  elif ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1 || [[ -z "$AUDIT_REPO" ]]; then
+    echo "[PASS] version-stamp-skew — N/A: published-release anchor unavailable (gh offline/unauth or repo unresolved)"
+    PASS=$((PASS + 1))
+  else
+    local c39r_local c39r_anchor
+    c39r_local="$(/usr/bin/head -1 "$c39r_version_file" 2>/dev/null | tr -d '[:space:]')"
+    c39r_anchor="$(gh api "repos/${AUDIT_REPO}/releases/latest" --jq '.tag_name' 2>/dev/null | tr -d '[:space:]')"
+    if [[ -z "$c39r_anchor" ]]; then
+      echo "[PASS] version-stamp-skew — N/A: no published GitHub Release for $AUDIT_REPO"
+      PASS=$((PASS + 1))
+    elif [[ "$c39r_local" == "$c39r_anchor" ]]; then
+      echo "[PASS] version-stamp-skew — .version ($c39r_local) == latest published Release ($c39r_anchor)"
+      PASS=$((PASS + 1))
+    else
+      local c39r_l_maj c39r_l_min c39r_a_maj c39r_a_min
+      c39r_l_maj="$(/usr/bin/printf '%s' "$c39r_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
+      c39r_l_min="$(/usr/bin/printf '%s' "$c39r_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
+      c39r_a_maj="$(/usr/bin/printf '%s' "$c39r_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
+      c39r_a_min="$(/usr/bin/printf '%s' "$c39r_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
+      if [[ -z "$c39r_l_maj" || -z "$c39r_a_maj" ]]; then
+        echo "[FAIL] version-stamp-skew — .version ('$c39r_local') or latest-Release ('$c39r_anchor') not parseable vMAJOR.MINOR"
+        FAIL=$((FAIL + 1))
+      elif [[ "$c39r_l_maj" != "$c39r_a_maj" ]]; then
+        echo "[FAIL] version-stamp-skew — .version ($c39r_local) different major-lineage than latest published Release ($c39r_anchor)"
+        FAIL=$((FAIL + 1))
+      else
+        local c39r_dist=$(( 10#$c39r_l_min - 10#$c39r_a_min )); local c39r_abs=${c39r_dist#-}
+        if [[ "$c39r_abs" -le 1 ]]; then
+          echo "[PASS] version-stamp-skew — .version ($c39r_local) within 1 published-minor of latest Release ($c39r_anchor) — Stage-12->13 window"
+          PASS=$((PASS + 1))
+        else
+          echo "[FAIL] version-stamp-skew — .version ($c39r_local) is $c39r_abs published-minors from latest published Release ($c39r_anchor) — stale source-of-truth; bump per stage-13-close.md Phase B5.7"
+          FAIL=$((FAIL + 1))
+        fi
+      fi
+    fi
   fi
   echo ""
 

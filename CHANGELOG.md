@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.13] - 2026-06-20
+
+Finding-disposition and deferral handling become uniform across the pipeline — behavioral acceptance criteria survive the gates intact, requirements-clarity rejects route upstream, and deferred items gain validity criteria plus a re-evaluation cadence.
+
+[Full notes](release/releases/notes/v2.13_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.13)
+
+## [v2.11] - 2026-06-20
+
+Twelve principal-level role-Specialist agents — Product Owner, Business Analyst, Program/Project/Portfolio Manager, Scrum Master, Release Train Engineer, Principal/Software Engineer, Architect, QA Lead, DevOps/SRE — each composing the platform's existing function-skills.
+
+[Full notes](release/releases/notes/v2.11_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.11)
+
+## [v2.10] - 2026-06-20
+
+Two agent editing disciplines are codified — canonical-form application and reconcile-don't-annotate — wired into the decision discipline.
+
+[Full notes](release/releases/notes/v2.10_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.10)
+
 ## [v2.09] - 2026-06-20
 
 Health pass on the deploy and release tooling: several checks and scripts that were silently skipping or failing opaquely now work as intended. Eleven surgical fixes to the platform's own deploy and release scripts; all additive or corrective, nothing you invoke directly and nothing you need to do.

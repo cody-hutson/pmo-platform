@@ -94,7 +94,7 @@ Memory-eviction manifest entries are VERIFY-CORPUS-gated per [`knowledge-archite
 
 Concurrency: Cowork opens for B-OPS2/B-OPS3, closes before C1. Per operations-bridge.md.
 
-**Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations to main-tracked release-corpus governance files (`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `release/releases/RELEASE_INDEX.md` new row; `release/releases/RELEASE_DIGEST.md` new entry; `release/releases/notes/vX.Y_RELEASE_NOTES.md` new file; `CHANGELOG.md` at repo root — Surface 2 of Layer-1 dual-write) ship via a single Stage 13 chore PR — never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the Stage 13 release-corpus updates into one atomic main-landing.
+**Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations to main-tracked release-corpus governance files (`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `release/releases/RELEASE_INDEX.md` new row; `release/releases/RELEASE_DIGEST.md` new entry; `release/releases/notes/vX.Y_RELEASE_NOTES.md` new file; `CHANGELOG.md` at repo root — Surface 2 of Layer-1 dual-write; `.version` at repo root — the version source-of-truth read by the SessionStart version-skew hook, stamped to the shipped `vX.Y` for *versioned* releases and SKIP-with-PASS for version-less releases) ship via a single Stage 13 chore PR — never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the Stage 13 release-corpus updates into one atomic main-landing.
 
 Canonical chore-PR shape (Stage 13 spoke executes after Phase A verification clears + Phase B-OPS verification clears, BEFORE Phase C C1 Milestone close):
 
@@ -117,12 +117,17 @@ git checkout -b chore/v<X.Y>-stage-13-corpus-update
 #   - Content extracted from RELEASE_NOTES.md Section 6a per release-notes-standard.md § 5.3 transform
 #   - Conditional: only fires if CHANGELOG.md exists at repo root;
 #     under pre-CHANGELOG state, Phase B5.5 below SKIPs CHANGELOG emit with PASS
+# Edit .version at repo root (release-cut-owned version source-of-truth):
+#   - Write the shipped version: .version = v<X.Y> (Phase B5.7 below)
+#   - Read by the SessionStart version-skew hook (core/hooks/notify-version-skew.sh)
+#   - Conditional: only fires for *versioned* releases; SKIP-with-PASS for version-less
 
 git add <OPERATOR_INSTANCE_RELEASE_LOG_PATH> \
         release/releases/RELEASE_INDEX.md \
         release/releases/RELEASE_DIGEST.md \
         release/releases/notes/v<X.Y>_RELEASE_NOTES.md \
-        CHANGELOG.md
+        CHANGELOG.md \
+        .version
 git commit -m "chore(v<X.Y>): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG"
 git push -u origin chore/v<X.Y>-stage-13-corpus-update
 
@@ -170,6 +175,10 @@ Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
 │   │                Pre-CHANGELOG SKIP: if CHANGELOG.md absent at repo root, SKIP with PASS
 │   ├── Phase B5.6 — Verify Surface 1 exists: gh release view v<X.Y> exit 0
 │   │                Missing Surface 1 → operator routing (Mode F publish OR accept residual)
+│   ├── Phase B5.7 — Edit .version: write .version = v<X.Y> (release-cut-owned version source-of-truth)
+│   │                Read by the SessionStart version-skew hook (notify-version-skew.sh)
+│   │                Idempotency: no-op if .version already == v<X.Y>
+│   │                Version-less SKIP: non-vX.Y / version-less release → SKIP with PASS (.version untouched)
 │   ├── Commit: chore(v<X.Y>): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG
 │   └── chore PR merged + Phase B merge verification PASS
 └── Phase C — Milestone close (hub Tier-1 mechanical post-chore-PR-merge)
@@ -181,6 +190,7 @@ Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
         ✓ All release sub-issues closed             (auto-close from release PR)
         ✓ GitHub Release published                  (Phase B5.6 — Surface 1 NEW)
         ✓ CHANGELOG.md entry present                (Phase B5.5 — Surface 2 NEW; N/A pre-CHANGELOG-init)
+        ✓ .version stamped to vX.Y                  (Phase B5.7 — release-cut-owned; N/A for version-less)
 ```
 
 The flow-block stays embedded here (NOT centralized at `core/standards/_examples/`) because it is referenced only from this file's Phase B5.5 subsection and cross-link to `stage-12-execute.md § Phase B5.5` — below the ≥3-doc threshold for centralization per `design-artifact-standard.md § 6`.
@@ -205,6 +215,8 @@ fi
 ```
 
 Surface 1 verification at Stage 13 catches partial-deploy scenarios where Stage 12 Phase B5.5 failed silently or was skipped. The check is non-blocking by default — operator decides routing (publish via Mode F, or accept residual + bundle into next release). When Surface 1 is missing, Stage 13 chore PR still proceeds with Surfaces 2+3; Surface 1 backfill is a separate operator action via Mode F.
+
+**Phase B5.7 — `.version` stamp (release-cut-owned version source-of-truth):** The Stage 13 chore PR commit includes a write to the repo-root `.version` file, stamping it to the shipped version (`.version = v<X.Y>`). `.version` is the platform's version source-of-truth: the SessionStart version-skew hook ([`core/hooks/notify-version-skew.sh`](../../../core/hooks/notify-version-skew.sh)) reads it and compares against the latest published GitHub Release; `update.sh` Phase 5b and `setup-workspace.sh` install_hooks propagate it to the deployed `<ws>/.claude/.version` snapshot. The bump has no other owner in the pipeline — Stage 12 Phase B3 owns the git *tag*, not the `.version` *file* — so absent this phase the file freezes at a stale value and the version-skew banner reports a perpetual "update available" no `update.sh` can clear. Owned by `automated-closeout.sh` `phase_bump_version`: it writes atomically (temp + `mv`), is **idempotent** (no-op when `.version` already equals `v<X.Y>`), and **SKIPs with PASS** for a *version-less* / non-`vX.Y` release — there is nothing to stamp, so the file is intentionally left untouched and the SKIP is recorded in the close-out report (auditable, not silent). **Cutover / grandfather:** applies to releases entering Stage 13 strictly AFTER this phase's introducing-release merge SHA; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it is version-less), and `.version` inside historical tags is immutable accepted-residual (only HEAD/`main` is correctable). **Reversibility:** CHEAP / HIGH — the `.version` write reverts atomically with the rest of the Stage 13 chore PR via `git revert <Stage-13-chore-PR-SHA>`. Drift backstop: `deploy.sh --check` Check 39 anchors `.version` against the latest published GitHub Release (warn-mode-initial).
 
 **Cutover discipline:** Applies to all releases going forward.
 
@@ -241,6 +253,8 @@ All issues CLOSED (or documented-deferred), Milestone CLOSED, RELEASE_LOG.md sta
 *The close-out learnings register output requirement applies to all releases going forward.*
 
 Stage 13 does NOT produce: design decisions (Stage 5), deployment execution (Stage 12), quality assessments (Stages 7-8).
+
+**Canonical-form applicability (per the canonical-form-application discipline under the core disciplines set):** Stage 13 produces a canonical-form-framed artifact — the release close-out / lessons-learned surface (the per-release retro + lessons-learned register). When this stage produces that surface, produce it in its canonical form (the retro + lessons-learned register template) OR document partial-form conformance with explicit rationale per the application protocol; do not silently leave the canonical form partial-or-absent. The frame registry and the produce-OR-document-partial protocol live in the canonical-form-application discipline.
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.

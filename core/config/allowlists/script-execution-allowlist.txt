@@ -6,7 +6,13 @@
 #
 # Format:
 #   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
-#   - Token-substituted at install time: [CLAUDE_WORKSPACE_ROOT]
+#   - Token-substituted at install time:
+#       [PMO_PLATFORM_ROOT]      → the pmo-platform repo root (where the deploy +
+#                                  release scripts live). Resolved at deploy time
+#                                  by core/deploy/compose.py via self-location, so
+#                                  it is correct for ANY clone directory name or
+#                                  location (no hardcoded dir-name assumption).
+#       [CLAUDE_WORKSPACE_ROOT]  → the Claude workspace root (default $HOME/Claude).
 #   - Comments start with # (first non-whitespace char)
 #   - Blank lines ignored
 #   - Patterns match the literal path as it appears in the Bash command (not after ~ expansion)
@@ -14,7 +20,7 @@
 # Per-tool form convention:
 #   A registered tool is invokable from any cwd, so each tool is listed in FOUR
 #   forms (grouped together, as the blast-radius.sh entry below illustrates):
-#     1. Absolute install form:  [CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/<path>/<tool>
+#     1. Absolute install form:  [PMO_PLATFORM_ROOT]/<path>/<tool>
 #     2. Worktree-glob form:     [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/<path>/<tool>
 #     3. Relative dot form:      ./<path>/<tool>
 #     4. Bare-relative form:     <path>/<tool>
@@ -25,7 +31,7 @@
 #   ./.claude/hooks/allowlist-add.sh .claude/script-execution-allowlist.txt '<pattern>'
 
 # Primary deploy script (Layer 1 deployment mechanism — writes to .claude/skills/)
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/core/deploy/deploy.sh
+[PMO_PLATFORM_ROOT]/core/deploy/deploy.sh
 ./core/deploy/deploy.sh
 core/deploy/deploy.sh
 
@@ -45,31 +51,31 @@ core/deploy/deploy.sh
 .claude/hooks/tests/*.test.sh
 
 # Release-pipeline tools (Stage 5 Solutioning + Stage 6 Engineering tooling)
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/blast-radius.sh
+[PMO_PLATFORM_ROOT]/release/tools/blast-radius.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
 ./release/tools/blast-radius.sh
 release/tools/blast-radius.sh
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/append-pipeline-event.sh
+[PMO_PLATFORM_ROOT]/release/tools/append-pipeline-event.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/append-pipeline-event.sh
 ./release/tools/append-pipeline-event.sh
 release/tools/append-pipeline-event.sh
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/synthesize-release-learnings.sh
+[PMO_PLATFORM_ROOT]/release/tools/synthesize-release-learnings.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/synthesize-release-learnings.sh
 ./release/tools/synthesize-release-learnings.sh
 release/tools/synthesize-release-learnings.sh
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/compute-cycle-time.sh
+[PMO_PLATFORM_ROOT]/release/tools/compute-cycle-time.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/compute-cycle-time.sh
 ./release/tools/compute-cycle-time.sh
 release/tools/compute-cycle-time.sh
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/cleanup-orphan-state.sh
+[PMO_PLATFORM_ROOT]/release/tools/cleanup-orphan-state.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/cleanup-orphan-state.sh
 ./release/tools/cleanup-orphan-state.sh
 release/tools/cleanup-orphan-state.sh
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/query-pipeline-event.sh
+[PMO_PLATFORM_ROOT]/release/tools/query-pipeline-event.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/query-pipeline-event.sh
 ./release/tools/query-pipeline-event.sh
 release/tools/query-pipeline-event.sh
-[CLAUDE_WORKSPACE_ROOT]/pmo-platform-v2/release/tools/automated-closeout.sh
+[PMO_PLATFORM_ROOT]/release/tools/automated-closeout.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh

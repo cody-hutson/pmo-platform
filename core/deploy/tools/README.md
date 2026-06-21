@@ -211,7 +211,7 @@ Documentary references from `core/disciplines + core/schemas` to
 `release/governance/release-process.md` + `release/references/pipeline/*` are
 classified as `info-adr-007-carry-forward` (accepted cohesion per the ADR-007 carry-forward contract).
 
-**Validation report:** `pmo-platform-v2/audit-output/cross-module-audit-<DATE>.md`
+**Validation report:** `audit-output/cross-module-audit-<DATE>.md` (relative to repo root)
 (markdown summary per Surface 6.2) + `.tsv` (machine-readable per Surface 6.1).
 The `audit-output/` directory is gitignored — reports are point-in-time evidence, not committed artifacts.
 
