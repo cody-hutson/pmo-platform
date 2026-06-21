@@ -535,122 +535,134 @@ _main() {
 # Stage-5 adversarial review demanded (network -> HALT, signing -> HALT) and the
 # CAS-rejection -> recompute -> win path — none of which a "mock a clean
 # rejection" suite would catch.
+#
+# STUB-SEAM SCOPING (the correctness property this placement guarantees): the
+# stub seams + fixture helpers are defined INSIDE _claim_self_test() — NOT at
+# top level — so they come into existence ONLY when --self-test runs. On a
+# sourced / normal load (allocation rule, freeness layer, release-executor
+# claim-mode) _claim_self_test() never runs, so the REAL _host_* seams (above)
+# stay authoritative and a production anchor()/claimed_set()/atomic_claim()/
+# --dry-run call hits real `gh`/`git`, never the empty self-test fixtures.
+# (A bash function defined inside another function is created only when the
+# enclosing function executes; the inner defs still propagate into the
+# command-substitution SUBSHELLS the fixtures use, so self-test behavior is
+# unchanged.)
 # ===========================================================================
-
-# Fixture state is FILE-BACKED under $_ST_DIR so that observations made inside a
-# `$(claim_version ...)` command-substitution SUBSHELL survive into the parent
-# (a subshell cannot mutate parent variables, but it CAN append to shared files).
-# This is what lets the parent assert "how many push attempts happened" and "were
-# any orphan local tags left" after running claim_version in command substitution.
-_ST_DIR=""
-
-# Fixture-input files (the parent writes; stubs read):
-#   published / origin_tags / log_deployed / latest / fetch_rc / push_plan / advance
-# Observation files (stubs append; parent reads):
-#   push_idx / pushed_tags / local_tags
-
-_st_f() { printf '%s/%s' "$_ST_DIR" "$1"; }   # path to a state file
-
-# --- stub seams (override the real host I/O; all state via $_ST_DIR files) ---
-_host_published_tags()       { cat "$(_st_f published)"    2>/dev/null || true; }
-_host_latest_release()       { cat "$(_st_f latest)"       2>/dev/null || true; }
-_host_origin_tags()          { cat "$(_st_f origin_tags)"  2>/dev/null || true; }
-_host_release_log_deployed() { cat "$(_st_f log_deployed)" 2>/dev/null || true; }
-
-# fetch stub: returns the configured rc; ALSO applies a programmed "tip advance"
-# the first time the attempt-count crosses the advance threshold (simulates a
-# concurrent winner publishing the next number between our lost attempt and our
-# recompute). The advance file format: "<after_attempts>|<new_latest>|<new_set...>"
-_host_fetch_refs() {
-  local rc; rc="$(cat "$(_st_f fetch_rc)" 2>/dev/null || echo 0)"
-  local adv; adv="$(cat "$(_st_f advance)" 2>/dev/null || true)"
-  if [[ -n "$adv" ]]; then
-    local threshold="${adv%%|*}" rest="${adv#*|}"
-    local new_latest="${rest%%|*}" new_set="${rest#*|}"
-    local idx; idx="$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)"
-    if [[ "$idx" -ge "$threshold" ]]; then
-      printf '%s\n' "$new_latest" > "$(_st_f latest)"
-      printf '%s\n' "$new_set" | tr ' ' '\n' > "$(_st_f published)"
-      printf '%s\n' "$new_set" | tr ' ' '\n' > "$(_st_f origin_tags)"
-      : > "$(_st_f advance)"      # one-shot
-    fi
-  fi
-  return "$rc"
-}
-
-_host_delete_local_tag() {
-  local tag="$1" lf; lf="$(_st_f local_tags)"
-  [[ -f "$lf" ]] || return 0
-  grep -vxF "$tag" "$lf" > "${lf}.tmp" 2>/dev/null || true
-  mv -f "${lf}.tmp" "$lf"
-}
-
-# Programmable push stub: consumes the next push_plan line (one outcome per line).
-#   "ok"        -> tag reaches origin (rc 0, success output)
-#   "collision" -> emit the real ref-rejection signature (rc 1)
-#   anything else -> emit that text as a raw NON-collision failure (rc 1)
-# A literal "\n" in a plan line is expanded to a real newline (multi-line errors).
-_host_push_tag() {
-  local tag="$1" _sha="$2" _msg="$3"
-  printf '%s\n' "$tag" >> "$(_st_f local_tags)"     # "git tag -a" created a local tag
-  local idx; idx="$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)"
-  local plan; plan="$(sed -n "$((idx + 1))p" "$(_st_f push_plan)" 2>/dev/null)"
-  [[ -n "$plan" ]] || plan="ok"
-  printf '%s\n' "$((idx + 1))" > "$(_st_f push_idx)"
-  case "$plan" in
-    ok)
-      printf '%s\n' "$tag" >> "$(_st_f pushed_tags)"
-      printf 'To origin\n * [new tag]  %s -> %s\n' "$tag" "$tag"
-      return 0
-      ;;
-    collision)
-      printf 'To origin\n ! [rejected]  %s -> %s (already exists)\nerror: failed to push some refs\n' "$tag" "$tag"
-      return 1
-      ;;
-    *)
-      printf '%b\n' "$plan"                          # raw non-collision error (\n expanded)
-      return 1
-      ;;
-  esac
-}
-
-# _ct_setup writes the fixture-input files and zeroes the observation files.
-#   _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
-#             deployed="" fetch_rc=0 plan=$'ok' advance="2|v2.16|v2.14 v2.15 v2.16"
-_ct_setup() {
-  rm -rf "$_ST_DIR"; mkdir -p "$_ST_DIR"
-  : > "$(_st_f push_idx)"; printf '0\n' > "$(_st_f push_idx)"
-  : > "$(_st_f pushed_tags)"; : > "$(_st_f local_tags)"
-  : > "$(_st_f published)"; : > "$(_st_f origin_tags)"; : > "$(_st_f log_deployed)"
-  : > "$(_st_f latest)"; printf '0\n' > "$(_st_f fetch_rc)"; : > "$(_st_f push_plan)"; : > "$(_st_f advance)"
-  local kv k v
-  for kv in "$@"; do
-    k="${kv%%=*}"; v="${kv#*=}"
-    case "$k" in
-      latest)    printf '%s\n' "$v" > "$(_st_f latest)";;
-      published) printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f published)";;
-      origin)    printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f origin_tags)";;
-      deployed)  printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f log_deployed)";;
-      fetch_rc)  printf '%s\n' "$v" > "$(_st_f fetch_rc)";;
-      plan)      printf '%s\n' "$v" > "$(_st_f push_plan)";;       # NB: pass via $'...\n...'
-      advance)   printf '%s\n' "$v" > "$(_st_f advance)";;
-    esac
-  done
-}
-
-# Counters emit exactly one integer and always exit 0 (so they are safe in
-# command substitution under set -e). Count non-blank lines via awk (no grep -c
-# double-output / non-zero-on-empty pitfalls).
-_ct_push_idx()    { cat "$(_st_f push_idx)" 2>/dev/null || echo 0; }
-_ct_pushed_n()    { awk 'NF{n++} END{print n+0}' "$(_st_f pushed_tags)" 2>/dev/null || echo 0; }
-_ct_local_n()     { awk 'NF{n++} END{print n+0}' "$(_st_f local_tags)"  2>/dev/null || echo 0; }
-_ct_has_local()   { grep -qxF "$1" "$(_st_f local_tags)" 2>/dev/null; }
 
 _claim_self_test() {
   local failures=0
   local _t_label
+
+  # ----- Fixture seams + helpers (function-local: exist only while this runs) --
+  # Fixture state is FILE-BACKED under $_ST_DIR so that observations made inside a
+  # `$(claim_version ...)` command-substitution SUBSHELL survive into the parent
+  # (a subshell cannot mutate parent variables, but it CAN append to shared files).
+  # This is what lets the parent assert "how many push attempts happened" and "were
+  # any orphan local tags left" after running claim_version in command substitution.
+  #
+  # Fixture-input files (the parent writes; stubs read):
+  #   published / origin_tags / log_deployed / latest / fetch_rc / push_plan / advance
+  # Observation files (stubs append; parent reads):
+  #   push_idx / pushed_tags / local_tags
   _ST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-selftest.XXXXXX")"
   trap 'rm -rf "$_ST_DIR"' RETURN
+
+  _st_f() { printf '%s/%s' "$_ST_DIR" "$1"; }   # path to a state file
+
+  # --- stub seams (override the real host I/O; all state via $_ST_DIR files) ---
+  _host_published_tags()       { cat "$(_st_f published)"    2>/dev/null || true; }
+  _host_latest_release()       { cat "$(_st_f latest)"       2>/dev/null || true; }
+  _host_origin_tags()          { cat "$(_st_f origin_tags)"  2>/dev/null || true; }
+  _host_release_log_deployed() { cat "$(_st_f log_deployed)" 2>/dev/null || true; }
+
+  # fetch stub: returns the configured rc; ALSO applies a programmed "tip advance"
+  # the first time the attempt-count crosses the advance threshold (simulates a
+  # concurrent winner publishing the next number between our lost attempt and our
+  # recompute). The advance file format: "<after_attempts>|<new_latest>|<new_set...>"
+  _host_fetch_refs() {
+    local rc; rc="$(cat "$(_st_f fetch_rc)" 2>/dev/null || echo 0)"
+    local adv; adv="$(cat "$(_st_f advance)" 2>/dev/null || true)"
+    if [[ -n "$adv" ]]; then
+      local threshold="${adv%%|*}" rest="${adv#*|}"
+      local new_latest="${rest%%|*}" new_set="${rest#*|}"
+      local idx; idx="$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)"
+      if [[ "$idx" -ge "$threshold" ]]; then
+        printf '%s\n' "$new_latest" > "$(_st_f latest)"
+        printf '%s\n' "$new_set" | tr ' ' '\n' > "$(_st_f published)"
+        printf '%s\n' "$new_set" | tr ' ' '\n' > "$(_st_f origin_tags)"
+        : > "$(_st_f advance)"      # one-shot
+      fi
+    fi
+    return "$rc"
+  }
+
+  _host_delete_local_tag() {
+    local tag="$1" lf; lf="$(_st_f local_tags)"
+    [[ -f "$lf" ]] || return 0
+    grep -vxF "$tag" "$lf" > "${lf}.tmp" 2>/dev/null || true
+    mv -f "${lf}.tmp" "$lf"
+  }
+
+  # Programmable push stub: consumes the next push_plan line (one outcome per line).
+  #   "ok"        -> tag reaches origin (rc 0, success output)
+  #   "collision" -> emit the real ref-rejection signature (rc 1)
+  #   anything else -> emit that text as a raw NON-collision failure (rc 1)
+  # A literal "\n" in a plan line is expanded to a real newline (multi-line errors).
+  _host_push_tag() {
+    local tag="$1" _sha="$2" _msg="$3"
+    printf '%s\n' "$tag" >> "$(_st_f local_tags)"     # "git tag -a" created a local tag
+    local idx; idx="$(cat "$(_st_f push_idx)" 2>/dev/null || echo 0)"
+    local plan; plan="$(sed -n "$((idx + 1))p" "$(_st_f push_plan)" 2>/dev/null)"
+    [[ -n "$plan" ]] || plan="ok"
+    printf '%s\n' "$((idx + 1))" > "$(_st_f push_idx)"
+    case "$plan" in
+      ok)
+        printf '%s\n' "$tag" >> "$(_st_f pushed_tags)"
+        printf 'To origin\n * [new tag]  %s -> %s\n' "$tag" "$tag"
+        return 0
+        ;;
+      collision)
+        printf 'To origin\n ! [rejected]  %s -> %s (already exists)\nerror: failed to push some refs\n' "$tag" "$tag"
+        return 1
+        ;;
+      *)
+        printf '%b\n' "$plan"                          # raw non-collision error (\n expanded)
+        return 1
+        ;;
+    esac
+  }
+
+  # _ct_setup writes the fixture-input files and zeroes the observation files.
+  #   _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+  #             deployed="" fetch_rc=0 plan=$'ok' advance="2|v2.16|v2.14 v2.15 v2.16"
+  _ct_setup() {
+    rm -rf "$_ST_DIR"; mkdir -p "$_ST_DIR"
+    : > "$(_st_f push_idx)"; printf '0\n' > "$(_st_f push_idx)"
+    : > "$(_st_f pushed_tags)"; : > "$(_st_f local_tags)"
+    : > "$(_st_f published)"; : > "$(_st_f origin_tags)"; : > "$(_st_f log_deployed)"
+    : > "$(_st_f latest)"; printf '0\n' > "$(_st_f fetch_rc)"; : > "$(_st_f push_plan)"; : > "$(_st_f advance)"
+    local kv k v
+    for kv in "$@"; do
+      k="${kv%%=*}"; v="${kv#*=}"
+      case "$k" in
+        latest)    printf '%s\n' "$v" > "$(_st_f latest)";;
+        published) printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f published)";;
+        origin)    printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f origin_tags)";;
+        deployed)  printf '%s\n' "$v" | tr ' ' '\n' | sed '/^$/d' > "$(_st_f log_deployed)";;
+        fetch_rc)  printf '%s\n' "$v" > "$(_st_f fetch_rc)";;
+        plan)      printf '%s\n' "$v" > "$(_st_f push_plan)";;       # NB: pass via $'...\n...'
+        advance)   printf '%s\n' "$v" > "$(_st_f advance)";;
+      esac
+    done
+  }
+
+  # Counters emit exactly one integer and always exit 0 (so they are safe in
+  # command substitution under set -e). Count non-blank lines via awk (no grep -c
+  # double-output / non-zero-on-empty pitfalls).
+  _ct_push_idx()    { cat "$(_st_f push_idx)" 2>/dev/null || echo 0; }
+  _ct_pushed_n()    { awk 'NF{n++} END{print n+0}' "$(_st_f pushed_tags)" 2>/dev/null || echo 0; }
+  _ct_local_n()     { awk 'NF{n++} END{print n+0}' "$(_st_f local_tags)"  2>/dev/null || echo 0; }
+  _ct_has_local()   { grep -qxF "$1" "$(_st_f local_tags)" 2>/dev/null; }
 
   _ct_fail() { echo "FAIL [$_t_label]: $*"; failures=$((failures+1)); }
   _ct_eq()   { [[ "$1" == "$2" ]] || _ct_fail "expected '$2' got '$1' ($3)"; }
