@@ -36,6 +36,8 @@ OPERATIONS_SKILLS=(
   file-router
   intake-desk
   pmo-business-analyst
+  pmo-knowledge-manager
+  pmo-ocm-lead
   pmo-process-designer
   pmo-portfolio-manager
   pmo-product-owner
@@ -46,6 +48,8 @@ OPERATIONS_SKILLS=(
   pmo-scrum-master
   pmo-technical-analyst
   pmo-technical-program-manager
+  pmo-tier-1-support
+  pmo-tier-2-support
   ppm-agent
   project-initiator
   tracker-manager
@@ -59,6 +63,7 @@ RELEASE_SKILLS=(
   pmo-devops-sre
   pmo-principal-engineer
   pmo-qa-lead
+  pmo-release-manager
   pmo-skill-editor
   pmo-skill-refiner
   pmo-software-engineer
@@ -69,6 +74,7 @@ RELEASE_SKILLS=(
 CORE_SKILLS=(
   eval-writer
   pmo-qa-auditor
+  pmo-skill-router
   prompt-builder
 )
 

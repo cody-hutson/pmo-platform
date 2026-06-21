@@ -19,7 +19,7 @@
 
 **Audience:** PMO practitioner (Senior Program Manager, Technical Program Manager, PMO Director).
 
-### Skills (13 invocation)
+### Skills (17 invocation)
 
 | Skill | Mode | Description |
 |---|---|---|
@@ -30,8 +30,12 @@
 | [`delivery-engine`](../operations/skills/delivery-engine/) | invocation | Backlog → release-readiness; DoR / DoD gates; sprint planning. |
 | [`file-router`](../operations/skills/file-router/) | invocation | Classifies and routes incoming files in the PMO workspace. |
 | [`intake-desk`](../operations/skills/intake-desk/) | invocation | Conversational intake front door — elicits typed, level-aware work items from a raw idea. |
+| [`pmo-knowledge-manager`](../operations/skills/pmo-knowledge-manager/) | invocation | Knowledge Manager Specialist — captures / structures / routes / stewards knowledge assets; composes artifact-generator + file-router. |
+| [`pmo-ocm-lead`](../operations/skills/pmo-ocm-lead/) | invocation | OCM Lead Specialist — sequences a go-live's change program (impact → training → readiness → hypercare); composes change-management. |
 | [`pmo-process-designer`](../operations/skills/pmo-process-designer/) | invocation | Converts business context into structured requirements / processes. |
 | [`pmo-technical-analyst`](../operations/skills/pmo-technical-analyst/) | invocation | Reviews technical artifacts (FDDs, integration specs) with TPM judgment. |
+| [`pmo-tier-1-support`](../operations/skills/pmo-tier-1-support/) | invocation | Tier-1 Support Specialist — first-line triage; resolves from a known issue / runbook or escalates to tier-2. |
+| [`pmo-tier-2-support`](../operations/skills/pmo-tier-2-support/) | invocation | Tier-2 Support Specialist — root-causes escalated issues and authors the runbook (RCA + knowledge-loop close). |
 | [`ppm-agent`](../operations/skills/ppm-agent/) | invocation | Strategic PMO brain — pushes actionable items to resolution. |
 | [`project-initiator`](../operations/skills/project-initiator/) | invocation | Project lifecycle scaffolding (init + closure). |
 | [`tracker-manager`](../operations/skills/tracker-manager/) | invocation | Generic update engine for operational trackers. |
@@ -58,7 +62,7 @@
 
 **Audience:** Platform builder (engineering, release manager, DevOps).
 
-### Skills (6 invocation, 1 source-only canary)
+### Skills (7 invocation, 1 source-only canary)
 
 | Skill | Mode | Description |
 |---|---|---|
@@ -68,6 +72,7 @@
 | [`implementation-planner`](../release/skills/implementation-planner/) | invocation | Converts build-reviewer findings into remediation plans. |
 | [`pmo-skill-editor`](../release/skills/pmo-skill-editor/) | invocation | Edit / audit / regression-test any skill. |
 | [`pmo-skill-refiner`](../release/skills/pmo-skill-refiner/) | invocation | Create / refine PMO-platform skills (wraps Anthropic scaffolder). |
+| [`pmo-release-manager`](../release/skills/pmo-release-manager/) | invocation | Release Manager Specialist — owns the release tail (go/no-go, deploy authorization, close-out); composes release-planner + release-executor. |
 
 Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canary`](../release/skills/pmo-skill-refiner-selftest-canary/).
 
@@ -141,13 +146,14 @@ Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canar
 
 **Audience:** BOTH PMO practitioners AND platform builders (the shared kernel).
 
-### Skills (3 invocation)
+### Skills (4 invocation)
 
 | Skill | Mode | Description |
 |---|---|---|
 | [`prompt-builder`](../core/skills/prompt-builder/) | invocation | Builds / improves prompts of every kind (Claude prompts, SKILL.md, agent prompts). |
 | [`pmo-qa-auditor`](../core/skills/pmo-qa-auditor/) | invocation | Reviews skill outputs against the principal-contributor standard. |
 | [`eval-writer`](../core/skills/eval-writer/) | invocation | Authors rigorous eval suites for AI agents, skills, LLM systems. |
+| [`pmo-skill-router`](../core/skills/pmo-skill-router/) | invocation | Capstone suite router — classifies a role-shaped request against [`core/skills/registry.md`](../core/skills/registry.md) and routes it to the correct role-Specialist. |
 
 ### Public references
 
