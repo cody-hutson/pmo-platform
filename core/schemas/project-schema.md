@@ -106,7 +106,7 @@ Required. Enum — one of 8 values (title-case, case-sensitive):
 | `Waterfall` | Sequential phased with gate-based change control |
 | `PRINCE2` | Stage-based project governance framework |
 | `SAFe` | Multi-team Agile at PI cadence (Essential 5.0+) |
-| `Hybrid` | Dual-lifecycle with SPM-co-managed dual framing |
+| `Hybrid` | User-configurable two-archetype combination `[A, B]` reported in both native framings (co-management is orthogonal — see `dual_framing_enabled`, § 7) |
 | `Custom` | Escape hatch — requires `custom_methodology_definition` block |
 
 Full normative definitions (3-5 sentences per archetype) live in [`methodology-parameterization-v1.md § Definitions`](../../release/references/specs/methodology-parameterization-v1.md). Variation table (lifecycle / ceremonies / artifacts / cadence / consumers / sample-types / distinguishing-constraint) lives in [`methodology-archetype-matrix.md`](../../release/references/specs/methodology-archetype-matrix.md).
@@ -230,7 +230,7 @@ delivery_approach: Hybrid
 
 **Validation trace:** V1 ✓, V2 ✓ (`Hybrid`), V3 N/A, V4 ✓, V5-V12 N/A.
 
-**Reconciliation note.** This is the **canonical combination** for an SPM-co-managed project: `delivery_approach: Hybrid` is the methodological classification; `spm_comanaged: true` is the operational dual-framing trigger for the SPM Bridge. A Hybrid project with `spm_comanaged: false` is also valid (Hybrid lifecycle without SPM co-management output) — see §7 Collision Check.
+**Reconciliation note.** The two fields are **orthogonal**, and this example shows them combined: `delivery_approach: Hybrid` is the methodology classification (a two-archetype combination), while `spm_comanaged: true` is the *separate, orthogonal* operational dual-framing trigger. Co-management is NOT implied by `Hybrid` — a Hybrid project with `spm_comanaged: false` is equally valid (two native framings, no co-management output), and a single-archetype project may set `spm_comanaged: true` independently. This combination is the legacy SPM co-managed shape, but it is a *configuration*, not the definition of Hybrid — see §7 Collision Check.
 
 ### 6.3 Custom — Scrumban (base_archetype: Kanban)
 
@@ -259,6 +259,8 @@ custom_methodology_definition:
 ```
 
 **Validation trace:** V1 ✓, V2 ✓ (`Custom`), V3 ✓ (block present), V5 ✓ (`Scrumban` non-empty), V6 ✓ (`Kanban` in enum), V7 ✓ (both members in enum), V8 ✓ (`continuous` in enum), V9 ✓ (3 entries), V10 ✓ (3 entries), V11 ✓ (non-empty cadence), V12 ✓ (notes is a string). **Custom Block Completeness: PASS.**
+
+**Hybrid-Two vs. Custom (partition note).** This Scrumban is a **fused variant** — Scrum ceremonies are retained but estimation and sprint commitment are *replaced* with WIP-limited pull — so it is correctly modelled as `Custom` (a named methodology that blends two archetypes into a third thing). A project running an **unmodified Scrum track alongside an unmodified Kanban track** instead uses the Hybrid-Two array `delivery_approach: [Scrum, Kanban]`. The two representations are **not redundant** and partition cleanly: **Custom** = a named modification/fusion (overridden ceremonies/practices, `derived_from` records lineage); **array** = two canonical archetypes coexisting as-is, each native, union of primitives. Test: *"two tracks each running an archetype natively (→ array), or one team running a fused/renamed methodology (→ Custom)?"*
 
 ### 6.4 Custom — Shape Up (base_archetype: null — genuinely novel)
 
@@ -295,20 +297,21 @@ custom_methodology_definition:
 
 ### Collision Check — Are `spm_comanaged` and `delivery_approach` redundant?
 
-**No.** They are orthogonal fields measuring different properties:
+**No.** They are orthogonal fields measuring different properties, and neither implies the other:
 
 | Field | Role | Consumer |
 |---|---|---|
-| `spm_comanaged: bool` | Triggers dual-framing SPM Bridge output (Agile + Waterfall) — operational dual-framing binary | `CLAUDE.md § SPM Bridge`; `delivery-engine` Mode D bridge step |
-| `delivery_approach: Hybrid` | Classifies project methodology as dual-lifecycle (one Agile track + one phase-gated track) | All methodology-aware role-skills (future) |
+| `spm_comanaged: bool` | Triggers dual-framing SPM Bridge output (Agile + Waterfall) — operational co-management dual-framing binary, independent of methodology | `CLAUDE.md § SPM Bridge`; `delivery-engine` Mode D bridge step |
+| `delivery_approach: Hybrid` | Classifies project methodology as a user-configurable two-archetype combination `[A, B]` reported in both native framings — a classification only, saying nothing about co-management | All methodology-aware role-skills |
 
 ### Reconciliation Rule
 
-A project with `spm_comanaged: true` **SHOULD** have `delivery_approach: Hybrid` — both describe the same underlying property (dual-framing). `[INFERRED]` — from alignment of the SPM Bridge trigger semantics with the Hybrid archetype's "two lifecycles reported simultaneously" distinguishing constraint.
+The two fields are **orthogonal and combine freely** — co-management is no longer implied by, and does not imply, the Hybrid classification:
 
-A project with `delivery_approach: Hybrid` and `spm_comanaged: false` is **valid** — represents a self-hosted dual-lifecycle project that does not activate the SPM Bridge dual-framing output.
-
-A project with `spm_comanaged: true` and `delivery_approach: Scrum` (or any non-Hybrid) is a **configuration-validation candidate** — likely authoring intent was `delivery_approach: Hybrid`. `project-initiator` Mode C (schema repair) SHOULD flag this combination for operator review but does NOT auto-correct.
+- `delivery_approach: Hybrid` + `spm_comanaged: true` — a two-archetype project that *additionally* runs the co-management dual-framing output (the legacy SPM co-managed shape, now expressed as an explicit combination rather than a coupled default).
+- `delivery_approach: Hybrid` + `spm_comanaged: false` (or absent) — a two-archetype project reported in both native framings, with no co-management output. **Valid.**
+- `spm_comanaged: true` + `delivery_approach: Scrum` (or any non-Hybrid) — a single-archetype project that runs the co-management dual-framing output independently of methodology. **Valid** under the decoupled model — this is NOT a misconfiguration to "correct" toward Hybrid. (`project-initiator` Mode C no longer flags this combination as a configuration-validation candidate.)
+- `spm_comanaged: false` (or absent) + non-Hybrid — single-methodology project, no dual-framing.
 
 ### Deprecation Timeline
 

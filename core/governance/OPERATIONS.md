@@ -353,18 +353,18 @@ Elevation triggers coordinated updates across:
 
 ### Relationship to SPM Bridge (Conditional)
 
-The legacy `spm_comanaged: true` binary remains operative and is **NOT deprecated** by this protocol. Reconciliation:
+The legacy `spm_comanaged: true` binary remains operative and is **NOT deprecated** by this protocol. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
 
-- `delivery_approach: Hybrid` is the **methodological classification** — it describes the dual-lifecycle nature of the project.
-- `spm_comanaged: true` is the **operational dual-framing trigger** — it activates the SPM Bridge output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`).
+- `delivery_approach: Hybrid` is the **methodology classification** — a user-configurable two-archetype combination `[A, B]` reported in both native framings. It says nothing about co-management.
+- `spm_comanaged: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the SPM Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
 
-Canonical valid combinations:
+Because they are orthogonal, every combination is valid:
 
 | `delivery_approach` | `spm_comanaged` | Interpretation |
 |---|---|---|
-| `Hybrid` | `true` | SPM co-managed project — dual-framing active |
-| `Hybrid` | `false` | Self-hosted dual-lifecycle — no dual-framing |
-| Non-Hybrid | `true` | **Configuration-validation candidate** — `project-initiator` Mode C flags for operator review |
+| `Hybrid` (or a two-archetype array) | `true` | Two-archetype project that *additionally* runs the co-management dual-framing output (the legacy SPM co-managed shape) |
+| `Hybrid` (or a two-archetype array) | `false` | Two-archetype project in both native framings — no co-management bridge |
+| Non-Hybrid | `true` | Single-archetype project running co-management dual-framing **independently of methodology** — a valid configuration, no longer flagged for review |
 | Non-Hybrid | `false` | Single-methodology project — no dual-framing |
 
 Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `spm_comanaged` before producing output. Future deprecation of `spm_comanaged` in favor of `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE. See [`methodology-parameterization-v1.md § 7 Relationship to SPM Bridge`](../../release/references/specs/methodology-parameterization-v1.md) + [`schemas/project-schema.md § 7 Migration Notes`](../schemas/project-schema.md) for the posture.
