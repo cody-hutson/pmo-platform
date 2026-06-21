@@ -5,7 +5,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
 | v2.14 | 71-autonomy-phaseout-foundation | 2026-06-21 | — | #1636 | [notes/v2.14_RELEASE_NOTES.md](notes/v2.14_RELEASE_NOTES.md) |
-| v2.12 | 12-field-first-intake-enforcement | 2026-06-20 | — | #1699 | — |
+| v2.12 | 12-field-first-intake-enforcement | 2026-06-20 | — | #1699 | [notes/v2.12_RELEASE_NOTES.md](notes/v2.12_RELEASE_NOTES.md) |
 | release-version-stamping (version-less) | release-version-stamping | 2026-06-20 | The platform version file stays accurate after a release — `.version` had frozen at `v2.08` inside the `v2.09`/`v2.10` tags, so the version-skew banner reported a perpetual "update available" no update could clear. #1643 fixes it in 3 layers: corrects the stale value (L1), makes the `.version` stamp an owned Stage 13 close-out step in `automated-closeout.sh` + declares it in `stage-13-close.md` (L2), and adds `deploy.sh` Check 39 to fail the build if `.version` drifts ≥2 minors behind the latest reachable release tag (L3). Version-less (no tag, no GitHub Release). | #1693 | [notes/release-version-stamping_RELEASE_NOTES.md](notes/release-version-stamping_RELEASE_NOTES.md) |
 | v2.13 | 63-finding-disposition-discipline | 2026-06-20 | — | #1657 | [notes/v2.13_RELEASE_NOTES.md](notes/v2.13_RELEASE_NOTES.md) |
 | v2.11 | 04-ROLE-delivery-coverage | 2026-06-20 | — | #1555 | [notes/v2.11_RELEASE_NOTES.md](notes/v2.11_RELEASE_NOTES.md) |
