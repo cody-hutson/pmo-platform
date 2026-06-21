@@ -103,26 +103,71 @@ A `## Change Description` section is embedded in every release plan FILE (`relea
 
 ---
 
-## Versioning (Semantic)
+## Versioning
 
-- **Major (X.0):** New skills, structural changes, protocol rewrites
-- **Minor (X.Y):** Skill updates, reference doc changes, tracker schema changes
-- **Patch (X.Y.Z):** Typos, small corrections, documentation fixes
+A release's version is **allocated in two phases, separated in time**: an *intent* declared at plan time, and the *concrete number* computed and claimed only at the merge moment. This is the authoritative allocation rule — it answers "what is the next version" deterministically, where the older "the bump-class decides the number" framing could not (a "Minor" change-type never said *which* minor). The rule is **host-agnostic**: it is pure version-tuple arithmetic over the canonical version grammar and consumes the repository-host adapter operations `anchor()` and `claimed_set()` **by name**. It does not itself call any host tool (no `gh`, no `git`); how a host computes the anchor and the claimed set is that host's adapter's concern, not this rule's. The adapter operations and the GitHub/git reference adapter are defined in the repo-host adapter version-claim interface (`core/standards/repo-host-adapter-versioning.md`); the version grammar, its integer-triple total order, and the comparator the arithmetic uses are defined in the version-grammar standard (`release/references/standards/version-grammar.md`), implemented once in `release/tools/version-grammar.sh`.
 
-### Versioning Decision Table
+### Phase 1 — Plan time: declare the bump-class + provisional-display version (the FLOOR)
 
-| Change Type | Version Bump | Rationale |
-|-------------|-------------|-----------|
-| New skill added to the suite | **Major** | New capability changes what the platform can do |
-| New governance file created | **Major** | Structural change to workspace architecture |
-| Skill behavioral change (new mode, altered processing logic) | **Major** | Changes how an existing skill operates; may affect downstream flows |
-| Governance file structural rewrite | **Major** | High-impact change to platform rules |
-| Skill configuration update (description, trigger phrases, reference docs) | **Minor** | Changes inputs/documentation but not core behavior |
-| Protocol text addition or modification | **Minor** | New rules or rule changes within existing structure |
-| Tracker schema change | **Minor** | Data structure change within existing trackers |
-| Reference document addition or update | **Minor** | Supporting material, not core behavior |
-| Typo fix, formatting correction | **Patch** | No behavioral or structural impact |
-| Documentation wording clarification (no rule change) | **Patch** | Improves clarity without changing meaning |
+The release plan declares a **bump-class** — one of `major`, `minor`, `patch` — and a **provisional-display version** for human readability. This is *intent to bump*: it binds **no concrete `vX.Y`**. It sets the **floor** the eventually-claimed number must satisfy. The bump-class is the operator's semantic signal, chosen by the change's nature; the **Bump-Class Selection Guide** below maps change types to bump-classes. The provisional-display version is a label, not a reservation — the concrete number is not known until Phase 2.
+
+### Phase 2 — Claim time (at the merge): compute next-free ≥ floor, then claim atomically
+
+The concrete version is computed and claimed only at the merge moment, against fresh authoritative host state:
+
+1. **Floor from the bump-class.** Derive the floor from `anchor()` — the highest claimed version in the mainline lineage (orphan lineages excluded; this is the adapter's responsibility, not this rule's):
+   - `major` → `(anchor.major + 1, 0)` — the `.0` of the next major line.
+   - `minor` → `(anchor.major, anchor.minor + 1)` — the next minor above the anchor.
+   - `patch` → computed from a shipped base, **not** from the anchor — see the Patch rule below.
+2. **Next-free ≥ floor.** The claimed version is the **lowest version at or above the floor that is NOT in `claimed_set()`** — the union of all currently-claimed and in-flight versions the host adapter reports. Walk upward from the floor, by the bump-class's own increment (minor for major/minor; patch for patch), comparing with the version-grammar comparator (`version_cmp`), until a version not in `claimed_set()` is found. That version is the candidate.
+3. **Atomic claim.** Claim the candidate via the adapter's `atomic_claim(version, release_ref)` compare-and-swap. On `OK`, the number is the release's. On `COLLISION` (another release claimed it first), **recompute from step 1 against fresh `anchor()` + `claimed_set()`** and retry — never overwrite. The compare-and-swap is what makes **ship-order = merge-order = tag-order** an architectural guarantee: whichever release wins the swap takes the lower free slot, in the order the host arbitrates; the loser recomputes upward. The claim mechanism (the recompute-and-retry loop) is a separate slice; this rule is the algorithm it executes.
+
+```
+ALLOCATE(bump_class, patch_base) -> claimed_version        # runs at the merge moment
+                                                           # patch_base supplied only when bump_class = patch
+
+floor := FLOOR(bump_class, patch_base)                     # step 1
+candidate := floor
+while candidate ∈ claimed_set():                           # step 2 — freeness oracle
+    candidate := INCREMENT(bump_class, candidate)          # minor for major/minor; patch for patch
+if atomic_claim(candidate, release_ref) == OK:             # step 3 — compare-and-swap
+    return candidate
+else:                                                      # COLLISION — never overwrite
+    retry ALLOCATE against fresh anchor() + claimed_set()
+```
+
+**Patch rule (the X.Y.Z form) — a separate path.** A `patch` bump does **not** compute against the anchor: it corrects a specific already-shipped release **in place**, so its floor is derived from that shipped base, and its increment walks the **patch** component, never the minor. The hotfixed base version is an explicit input (`patch_base`) — it is not derivable from the anchor, which is exactly why the patch path is split out of the major/minor machinery:
+
+- `FLOOR(patch, patch_base)` = `(patch_base.major, patch_base.minor, patch_base.patch + 1)` — e.g. a hotfix to the shipped `v2.06` floors at `v2.06.1`; a second hotfix to the same base floors at `v2.06.2`.
+- `INCREMENT(patch, candidate)` = increment the **patch** component (`(M, N, P) → (M, N, P + 1)`), so a collided `v2.06.1` resolves to `v2.06.2` — **never** to a minor such as `v2.07` (which would steal the next minor slot).
+
+`FLOOR`/`INCREMENT` for `major` and `minor` walk the **minor** component (`(M, N) → (M, N + 1)`); only `patch` walks the patch component. The canonical hotfix form is the three-component `vMAJOR.MINOR.PATCH` (e.g. `v2.06.1`); suffix forms (`vX.Yb`) are not a valid claimed shape — see the version-grammar standard.
+
+**Monotonicity, and the reconciliation of the "non-monotonic" note.** Claimed versions are monotonic **at claim time** — each is next-free at or above the anchor, so each newly claimed number exceeds the prior tip. What is intentionally **not** preserved is the correlation between a release's *start time* and its number: a faster concurrent release claims a lower free slot than a slower release that started earlier. The release log records **claim order**, which is monotonic by construction, even when its rows are non-monotonic in *authoring* order. The historical note that "git-describe versioning was non-monotonic" is resolved here as **an artifact of reading a non-authoritative source**: `git describe` reports the nearest tag reachable from the current branch (the merge base on a feature branch), not the top of the mainline lineage, so it returns a stale, non-monotonic answer. The authoritative anchor is the adapter's `anchor()` (the highest claimed version in the mainline lineage), against which allocation is monotonic. The non-monotonicity the operator accepted was start-time-vs-number decorrelation for concurrent releases — preserved and explained by this rule — not a defect in the allocation order.
+
+### Bump-Class Selection Guide (advisory input to the allocation rule)
+
+The bump-class declared at Phase 1 is chosen by the change's nature. This guide maps change types to bump-classes — it is **advisory input** to the allocation rule: it declares the **floor**, it does **not** decide the concrete number (Phase 2 does, at claim time).
+
+| Change Type | Bump-Class | Rationale |
+|-------------|-----------|-----------|
+| New skill added to the suite | **major** | New capability changes what the platform can do |
+| New governance file created | **major** | Structural change to workspace architecture |
+| Skill behavioral change (new mode, altered processing logic) | **major** | Changes how an existing skill operates; may affect downstream flows |
+| Governance file structural rewrite | **major** | High-impact change to platform rules |
+| Skill configuration update (description, trigger phrases, reference docs) | **minor** | Changes inputs/documentation but not core behavior |
+| Protocol text addition or modification | **minor** | New rules or rule changes within existing structure |
+| Tracker schema change | **minor** | Data structure change within existing trackers |
+| Reference document addition or update | **minor** | Supporting material, not core behavior |
+| Typo / formatting correction to a shipped release | **patch** | No behavioral or structural impact; corrects a shipped base in place |
+| Documentation wording clarification to a shipped release (no rule change) | **patch** | Improves clarity without changing meaning |
+
+### References
+
+<!-- repo-integrity: allow-issue-ref -->
+- #1673 — the authoritative version-allocation rule (this section satisfies its ACs: the rule stated with no contradiction to practice, and the prior semantic decision table corrected to an advisory selection guide).
+- #1697 — the founding version-claim-determinism ADR (defer-to-merge claim, atomic compare-and-swap, slug-primary identity; the architecture this rule operationalizes).
+- #1676 — the canonical version grammar and its comparator (`version-grammar.sh`), which this rule's arithmetic sources rather than re-encodes.
 
 ---
 
