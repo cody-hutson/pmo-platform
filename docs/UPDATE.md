@@ -115,6 +115,8 @@ A SessionStart hook at [`core/hooks/notify-version-skew.sh`](../core/hooks/notif
 
 The hook is passive — it does NOT auto-apply updates. Operator decides when to run `update.sh`.
 
+`.version` is **release-cut-owned**: for a versioned release it is stamped to the shipped version by the Stage 13 close-out (`release/tools/automated-closeout.sh` `phase_bump_version`, per [`release/references/pipeline/stage-13-close.md` § Phase B5.7](../release/references/pipeline/stage-13-close.md)); a version-less release leaves it unchanged. `update.sh` only *propagates* the source value to the deployed `<ws>/.claude/.version` snapshot (per ADR-017) — it does not author it, so a clone on current `main` reads the version that shipped, and the banner above clears once the stamped value matches the latest published Release.
+
 ---
 
 ## 6. Troubleshooting
