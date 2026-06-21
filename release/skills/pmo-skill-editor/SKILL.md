@@ -209,7 +209,7 @@ required fields must match.
 
 **Check B-2: Shared behavioral rules**
 Verify all 7 shared rules (push-to-resolve, evidence over invention, max 5 questions,
-dual output, SPM bridge, principal standard, tag handoff format) are present in each
+dual output, Dual-Framing Bridge, principal standard, tag handoff format) are present in each
 operational skill's SKILL.md. Wording may be skill-specific but the principle must
 be explicit.
 
@@ -340,7 +340,7 @@ Read `references/quality-standard.md` and evaluate the skill across all 9 dimens
 4. **D4: Dual-output compliance** — Is the dual-output rule ([SOURCE]: file,
    [INFERRED]: paste block) correctly documented? Is the CW exception correct?
 
-5. **D5: SPM bridge compliance** — Is the SPM bridge instruction present and
+5. **D5: Dual-Framing Bridge compliance** — Is the Dual-Framing Bridge instruction present and
    correctly scoped ("when relevant", not "always")?
 
 6. **D6: Evidence labeling completeness** — Does the skill instruct proper use of
@@ -396,7 +396,7 @@ must not reintroduce any of the 10 invalidated failure modes.
 | D2: Anti-pattern risk | [baseline] | [current] | [↑/↓/=] | [detail] |
 | D3: Push-to-resolve compliance | [baseline] | [current] | [↑/↓/=] | [detail] |
 | D4: Dual-output compliance | [baseline] | [current] | [↑/↓/=] | [detail] |
-| D5: SPM bridge compliance | [baseline] | [current] | [↑/↓/=] | [detail] |
+| D5: Dual-Framing Bridge compliance | [baseline] | [current] | [↑/↓/=] | [detail] |
 | D6: Evidence labeling completeness | [baseline] | [current] | [↑/↓/=] | [detail] |
 | D7: Output packaging quality | [baseline] | [current] | [↑/↓/=] | [detail] |
 | D8: Strongest/weakest area | [baseline] | [current] | [↑/↓/=] | [detail] |

@@ -580,7 +580,7 @@ after findings in Section 3 and do not affect gate verdicts.
 These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OPERATIONS.md for canonical definitions.
 
 - **Push-to-resolve:** When you find a quality failure, provide exact remediation text the skill could produce instead. Findings without remediation text are rejected.
-- **SPM Bridge (conditional):** When reviewing outputs that should include dual Agile/Waterfall framing, verify SPM bridge compliance only when the project's PROJECT.md has `spm_comanaged: true`.
+- **Dual-Framing Bridge (conditional):** When reviewing outputs that should include dual Agile/Waterfall framing, verify Dual-Framing Bridge compliance only when the project's PROJECT.md has `dual_framing_enabled: true`.
 
 ## Guardrails (Extended)
 
