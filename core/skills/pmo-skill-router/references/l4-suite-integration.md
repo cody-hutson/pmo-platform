@@ -19,8 +19,8 @@ The harness is grounded in [`../../eval-writer/SKILL.md`](../../eval-writer/SKIL
 ### Pass bar (hub-resolved)
 
 - **Per-query binary score:** routed `name` == expected `name` → **PASS**; else **FAIL**.
-- **Aggregate bar: firm 90%** (the Stage 9 hub resolution of the open design question). #284 Decision 10 sets "90% trigger accuracy threshold, **adaptive based on pilot results**"; the hub fixed the v2.12 L4 at the **firm 90% aggregate** bar. Any pilot-adjusted bar must be **recorded with rationale**, never applied silently.
-- **Sub-90% on a *confusable cluster* (C1–C6) → trigger-deconfliction finding, NOT a router defect.** The router classifies on the prose it is given; if two rows' `trigger surface` are not separable, the fix is **sharpening the registry rows** (or the source `description:`), not patching router logic. This lets the router pass the build gate while the deconfliction finding routes back to the registry rows — honoring both the firm bar and the #284-D10 adaptive clause.
+- **Aggregate bar: firm 90%** (the Stage 9 hub resolution of the open design question). The skill-suite epic's Decision 10 sets a "90% trigger-accuracy threshold, **adaptive based on pilot results**"; the hub fixed the v2.12 L4 at the **firm 90% aggregate** bar. Any pilot-adjusted bar must be **recorded with rationale**, never applied silently.
+- **Sub-90% on a *confusable cluster* (C1–C6) → trigger-deconfliction finding, NOT a router defect.** The router classifies on the prose it is given; if two rows' `trigger surface` are not separable, the fix is **sharpening the registry rows** (or the source `description:`), not patching router logic. This lets the router pass the build gate while the deconfliction finding routes back to the registry rows — honoring both the firm bar and the epic Decision-10 adaptive clause.
 
 ### Count allocation (≥50; recommend 60 for headroom)
 
@@ -72,7 +72,7 @@ A flow **PASSes iff every seam PASSes.** 3 flows × clean = AC met. The flows ar
 
 ### Scope
 
-The 5 shared files (authored in #186) and their consumers among the 19 role-Specialists. **Not every role consumes every file** — each file's own header declares its consumer scope:
+The 5 shared files (the `_shared/*` files) and their consumers among the 19 role-Specialists. **Not every role consumes every file** — each file's own header declares its consumer scope:
 
 | Shared file | Contract shape to check | Consumer scope (per the file's own header) |
 |---|---|---|
@@ -94,7 +94,7 @@ The audit **first builds the consumer × file matrix** (which roles reference wh
 
 A divergence routes back as a **shared-file or consumer-skill finding** (fix the shared file's ambiguity, or the deviating consumer) — **NOT a router defect.** The router does **not** consume `_shared/*`; this audit is suite-integration, riding the L4 capstone because the capstone is where the whole suite is exercised at once.
 
-## Runner output (attach to #181 as AC evidence)
+## Runner output (attach as AC evidence to the parent work item)
 
 1. **Classification report** — aggregate %, per-cluster sub-aggregates (C1–C6), the calibration-set α, and the cross-family sample result. Flag any sub-90% cluster as a trigger-deconfliction finding (registry text fix), not a router defect.
 2. **3 E2E flow reports** — F1 / F2 / F3, per-seam handoff-completeness + contradiction verdicts.
