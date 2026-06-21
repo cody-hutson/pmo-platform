@@ -8,6 +8,17 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.15] - 2026-06-20
+
+The PMO role-Specialist suite is now GA — five Release-to-Sustain role agents and a capstone router that sends a role-shaped request to the Specialist that owns it.
+
+### Added
+- **The role-Specialist suite is GA and addressable as one unit.** The nineteen role-Specialists (fourteen prior-wave + five new) are now a single, routable suite. *Why it matters:* you can reach for any delivery role by name and get its full perspective, not a generic function output. ([#181](https://github.com/cody-hutson/pmo-platform/issues/181))
+- **A router sends a role-shaped request to the right Specialist.** Ask "which role handles this?" and the capstone `pmo-skill-router` matches the request to the one Specialist that owns the work, reading the new `core/skills/registry.md` logical skill registry. *Why it matters:* you do not have to know the skill catalogue — routing changes by editing one registry file, never the router. ([#181](https://github.com/cody-hutson/pmo-platform/issues/181), [#1564](https://github.com/cody-hutson/pmo-platform/issues/1564))
+- **The Release-to-Sustain roles are now first-class agents.** A Release Manager owns the release tail (go/no-go, deploy, close-out); Tier-1 Support triages and resolves known issues; Tier-2 Support root-causes the novel ones and writes the runbook; the OCM Lead drives a go-live's organizational change; the Knowledge Manager captures and files knowledge assets. *Why it matters:* the seats that carry a delivery effort from ship through steady-state are covered, each composing the platform's function-skills rather than re-implementing them. ([#1120](https://github.com/cody-hutson/pmo-platform/issues/1120), [#1121](https://github.com/cody-hutson/pmo-platform/issues/1121), [#1122](https://github.com/cody-hutson/pmo-platform/issues/1122), [#1123](https://github.com/cody-hutson/pmo-platform/issues/1123), [#1124](https://github.com/cody-hutson/pmo-platform/issues/1124))
+
+[Full notes](release/releases/notes/v2.15_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.15)
+
 ## [v2.12] - 2026-06-21
 
 <one-sentence ≤140 chars; plain language; agent-search target>
