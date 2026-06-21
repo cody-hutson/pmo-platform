@@ -5,8 +5,8 @@
 **Owner:** `core/schemas/touchpoint-phaseout-schema.md`
 **Layer:** 1 (Engineering, git-tracked)
 **Type:** schema-spec doc (the K1 *grammar*; the populated inventory + phase-out plan is a K4 *instance*, operator-local and git-ignored)
-**Establishing milestone:** `71-autonomy-phaseout-foundation` (v2.12)
-**Architectural basis:** ADR-035 (this doc holds the schema; the populated instance is operator-local) — see the Source(s) block.
+**Establishing milestone:** `71-autonomy-phaseout-foundation`
+**Architectural basis:** see the Design rationale section below (placement in `core/schemas/`; grammar tracked, instance operator-local; `current_phase` references the progressive-rollout convention's enum by name; structural validation by a skip-when-absent deploy-check).
 
 ---
 
@@ -26,6 +26,17 @@ Both schemas live in **one doc** because they are one coherent contract: the pha
 | A contract a structural check (`deploy.sh --check` Check 39) validates an instance against. | An enforcement surface for the *content* of an operator's phase-out decisions. Advancement stays an operator judgment call. |
 
 **The schema↔instance split.** The reusable grammar is tracked here; the populated instance is operator-local. This mirrors the established platform pattern (the work-item type-pack meta-schema: "the grammar every type-pack conforms to" is tracked K1; "a project's declared kinds are operator-local … never authored into this git-tracked corpus"). The instance home is the operator-local roadmaps tree (the git-ignored `*/governance/roadmaps/` seam) or an operator-local analysis path; it is never in the PR. AC1/AC3/AC5 are satisfied by spoke evidence against that instance, not by a corpus diff.
+
+---
+
+## Design rationale
+
+Why this artifact takes the shape it does — the durable placement and contract decisions, version-agnostically:
+
+- **Home is `core/schemas/`.** Per the `core/schemas/` charter, this tree holds the typed-format contracts that agents and gates validate documents and handoffs against — exactly what this doc is (a field-set an instance is structurally checked against), as distinct from a normative "what good looks like" standard. Its peers are `core/schemas/work-item-type-schema.md` and `core/schemas/entity-field-schemas.md`.
+- **Grammar tracked, instance operator-local.** Only the reusable grammar lives here; the populated inventory + phase-out plan is operator-instance planning data (one deployment's specific touchpoints, phases, dates, and pilot selections — not template content), so it stays operator-local and git-ignored. This is the same grammar-vs-instance split the roadmap-instance descope posture applies, and the reason a template downloader receives the contract rather than one operator's data.
+- **`current_phase` references the phase enum by name.** The progressive-rollout convention is the single home of the rollout-phase vocabulary; this schema consumes it by reference (§1), so a rename of a phase value propagates without re-authoring this schema.
+- **Structural validation by a skip-when-absent deploy-check.** A `deploy.sh --check` validates an instance structurally (field/enum shape, not the content of the operator's judgment); it skips cleanly when the instance is absent — a fresh clone or CI has no operator-local file — and ships warn-mode-initial through the shared deploy-check mode machinery, dogfooding the early phases of the very convention this schema serves.
 
 ---
 
@@ -201,6 +212,5 @@ Authoring and reverting this schema + its instance is **CHEAP** (HIGH confidence
 
 ### Sources
 
-- `#164` — the progressive-rollout convention (`core/standards/progressive-rollout-convention.md`) whose phase enum this schema's `current_phase` consumes by name. Same milestone (`71-autonomy-phaseout-foundation`, v2.12).
+- `#164` — the progressive-rollout convention (`core/standards/progressive-rollout-convention.md`) whose phase enum this schema's `current_phase` consumes by name. Same milestone (`71-autonomy-phaseout-foundation`).
 - `#165` — this schema's parent task: define the operator-touchpoint inventory + phase-out-plan schema (units 1+2).
-- ADR-035 — records the placement decision (schema tracked in `core/schemas/`; instance operator-local) and the Check 39 structural-validator decision.

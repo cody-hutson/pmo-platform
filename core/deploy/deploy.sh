@@ -4672,7 +4672,7 @@ cmd_check() {
   # progressive-rollout convention).
   #
   # SKIP-WHEN-ABSENT: the instance is operator-local and git-ignored (the
-  # *.governance/roadmaps/ + personal/ seam per ADR-012 / ADR-035), so it does
+  # *.governance/roadmaps/ + personal/ seam per ADR-012), so it does
   # NOT exist in a fresh clone or in CI. Mirroring Check 13's "deploy never run
   # → skip, don't double-fail" posture, this check SKIPs cleanly when no
   # instance file is present; absence is not drift.
