@@ -1988,6 +1988,81 @@ cmd_check() {
     esac
   }
 
+  # resolve_check_mode — per-check mode resolver (decouples a single check from
+  # the shared deploy-check.mode cohort). Reads a CHECK-SPECIFIC mode file
+  # "<check_id>.mode" from the same operator-instance base (and legacy
+  # .claude/hooks/ fallback) as the shared MODE_FILE; if that file is absent or
+  # carries an invalid value, FALLS BACK to the shared $DEPLOY_CHECK_MODE. Echoes
+  # the resolved mode (enforce|warn|off). This lets one check graduate
+  # warn→enforce independently of the ~12-check shared-mode cohort without
+  # touching any other check's behavior — every other check keeps reading
+  # $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged.
+  #
+  # Decoupling contract (per #27 Stage 6 scope expansion, sub-task #1647): the
+  # g1-enforcement check (Check 22) resolves its mode via this helper from a
+  # dedicated `g1-enforcement.mode` file; with no such file present it falls back
+  # to the shared mode → warn (the current default). The warn→enforce flip is
+  # DEFERRED to a follow-on after the ≥3-day shakedown; this release ships warn.
+  # Mode files are operator-instance runtime state and are NOT committed.
+  resolve_check_mode() {
+    local _check_id="$1"
+    local _check_mode_file="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/${_check_id}.mode"
+    [[ -f "$_check_mode_file" ]] || _check_mode_file=".claude/hooks/${_check_id}.mode"
+    if [[ -f "$_check_mode_file" ]]; then
+      local _cm
+      _cm=$(cat "$_check_mode_file" 2>/dev/null | tr -d '[:space:]')
+      case "$_cm" in
+        enforce|warn|off) printf '%s' "$_cm"; return 0 ;;
+      esac
+    fi
+    # No check-specific file (or invalid value) → fall back to the shared mode.
+    printf '%s' "$DEPLOY_CHECK_MODE"
+  }
+
+  # flag_g1_enforcement — Check 22 (G1 enforcement) gating emit. Identical
+  # semantics to flag_warn_or_issue, EXCEPT it switches on the check-specific
+  # $G1_ENFORCEMENT_MODE (resolved at Check 22 start via resolve_check_mode
+  # "g1-enforcement") rather than the shared $DEPLOY_CHECK_MODE. Structural G1
+  # findings (G1-01/03/05a/06/09) route here. In enforce-mode → FAIL (increments
+  # ISSUES); in warn-mode → WARN + jsonl, no ISSUES increment.
+  flag_g1_enforcement() {
+    local check_id="$1"
+    local detail="$2"
+    case "$G1_ENFORCEMENT_MODE" in
+      enforce)
+        log "  FAIL:  $check_id — $detail"
+        ISSUES=$((ISSUES + 1))
+        ;;
+      warn)
+        log "  WARN:  $check_id — $detail (warn-mode; flip g1-enforcement.mode to 'enforce' after shakedown — see #27 follow-on)"
+        local _ts
+        _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        local _detail_escaped="${detail//\\/\\\\}"
+        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+        ;;
+    esac
+  }
+
+  # recommend_g1_enforcement — Check 22 NON-GATING advisory emit for the four
+  # judgment-class G1 criteria (G1-02/04/05b/08). NEVER increments ISSUES in any
+  # mode (not even enforce) — these are recommend-tier per gate-criteria-spec.md
+  # § Gate 1 (G1 Enforcement-Layer Split: judgment → recommend-flag, never FAIL).
+  # Emits a RECOMMEND line and appends to the warn-log with a "recommend" level
+  # so advisory findings are distinguishable from gating WARN/FAIL entries. In
+  # off-mode it stays silent (parity with the gating helpers).
+  recommend_g1_enforcement() {
+    local check_id="$1"
+    local detail="$2"
+    [[ "$G1_ENFORCEMENT_MODE" == "off" ]] && return 0
+    log "  RECOMMEND:  $check_id — $detail (advisory; judgment-tier, never gate-blocking)"
+    local _ts
+    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local _detail_escaped="${detail//\\/\\\\}"
+    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    printf '{"ts":"%s","check":"%s","level":"recommend","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+  }
+
   # Check 8 — Canonical-session-path freshness (warn-mode initial)
   # Rules file at core/rules/skill-deployment.md (no engineering/rules
   # mirror — collapsed per the layout §8.3).
@@ -3000,67 +3075,116 @@ cmd_check() {
   # Stage 2 Triage was the only early stage with zero tooling enforcement.
   #
   # Scope decision rendered Option 3 (check-only): ship Layer (b) detection-
-  # only enforcement. Layers (a) intake-time hook and (c) scheduled cadence
-  # are deferred as calibrated follow-ons IF Layer (b) shakedown surfaces
-  # need. Lowest blast radius; mirrors deploy.sh --check warn-mode shakedown
-  # precedent (Checks 8/9/10/14/15/18/19/20/21).
+  # only enforcement. Intake-scope RATIFIED bundled-only (#27 Stage 5): the
+  # population stays open `status: bundled` — Check 22 is NOT extended to
+  # `status: proposed`. The earlier "intake-time hook (Layer a)" deferral's
+  # reopening condition is unmet (warn-log empty), and Layer-A form-required
+  # (intake template `validations: required: true`) already delivers the
+  # intake-time HARD-STOP that a proposed-status content-sweep would target —
+  # earlier and cheaper. Lowest blast radius; mirrors deploy.sh --check
+  # warn-mode shakedown precedent (Checks 8/9/10/14/15/18/19/20/21).
   #
-  # Structural-auto criteria evaluated (per gate-criteria-spec.md § Gate 1):
+  # COVERAGE (per gate-criteria-spec.md § Gate 1 + its G1 Enforcement-Layer
+  # Split): Check 22 (Layer-B gate) now EVALUATES ALL 9 G1 criteria —
+  # ENFORCES the 5 structural (FAIL-capable) + RECOMMEND-FLAGS the 4 judgment
+  # (advisory, never FAIL).
+  #
+  # Structural criteria ENFORCED (gate-checked; emit via flag_g1_enforcement):
   #   G1-01  title prefix `[Category]:` (improvement) / `[Bug]:` (bug per
   #          Adapter G1-01-Bug) / `[Observation]:` (observation per Adapter
   #          G1-01-Obs)
   #   G1-03  evidence-quality labels present in body — at least one
   #          [SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION ...]/[RECOMMENDED];
   #          n/a for observation
+  #   G1-05a AC structural pattern — each AC checkbox bullet must match one of
+  #          the three G1-05a patterns: verb-first (verify/check/confirm/
+  #          assert/ensure/validate) | backtick-wrapped path + state verb
+  #          (contains/includes/has) | `predicate:` prefix. Adapter G1-05-Bug
+  #          accepts the bug-narrative AC phrase for bug bodies; n/a for
+  #          observation (no AC field). Pattern (d) behavioral/`method:` is a
+  #          recommend-only refinement, not gated here (structural detector
+  #          stays on the three lexical patterns + the bug adapter).
   #   G1-06  Priority `P1`-`P4` in improvement body OR Severity `P1`-`P4` in
   #          bug body per Adapter G1-06-Bug; n/a for observation
   #   G1-09  label-body template match — label_template (Step 1) must agree
   #          with inferred_template (Step 2) per Template Detection Logic at
-  #          gate-criteria-spec.md:71
+  #          gate-criteria-spec.md § Gate 1
   #
-  # Judgment criteria (G1-02 / G1-04 / G1-05 / G1-08) are deliberately
-  # excluded — they are recommend-tier per gate-criteria-spec.md, not
-  # suitable for structural-auto enforcement.
+  # Judgment criteria RECOMMEND-FLAGGED (advisory; emit via
+  # recommend_g1_enforcement — NEVER increments ISSUES, in any mode):
+  #   G1-02  description / bug-narrative actionable (presence-proxy: improvement
+  #          body has a non-empty Description; bug body has the narrative)
+  #   G1-04  Proposed Change names a file or protocol (improvement only)
+  #   G1-05b AC verifiable beyond the structural check — no unreplaced `<...>`
+  #          placeholder slots, no commented-out bullets
+  #   G1-08  implementability proxy — body contains no obvious undefined-term
+  #          markers (advisory only; full G1-08 is human-judgment)
+  #   These are recommend-tier per gate-criteria-spec.md § Gate 1; surfacing
+  #   them as advisory RECOMMENDs (not FAILs) honors the "right tool, right
+  #   time" framing — they never gate-block routine intake.
+  #
+  # MODE DECOUPLING (#27 Stage 6 scope expansion, sub-task #1647): this check's
+  # mode is RESOLVED via resolve_check_mode "g1-enforcement" into
+  # $G1_ENFORCEMENT_MODE at Check 22 start — reading a dedicated
+  # `g1-enforcement.mode` file (operator-instance path, same fallback pattern
+  # as deploy-check.mode) and FALLING BACK to the shared $DEPLOY_CHECK_MODE
+  # when that file is absent. This lets G1 enforcement graduate warn→enforce
+  # INDEPENDENTLY of the ~12-check shared-mode cohort. Every OTHER check still
+  # reads $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged. With no
+  # `g1-enforcement.mode` file present, this check falls back to the shared
+  # mode → warn (the current default). The warn→enforce flip is DEFERRED to
+  # follow-on #1686 (after the ≥3-day shakedown); this release ships WARN. Mode
+  # files are operator-instance runtime state and are NOT committed.
   #
   # Template Detection Logic — pragmatic body-marker variant:
-  #   gate-criteria-spec.md:81 cites `### Priority` AND `### Category` AND
-  #   `### Description` for improvement, but the actual rendered improvement
-  #   issue bodies use `**Priority:**` and `**Category:**` (dropdown bold)
-  #   rather than `### Priority` and `### Category` (section headers). This
-  #   check uses the unique textarea section headers that DO appear in
-  #   rendered bodies:
+  #   gate-criteria-spec.md § Gate 1 (Template Detection Logic, Step 2) cites
+  #   `### Priority` AND `### Category` AND `### Description` for improvement,
+  #   but the actual rendered improvement issue bodies use `**Priority:**` and
+  #   `**Category:**` (dropdown bold) rather than `### Priority` and
+  #   `### Category` (section headers). This check uses the unique textarea
+  #   section headers that DO appear in rendered bodies:
   #     bug         → `### Reproduction Steps`
   #     observation → `### What is missing?`
   #     improvement → `### Proposed Change`
-  #   The pragmatic markers are unique to each template per body-marker-
-  #   uniqueness verification at gate-criteria-spec.md:90.
+  #   The pragmatic markers are unique to each template per the body-marker-
+  #   uniqueness verification in gate-criteria-spec.md § Gate 1.
   #
   # Sub-checks:
   #   22a token   — verifies `gh auth status` reports `repo` scope; if
   #       missing, the check warns once and exits cleanly
   #   22b per-issue — iterates open `status: bundled` issues; applies
-  #       Template Detection Logic; evaluates G1-01/G1-03/G1-06/G1-09 per
-  #       applies-to triple using Adapter Blocks G1-01-Bug / G1-01-Obs /
-  #       G1-06-Bug
+  #       Template Detection Logic; ENFORCES G1-01/G1-03/G1-05a/G1-06/G1-09
+  #       (structural) + RECOMMEND-FLAGS G1-02/G1-04/G1-05b/G1-08 (judgment)
+  #       per applies-to triple using Adapter Blocks G1-01-Bug / G1-01-Obs /
+  #       G1-05-Bug / G1-06-Bug
   #
   # The check runs whenever AUDIT_REPO resolves to a tracker; with no tracker
   # configured the bundled-issue query returns an empty set and it no-ops.
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
-  # 8/9/10/14/15/18/19/20/21 precedent); flip-to-enforce after ≥3-day
-  # warn-log review with zero false positives. Operator may consider adding
-  # Layers (a) intake-time hook and (c) scheduled cadence after a 2-3 release
-  # calibration window: "keep in mind the right time to perform this work
-  # and the tools/processes available currently."
-  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 22: G1 enforcement on bundled issues"
+  # 8/9/10/14/15/18/19/20/21 precedent); flip-to-enforce DEFERRED to follow-on
+  # #1686 after ≥3-day warn-log review with zero false positives — flipped via
+  # the dedicated `g1-enforcement.mode` file (NOT the shared deploy-check.mode),
+  # so this check graduates independently of the shared-mode cohort. Operator
+  # may consider adding Layers (a) intake-time hook and (c) scheduled cadence
+  # after a 2-3 release calibration window: "keep in mind the right time to
+  # perform this work and the tools/processes available currently."
+  #
+  # Mode is resolved per-check (NOT the shared $DEPLOY_CHECK_MODE) — the check
+  # runs whenever $G1_ENFORCEMENT_MODE is not "off". Resolved at block start.
+  # `local` here matches DEPLOY_CHECK_MODE's scope; bash dynamic scoping makes
+  # it visible to flag_g1_enforcement / recommend_g1_enforcement (called below).
+  local G1_ENFORCEMENT_MODE
+  G1_ENFORCEMENT_MODE="$(resolve_check_mode "g1-enforcement")"
+  if [[ "$G1_ENFORCEMENT_MODE" != "off" ]]; then
+    log "Check 22: G1 enforcement on bundled issues (mode=${G1_ENFORCEMENT_MODE})"
 
     # 22a — gh auth scope check (issue list read requires `repo` for
     # private repos; this is non-fatal — check warns once and exits if
     # scope missing, since the check is non-gate-blocking detection)
     local c22_scope_ok=true
     if ! gh auth status --hostname github.com 2>&1 | /usr/bin/grep -qE '\brepo\b'; then
-      flag_warn_or_issue "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
+      flag_g1_enforcement "g1-enforcement" "gh auth scope missing 'repo' — cannot iterate bundled issues (run 'gh auth refresh -s repo')"
       c22_scope_ok=false
     fi
 
@@ -3080,10 +3204,13 @@ cmd_check() {
       #  2. Infer template from unique body markers (Step 2; pragmatic
       #     variant per leading comment)
       #  3. Reconcile (Step 3) — emit G1-09 FAIL on mismatch
-      #  4. Apply G1-01 / G1-03 / G1-06 per applies-to triple
+      #  4. ENFORCE G1-01 / G1-03 / G1-05a / G1-06 / G1-09 (structural) +
+      #     RECOMMEND-FLAG G1-02 / G1-04 / G1-05b / G1-08 (judgment) per the
+      #     applies-to triple
       local _num _title _body _labels _label_template _inferred _template
       local _has_imp _has_bug _has_obs _label_total
       local _bm_repro _bm_obswhat _bm_propchange _title_ok
+      local _ac_lines _ac_total _ac_bad _ac_line _ac_norm _ac_ok
       while IFS= read -r _issue_line; do
         [[ -n "$_issue_line" ]] || continue
         _num=$(printf '%s' "$_issue_line" | jq -r '.number')
@@ -3099,7 +3226,7 @@ cmd_check() {
         _label_total=$((_has_imp + _has_bug + _has_obs))
 
         if [[ "$_label_total" -ne 1 ]]; then
-          flag_warn_or_issue "g1-enforcement" \
+          flag_g1_enforcement "g1-enforcement" \
             "issue #${_num} — G1-09 FAIL: ${_label_total} intake-tier label(s) (expected exactly 1 of improvement/bug/observation; apply correct single label per pipeline/stage-01-intake.md § Routing)"
           c22_finding_count=$((c22_finding_count + 1))
           continue
@@ -3129,7 +3256,7 @@ cmd_check() {
         # Step 3 — reconcile
         _template="$_label_template"
         if [[ "$_inferred" != "ambiguous" && "$_label_template" != "$_inferred" ]]; then
-          flag_warn_or_issue "g1-enforcement" \
+          flag_g1_enforcement "g1-enforcement" \
             "issue #${_num} — G1-09 FAIL: label=${_label_template}, body=${_inferred} (label-body template mismatch — relabel or rewrite body per gate-criteria-spec.md self-repair)"
           c22_finding_count=$((c22_finding_count + 1))
           continue
@@ -3158,7 +3285,7 @@ cmd_check() {
             ;;
         esac
         if [[ "$_title_ok" != "true" ]]; then
-          flag_warn_or_issue "g1-enforcement" \
+          flag_g1_enforcement "g1-enforcement" \
             "issue #${_num} — G1-01 FAIL: title prefix mismatch for template '${_template}' (expected '[Category]:' / '[Bug]:' / '[Observation]:' per Adapter Blocks)"
           c22_finding_count=$((c22_finding_count + 1))
         fi
@@ -3167,7 +3294,7 @@ cmd_check() {
         # NOT observation per applies-to triple)
         if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
           if ! printf '%s' "$_body" | /usr/bin/grep -qE '\[(SOURCE|INFERRED|CONTEXT|RECOMMENDED|ASSUMPTION)' ; then
-            flag_warn_or_issue "g1-enforcement" \
+            flag_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-03 FAIL: no evidence-quality labels found in body ([SOURCE]/[INFERRED]/[CONTEXT]/[ASSUMPTION – CONFIRM]/[RECOMMENDED])"
             c22_finding_count=$((c22_finding_count + 1))
           fi
@@ -3177,25 +3304,136 @@ cmd_check() {
         # Adapter G1-06-Bug); n/a observation
         if [[ "$_template" == "improvement" ]]; then
           if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Priority:\*\*[[:space:]]*P[1-4]'; then
-            flag_warn_or_issue "g1-enforcement" \
+            flag_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-06 FAIL: Priority field missing or no P1-P4 value (improvement.yml expects '**Priority:** P1-Urgent'-style anchor)"
             c22_finding_count=$((c22_finding_count + 1))
           fi
         elif [[ "$_template" == "bug" ]]; then
           # Adapter G1-06-Bug — Severity P-level digit canonical
           if ! printf '%s' "$_body" | /usr/bin/grep -qE '\*\*Severity:\*\*[[:space:]]*P[1-4]'; then
-            flag_warn_or_issue "g1-enforcement" \
+            flag_g1_enforcement "g1-enforcement" \
               "issue #${_num} — G1-06 FAIL: Severity field missing or no P1-P4 value (Adapter G1-06-Bug — bug.yml expects '**Severity:** P1-Blocker'-style anchor)"
             c22_finding_count=$((c22_finding_count + 1))
+          fi
+        fi
+
+        # ── G1-05a — AC structural pattern (NEW; structural FAIL) ──────────
+        # Applies to improvement + bug (both carry an Acceptance Criteria
+        # field); n/a for observation (no AC field per applies-to triple).
+        # Extract every AC checkbox bullet (GitHub task-list `- [ ]` / `- [x]`)
+        # from the body, then assert each bullet matches ONE of the three
+        # G1-05a structural patterns:
+        #   (a) verb-first — verify|check|confirm|assert|ensure|validate
+        #   (b) backtick-path + state verb — a backtick-wrapped token AND a
+        #       contains|includes|has state verb
+        #   (c) explicit predicate — `predicate:` prefix
+        # Adapter G1-05-Bug (bug bodies): also accept the literal bug-narrative
+        # AC phrases. Pattern (d) behavioral/`method:` is a recommend-only
+        # refinement (gate-criteria-spec.md § Gate 1) — NOT gated here.
+        if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
+          # Pull AC checkbox bullets. Match leading `- [ ]` / `- [x]` / `- [X]`
+          # (any indentation). This is the gateable AC surface; non-checkbox
+          # prose in the AC section is not a bullet and is not checked.
+          _ac_lines=$(printf '%s' "$_body" | /usr/bin/grep -nE '^[[:space:]]*-[[:space:]]*\[[ xX]?\][[:space:]]+' || true)
+          _ac_total=0
+          _ac_bad=0
+          if [[ -n "$_ac_lines" ]]; then
+            while IFS= read -r _ac_line; do
+              [[ -n "$_ac_line" ]] || continue
+              _ac_total=$((_ac_total + 1))
+              # Strip the leading `<n>:- [ ] ` prefix down to the AC content.
+              _ac_norm=$(printf '%s' "$_ac_line" | /usr/bin/sed -E 's/^[0-9]+:[[:space:]]*-[[:space:]]*\[[ xX]?\][[:space:]]+//')
+              _ac_ok=false
+              # (a) verb-first (case-insensitive)
+              if printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '^(verify|check|confirm|assert|ensure|validate)\b'; then
+                _ac_ok=true
+              # (b) backtick-wrapped path/token AND a state verb
+              elif printf '%s' "$_ac_norm" | /usr/bin/grep -qE '`[^`]+`' \
+                && printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '\b(contains|includes|has)\b'; then
+                _ac_ok=true
+              # (c) explicit predicate: prefix
+              elif printf '%s' "$_ac_norm" | /usr/bin/grep -qiE '^predicate:'; then
+                _ac_ok=true
+              fi
+              # Adapter G1-05-Bug — bug-narrative AC phrase (bug bodies only)
+              if [[ "$_ac_ok" != "true" && "$_template" == "bug" ]]; then
+                if printf '%s' "$_ac_norm" | /usr/bin/grep -qiE 'reproduction steps no longer trigger actual behavior|running reproduction steps produces expected behavior'; then
+                  _ac_ok=true
+                fi
+              fi
+              [[ "$_ac_ok" == "true" ]] || _ac_bad=$((_ac_bad + 1))
+            done < <(printf '%s\n' "$_ac_lines")
+          fi
+          if [[ "$_ac_bad" -gt 0 ]]; then
+            flag_g1_enforcement "g1-enforcement" \
+              "issue #${_num} — G1-05a FAIL: ${_ac_bad} of ${_ac_total} AC bullet(s) match no G1-05a structural pattern (verb-first / backtick-path+state-verb / 'predicate:'$([[ "$_template" == "bug" ]] && printf ' / bug-narrative phrase'); see gate-criteria-spec.md § Gate 1 self-repair)"
+            c22_finding_count=$((c22_finding_count + 1))
+          fi
+        fi
+
+        # ── Recommend pass — judgment criteria (advisory; NEVER FAIL) ──────
+        # G1-02 / G1-04 / G1-05b / G1-08 are recommend-tier per
+        # gate-criteria-spec.md § Gate 1 (G1 Enforcement-Layer Split). Emitted
+        # via recommend_g1_enforcement — RECOMMEND lines that never increment
+        # ISSUES in any mode and never add to c22_finding_count (which counts
+        # only gating findings). Lightweight content proxies, not the full
+        # judgment evaluation (that remains a human/LLM gate-assist task).
+
+        # G1-02 — description / bug-narrative actionable (presence proxy).
+        if [[ "$_template" == "improvement" ]]; then
+          if ! printf '%s' "$_body" | /usr/bin/grep -qE '^### Description[[:space:]]*$'; then
+            recommend_g1_enforcement "g1-enforcement" \
+              "issue #${_num} — G1-02 RECOMMEND: no '### Description' section detected — confirm the change is stated as an actionable WHAT (not just an observation)"
+          fi
+        elif [[ "$_template" == "bug" ]]; then
+          if ! printf '%s' "$_body" | /usr/bin/grep -qE '^### (Expected Behavior|Actual Behavior)[[:space:]]*$'; then
+            recommend_g1_enforcement "g1-enforcement" \
+              "issue #${_num} — G1-02 RECOMMEND: bug narrative incomplete — confirm Reproduction Steps + Expected + Actual are all present (reproduce-and-observe must be possible)"
+          fi
+        fi
+
+        # G1-04 — Proposed Change names a file or protocol (improvement only).
+        if [[ "$_template" == "improvement" ]]; then
+          if printf '%s' "$_body" | /usr/bin/grep -qE '^### Proposed Change[[:space:]]*$' \
+            && ! printf '%s' "$_body" | /usr/bin/grep -qE '`[^`]+`|\.(md|sh|ya?ml|py|toml|json)\b|OPERATIONS\.md|CLAUDE\.md|SKILL\.md'; then
+            recommend_g1_enforcement "g1-enforcement" \
+              "issue #${_num} — G1-04 RECOMMEND: Proposed Change names no obvious file/protocol — confirm the WHAT identifies the affected file(s) or protocol(s)"
+          fi
+        fi
+
+        # G1-05b — AC verifiable beyond the structural check (improvement + bug):
+        # no unreplaced `<...>` placeholder slots in AC bullets, no commented-out
+        # bullets. Scoped to the AC checkbox lines captured for G1-05a.
+        if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
+          if [[ -n "$_ac_lines" ]]; then
+            if printf '%s' "$_ac_lines" | /usr/bin/grep -qE '<[A-Za-z][^>]*>'; then
+              recommend_g1_enforcement "g1-enforcement" \
+                "issue #${_num} — G1-05b RECOMMEND: AC bullet(s) contain unreplaced '<...>' placeholder slot(s) — fill the templated slots before bundling"
+            fi
+          fi
+          if printf '%s' "$_body" | /usr/bin/grep -qE '^[[:space:]]*<!--[[:space:]]*-[[:space:]]*\[[ xX]?\]'; then
+            recommend_g1_enforcement "g1-enforcement" \
+              "issue #${_num} — G1-05b RECOMMEND: commented-out AC bullet(s) detected — un-comment or remove them"
+          fi
+        fi
+
+        # G1-08 — implementability proxy (improvement + bug). Full G1-08 is a
+        # fresh-session-pickup human/LLM judgment; the automatable proxy is a
+        # body-substance floor: a very short body is unlikely to give a fresh
+        # agent enough to implement without clarifying questions. Advisory only.
+        if [[ "$_template" == "improvement" || "$_template" == "bug" ]]; then
+          if [[ "${#_body}" -lt 200 ]]; then
+            recommend_g1_enforcement "g1-enforcement" \
+              "issue #${_num} — G1-08 RECOMMEND: body is very short (${#_body} chars) — confirm a fresh Claude Code session could implement it without clarifying questions"
           fi
         fi
 
       done < <(printf '%s' "$c22_issues_json" | jq -c '.[]')
 
       if [[ "$c22_finding_count" -eq 0 ]]; then
-        log "  OK:    0 G1 findings across ${c22_issue_count} bundled issue(s)"
+        log "  OK:    0 gating G1 findings across ${c22_issue_count} bundled issue(s) (structural enforced: G1-01/03/05a/06/09; judgment recommend-flagged: G1-02/04/05b/08)"
       else
-        log "  ${c22_finding_count} G1 finding(s) emitted across ${c22_issue_count} bundled issue(s) (mode=${DEPLOY_CHECK_MODE})"
+        log "  ${c22_finding_count} gating G1 finding(s) emitted across ${c22_issue_count} bundled issue(s) (mode=${G1_ENFORCEMENT_MODE}; judgment criteria recommend-flagged separately, non-gating)"
       fi
     fi
   fi
