@@ -26,7 +26,7 @@ body:
     attributes:
       label: File or section affected
       description: Directional pointer to where the gap lives. File-level OK; section-level better if known.
-      placeholder: "pmo-platform/governance/OPERATIONS.md §Continuous Improvement Protocol"
+      placeholder: "core/governance/OPERATIONS.md §Continuous Improvement Protocol"
     validations:
       required: true
 
