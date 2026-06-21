@@ -110,7 +110,7 @@ Five requirements hold on every emission: (1) the audience is named and the fram
 
 ## Delivery Model Variation
 
-Tier-2's escalation cadence varies by delivery model (`delivery_approach: context-aware`, resolved per the project's governance — see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md)): RCA close-out and the runbook sweep align to **phase-gate exits** (Waterfall/SPM), the **sprint boundary** (Agile/Scrum), the **policy/SLA cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit support rhythm** (n/a). The 6-step RCA method and the required runbook half of CAPA are model-invariant.
+Tier-2's escalation cadence varies by delivery model (`delivery_approach: context-aware`, resolved per the project's governance — see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md)): RCA close-out and the runbook sweep align to **phase-gate exits** (Waterfall), the **sprint boundary** (Agile/Scrum), the **policy/SLA cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit support rhythm** (n/a). The 6-step RCA method and the required runbook half of CAPA are model-invariant.
 
 ## Evidence Quality Protocol
 
