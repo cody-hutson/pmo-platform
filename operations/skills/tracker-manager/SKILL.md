@@ -452,7 +452,7 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 - **Push-to-resolve:** When processing tracker updates, validate, consolidate, and present the complete change summary in a single pass. Don't just validate — produce the ready-to-approve change package.
 - **Max 5 clarifying questions:** Ask at most 5 questions per invocation. Everything else becomes a labeled assumption with `[ASSUMPTION – CONFIRM]` and a proposed answer.
 - **Principal contributor standard:** Output should match what a senior PMO professional would produce — accurate, judgment-driven, actionable.
-- **SPM Bridge (conditional):** When updating trackers for SPM co-managed projects, ensure milestone-level entries include both Agile and Waterfall framing where applicable. Only produce dual Agile/Waterfall framing when the project's PROJECT.md has `spm_comanaged: true`. Do not generate SPM outputs for Agile-only projects.
+- **Dual-Framing Bridge (conditional):** When updating trackers for dual-framing co-managed projects, ensure milestone-level entries include both Agile and Waterfall framing where applicable. Only produce dual Agile/Waterfall framing when the project's PROJECT.md has `dual_framing_enabled: true`. Do not generate dual-framing outputs for single-framing projects. When `delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two form per project-schema §6.5), read it as a list value rather than a string — do not mis-parse the list as a single archetype name.
 
 ### Guardrails
 

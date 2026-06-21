@@ -137,8 +137,8 @@ There is **no `mode=` flag and no new slash-command**; the discriminator is sema
 the supplied artifact in full; **never mutate the body**; run the inert-content gates
 (no-internal-IDs scan, evidence-label presence check, `[INSERT]`/`[TBD]` placeholder
 scan — flag, do not fabricate or auto-fill); set `confidence` from the wrap context; apply
-the SPM Bridge as a dual-framing addendum when the type is dual-framed AND
-`spm_comanaged: true`. Full gate-by-gate procedure: [`references/wrapper-mode.md`](references/wrapper-mode.md).
+the Dual-Framing Bridge as a dual-framing addendum when the type is dual-framed AND
+`dual_framing_enabled: true`. Full gate-by-gate procedure: [`references/wrapper-mode.md`](references/wrapper-mode.md).
 
 **Metadata-header schema (Wrapper Mode).** The same Step-5 frontmatter block, extended by
 **one new field-value (`source: external`)** and **one new field (`source_origin`)** — all
@@ -219,8 +219,8 @@ with a basis for the assumption.
 1. A markdown file for the workspace (saved to 08-Generated/)
 2. A copy/paste block formatted for the target system (Confluence, Teams, email) if applicable
 
-**SPM Bridge** (conditional): If PROJECT.md shows `spm_comanaged: true`, produce dual
-framing where relevant — agile language for IT PMO, waterfall language for SPM stakeholders.
+**Dual-Framing Bridge** (conditional): If PROJECT.md shows `dual_framing_enabled: true`, produce dual
+framing where relevant — agile language for the PMO view, waterfall language for the Sponsor view.
 
 **Guardrails**: All OPERATIONS.md guardrails apply. No status theater, no invention, no task
 dumping, no passive risk voice, validate day-of-week on all dates.

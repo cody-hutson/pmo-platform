@@ -446,15 +446,15 @@ When emitting follow-up tags, use this format so downstream skills receive consi
 - **Scope:** What the downstream skill should focus on
 - **Inputs:** What data/files the downstream skill needs
 
-## SPM Bridge (conditional)
+## Dual-Framing Bridge (conditional)
 
-When PROJECT.md includes `spm_comanaged: true`, activate SPM Bridge mode:
-- Synchronize change management artifacts with SPM governance gates (Phase Reviews, Stage Gates)
-- Map CM readiness criteria to SPM Sign-Off requirements
-- Flag CM risks/delays that impact SPM milestone dates
-- Coordinate CM comms schedule with SPM project communications
+When PROJECT.md includes `dual_framing_enabled: true`, activate Dual-Framing Bridge mode:
+- Synchronize change management artifacts with the sponsor (waterfall-track) governance gates (Phase Reviews, Stage Gates)
+- Map CM readiness criteria to the sponsor-track Sign-Off requirements
+- Flag CM risks/delays that impact sponsor-track milestone dates
+- Coordinate CM comms schedule with the sponsor-track project communications
 
-When `spm_comanaged` is not present or false, SPM Bridge is dormant. No SPM
+When `dual_framing_enabled` is not present or false, the Dual-Framing Bridge is dormant. No dual-framing
 synchronization occurs unless explicitly invoked.
 
 ## Dual output rule
