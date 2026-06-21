@@ -358,12 +358,13 @@ _vf_resolve_candidate() {
   # (2) bump-class -> claim-version.sh --dry-run (subprocess; no set -e leak).
   #     The allocator is the ONE #1675/#1673 implementation; never re-derived here.
   #     If the dry-run yields a NON-canonical value (e.g. the allocator could not
-  #     resolve the anchor, or an upstream defect — see the re-flag in the Stage-6
-  #     handoff: claim-version.sh's self-test stub seams override the real host I/O
-  #     unconditionally, so --dry-run currently reads empty fixtures), treat it as
-  #     "no usable candidate" -> empty -> the check SKIPs rather than asserting on a
-  #     malformed value. The explicit PMO_VERSION_FREENESS_CANDIDATE path (1) is the
-  #     exact, always-correct surface the CI gate + the operator use.
+  #     resolve the anchor), treat it as "no usable candidate" -> empty -> the check
+  #     SKIPs rather than asserting on a malformed value. This output validation is
+  #     defensive: an earlier stub-seam leak that let the self-test seams override
+  #     real host I/O on a normal load (so --dry-run read empty fixtures) has since
+  #     been fixed in claim-version.sh; the guard remains as a safety net against any
+  #     future allocator regression. The explicit PMO_VERSION_FREENESS_CANDIDATE path
+  #     (1) is the exact, always-correct surface the CI gate + the operator use.
   if [[ -n "${PMO_VERSION_FREENESS_BUMP:-}" ]]; then
     local _claim="${_audit_src_root:-.}/release/tools/claim-version.sh"
     if [[ -f "$_claim" ]]; then
