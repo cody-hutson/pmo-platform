@@ -79,3 +79,10 @@ release/tools/query-pipeline-event.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh
+# version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
+# source it, so all four invocation forms (incl. source/.) must be allowlisted
+# (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
+[PMO_PLATFORM_ROOT]/release/tools/version-grammar.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/version-grammar.sh
+./release/tools/version-grammar.sh
+release/tools/version-grammar.sh
