@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-034 — Registry as classification source — the core/ logical skill registry is a single central markdown index, registration is a central-index row (never a SKILL.md frontmatter field), and only role-Specialists register
+title: ADR-035 — Registry as classification source — the core/ logical skill registry is a single central markdown index, registration is a central-index row (never a SKILL.md frontmatter field), and only role-Specialists register
 status: Proposed
 date: 2026-06-20
 release: 05-ROLE-sustain-coverage-router (v2.15)
@@ -12,7 +12,7 @@ source_observations:
   - "Backfilling the registry for the existing role-Specialists must not edit their SKILL.md files — editing them would trip the skill-edit hook and balloon the change's blast radius. The platform already has a central per-skill index that catalogs skills without editing any SKILL.md (core/schemas/per-skill-output-contracts.md), establishing the central-index pattern this decision adopts and extends to the role-routing surface."
 ---
 
-# ADR-034 — Registry as classification source
+# ADR-035 — Registry as classification source
 
 ## Status
 

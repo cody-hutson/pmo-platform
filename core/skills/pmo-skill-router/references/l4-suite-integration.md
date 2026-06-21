@@ -106,4 +106,4 @@ A divergence routes back as a **shared-file or consumer-skill finding** (fix the
 - [`../../eval-writer/SKILL.md`](../../eval-writer/SKILL.md) — the eval methodology (binary judges, calibration, cross-family) this harness follows.
 - [`../registry.md`](../../registry.md) — the classification source the (a) set probes; the destination for trigger-deconfliction findings.
 - [ADR-033](../../../ADRs/ADR-033-methodology-conditional-skill-activation.md) — the methodology-conditional activation governing the dormant-RTE negative-path queries (C1 + the ~6 negative bucket).
-- [ADR-034](../../../ADRs/ADR-034-registry-as-classification-source.md) — the registry-as-classification-source contract the router consumes.
+- [ADR-035](../../../ADRs/ADR-035-registry-as-classification-source.md) — the registry-as-classification-source contract the router consumes.
