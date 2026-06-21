@@ -293,6 +293,105 @@ def test_roundtrip_preserves_operator_additions_through_multiple_writes(tmp_path
     assert compose.extract_operator_additions(target) == initial_preserved
 
 
+# ----- [PMO_PLATFORM_ROOT] deploy-time token (repo-root resolution) -----------------------------
+# The token replaces the vestigial hardcoded `pmo-platform-v2` install-path segment
+# in script-execution-allowlist.txt. Install safety hinges on the self-location
+# fallback being unconditionally correct, so it is the most heavily asserted path.
+
+
+def test_resolve_repo_root_self_location_is_compose_parent2() -> None:
+    """With no CLI value and no env override, the repo root is compose.py's parents[2].
+
+    This is the install-safety anchor: compose.py lives at
+    <repo>/core/deploy/compose.py and is never copied out of the repo, so this is
+    always the repo root being composed — meaning the token can never survive
+    unsubstituted into a deployed file.
+    """
+    expected = str(Path(compose.__file__).resolve().parents[2])
+    assert compose.resolve_repo_root() == expected
+
+
+def test_resolve_repo_root_cli_value_wins(monkeypatch) -> None:
+    # CLI value beats both env and self-location.
+    monkeypatch.setenv("PMO_PLATFORM_ROOT", "/env/repo")
+    assert compose.resolve_repo_root("/cli/repo") == str(Path("/cli/repo").resolve())
+
+
+def test_resolve_repo_root_env_used_when_no_cli(monkeypatch) -> None:
+    monkeypatch.setenv("PMO_PLATFORM_ROOT", "/env/repo")
+    assert compose.resolve_repo_root() == str(Path("/env/repo").resolve())
+
+
+def test_resolve_repo_root_self_location_when_cli_and_env_absent(monkeypatch) -> None:
+    monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
+    assert compose.resolve_repo_root() == str(Path(compose.__file__).resolve().parents[2])
+
+
+def test_resolve_tokens_includes_pmo_platform_root(monkeypatch) -> None:
+    monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
+    tokens = compose.resolve_tokens(Path("/nonexistent/operator.toml"))
+    assert "[PMO_PLATFORM_ROOT]" in tokens
+    assert tokens["[PMO_PLATFORM_ROOT]"] == str(Path(compose.__file__).resolve().parents[2])
+
+
+def test_resolve_tokens_pmo_platform_root_override_flows_through() -> None:
+    tokens = compose.resolve_tokens(
+        Path("/nonexistent/operator.toml"), repo_root="/Users/x/Claude/pmo-platform"
+    )
+    assert tokens["[PMO_PLATFORM_ROOT]"] == str(Path("/Users/x/Claude/pmo-platform").resolve())
+
+
+def test_pmo_platform_root_substitutes_in_allowlist_end_to_end(tmp_path: Path) -> None:
+    """End-to-end: an allowlist-shaped source resolves [PMO_PLATFORM_ROOT] to the
+    real repo path with NO literal token left behind, independently of
+    [CLAUDE_WORKSPACE_ROOT]. This is the regression guard for the original bug
+    (a never-matching absolute entry in a security allowlist)."""
+    source = tmp_path / "allow.txt"
+    target = tmp_path / "allow.out.txt"
+    _seed_source(
+        source,
+        "[PMO_PLATFORM_ROOT]/core/deploy/deploy.sh\n"
+        "[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/core/deploy/deploy.sh\n"
+        "./core/deploy/deploy.sh\n",
+    )
+    tokens = compose.resolve_tokens(
+        tmp_path / "absent.toml", repo_root="/Users/x/Claude/pmo-platform"
+    )
+    compose.write_managed_file(source, target, tokens, "", "sha", "tokens")
+    written = target.read_text()
+    # No token survives unsubstituted in the security file.
+    assert "[PMO_PLATFORM_ROOT]" not in written
+    assert "[CLAUDE_WORKSPACE_ROOT]" not in written
+    # The repo-root entry resolves to the actual repo path (not a hardcoded dir name).
+    assert "/Users/x/Claude/pmo-platform/core/deploy/deploy.sh" in written
+    # Relative form passes through untouched.
+    assert "./core/deploy/deploy.sh" in written
+
+
+def test_cli_write_repo_root_flag_substitutes(tmp_path: Path) -> None:
+    """Full CLI wiring: `compose.py write --repo-root` substitutes [PMO_PLATFORM_ROOT]."""
+    import subprocess
+
+    source = tmp_path / "src.txt"
+    target = tmp_path / "out.txt"
+    _seed_source(source, "[PMO_PLATFORM_ROOT]/release/tools/blast-radius.sh\n")
+    compose_py = Path(__file__).resolve().parent.parent / "compose.py"
+    out = subprocess.run(
+        [
+            sys.executable, str(compose_py), "write",
+            "--source", str(source), "--target", str(target),
+            "--operator-toml", str(tmp_path / "absent.toml"),
+            "--tokens-flag", "tokens", "--source-sha", "abc",
+            "--repo-root", "/opt/pmo",
+        ],
+        capture_output=True, text=True,
+    )
+    assert out.returncode == 0, out.stderr
+    written = target.read_text()
+    assert "/opt/pmo/release/tools/blast-radius.sh" in written
+    assert "[PMO_PLATFORM_ROOT]" not in written
+
+
 def test_roundtrip_with_token_substitution_does_not_affect_preserved_section(tmp_path: Path) -> None:
     """Tokens substitute in managed content but the preserved section is verbatim regardless of token state."""
     source = tmp_path / "src.txt"

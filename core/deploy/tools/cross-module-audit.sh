@@ -20,7 +20,7 @@
 # release/governance/release-process.md + release/references/pipeline/* are
 # accepted cohesion (per the ADR-007 carry-forward contract).
 #
-# Usage (from pmo-platform-v2 repo root):
+# Usage (from pmo-platform repo root):
 #   core/deploy/tools/cross-module-audit.sh [<md-output>] [<tsv-output>]
 #
 # Defaults:

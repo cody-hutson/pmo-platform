@@ -233,7 +233,7 @@ For the structured boundary contract, see [schemas/stage-io-contracts.md](../../
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics: all issues have design specs, ADRs resolved (closed), blast radius complete, no unresolved questions, plan updated, Mode 3/4 flags resolved.
+Metrics: all issues have design specs, ADRs resolved (closed), blast radius complete, no unresolved questions, plan updated, Mode 3/4 flags resolved; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
 Judgment (1-5): design specificity, architecture alignment, blast radius coverage, decision quality, handoff completeness.
 Calibration: design specs vs. actual implementation, ADR decisions vs. outcomes, blast radius predicted vs. actual, escape rate.
 

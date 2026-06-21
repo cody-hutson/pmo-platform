@@ -7,6 +7,8 @@
 ## 1. Purpose
 Validate deployment procedure before executing against production. **How the platform satisfies this:** The PR diff reviewed by the operator in Stage 9 (Phase B2) IS the dry run. Git's merge operation is deterministic — what the diff shows is what will deploy. No separate dry run step needed for git-native releases.
 
+**Deferred Items (mid-pipeline) — pass-through:** This stage is PLATFORM-SATISFIED and exposes no `## 7. Stage-Transition Gate`, so it performs no per-gate "Deferred Items" accounting. Any mid-pipeline deferred item whose target stage falls at or after this point passes through the compressed Stage 9→12 path to the next real gate (Stage 12 Execute), which carries the incoming-deferred-items accounting clause per deferred-item-tracking.md §13.8.
+
 ## 2. Reference Model Alignment
 
 | Ref Model Attribute | Part 6 Definition | Our Implementation | Satisfaction Mechanism |

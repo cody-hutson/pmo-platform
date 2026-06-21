@@ -23,7 +23,7 @@ Both schemas live in **one doc** because they are one coherent contract: the pha
 |---|---|
 | The **grammar** (field set, types, requiredness, structural predicates) an instance is validated against. | A populated inventory. The populated rows (≥1 per pipeline stage) are a K4 instance, authored operator-local and git-ignored — never committed to this corpus (template purity per ADR-012). |
 | K1 codified-knowledge (the shape is universal — every deployment's pipeline has touchpoints). | K4 instance data. One deployment's specific touchpoints, phases, dates, and pilot selections are operator-local planning data. |
-| A contract a structural check (`deploy.sh --check` Check 39) validates an instance against. | An enforcement surface for the *content* of an operator's phase-out decisions. Advancement stays an operator judgment call. |
+| A contract a structural check (`deploy.sh --check` Check 40) validates an instance against. | An enforcement surface for the *content* of an operator's phase-out decisions. Advancement stays an operator judgment call. |
 
 **The schema↔instance split.** The reusable grammar is tracked here; the populated instance is operator-local. This mirrors the established platform pattern (the work-item type-pack meta-schema: "the grammar every type-pack conforms to" is tracked K1; "a project's declared kinds are operator-local … never authored into this git-tracked corpus"). The instance home is the operator-local roadmaps tree (the git-ignored `*/governance/roadmaps/` seam) or an operator-local analysis path; it is never in the PR. AC1/AC3/AC5 are satisfied by spoke evidence against that instance, not by a corpus diff.
 
@@ -110,7 +110,7 @@ The instance carries a **phase-state matrix** at the top of the inventory for <3
 
 The phase-out plan is the second schema in this doc. Each row is the plan for advancing **one** touchpoint toward its `target_phase`, keyed on `touchpoint_id` (a foreign key into the inventory). The instance authors a plan row for each of the 3 CHEAP pilot touchpoints (§4). Per-row fields:
 
-| Field | Type | Requirement | Structural predicate (Check 39 / §5) |
+| Field | Type | Requirement | Structural predicate (Check 40 / §5) |
 |---|---|---|---|
 | `touchpoint_id` | FK → an inventory `touchpoint_id` | Resolves to a real inventory row | The value matches an inventory row's field 1. |
 | `success_criteria` | string (a **testable** predicate) | Measurable — a comparison or measurable verb | Contains one of `≥ <= >= == exactly zero` or an equivalent measurable predicate. |
@@ -147,9 +147,9 @@ Each pilot's inventory row sets `automation_candidate: true`, a `target_phase`, 
 
 ---
 
-## 5. Structural-check predicates (AC6) — what `deploy.sh --check` Check 39 validates
+## 5. Structural-check predicates (AC6) — what `deploy.sh --check` Check 40 validates
 
-The instance is operator-local and git-ignored, so the structural check is **skip-when-absent**: with no instance present (a fresh clone, CI, or any machine without the operator-local file), Check 39 SKIPs cleanly and never fails. When an instance IS present, Check 39 validates it **structurally** (field presence + type/enum shape — not the *content* of the operator's judgment) and runs **warn-mode-initial** through the shared deploy-check mode machinery (dogfooding the `shadow`/`warn` phase of the very convention this release ships). The predicates:
+The instance is operator-local and git-ignored, so the structural check is **skip-when-absent**: with no instance present (a fresh clone, CI, or any machine without the operator-local file), Check 40 SKIPs cleanly and never fails. When an instance IS present, Check 40 validates it **structurally** (field presence + type/enum shape — not the *content* of the operator's judgment) and runs **warn-mode-initial** through the shared deploy-check mode machinery (dogfooding the `shadow`/`warn` phase of the very convention this release ships). The predicates:
 
 - **P1 (inventory field presence):** every inventory row carries all 10 required fields (1–10 minus the optional 11–13/15; required = `touchpoint_id`, `stage`, `touchpoint_name`, `description`, `autonomy_tier`, `interaction_modality`, `reversibility_tier`, `current_phase`, `irreducible_human`, `automation_candidate`, `owner`, `last_phase_advanced`).
 - **P2 (enum conformance):** `current_phase` / `target_phase` ∈ the §1 enum; `autonomy_tier` ∈ `{0,1,2,3}`; `reversibility_tier` ∈ `{CHEAP, MODERATE, EXPENSIVE, IRREVERSIBLE}`; `interaction_modality` ∈ its enum.
@@ -158,7 +158,7 @@ The instance is operator-local and git-ignored, so the structural check is **ski
 - **P5 (phase-out-plan field presence):** every plan row carries `success_criteria`, `slo`, `risks` (≥2), `rollback_path`, `phase_sequence`, `current_phase`.
 - **P6 (FMEA shape):** every risk carries `severity`, `likelihood`, `detectability`, `mitigation`.
 
-Check 39 is a **structural** gate only. It does not grade whether a `success_criteria` is *good* or a phase-out decision is *wise* — that is operator judgment, never auto-promoted (per the convention's advance-is-an-operator-decision rule).
+Check 40 is a **structural** gate only. It does not grade whether a `success_criteria` is *good* or a phase-out decision is *wise* — that is operator judgment, never auto-promoted (per the convention's advance-is-an-operator-decision rule).
 
 ---
 
@@ -206,7 +206,7 @@ Each row carries an evidence grade and a `file:line` citation:
 
 ## 7. Reversibility
 
-Authoring and reverting this schema + its instance is **CHEAP** (HIGH confidence). The tracked half reverts via a PR revert (one schema doc + one taxonomy reciprocity line + the Check 39 block). The operator-local instance is an operator file delete. No tracked consumer depends on the schema except the release-class-taxonomy future-sibling line, which reverts in the same PR.
+Authoring and reverting this schema + its instance is **CHEAP** (HIGH confidence). The tracked half reverts via a PR revert (one schema doc + one taxonomy reciprocity line + the Check 40 block). The operator-local instance is an operator file delete. No tracked consumer depends on the schema except the release-class-taxonomy future-sibling line, which reverts in the same PR.
 
 ---
 

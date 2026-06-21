@@ -38,6 +38,7 @@ The token vocabulary is:
 | `[OPERATOR_GIT_EMAIL]` | Git config email (may differ from above) | `git config user.email` | Doc prose where commit-attribution email appears |
 | `[OPERATOR_HOMEDIR_PATH]` | Operator's POSIX home directory path | `$HOME` at workspace-setup time | `~/Library/Application Support/...` references, doc prose paths |
 | `[CLAUDE_WORKSPACE_ROOT]` | Claude workspace root path | Operator config at setup | Workspace-root references in load-bearing hooks/config |
+| `[PMO_PLATFORM_ROOT]` | pmo-platform repo root (where deploy + release scripts live) | Deploy-time resolution in `core/deploy/compose.py` (NOT operator.toml) | Absolute-path entries in load-bearing hook allowlists (e.g. `script-execution-allowlist.txt`) |
 | `[COWORK_INSTALL_PATH_BASE]` | Cowork install path base | Operator config at setup | `~/Library/Application Support/Claude/local-agent-mode-sessions/...` references |
 | `[OPERATOR_PROJECT_NAME]` | First active K4 project name (informational only) | `projects/<Project>/PROJECT.md` discovery | K4-leak references in K1 docs |
 
@@ -51,6 +52,7 @@ The parameterization seam lives at:
 
 - **Read-source for `[OPERATOR_*]` tokens:** `~/.config/pmo-platform/operator.toml` (canonical, XDG-spec) with optional per-workspace override at `<workspace>/operator.local.toml`. Resolution order: operator.local.toml > operator.toml > template defaults. Documented surface form: `/CLAUDE.md § Workspace Owner` (the K3 parameter home per `universal-vs-localized-context.md § 4(b)`) is the human-readable view of the same values.
 - **Read-source for `[CLAUDE_WORKSPACE_ROOT]` token:** `~/.config/pmo-platform/operator.toml` `[paths].claude_workspace_root` field, created at workspace-setup time. Default fallback: `$HOME/Claude`.
+- **Read-source for `[PMO_PLATFORM_ROOT]` token:** resolved at deploy time by `core/deploy/compose.py`, NOT from operator.toml. Precedence: `--repo-root` CLI flag > `$PMO_PLATFORM_ROOT` env > compose.py self-location (`Path(__file__).resolve().parents[2]`). Self-location is always the repo root being composed (compose.py is never copied out of the repo), so the token cannot survive unsubstituted into a deployed file. This token is distinct from `[CLAUDE_WORKSPACE_ROOT]`: the repo MAY live anywhere (a clone, a sibling dev checkout), not necessarily directly under the workspace root.
 - **Read-source for `[OPERATOR_HOMEDIR_PATH]` token:** `$HOME` at read-time (no separate config needed).
 - **Read-source for `[COWORK_INSTALL_PATH_BASE]` token (Cowork-specific):** discovered at workspace-setup time by scanning `~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/` for the active session UUID; persisted to `~/.config/pmo-platform/operator.toml` `[paths].cowork_install_path` field.
 - **Read-source for `[OPERATOR_PROJECT_NAME]` token:** lazily resolved per K4 surface — read `projects/<Project>/PROJECT.md` at the point the K1 doc is consumed; informational only.
