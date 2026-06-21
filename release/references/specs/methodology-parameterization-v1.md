@@ -286,23 +286,23 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) 5
 
 ## 7. Relationship to Dual-Framing Bridge (Conditional)
 
-The legacy `spm_comanaged: true` binary **remains operative** and is NOT deprecated by the introduction of `delivery_approach`. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
+The `dual_framing_enabled: true` binary (legacy key `spm_comanaged`, accepted via the `project-initiator` Mode C shim) **remains operative** and is NOT deprecated by the introduction of `delivery_approach`. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
 
 - `delivery_approach` is the **methodology classification** — a single archetype, or (for Hybrid) a user-configurable two-archetype combination `[A, B]` reported in both native framings. It says nothing about co-management.
-- `spm_comanaged: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the Dual-Framing Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
+- `dual_framing_enabled: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the Dual-Framing Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
 
 Because they are orthogonal, every combination is meaningful:
 
-| `delivery_approach` | `spm_comanaged` | Interpretation |
+| `delivery_approach` | `dual_framing_enabled` | Interpretation |
 |---|---|---|
 | `Hybrid` (or a two-archetype array) | `true` | A two-archetype project that *additionally* runs the co-management dual-framing output |
 | `Hybrid` (or a two-archetype array) | `false` (or absent) | A two-archetype project reported in both native framings, with no co-management bridge |
 | Non-Hybrid (e.g., `Scrum`) | `true` | A single-archetype project that runs the co-management dual-framing output independently of methodology |
 | Non-Hybrid | `false` (or absent) | Single-methodology project — no dual-framing |
 
-The "Hybrid + `spm_comanaged: true`" row is the **legacy co-managed shape**, but it is a *configuration*, not the definition of Hybrid: co-management is no longer implied by the classification. Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `spm_comanaged` before producing output — the two fields independently determine the methodology framing and whether co-management dual-framing is active.
+The "Hybrid + `dual_framing_enabled: true`" row is the **legacy co-managed shape**, but it is a *configuration*, not the definition of Hybrid: co-management is no longer implied by the classification. Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `dual_framing_enabled` before producing output — the two fields independently determine the methodology framing and whether co-management dual-framing is active.
 
-**Deprecation timeline.** Consolidation of `spm_comanaged` with `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE currently. See [`schemas/project-schema.md § 7 Migration Notes`](../../../core/schemas/project-schema.md) and [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../../../core/governance/OPERATIONS.md).
+**Deprecation timeline.** Consolidation of `dual_framing_enabled` with `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE currently (the legacy `spm_comanaged` key folds away with it). See [`schemas/project-schema.md § 7 Migration Notes`](../../../core/schemas/project-schema.md) and [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../../../core/governance/OPERATIONS.md).
 
 ## 8. Versioning
 
