@@ -22,7 +22,7 @@ are replaced by the skill during project scaffolding. Conditional sections are m
 **Go-live target:** {{GO_LIVE_TARGET}}
 **Current phase:** {{CURRENT_PHASE}}
 **Governance model:** {{GOVERNANCE_MODEL}}
-**SPM co-managed:** {{SPM_CO_MANAGED}}
+**Dual-framing enabled:** {{DUAL_FRAMING_ENABLED}}
 {{IF INVESTMENT_CLASS}}
 **Investment class:** {{INVESTMENT_CLASS}}
 {{ENDIF}}
@@ -116,7 +116,7 @@ capacity effort-split — a different concept that shares the same digits.)
 {{IF GOVERNANCE_MODEL == Waterfall}}
 | `{{PROJECT_PREFIX}}_Milestone_Tracker.md` | Phase-gate milestone tracking with evidence. | Initialized — empty |
 {{ENDIF}}
-{{IF SPM_CO_MANAGED == Yes}}
+{{IF DUAL_FRAMING_ENABLED == Yes}}
 | `{{PROJECT_PREFIX}}_SPM_Bridge.md` | Milestone-to-sprint mapping, dual-frame status. | Initialized — empty |
 {{ENDIF}}
 
@@ -126,7 +126,7 @@ capacity effort-split — a different concept that shares the same digits.)
 {{IF GOVERNANCE_MODEL == Agile OR Hybrid}}
 - **Jira board:** [{{JIRA_PROJECT_KEY}} Board](https://[OPERATOR_JIRA]/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
 {{ENDIF}}
-{{IF SPM_CO_MANAGED == Yes}}
+{{IF DUAL_FRAMING_ENABLED == Yes}}
 - **SharePoint folder:** {{ASSUMPTION – CONFIRM: SharePoint URL}}
 - **Smartsheet:** {{ASSUMPTION – CONFIRM: Smartsheet URL}}
 {{ENDIF}}
