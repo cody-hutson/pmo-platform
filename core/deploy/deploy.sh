@@ -74,6 +74,7 @@ RELEASE_SKILLS=(
 CORE_SKILLS=(
   eval-writer
   pmo-qa-auditor
+  pmo-skill-router
   prompt-builder
 )
 
