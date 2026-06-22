@@ -132,7 +132,7 @@ The remaining catalogued archetypes are mapped at **level-name + general-level g
 | **PRINCE2** | Project | Stage (management stage) | Work Package | `[deferred]` — Stage (Milestone-level) ⊐ Work Package (Work-Item-level); PRINCE2 is a governance wrapper that tailors over an execution engine |
 | **Kanban** | *(service/board)* | *(flow — no time-box)* | Card / work item | `[deferred]` — continuous-flow: no fixed Milestone-level time-box; cards are Work-Item-level pulled through WIP-limited columns |
 | **XP** | *(product)* | Iteration | User story / Task | `[deferred]` — Iteration (Milestone-level) ⊐ Story ⊐ Task (both Work-Item-level); engineering-practice-heavy |
-| **Hybrid** | Project | per-track (one iterative, one phased) | per-track kind set | `[deferred]` — dual-track: each track maps per its constituent archetype (Scrum-track + Waterfall-track), union of both |
+| **Hybrid** | Project | per-track (one per constituent archetype) | per-track kind set | `[deferred]` — a user-configurable two-archetype combination `delivery_approach: [A, B]`: each track maps per its constituent archetype (e.g. Scrum-track + Waterfall-track), union of both |
 | **Custom** | per `custom_methodology_definition` | per block | per block | `[deferred]` — resolves via the block's `base_archetype` (use that archetype's row) or, when `base_archetype: null`, places brought kinds at Work-Item level by default (Layer 4 §4.2 step 5) |
 
 > **Note on SAFe/PRINCE2 names.** `Capability`, `Feature`, `Work Package` are projection/display labels (glossary Appendix B), not canonical kinds — listed here to map the methodology, not to bless the term. The canonical kind remains `Work Item` distinguished by `work_item_type`.

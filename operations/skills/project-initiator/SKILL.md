@@ -77,7 +77,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 | Go-Live Target | Target go-live date | August 15, 2026 |
 | Implementation Partner | Vendor name (if applicable). "None" if internal-only. | [VENDOR_X] |
 | Key Stakeholders | Minimum: Sponsor, PM, Tech Lead. Include role and name. | [COLLEAGUE_A] (Sponsor), [COLLEAGUE_B] (Tech Lead) |
-| SPM Co-Managed? | Whether SPM team co-manages. Controls SPM Bridge activation. | Yes / No |
+| Dual-Framing Co-Managed? | Whether the project is co-managed with dual Agile/Waterfall framing. Controls Dual-Framing Bridge activation. (Sets frontmatter `dual_framing_enabled`; legacy input label "SPM Co-Managed" / legacy key `spm_comanaged` is accepted via the Mode A deprecation shim — see Step 1.) | Yes / No |
 | Jira Project Key | If Agile/Hybrid: the Jira project key for MCP configuration. N/A for pure Waterfall. | WHO |
 | Confluence Space | Primary Confluence space key. N/A if SharePoint-only. | TS |
 
@@ -97,8 +97,9 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 2. Validate the governance model is one of: Agile, Waterfall, Hybrid
 3. Validate day-of-week for the go-live date
 4. If Agile or Hybrid, confirm Jira Project Key is provided
-5. If SPM Co-Managed = Yes, note that SPM Bridge sections will be activated
-6. Flag any missing inputs as `ASSUMPTION – CONFIRM` with proposed values
+5. If Dual-Framing Co-Managed = Yes, note that Dual-Framing Bridge sections will be activated
+6. **Legacy-key deprecation shim.** This is the dual-framing trigger's back-compat shim (the contract documented in `core/schemas/project-schema.md` § Migration §7, where it is referred to as the "Mode C shim"; project-initiator implements it here, in the Mode A input-validation path — Mode A is the live mode that reads the co-management input and writes the frontmatter flag). When the Required Input arrives under the **legacy label "SPM Co-Managed"**, or an existing/imported `PROJECT.md` carries the **legacy frontmatter key `spm_comanaged`**, accept it: emit a one-line deprecation warning (`[DEPRECATION] 'spm_comanaged' / 'SPM Co-Managed' is renamed to 'dual_framing_enabled' / 'Dual-Framing Co-Managed'; reading the legacy value as the new field — update the source to silence this`) and treat the legacy boolean as `dual_framing_enabled` (identical boolean semantics). Shim-removal is deferred to a future milestone; it is a one-line deletion when live `PROJECT.md` files have migrated.
+7. Flag any missing inputs as `ASSUMPTION – CONFIRM` with proposed values
 
 ### Step 2: Create Folder Structure
 
@@ -176,8 +177,9 @@ user inputs. Apply conditional logic:
 - **Agile projects:** Include Sprint Tracking section. Omit Phase-Gate Timeline.
 - **Waterfall projects:** Include Phase-Gate Timeline. Omit Sprint Tracking.
 - **Hybrid projects:** Include both Sprint Tracking and Phase-Gate Timeline.
-- **SPM Co-Managed = Yes:** Include SPM Bridge section with Waterfall milestone framing.
-- **SPM Co-Managed = No:** Omit SPM Bridge section entirely.
+- **Dual-Framing Co-Managed = Yes:** Include Dual-Framing Bridge section with Waterfall milestone framing. Set frontmatter `dual_framing_enabled: true` (the legacy key `spm_comanaged` is read via the Step 1 shim).
+- **Dual-Framing Co-Managed = No:** Omit Dual-Framing Bridge section entirely.
+- **`delivery_approach` is a 2-element array `[A, B]` (Hybrid-Two, per project-schema §6.5):** scaffold the array form verbatim in the frontmatter (e.g. `delivery_approach: [Scrum, Kanban]`) and include one native track structure per constituent (union per `work-organization-mapping-framework.md` §2.5). This is orthogonal to the Dual-Framing Bridge — a Hybrid-Two project may have `dual_framing_enabled: false`.
 
 Set `last_synced_with_confluence: [today's date]` and `status: ACTIVE`.
 
@@ -196,7 +198,7 @@ All governance models get:
 Governance-specific additions:
 - **Agile/Hybrid:** `[Project]_Sprint_Tracker.md` — Sprint number, goal, capacity, velocity fields
 - **Waterfall:** `[Project]_Milestone_Tracker.md` — Phase, milestone, planned date, actual date, status, evidence
-- **All with SPM Co-Managed = Yes:** `[Project]_SPM_Bridge.md` — Milestone-to-sprint mapping, dual-frame status
+- **All with Dual-Framing Co-Managed = Yes:** `[Project]_Dual_Framing_Bridge.md` — Milestone-to-sprint mapping, dual-frame status
 
 Status framework templates:
 7. `[Project]_Daily_Status_Update_Framework.md` — Phase-appropriate prompt templates for AM/PM updates
@@ -241,7 +243,7 @@ After updating PORTFOLIO.md (Step 5), validate the write before proceeding:
 Produce a checklist of actions the user must take in parallel systems. This is NOT optional —
 it ensures the PMO workspace stays in sync with team tools.
 
-**For Agile / Hybrid (IT PMO):**
+**For Agile / Hybrid:**
 - [ ] Verify Confluence space `[key]` exists and is accessible
 - [ ] Create project overview page in Confluence (or verify existing)
 - [ ] Create FDD folder in Confluence space
@@ -251,7 +253,7 @@ it ensures the PMO workspace stays in sync with team tools.
 - [ ] Invite team members to Confluence space
 - [ ] Upload initial documents to appropriate Confluence folders
 
-**For Waterfall (SPM):**
+**For the Waterfall (Sponsor) track:**
 - [ ] Create SharePoint project folder (or verify existing)
 - [ ] Create milestone tracker in Smartsheet (or verify existing)
 - [ ] Set up Google Drive transcript folder (or verify Sembly routing)
@@ -260,9 +262,9 @@ it ensures the PMO workspace stays in sync with team tools.
 
 **For Hybrid (both):**
 - All Agile items above, PLUS:
-- [ ] Create SharePoint folder for SPM deliverables
+- [ ] Create SharePoint folder for the sponsor deliverables
 - [ ] Verify Smartsheet milestone tracker accessible
-- [ ] Confirm SPM reporting cadence with SPM stakeholder
+- [ ] Confirm the reporting cadence with the sponsor stakeholder
 
 **MCP Connector Configuration:**
 - [ ] Verify Jira MCP connector has access to `[project key]` (if Agile/Hybrid)
@@ -448,7 +450,7 @@ Read `Projects/_governance/PORTFOLIO.md` and update:
 
 Produce a checklist of actions the user must take in parallel systems:
 
-**For Agile / Hybrid (IT PMO):**
+**For Agile / Hybrid:**
 - [ ] Archive or close Jira project `[key]` (or mark sprint board inactive)
 - [ ] Archive Confluence space `[key]` (or move pages to archive section)
 - [ ] Remove/archive Google Drive transcript folder
@@ -456,7 +458,7 @@ Produce a checklist of actions the user must take in parallel systems:
 - [ ] Notify stakeholders of project closure (use Comms Writer if needed)
 - [ ] Remove MCP connector access if project-specific
 
-**For Waterfall (SPM):**
+**For the Waterfall (Sponsor) track:**
 - [ ] Archive SharePoint project folder
 - [ ] Close or archive Smartsheet milestone tracker
 - [ ] Remove/archive Google Drive transcript folder
@@ -567,32 +569,32 @@ structural conformance and content quality.
   data or confirms the assumption before scaffold completion.
 - **Principal response vs. junior response:** Principal labels every non-input field and
   surfaces the assumption list in the Step 8 summary. Junior fills the blanks with
-  plausible defaults (SPM default stakeholder names, guessed go-live date, assumed
+  plausible defaults (sponsor default stakeholder names, guessed go-live date, assumed
   governance model) and ships a PROJECT.md that reads as authoritative but is half
   invented.
 
-### SPM Bridge section omitted on co-managed project — TRIG
+### Dual-Framing Bridge section omitted on co-managed project — TRIG
 
 - **Signature (observable signal):** A PROJECT.md scaffolded for a project whose user
-  input specified `SPM Co-Managed = Yes` does not contain an SPM Bridge section with
-  milestone framing, or the frontmatter lacks `spm_comanaged: true`, or the section is
+  input specified `Dual-Framing Co-Managed = Yes` (or the legacy `SPM Co-Managed = Yes`) does not contain a Dual-Framing Bridge section with
+  milestone framing, or the frontmatter lacks `dual_framing_enabled: true`, or the section is
   present but empty.
-- **Conditional:** do NOT omit the SPM Bridge section from PROJECT.md when the user
-  specified SPM Co-Managed = Yes in Required Inputs, because the SPM Bridge activates
+- **Conditional:** do NOT omit the Dual-Framing Bridge section from PROJECT.md when the user
+  specified Dual-Framing Co-Managed = Yes in Required Inputs, because the Dual-Framing Bridge activates
   dual Agile/Waterfall framing across the skill suite (ppm-agent, delivery-engine,
   daily-status, weekly-status-rollup) and its absence silently disables every downstream
-  SPM-compatible output for the rest of the project's life — the flag is read once at
+  dual-framing output for the rest of the project's life — the flag is read once at
   scaffold time and referenced thereafter.
-- **Root cause:** SPM Bridge is a conditional section that requires branching the
+- **Root cause:** Dual-Framing Bridge is a conditional section that requires branching the
   PROJECT.md template; the default Agile and Waterfall templates do not include it. The
   branching step is easy to skip when the primary governance model dominates attention.
-- **Mitigation:** Read the `SPM Co-Managed` Required Input value in Step 3 before
-  applying the template; when Yes, branch to the SPM-enabled template variant; include
-  the SPM Bridge section verbatim; set frontmatter `spm_comanaged: true`; verify the
+- **Mitigation:** Read the `Dual-Framing Co-Managed` Required Input value (accepting the legacy `SPM Co-Managed` label / `spm_comanaged` key via the Step 1 shim) in Step 3 before
+  applying the template; when Yes, branch to the dual-framing-enabled template variant; include
+  the Dual-Framing Bridge section verbatim; set frontmatter `dual_framing_enabled: true`; verify the
   section is present before moving to Step 4.
 - **Principal response vs. junior response:** Principal reads the flag, branches the
-  template, and ships the full SPM-enabled scaffold. Junior ships the default template,
-  and the SPM lead notices at first SteerCo that the project is not generating milestone-
+  template, and ships the full dual-framing-enabled scaffold. Junior ships the default template,
+  and the sponsor (waterfall-track) lead notices at first SteerCo that the project is not generating milestone-
   framed output — requiring a retrofit edit under stakeholder visibility.
 
 ### Mode B archival with unresolved RAID entries — PROC

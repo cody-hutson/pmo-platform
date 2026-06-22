@@ -172,9 +172,9 @@ Governs how multi-mode skills select which mode to run on a given invocation. Pa
 
 Do NOT flood response with transcribed data. Synthesize. Show work.
 
-### SPM Bridge (Conditional)
+### Dual-Framing Bridge (Conditional)
 
-Activates **only** when `PROJECT.md` has `spm_comanaged: true`. Produces dual framing:
+Activates **only** when `PROJECT.md` has `dual_framing_enabled: true` (legacy key `spm_comanaged` accepted via the `project-initiator` Mode C shim). Produces dual framing:
 - **Agile track:** Sprint-level progress, velocity, backlog health
 - **Waterfall track:** Milestone gates, phase approval, stage gates
 
@@ -351,23 +351,23 @@ Elevation triggers coordinated updates across:
 - New enum value in [`schemas/project-schema.md`](../schemas/project-schema.md) `delivery_approach` field.
 - Consumer-skill updates (release-planner, role-skills).
 
-### Relationship to SPM Bridge (Conditional)
+### Relationship to Dual-Framing Bridge (Conditional)
 
-The legacy `spm_comanaged: true` binary remains operative and is **NOT deprecated** by this protocol. Reconciliation:
+The `dual_framing_enabled: true` binary (legacy key `spm_comanaged`, accepted via the `project-initiator` Mode C shim) remains operative and is **NOT deprecated** by this protocol. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
 
-- `delivery_approach: Hybrid` is the **methodological classification** — it describes the dual-lifecycle nature of the project.
-- `spm_comanaged: true` is the **operational dual-framing trigger** — it activates the SPM Bridge output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`).
+- `delivery_approach: Hybrid` is the **methodology classification** — a user-configurable two-archetype combination `[A, B]` reported in both native framings. It says nothing about co-management.
+- `dual_framing_enabled: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the Dual-Framing Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
 
-Canonical valid combinations:
+Because they are orthogonal, every combination is valid:
 
-| `delivery_approach` | `spm_comanaged` | Interpretation |
+| `delivery_approach` | `dual_framing_enabled` | Interpretation |
 |---|---|---|
-| `Hybrid` | `true` | SPM co-managed project — dual-framing active |
-| `Hybrid` | `false` | Self-hosted dual-lifecycle — no dual-framing |
-| Non-Hybrid | `true` | **Configuration-validation candidate** — `project-initiator` Mode C flags for operator review |
+| `Hybrid` (or a two-archetype array) | `true` | Two-archetype project that *additionally* runs the co-management dual-framing output (the legacy co-managed shape) |
+| `Hybrid` (or a two-archetype array) | `false` | Two-archetype project in both native framings — no co-management bridge |
+| Non-Hybrid | `true` | Single-archetype project running co-management dual-framing **independently of methodology** — a valid configuration, no longer flagged for review |
 | Non-Hybrid | `false` | Single-methodology project — no dual-framing |
 
-Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `spm_comanaged` before producing output. Future deprecation of `spm_comanaged` in favor of `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE. See [`methodology-parameterization-v1.md § 7 Relationship to SPM Bridge`](../../release/references/specs/methodology-parameterization-v1.md) + [`schemas/project-schema.md § 7 Migration Notes`](../schemas/project-schema.md) for the posture.
+Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `dual_framing_enabled` before producing output. Future deprecation of `dual_framing_enabled` in favor of `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE. See [`methodology-parameterization-v1.md § 7 Relationship to Dual-Framing Bridge`](../../release/references/specs/methodology-parameterization-v1.md) + [`schemas/project-schema.md § 7 Migration Notes`](../schemas/project-schema.md) for the posture.
 
 ---
 
@@ -1025,7 +1025,7 @@ confluence_page_ids:                       # FDD, RAID, processes
   - "123457"    # FDD Index
   - "123458"    # Process Flows
 gdrive_folder: "1aB2cD3eF4gH5i..."        # Google Drive folder ID for transcripts
-spm_comanaged: false                       # True if Smartsheet + SPM bridge active
+spm_comanaged: false                       # True if Smartsheet + dual-framing bridge active
 spm_sharepoint_folder: null                # SharePoint path if spm_comanaged=true
 spm_smartsheet_id: null                    # Smartsheet grid ID if spm_comanaged=true
 ```
@@ -1055,7 +1055,7 @@ Always ground status in **specific blockers, actions, owners, dates** (with day-
 | **Jira test export** | Jira export of test-case data; shows test case status |
 | **MSG-##** | Communication entry ID (e.g., MSG-047) |
 | **MTG-##** | Meeting entry ID (e.g., MTG-012) |
-| **SPM Bridge** | Dual-track (Agile + Waterfall) framing for comanaged projects |
+| **Dual-Framing Bridge** | Dual-track (Agile + Waterfall) framing for comanaged projects |
 | **TR-###** | Transcript register entry ID (e.g., TR-034) |
 | **Document Tier 1–4** | File update governance (Stakeholder, Operational, New Files, Context) |
 

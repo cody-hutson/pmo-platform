@@ -42,7 +42,7 @@ Worked edge set (illustrative shape, not a fixed inventory):
 
 The Program Manager's synthesis varies by delivery model (`delivery_approach: context-aware`, resolved per the program's governance — see [`operations/skills/_shared/five-model-variations.md`](../../_shared/five-model-variations.md)):
 
-- **Waterfall / SPM** — the program's delivery decisions are phase-gate (milestone DoD, stage exit); the risk binding is to the shared phase-gate the program is approaching, and the inter-workstream dependency is the predecessor-milestone edge.
+- **Waterfall** — the program's delivery decisions are phase-gate (milestone DoD, stage exit); the risk binding is to the shared phase-gate the program is approaching, and the inter-workstream dependency is the predecessor-milestone edge.
 - **Agile / Scrum** — the decisions are sprint-scoped across the workstreams (DoR for the next sprint, DoD for the increment); the binding is to the release train and cross-workstream sprint capacity.
 - **Kanban** — continuous-flow; the binding is to the policy gates (cross-workstream WIP, the explicit DoD per class of service) rather than a sprint boundary.
 - **Hybrid** — the program runs phase-gates over agile execution; the Program Manager binds risk to *both* the agile DoD and the phase-gate across workstreams, surfacing where they disagree.

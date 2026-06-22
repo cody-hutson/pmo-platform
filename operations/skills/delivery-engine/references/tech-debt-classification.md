@@ -123,7 +123,7 @@ time-boxed sprints, not to the single-operator platform running the PMO.
 - **Applies when:** the tech-debt backlog being classified/ranked is that of a **managed
   delivery team** (`org_scale ∈ {small-team, multi-team}`) on a time-boxed track
   (`delivery_approach ∈ {Scrum, XP, SAFe, Hybrid (iterative), Custom (timeboxed)}`) — the
-  agile/SPM squads a TPM plans for in Mode D, whose tech-debt slice is floored by
+  agile squads a TPM plans for in Mode D, whose tech-debt slice is floored by
   `tech-debt-capacity.md` and ranked here.
 - **Contraindicated when:** **CI-5** — do **NOT** apply the Fowler quadrant classification, the
   CoD ranking, or the (quadrant × CoD) deficit-fill to the **single-operator PMO's own
@@ -133,7 +133,7 @@ time-boxed sprints, not to the single-operator platform running the PMO.
   tech-debt paydown is phase-scheduled rather than sprint-allocated (calibrate via the
   `delivery_approach` enum, consistent with `tech-debt-capacity.md` §1).
 - **On conflict:** `decision-discipline.md` M1 (contextual localization); co-manifestation
-  when `spm_comanaged: true` — produce both the agile ranking framing and the phase-gate
+  when `dual_framing_enabled: true` — produce both the agile ranking framing and the phase-gate
   framing rather than forcing one.
 
 ---

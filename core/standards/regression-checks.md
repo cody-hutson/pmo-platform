@@ -167,10 +167,10 @@ These checks verify that hand-offs between skills maintain contract integrity.
 - Validation: No skill should route to another skill that itself routes to a third skill (max 2-hop chains: Skill A → Skill B → Skill C, but B routes must not further invoke C)
 - Failure mode: PPM routes to DE; DE routes to CW; CW routes to TA (3-hop chain)
 
-**XC-06:** SPM Bridge produces dual framing only when spm_comanaged = true
-- Intent: SPM Bridge (cross-team framing) is applied only when justified
-- Validation: If output includes SPM Bridge framing (dual perspective: sponsor view + PMO view), confirm PROJECT.md has `spm_comanaged: true`
-- Failure mode: Dual framing produced when spm_comanaged is false or not set
+**XC-06:** Dual-Framing Bridge produces dual framing only when dual_framing_enabled = true
+- Intent: Dual-Framing Bridge (cross-team framing) is applied only when justified
+- Validation: If output includes Dual-Framing Bridge framing (dual perspective: sponsor view + PMO view), confirm PROJECT.md has `dual_framing_enabled: true`
+- Failure mode: Dual framing produced when dual_framing_enabled is false or not set
 
 **XC-07:** Comms Writer READY/NOT READY assessment correctly evaluates evidence quality
 - Intent: CW prevents low-confidence outputs from being sent

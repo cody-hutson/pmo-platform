@@ -128,7 +128,7 @@ Waterfall stakeholders or vice versa.
 | Status artifact | Sprint board / Burndown | Status report / Gantt | Program board / ART dashboard | Status update |
 | Plan artifact | Sprint Backlog | Project plan / WBS | PI Plan | Delivery plan |
 
-**SPM bridge rule:** When `spm_comanaged: true`, the same data must be expressed in
+**Dual-Framing bridge rule:** When `dual_framing_enabled: true`, the same data must be expressed in
 both vocabularies. Use the neutral column as the bridge term when a single
 communication serves both audiences, then provide approach-specific detail in
 labeled sections.

@@ -117,7 +117,7 @@ Five requirements hold on every emission: (1) the audience is named and the fram
 
 ## Delivery Model Variation
 
-The OCM Lead's lifecycle cadence varies by delivery model (`delivery_approach: context-aware`; see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md)): the readiness gate and hypercare exit align to **phase-gate exits** (Waterfall/SPM), the **sprint/release-train boundary** (Agile/Scrum), the **policy cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit go-live milestone** (n/a). The lifecycle ordering and the ADKAR-ordering gate hold across all five — only the cadence the gates align to varies.
+The OCM Lead's lifecycle cadence varies by delivery model (`delivery_approach: context-aware`; see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md)): the readiness gate and hypercare exit align to **phase-gate exits** (Waterfall), the **sprint/release-train boundary** (Agile/Scrum), the **policy cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit go-live milestone** (n/a). The lifecycle ordering and the ADKAR-ordering gate hold across all five — only the cadence the gates align to varies.
 
 ## Evidence Quality Protocol
 

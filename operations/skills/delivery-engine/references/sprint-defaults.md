@@ -211,5 +211,5 @@ Per [`applicability-framework.md`](../../../../core/disciplines/applicability-fr
 - **Universality:** contextual            # §938 axis position — methodology-axis
 - **Applies when:** `delivery_methodology ∈ {Scrum, XP, SAFe, Hybrid (iterative phase), Custom (timeboxed lifecycle)}`
 - **Contraindicated when:** **CI-4** (sprint/velocity ceremonies — `delivery_methodology ∈ {Waterfall, PRINCE2}`, non-time-boxed); also **CI-5** when `org_scale = single-operator` and a ceremony presumes multi-team coordination (scrum-of-scrums in a one-person PMO)
-- **On conflict:** §4 rung 4 (co-manifestation) when `spm_comanaged: true` — produce BOTH the sprint-cadence framing AND the phase-gate framing rather than forcing one; §4 rung 1 (contextual localization via decision-discipline.md M1) otherwise
+- **On conflict:** §4 rung 4 (co-manifestation) when `dual_framing_enabled: true` — produce BOTH the sprint-cadence framing AND the phase-gate framing rather than forcing one; §4 rung 1 (contextual localization via decision-discipline.md M1) otherwise
 - **Evidence tier:** ref `corpus-curation.md`; tiebreak input only — not defined here

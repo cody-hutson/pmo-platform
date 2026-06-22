@@ -20,7 +20,7 @@ contract — structure present, operational state absent.
 | 6 | `Key Terms Glossary.csv` | Header row: Term, Definition, Context, Source | Any term row |
 | 7 | `[Project]_Sprint_Tracker.md` (Agile/Hybrid only) | Sprint number, goal, capacity, velocity fields | Any populated sprint row |
 | 8 | `[Project]_Milestone_Tracker.md` (Waterfall only) | Phase, milestone, planned/actual date, status, evidence columns | Any populated milestone row |
-| 9 | `[Project]_SPM_Bridge.md` (SPM co-managed only) | Milestone-to-sprint mapping structure, dual-frame status fields | Any populated mapping row |
+| 9 | `[Project]_Dual_Framing_Bridge.md` (dual-framing co-managed only) | Milestone-to-sprint mapping structure, dual-frame status fields | Any populated mapping row |
 
 Step 4 items 7–8 (the Daily Status Update Framework and the Executive Status Report
 Prompt) are prompt-framework templates — they legitimately carry template content and are
@@ -39,7 +39,7 @@ NOT checked for emptiness. Verify only that both files exist.
    Step 8 — never ship it silently.
 4. **PROJECT.md cross-check.** Frontmatter `status: ACTIVE` is set; governance-model
    conditional sections match the Required Inputs (Sprint Tracking, Phase-Gate Timeline,
-   and SPM Bridge per the Step 3 conditional rules).
+   and Dual-Framing Bridge per the Step 3 conditional rules).
 5. **Record the result.** Surface the verification outcome in the Step 8 summary
    alongside the Step 5a portfolio-validation count — artifacts verified, breaches
    found, corrections applied.

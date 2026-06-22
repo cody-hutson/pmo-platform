@@ -26,7 +26,7 @@ The Portfolio Manager invokes these surfaces read-only. Their modes, gates, and 
 
 The Portfolio Manager's synthesis varies by delivery model (`delivery_approach: context-aware`, resolved per the portfolio's governance — see [`operations/skills/_shared/five-model-variations.md`](../../_shared/five-model-variations.md)):
 
-- **Waterfall / SPM** — portfolio calls are phase-gate-anchored; the cross-project binding is to the milestones and stage gates the projects are approaching, and the SteerCo readiness call is the phase-gate decision at portfolio scope.
+- **Waterfall** — portfolio calls are phase-gate-anchored; the cross-project binding is to the milestones and stage gates the projects are approaching, and the SteerCo readiness call is the phase-gate decision at portfolio scope.
 - **Agile / Scrum** — portfolio calls are anchored to the release trains and sprint commitments across projects; the binding is to cross-project capacity and the WSJF-ranked backlog.
 - **Kanban** — continuous-flow; the binding is to the portfolio policy gates (cross-project WIP, the explicit class-of-service throughput) rather than a sprint boundary.
 - **Hybrid** — the portfolio runs phase-gates over agile execution; the Portfolio Manager binds cross-project health to *both* the agile cadence and the phase-gate, surfacing where they disagree at portfolio altitude.

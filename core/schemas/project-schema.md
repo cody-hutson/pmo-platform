@@ -37,8 +37,8 @@ project_name: string                       # REQUIRED — display name
 project_owner: string                      # REQUIRED — primary accountable owner
 status: ACTIVE | CLOSING | CLOSED          # REQUIRED — lifecycle state (per CLAUDE.md Project Lifecycle)
 
-# Legacy SPM-bridge binary (retained; deprecation deferred)
-spm_comanaged: bool                        # OPTIONAL — true triggers dual-framing SPM Bridge (CLAUDE.md § SPM Bridge)
+# Dual-framing co-management trigger (decoupled from delivery_approach — orthogonal)
+dual_framing_enabled: bool                 # OPTIONAL — true triggers dual Agile/Waterfall co-management framing (CLAUDE.md § Dual-Framing Bridge). Legacy key `spm_comanaged` is accepted via the project-initiator Mode C deprecation shim — see §7.
 
 # Methodology classification — NEW
 delivery_approach: Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom
@@ -57,7 +57,7 @@ custom_methodology_definition:
   notes: string                            # OPTIONAL — rationale + known trade-offs
 
 # Other per-project fields (per existing skill conventions — not introduced by )
-# ... e.g., stakeholder roster, go-live date, systems, governance model, SPM Bridge section trigger ...
+# ... e.g., stakeholder roster, go-live date, systems, governance model, Dual-Framing Bridge section trigger ...
 ---
 ```
 
@@ -68,7 +68,7 @@ Field presence rules summary:
 | `project_name` | ✅ Always | — |
 | `project_owner` | ✅ Always | — |
 | `status` | ✅ Always | — |
-| `spm_comanaged` | ⚪ Optional | — |
+| `dual_framing_enabled` | ⚪ Optional | — (legacy key `spm_comanaged` accepted via Mode C shim — §7) |
 | `delivery_approach` | ✅ Always | — (new) |
 | `custom_methodology_definition` | Conditional | ✅ iff `delivery_approach: Custom`; ❌ otherwise |
 
@@ -88,11 +88,13 @@ Primary accountable owner (single person). Free-form string. Used in routing sta
 
 Enum: `ACTIVE` | `CLOSING` | `CLOSED`. Lifecycle state per `CLAUDE.md § Project Lifecycle`. `ACTIVE` projects receive full processing; `CLOSING` projects receive reduced cadence (hypercare); `CLOSED` projects are read-only reference. Skills MUST check `status` before processing and short-circuit accordingly. `[SOURCE]` — `CLAUDE.md § Project Lifecycle`.
 
-### `spm_comanaged`
+### `dual_framing_enabled`
 
-Boolean. When `true`, activates the **SPM Bridge** — dual Agile/Waterfall framing across outputs from `ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`. `[SOURCE]` — `CLAUDE.md § SPM Bridge (Conditional)` lines 155-157.
+Boolean. When `true`, activates the **Dual-Framing Bridge** — dual Agile/Waterfall co-management framing across outputs from `ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`. `[SOURCE]` — `CLAUDE.md § Dual-Framing Bridge (Conditional)` lines 155-157.
 
-This field is **retained** for backward compatibility. It is **NOT superseded** by `delivery_approach: Hybrid` — see §7 Collision Check for reconciliation rules. Deprecation and consolidation with `delivery_approach` is a future concern and is **out of scope for this release**.
+This field is the dual-framing co-management trigger, **orthogonal** to `delivery_approach`: it is **NOT implied by, and does not imply, `delivery_approach: Hybrid`** — see §7 Collision Check for reconciliation rules. The trigger is the operational co-management dual-framing capability; `Hybrid` (and the `[A, B]` array form) is a methodology classification — the two combine freely.
+
+**Legacy key.** The field was previously named `spm_comanaged`. A live `PROJECT.md` carrying the legacy `spm_comanaged` key is still accepted: the `project-initiator` Mode C deprecation shim reads it, emits a one-line deprecation warning, and treats it as `dual_framing_enabled`. Shim-removal is deferred to a future milestone — see §7 Migration Notes.
 
 ### `delivery_approach`
 
@@ -106,7 +108,7 @@ Required. Enum — one of 8 values (title-case, case-sensitive):
 | `Waterfall` | Sequential phased with gate-based change control |
 | `PRINCE2` | Stage-based project governance framework |
 | `SAFe` | Multi-team Agile at PI cadence (Essential 5.0+) |
-| `Hybrid` | Dual-lifecycle with SPM-co-managed dual framing |
+| `Hybrid` | User-configurable two-archetype combination `[A, B]` reported in both native framings (co-management is orthogonal — see `dual_framing_enabled`, § 7) |
 | `Custom` | Escape hatch — requires `custom_methodology_definition` block |
 
 Full normative definitions (3-5 sentences per archetype) live in [`methodology-parameterization-v1.md § Definitions`](../../release/references/specs/methodology-parameterization-v1.md). Variation table (lifecycle / ceremonies / artifacts / cadence / consumers / sample-types / distinguishing-constraint) lives in [`methodology-archetype-matrix.md`](../../release/references/specs/methodology-archetype-matrix.md).
@@ -164,7 +166,7 @@ Twelve rules governing schema conformance. Enforcement level `structural (auto)`
 | ID | Rule | Blocks | Level |
 |---|---|---|---|
 | **V1** | `delivery_approach` field is present in PROJECT.md frontmatter | schema parse | structural (auto) |
-| **V2** | `delivery_approach` value is one of `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe, Hybrid, Custom}` (case-sensitive, title-case) | schema parse | structural (auto) |
+| **V2** | `delivery_approach` is EITHER (a) a single value in `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe, Hybrid, Custom}` (case-sensitive, title-case — the original single-enum form), OR (b) a 2-element YAML sequence `[A, B]` where A ≠ B and both A, B ∈ `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe}` (the Hybrid-Two array form; array members **exclude** `Hybrid` and `Custom` — they are meta-archetypes, not composable constituents). Array sub-assertions: **(V2-a) length == 2 · (V2-b) members distinct · (V2-c) each member ∈ the 6-set.** | schema parse + skill branch | structural (auto) |
 | **V3** | When `delivery_approach: Custom`, block `custom_methodology_definition` is present | skill branch | structural (auto) — **AC-R2** |
 | **V4** | When `delivery_approach ≠ Custom`, block `custom_methodology_definition` is absent or `null` | skill branch | structural (auto) |
 | **V5** | `custom_methodology_definition.name` is a non-empty string | — | structural (auto) — **AC-R2** |
@@ -175,6 +177,8 @@ Twelve rules governing schema conformance. Enforcement level `structural (auto)`
 | **V10** | `custom_methodology_definition.artifacts` is a non-empty list of strings (min 1 entry) | — | structural (auto) — **AC-R2** |
 | **V11** | `custom_methodology_definition.cadence` is a non-empty string | — | structural (auto) — **AC-R2** |
 | **V12** | `custom_methodology_definition.notes` is either absent OR a string (may be empty `""`) | — | structural (auto) |
+
+**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule, so the V-series tail remains **V12**. The next V-numbers, **V13 and V14, are reserved** for the PROJECT.md-schema keystone (the first-class domain / deliverable-type axis) and the org-structure / delivery-model / team-roster card respectively, which append to the V12 tail when that later schema-expansion milestone is built (see References). No existing rule is renumbered.
 
 ### 5.1 Custom Block Completeness (operationalizes AC-R2)
 
@@ -199,6 +203,11 @@ A PROJECT.md that fails any V1-V12 assertion is **malformed**. Consumer skills e
 
 Skills MUST NOT silently work around validation failures by defaulting to an archetype. Silent default is a named failure mode — see `methodology-parameterization-v1.md § Failure Modes` (PROC-2: Base-archetype blind fallback; PROC-3: Custom-block skip).
 
+### References
+
+- #351 — PROJECT.md-schema keystone: adds a first-class domain / deliverable-type axis to the schema; reserves the next V-rule (V13) off the V12 tail when its milestone is built.
+- #262 — adds org-structure, delivery-model, and team-roster fields to the schema; reserves the V-rule after the keystone (V14).
+
 ## 6. Examples
 
 Four worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V12 assertions applicable to its `delivery_approach` value.
@@ -216,21 +225,21 @@ delivery_approach: Scrum
 
 **Validation trace:** V1 ✓ (field present), V2 ✓ (`Scrum` in enum), V3 N/A (not Custom), V4 ✓ (no block present as expected), V5-V12 N/A.
 
-### 6.2 Hybrid with `spm_comanaged: true` (enum-matched + legacy SPM Bridge)
+### 6.2 Hybrid with `dual_framing_enabled: true` (enum-matched + co-management framing)
 
 ```yaml
 ---
 project_name: [PROJECT_KEY] Implementation
 project_owner: C. [OPERATOR_NAME]
 status: ACTIVE
-spm_comanaged: true
+dual_framing_enabled: true
 delivery_approach: Hybrid
 ---
 ```
 
 **Validation trace:** V1 ✓, V2 ✓ (`Hybrid`), V3 N/A, V4 ✓, V5-V12 N/A.
 
-**Reconciliation note.** This is the **canonical combination** for an SPM-co-managed project: `delivery_approach: Hybrid` is the methodological classification; `spm_comanaged: true` is the operational dual-framing trigger for the SPM Bridge. A Hybrid project with `spm_comanaged: false` is also valid (Hybrid lifecycle without SPM co-management output) — see §7 Collision Check.
+**Reconciliation note.** The two fields are **orthogonal**, and this example shows them combined: `delivery_approach: Hybrid` is the methodology classification (a two-archetype combination), while `dual_framing_enabled: true` is the *separate, orthogonal* operational co-management dual-framing trigger. Co-management is NOT implied by `Hybrid` — a Hybrid project with `dual_framing_enabled: false` is equally valid (two native framings, no co-management output), and a single-archetype project may set `dual_framing_enabled: true` independently. This combination is the legacy co-managed shape, but it is a *configuration*, not the definition of Hybrid — see §7 Collision Check. (A legacy `PROJECT.md` carrying `spm_comanaged: true` is accepted via the Mode C shim and reads identically — §7.)
 
 ### 6.3 Custom — Scrumban (base_archetype: Kanban)
 
@@ -259,6 +268,8 @@ custom_methodology_definition:
 ```
 
 **Validation trace:** V1 ✓, V2 ✓ (`Custom`), V3 ✓ (block present), V5 ✓ (`Scrumban` non-empty), V6 ✓ (`Kanban` in enum), V7 ✓ (both members in enum), V8 ✓ (`continuous` in enum), V9 ✓ (3 entries), V10 ✓ (3 entries), V11 ✓ (non-empty cadence), V12 ✓ (notes is a string). **Custom Block Completeness: PASS.**
+
+**Hybrid-Two vs. Custom (partition note).** This Scrumban is a **fused variant** — Scrum ceremonies are retained but estimation and sprint commitment are *replaced* with WIP-limited pull — so it is correctly modelled as `Custom` (a named methodology that blends two archetypes into a third thing). A project running an **unmodified Scrum track alongside an unmodified Kanban track** instead uses the Hybrid-Two array `delivery_approach: [Scrum, Kanban]`. The two representations are **not redundant** and partition cleanly: **Custom** = a named modification/fusion (overridden ceremonies/practices, `derived_from` records lineage); **array** = two canonical archetypes coexisting as-is, each native, union of primitives. Test: *"two tracks each running an archetype natively (→ array), or one team running a fused/renamed methodology (→ Custom)?"*
 
 ### 6.4 Custom — Shape Up (base_archetype: null — genuinely novel)
 
@@ -291,34 +302,56 @@ custom_methodology_definition:
 
 **Skill consumption note.** Because `base_archetype: null`, consumer skills MUST use the block's `lifecycle` / `ceremonies` / `artifacts` / `cadence` directly — NO archetype fallback. If a skill cannot parameterize from these fields alone, it MUST emit a methodology-agnostic output with an explicit caveat (not a silent default to Scrum). See `methodology-parameterization-v1.md § Skill Consumption Pattern` 3-branch logic CASE 3.
 
-## 7. Migration Notes — Legacy `spm_comanaged`
+### 6.5 Hybrid-Two array — `delivery_approach: [Scrum, Kanban]` (two archetypes as-is)
 
-### Collision Check — Are `spm_comanaged` and `delivery_approach` redundant?
+A project running **two canonical archetypes natively, side-by-side** — each track keeping its own lifecycle/ceremonies/artifacts — declares the pair as a 2-element array. No `custom_methodology_definition` block is present (the array members are unmodified archetypes, not a fused variant).
 
-**No.** They are orthogonal fields measuring different properties:
+```yaml
+---
+project_name: Platform Re-architecture Program
+project_owner: M. Okafor
+status: ACTIVE
+delivery_approach: [Scrum, Kanban]
+---
+```
+
+**Validation trace:** V1 ✓ (field present), V2 ✓ — **array branch**: 2 elements (V2-a length == 2 ✓), `Scrum ≠ Kanban` (V2-b distinct ✓), both members ∈ the 6-set `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe}` (V2-c ✓; neither is `Hybrid`/`Custom`). V3 N/A (not `Custom`), V4 ✓ (no `custom_methodology_definition` block), V5-V12 N/A.
+
+**Array vs. Custom (which form to use).** This is the **array** family, NOT a second Custom example. Use the array `[A, B]` when two named archetypes run **as-is** (union of both, each native) — contrast §6.3, where Scrumban is a *fused* variant (Scrum ceremonies retained but estimation replaced with WIP-pull) and is therefore `Custom`. The two representations partition cleanly and are not redundant: **array** = two archetypes coexisting unmodified; **Custom** = a named modification/fusion. (The array-consumption logic — how a consumer renders dual-framed output from `[A, B]` — is specified in the [`methodology-parameterization-v1.md § Skill Consumption Pattern` CASE 1-ARRAY sub-branch](../../release/references/specs/methodology-parameterization-v1.md#case-1-array): one native section per constituent, union of primitives per work-org-mapping §2.5, phased-governs-gates / timeboxed-governs-iterations on contested surfaces.)
+
+## 7. Migration Notes — Field Rename + Legacy `spm_comanaged` Shim
+
+The dual-framing co-management trigger is named **`dual_framing_enabled`**. It was previously named `spm_comanaged`; that legacy key is **accepted on read** via a deprecation shim (below) so live `PROJECT.md` files do not silently orphan.
+
+### Collision Check — Are `dual_framing_enabled` and `delivery_approach` redundant?
+
+**No.** They are orthogonal fields measuring different properties, and neither implies the other:
 
 | Field | Role | Consumer |
 |---|---|---|
-| `spm_comanaged: bool` | Triggers dual-framing SPM Bridge output (Agile + Waterfall) — operational dual-framing binary | `CLAUDE.md § SPM Bridge`; `delivery-engine` Mode D bridge step |
-| `delivery_approach: Hybrid` | Classifies project methodology as dual-lifecycle (one Agile track + one phase-gated track) | All methodology-aware role-skills (future) |
+| `dual_framing_enabled: bool` | Triggers Dual-Framing Bridge output (Agile + Waterfall) — operational co-management dual-framing binary, independent of methodology. (Legacy alias: `spm_comanaged` — accepted via the Mode C shim.) | `CLAUDE.md § Dual-Framing Bridge`; `delivery-engine` Mode D bridge step |
+| `delivery_approach: Hybrid` | Classifies project methodology as a user-configurable two-archetype combination `[A, B]` reported in both native framings — a classification only, saying nothing about co-management | All methodology-aware role-skills |
 
 ### Reconciliation Rule
 
-A project with `spm_comanaged: true` **SHOULD** have `delivery_approach: Hybrid` — both describe the same underlying property (dual-framing). `[INFERRED]` — from alignment of the SPM Bridge trigger semantics with the Hybrid archetype's "two lifecycles reported simultaneously" distinguishing constraint.
+The two fields are **orthogonal and combine freely** — co-management is no longer implied by, and does not imply, the Hybrid classification:
 
-A project with `delivery_approach: Hybrid` and `spm_comanaged: false` is **valid** — represents a self-hosted dual-lifecycle project that does not activate the SPM Bridge dual-framing output.
+- `delivery_approach: Hybrid` + `dual_framing_enabled: true` — a two-archetype project that *additionally* runs the co-management dual-framing output (the legacy co-managed shape, now expressed as an explicit combination rather than a coupled default).
+- `delivery_approach: Hybrid` + `dual_framing_enabled: false` (or absent) — a two-archetype project reported in both native framings, with no co-management output. **Valid.**
+- `dual_framing_enabled: true` + `delivery_approach: Scrum` (or any non-Hybrid) — a single-archetype project that runs the co-management dual-framing output independently of methodology. **Valid** under the decoupled model — this is NOT a misconfiguration to "correct" toward Hybrid. (`project-initiator` Mode C no longer flags this combination as a configuration-validation candidate.)
+- `dual_framing_enabled: false` (or absent) + non-Hybrid — single-methodology project, no dual-framing.
 
-A project with `spm_comanaged: true` and `delivery_approach: Scrum` (or any non-Hybrid) is a **configuration-validation candidate** — likely authoring intent was `delivery_approach: Hybrid`. `project-initiator` Mode C (schema repair) SHOULD flag this combination for operator review but does NOT auto-correct.
+### Deprecation Shim — legacy `spm_comanaged`
 
-### Deprecation Timeline
+The field is **renamed to `dual_framing_enabled` in this release**. The legacy `spm_comanaged` key is **accepted via a `project-initiator` Mode C deprecation shim**: when a `PROJECT.md` carries `spm_comanaged`, Mode C reads it, emits a one-line deprecation warning, and treats it as `dual_framing_enabled` (same boolean semantics). The shim is additive read-logic — an extension of an existing Mode C branch, not a new mechanism. **Shim-removal is deferred to a future milestone** (once live operator `PROJECT.md` files have migrated to the new key); removing it later is a one-line deletion. (The Mode C shim *implementation* lands in a downstream consumer slice; this section documents the contract.)
 
-`spm_comanaged` is **retained as-is**. Consolidation with `delivery_approach: Hybrid` is deferred and is explicitly OUT OF SCOPE for this release. The migration will be planned in a future milestone with operator-rendered decision on whether to:
+This is a rename + back-compat shim, **not** the deferred `spm_comanaged`↔`Hybrid` consolidation. That consolidation — collapsing the orthogonal trigger into the methodology classification — remains explicitly OUT OF SCOPE; doing it would collapse the orthogonality this decouple protects. A future milestone may still revisit whether to:
 
-- (a) deprecate `spm_comanaged` entirely and derive SPM Bridge activation from `delivery_approach: Hybrid`,
-- (b) retain `spm_comanaged` as the authoritative trigger and make `delivery_approach: Hybrid` the methodological tag,
+- (a) derive co-management framing from `delivery_approach: Hybrid` and drop the standalone trigger,
+- (b) keep `dual_framing_enabled` as the authoritative trigger and `delivery_approach: Hybrid` as the methodological tag (current model),
 - (c) introduce a reconciliation validator that enforces alignment between the two fields.
 
-See [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to SPM Bridge`](../governance/OPERATIONS.md) for the operational posture.
+See [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../governance/OPERATIONS.md) for the operational posture.
 
 ### Current PROJECT.md format note
 
@@ -336,8 +369,8 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 
 | Consumer | Reads | Methodology-sensitivity | status |
 |---|---|---|---|
-| `delivery-engine` | `spm_comanaged` + sprint tracker + velocity history + (future) `delivery_approach` | CRITICAL | Reads unchanged; future refit parameterizes on `delivery_approach` |
-| `project-initiator` | `spm_comanaged` + governance-specific tracker routing + (future) `delivery_approach` | HIGH | Reads unchanged; future refit adds 8-way archetype branch |
+| `delivery-engine` | `dual_framing_enabled` + sprint tracker + velocity history + (future) `delivery_approach` | CRITICAL | Reads unchanged; future refit parameterizes on `delivery_approach` |
+| `project-initiator` | `dual_framing_enabled` + governance-specific tracker routing + (future) `delivery_approach`; Mode C hosts the legacy-`spm_comanaged` shim | HIGH | Reads unchanged; future refit adds 8-way archetype branch |
 | `ppm-agent` | `status` + project metadata + RAG derivation | MEDIUM | Unchanged |
 | `daily-status` | `status` + framework + sprint stand-up format | HIGH | Unchanged; future refit varies format by archetype |
 | `weekly-status-rollup` | project metadata + status cadence | MEDIUM | Unchanged |
@@ -353,7 +386,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 **Governance consumers:**
 
 - [`OPERATIONS.md § Methodology Awareness Protocol`](../governance/OPERATIONS.md) — Rules 1-3 mandate that skills read `delivery_approach` + consult the matrix + handle Custom via typed extension.
-- [`CLAUDE.md § SPM Bridge (Conditional)`](<OPERATOR_INSTANCE_CLAUDE_MD>) — reads `spm_comanaged`; not yet refit to read `delivery_approach: Hybrid` (future consolidation scope).
+- [`CLAUDE.md § Dual-Framing Bridge (Conditional)`](<OPERATOR_INSTANCE_CLAUDE_MD>) — reads the dual-framing trigger `dual_framing_enabled` (legacy `spm_comanaged` accepted via the Mode C shim); not yet refit to read `delivery_approach: Hybrid` (future consolidation scope).
 
 **Downstream (future) consumers:**
 
@@ -368,7 +401,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 | 1 | 13 skills consume PROJECT.md | `[SOURCE]` `grep -l 'PROJECT\.md' release/skills/**/SKILL.md` 2026-04-24 (blast radius §6.1) |
 | 2 | `delivery-engine` Mode D + Mode E presuppose sprints | `[SOURCE]` `operations/skills/delivery-engine/SKILL.md:170-215` |
 | 3 | `project-initiator` binary Agile/Hybrid vs. Waterfall branch | `[SOURCE]` `operations/skills/project-initiator/SKILL.md:190-193` |
-| 4 | `CLAUDE.md § SPM Bridge` uses legacy `spm_comanaged` binary | `[SOURCE]` `CLAUDE.md:155-157` |
+| 4 | `CLAUDE.md § Dual-Framing Bridge` uses legacy `spm_comanaged` binary | `[SOURCE]` `CLAUDE.md:155-157` |
 | 5 | Existing PROJECT.md files use markdown key-value format | `[SOURCE]` inspection of `projects/[PROJECT_KEY] Implementation/PROJECT.md` 2026-04-24 |
 | 6 | AC-R2 block-completeness operationalization | `[SOURCE]` Stage 5 spec §1 + AC-R2 locked text |
 

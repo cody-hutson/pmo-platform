@@ -95,7 +95,7 @@ Five output requirements hold on every emission: (1) the audience is named and t
 ## Delivery Model Variation
 
 The Coordinator's cadence varies by delivery model (`delivery_approach: context-aware`, resolved per the program's governance — see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md)):
-- **Waterfall / SPM** — the cadence is phase-anchored (status against the milestone plan); the tracker reconciliation centers on the milestone and RAID trackers.
+- **Waterfall** — the cadence is phase-anchored (status against the milestone plan); the tracker reconciliation centers on the milestone and RAID trackers.
 - **Agile / Scrum** — the cadence is sprint-anchored (daily-standup rhythm); the reconciliation centers on the sprint board and the carry-forward of in-sprint blockers.
 - **Kanban** — continuous-flow; the cadence is the daily pull-review and the trackers reflect WIP state rather than a sprint boundary.
 - **Hybrid** — phase-gates over agile execution; the Coordinator keeps both the agile daily cadence and the phase-gate trackers coherent, surfacing where they disagree.

@@ -95,4 +95,4 @@
 - Meeting cadence sub-sections should match the project's actual meeting schedule
 - Phase-specific sections may be added as the project progresses (e.g., cutover countdown, hypercare metrics)
 - For Waterfall projects: replace sprint references with phase-gate references
-- For SPM co-managed projects: include a one-line SPM summary at the top of each update
+- For dual-framing co-managed projects (`dual_framing_enabled: true`): include a one-line Sponsor view summary at the top of each update

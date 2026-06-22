@@ -97,8 +97,8 @@ For each active project, generate:
 - Upcoming milestones or deadlines
 - Required actions or decisions
 
-**SPM Bridge (conditional):**
-Only include when `PROJECT.md` has `spm_comanaged: true`.
+**Dual-Framing Bridge (conditional):**
+Only include when `PROJECT.md` has `dual_framing_enabled: true`.
 
 ```
 Agile Track: [Sprint progress, velocity, backlog health]
@@ -353,7 +353,7 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 - **Push-to-resolve:** When generating the weekly roll-up, produce the complete executive-ready document — health dashboard, per-project summaries, cross-project items, and forward look. Not a skeleton to fill in.
 - **Max 5 clarifying questions:** Ask at most 5 questions per invocation. Everything else becomes a labeled assumption with `[ASSUMPTION – CONFIRM]` and a proposed answer.
 - **Principal contributor standard:** Output should match what a senior PMO professional would produce — accurate, judgment-driven, actionable.
-- **SPM Bridge (conditional):** When generating roll-ups for SPM co-managed projects, include both Agile and Waterfall track summaries converging on unified priorities. Only produce dual Agile/Waterfall framing when the project's PROJECT.md has `spm_comanaged: true`. Do not generate SPM outputs for Agile-only projects.
+- **Dual-Framing Bridge (conditional):** When generating roll-ups for dual-framing co-managed projects, include both Agile and Waterfall track summaries converging on unified priorities. Only produce dual Agile/Waterfall framing when the project's PROJECT.md has `dual_framing_enabled: true`. Do not generate dual-framing outputs for single-framing projects. **When a project's `delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two array form per project-schema §6.5)**, summarize each constituent track natively and take the **union** of priorities across both (per `work-organization-mapping-framework.md` §2.5) rather than collapsing to one track — independent of `dual_framing_enabled`.
 
 ### Guardrails
 

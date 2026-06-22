@@ -1,7 +1,7 @@
 # Executive Status Report Prompt — {{PROJECT_NAME}}
 
 **Purpose:** Template for generating leadership-ready status reports.
-**Audience:** Executive sponsors, SteerCo, SPM leadership
+**Audience:** Executive sponsors, SteerCo, Sponsor leadership
 **Cadence:** Weekly or as requested
 **Last updated:** {{CREATION_DATE}}
 
@@ -48,10 +48,10 @@
 [Top 3-5 items for next week]
 ```
 
-{{IF SPM_CO_MANAGED == Yes}}
-## SPM Frame (Waterfall View)
+{{IF DUAL_FRAMING_ENABLED == Yes}}
+## Sponsor Frame (Waterfall View)
 
-When producing this report for SPM stakeholders, additionally include:
+When producing this report for Sponsor view stakeholders, additionally include:
 - Phase-gate status (which gate, % complete, gate review date)
 - Milestone burn-down (planned vs. actual)
 - Deliverable completion status

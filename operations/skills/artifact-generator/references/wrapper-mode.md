@@ -35,11 +35,11 @@ Before staging, the wrapper:
    - `HIGH` — the source is a trusted named skill output the user vouches for, clean of gate flags.
    - `MEDIUM` — the wrapper had to infer the catalog type, or a gate scan raised a flag.
    - `LOW` — content is partial or uncertain.
-5. **Applies the SPM Bridge** (next section) when the resolved catalog type is dual-framed AND `spm_comanaged: true`.
+5. **Applies the Dual-Framing Bridge** (next section) when the resolved catalog type is dual-framed AND `dual_framing_enabled: true`.
 
-## SPM Bridge in Wrapper Mode
+## Dual-Framing Bridge in Wrapper Mode
 
-When the wrapped artifact's resolved `artifact_type` is one of the dual-framed Waterfall/Agile types (Milestone Status Report, Sprint Review Summary, Phase Gate Review Package, etc. per the [catalog](artifact-catalog.md)) **AND** PROJECT.md carries `spm_comanaged: true`, the wrapper appends a **dual-framing addendum block** beneath the ingested content — an Agile framing and a Waterfall framing — rather than rewriting the body. This preserves the no-content-mutation invariant while satisfying the SPM Bridge contract. When the type is single-framed, or `spm_comanaged` is false/absent, the bridge is omitted (the correct non-ceremony signal).
+When the wrapped artifact's resolved `artifact_type` is one of the dual-framed Waterfall/Agile types (Milestone Status Report, Sprint Review Summary, Phase Gate Review Package, etc. per the [catalog](artifact-catalog.md)) **AND** PROJECT.md carries `dual_framing_enabled: true`, the wrapper appends a **dual-framing addendum block** beneath the ingested content — an Agile framing and a Waterfall framing — rather than rewriting the body. This preserves the no-content-mutation invariant while satisfying the Dual-Framing Bridge contract. When the type is single-framed, or `dual_framing_enabled` is false/absent, the bridge is omitted (the correct non-ceremony signal).
 
 ## Metadata header (recap — schema lives in the SKILL.md)
 

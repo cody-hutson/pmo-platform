@@ -105,7 +105,7 @@ Five requirements hold on every emission: (1) the audience is named and the fram
 
 ## Delivery Model Variation
 
-The Knowledge Manager's stewardship cadence varies by delivery model (`delivery_approach: context-aware`, resolved per the project's governance — see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md) for the canonical five-model variation set): capture and the debt sweep align to **phase-gate exits** (Waterfall/SPM), the **sprint boundary** (Agile/Scrum), the **policy cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit review cadence** (n/a).
+The Knowledge Manager's stewardship cadence varies by delivery model (`delivery_approach: context-aware`, resolved per the project's governance — see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md) for the canonical five-model variation set): capture and the debt sweep align to **phase-gate exits** (Waterfall), the **sprint boundary** (Agile/Scrum), the **policy cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit review cadence** (n/a).
 
 ## Evidence Quality Protocol
 
