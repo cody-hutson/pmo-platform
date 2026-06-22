@@ -10,13 +10,31 @@ set -u
 HOOK_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 HOOK="${HOOK_DIR}/block-draft-files.sh"
 MODE_FILE="${HOOK_DIR}/.mode"
-REPO="$(cd "$HOOK_DIR/../.." && pwd -P)"
 
 [ -x "$HOOK" ] || { echo "FAIL: hook not executable at $HOOK" >&2; exit 1; }
 
+# Hermetic git fixture. The hook classifies via `git check-ignore` against the repo
+# that contains the payload's cwd, so the test must OWN a real git repo carrying the
+# sanctioned-scratch .gitignore patterns — depending on the ambient checkout makes the
+# test pass locally but fail in CI's materialized-layout sandbox (a bare mktemp dir
+# with no git context → the hook fail-opens and every BLOCK case regresses; this was
+# the #1847 CI miss). The .gitignore mirrors the real repo: personal/,
+# steering-committee/, and <root>/governance/roadmaps/ per governed root.
+REPO="$(mktemp -d 2>/dev/null)"
+(
+  cd "$REPO" && /usr/bin/git init -q && /usr/bin/printf '%s\n' \
+    'personal/' 'steering-committee/' \
+    'core/governance/roadmaps/' 'release/governance/roadmaps/' 'operations/governance/roadmaps/' \
+    > .gitignore
+)
+REPO="$(cd "$REPO" && pwd -P)"   # canonicalize (macOS mktemp returns a /private symlink) to match `git rev-parse --show-toplevel`
+
 ORIGINAL_MODE=""; [ -f "$MODE_FILE" ] && ORIGINAL_MODE="$(cat "$MODE_FILE")"
-restore_mode() { if [ -n "$ORIGINAL_MODE" ]; then /usr/bin/printf '%s' "$ORIGINAL_MODE" > "$MODE_FILE"; else /bin/rm -f "$MODE_FILE"; fi; }
-trap restore_mode EXIT
+cleanup() {
+  if [ -n "$ORIGINAL_MODE" ]; then /usr/bin/printf '%s' "$ORIGINAL_MODE" > "$MODE_FILE"; else /bin/rm -f "$MODE_FILE"; fi
+  [ -n "${REPO:-}" ] && /bin/rm -rf "$REPO"
+}
+trap cleanup EXIT
 
 set_mode() { /usr/bin/printf '%s' "$1" > "$MODE_FILE"; }
 
