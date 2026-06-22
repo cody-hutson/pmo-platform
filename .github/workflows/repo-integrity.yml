@@ -595,3 +595,58 @@ jobs:
           fi
 
           echo ":white_check_mark: ADR-number integrity — numbers are unique and contiguous" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  draft-file:
+    name: Draft-file gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Flag draft/scratch/proposal files added outside the governed corpus
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WARN_MODE: 'true'   # warn-mode initial; flip to 'false' to enforce after shakedown
+        run: |
+          set -euo pipefail
+
+          # The A-status-delta MERGE-time companion to the edit-time
+          # core/hooks/block-draft-files.sh hook (#411b): the hook acts on path-shape
+          # per Write; this gate scopes to files ADDED in the PR. git-ignored files
+          # never reach A-status, so the sanctioned-scratch tier (projects/, personal/,
+          # */governance/roadmaps/, …) is excluded by construction. SHA inputs are
+          # passed via env and used quoted (no untrusted-text interpolation in run:).
+          DRAFT_SEG='(^|/)(proposals|drafts|draft|scratch|sandbox|wip)/'
+          GOVERNED='^(core|release|operations|packages|docs|\.github)/'
+          TOPLEVEL='^(README\.md|CHANGELOG\.md|LICENSE|SECURITY\.md|CONTRIBUTING\.md|install\.sh|update\.sh|\.gitignore|\.version)$'
+
+          mapfile -t ADDED < <(git diff --name-only --diff-filter=A "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          FINDINGS=""
+          for f in "${ADDED[@]}"; do
+            [ -z "$f" ] && continue
+            if echo "$f" | grep -qE "$DRAFT_SEG"; then
+              FINDINGS="${FINDINGS}- \`$f\` — draft-shaped path segment in tracked corpus"$'\n'
+            elif ! echo "$f" | grep -qE "$GOVERNED" && ! echo "$f" | grep -qE "$TOPLEVEL"; then
+              FINDINGS="${FINDINGS}- \`$f\` — new tracked file outside the governed-corpus roots"$'\n'
+            fi
+          done
+
+          if [ -z "$FINDINGS" ]; then
+            echo ":white_check_mark: Draft-file gate — no draft/scratch files added outside the governed corpus" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## Draft-file gate findings"
+            echo ""
+            echo "Draft / scratch / proposal content belongs in the issue tracker (\`observation.yml\` -> \`improvement.yml\`) or the git-ignored runtime tier — not the tracked public corpus. See \`core/rules/git-workflow.md\` § Draft / scratch content."
+            echo ""
+            printf '%s' "$FINDINGS"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "::warning::Draft-file gate (warn-mode initial): findings reported, not blocking. Flip WARN_MODE to 'false' to enforce after shakedown."
+            exit 0
+          fi
+          exit 1
