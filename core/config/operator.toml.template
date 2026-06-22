@@ -171,6 +171,36 @@ kb = "markdown"
 # Default: "claude-code"
 ai_tool = "claude-code"
 
+[projects]
+# GitHub Projects (v2) board identifiers — the field / node IDs the pipeline uses
+# when it reads or writes the board. Operator-instance values; obtain them once via
+# `gh project field-list --owner <handle> --number <n> --format json`. These resolve
+# the [OPERATOR_GITHUB_PROJECT_URL] / [OPERATOR_PROJECT_NODE_ID] / [OPERATOR_PROJECTS_*]
+# tokens (core/standards/depersonalization-spec.md §1.1). Markdown docs render those
+# tokens as-is; no code auto-resolves them today, so this section is the operator's
+# canonical record of the IDs. All empty by default; like [adapters]/[automation],
+# operator-set values are preserved across update / re-bootstrap (setup-workspace.sh
+# write_operator_toml round-trip).
+
+# Resolves [OPERATOR_GITHUB_PROJECT_URL] — the board's web URL.
+board_url = ""
+
+# Resolves [OPERATOR_PROJECT_NODE_ID] — the project's GraphQL node ID (PVT_…).
+node_id = ""
+
+# Resolves [OPERATOR_PROJECTS_STATUS_FIELD_ID] — the Status single-select field ID.
+status_field_id = ""
+
+# Resolves [OPERATOR_PROJECTS_STAGE_FIELD_ID] — the Stage single-select field ID.
+stage_field_id = ""
+
+# Resolves [OPERATOR_PROJECTS_VIEW_FIELD_ID] — the Priority field ID (the token name
+# says VIEW for backward-compat; it resolves the Priority field).
+priority_field_id = ""
+
+# Resolves [OPERATOR_PROJECTS_DATE_FIELD_ID] — the Decision Date field ID.
+decision_date_field_id = ""
+
 [platform]
 # Work-board adapter. Selects which work-tracking surface the platform
 # integrates with. Reserved field per pmo-platform repo-adapter

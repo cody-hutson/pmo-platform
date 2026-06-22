@@ -44,6 +44,21 @@ The token vocabulary is:
 
 **Token rendering convention:** square-bracket bare tokens (no `${}`, no `{{}}`) — disambiguates from existing `{{PLACEHOLDER}}` template syntax used by project-initiator and from `$ENV_VAR` shell substitution. Tokens render as text in markdown; they are NOT auto-substituted at read-time. Resolution is the workspace-setup spoke's job.
 
+### §1.1 GitHub Projects board tokens
+
+The GitHub Projects (v2) board identifiers used in `core/disciplines/github-projects-guide.md` and the pipeline references. Source-of-truth: `~/.config/pmo-platform/operator.toml` `[projects]` (operator-instance; obtain once via `gh project field-list --owner <handle> --number <n> --format json`, then record under `[projects]`). Same rendering convention as §1 — square-bracket, render-as-is, not auto-substituted (no code consumes them today; `[projects]` is the operator's canonical record of the IDs for when a consumer needs them).
+
+| Token | Resolves to | Source-of-truth (`operator.toml [projects]`) | Used in |
+|---|---|---|---|
+| `[OPERATOR_GITHUB_PROJECT_URL]` | The board's web URL | `[projects].board_url` | github-projects-guide.md header |
+| `[OPERATOR_PROJECT_NODE_ID]` | Project GraphQL node ID (`PVT_…`) | `[projects].node_id` | `gh project item-edit --project-id` commands |
+| `[OPERATOR_PROJECTS_STATUS_FIELD_ID]` | Status single-select field ID | `[projects].status_field_id` | `--field-id` in status-transition commands |
+| `[OPERATOR_PROJECTS_STAGE_FIELD_ID]` | Stage single-select field ID | `[projects].stage_field_id` | `--field-id` in stage-transition commands |
+| `[OPERATOR_PROJECTS_VIEW_FIELD_ID]` | Priority field ID (the token name says `VIEW` for backward-compat; it resolves the **Priority** field — registered as-is to avoid a multi-file rename cascade) | `[projects].priority_field_id` | `--field-id` in priority-set commands |
+| `[OPERATOR_PROJECTS_DATE_FIELD_ID]` | Decision Date field ID | `[projects].decision_date_field_id` | `--field-id` in decision-date commands |
+
+The single-select **option** IDs (the 8-char hex literals in example commands) are NOT tokenized — preserved literally for traceability per github-projects-guide.md.
+
 ---
 
 ## §2 Parameterization seam location
