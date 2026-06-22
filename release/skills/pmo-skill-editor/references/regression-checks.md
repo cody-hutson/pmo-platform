@@ -440,7 +440,7 @@ The regression checks above reference several skill definitions and cross-projec
 - **Skill Definitions:** See `/mnt/Claude/_Implementation/Skills/[SkillName]/SKILL.md`
 - **Dependency Graph:** See `/mnt/Claude/_Implementation/Staging/dependency-graph.md` for skill-to-skill routing rules
 - **Output Contracts:** See `/mnt/Claude/_Implementation/Staging/per-skill-output-contracts.md` for detailed output structure requirements per skill and mode
-- **Project Context:** See `/mnt/Claude/Projects/<project-name>/PROJECT.md` for current project state (phase, team, spm_comanaged flag, etc.)
+- **Project Context:** See `/mnt/Claude/Projects/<project-name>/PROJECT.md` for current project state (phase, team, dual_framing_enabled flag, etc.)
 - **CLAUDE.md:** See `/mnt/Claude/CLAUDE.md` for workspace-wide preferences and universal rules
 
 ---

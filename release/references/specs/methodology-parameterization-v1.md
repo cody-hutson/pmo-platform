@@ -246,9 +246,9 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) 5
 
 ### 6.1 Methodology conflation — INPUT
 
-- **Signature.** Skill reads `spm_comanaged: true` as synonymous with `delivery_approach: Hybrid`, OR treats `delivery_approach: Hybrid` as implying `spm_comanaged: true`.
-- **Conditional.** Do NOT treat `spm_comanaged` and `delivery_approach` as redundant or coupled when both are present, because they are orthogonal fields measuring different properties (co-management dual-framing trigger vs. methodology classification) and every independent combination is valid and meaningful — co-management is NOT implied by, and does not imply, the Hybrid classification.
-- **Root cause.** Legacy schema collapsed both into a single binary, and the legacy `§3` anchor named Hybrid "the SPM-co-managed pattern"; pattern-recognition misreads the new field as a rename of, or a synonym for, the classification. Authoring pressure to "clean up the duplicate" inflates conflation.
+- **Signature.** Skill reads `dual_framing_enabled: true` as synonymous with `delivery_approach: Hybrid`, OR treats `delivery_approach: Hybrid` as implying `dual_framing_enabled: true`.
+- **Conditional.** Do NOT treat `dual_framing_enabled` and `delivery_approach` as redundant or coupled when both are present, because they are orthogonal fields measuring different properties (co-management dual-framing trigger vs. methodology classification) and every independent combination is valid and meaningful — co-management is NOT implied by, and does not imply, the Hybrid classification.
+- **Root cause.** Legacy schema collapsed both into a single binary, and the legacy `§3` anchor named Hybrid "the co-managed pattern"; pattern-recognition misreads the new field as a rename of, or a synonym for, the classification. Authoring pressure to "clean up the duplicate" inflates conflation.
 - **Mitigation.** Always read both fields when either is present, and treat them independently. Reconcile per `schemas/project-schema.md § 7 Collision Check`.
 - **Principal vs. junior.** Principal reads both fields and treats them as orthogonal — a single-archetype project that sets the co-management dual-framing trigger is a *valid* configuration, not an error to "correct" toward Hybrid. Junior silently rewrites one field to match the other (re-introducing the conflation the decouple removed).
 
@@ -286,7 +286,7 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) 5
 
 ## 7. Relationship to Dual-Framing Bridge (Conditional)
 
-The `dual_framing_enabled: true` binary (legacy key `spm_comanaged`, accepted via the `project-initiator` Mode C shim) **remains operative** and is NOT deprecated by the introduction of `delivery_approach`. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
+The `dual_framing_enabled: true` binary **remains operative** and is NOT deprecated by the introduction of `delivery_approach`. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
 
 - `delivery_approach` is the **methodology classification** — a single archetype, or (for Hybrid) a user-configurable two-archetype combination `[A, B]` reported in both native framings. It says nothing about co-management.
 - `dual_framing_enabled: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the Dual-Framing Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
@@ -302,7 +302,7 @@ Because they are orthogonal, every combination is meaningful:
 
 The "Hybrid + `dual_framing_enabled: true`" row is the **legacy co-managed shape**, but it is a *configuration*, not the definition of Hybrid: co-management is no longer implied by the classification. Skills reading `delivery_approach: Hybrid` for methodology parameterization MUST ALSO read `dual_framing_enabled` before producing output — the two fields independently determine the methodology framing and whether co-management dual-framing is active.
 
-**Deprecation timeline.** Consolidation of `dual_framing_enabled` with `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE currently (the legacy `spm_comanaged` key folds away with it). See [`schemas/project-schema.md § 7 Migration Notes`](../../../core/schemas/project-schema.md) and [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../../../core/governance/OPERATIONS.md).
+**Deprecation timeline.** Consolidation of `dual_framing_enabled` with `delivery_approach: Hybrid` is a future concern and is OUT OF SCOPE currently. See [`schemas/project-schema.md § 7 Migration Notes`](../../../core/schemas/project-schema.md) and [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Framing Bridge`](../../../core/governance/OPERATIONS.md).
 
 ## 8. Versioning
 

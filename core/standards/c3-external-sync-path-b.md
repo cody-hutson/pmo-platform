@@ -38,11 +38,11 @@ outcome (a `skipped`/`reachable:false` row), never a hard failure that aborts th
 |---|---|---|
 | Ticketing (Jira) | `[adapters].ticketing` includes Jira (`jira+github` / `gitlab+jira`) | live Atlassian MCP — `searchJiraIssuesUsingJql` (status pull for tracked keys) / `getJiraIssue` (per-key detail) |
 | KB (Confluence) | `[adapters].kb` selects Confluence (future selector) | live Atlassian MCP — `getConfluencePage` / `getConfluencePageFooterComments` (FDD/RAID drift — the existing step-9 "Confluence MCP checks for drift" behavior) |
-| Smartsheet | per-project `spm_smartsheet_id` present (`dual_framing_enabled: true`; `core/schemas/project-schema.md`) | live Smartsheet MCP — `get_sheet_summary` / `get_columns`, ONLY when a grid is configured |
+| Smartsheet | per-project `co_management_smartsheet_id` present (`dual_framing_enabled: true`; `core/schemas/project-schema.md`) | live Smartsheet MCP — `get_sheet_summary` / `get_columns`, ONLY when a grid is configured |
 
 **Smartsheet is not yet an `[adapters]` selector** — `operator.toml [adapters]` declares
 `repo_host`/`ticketing`/`kb`/`ai_tool` only; Smartsheet appears solely as the per-project
-`spm_smartsheet_id` field (SPM-gated). C3 therefore polls Smartsheet only when a grid is
+`co_management_smartsheet_id` field (co-management-gated). C3 therefore polls Smartsheet only when a grid is
 configured; absent config → a run-record `skipped: smartsheet (no grid configured)` row.
 A first-class `[adapters].smartsheet` selector is out of C3 scope (a separate adapter-config
 change). The poll set degrades per-adapter so C3 ships against the live adapter set without
