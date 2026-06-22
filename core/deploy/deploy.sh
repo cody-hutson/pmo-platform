@@ -1854,7 +1854,7 @@ cmd_check() {
 
   # Check 4 — Governance presence.
   # RELEASE_LOG.md DROPPED — per Q1 + Spec Surface 5.2 it is operator-instance,
-  # NOT in-repo governance (lives at $PMO_INSTANCE_PATH/RELEASE_LOG.md).
+  # NOT in-repo governance (lives at ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/RELEASE_LOG.md).
   log "Check 4: Governance presence"
   local -a EXPECTED_ENGINEERING=(
     core/governance/OPERATIONS.md
@@ -1977,7 +1977,7 @@ cmd_check() {
   # EXEMPTION_LIST adapts to an operator-instance path-via-env-var per
   # Spec Surface 5.2 (C) — defaults to operator-instance path; falls back to
   # legacy .claude/ location for compatibility.
-  local EXEMPTION_LIST="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skill-editor-exemption-list.txt"
+  local EXEMPTION_LIST="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/skill-editor-exemption-list.txt"
   [[ -f "$EXEMPTION_LIST" ]] || EXEMPTION_LIST=".claude/skill-editor-exemption-list.txt"
 
   # Check 6 — Canonical-structure compliance (required; always-enforce; enforcement-surface: deploy-time + CI mirror)
@@ -2004,7 +2004,7 @@ cmd_check() {
   # to the shared invokable that closes the run-context gap (#673).
   #
   # The script honors the same EXEMPTION_LIST (canary-by-design D-Refs exemption,
-  # frontmatter still enforced) via PMO_INSTANCE_PATH / .claude fallback. We
+  # frontmatter still enforced) via the operator-instance path / .claude fallback. We
   # re-emit each per-skill line through log() and fold every FAIL into ISSUES so
   # the STRICT summary gate behaves exactly as before.
   log "Check 6: Canonical-structure compliance"
@@ -2173,7 +2173,7 @@ cmd_check() {
   # MODE_FILE adapts to an operator-instance path-via-env-var per Spec
   # Surface 5.2 (C); falls back to legacy .claude/ location for compatibility.
   local DEPLOY_CHECK_MODE="warn"
-  local MODE_FILE="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/deploy-check.mode"
+  local MODE_FILE="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/deploy-check.mode"
   [[ -f "$MODE_FILE" ]] || MODE_FILE=".claude/hooks/deploy-check.mode"
   if [[ -f "$MODE_FILE" ]]; then
     local _mode
@@ -2182,7 +2182,7 @@ cmd_check() {
       enforce|warn|off) DEPLOY_CHECK_MODE="$_mode" ;;
     esac
   fi
-  local WARN_LOG="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/deploy-check-warn-log.jsonl"
+  local WARN_LOG="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/deploy-check-warn-log.jsonl"
 
   # flag_warn_or_issue — Checks 8-10 helper. In enforce-mode, acts like a normal
   # FAIL (increments ISSUES). In warn-mode, logs a WARN + appends to jsonl but
@@ -2224,7 +2224,7 @@ cmd_check() {
   # Mode files are operator-instance runtime state and are NOT committed.
   resolve_check_mode() {
     local _check_id="$1"
-    local _check_mode_file="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/${_check_id}.mode"
+    local _check_mode_file="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/${_check_id}.mode"
     [[ -f "$_check_mode_file" ]] || _check_mode_file=".claude/hooks/${_check_id}.mode"
     if [[ -f "$_check_mode_file" ]]; then
       local _cm
@@ -2742,7 +2742,7 @@ cmd_check() {
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 14: Doc-link maintenance (governance + skill SKILL.md scope)"
     local c14_script="core/deploy/tools/check-doc-links.py"
-    local c14_allowlist="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skip-doc-link-check.txt"
+    local c14_allowlist="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/skip-doc-link-check.txt"
     [[ -f "$c14_allowlist" ]] || c14_allowlist=".claude/skip-doc-link-check.txt"
     if [[ ! -f "$c14_script" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "primitive script missing: $c14_script"
@@ -2805,7 +2805,7 @@ cmd_check() {
   #     CHANGELOG + GitHub Release Surface 1 emit).
   #
   # Evolution: an earlier Check 15 scanned the in-repo release corpus; a
-  # subsequent wave gated it on the PMO_INSTANCE_PATH env var; this retirement
+  # subsequent wave gated it on the operator-instance-path env var; this retirement
   # replaces the gated block with this citation comment per the operator's full
   # architectural disposition.
   #
@@ -3079,8 +3079,8 @@ cmd_check() {
   # the EXPECTED state, NOT drift.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 19: Pipeline-event-log integrity"
-    local c19_log="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/pipeline-event-log.md"
-    local c19_write_log="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/pipeline-event-log-write.log"
+    local c19_log="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/pipeline-event-log.md"
+    local c19_write_log="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/pipeline-event-log-write.log"
     local c19_schema="release/standards/pipeline-event-log-schema.md"
 
     # 19a — presence
@@ -3744,7 +3744,7 @@ cmd_check() {
   #
   # Empirically validated against the universal-vs-localized-context audit
   # (TRUE-LEAK + ILLUSTRATIVE rows for DC1-DC4) and the self-containment audit
-  # under ${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/analysis/
+  # under ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/analysis/
   # (VIOLATION + REVIEW rows for DC6).
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks 8/9/10/14/
@@ -3768,7 +3768,7 @@ cmd_check() {
     # the tracked detector carries NO operator identity (self-containment — fixes
     # the prior defect where the detector embedded the very name/org it detects).
     local c23_dc1='[0-9]{3}-[0-9]{3}-[0-9]{4}|@(ymail|gmail|yahoo|outlook|hotmail|icloud)\.com'
-    local c23_needles="${PMO_LOCALIZED_NEEDLES:-${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/localized-context-needles.txt}"
+    local c23_needles="${PMO_LOCALIZED_NEEDLES:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/localized-context-needles.txt}"
     # Operator project keys (e.g. tracker/Jira keys) load at runtime from the
     # gitignored project-keys file via the DC3 key pass below. The tracked DC3
     # detector therefore carries NO real project keys — baking literal keys into
@@ -3776,7 +3776,7 @@ cmd_check() {
     # self-containment rationale as the DC1 needle file). One key per line; blank
     # lines and `#` comments ignored. Absent file → DC3 matches structural shapes
     # only (no-op for key-derived patterns).
-    local c23_project_keys="${PMO_PROJECT_KEYS:-${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/project-keys.txt}"
+    local c23_project_keys="${PMO_PROJECT_KEYS:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/project-keys.txt}"
     # DC2 — Vendors/systems (named tools at parameter-seam positions)
     local c23_dc2='\b(Smartsheet|Confluence|Jira|Teams|atlassian\.net|smartsheet\.com)\b'
     # DC3 — Project identifiers. Tracked pattern is STRUCTURAL ONLY (a
@@ -3943,7 +3943,7 @@ cmd_check() {
   # Verifies every released version on or after the configurable cutoff
   # (default v1.00 — the first released version; override via
   # RELEASE_NOTE_CHECK_CUTOFF to scope to a later baseline) has
-  # a corresponding ${PMO_INSTANCE_PATH}/releases/notes/vX.Y_RELEASE_NOTES.md file.
+  # a corresponding ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes/vX.Y_RELEASE_NOTES.md file.
   #
   # Composes with — does NOT replace — Check 20 (note-content lint).
   # Check 20 lints CONTENT of notes that exist; Check 26 detects PRESENCE drift.
@@ -3963,10 +3963,10 @@ cmd_check() {
   # impact at ship).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 26: Release-note presence (release-notes-standard.md AC#3)"
-    local c26_log="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/RELEASE_LOG.md"
+    local c26_log="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/RELEASE_LOG.md"
     local c26_allowlist=".claude/skip-release-note-check.txt"
     local c26_cutoff="${RELEASE_NOTE_CHECK_CUTOFF:-v1.00}"
-    local c26_notes_dir="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/releases/notes"
+    local c26_notes_dir="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes"
 
     if [[ ! -f "$c26_log" ]]; then
       flag_warn_or_issue "release-note-presence" \
@@ -4427,7 +4427,7 @@ cmd_check() {
   # in INDEX/DIGEST but absent from the LOG are NOT flagged (the LOG is the closed
   # set of releases; Check 23 separately reconciles LOG<->INDEX drift on the instance
   # corpus). This in-repo target differs deliberately from Check 23/26 (which read the
-  # operator-instance ${PMO_INSTANCE_PATH} corpus) — the tracked release/releases/
+  # operator-instance ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance corpus) — the tracked release/releases/
   # ledger is the surface where the incident occurred and the one shipped in this repo.
   #
   # NOTES filename resolution (historical-tolerant): the notes file is accepted under
@@ -5225,7 +5225,7 @@ cmd_check() {
     # Resolve the operator-local instance. Primary: the operator-instance base
     # (env-var-aware, same resolution as the warn-log / mode file above); a
     # roadmaps-tree fallback is also accepted. Filename is stable per the schema.
-    local c40_base="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}"
+    local c40_base="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance"
     local c40_file=""
     local c40_candidate
     for c40_candidate in \
