@@ -1656,8 +1656,8 @@ cmd_check_lifecycle() {
   cat <<'LIFECYCLE'
 deploy.sh check lifecycle registry
 ===================================
-Live check sequence: 1-14, 16-23, 25-38   (gaps: 15, 24 — both reserved)
-Next NEW top-level check number: 39
+Live check sequence: 1-14, 16-23, 25-44   (gaps: 15, 24 — both reserved)
+Next NEW top-level check number: 45
   (15 and 24 are RETIRED-RESERVED; never reuse. Sub-checks extend an existing
    number, e.g. 18a/18b/18c/18d, and do NOT consume a new top-level number.)
 
@@ -5462,6 +5462,50 @@ cmd_check() {
       else
         log "  OK:    no path-portability leaks on the executable surface"
       fi
+    fi
+  fi
+
+
+  # Check 44 — Depersonalization-token conformance (warn-mode initial) [#323]
+  #
+  # Two single-responsibility assertions over the Layer-1 corpus markdown:
+  #  (a) PVT*-reintroduction ratchet — flag a literal GitHub Projects ID
+  #      (PVT_ / PVTI_ / PVTF_ / PVTSSF_ + >=4 ID chars) reintroduced outside the
+  #      guide. Part-a (the cleanup) shipped via #600; this is the forward ratchet.
+  #      The {4,} floor exempts the guide's bare PVT_ example shapes; the guide file
+  #      is additionally exempt.
+  #  (b) bracket-token conformance — flag any [OPERATOR_*] square-bracket token used
+  #      in tracked corpus that is NOT registered in depersonalization-spec.md
+  #      §1/§1.1. Reads the registry (self-updating). Excludes release/releases/
+  #      (release-corpus / ledger surface). A legitimately-illustrative token carries
+  #      a 'depersonalization-token: allow' line marker.
+  # Companion to #324 (token registration); kept SEPARATE from #529's path-portability
+  # check (distinct concern). Warn-mode initial per bypass-mode-readiness.md §Shakedown.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 44: Depersonalization-token conformance (PVT* + [OPERATOR_*] vocabulary)"
+    local c44_spec="core/standards/depersonalization-spec.md"
+    local c44_pvt c44_unreg=""
+    # (a) PVT*-literal reintroduction (exempt the guide + marker lines)
+    c44_pvt="$(grep -rEn 'PVT(SSF|F|I)?_[A-Za-z0-9]{4,}' --include='*.md' core release operations 2>/dev/null | grep -vE 'github-projects-guide\.md|depersonalization-token: allow' || true)"
+    if [[ -n "$c44_pvt" ]]; then
+      flag_warn_or_issue "depersonalization-token" "literal GitHub Projects ID (PVT*) reintroduced outside the guide — tokenize to an [OPERATOR_PROJECT*] token: $(printf '%s' "$c44_pvt" | head -3 | tr '\n' ';')"
+    fi
+    # (b) [OPERATOR_*] bracket-token conformance against the §1/§1.1 registry
+    if [[ -f "$c44_spec" ]]; then
+      local c44_reg c44_tok
+      c44_reg="$(grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' "$c44_spec" | sort -u)"
+      while IFS= read -r c44_tok; do
+        [[ -z "$c44_tok" ]] && continue
+        printf '%s\n' "$c44_reg" | grep -qxF "$c44_tok" || c44_unreg="${c44_unreg}${c44_tok} "
+      done < <(grep -rEn '\[OPERATOR_[A-Z0-9_]+\]' --include='*.md' core release operations 2>/dev/null | grep -vE 'release/releases/' | grep -v 'depersonalization-token: allow' | grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' | sort -u)
+      if [[ -n "$c44_unreg" ]]; then
+        flag_warn_or_issue "depersonalization-token" "unregistered [OPERATOR_*] token(s) in corpus, absent from depersonalization-spec.md §1: ${c44_unreg}— register them (with a config home) or mark an illustrative use 'depersonalization-token: allow'"
+      fi
+    else
+      flag_warn_or_issue "depersonalization-token" "registry missing: $c44_spec"
+    fi
+    if [[ -z "$c44_pvt" && -z "$c44_unreg" && -f "$c44_spec" ]]; then
+      log "  OK:    no PVT* reintroduction; all [OPERATOR_*] tokens registered"
     fi
   fi
 
