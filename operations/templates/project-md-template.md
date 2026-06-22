@@ -48,7 +48,7 @@ capacity effort-split — a different concept that shares the same digits.)
 
 **Current sprint:** Sprint 1
 **Velocity:** Not yet established
-**Jira board:** [{{JIRA_PROJECT_KEY}} Board](https://[OPERATOR_JIRA]/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
+**Jira board:** [{{JIRA_PROJECT_KEY}} Board](https://{{JIRA_BASE_URL}}/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
 {{ENDIF}}
 
 {{IF GOVERNANCE_MODEL == Waterfall OR Hybrid}}
@@ -88,7 +88,7 @@ capacity effort-split — a different concept that shares the same digits.)
 
 {{IF GOVERNANCE_MODEL == Agile OR Hybrid}}
 - **Project key:** {{JIRA_PROJECT_KEY}}
-- **Board:** [{{JIRA_PROJECT_KEY}} Board](https://[OPERATOR_JIRA]/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
+- **Board:** [{{JIRA_PROJECT_KEY}} Board](https://{{JIRA_BASE_URL}}/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
 - **Bug naming:** {{JIRA_PROJECT_KEY}}-### (e.g., {{JIRA_PROJECT_KEY}}-001)
 - **Priority levels:** P1 Critical, P2 High, P3 Moderate, P4 Low
 {{ENDIF}}
@@ -124,7 +124,7 @@ capacity effort-split — a different concept that shares the same digits.)
 
 - **Confluence space:** {{CONFLUENCE_SPACE}}
 {{IF GOVERNANCE_MODEL == Agile OR Hybrid}}
-- **Jira board:** [{{JIRA_PROJECT_KEY}} Board](https://[OPERATOR_JIRA]/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
+- **Jira board:** [{{JIRA_PROJECT_KEY}} Board](https://{{JIRA_BASE_URL}}/jira/software/c/projects/{{JIRA_PROJECT_KEY}}/boards/)
 {{ENDIF}}
 {{IF SPM_CO_MANAGED == Yes}}
 - **SharePoint folder:** {{ASSUMPTION – CONFIRM: SharePoint URL}}
