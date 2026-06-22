@@ -55,7 +55,7 @@ jobs:
     name: Pre-merge version-freeness gate
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0          # need the full tag set for claimed_set (git ls-remote also used)
 

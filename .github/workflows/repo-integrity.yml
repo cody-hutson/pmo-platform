@@ -60,7 +60,7 @@ jobs:
       COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
       FORK_OPTOUT: ${{ vars.REPO_INTEGRITY_FORK_OPTOUT }}     # fork-only: explicit opt-out of a dimension
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # need the base commit for the changed-files delta
 
@@ -272,7 +272,7 @@ jobs:
     name: Issue-reference validity gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -471,7 +471,7 @@ jobs:
     name: Dead-file-reference gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6
@@ -557,7 +557,7 @@ jobs:
     name: ADR-number integrity gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.x'
@@ -600,7 +600,7 @@ jobs:
     name: Draft-file gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Flag draft/scratch/proposal files added outside the governed corpus

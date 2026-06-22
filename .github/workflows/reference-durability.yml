@@ -33,7 +33,7 @@ jobs:
     name: Durable-corpus fragile-reference delta
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # need the base commit for the added-lines delta
 
