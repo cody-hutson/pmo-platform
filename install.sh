@@ -121,6 +121,34 @@ phase_skill_deploy() {
   phase_deploy_skills
 }
 
+# --- localized-context needle scaffold (#1830 Part 2) ---
+# Create-once: copy the tracked .example to the operator's needle file ONLY IF
+# absent. Phase 1 (setup-workspace.sh) already does this on a normal install;
+# this is an idempotent belt-and-suspenders guard keyed on the same resolver, so
+# it is a no-op when the file already exists. <ws_root> empty → resolver default.
+scaffold_needles() {
+  local ws_root="$1"
+  local lib="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
+  local example="${REPO_ROOT}/core/config/localized-context-needles.txt.example"
+  [ -f "${lib}" ] || { info "Resolver lib absent; needle scaffold handled by Phase 1."; return 0; }
+  [ -f "${example}" ] || { info "Needle template absent; skipping scaffold."; return 0; }
+  # shellcheck disable=SC1090
+  source "${lib}"
+  local base
+  if [ -n "${ws_root}" ]; then
+    base="$(pmo_instance_path_for "${ws_root}")"
+  else
+    base="$(pmo_instance_path)"
+  fi
+  local needle_file="${PMO_LOCALIZED_NEEDLES:-${base}/localized-context-needles.txt}"
+  if [ -f "${needle_file}" ]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "${needle_file}")"
+  cp "${example}" "${needle_file}"
+  info "Scaffolded localized-context needle file → ${needle_file}"
+}
+
 # --- Main ---
 main() {
   # Short-circuit on --help so we don't run skill deployment after a usage print.
@@ -160,6 +188,9 @@ main() {
     export PMO_PLATFORM_DEPLOY_ROOT="${ws_root}"
     info "Phase 2 deploy root set from --workspace-root: ${ws_root}"
   fi
+
+  # Idempotent needle scaffold (no-op if Phase 1 already created it).
+  scaffold_needles "${ws_root}"
 
   phase_skill_deploy
 

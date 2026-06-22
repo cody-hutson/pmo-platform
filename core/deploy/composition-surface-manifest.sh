@@ -13,9 +13,12 @@
 #   "<source-relative-path>|<runtime-tier>|<tokens-flag>"
 #
 #   <source-relative-path>  Path relative to repo root (where the package source lives)
-#   <runtime-tier>          "hook"      → ~/Claude/.claude/<basename>
-#                           "instance"  → ~/Claude/personal/pmo-instance/<basename>
-#                           "hub-state" → ~/Claude/personal/pmo-instance/hub-state/<basename>
+#   <runtime-tier>          "hook"      → <workspace-root>/.claude/<basename>
+#                           "instance"  → <instance-base>/<basename>
+#                           "hub-state" → <instance-base>/hub-state/<basename>
+#                                         (<instance-base> resolved by
+#                                          lib_compose_resolve_target via the
+#                                          lib-instance-path.sh resolver — #1830)
 #                                         (per core/standards/depersonalization-spec.md §4
 #                                          <OPERATOR_INSTANCE_HUB_STATE_PATH> token resolution
 #                                          — schema templates for hub-state Surfaces A/C +
@@ -52,7 +55,7 @@ COMPOSITION_SURFACE_FILES=(
   "core/config/allowlists/skip-localized-context-check.txt|hook|raw"
   "core/config/allowlists/skip-release-note-check.txt|hook|raw"
 
-  # Instance-tier (operator-scoped, ~/Claude/personal/pmo-instance/<basename>)
+  # Instance-tier (operator-scoped, <instance-base>/<basename>)
   # Token-free — operator extends per-instance over time
   "core/config/allowlists/skill-editor-exemption-list.txt|instance|raw"
   "core/config/allowlists/skip-doc-link-check.txt|instance|raw"
@@ -65,7 +68,7 @@ COMPOSITION_SURFACE_FILES=(
   # program-config.toml / PROJECT.md) — NOT this seed. Token-free.
   "core/config/platform-config.toml.template|instance|raw"
 
-  # Hub-state-tier (operator-scoped, ~/Claude/personal/pmo-instance/hub-state/<basename>)
+  # Hub-state-tier (operator-scoped, <instance-base>/hub-state/<basename>)
   # Schema templates for hub-state Surfaces A, C + action-items ledger. Hub
   # copies these to <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/<basename-stripped>
   # on first surface emit per release (lazy per-release directory creation

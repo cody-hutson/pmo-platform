@@ -1247,6 +1247,43 @@ install_composition_surface_files() {
   info "Composition-surface install pass complete (${installed_count} installed, ${preserved_count} preserved)"
 }
 
+# --- Section 15c: localized-context needle scaffold (#1830 Part 2) ---
+# Create the operator's localized-context-needles.txt from the tracked .example
+# ONLY IF it does not already exist (create-once — never clobbers operator data).
+# Resolves the target via the single resolver (pmo_localized_needles), keyed on
+# the passed WORKSPACE_ROOT so a sandboxed install lands inside the sandbox.
+scaffold_localized_needles() {
+  local lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if [ ! -f "${lib}" ]; then
+    warn "Instance-path resolver not found at ${lib}; skipping needle scaffold"
+    return 0
+  fi
+  # shellcheck source=/dev/null
+  source "${lib}"
+  local example="${SOURCE_REPO}/core/config/localized-context-needles.txt.example"
+  if [ ! -f "${example}" ]; then
+    warn "Needle template not found at ${example}; skipping needle scaffold"
+    return 0
+  fi
+  # Key the instance base on the passed WORKSPACE_ROOT (honors PMO_INSTANCE_PATH
+  # override; falls back to <workspace-root>/<instance-leaf>, not the $HOME default
+  # — so a sandboxed --workspace-root is respected).
+  local instance_base; instance_base="$(pmo_instance_path_for "${WORKSPACE_ROOT}")"
+  local needle_file="${PMO_LOCALIZED_NEEDLES:-${instance_base}/localized-context-needles.txt}"
+  if [ -f "${needle_file}" ]; then
+    info "PRESERVED (operator-state): localized-context-needles.txt"
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would scaffold needle file → ${needle_file}"
+    return 0
+  fi
+  mkdir -p "$(dirname "${needle_file}")" || { err "mkdir failed: $(dirname "${needle_file}")"; exit 73; }
+  cp "${example}" "${needle_file}" || { err "needle scaffold copy failed → ${needle_file}"; exit 74; }
+  info "INSTALLED needle template: ${needle_file}"
+  printf 'rm-file:%s\n' "${needle_file}" >> "${ROLLBACK_OPS_FILE}"
+}
+
 # --- Section 16: Hook behavioral verification (CD-5 absorption) ---
 verify_hooks_invokable() {
   local sample_hook="${WORKSPACE_ROOT}/.claude/hooks/block-destructive.sh"
@@ -1482,6 +1519,7 @@ fresh_install() {
   substitute_templates
   install_hooks
   install_composition_surface_files
+  scaffold_localized_needles
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1
@@ -1504,6 +1542,7 @@ rebootstrap() {
   substitute_templates
   install_hooks
   install_composition_surface_files
+  scaffold_localized_needles
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1

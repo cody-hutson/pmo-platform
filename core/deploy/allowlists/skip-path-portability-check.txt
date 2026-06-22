@@ -11,3 +11,7 @@
 # --self-test fixtures (which deliberately embed /Users/<op> + personal/pmo-instance
 # example strings to verify flagging).
 core/deploy/tools/path-leak-patterns.sh
+
+# The instance-path resolver DEFINES the canonical operator-instance default
+# (the one sanctioned home for the personal/pmo-instance literal). #1830.
+core/deploy/lib-instance-path.sh
