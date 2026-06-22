@@ -72,7 +72,7 @@ jobs:
     name: Shell harness (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Verify prerequisites
         run: |
@@ -143,7 +143,7 @@ jobs:
     # so a hook failure is attributable separately from a deploy-test failure.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Ensure jq
         # jq is the hook dependency (bypass-mode-readiness.md Recovery § "Missing
@@ -185,7 +185,7 @@ jobs:
     # its sibling jobs. The path-scoping optimization is intentionally deferred.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Ensure jq
         # Shared dependency of the install/deploy harness + the hook floor.

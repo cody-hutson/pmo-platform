@@ -24,7 +24,7 @@ jobs:
     name: Workflow SAST (actionlint)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install actionlint
         run: |
           # actionlint binary installer (upstream-recommended path)
@@ -45,7 +45,7 @@ jobs:
     name: Python SAST (bandit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -60,7 +60,7 @@ jobs:
     name: Python deps (pip-audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -94,7 +94,7 @@ jobs:
     name: Secret scanning (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Install gitleaks
