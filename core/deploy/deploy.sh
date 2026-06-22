@@ -5014,6 +5014,7 @@ cmd_check() {
       "block-skill-direct-edit:core/standards/canonical-skill-structure.md"
       "block-fragile-refs:core/standards/reference-durability-standard.md"
       "block-gh-path-leak:core/rules/git-workflow.md"
+      "block-draft-files:core/rules/git-workflow.md"
     )
     if [[ ! -d core/hooks ]] || [[ ! -f "$c37_index" ]] || [[ ! -d "$c37_src_dir" ]]; then
       log "  SKIP:  hook scripts dir, index, or source dir absent (greenfield/partial checkout)"
