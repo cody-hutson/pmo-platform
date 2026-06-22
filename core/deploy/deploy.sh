@@ -5417,6 +5417,53 @@ cmd_check() {
     fi
   fi
 
+  # Check 43 — Path-portability leak detector (warn-mode initial) [#529]
+  #
+  # Flags machine-specific path leaks on the EXECUTABLE surface (scripts / hooks /
+  # deploy-tools — where path resolution is operationally load-bearing): an absolute
+  # machine path (/Users/<u>, /home/<u>) or a BARE relative operator-instance path
+  # (personal/pmo-instance/...). The path-portability leakage family — the path-axis
+  # sibling of the host-binding-leak class (core/disciplines/knowledge-architecture.md
+  # §4.1). The raw $HOME/Claude root is NOT flagged: it is the portable canonical
+  # default. Patterns + the exempt predicate are SHARED with the #1137 gh-issue-ops
+  # guard via core/deploy/tools/path-leak-patterns.sh.
+  #
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown; flip-to-enforce after a
+  # >=3-day warn-log review via .claude/hooks/deploy-check.mode (shared cohort) or a
+  # dedicated path-portability.mode (resolve_check_mode, independent graduation).
+  # Detection-definition files are allowlisted (tracked:
+  # core/deploy/allowlists/skip-path-portability-check.txt).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 43: Path-portability leak detector (executable surface)"
+    local c43_primitive="core/deploy/tools/path-leak-patterns.sh"
+    local c43_allowlist="core/deploy/allowlists/skip-path-portability-check.txt"
+    if [[ ! -f "$c43_primitive" ]]; then
+      flag_warn_or_issue "path-portability" "primitive missing: $c43_primitive"
+    else
+      # shellcheck source=/dev/null
+      source "$c43_primitive"
+      local c43_n=0 c43_findings="" c43_f c43_ln c43_line
+      for c43_f in core/deploy/deploy.sh core/deploy/tools/*.sh core/deploy/tools/*.py core/hooks/*.sh docs/scripts/*.sh install.sh update.sh; do
+        [[ -f "$c43_f" ]] || continue
+        grep -qxF "$c43_f" "$c43_allowlist" 2>/dev/null && continue
+        c43_ln=0
+        while IFS= read -r c43_line || [[ -n "$c43_line" ]]; do
+          c43_ln=$((c43_ln+1))
+          if path_leak_scan_line "$c43_line"; then
+            c43_findings+="$c43_f:$c43_ln: $(printf '%s' "$c43_line" | sed 's/^[[:space:]]*//' | cut -c1-100)"$'\n'
+            c43_n=$((c43_n+1))
+          fi
+        done < "$c43_f"
+      done
+      if [[ "$c43_n" -gt 0 ]]; then
+        flag_warn_or_issue "path-portability" "$c43_n path-portability leak(s) on the executable surface — an absolute machine path (/Users//home) or a bare personal/pmo-instance path; use \${CLAUDE_WORKSPACE_ROOT:-\$HOME/Claude}/... , mark the line 'path-leak: allow', or allowlist the file"
+        printf '%s' "$c43_findings" | head -10 | sed 's/^/         /'
+      else
+        log "  OK:    no path-portability leaks on the executable surface"
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
