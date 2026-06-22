@@ -178,7 +178,7 @@ Twelve rules governing schema conformance. Enforcement level `structural (auto)`
 | **V11** | `custom_methodology_definition.cadence` is a non-empty string | — | structural (auto) — **AC-R2** |
 | **V12** | `custom_methodology_definition.notes` is either absent OR a string (may be empty `""`) | — | structural (auto) |
 
-**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.16)** — it does NOT introduce a new V-rule, so the V-series tail remains **V12**. The next V-numbers, **V13 and V14, are reserved** for the PROJECT.md-schema keystone (the first-class domain / deliverable-type axis) and the org-structure / delivery-model / team-roster card respectively, which append to the V12 tail when that later schema-expansion milestone is built (see References). No existing rule is renumbered.
+**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule, so the V-series tail remains **V12**. The next V-numbers, **V13 and V14, are reserved** for the PROJECT.md-schema keystone (the first-class domain / deliverable-type axis) and the org-structure / delivery-model / team-roster card respectively, which append to the V12 tail when that later schema-expansion milestone is built (see References). No existing rule is renumbered.
 
 ### 5.1 Custom Block Completeness (operationalizes AC-R2)
 
