@@ -40,6 +40,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 SETUP="${REPO_ROOT}/docs/scripts/setup-workspace.sh"
 UPDATE="${REPO_ROOT}/update.sh"
+# Resolve the instance-tier dir via the single resolver instead of inlining the
+# hardcoded leaf (#1830 AC1/AC5). PMO_INSTANCE_PATH is unset in this test, so
+# pmo_instance_path_for returns <workspace-root>/<instance-leaf>.
+# shellcheck source=../lib-instance-path.sh disable=SC1091
+source "${SCRIPT_DIR}/../lib-instance-path.sh"
 
 PASS=0
 FAIL=0
@@ -146,7 +151,7 @@ else
   report "hooks installed (>=10)" 0 "found ${hook_count}"
 fi
 
-allowlist_count=$(find "${SBX}/ws/.claude" "${SBX}/ws/personal/pmo-instance" -maxdepth 1 -name "*.txt" 2>/dev/null | wc -l | tr -d ' ')
+allowlist_count=$(find "${SBX}/ws/.claude" "$(pmo_instance_path_for "${SBX}/ws")" -maxdepth 1 -name "*.txt" 2>/dev/null | wc -l | tr -d ' ')
 if [ "${allowlist_count}" -ge 14 ]; then
   report "composition-surface files (>=14)" 1
 else

@@ -52,6 +52,12 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
+# Single resolver for the operator-instance path (sibling of deploy.sh). Used by
+# the exemption-list resolution below instead of the hardcoded instance default
+# (#1830). Mirrors deploy.sh Check 6.
+# shellcheck source=../lib-instance-path.sh disable=SC1091
+source "${SCRIPT_DIR}/../lib-instance-path.sh"
+
 # ─── D-Refs thresholds (BYTE-ALIGNED with deploy.sh Check 6) ──────────────────
 # Keep these two literals in lockstep with the deploy.sh Check-6 block. They are
 # the pre-existing, canonical thresholds — this script does not invent new ones.
@@ -357,8 +363,8 @@ main() {
       ;;
     "")
       # Default: scan the live roster. EXEMPTION_LIST mirrors deploy.sh Check 6:
-      # operator-instance path via env var, fallback to the legacy .claude path.
-      local exemption_list="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skill-editor-exemption-list.txt"
+      # operator-instance path via the resolver, fallback to the legacy .claude path.
+      local exemption_list="$(pmo_instance_path)/skill-editor-exemption-list.txt"
       [[ -f "$exemption_list" ]] || exemption_list="$REPO_ROOT/.claude/skill-editor-exemption-list.txt"
       [[ -f "$exemption_list" ]] || exemption_list=""
       run_check "$REPO_ROOT" "$REPO_ROOT/core/deploy/deploy.sh" "$exemption_list"

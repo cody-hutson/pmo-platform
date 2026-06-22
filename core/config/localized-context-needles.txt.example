@@ -1,0 +1,47 @@
+# localized-context-needles.txt — operator-instance PII needle list (TEMPLATE)
+#
+# Purpose:
+#   Fixed-string "needles" that the PII pre-commit guard (core/hooks/git-pre-commit-pii.sh)
+#   and deploy.sh Check 25 (universal-vs-localized-context) match against staged
+#   additions / the tracked corpus to keep ORGANIZATIONAL IDENTITY out of the
+#   public repo: coworker names, the employer / org name, and the org's email
+#   domain. These literals are intentionally NOT baked into the tracked hook or
+#   detector — a hardcoded employer domain in a public regex is itself a published
+#   leak — so they live here, in a gitignored operator-instance file.
+#
+# How it is used:
+#   This is the .example TEMPLATE (tracked, public-safe, ZERO real names).
+#   install.sh / update.sh / setup-workspace.sh copy it to the operator-instance
+#   dir as `localized-context-needles.txt` ONLY IF that file does not yet exist
+#   (create-once — your real list is never overwritten on update). The resolved
+#   path is owned by core/deploy/lib-instance-path.sh (pmo_localized_needles);
+#   default <instance-dir>/localized-context-needles.txt, override via
+#   PMO_LOCALIZED_NEEDLES.
+#
+# Format:
+#   - One needle per line.
+#   - Lines beginning with `#` are comments; blank lines are ignored.
+#   - Matching is FIXED-STRING (grep -F), case-insensitive — no regex, no escaping.
+#   - Keep each needle specific enough to avoid false positives on common words.
+#
+# Fail-closed note:
+#   While this file holds ONLY commented placeholder rows (as shipped), it counts
+#   as "unfilled". If your operator-instance dir exists but this file is missing
+#   or unfilled, the pre-commit guard fails closed (once its .mode is flipped to
+#   enforce) so the organizational-identity tier can never silently no-op. Replace
+#   the placeholder rows below with your real needles to activate scanning.
+#
+# Replace the example rows below (delete the leading `# ` and edit) — do NOT
+# commit real names to the repo; this file is gitignored at the instance dir.
+
+# --- Coworker / collaborator names (one per line) ---
+# Jane Q. Example
+# John Doe
+
+# --- Employer / organization name(s) ---
+# Example Corporation
+# ExampleCorp
+
+# --- Organization email / web domain(s) ---
+# examplecorp.com
+# example.org

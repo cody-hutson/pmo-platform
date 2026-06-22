@@ -314,6 +314,75 @@ regenerate_managed_sections() {
   REGENERATED_COUNT="${regenerated}"
 }
 
+# --- Phase 2.5a: Pre-update backup of the operator-instance dir (#1830 Part 3) ---
+# Before any regeneration runs, snapshot the operator-instance dir so operator-
+# only data (the localized-context needle file, project keys, mode files, hub
+# state) is recoverable if a later phase misbehaves. Reuses the BACKUP_DIR_ROOT
+# convention Phase 3 uses for per-file managed-section backups. Best-effort: a
+# missing instance dir (fresh workspace) or copy hiccup warns but never aborts
+# the update. The needle file is operator data and is NEVER regenerated — this
+# backup is the safety net for that guarantee.
+INSTANCE_DIR=""
+resolve_instance_dir() {
+  # pmo_instance_path_for is available via lib-composition.sh → lib-instance-path.sh
+  # (sourced in preflight). Key on WORKSPACE_ROOT so a sandboxed update resolves
+  # inside the sandbox; PMO_INSTANCE_PATH override still wins.
+  if command -v pmo_instance_path_for >/dev/null 2>&1; then
+    INSTANCE_DIR="$(pmo_instance_path_for "${WORKSPACE_ROOT}")"
+  fi
+}
+
+backup_instance_dir() {
+  info "Phase 2.5a: Pre-update backup of operator-instance dir"
+  resolve_instance_dir
+  if [ -z "${INSTANCE_DIR}" ] || [ ! -d "${INSTANCE_DIR}" ]; then
+    info "No operator-instance dir to back up (${INSTANCE_DIR:-unresolved}); skipping."
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would back up ${INSTANCE_DIR} → ${BACKUP_DIR_ROOT}-instance-<ts>"
+    return 0
+  fi
+  local backup_dir="${BACKUP_DIR_ROOT}-instance-$(date -u +%Y%m%dT%H%M%SZ)"
+  if mkdir -p "${backup_dir}" && cp -R "${INSTANCE_DIR}/." "${backup_dir}/" 2>/dev/null; then
+    info "Backed up operator-instance dir → ${backup_dir}"
+  else
+    warn "Pre-update instance backup did not complete cleanly (continuing): ${backup_dir}"
+  fi
+}
+
+# --- Phase 2.5b: localized-context needle scaffold (#1830 Part 2 + Part 3) ---
+# Create-once ONLY: copy the tracked .example to the operator's needle file if and
+# only if it does NOT already exist. update.sh must NEVER regenerate this file (it
+# is pure operator data, unlike the marker-fenced composition surfaces Phase 3
+# regenerates) — the `[ -f ] ||` guard IS that guarantee. A filled needle file is
+# therefore byte-identical across repeated updates.
+scaffold_needles() {
+  info "Phase 2.5b: localized-context needle scaffold (create-once; never regenerated)"
+  resolve_instance_dir
+  local example="${REPO_ROOT}/core/config/localized-context-needles.txt.example"
+  if [ ! -f "${example}" ]; then
+    warn "Needle template not found at ${example}; skipping needle scaffold"
+    return 0
+  fi
+  if [ -z "${INSTANCE_DIR}" ]; then
+    warn "Instance dir unresolved; skipping needle scaffold"
+    return 0
+  fi
+  local needle_file="${PMO_LOCALIZED_NEEDLES:-${INSTANCE_DIR}/localized-context-needles.txt}"
+  if [ -f "${needle_file}" ]; then
+    info "PRESERVED (operator data, never regenerated): ${needle_file}"
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would scaffold needle file → ${needle_file}"
+    return 0
+  fi
+  mkdir -p "$(dirname "${needle_file}")"
+  cp "${example}" "${needle_file}"
+  info "Scaffolded localized-context needle file → ${needle_file}"
+}
+
 # --- Phase 4: State update ---
 write_last_update() {
   if [ "${DRY_RUN}" -eq 1 ]; then
@@ -446,6 +515,8 @@ trap 'err "Interrupted"; exit '"${EX_INTERRUPT}" INT TERM
 
 preflight
 schema_migrate
+backup_instance_dir
+scaffold_needles
 regenerate_managed_sections
 redeploy_skills
 refresh_version_snapshot

@@ -27,6 +27,12 @@ LIB_COMPOSITION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly LIB_COMPOSITION_DIR
 readonly LIB_COMPOSE_PY="${LIB_COMPOSITION_DIR}/compose.py"
 
+# Single resolver for the operator-instance dir (sibling lib). lib_compose_resolve_target
+# uses pmo_instance_path() for the instance / hub-state tiers so PMO_INSTANCE_PATH
+# overrides are honored instead of being ignored (#1830).
+# shellcheck source=lib-instance-path.sh disable=SC1091
+source "${LIB_COMPOSITION_DIR}/lib-instance-path.sh"
+
 # --- Logging ---
 
 lib_compose_log_info() { printf 'INFO: %s\n' "$*" >&2; }
@@ -182,17 +188,27 @@ lib_compose_parse_entry() {
 # Resolve a manifest entry's runtime target path given the workspace root.
 # Usage: lib_compose_resolve_target <basename> <tier> <workspace-root>
 #   tier: "hook"      → <workspace-root>/.claude/<basename>
-#         "instance"  → <workspace-root>/personal/pmo-instance/<basename>
-#         "hub-state" → <workspace-root>/personal/pmo-instance/hub-state/<basename>
+#         "instance"  → <instance-base>/<basename>
+#         "hub-state" → <instance-base>/hub-state/<basename>
 #                       (resolves <OPERATOR_INSTANCE_HUB_STATE_PATH> per
 #                        core/standards/depersonalization-spec.md §4)
+#   <instance-base> = pmo_instance_path_for <workspace-root> — the
+#                     PMO_INSTANCE_PATH override when set, else the instance leaf
+#                     under <workspace-root> (#1830; resolver-owned leaf).
 # Echoes the resolved path; non-zero exit on unknown tier.
 lib_compose_resolve_target() {
   local basename="$1" tier="$2" workspace_root="$3"
+  # Instance-tier base via the single resolver (the #1830 fix — this site
+  # previously ignored PMO_INSTANCE_PATH entirely). pmo_instance_path_for honors
+  # the override when set, else appends the instance leaf to the caller-passed
+  # workspace_root so sandboxed installs/tests still redirect correctly (the
+  # $HOME-based default is intentionally NOT used here — it would escape a passed
+  # sandbox root). The instance-leaf literal lives only in the resolver.
+  local instance_base; instance_base="$(pmo_instance_path_for "${workspace_root}")"
   case "${tier}" in
     hook)      printf '%s/.claude/%s\n' "${workspace_root}" "${basename}" ;;
-    instance)  printf '%s/personal/pmo-instance/%s\n' "${workspace_root}" "${basename}" ;;
-    hub-state) printf '%s/personal/pmo-instance/hub-state/%s\n' "${workspace_root}" "${basename}" ;;
+    instance)  printf '%s/%s\n' "${instance_base}" "${basename}" ;;
+    hub-state) printf '%s/hub-state/%s\n' "${instance_base}" "${basename}" ;;
     *)
       lib_compose_log_err "Unknown tier '${tier}' for basename '${basename}'"
       return 1
