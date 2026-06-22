@@ -8,6 +8,10 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.18.1] - 2026-06-22
+
+Operator-instance path decoupling — the operator needle/instance path resolves through one resolver (`CLAUDE_WORKSPACE_ROOT` per ADR-032), with a `.env`-style template + create-once scaffold, persistence across update, and a fail-closed PII guard (warn-mode-initial). Patch off v2.18; non-breaking.
+
 ## [public-flip-depersonalization-enforcement] - 2026-06-21
 
 Public-flip depersonalization + path-portability enforcement — the public repo's depersonalization/portability boundary moves from manual vigilance to standing, warn-mode-initial guards. Version-less (theme-named).
