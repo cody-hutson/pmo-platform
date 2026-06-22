@@ -87,7 +87,7 @@ _path_leak_self_test() {
   expect_clean() { n=$((n+1)); if path_leak_scan_line "$2"; then echo "  ✗ FALSE-POSITIVE (should pass): $1 — [$2]"; fails=$((fails+1)); else echo "  ✓ PASS: $1"; fi; }
 
   echo "MACHINE:"
-  expect_leak  "real /Users/<op> path"            'see /Users/codyhutson/Claude/x.md'
+  expect_leak  "real /Users/<op> path"            'see /Users/operator/Claude/x.md'
   expect_leak  "real /home/<op> path"             'cd /home/operator/work'
   expect_clean "fixture /Users/testuser"          'export H=/Users/testuser/Claude'
   expect_clean "fixture /Users/foo"               'p=/Users/foo/bar'
@@ -104,7 +104,7 @@ _path_leak_self_test() {
   expect_clean "personalization (near-miss)"      'see personalization settings'
   expect_clean "rooted /…/personal/pmo-instance"  'f="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance"'
   echo "MARKER:"
-  expect_clean "path-leak: allow marker"          'see /Users/codyhutson/x  # path-leak: allow'
+  expect_clean "path-leak: allow marker"          'see /Users/operator/x  # path-leak: allow'
   echo ""
   if [ "$fails" -eq 0 ]; then echo "SELF-TEST PASS ($n cases)"; return 0; else echo "SELF-TEST FAIL ($fails/$n)"; return 1; fi
 }
