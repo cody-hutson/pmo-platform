@@ -99,6 +99,18 @@ for hook in "${HOOKS_SRC}"/*.sh; do
 done
 chmod +x "${HOOKS_DST}"/*.sh
 
+# 1b) Co-locate the shared path-leak primitive next to the hooks, mirroring the
+#     deployed posture (setup-workspace.sh co-deploys it to .claude/hooks/).
+#     block-gh-path-leak.sh resolves it from ${HOOK_DIR}/path-leak-patterns.sh; the
+#     source lives at core/deploy/tools/, outside the hooks dir the loop above copies.
+PRIMITIVE_SRC="${REPO_ROOT}/core/deploy/tools/path-leak-patterns.sh"
+if [ -f "${PRIMITIVE_SRC}" ]; then
+  cp "${PRIMITIVE_SRC}" "${HOOKS_DST}/"
+  log "setup-ci-layout: co-located path-leak primitive -> ${HOOKS_DST}/path-leak-patterns.sh"
+else
+  log "setup-ci-layout: WARNING path-leak primitive missing at ${PRIMITIVE_SRC}"
+fi
+
 # 2) Copy tests + runner (skip this setup script — it is not a test file).
 log "setup-ci-layout: copying tests -> ${TESTS_DST}"
 for tf in "${TESTS_SRC}"/*.sh; do

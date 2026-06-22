@@ -39,7 +39,14 @@ readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/gh-path-leak-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
-readonly PRIMITIVE="${HOOK_DIR}/../deploy/tools/path-leak-patterns.sh"
+# Shared primitive resolves co-located FIRST (deployed layout: .claude/hooks/, where
+# setup-workspace.sh co-deploys it next to the hooks), then the repo/source layout
+# (core/hooks/../deploy/tools/, the DevTest + CI-check path). Both yield the same
+# path_leak_* API. Without the co-located copy a DEPLOYED hook fail-opens, since
+# .claude/hooks/../deploy/tools/ does not exist post-install. (#1850)
+PRIMITIVE="${HOOK_DIR}/path-leak-patterns.sh"
+[ -f "$PRIMITIVE" ] || PRIMITIVE="${HOOK_DIR}/../deploy/tools/path-leak-patterns.sh"
+readonly PRIMITIVE
 
 log_error() {
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"

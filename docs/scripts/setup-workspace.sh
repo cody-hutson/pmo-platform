@@ -1111,6 +1111,24 @@ install_hooks() {
   fi
   info "Hook install pass complete (${installed_count} hooks processed)"
 
+  # Co-deploy the shared path-leak primitive NEXT TO the hooks. block-gh-path-leak.sh
+  # (#1137) sources it from ${HOOK_DIR}/path-leak-patterns.sh at runtime; the source
+  # primitive lives at core/deploy/tools/ (shared with deploy.sh Check 43), which the
+  # deployed .claude/hooks/ cannot reach — so without this copy the deployed hook
+  # fail-opens. It is a sourced lib, not a registered hook (no block-* name), so the
+  # hook-registry checks correctly ignore it. (#1850)
+  local primitive_src="${SOURCE_REPO}/core/deploy/tools/path-leak-patterns.sh"
+  local primitive_dst="${WORKSPACE_ROOT}/.claude/hooks/path-leak-patterns.sh"
+  if [ ! -r "${primitive_src}" ]; then
+    warn "path-leak primitive not found at ${primitive_src}; block-gh-path-leak will fail-open"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy path-leak primitive → ${primitive_dst}"
+  else
+    cp "${primitive_src}" "${primitive_dst}"
+    info "INSTALLED: path-leak primitive (block-gh-path-leak dependency)"
+    printf 'rm-file:%s\n' "${primitive_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   install_mode_template_if_missing ".mode.template" ".mode"
   install_mode_template_if_missing "deploy-check.mode.template" "deploy-check.mode"
 
