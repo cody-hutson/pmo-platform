@@ -8,6 +8,22 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [public-flip-depersonalization-enforcement] - 2026-06-21
+
+Public-flip depersonalization + path-portability enforcement — the public repo's depersonalization/portability boundary moves from manual vigilance to standing, warn-mode-initial guards. Version-less (theme-named).
+
+### Added
+
+- **Path-portability + depersonalization-token build checks.** `deploy.sh` Check 43 flags non-portable machine paths (`/Users//home`, bare operator-instance paths) in tracked scripts; Check 44 enforces the `[OPERATOR_*]` token registry and ratchets against reintroduced private GitHub-Projects IDs. Both consume a shared `path-leak-patterns.sh` primitive.
+- **Runtime guards (warn-mode-initial).** A gh-issue-ops path-leak hook scans `gh issue/pr` bodies (including `--body-file` content) for operator-local paths before they post to the public repo; a draft-file hook plus a `repo-integrity` CI gate keep draft/scratch content out of the tracked corpus.
+- **GitHub-Projects token vocabulary.** Six `[OPERATOR_PROJECTS_*]`/board tokens registered in the depersonalization spec §1.1 with an `operator.toml [projects]` home.
+
+### Changed
+
+- **`operator.toml` lossless round-trip.** The setup writer preserves operator-added sections verbatim instead of dropping them on rewrite.
+- **`[OPERATOR_JIRA]` → `{{JIRA_BASE_URL}}`.** The Jira base is a localized value (DC3), not an identity token.
+- **Orphan path-variable convergence.** The residual `PMO_INSTANCE_PATH` fallthrough converges onto `${CLAUDE_WORKSPACE_ROOT}` per ADR-017/ADR-032.
+
 ## [v2.18] - 2026-06-21
 
 The `Hybrid` methodology is now defined cleanly as a user-configurable combination of two archetypes, decoupled from the co-management arrangement it was previously tied to; dual-framing behavior is unchanged.
