@@ -56,5 +56,5 @@ test_case "warn: governed write silent"  "core/standards/y.md" 0
 set_mode off
 test_case "off: draft not flagged" "docs/proposals/z.md" 0
 
-/usr/bin/printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
+/usr/bin/printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
