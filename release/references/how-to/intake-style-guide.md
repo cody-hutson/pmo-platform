@@ -21,6 +21,15 @@ When an idea is not yet intake-ready, the `intake-desk` skill is the conversatio
 
 `[SOURCE: <OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/recommendations.md §C, §D]`
 
+### Sanctioned idea-refinement surface
+
+A half-formed idea — one not yet intake-ready (it fails one or more of the 5 tests below) — still has a sanctioned home; it is **never** developed as a draft / scratch file committed to the public repo (per [`core/rules/git-workflow.md` § Draft / scratch content](../../../core/rules/git-workflow.md)). Two surfaces:
+
+1. **The issue tracker (primary).** Capture the nascent idea with `observation.yml` (the lightweight gap-capture tier), then promote it to `improvement.yml` once enough context exists to pass the 5-test rule. `intake-desk` is the conversational front door that meets the idea at its altitude and logs a well-formed item — refine *in the tracker*, not in a file.
+2. **The git-ignored runtime tier (secondary).** Free-form exploration not yet tracker-ready lives in the operator-instance working space (`projects/`, `personal/` — the Layer-2 git-ignored tree), never as tracked corpus.
+
+This is the *where* that complements the 5-test rule's *whether*: when an idea fails the tests, refine it on one of these surfaces until it passes, rather than committing a premature design or a scratch file.
+
 ---
 
 ## 2. The 5-Test Rule

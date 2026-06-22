@@ -22,7 +22,7 @@
 #
 # Install:  ln -sf ../../core/hooks/git-pre-commit-pii.sh .git/hooks/pre-commit
 # Bypass:   CLAUDE_HOOK_BYPASS=1 git commit ...
-# Needles:  ${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/localized-context-needles.txt
+# Needles:  ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/localized-context-needles.txt
 set -uo pipefail
 
 [[ "${CLAUDE_HOOK_BYPASS:-0}" == "1" ]] && exit 0
@@ -33,7 +33,7 @@ added_all="$(git diff --cached --no-color -U0 2>/dev/null | grep -E '^\+' | grep
 hits="$(printf '%s\n' "$added_all" | grep -inE "$always" || true)"
 
 # Tier 1b — coworker / org needles (gitignored instance file), every file.
-needles="${PMO_LOCALIZED_NEEDLES:-${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/localized-context-needles.txt}"
+needles="${PMO_LOCALIZED_NEEDLES:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/localized-context-needles.txt}"
 if [[ -r "$needles" ]]; then
   cleaned="$(grep -vE '^[[:space:]]*(#|$)' "$needles" || true)"
   if [[ -n "$cleaned" ]]; then

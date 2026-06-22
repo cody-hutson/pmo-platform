@@ -211,6 +211,8 @@ All skills auto-log improvements by creating a GitHub Issue via the `improvement
 
 **Do not:** Ask the user before creating the Issue. Do not mention it conversationally without also creating the Issue. Do not filter by perceived importance — log everything, let the user triage on GitHub.
 
+**Where a half-formed idea lives before it is tracker-ready:** refine it on a sanctioned surface — the issue tracker (`observation.yml` → `improvement.yml`) or the git-ignored runtime tier — never as a draft / scratch file committed to the public repo. See [intake-style-guide.md § Sanctioned idea-refinement surface](../../release/references/how-to/intake-style-guide.md) and [`core/rules/git-workflow.md` § Draft / scratch content](../rules/git-workflow.md).
+
 **Two paths for improvements:**
 
 **Path A — Self-generated (skill finds a gap during processing):**

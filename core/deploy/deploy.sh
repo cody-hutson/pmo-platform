@@ -1656,8 +1656,8 @@ cmd_check_lifecycle() {
   cat <<'LIFECYCLE'
 deploy.sh check lifecycle registry
 ===================================
-Live check sequence: 1-14, 16-23, 25-38   (gaps: 15, 24 — both reserved)
-Next NEW top-level check number: 39
+Live check sequence: 1-14, 16-23, 25-44   (gaps: 15, 24 — both reserved)
+Next NEW top-level check number: 45
   (15 and 24 are RETIRED-RESERVED; never reuse. Sub-checks extend an existing
    number, e.g. 18a/18b/18c/18d, and do NOT consume a new top-level number.)
 
@@ -1854,7 +1854,7 @@ cmd_check() {
 
   # Check 4 — Governance presence.
   # RELEASE_LOG.md DROPPED — per Q1 + Spec Surface 5.2 it is operator-instance,
-  # NOT in-repo governance (lives at $PMO_INSTANCE_PATH/RELEASE_LOG.md).
+  # NOT in-repo governance (lives at ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/RELEASE_LOG.md).
   log "Check 4: Governance presence"
   local -a EXPECTED_ENGINEERING=(
     core/governance/OPERATIONS.md
@@ -1977,7 +1977,7 @@ cmd_check() {
   # EXEMPTION_LIST adapts to an operator-instance path-via-env-var per
   # Spec Surface 5.2 (C) — defaults to operator-instance path; falls back to
   # legacy .claude/ location for compatibility.
-  local EXEMPTION_LIST="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skill-editor-exemption-list.txt"
+  local EXEMPTION_LIST="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/skill-editor-exemption-list.txt"
   [[ -f "$EXEMPTION_LIST" ]] || EXEMPTION_LIST=".claude/skill-editor-exemption-list.txt"
 
   # Check 6 — Canonical-structure compliance (required; always-enforce; enforcement-surface: deploy-time + CI mirror)
@@ -2004,7 +2004,7 @@ cmd_check() {
   # to the shared invokable that closes the run-context gap (#673).
   #
   # The script honors the same EXEMPTION_LIST (canary-by-design D-Refs exemption,
-  # frontmatter still enforced) via PMO_INSTANCE_PATH / .claude fallback. We
+  # frontmatter still enforced) via the operator-instance path / .claude fallback. We
   # re-emit each per-skill line through log() and fold every FAIL into ISSUES so
   # the STRICT summary gate behaves exactly as before.
   log "Check 6: Canonical-structure compliance"
@@ -2173,7 +2173,7 @@ cmd_check() {
   # MODE_FILE adapts to an operator-instance path-via-env-var per Spec
   # Surface 5.2 (C); falls back to legacy .claude/ location for compatibility.
   local DEPLOY_CHECK_MODE="warn"
-  local MODE_FILE="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/deploy-check.mode"
+  local MODE_FILE="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/deploy-check.mode"
   [[ -f "$MODE_FILE" ]] || MODE_FILE=".claude/hooks/deploy-check.mode"
   if [[ -f "$MODE_FILE" ]]; then
     local _mode
@@ -2182,7 +2182,7 @@ cmd_check() {
       enforce|warn|off) DEPLOY_CHECK_MODE="$_mode" ;;
     esac
   fi
-  local WARN_LOG="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/deploy-check-warn-log.jsonl"
+  local WARN_LOG="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/deploy-check-warn-log.jsonl"
 
   # flag_warn_or_issue — Checks 8-10 helper. In enforce-mode, acts like a normal
   # FAIL (increments ISSUES). In warn-mode, logs a WARN + appends to jsonl but
@@ -2224,7 +2224,7 @@ cmd_check() {
   # Mode files are operator-instance runtime state and are NOT committed.
   resolve_check_mode() {
     local _check_id="$1"
-    local _check_mode_file="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/${_check_id}.mode"
+    local _check_mode_file="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/${_check_id}.mode"
     [[ -f "$_check_mode_file" ]] || _check_mode_file=".claude/hooks/${_check_id}.mode"
     if [[ -f "$_check_mode_file" ]]; then
       local _cm
@@ -2742,7 +2742,7 @@ cmd_check() {
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 14: Doc-link maintenance (governance + skill SKILL.md scope)"
     local c14_script="core/deploy/tools/check-doc-links.py"
-    local c14_allowlist="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/skip-doc-link-check.txt"
+    local c14_allowlist="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/skip-doc-link-check.txt"
     [[ -f "$c14_allowlist" ]] || c14_allowlist=".claude/skip-doc-link-check.txt"
     if [[ ! -f "$c14_script" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "primitive script missing: $c14_script"
@@ -2805,7 +2805,7 @@ cmd_check() {
   #     CHANGELOG + GitHub Release Surface 1 emit).
   #
   # Evolution: an earlier Check 15 scanned the in-repo release corpus; a
-  # subsequent wave gated it on the PMO_INSTANCE_PATH env var; this retirement
+  # subsequent wave gated it on the operator-instance-path env var; this retirement
   # replaces the gated block with this citation comment per the operator's full
   # architectural disposition.
   #
@@ -3079,8 +3079,8 @@ cmd_check() {
   # the EXPECTED state, NOT drift.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 19: Pipeline-event-log integrity"
-    local c19_log="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/pipeline-event-log.md"
-    local c19_write_log="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/pipeline-event-log-write.log"
+    local c19_log="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/pipeline-event-log.md"
+    local c19_write_log="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/pipeline-event-log-write.log"
     local c19_schema="release/standards/pipeline-event-log-schema.md"
 
     # 19a — presence
@@ -3744,7 +3744,7 @@ cmd_check() {
   #
   # Empirically validated against the universal-vs-localized-context audit
   # (TRUE-LEAK + ILLUSTRATIVE rows for DC1-DC4) and the self-containment audit
-  # under ${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/analysis/
+  # under ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/analysis/
   # (VIOLATION + REVIEW rows for DC6).
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks 8/9/10/14/
@@ -3768,7 +3768,7 @@ cmd_check() {
     # the tracked detector carries NO operator identity (self-containment — fixes
     # the prior defect where the detector embedded the very name/org it detects).
     local c23_dc1='[0-9]{3}-[0-9]{3}-[0-9]{4}|@(ymail|gmail|yahoo|outlook|hotmail|icloud)\.com'
-    local c23_needles="${PMO_LOCALIZED_NEEDLES:-${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/localized-context-needles.txt}"
+    local c23_needles="${PMO_LOCALIZED_NEEDLES:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/localized-context-needles.txt}"
     # Operator project keys (e.g. tracker/Jira keys) load at runtime from the
     # gitignored project-keys file via the DC3 key pass below. The tracked DC3
     # detector therefore carries NO real project keys — baking literal keys into
@@ -3776,7 +3776,7 @@ cmd_check() {
     # self-containment rationale as the DC1 needle file). One key per line; blank
     # lines and `#` comments ignored. Absent file → DC3 matches structural shapes
     # only (no-op for key-derived patterns).
-    local c23_project_keys="${PMO_PROJECT_KEYS:-${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/project-keys.txt}"
+    local c23_project_keys="${PMO_PROJECT_KEYS:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/project-keys.txt}"
     # DC2 — Vendors/systems (named tools at parameter-seam positions)
     local c23_dc2='\b(Smartsheet|Confluence|Jira|Teams|atlassian\.net|smartsheet\.com)\b'
     # DC3 — Project identifiers. Tracked pattern is STRUCTURAL ONLY (a
@@ -3943,7 +3943,7 @@ cmd_check() {
   # Verifies every released version on or after the configurable cutoff
   # (default v1.00 — the first released version; override via
   # RELEASE_NOTE_CHECK_CUTOFF to scope to a later baseline) has
-  # a corresponding ${PMO_INSTANCE_PATH}/releases/notes/vX.Y_RELEASE_NOTES.md file.
+  # a corresponding ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes/vX.Y_RELEASE_NOTES.md file.
   #
   # Composes with — does NOT replace — Check 20 (note-content lint).
   # Check 20 lints CONTENT of notes that exist; Check 26 detects PRESENCE drift.
@@ -3963,10 +3963,10 @@ cmd_check() {
   # impact at ship).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 26: Release-note presence (release-notes-standard.md AC#3)"
-    local c26_log="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/RELEASE_LOG.md"
+    local c26_log="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/RELEASE_LOG.md"
     local c26_allowlist=".claude/skip-release-note-check.txt"
     local c26_cutoff="${RELEASE_NOTE_CHECK_CUTOFF:-v1.00}"
-    local c26_notes_dir="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}/releases/notes"
+    local c26_notes_dir="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes"
 
     if [[ ! -f "$c26_log" ]]; then
       flag_warn_or_issue "release-note-presence" \
@@ -4427,7 +4427,7 @@ cmd_check() {
   # in INDEX/DIGEST but absent from the LOG are NOT flagged (the LOG is the closed
   # set of releases; Check 23 separately reconciles LOG<->INDEX drift on the instance
   # corpus). This in-repo target differs deliberately from Check 23/26 (which read the
-  # operator-instance ${PMO_INSTANCE_PATH} corpus) — the tracked release/releases/
+  # operator-instance ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance corpus) — the tracked release/releases/
   # ledger is the surface where the incident occurred and the one shipped in this repo.
   #
   # NOTES filename resolution (historical-tolerant): the notes file is accepted under
@@ -5013,6 +5013,8 @@ cmd_check() {
     local -a C37_OTHER_OWNERS=(
       "block-skill-direct-edit:core/standards/canonical-skill-structure.md"
       "block-fragile-refs:core/standards/reference-durability-standard.md"
+      "block-gh-path-leak:core/rules/git-workflow.md"
+      "block-draft-files:core/rules/git-workflow.md"
     )
     if [[ ! -d core/hooks ]] || [[ ! -f "$c37_index" ]] || [[ ! -d "$c37_src_dir" ]]; then
       log "  SKIP:  hook scripts dir, index, or source dir absent (greenfield/partial checkout)"
@@ -5225,7 +5227,7 @@ cmd_check() {
     # Resolve the operator-local instance. Primary: the operator-instance base
     # (env-var-aware, same resolution as the warn-log / mode file above); a
     # roadmaps-tree fallback is also accepted. Filename is stable per the schema.
-    local c40_base="${PMO_INSTANCE_PATH:-$HOME/Claude/personal/pmo-instance}"
+    local c40_base="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance"
     local c40_file=""
     local c40_candidate
     for c40_candidate in \
@@ -5414,6 +5416,97 @@ cmd_check() {
       else
         flag_warn_or_issue "host-binding-leak" "detector errored (exit $c42_exit): $(echo "$c42_output" | head -1)"
       fi
+    fi
+  fi
+
+  # Check 43 — Path-portability leak detector (warn-mode initial) [#529]
+  #
+  # Flags machine-specific path leaks on the EXECUTABLE surface (scripts / hooks /
+  # deploy-tools — where path resolution is operationally load-bearing): an absolute
+  # machine path (/Users/<u>, /home/<u>) or a BARE relative operator-instance path
+  # (personal/pmo-instance/...). The path-portability leakage family — the path-axis
+  # sibling of the host-binding-leak class (core/disciplines/knowledge-architecture.md
+  # §4.1). The raw $HOME/Claude root is NOT flagged: it is the portable canonical
+  # default. Patterns + the exempt predicate are SHARED with the #1137 gh-issue-ops
+  # guard via core/deploy/tools/path-leak-patterns.sh.
+  #
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown; flip-to-enforce after a
+  # >=3-day warn-log review via .claude/hooks/deploy-check.mode (shared cohort) or a
+  # dedicated path-portability.mode (resolve_check_mode, independent graduation).
+  # Detection-definition files are allowlisted (tracked:
+  # core/deploy/allowlists/skip-path-portability-check.txt).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 43: Path-portability leak detector (executable surface)"
+    local c43_primitive="core/deploy/tools/path-leak-patterns.sh"
+    local c43_allowlist="core/deploy/allowlists/skip-path-portability-check.txt"
+    if [[ ! -f "$c43_primitive" ]]; then
+      flag_warn_or_issue "path-portability" "primitive missing: $c43_primitive"
+    else
+      # shellcheck source=/dev/null
+      source "$c43_primitive"
+      local c43_n=0 c43_findings="" c43_f c43_ln c43_line
+      for c43_f in core/deploy/deploy.sh core/deploy/tools/*.sh core/deploy/tools/*.py core/hooks/*.sh docs/scripts/*.sh install.sh update.sh; do
+        [[ -f "$c43_f" ]] || continue
+        grep -qxF "$c43_f" "$c43_allowlist" 2>/dev/null && continue
+        c43_ln=0
+        while IFS= read -r c43_line || [[ -n "$c43_line" ]]; do
+          c43_ln=$((c43_ln+1))
+          if path_leak_scan_line "$c43_line"; then
+            c43_findings+="$c43_f:$c43_ln: $(printf '%s' "$c43_line" | sed 's/^[[:space:]]*//' | cut -c1-100)"$'\n'
+            c43_n=$((c43_n+1))
+          fi
+        done < "$c43_f"
+      done
+      if [[ "$c43_n" -gt 0 ]]; then
+        flag_warn_or_issue "path-portability" "$c43_n path-portability leak(s) on the executable surface — an absolute machine path (/Users//home) or a bare personal/pmo-instance path; use \${CLAUDE_WORKSPACE_ROOT:-\$HOME/Claude}/... , mark the line 'path-leak: allow', or allowlist the file"
+        printf '%s' "$c43_findings" | head -10 | sed 's/^/         /'
+      else
+        log "  OK:    no path-portability leaks on the executable surface"
+      fi
+    fi
+  fi
+
+
+  # Check 44 — Depersonalization-token conformance (warn-mode initial) [#323]
+  #
+  # Two single-responsibility assertions over the Layer-1 corpus markdown:
+  #  (a) PVT*-reintroduction ratchet — flag a literal GitHub Projects ID
+  #      (PVT_ / PVTI_ / PVTF_ / PVTSSF_ + >=4 ID chars) reintroduced outside the
+  #      guide. Part-a (the cleanup) shipped via #600; this is the forward ratchet.
+  #      The {4,} floor exempts the guide's bare PVT_ example shapes; the guide file
+  #      is additionally exempt.
+  #  (b) bracket-token conformance — flag any [OPERATOR_*] square-bracket token used
+  #      in tracked corpus that is NOT registered in depersonalization-spec.md
+  #      §1/§1.1. Reads the registry (self-updating). Excludes release/releases/
+  #      (release-corpus / ledger surface). A legitimately-illustrative token carries
+  #      a 'depersonalization-token: allow' line marker.
+  # Companion to #324 (token registration); kept SEPARATE from #529's path-portability
+  # check (distinct concern). Warn-mode initial per bypass-mode-readiness.md §Shakedown.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 44: Depersonalization-token conformance (PVT* + [OPERATOR_*] vocabulary)"
+    local c44_spec="core/standards/depersonalization-spec.md"
+    local c44_pvt c44_unreg=""
+    # (a) PVT*-literal reintroduction (exempt the guide + marker lines)
+    c44_pvt="$(grep -rEn 'PVT(SSF|F|I)?_[A-Za-z0-9]{4,}' --include='*.md' core release operations 2>/dev/null | grep -vE 'github-projects-guide\.md|depersonalization-token: allow' || true)"
+    if [[ -n "$c44_pvt" ]]; then
+      flag_warn_or_issue "depersonalization-token" "literal GitHub Projects ID (PVT*) reintroduced outside the guide — tokenize to an [OPERATOR_PROJECT*] token: $(printf '%s' "$c44_pvt" | head -3 | tr '\n' ';')"
+    fi
+    # (b) [OPERATOR_*] bracket-token conformance against the §1/§1.1 registry
+    if [[ -f "$c44_spec" ]]; then
+      local c44_reg c44_tok
+      c44_reg="$(grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' "$c44_spec" | sort -u)"
+      while IFS= read -r c44_tok; do
+        [[ -z "$c44_tok" ]] && continue
+        printf '%s\n' "$c44_reg" | grep -qxF "$c44_tok" || c44_unreg="${c44_unreg}${c44_tok} "
+      done < <(grep -rEn '\[OPERATOR_[A-Z0-9_]+\]' --include='*.md' core release operations 2>/dev/null | grep -vE 'release/releases/' | grep -v 'depersonalization-token: allow' | grep -ohE '\[OPERATOR_[A-Z0-9_]+\]' | sort -u)
+      if [[ -n "$c44_unreg" ]]; then
+        flag_warn_or_issue "depersonalization-token" "unregistered [OPERATOR_*] token(s) in corpus, absent from depersonalization-spec.md §1: ${c44_unreg}— register them (with a config home) or mark an illustrative use 'depersonalization-token: allow'"
+      fi
+    else
+      flag_warn_or_issue "depersonalization-token" "registry missing: $c44_spec"
+    fi
+    if [[ -z "$c44_pvt" && -z "$c44_unreg" && -f "$c44_spec" ]]; then
+      log "  OK:    no PVT* reintroduction; all [OPERATOR_*] tokens registered"
     fi
   fi
 

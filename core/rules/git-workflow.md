@@ -184,6 +184,16 @@ Every Claude Code session begins with:
 - Never `cd ${HOME}/Claude/` from a Claude Code session (Primary is read-only; see §Primary Checkout Discipline)
 - Never run `git checkout main && git pull` inside a worktree (claims main, blocks primary; use `git fetch origin main && git merge origin/main` instead)
 - Never use `gh issue list --limit N` (or any batch CLI command with a result-cap parameter) without verifying N ≥ total dataset size. Silent truncation produces misclassified state — see § Batch CLI Query Limits below.
+- Never commit draft / scratch / proposal / working-notes content as tracked files in the public repo — see § Draft / scratch content below for where it belongs.
+
+## Draft / scratch content — not in the public repo
+
+Draft, scratch, proposal, exploratory, or working-notes content is NOT committed as a tracked file in the public repo. A half-formed idea has two sanctioned homes:
+
+1. **The issue tracker** — the front door for anything heading toward a work item. Capture it with `observation.yml` and promote to `improvement.yml` once it is intake-ready (per [intake-style-guide.md § Sanctioned idea-refinement surface](../../release/references/how-to/intake-style-guide.md)). The `intake-desk` skill is the conversational funnel; it logs a well-formed item, never a scratch file.
+2. **The git-ignored runtime tier** — the operator-instance working space (`projects/`, `personal/`, and the rest of the Layer-2 tree per [operations-bridge.md](operations-bridge.md) § Layer Classification) is git-ignored and is the home for operator working notes and pre-ticket exploration.
+
+What this prevents: an agent improvising a `docs/proposals/…md` (or similar) draft into the tracked corpus before the idea is recognized as belonging in the tracker. This rule is enforced at commit/PR time by the draft-file guard (`core/hooks/block-draft-files.sh` + its repo-integrity CI gate); until that guard ships it is advisory-by-documentation.
 
 ## Batch CLI Query Limits
 

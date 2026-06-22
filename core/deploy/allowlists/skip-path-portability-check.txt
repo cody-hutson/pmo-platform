@@ -1,0 +1,13 @@
+# Allowlist for the path-portability leak detector (deploy.sh Check 43 +
+# core/deploy/tools/path-leak-patterns.sh, the #1137 gh-issue-ops guard).
+# One path per line; matched as a whole-line exact path; `#` = comment.
+#
+# These files legitimately CONTAIN the leak shapes because they DEFINE or TEST the
+# detection itself (the detection-signature exclusion) — they do not leak a real
+# operator path. Adjudicated legitimate per knowledge-architecture.md §4.1 (the
+# path-portability leakage family).
+
+# The detector itself: holds the PATH_LEAK_RE_* pattern definitions and the
+# --self-test fixtures (which deliberately embed /Users/<op> + personal/pmo-instance
+# example strings to verify flagging).
+core/deploy/tools/path-leak-patterns.sh
