@@ -174,7 +174,7 @@ Do NOT flood response with transcribed data. Synthesize. Show work.
 
 ### Dual-Framing Bridge (Conditional)
 
-Activates **only** when `PROJECT.md` has `dual_framing_enabled: true` (legacy key `spm_comanaged` accepted via the `project-initiator` Mode C shim). Produces dual framing:
+Activates **only** when `PROJECT.md` has `dual_framing_enabled: true`. Produces dual framing:
 - **Agile track:** Sprint-level progress, velocity, backlog health
 - **Waterfall track:** Milestone gates, phase approval, stage gates
 
@@ -330,7 +330,7 @@ When `delivery_approach: Custom`, skills MUST read the `custom_methodology_defin
 
 See [`methodology-parameterization-v1.md § 6 Failure Modes`](../../release/references/specs/methodology-parameterization-v1.md) for the 5 domain-specific anti-patterns (category tags per [`failure-mode-standard.md`](../specs/failure-mode-standard.md)):
 
-- **INPUT-1 Methodology conflation** — conflating `delivery_approach` with `spm_comanaged`.
+- **INPUT-1 Methodology conflation** — conflating `delivery_approach` with `dual_framing_enabled`.
 - **PROC-2 Custom-block skip** — reading `Custom` without reading the block.
 - **PROC-3 Base-archetype blind fallback** — silently defaulting `null` base_archetype to Scrum.
 - **PROC-4 Hardcoded sprint presumption** — using DoR/DoD/velocity gates for non-timeboxed lifecycles.
@@ -355,7 +355,7 @@ Elevation triggers coordinated updates across:
 
 ### Relationship to Dual-Framing Bridge (Conditional)
 
-The `dual_framing_enabled: true` binary (legacy key `spm_comanaged`, accepted via the `project-initiator` Mode C shim) remains operative and is **NOT deprecated** by this protocol. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
+The `dual_framing_enabled: true` binary remains operative and is **NOT deprecated** by this protocol. The two fields are **orthogonal** — they measure different properties and combine freely; neither implies the other. Reconciliation:
 
 - `delivery_approach: Hybrid` is the **methodology classification** — a user-configurable two-archetype combination `[A, B]` reported in both native framings. It says nothing about co-management.
 - `dual_framing_enabled: true` is the **operational dual-framing trigger** — an orthogonal capability that activates the Dual-Framing Bridge co-management output in downstream skills (`ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`). It is gated by the flag, not by `delivery_approach: Hybrid`.
@@ -1027,9 +1027,9 @@ confluence_page_ids:                       # FDD, RAID, processes
   - "123457"    # FDD Index
   - "123458"    # Process Flows
 gdrive_folder: "1aB2cD3eF4gH5i..."        # Google Drive folder ID for transcripts
-spm_comanaged: false                       # True if Smartsheet + dual-framing bridge active
-spm_sharepoint_folder: null                # SharePoint path if spm_comanaged=true
-spm_smartsheet_id: null                    # Smartsheet grid ID if spm_comanaged=true
+dual_framing_enabled: false                # True if Smartsheet + dual-framing bridge active
+co_management_sharepoint_folder: null      # SharePoint path if dual_framing_enabled=true
+co_management_smartsheet_id: null          # Smartsheet grid ID if dual_framing_enabled=true
 ```
 
 ---

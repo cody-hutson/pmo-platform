@@ -262,7 +262,7 @@ Per [`methodology-parameterization-v1.md § 6 Failure Modes`](methodology-parame
 - **PROC-3 Base-archetype blind fallback** — silently defaulting to Scrum when `base_archetype: null`.
 - **PROC-4 Hardcoded sprint presumption** — applying sprint primitives to `lifecycle: continuous` or `lifecycle: phased`.
 - **HAND-5 Enum-drift** — inventing a 9th archetype in one skill without governance-promotion.
-- **INPUT-1 Methodology conflation** — treating `spm_comanaged: true` as synonymous with `delivery_approach: Hybrid`.
+- **INPUT-1 Methodology conflation** — treating `dual_framing_enabled: true` as synonymous with `delivery_approach: Hybrid`.
 
 ### 5.3 Debug-log convention
 

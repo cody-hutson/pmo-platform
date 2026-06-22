@@ -77,7 +77,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 | Go-Live Target | Target go-live date | August 15, 2026 |
 | Implementation Partner | Vendor name (if applicable). "None" if internal-only. | [VENDOR_X] |
 | Key Stakeholders | Minimum: Sponsor, PM, Tech Lead. Include role and name. | [COLLEAGUE_A] (Sponsor), [COLLEAGUE_B] (Tech Lead) |
-| Dual-Framing Co-Managed? | Whether the project is co-managed with dual Agile/Waterfall framing. Controls Dual-Framing Bridge activation. (Sets frontmatter `dual_framing_enabled`; legacy input label "SPM Co-Managed" / legacy key `spm_comanaged` is accepted via the Mode A deprecation shim — see Step 1.) | Yes / No |
+| Dual-Framing Co-Managed? | Whether the project is co-managed with dual Agile/Waterfall framing. Controls Dual-Framing Bridge activation. (Sets frontmatter `dual_framing_enabled`.) | Yes / No |
 | Jira Project Key | If Agile/Hybrid: the Jira project key for MCP configuration. N/A for pure Waterfall. | WHO |
 | Confluence Space | Primary Confluence space key. N/A if SharePoint-only. | TS |
 
@@ -98,8 +98,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 3. Validate day-of-week for the go-live date
 4. If Agile or Hybrid, confirm Jira Project Key is provided
 5. If Dual-Framing Co-Managed = Yes, note that Dual-Framing Bridge sections will be activated
-6. **Legacy-key deprecation shim.** This is the dual-framing trigger's back-compat shim (the contract documented in `core/schemas/project-schema.md` § Migration §7, where it is referred to as the "Mode C shim"; project-initiator implements it here, in the Mode A input-validation path — Mode A is the live mode that reads the co-management input and writes the frontmatter flag). When the Required Input arrives under the **legacy label "SPM Co-Managed"**, or an existing/imported `PROJECT.md` carries the **legacy frontmatter key `spm_comanaged`**, accept it: emit a one-line deprecation warning (`[DEPRECATION] 'spm_comanaged' / 'SPM Co-Managed' is renamed to 'dual_framing_enabled' / 'Dual-Framing Co-Managed'; reading the legacy value as the new field — update the source to silence this`) and treat the legacy boolean as `dual_framing_enabled` (identical boolean semantics). Shim-removal is deferred to a future milestone; it is a one-line deletion when live `PROJECT.md` files have migrated.
-7. Flag any missing inputs as `ASSUMPTION – CONFIRM` with proposed values
+6. Flag any missing inputs as `ASSUMPTION – CONFIRM` with proposed values
 
 ### Step 2: Create Folder Structure
 
@@ -177,7 +176,7 @@ user inputs. Apply conditional logic:
 - **Agile projects:** Include Sprint Tracking section. Omit Phase-Gate Timeline.
 - **Waterfall projects:** Include Phase-Gate Timeline. Omit Sprint Tracking.
 - **Hybrid projects:** Include both Sprint Tracking and Phase-Gate Timeline.
-- **Dual-Framing Co-Managed = Yes:** Include Dual-Framing Bridge section with Waterfall milestone framing. Set frontmatter `dual_framing_enabled: true` (the legacy key `spm_comanaged` is read via the Step 1 shim).
+- **Dual-Framing Co-Managed = Yes:** Include Dual-Framing Bridge section with Waterfall milestone framing. Set frontmatter `dual_framing_enabled: true`.
 - **Dual-Framing Co-Managed = No:** Omit Dual-Framing Bridge section entirely.
 - **`delivery_approach` is a 2-element array `[A, B]` (Hybrid-Two, per project-schema §6.5):** scaffold the array form verbatim in the frontmatter (e.g. `delivery_approach: [Scrum, Kanban]`) and include one native track structure per constituent (union per `work-organization-mapping-framework.md` §2.5). This is orthogonal to the Dual-Framing Bridge — a Hybrid-Two project may have `dual_framing_enabled: false`.
 
@@ -576,7 +575,7 @@ structural conformance and content quality.
 ### Dual-Framing Bridge section omitted on co-managed project — TRIG
 
 - **Signature (observable signal):** A PROJECT.md scaffolded for a project whose user
-  input specified `Dual-Framing Co-Managed = Yes` (or the legacy `SPM Co-Managed = Yes`) does not contain a Dual-Framing Bridge section with
+  input specified `Dual-Framing Co-Managed = Yes` does not contain a Dual-Framing Bridge section with
   milestone framing, or the frontmatter lacks `dual_framing_enabled: true`, or the section is
   present but empty.
 - **Conditional:** do NOT omit the Dual-Framing Bridge section from PROJECT.md when the user
@@ -588,7 +587,7 @@ structural conformance and content quality.
 - **Root cause:** Dual-Framing Bridge is a conditional section that requires branching the
   PROJECT.md template; the default Agile and Waterfall templates do not include it. The
   branching step is easy to skip when the primary governance model dominates attention.
-- **Mitigation:** Read the `Dual-Framing Co-Managed` Required Input value (accepting the legacy `SPM Co-Managed` label / `spm_comanaged` key via the Step 1 shim) in Step 3 before
+- **Mitigation:** Read the `Dual-Framing Co-Managed` Required Input value in Step 3 before
   applying the template; when Yes, branch to the dual-framing-enabled template variant; include
   the Dual-Framing Bridge section verbatim; set frontmatter `dual_framing_enabled: true`; verify the
   section is present before moving to Step 4.
