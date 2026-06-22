@@ -38,7 +38,7 @@ project_owner: string                      # REQUIRED — primary accountable ow
 status: ACTIVE | CLOSING | CLOSED          # REQUIRED — lifecycle state (per CLAUDE.md Project Lifecycle)
 
 # Dual-framing co-management trigger (decoupled from delivery_approach — orthogonal)
-dual_framing_enabled: bool                 # OPTIONAL — true triggers dual Agile/Waterfall co-management framing (CLAUDE.md § Dual-Framing Bridge). See §7 Migration Notes.
+dual_framing_enabled: bool                 # OPTIONAL — true triggers dual Agile/Waterfall co-management framing (OPERATIONS.md § Dual-Framing Bridge). See §7 Migration Notes.
 
 # Methodology classification — NEW
 delivery_approach: Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom
@@ -90,7 +90,7 @@ Enum: `ACTIVE` | `CLOSING` | `CLOSED`. Lifecycle state per `CLAUDE.md § Project
 
 ### `dual_framing_enabled`
 
-Boolean. When `true`, activates the **Dual-Framing Bridge** — dual Agile/Waterfall co-management framing across outputs from `ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`. `[SOURCE]` — `CLAUDE.md § Dual-Framing Bridge (Conditional)` lines 155-157.
+Boolean. When `true`, activates the **Dual-Framing Bridge** — dual Agile/Waterfall co-management framing across outputs from `ppm-agent`, `delivery-engine`, `daily-status`, `weekly-status-rollup`. `[SOURCE]` — `OPERATIONS.md § Dual-Framing Bridge (Conditional)`.
 
 This field is the dual-framing co-management trigger, **orthogonal** to `delivery_approach`: it is **NOT implied by, and does not imply, `delivery_approach: Hybrid`** — see §7 Collision Check for reconciliation rules. The trigger is the operational co-management dual-framing capability; `Hybrid` (and the `[A, B]` array form) is a methodology classification — the two combine freely.
 
@@ -329,7 +329,7 @@ The dual-framing co-management trigger is named **`dual_framing_enabled`**. The 
 
 | Field | Role | Consumer |
 |---|---|---|
-| `dual_framing_enabled: bool` | Triggers Dual-Framing Bridge output (Agile + Waterfall) — operational co-management dual-framing binary, independent of methodology. | `CLAUDE.md § Dual-Framing Bridge`; `delivery-engine` Mode D bridge step |
+| `dual_framing_enabled: bool` | Triggers Dual-Framing Bridge output (Agile + Waterfall) — operational co-management dual-framing binary, independent of methodology. | `OPERATIONS.md § Dual-Framing Bridge`; `delivery-engine` Mode D bridge step |
 | `delivery_approach: Hybrid` | Classifies project methodology as a user-configurable two-archetype combination `[A, B]` reported in both native framings — a classification only, saying nothing about co-management | All methodology-aware role-skills |
 
 ### Reconciliation Rule
@@ -384,7 +384,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 **Governance consumers:**
 
 - [`OPERATIONS.md § Methodology Awareness Protocol`](../governance/OPERATIONS.md) — Rules 1-3 mandate that skills read `delivery_approach` + consult the matrix + handle Custom via typed extension.
-- [`CLAUDE.md § Dual-Framing Bridge (Conditional)`](<OPERATOR_INSTANCE_CLAUDE_MD>) — reads the dual-framing trigger `dual_framing_enabled`; not yet refit to read `delivery_approach: Hybrid` (future consolidation scope).
+- [`OPERATIONS.md § Dual-Framing Bridge (Conditional)`](../governance/OPERATIONS.md) — reads the dual-framing trigger `dual_framing_enabled`; not yet refit to read `delivery_approach: Hybrid` (future consolidation scope).
 
 **Downstream (future) consumers:**
 
@@ -399,7 +399,7 @@ Skills and governance files that read `PROJECT.md` fields at invocation. Methodo
 | 1 | 13 skills consume PROJECT.md | `[SOURCE]` `grep -l 'PROJECT\.md' release/skills/**/SKILL.md` 2026-04-24 (blast radius §6.1) |
 | 2 | `delivery-engine` Mode D + Mode E presuppose sprints | `[SOURCE]` `operations/skills/delivery-engine/SKILL.md:170-215` |
 | 3 | `project-initiator` binary Agile/Hybrid vs. Waterfall branch | `[SOURCE]` `operations/skills/project-initiator/SKILL.md:190-193` |
-| 4 | `CLAUDE.md § Dual-Framing Bridge` reads the dual-framing trigger binary | `[SOURCE]` `CLAUDE.md:155-157` |
+| 4 | `OPERATIONS.md § Dual-Framing Bridge` defines the dual-framing trigger behavior | `[SOURCE]` `core/governance/OPERATIONS.md § Dual-Framing Bridge` |
 | 5 | Existing PROJECT.md files use markdown key-value format | `[SOURCE]` inspection of `projects/[PROJECT_KEY] Implementation/PROJECT.md` 2026-04-24 |
 | 6 | AC-R2 block-completeness operationalization | `[SOURCE]` Stage 5 spec §1 + AC-R2 locked text |
 
