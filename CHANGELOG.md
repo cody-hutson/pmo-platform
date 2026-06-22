@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.18] - 2026-06-21
+
+The `Hybrid` methodology is now defined cleanly as a user-configurable combination of two archetypes, decoupled from the operator-specific "SPM" co-management arrangement; dual-framing behavior is unchanged.
+
+### Added
+
+- **Hybrid is now a user-configurable two-archetype combination.** `delivery_approach` accepts a two-element array — `[Scrum, Kanban]`, `[Waterfall, XP]`, any two distinct archetypes — declaring a project that runs both methodologies side by side and reports status in both native framings. The literal `Hybrid` value is retained for backward-compatibility, and a one-line array is now the explicit forward-looking declaration instead of dropping to the heavyweight `Custom` block for what is really a two-archetype selection.
+
+### Changed
+
+- **`Hybrid` is decoupled from co-management.** The `Hybrid` methodology classification no longer names the operator-specific "SPM" co-management arrangement — the two were conflated, and they are now documented as orthogonal across the schema, governance, and methodology specs. A Hybrid project may run with or without co-management; a non-Hybrid project may enable co-management independently.
+- **The `spm_comanaged` field is renamed `dual_framing_enabled`.** The trigger for dual Agile/Waterfall status framing now carries an operator-agnostic name. A live `PROJECT.md` carrying the legacy `spm_comanaged` key is still accepted — a deprecation shim reads it, emits a one-line warning, and treats it as `dual_framing_enabled` — so the rename is non-breaking. The operator token "SPM" survives only as operator-local configuration.
+- **The "SPM Bridge" is renamed the "Dual-Framing Bridge".** The co-managed status artifact and its template, governance clause, and registry entries are renamed operator-agnostically, with role-based audience labels ("PMO view" / "Sponsor view"). The dual-framing output it produces is unchanged.
+
+### Deprecated
+
+- **The `spm_comanaged` frontmatter key.** Renamed to `dual_framing_enabled`. The legacy key is still read via a deprecation shim (with a one-line warning); shim removal is deferred to a future milestone once live project files have migrated.
+
 ## [v2.17] - 2026-06-21
 
 ### Added
