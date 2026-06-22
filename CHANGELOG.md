@@ -8,6 +8,19 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.19] - 2026-06-22
+
+Co-management governance cleanup — finishes de-broadcasting the operator-specific naming from the public codebase (a follow-up to v2.18) and single-sources the dual-framing status rule. The legacy co-management compatibility shim is retired, the residual integration field names are genericized to `co_management_*`, and the Dual-Framing Bridge rule now lives in one place (`OPERATIONS.md`) instead of a redundant copy in the workspace director. Dual Agile/Waterfall framing behavior is unchanged. Minor (the shim removal is a back-compat contract change), not a patch.
+
+### Changed
+
+- **The Dual-Framing Bridge rule is single-sourced in `OPERATIONS.md`.** The redundant copy in the workspace director (`CLAUDE.md`) is removed and every reference now points at the one authoritative home — closing the duplicate-source drift that had let the two copies disagree. Re-run `update.sh` to re-render your workspace `CLAUDE.md`; your project settings and personal additions are preserved.
+- **The co-management integration field names are genericized** to `co_management_smartsheet_id` / `co_management_sharepoint_folder`, completing the operator-agnostic rename begun in v2.18.
+
+### Removed
+
+- **The legacy co-management compatibility shim is retired.** The pre-v2.18 setting name is no longer read. **Migration:** if a `PROJECT.md` still carries the old key, rename that one line to `dual_framing_enabled` (identical on/off meaning). Projects already on `dual_framing_enabled`, and projects without co-management, need no action.
+
 ## [v2.18.1] - 2026-06-22
 
 Operator-instance path decoupling — the operator needle/instance path resolves through one resolver (`CLAUDE_WORKSPACE_ROOT` per ADR-032), with a `.env`-style template + create-once scaffold, persistence across update, and a fail-closed PII guard (warn-mode-initial). Patch off v2.18; non-breaking.
