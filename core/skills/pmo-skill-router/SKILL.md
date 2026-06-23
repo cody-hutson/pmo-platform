@@ -7,7 +7,7 @@ description: >
   trigger surface. No hardcoded skill list; routing changes by editing the
   registry, never the router. Use when a role-shaped request needs to be routed
   to the right PMO role-Specialist, or "which role skill handles this".
-version: v2.15
+version: v2.20
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true
@@ -24,15 +24,18 @@ role-Specialist, so the operator does not have to know which of the 19 role skil
 invoke. You are a **thin reader**: you carry no domain logic of any routed role and you
 re-implement none of them — you classify and hand off.
 
-**Your sole classification source is the logical skill registry at [`../registry.md`](../registry.md)** (`core/skills/registry.md`). You read its `## Registry` table, match the incoming request against each row's `trigger surface`, and emit the matched row's `name` as the routing target — surfacing that row's `modes` so the operator sees what the selected role can do before invoking it. You **enumerate no skill list of your own**: a role is added to your routing surface by **appending a registry row, never by editing you** (per [ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) Decision 4). This is the parameterization the suite depends on — if you ever bake the 19 names into your body, the 20th role is unroutable until someone edits the router, which is the exact failure ADR-035 exists to prevent (see FM1).
+**Your sole classification source is the `kind == role-Specialist` routing view of the skill catalog at [`../registry.md`](../registry.md)** (`core/skills/registry.md`). The catalog is the single skill CMDB (all 43 deployed CIs); you read **only its routing view** — the `## Configuration Items` table filtered to `kind == role-Specialist` (the 19 role-Specialist rows, defined in the catalog's `## Routing view` section). You match the incoming request against each view row's `trigger surface` and emit the matched row's `name` as the routing target — surfacing that row's `modes` so the operator sees what the selected role can do before invoking it. You **enumerate no skill list of your own**: a role is added to your routing surface by **appending a `kind: role-Specialist` row to the catalog, never by editing you** (per [ADR-036](../../ADRs/ADR-036-registry-as-cmdb.md), which evolved the registry into the CMDB and preserves [ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) Decision 4's protected property via this view). This is the parameterization the suite depends on — if you ever bake the 19 names into your body, the 20th role is unroutable until someone edits the router, which is the exact failure ADR-035/ADR-036 exist to prevent (see FM1).
 
-**Read-by-path posture (the precedent).** You read the registry **by path** as runtime context — the same posture `pmo-qa-auditor` uses to read [`../../schemas/per-skill-output-contracts.md`](../../schemas/per-skill-output-contracts.md) as its per-skill structural-review source ([ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) §Consumers names this the precedent). You do **not** open the 19 `SKILL.md` files to classify; the registry's `trigger surface` column is the condensed, router-facing description by design. Classification is on prose — there is no parse step — which is why ADR-035 Decision 1 chose markdown over a structured data format.
+**The catalog grew; your classification surface did not.** The catalog now holds 43 CIs, but your routing view is `WHERE kind == role-Specialist` — byte-for-byte the same 19-row, `trigger surface`-keyed surface you classified against before the catalog existed. The 24 non-role CIs (`kind ∈ {function-skill, core, router}`) are **excluded by the filter** and carry `—` in `trigger surface`/`modes` regardless, so they add **zero** strings to your classification input (ADR-036 §Decision part 4 — the de-blur that lets one catalog serve both configuration-management and routing).
 
-**Role-vs-function boundary (what you will NOT route to).** You route **only** to registry rows, and every registry row is a **role-Specialist** (a role-named skill that composes shared function-skills per [ADR-019](../../ADRs/ADR-019-specialists-compose-not-absorb.md)). You do **not** route to:
+**Read-by-path posture (the precedent).** You read the catalog **by path** as runtime context — the same posture `pmo-qa-auditor` uses to read [`../../schemas/per-skill-output-contracts.md`](../../schemas/per-skill-output-contracts.md) as its per-skill structural-review source ([ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) §Consumers names this the precedent). You do **not** open the 19 `SKILL.md` files to classify; the catalog's `trigger surface` column is the condensed, router-facing description by design. Classification is on prose — there is no parse step — which is why ADR-035 Decision 1 chose markdown over a structured data format.
 
-- **function-skills** — `comms-writer`, `tracker-manager`, `artifact-generator`, `file-router`, `eval-writer`, `pmo-qa-auditor`, `prompt-builder`, and the rest of the composition machinery (they are not in the registry; registry `## What qualifies` excludes them — see FM2);
+**Role-vs-function boundary (what you will NOT route to).** You route **only** to routing-view rows, and every routing-view row is a **role-Specialist** (`kind == role-Specialist`; a role-named skill that composes shared function-skills per [ADR-019](../../ADRs/ADR-019-specialists-compose-not-absorb.md)). The non-role CIs are present in the catalog but **filtered out of your routing view** — they are catalogued, not routable. You do **not** route to:
+
+- **function-skills** (`kind == function-skill`) — `comms-writer`, `tracker-manager`, `artifact-generator`, `file-router`, `pmo-process-designer`, `pmo-technical-analyst`, and the rest of the composition machinery (excluded from the routing view by the `kind` filter and carrying `—` trigger surfaces; catalog `## What qualifies` distinguishes CI-vs-routing-target — see FM2);
+- **core function-skills** (`kind == core`) — `eval-writer`, `pmo-qa-auditor`, `prompt-builder` (CIs, but not routing targets);
 - **Organizer / Orchestrator skills** — not routing targets;
-- **yourself** — a router does not route to itself (ADR-035 Decision 4; registry `## What qualifies`).
+- **yourself** (`kind == router`) — a router does not route to itself, and `pmo-skill-router` is filtered out of its own routing view (ADR-035 Decision 4 / ADR-036; catalog `## What qualifies`).
 
 A request that is **function-shaped** (asks for what a function-skill *does*, not for a role) exits via the **no-confident-match handoff** that *names* the right function-skill as a pointer — it is never emitted as a route.
 
@@ -40,24 +43,24 @@ A request that is **function-shaped** (asks for what a function-skill *does*, no
 
 ## Registry-Consumption Contract
 
-This is the load-bearing contract; it is verbatim-aligned to [ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) and the registry's `## Consumers` section.
+This is the load-bearing contract; it is verbatim-aligned to [ADR-036](../../ADRs/ADR-036-registry-as-cmdb.md) (which evolved the registry into the CMDB) and [ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md), and the catalog's `## Routing view` + `## Consumers` sections.
 
 | Element | Value |
 |---|---|
 | **File path (sole source)** | [`core/skills/registry.md`](../registry.md) — read by path as runtime context |
-| **Section read** | `## Registry` (one table row per role-Specialist) |
-| **Fields consumed** | `name` (the routing referent you emit) · `module` (`operations`\|`release`\|`core` — drives the doc-link and a candidate-set hint) · `trigger surface` (the prose you classify the request against) · `modes` (surfaced so the operator sees the role's capabilities) |
-| **Invariant** | **Append a row ≠ edit the router.** Adding/removing/updating a role-Specialist changes routing by editing `registry.md` alone. You enumerate nothing. |
+| **Section read** | `## Configuration Items`, **filtered to the routing view** `WHERE kind == role-Specialist` (per the catalog's `## Routing view` section — the 19 role-Specialist rows) |
+| **Fields consumed** | `name` (the routing referent you emit) · `module` (`operations`\|`release`\|`core` — drives the doc-link and a candidate-set hint) · `trigger surface` (the prose you classify the request against) · `modes` (surfaced so the operator sees the role's capabilities). The CI-only columns (`kind`, `lifecycle-state`, `dependencies`, `owner`) are read **only** for the `kind` filter; you do not classify on them. |
+| **Invariant** | **Append a row ≠ edit the router.** Adding/removing/updating a role-Specialist changes routing by editing the catalog alone. You enumerate nothing. |
 | **Precedent** | Mirrors `pmo-qa-auditor` ↔ `core/schemas/per-skill-output-contracts.md` (central index, read by path, no per-skill frontmatter field) |
 
-The current registry holds **19 role-Specialist rows** (13 `operations` + 6 `release`). That count is **not** wired into you — it is whatever the table holds when you read it. (`registry.md` is a markdown file, not a skill directory; it is not itself a routing target and does not register a row of its own.)
+The catalog holds **43 CIs**; your **routing view is 19 role-Specialist rows** (13 `operations` + 6 `release`) — the `kind == role-Specialist` projection. Neither count is **wired into you** — the view is whatever `WHERE kind == role-Specialist` yields when you read the table. (`registry.md` is a markdown file, not a skill directory; it is catalogued as the `kind == router` CI `pmo-skill-router`'s source but is not itself a routing target, and the router row is filtered out of its own view.)
 
 ## Classification Contract
 
 On an incoming role-shaped request, execute this sequence:
 
-1. **Read** the `## Registry` table from [`../registry.md`](../registry.md).
-2. **Match** the request's intent against each row's `trigger surface` (the "Use when…" intent + representative trigger phrases). This is classification-on-prose — assess which row's described purpose the request actually wants, not which row shares the most keywords.
+1. **Read** the `## Configuration Items` table from [`../registry.md`](../registry.md) and **filter to the routing view** — `WHERE kind == role-Specialist` (the 19 role-Specialist rows, per the catalog's `## Routing view`). The 24 non-role CIs are excluded; they carry `—` trigger surfaces and cannot match regardless.
+2. **Match** the request's intent against each view row's `trigger surface` (the "Use when…" intent + representative trigger phrases). This is classification-on-prose — assess which row's described purpose the request actually wants, not which row shares the most keywords.
 3. **Apply optional metadata hints** if present (see below) to narrow among plausibly-matching rows.
 4. **Emit** per the ambiguity ladder: the matched row's `name` as the routing target, plus its `modes`, plus a one-line "why this row" rationale grounded in the row's `trigger surface`.
 
@@ -85,15 +88,15 @@ A request may carry hints: an explicit **module** (`operations` / `release` / `c
 ### Hardcoding a skill list instead of reading the registry — PROC
 
 - **Signature (observable signal):** The router body contains a `pmo-*` role-name table, or an `if request matches X → route to Y` enumeration, used as the routing source — and the routing decision can be reproduced from the router body alone without ever reading `core/skills/registry.md`.
-- **Conditional:** do NOT embed a skill list in the router when [`../registry.md`](../registry.md) is the declared classification source, because a hardcoded list must be edited on every roster change — defeating the parameterization [ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) Decision 4 exists to provide, and silently drifting from the registry the moment a row is added.
+- **Conditional:** do NOT embed a skill list in the router when the `kind == role-Specialist` routing view of [`../registry.md`](../registry.md) is the declared classification source, because a hardcoded list must be edited on every roster change — defeating the parameterization [ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) Decision 4 / [ADR-036](../../ADRs/ADR-036-registry-as-cmdb.md) provide, and silently drifting from the catalog the moment a row is added.
 - **Root cause:** Inlining the 19 names *feels* faster and more deterministic than reading a file at runtime; the pressure to make routing "self-contained" reproduces the exact coupling the registry was created to remove.
-- **Mitigation:** The only enumeration lives in `registry.md`; the router reads it by path every invocation. Any in-body example is a single illustrative sentence explicitly marked non-source, never a table. Verify against the AC: grep `registry` in this SKILL.md ≥1; confirm no `pmo-*` table functions as the source.
+- **Mitigation:** The only enumeration lives in the catalog (`registry.md`); the router reads the `kind == role-Specialist` view by path every invocation. Any in-body example is a single illustrative sentence explicitly marked non-source, never a table. Verify against the AC: grep `registry` in this SKILL.md ≥1; confirm no `pmo-*` table functions as the source.
 - **Principal response vs. junior response:** Principal reads the table at runtime and routes from it, so the 20th role is routable the moment its row lands; junior bakes in the 19 names and the 20th role is unroutable until someone remembers to edit the router.
 
 ### Routing to a function-skill instead of a role-Specialist — HAND
 
 - **Signature (observable signal):** The router emits `comms-writer` / `tracker-manager` / `artifact-generator` / `file-router` / `eval-writer` / `pmo-qa-auditor` / `prompt-builder` / an Organizer-Orchestrator as a *route target* (rather than naming it as a handoff pointer).
-- **Conditional:** do NOT route to a function-skill when the registry contains only role-Specialists ([ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) Decision 4 / registry `## What qualifies`), because function-skills are the machinery roles compose — routing to one bypasses the role layer and breaks the compose-not-absorb contract ([ADR-019](../../ADRs/ADR-019-specialists-compose-not-absorb.md)).
+- **Conditional:** do NOT route to a function-skill when the routing view contains only role-Specialists ([ADR-035](../../ADRs/ADR-035-registry-as-classification-source.md) Decision 4 / [ADR-036](../../ADRs/ADR-036-registry-as-cmdb.md) routing view / catalog `## What qualifies`), because function-skills are catalogued CIs filtered OUT of the routing view — they are the machinery roles compose, and routing to one bypasses the role layer and breaks the compose-not-absorb contract ([ADR-019](../../ADRs/ADR-019-specialists-compose-not-absorb.md)).
 - **Root cause:** A function-shaped request ("draft the comm", "update the tracker") names a real capability, and the nearest match by keyword is a function-skill; without the role-vs-function boundary the router treats "nearest capability" as "route target."
 - **Mitigation:** The candidate set is the registry table **only**. A function-shaped request exits via the rung-4 no-confident-match handoff that *names* the function-skill as a pointer ("this is a `comms-writer` task, not a role") — a pointer, never a route.
 - **Principal response vs. junior response:** Principal hands off "this is a `comms-writer` task — invoke it directly, no role routing needed"; junior routes to `comms-writer` and the role-altitude framing (which role owns this work) is silently lost.
