@@ -132,6 +132,8 @@ Terminating the cascade is always safe — the pending work falls back to a manu
 
 **Alternative design (not active).** If Cowork could not chain skills programmatically, the fallback would be AD-1 "tag bundle": PPM emits a copy/paste block listing all qualifying tags; the user clicks once to expand into parallel invocations. AD-1 preserves the breadth/depth bounds but loses the push-to-resolve latency benefit. Documented here for portability to environments without Skill-tool chaining; not active in the current platform.
 
+**Entity-field write authority (cross-reference).** Where C1–C7 govern *when* a cascade fires, the **entity-field write-permission matrix** ([`schemas/entity-field-lifecycle-matrix.md`](../schemas/entity-field-lifecycle-matrix.md)) governs *which agent may write which field of which project-DATA entity at which lifecycle transition* — the write-authority surface the cascade writes into. Its **CW-BASE** rule (the §5 maintainer owns every write after create-commit; the creator's authority terminates at create-commit) determines the legitimate writer when two skills claim the same entity field; its **audit-trail-per-write-class** table extends the C3 `evidence_quality ∈ {[SOURCE], [INFERRED]}` bar from auto-cascaded tracker writes to all entity-field writes by class. Consult it before auto-cascading any entity-field write.
+
 ### Mode Selection Protocol
 
 Governs how multi-mode skills select which mode to run on a given invocation. Parallel to the Skill Chaining Protocol above — chaining defines when auto-invocation fires; mode selection defines how the receiving skill decides what to do. Operationalized via a three-step pattern (chain-skip → trigger-heuristic-or-AskUserQuestion → execute) placed as the first operational subsection (`## Mode Selection`) in every multi-mode SKILL.md. Structural placement IS the forcing function: a reader encounters mode-selection instruction before any mode-specific content, so mode selection cannot be bypassed without skipping half the file.
@@ -252,6 +254,8 @@ Every artifact processing cycle follows a closed loop. This protocol defines the
 **Skill invocation model:** The PPM Agent produces structured output (TRACKER_UPDATES + Impact Matrix). The Tracker Manager is invoked as a separate skill to consume that output. Skills do not call each other directly — they communicate through files and structured output blocks. The protocol governs the sequence; each skill owns its steps.
 
 This protocol applies to PPM Agent processing. See § Skill Chaining Protocol above for the generalized cascade mechanism — it applies to any skill that produces tracker updates, governed by rules C1–C7.
+
+**Entity-field write authority at Apply (step 5).** When the Tracker Manager consumes TRACKER_UPDATES, the legitimate writer for any project-DATA entity field is determined by the **entity-field write-permission matrix** ([`schemas/entity-field-lifecycle-matrix.md`](../schemas/entity-field-lifecycle-matrix.md)). Its **CW-BASE** rule resolves the #154-named conflicts — e.g. on `RAID Item.lifecycle_state` the maintainer (`tracker-manager`) wins and a creator-role skill (`ppm-agent`, which created the item) is demoted to reader and must route a *recommendation* through the TRACKER_UPDATE channel rather than write directly. Multi-writer accreting fields (`RAID Item.action_plan`, `Decision.rationale`) are **append (`Ap`)** — both writers' entries land, neither overwrites.
 
 ### Template Protocol
 
