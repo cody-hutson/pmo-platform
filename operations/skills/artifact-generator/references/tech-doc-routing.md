@@ -35,7 +35,7 @@ The Anthropic-produced document is brought into the project via artifact-generat
 
 - `source: external`
 - `source_origin: Anthropic engineering/documentation`
-- the full Step-5 frontmatter block with `artifact_state: DRAFT` (the `Artifact-DRAFT` lifecycle state on emit)
+- the full Step-5 frontmatter block with `lifecycle_state: draft` + `promotion_state: staged` (the `Artifact-DRAFT` content entry, staged on emit)
 
 The artifact then follows the normal PROMOTE / REVISE / REJECT promotion workflow.
 
