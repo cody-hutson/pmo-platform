@@ -8,6 +8,23 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.20] - 2026-06-23
+
+Field-lifecycle and CMDB automation — the platform's entity fields now have a governed lifecycle (who may write which field, at which stage, driven by agents), the artifact-state model is reconciled onto one canonical lifecycle, and the skill registry becomes the platform's configuration-management catalog with a per-project Artifact Register. A project-tracking integrity sweep adds dormancy and overdue-decision detection with an evidence-backed gate. Cross-cutting; QA ACCEPT (~48/48 acceptance criteria, 0 defects). *(Numbering note: `v2.20` was tagged after `v2.21` — a concurrent release claimed the higher number first and the operator kept `v2.20` for this one; the claim order is non-monotonic by version and self-heals on the next allocation.)*
+
+### Added
+
+- **Agent-driven entity lifecycle automation (G8).** Per-entity state transitions are now agent-driven, with shared and portfolio-scoped lifecycle transition protocols defining the legal moves and a canonical lifecycle-state vocabulary. Skills emit and consume these transitions (ppm-agent, tracker-manager, artifact-generator, and the other active branchers).
+- **The G10 field-lifecycle write-permission matrix.** A matrix declares which agent may write which field, for which entity, at which stage — and the Agent Write Permissions table is aligned to it, so the permission picture is single-sourced.
+- **The skill registry is now the platform CMDB.** `core/skills/registry.md` is evolved into the single configuration-management catalog: every deployed skill is a configuration item carrying lifecycle-state, dependency, and owner axes (version and roster-existence are cited from the skill files and the deploy script, never duplicated). A new per-project **Artifact Register** template lands alongside it. Recorded in **ADR-038**, which supersedes part 4 of ADR-035 (and preserves its other decisions); the skill-router classifies against a role-Specialist-filtered view so routing stays unambiguous.
+- **Project-tracking integrity sweep.** delivery-engine now detects dormant work items (10 business days) and overdue decisions (3–5 business days) and enforces evidence-backed phase-gate completion.
+
+### Changed
+
+- **The artifact-state model is reconciled onto the canonical lifecycle.** What used to be a separate `artifact_state` is reconciled into the canonical `lifecycle_state` + Domain model (with a `promotion_state` carve-out for the staging→promoted axis), and artifact-generator and artifact-lint are migrated onto the reconciled model. The transitional dual-read path is removed. A new `artifact-workflow-protocol.md` documents the workflow.
+
+[Full notes](release/releases/notes/v2.20-field-lifecycle-and-cmdb-automation_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.20)
+
 ## [v2.19] - 2026-06-22
 
 Co-management governance cleanup — finishes de-broadcasting the operator-specific naming from the public codebase (a follow-up to v2.18) and single-sources the dual-framing status rule. The legacy co-management compatibility shim is retired, the residual integration field names are genericized to `co_management_*`, and the Dual-Framing Bridge rule now lives in one place (`OPERATIONS.md`) instead of a redundant copy in the workspace director. Dual Agile/Waterfall framing behavior is unchanged. Minor (the shim removal is a back-compat contract change), not a patch.
