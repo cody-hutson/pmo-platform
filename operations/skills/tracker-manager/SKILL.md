@@ -354,12 +354,53 @@ precondition (file-liveness) — all four run together; none is bypassed.
 - **Autonomy Tier 2** — scoped tracker-row writes inside `cascade_scope` (auto-write).
 - **Never Autonomy Tier 0** — no governance file is a lifecycle-write target.
 
-<!-- #202 (sub-task #1862) ADDS, in a later coordinated pmo-skill-editor pass on this
-file: the Artifact-Register row maintenance + the restored skill-CMDB lifecycle-state axis
-(a read/registry view reusing the System `active → deprecated → retired` machine). That
-section MUST cite the SAME canonical lifecycle_state source of truth named here
-(frontmatter-schema.md § Category 2 / project-entity-model.md Axis-1) — no second field,
-no divergent vocabulary. #1156 is first; #202 follows on the same write surface. -->
+## Artifact Register Row Maintenance
+
+The **Artifact Register** (`[Project]_Artifact_Register.md`,
+`core/schemas/tracker-schemas.md` § Tracker 6) is the per-project
+configuration-management catalog for the **Artifact** entity. Like every tracker
+in `04-PMO-Operations/`, **Tracker Manager owns its ROW writes** — this is the
+same entity-maintainer ≠ tracker-row-writer split already in production for RAID
+Item and Decision. The **Artifact entity** itself stays maintained by **PPM Agent**
+(creates: Artifact Generator; route: File Router) per
+`core/disciplines/project-entity-model.md` §6 + `entity-field-schemas.md` §5 —
+**unchanged**. Tracker Manager writes the Register *rows*, not the entity. No new
+mode and no second lifecycle field: Baseline Status is the Register's own CI-state
+column (defined in Tracker 6), and any artifact `lifecycle_state` write remains the
+canonical `lifecycle_state` source of truth named in the Lifecycle-State Field Write
+section above (`core/schemas/frontmatter-schema.md` § Category 2 /
+`project-entity-model.md` Axis-1) — no divergent vocabulary.
+
+**Row writes (reuse the existing `TRACKER_UPDATE` path).** Emit/apply a Register row
+write via the same Step-1 → Step-5 consolidation path as any other tracker, with
+`target: [Project]_Artifact_Register.md`:
+- **ADD** a row when an artifact is generated (artifact-generate event) — populate
+  Artifact Name, Artifact Type, Current Version, `Baseline Status = operational`
+  (default), Last Updated, Owner, Retention.
+- **MODIFY** a row's `Last Updated` / `Current Version` / `Baseline Status` when the
+  artifact (or its baseline state) changes.
+
+These are **Document Tier 2 / Autonomy Tier 2** writes — auto-write within
+`cascade_scope` (the Register is a Tier-2 operational tracker; no approval gate),
+identical to the Tier-2 contract in the Lifecycle-State Field Write section above.
+The Step-5 **Lifecycle-State Precondition** still runs first: if the target Register's
+`lifecycle_state` is `archived`/`superseded`, **BLOCK + flag** exactly as for any
+other tracker — the Register row write never bypasses that guard.
+
+**Baseline-at-phase-gate flip trigger (the update trigger).** Baseline Status follows
+the Baseline Rules in Tracker 6:
+- **Default** `operational` on every new row.
+- **Flip to `baselined-at-phase-gate`** at a **phase-gate moment** — PRINCE2
+  configuration-management baselining. The platform already models phase-gate cadence
+  (`tracker-schemas.md` Methodology Variation table: Waterfall → `phase-gate-log.md`;
+  PRINCE2 → `stage-boundary.md`). When a phase gate is reached, Tracker Manager flips
+  the in-scope artifacts' Baseline Status to `baselined-at-phase-gate` and pins
+  `Last Updated` to the gate date. This is a **Tier-2 row MODIFY** (auto-write within
+  `cascade_scope`), **not** a Tier-1 approval gate — the artifact's *content* is not
+  changing, only the CI baseline marker.
+- **Flip to `superseded`** when a newer version supersedes the artifact — the prior
+  row's Baseline Status → `superseded`, **append-only** (never delete the superseded
+  row; it is the CI history the `projects/` gitignore otherwise loses).
 
 ## Tracker Schemas
 
