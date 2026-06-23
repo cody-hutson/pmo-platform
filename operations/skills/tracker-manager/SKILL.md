@@ -318,8 +318,8 @@ schema-validates it as a `MODIFY`-class field:
   **validation error** (reported in the VALIDATION ERRORS section), **never a silent
   write**. The written target field is the canonical `lifecycle_state`
   (`core/schemas/frontmatter-schema.md` § Category 2); Tracker Manager NEVER writes the
-  deprecated `artifact_state` (deprecated as a content-maturity carrier per
-  `core/artifact-workflow-protocol.md`).
+  **deprecated single-field Artifact Workflow machine** (deprecated as a content-maturity
+  carrier per `core/artifact-workflow-protocol.md`).
 
 **Document-Tier-gated write (the core requirement).** Classify the write by the **target's**
 Document Tier exactly as Step 3 already does:

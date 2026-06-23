@@ -428,9 +428,9 @@ TRACKER_UPDATE:
 The transition **value** uses the object-typed `<Entity>-<state>` form per
 `core/standards/lifecycle-states-canonical.md` §2.1 (e.g. `Decision-superseded`,
 `Meeting-held`, `Plan-active`); the write target field is the canonical `lifecycle_state`
-(`frontmatter-schema.md` § Category 2). PPM Agent NEVER stamps `artifact_state` — that
-field is deprecated as a content-maturity carrier (`frontmatter-schema.md` § Category 2;
-`core/artifact-workflow-protocol.md`).
+(`frontmatter-schema.md` § Category 2). PPM Agent NEVER stamps the **legacy single-field
+Artifact Workflow machine** — that machine is deprecated as a content-maturity carrier
+(`frontmatter-schema.md` § Category 2; `core/artifact-workflow-protocol.md`).
 
 **Evidence-gate refusal (load-bearing).** No `lifecycle_transition` is emitted without
 its qualifying evidence. A `[SOURCE]` or `[INFERRED]` citation authorizes the emission;
