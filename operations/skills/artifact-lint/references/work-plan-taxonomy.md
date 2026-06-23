@@ -42,7 +42,7 @@ This derivation was **operator-confirmed at Stage 9 Collective Review (v2.08)** 
 
 ## How Check 4 uses this table
 
-For each scanned artifact, read its `artifact_type` and `folder`/`target_folder`. Look up the canonical target folder above. When the artifact's current folder contradicts the canonical home AND the artifact's state indicates it should have landed there (e.g., `artifact_state: PROMOTED` / `lifecycle_state: published` but `folder: 08-Generated/`), emit a displaced-content finding proposing the correct folder. Working-state artifacts legitimately in `08-Generated/` (e.g., a `processing-run`, or an `analysis`/`draft-communication` still in DRAFT) are NOT displaced — displacement keys on the state-vs-folder contradiction, not on presence in staging.
+For each scanned artifact, read its `artifact_type` and `folder`/`target_folder`. Look up the canonical target folder above. When the artifact's current folder contradicts the canonical home AND its `promotion_state` indicates it should have landed there (`promotion_state: promoted` but `folder: 08-Generated/`), emit a displaced-content finding proposing the correct folder. Working-state artifacts legitimately in `08-Generated/` (e.g., a `processing-run`, or an `analysis`/`draft-communication` still `promotion_state: staged`) are NOT displaced — displacement keys on the `promotion_state`-vs-`folder` contradiction, not on presence in staging, and not on content-maturity (`lifecycle_state`), which is orthogonal.
 
 Notes:
 - A type whose canonical home IS `08-Generated/` (rows 6) is never flagged as displaced while in staging.
