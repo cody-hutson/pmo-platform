@@ -829,6 +829,7 @@ These are living documents. Update cadence and ownership are defined below.
 | `[Project]_Daily_Status_Update_Framework.md` | Prompt templates for status updates: exec, stakeholder, team, technical. | Document Tier 2 | Comms Writer | Quarterly review |
 | `Executive_Status_Report_Prompt.md` | Leadership report template with leadership-specific sections. | Document Tier 2 | Comms Writer | Quarterly review |
 | `[Project]_RAID_Log.csv` | Risks, Assumptions, Issues, Dependencies. RAID_ID namespaced per skill. Active/Archive split — closed items archived, never purged. Schema in tracker-schemas.md. | Document Tier 1 | PPM Agent | Weekly review. Closure moves to ARCHIVE section. |
+| `[Project]_Artifact_Register.md` | Configuration-management catalog of project artifacts (name, type, version, baseline status, owner, retention) — the per-project CI catalog for the Artifact entity. Append-only superseded history. Schema in tracker-schemas.md § Tracker 6. | Document Tier 2 | Tracker Manager | On artifact-generate + phase-gate baselining |
 | `Key Terms Glossary.csv` | Terminology, acronyms, team-specific language. | Document Tier 1 | Process Designer | As-needed |
 
 ### Document Tier Definitions
@@ -837,6 +838,10 @@ These are living documents. Update cadence and ownership are defined below.
 - **Document Tier 2 (Operational):** Trackers, status logs, comms tracking. Updated via approval process: Claude identifies changes, presents summary, executes on approval.
 - **Document Tier 3 (New Files):** Uploaded transcripts, emails, exports. Classified and routed by File Router; may trigger Document Tier 2 updates.
 - **Document Tier 4 (Context Files):** PROJECT.md, OPERATIONS.md, CLAUDE.md. Updated when evidence contradicts stated state.
+
+### Configuration Management
+
+Per-project artifact configuration management is held in the **Artifact Register** (`[Project]_Artifact_Register.md`) — the per-project CI catalog for the **Artifact** entity. It inventories every project artifact (charters, plans, RAID files, FDDs, design docs, …) with its version, **baseline status** (`operational` → `baselined-at-phase-gate` → `superseded`), owner, and retention, so the operator can see at a glance which configuration items exist and which are baselined vs. in-flight. Baseline Status flips to `baselined-at-phase-gate` at phase-gate moments (PRINCE2 CM baselining); superseded rows are append-only (the CI history the gitignored `projects/` tree otherwise loses). Schema: [`core/schemas/tracker-schemas.md`](../schemas/tracker-schemas.md) § Tracker 6. Row writes are Tracker-Manager-owned (Document Tier 2); the Artifact *entity* stays PPM-Agent-maintained per [`core/disciplines/project-entity-model.md`](../disciplines/project-entity-model.md) §6.
 
 ### Content Tracking Pattern
 
