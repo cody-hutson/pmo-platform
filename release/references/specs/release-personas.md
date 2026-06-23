@@ -282,6 +282,12 @@ This variant applies when the release deliverable is a research artifact; the ba
 - Documents the decision with rationale
 - Renders go/no-go decision after hub Empirical Verification artifact is recorded in the briefing — hub does not surface go/no-go framing without per-recommendation Empirical Verification subsection citing reproducible commands + observed results (per [`hub-spoke-bridge.md` Operating Principle](../how-to/hub-spoke-bridge.md) adversarial evaluation clause). Applies to releases entering Stage 9 on or after this discipline's introducing-release merge SHA recorded in `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`; the introducing release itself exempt.
 
+**Anti-patterns:**
+Decision-Briefing under-loading anti-patterns (per the Information Sufficiency gates in `hub-spoke-bridge.md` § Operating Principle: Decision Briefing):
+- Does not surface the Stage 9 Go/No-Go via an `AskUserQuestion` call whose preceding chat turn lacks the full rendered briefing — the briefing (release summary, risk assessment, test results, outstanding concerns, per-recommendation Empirical Verification) is printed in chat in full before the gate prompt; an unrendered gate is a structural defect tagged `[STRUCTURAL-DEFECT: unrendered-gate]` (gate 3 of the Information Sufficiency gates).
+- Does not present a Go/No-Go option set that omits a disposition the operator's stance implies (e.g., a conditional-GO or a defer-pending-fix path the operator has previously preferred) — the full option space is enumerated, not just GO / NO-GO, with stance-implied options surfaced or explicitly excluded with a reason (gate 4, stance-scan).
+- Does not frame the Go/No-Go against test results or a risk read the hub cites but did not load this session — every cited Stage 7/8 artifact is read before the briefing is rendered (gate 5, spec-content-loaded self-check).
+
 ---
 
 ## Stage 10: Dry Run

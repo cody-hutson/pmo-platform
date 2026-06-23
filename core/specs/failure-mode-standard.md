@@ -846,6 +846,16 @@ The entries below address the `snapshot-as-current-state` root failure mode at h
   9), but the reconciliation consumed Engineering attention.
 ```
 
+```markdown
+### Decision-Briefing under-loading — OUT
+
+- **Signature (observable signal):** A hub Decision Briefing fires an `AskUserQuestion` (or equivalent in-chat) call whose immediately-preceding chat turn is missing the full rendered briefing, OR the briefing's option set omits an option the operator's prior stance implies, OR a decision is framed against a spec the hub cites but did not read this session. The reviewer sees a structured prompt the operator must answer from a curated or thin summary rather than from a rendered, fully-enumerated, source-grounded briefing.
+- **Conditional:** do NOT fire the AskUserQuestion call when the full Decision Briefing has not been rendered in chat, the option space has not been enumerated to include stance-implied options, or a cited spec has not been read this session, because an under-loaded briefing forces the operator to decide on incomplete information and silently narrows the decision to the hub's curated subset.
+- **Root cause:** rendering the full briefing and reading every cited source reads like slower work than surfacing the recommendation directly; under throughput pressure the hub defaults to a remembered summary and a recommendation-shaped option set, and the missing options and unread sources are invisible in the prompt itself.
+- **Mitigation:** satisfy the five Information Sufficiency gates in `hub-spoke-bridge.md` § Operating Principle: Decision Briefing before any gate call — pre-load every cited source, enumerate the full option space including stance-implied options (stance-scan pre-check), render the full briefing in chat, then call `AskUserQuestion` with the `preview` field as a complement; treat a gate call lacking the preceding rendered briefing as `[STRUCTURAL-DEFECT: unrendered-gate]`.
+- **Principal response vs. junior response:** a principal reads every cited spec, enumerates the options the operator would plausibly choose (not only the recommended one), renders the whole briefing in chat, and only then asks — treating the prompt as a selection over information the operator already has; a junior surfaces the recommendation with a thin option set, asks first, and back-fills context only if the operator pushes back.
+```
+
 ## Relationship to Platform Guardrails
 
 Every SKILL.md now has two distinct sections:
