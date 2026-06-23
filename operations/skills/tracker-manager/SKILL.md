@@ -2,7 +2,7 @@
 name: tracker-manager
 description: >
   Generic update engine for all operational trackers in 04-PMO-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
-version: v2.01
+version: v2.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -295,6 +295,112 @@ For each rejected change, record:
 - Pattern note: what would prevent this type of incorrect proposal in the future
 
 Rejection patterns are available for the PPM Agent to learn from in future processing runs.
+
+## Lifecycle-State Field Write
+
+This is the **write complement** to the Step-5 Lifecycle-State Precondition (which reads
+the *target file's* liveness). Here Tracker Manager physically writes the entity's
+`lifecycle_state` field on a transition fired upstream. Tracker Manager **maintains**
+Decision and RAID Item per the owning-agent matrix (`core/disciplines/project-entity-model.md`
+§6), so it is the skill that persists their Axis-1 state changes; PPM Agent emits the
+transition, Tracker Manager writes it.
+
+**Input.** A `lifecycle_transition` field arriving inside a validated `TRACKER_UPDATE`
+(emitted by PPM Agent's Section-8.7). Step 1 (Collect and Parse) recognizes and
+schema-validates it as a `MODIFY`-class field:
+- **Value form:** `<Entity>-<from> → <Entity>-<to>` (object-typed per
+  `core/standards/lifecycle-states-canonical.md` §2.1).
+- **Legal-edge check:** the `from → to` pair MUST be a declared edge in the entity's
+  transition table — `core/standards/entity-lifecycle-protocol.md` (project-scoped:
+  Decision, RAID Item, Plan, Milestone, Workstream, …) or
+  `core/standards/entity-lifecycle-protocol-shared-portfolio.md` (shared + portfolio).
+  An edge **not** in the entity's machine is an `[INVALID-TRANSITION]` → raise a
+  **validation error** (reported in the VALIDATION ERRORS section), **never a silent
+  write**. The written target field is the canonical `lifecycle_state`
+  (`core/schemas/frontmatter-schema.md` § Category 2); Tracker Manager NEVER writes the
+  **deprecated single-field Artifact Workflow machine** (deprecated as a content-maturity
+  carrier per `core/artifact-workflow-protocol.md`).
+
+**Document-Tier-gated write (the core requirement).** Classify the write by the **target's**
+Document Tier exactly as Step 3 already does:
+- **RAID Log = Document Tier 1 → approval-gated.** The transition appears in the Step-4
+  consolidated change summary and waits for explicit user approval before the write
+  (e.g. `RAIDItem-mitigating → RAIDItem-resolved` on the RAID Log).
+- **A Tier-2 tracker row** (a Decision row in a Decisions tracker, a Meeting row, a
+  Workstream record) **= auto-write within `cascade_scope`.** Executed in Step 5 without
+  an approval gate.
+
+This is the literal contract: **Tier 1 RAID = approval; Tier 2 row = auto-write within
+`cascade_scope`.**
+
+**`cascade_scope` enforcement.** A Tier-2 lifecycle write must fall inside the authorized
+`cascade_scope` list carried on the upstream Handoff Manifest (the C6 cascade rule). An
+out-of-scope target **descends to Tier 1** (approval-gated) — it does not silently
+auto-write. This reuses the existing Chained Invocation Contract `cascade_scope` check
+(step 4); no new mechanism.
+
+**Evidence-gate refusal.** The Evidence Gate Enforcement extends to lifecycle writes: a
+transition into a terminal/closed state (`resolved`, `closed`, `accepted`, `superseded`,
+`held`, `cancelled`, `archived`) requires evidence in the same way a CLOSE action does
+today. No qualifying evidence → the transition is **rejected** with a specific gap
+statement (e.g. `Transition rejected for DEC-014: RAIDItem→resolved requires closure
+evidence — none supplied`), surfaced in the change summary. This composes with the
+existing Step-1.5 RAID dedup, the Step-2.5 cascade guard, and the Step-5 lifecycle-state
+precondition (file-liveness) — all four run together; none is bypassed.
+
+**Autonomy Tier (explicit per write).**
+- **Autonomy Tier 1** — RAID-Log and Decision-of-record writes (Document Tier 1 targets;
+  approval-gated).
+- **Autonomy Tier 2** — scoped tracker-row writes inside `cascade_scope` (auto-write).
+- **Never Autonomy Tier 0** — no governance file is a lifecycle-write target.
+
+## Artifact Register Row Maintenance
+
+The **Artifact Register** (`[Project]_Artifact_Register.md`,
+`core/schemas/tracker-schemas.md` § Tracker 6) is the per-project
+configuration-management catalog for the **Artifact** entity. Like every tracker
+in `04-PMO-Operations/`, **Tracker Manager owns its ROW writes** — this is the
+same entity-maintainer ≠ tracker-row-writer split already in production for RAID
+Item and Decision. The **Artifact entity** itself stays maintained by **PPM Agent**
+(creates: Artifact Generator; route: File Router) per
+`core/disciplines/project-entity-model.md` §6 + `entity-field-schemas.md` §5 —
+**unchanged**. Tracker Manager writes the Register *rows*, not the entity. No new
+mode and no second lifecycle field: Baseline Status is the Register's own CI-state
+column (defined in Tracker 6), and any artifact `lifecycle_state` write remains the
+canonical `lifecycle_state` source of truth named in the Lifecycle-State Field Write
+section above (`core/schemas/frontmatter-schema.md` § Category 2 /
+`project-entity-model.md` Axis-1) — no divergent vocabulary.
+
+**Row writes (reuse the existing `TRACKER_UPDATE` path).** Emit/apply a Register row
+write via the same Step-1 → Step-5 consolidation path as any other tracker, with
+`target: [Project]_Artifact_Register.md`:
+- **ADD** a row when an artifact is generated (artifact-generate event) — populate
+  Artifact Name, Artifact Type, Current Version, `Baseline Status = operational`
+  (default), Last Updated, Owner, Retention.
+- **MODIFY** a row's `Last Updated` / `Current Version` / `Baseline Status` when the
+  artifact (or its baseline state) changes.
+
+These are **Document Tier 2 / Autonomy Tier 2** writes — auto-write within
+`cascade_scope` (the Register is a Tier-2 operational tracker; no approval gate),
+identical to the Tier-2 contract in the Lifecycle-State Field Write section above.
+The Step-5 **Lifecycle-State Precondition** still runs first: if the target Register's
+`lifecycle_state` is `archived`/`superseded`, **BLOCK + flag** exactly as for any
+other tracker — the Register row write never bypasses that guard.
+
+**Baseline-at-phase-gate flip trigger (the update trigger).** Baseline Status follows
+the Baseline Rules in Tracker 6:
+- **Default** `operational` on every new row.
+- **Flip to `baselined-at-phase-gate`** at a **phase-gate moment** — PRINCE2
+  configuration-management baselining. The platform already models phase-gate cadence
+  (`tracker-schemas.md` Methodology Variation table: Waterfall → `phase-gate-log.md`;
+  PRINCE2 → `stage-boundary.md`). When a phase gate is reached, Tracker Manager flips
+  the in-scope artifacts' Baseline Status to `baselined-at-phase-gate` and pins
+  `Last Updated` to the gate date. This is a **Tier-2 row MODIFY** (auto-write within
+  `cascade_scope`), **not** a Tier-1 approval gate — the artifact's *content* is not
+  changing, only the CI baseline marker.
+- **Flip to `superseded`** when a newer version supersedes the artifact — the prior
+  row's Baseline Status → `superseded`, **append-only** (never delete the superseded
+  row; it is the CI history the `projects/` gitignore otherwise loses).
 
 ## Tracker Schemas
 

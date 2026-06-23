@@ -132,6 +132,8 @@ Terminating the cascade is always safe — the pending work falls back to a manu
 
 **Alternative design (not active).** If Cowork could not chain skills programmatically, the fallback would be AD-1 "tag bundle": PPM emits a copy/paste block listing all qualifying tags; the user clicks once to expand into parallel invocations. AD-1 preserves the breadth/depth bounds but loses the push-to-resolve latency benefit. Documented here for portability to environments without Skill-tool chaining; not active in the current platform.
 
+**Entity-field write authority (cross-reference).** Where C1–C7 govern *when* a cascade fires, the **entity-field write-permission matrix** ([`schemas/entity-field-lifecycle-matrix.md`](../schemas/entity-field-lifecycle-matrix.md)) governs *which agent may write which field of which project-DATA entity at which lifecycle transition* — the write-authority surface the cascade writes into. Its **CW-BASE** rule (the §5 maintainer owns every write after create-commit; the creator's authority terminates at create-commit) determines the legitimate writer when two skills claim the same entity field; its **audit-trail-per-write-class** table extends the C3 `evidence_quality ∈ {[SOURCE], [INFERRED]}` bar from auto-cascaded tracker writes to all entity-field writes by class. Consult it before auto-cascading any entity-field write.
+
 ### Mode Selection Protocol
 
 Governs how multi-mode skills select which mode to run on a given invocation. Parallel to the Skill Chaining Protocol above — chaining defines when auto-invocation fires; mode selection defines how the receiving skill decides what to do. Operationalized via a three-step pattern (chain-skip → trigger-heuristic-or-AskUserQuestion → execute) placed as the first operational subsection (`## Mode Selection`) in every multi-mode SKILL.md. Structural placement IS the forcing function: a reader encounters mode-selection instruction before any mode-specific content, so mode selection cannot be bypassed without skipping half the file.
@@ -253,6 +255,8 @@ Every artifact processing cycle follows a closed loop. This protocol defines the
 
 This protocol applies to PPM Agent processing. See § Skill Chaining Protocol above for the generalized cascade mechanism — it applies to any skill that produces tracker updates, governed by rules C1–C7.
 
+**Entity-field write authority at Apply (step 5).** When the Tracker Manager consumes TRACKER_UPDATES, the legitimate writer for any project-DATA entity field is determined by the **entity-field write-permission matrix** ([`schemas/entity-field-lifecycle-matrix.md`](../schemas/entity-field-lifecycle-matrix.md)). Its **CW-BASE** rule resolves the #154-named conflicts — e.g. on `RAID Item.lifecycle_state` the maintainer (`tracker-manager`) wins and a creator-role skill (`ppm-agent`, which created the item) is demoted to reader and must route a *recommendation* through the TRACKER_UPDATE channel rather than write directly. Multi-writer accreting fields (`RAID Item.action_plan`, `Decision.rationale`) are **append (`Ap`)** — both writers' entries land, neither overwrites.
+
 ### Template Protocol
 
 Governs when a skill should produce an artifact via a canonical template versus author it ad-hoc. The protocol owns artifact-family classification, lifecycle state machine (DRAFT→REVIEWED→APPROVED→DEPRECATED→ARCHIVED), provenance schema, and 5 trigger conditions (T1-T5) + 5 promotion gates (P1-P5). Authoritative spec lives at [`core/standards/template-protocol.md`](../standards/template-protocol.md); canonical template-family taxonomy lives at [`core/standards/template-taxonomy.md`](../standards/template-taxonomy.md). Consumer skills (the 6 template-authoring skills: project-initiator, delivery-engine, eval-writer, pmo-process-designer, pmo-skill-refiner, release-planner) consult the protocol's T1-T5 trigger evaluation before authoring a templatizable artifact and the P1-P5 promotion gates before promoting a skill-internal template to canonical. See the [`template-architecture` roadmap](<OPERATOR_INSTANCE_ROADMAPS_PATH>/template-architecture.md) (operator-local) for the architected path-to-done across downstream initiatives.
@@ -291,6 +295,38 @@ Assumptions and Dependencies are not age-escalated by this protocol (no threshol
 **Worked example (AC).** A RAID Log issue (`I-PPM-012`) opened 35 days ago: age 35 > 30 (issue-escalate threshold) → **Escalate** band → agent flags `I-PPM-012` with an escalation action naming the owner and the breached 30-day threshold, and routes per `escalation-thresholds.md` tier rules.
 
 **Evidence labels.** Age computations carry `[INFERRED: today − open-date]`; threshold-breach claims cite the RAID Log row `[SOURCE: <RAID_ID>, open-date]`. See § Evidence Quality Labeling above.
+
+---
+
+### Overdue-Decision Escalation Protocol
+
+Open **blocking-class** decisions age past their deadline. This protocol defines due-date-based auto-escalation so an overdue gating decision surfaces a recommended escalation action instead of silently stalling the project. It is the decision-tracker sibling of the Stale-RAID Auto-Escalation Protocol above (RAID items age from their open-date; decisions age from their **deadline**). It is cross-skill: `weekly-status-rollup` surfaces the overdue-decision escalation in the portfolio roll-up; `ppm-agent` (which owns DECISION escalations per § Skills Section) is the router; `delivery-engine` Mode G records the decision-artifact update.
+
+**Doc-of-record.** The escalation **tiers** this protocol routes to are the canonical routing ladder in [`escalation-thresholds.md`](../../operations/skills/ppm-agent/references/escalation-thresholds.md) §2 (Team → Project → Program → Program-Critical/Sponsor → Portfolio). That doc is authoritative for the tier names and routing; this protocol adds the **decision-overdue trigger** and states the operational trigger (when the check runs, who acts, what action results). It does **not** author a parallel tier scheme (register-or-remove / duplicate-source-discipline). The `> 5 bd past deadline` escalate point reuses the existing deadline-keyed Overdue band in [`proactive-follow-up-tracking.md`](../../operations/skills/ppm-agent/references/proactive-follow-up-tracking.md) §Aging, which already covers decision follow-ups.
+
+**Scope (which decisions).** The escalation fires only for **blocking-class** decisions — the Daily Status Log §3 Decisions Pending entry's `blocking: true` field (schema: [`core/schemas/tracker-schemas.md`](../schemas/tracker-schemas.md) § Tracker 1 §3). A decision with no `blocking` field is treated as **non-blocking** (no escalation), and the missing classification is surfaced as a coverage gap on first encounter — never silently defaulted to blocking.
+
+**Overdue clock (business days past the decision's deadline).** A blocking decision's overdue age is `today − Deadline`, in business days, validated against the Daily Status Log (Document Tier 2). Two warning/escalate bands:
+
+| Decision class | Warning at | Escalate at |
+|---|---|---|
+| Blocking (`blocking: true`) | age > 3 business days past due | age > 5 business days past due |
+
+Non-blocking decisions are not escalated by this protocol.
+
+**Action by band (the warning → escalate ladder).**
+
+| Band | Condition | Agent action |
+|---|---|---|
+| **Nominal** | age ≤ 3 bd past due | No escalation. `escalation_state: NOMINAL`. Decision carries forward normally. |
+| **Warning** | 3 bd < age ≤ 5 bd past due | Flag the decision with a `[RECOMMENDED]` nudge to the decision-maker ("DEC-007 overdue 4 business days — past the 3-day blocking-decision warning threshold; confirm decision status"). `weekly-status-rollup`: surface in the Section 2 Decisions Pending block. `escalation_state: WARN`. No tier change. |
+| **Escalate** | age > 5 bd past due | Flag with an **escalation action**, naming the decision, the decision-maker, the breached 5-day threshold, and the routed tier. Bump the decision **one tier up** the `escalation-thresholds.md` §2 ladder. `weekly-status-rollup`: surface the escalation and hand the DECISION tag to `ppm-agent` for routing (no self-routing). `ppm-agent`: raise as a `[DECISION]` escalation (per § Follow-Up Tag Routing) and route to the bumped tier. `delivery-engine` Mode G: record the decision-artifact update. `escalation_state: ESCALATED`; `escalated_to:` = the routed tier. |
+
+**Reversibility.** Each escalation is a CHEAP, recommend-tier action (a flag + routed tag the operator reviews) — the protocol recommends; it never auto-decides the decision, auto-defers it, or mutates the Daily Status Log without the normal Document Tier 2 approval gate.
+
+**Worked example (AC).** A Daily Status Log blocking decision (`DEC-001`, `blocking: true`) with a deadline 6 business days ago: age 6 > 5 (escalate threshold) → **Escalate** band → agent flags `DEC-001` with an escalation action naming the decision-maker and the breached 5-day threshold, bumps one tier up per `escalation-thresholds.md` §2, and sets `escalation_state: ESCALATED` + `escalated_to:` the routed tier. A second blocking decision (`DEC-002`) 2 business days overdue stays **Nominal** (under the 3-day warn). A non-blocking decision (`DEC-003`) 8 business days overdue is **not** escalated (out of scope).
+
+**Evidence labels.** Overdue-age computations carry `[INFERRED: today − Deadline]`; threshold-breach claims cite the Daily Status Log row `[SOURCE: <DEC-ID>, Deadline]`. See § Evidence Quality Labeling above.
 
 ---
 
@@ -825,6 +861,7 @@ These are living documents. Update cadence and ownership are defined below.
 | `[Project]_Daily_Status_Update_Framework.md` | Prompt templates for status updates: exec, stakeholder, team, technical. | Document Tier 2 | Comms Writer | Quarterly review |
 | `Executive_Status_Report_Prompt.md` | Leadership report template with leadership-specific sections. | Document Tier 2 | Comms Writer | Quarterly review |
 | `[Project]_RAID_Log.csv` | Risks, Assumptions, Issues, Dependencies. RAID_ID namespaced per skill. Active/Archive split — closed items archived, never purged. Schema in tracker-schemas.md. | Document Tier 1 | PPM Agent | Weekly review. Closure moves to ARCHIVE section. |
+| `[Project]_Artifact_Register.md` | Configuration-management catalog of project artifacts (name, type, version, baseline status, owner, retention) — the per-project CI catalog for the Artifact entity. Append-only superseded history. Schema in tracker-schemas.md § Tracker 6. | Document Tier 2 | Tracker Manager | On artifact-generate + phase-gate baselining |
 | `Key Terms Glossary.csv` | Terminology, acronyms, team-specific language. | Document Tier 1 | Process Designer | As-needed |
 
 ### Document Tier Definitions
@@ -833,6 +870,10 @@ These are living documents. Update cadence and ownership are defined below.
 - **Document Tier 2 (Operational):** Trackers, status logs, comms tracking. Updated via approval process: Claude identifies changes, presents summary, executes on approval.
 - **Document Tier 3 (New Files):** Uploaded transcripts, emails, exports. Classified and routed by File Router; may trigger Document Tier 2 updates.
 - **Document Tier 4 (Context Files):** PROJECT.md, OPERATIONS.md, CLAUDE.md. Updated when evidence contradicts stated state.
+
+### Configuration Management
+
+Per-project artifact configuration management is held in the **Artifact Register** (`[Project]_Artifact_Register.md`) — the per-project CI catalog for the **Artifact** entity. It inventories every project artifact (charters, plans, RAID files, FDDs, design docs, …) with its version, **baseline status** (`operational` → `baselined-at-phase-gate` → `superseded`), owner, and retention, so the operator can see at a glance which configuration items exist and which are baselined vs. in-flight. Baseline Status flips to `baselined-at-phase-gate` at phase-gate moments (PRINCE2 CM baselining); superseded rows are append-only (the CI history the gitignored `projects/` tree otherwise loses). Schema: [`core/schemas/tracker-schemas.md`](../schemas/tracker-schemas.md) § Tracker 6. Row writes are Tracker-Manager-owned (Document Tier 2); the Artifact *entity* stays PPM-Agent-maintained per [`core/disciplines/project-entity-model.md`](../disciplines/project-entity-model.md) §6.
 
 ### Content Tracking Pattern
 

@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v2.01
+version: v2.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -90,7 +90,31 @@ For each active project, generate:
 
 **Decisions Pending:**
 - Open DEC-### entries with deadlines
-- Overdue decisions flagged
+- **Overdue blocking-decision escalation (thresholded + routed).** For each open
+  DEC-### entry, compute the overdue clock `today − Deadline` in **business days** (carries
+  `[INFERRED: today − Deadline]`; the deadline-keyed clock per
+  `../ppm-agent/references/proactive-follow-up-tracking.md` §Aging "starts from the deadline
+  date"). The escalation fires only for **blocking-class** decisions (the entry's
+  `blocking: true` field — go/no-go, launch-sequence, and similar gating decisions). Apply the
+  two-stage, due-date-keyed ladder:
+  - **WARN at `> 3 business days` past due** — emit a `[RECOMMENDED]` nudge to the
+    decision-maker in the rollup output. **No tier change** (parallel to the Stale-RAID
+    Warning band).
+  - **ESCALATE at `> 5 business days` past due** — emit an **escalation action** that bumps the
+    decision **one tier up** the existing routing ladder in
+    `../ppm-agent/references/escalation-thresholds.md` §2 (Team → Project → Program →
+    Program-Critical/Sponsor → Portfolio). The escalate action names the decision, the
+    decision-maker, the breached `5bd` threshold, and the routed tier. This consumes the
+    existing tier ladder by reference — it does **not** author a parallel tier scheme.
+  - **Coverage gap on absent `blocking`:** a DEC-### entry with no `blocking` field → treat as
+    **non-blocking** (no escalation) and flag the missing classification as a coverage gap on
+    first encounter; **never** silently default to blocking.
+  - **Cross-skill ownership (mirrors the Stale-RAID split):** this skill **surfaces** the
+    overdue-decision escalation in the roll-up; `ppm-agent` (which owns DECISION escalations) is
+    the **router**; `delivery-engine` Mode G is where the decision artifact is updated. See the
+    OPERATIONS.md **Overdue-Decision Escalation Protocol**. Reversibility **CHEAP** /
+    recommend-tier — a flag + routed tag the operator reviews; never auto-decides the decision
+    or mutates the tracker without approval (carry the tier per § Reversibility Discipline).
 
 **Next Week Focus:**
 - Top 3 priorities for next week
@@ -270,6 +294,47 @@ capacity dashboard, applying `capacity-model.md` §1 (effective-capacity formula
 (Demand-Supply Gap RAG bands) **by reference**. Report per-project utilization + the portfolio
 roll-up, flagging any project breaching the §9 RED band (`> 1.00` utilization) as over-committed.
 Reproduce the source's inclusivity (`≤ 0.85` is GREEN); do **not** restate the formula or bands.
+
+#### 7.6 Portfolio Dormancy Sweep
+
+For **each** tracked project, run a dormancy sweep that detects a project producing **no
+artifact activity at all** across a defined window and routes it to an explicit **disposition
+decision** — distinct from the §7.1 W6 signal and the "Roll-up generated as a substitute for
+the week's unprocessed work — TRIG" failure mode, which detect *stale content within a
+reported week*; §7.6 detects *whole-project no-activity* and routes to disposition, not a
+watermelon flag.
+
+- **Artifact-activity signal set (per project):** the most-recent modification across {Daily
+  Status Log entries, any `04-PMO-Operations/` tracker update, any `05-Transcripts/`
+  arrival}. "Activity" = a **substantive** entry/update, mirroring the Stale-RAID "substantive
+  update resets the clock" rule (`../ppm-agent/references/escalation-thresholds.md` §3) — a
+  cosmetic re-save does **not** count.
+- **Dormancy clock:** `today − last-artifact-activity-date`, in **business days** (carries
+  `[INFERRED: today − last-activity-date]` per the platform's existing age-computation
+  precedent — there is no codified business-day calendar primitive yet).
+- **Fire condition — `> 10 business days` (= 2 weekly-rollup cycles):** emit a **dormancy
+  prompt** for that project naming (a) the project, (b) the last-activity date + its source,
+  (c) the computed dormancy age, and (d) the three disposition options — **proceed / shelve /
+  close**. The window is **10 business days**: it requires a project to miss *two consecutive*
+  rollup windows (the rollup runs weekly per § Generation Schedule) and reuses the platform's
+  existing 10-business-day "inactivity → disposition" cadence (`08-Generated/` auto-archive).
+- **Disposition routing (Autonomy Tier 1 — recommend):** the prompt is an **evidence-integrity
+  finding surfaced to the operator**. The sweep **never** auto-shelves or auto-closes;
+  disposition is an operator decision (mirrors §7.1's "a flag is an evidence-integrity
+  finding, not a unilateral re-coloring"). The dormancy prompt is a decision-class output —
+  carry a reversibility tier per § Reversibility Discipline (an internal pre-confirmation
+  dormancy flag is CHEAP; a close disposition acted on downstream escalates per the tier
+  table).
+- **Coverage-gap honesty (composes with the "Daily-log coverage gap read as a quiet week —
+  INPUT" failure mode):** if the activity signal cannot be computed (no trackers present yet —
+  a just-initiated project), emit `dormancy: not assessable — no tracker baseline` and flag it
+  as a coverage gap; **never** read "no trackers" as "dormant" (that would converge with the
+  "absence of evidence becomes evidence of absence" anti-pattern the skill already guards).
+- **De-registration sub-case:** a project that is *archived but still on the active list* fires
+  the same sweep → the disposition prompt's **close** option doubles as the de-registration
+  trigger (drop from PORTFOLIO.md active list). This sweep is the **detector**;
+  `project-initiator` Mode B is the **executor** (the closure-entry dormancy hook in that
+  skill acts on what this sweep detects).
 
 **Section 7 ↔ Section 1 feedback (worst-component dominance).** The watermelon scan's W2 signal
 (green project-RAG over a worse component) requires the **worst-component dominance rule** to

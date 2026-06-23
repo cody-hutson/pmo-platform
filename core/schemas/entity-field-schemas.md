@@ -360,6 +360,7 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 | `project_id` | ref | ✅ | 1 | — | `Project.id` | L2 — `BELONGS_TO` parent |
 | `domain` | enum{A,B,C} | ⚪ | 1 | — | — | reconciliation seam to backing file's Domain |
 | `version` | string | ⚪ | 1 | — | — | — |
+| `promotion_state` | enum | ⚪ | 1 | — | — | **promotion-location** (orthogonal to `lifecycle_state`); values `frontmatter-schema.md` § Domain C / `artifact-workflow-protocol.md` §4 (**referenced, not redefined**); owner `artifact-generator` |
 
 **V-rules** (inherits V-CORE-01..07; Axis-1 **delegates to Axis-2** — `lifecycle_state` mirrors the backing file's `frontmatter-schema.md` §Cat-2 Domain machine — the reconciliation seam):
 
@@ -371,8 +372,11 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 | **V-ART-04** | `domain`, if present, ∈ {A, B, C} | L1 | — | schema parse | AC-2 |
 | **V-ART-05** | `lifecycle_state` **delegates to Axis-2** — equals a content-state valid for the backing file's `domain` per `frontmatter-schema.md` §Cat-2 (the reconciliation seam; physical check = G3/G4) | L2 (seam resolve against frontmatter-schema content-state machine) | DEFER-G8 | — | AC-4 |
 | **V-ART-06** | `created_date` ISO ∧ ≤ today (= V-CORE-06 instance) | L1 | — | schema parse | AC-2 |
+| **V-ART-07** | `promotion_state`, if present, ∈ {`staged`, `promoted`, `archived-in-place`} (the **orthogonal promotion-location** field — *where the file physically sits*, distinct from `lifecycle_state` content-maturity; canonical home `frontmatter-schema.md` § Domain C / `artifact-workflow-protocol.md` §4, **referenced, not redefined**) ∧ consistency: `promotion_state: promoted ⇒ folder ≠ 08-generated` (location-move actually happened; physical check = G3/G4) | L2 (seam resolve against the `frontmatter-schema.md` promotion-location field + `folder`) | DEFER-G8 | — | AC-4 |
 
-**Negative tests:** **NT-ART-1** `domain: D` → V-ART-04 FAIL (out-of-enum). · **NT-ART-2** `project_id: prj-ghost` → V-ART-03 FAIL (L2 unresolved → BLOCK-WRITE).
+**Negative tests:** **NT-ART-1** `domain: D` → V-ART-04 FAIL (out-of-enum). · **NT-ART-2** `project_id: prj-ghost` → V-ART-03 FAIL (L2 unresolved → BLOCK-WRITE). · **NT-ART-3** `promotion_state: promoted` with `folder: 08-generated` → V-ART-07 FAIL (promotion-location consistency: a `promoted` file must have left the staging area).
+
+> **`promotion_state` is the orthogonal location field (DEFER-G8).** Mirrors V-ART-05's shape: a seam-resolve against a referenced canonical machine, declared here but with its referential lifecycle deferred to G8 (consistent with how `artifact-workflow-protocol.md` §5.3 / §6 FLAGS the `lifecycle-states-canonical.md §3` registration as the operator-gated G8/G10 touch, NOT executed inline). This rule **registers** the field into the Artifact schema's validation surface (the `entity-field-schemas.md` §3.9 registration that `artifact-workflow-protocol.md` forward-bound as a follow-up); it does **not** register a new `promotion_state` state machine into `lifecycle-states-canonical.md §3`.
 
 ---
 
@@ -649,6 +653,7 @@ This extends the **owning-agent matrix** in [`project-entity-model.md` §6](../d
 | Cross-Project Dependency | `ppm-agent` | `ppm-agent` | `from_entity_ref`,`to_entity_ref`,`lifecycle_state` → `weekly-status-rollup` |
 | Cross-Project Resource Conflict | `delivery-engine` | `delivery-engine` | `person_id`,`competing_project_ids`,`over_allocation_pct` → `weekly-status-rollup` |
 | Strategic Initiative | `ppm-agent` | `weekly-status-rollup` | `sponsor`,`target_outcome`,`linked_program_ids` → `comms-writer` |
+| Work Item | `intake-desk` (supplies `work_item_type`,`parent_ref` — both `✅`) | `delivery-engine` | `work_item_type`,`parent_ref`,`lifecycle_state` → `ppm-agent`, `daily-status`, `weekly-status-rollup` (container rollup from work-item children) |
 
 ## 6. Worked Examples + Validation Trace
 

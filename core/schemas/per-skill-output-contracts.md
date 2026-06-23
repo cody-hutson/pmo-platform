@@ -1033,20 +1033,20 @@ Severity: [Critical / Major / Minor]
 
 ### Output Contract (Staged Report — 4 Required Sections)
 
-Artifact Lint produces a single staged report at `08-Generated/artifact-lint-YYYY-MM-DD.md` (itself a Domain-C `analysis` artifact with an `artifact_state: DRAFT` header). The report has four required sections.
+Artifact Lint produces a single staged report at `08-Generated/artifact-lint-YYYY-MM-DD.md` (itself a Domain-C `analysis` artifact with a `lifecycle_state: draft` + `promotion_state: staged` header). The report has four required sections.
 
 | Section | Content | Format | Notes |
 |---------|---------|--------|-------|
 | 1. Scope | In-scope surface (08-Generated/ + promoted 01-07), honored exclusions (09-Prototype/, _templates/; read-only _archived/), artifacts-scanned count, unscannable list | Structured block | The exclusion + override posture is stated every run |
 | 2. Findings | Five check sub-sections — orphan, sibling duplicate, stale draft, displaced content, version chain — each a table of findings | One table per check | Empty checks reported explicitly as "none" (honest no-finding signal), never omitted |
 | 3. Summary | Total finding count + the recommend-only assertion ("no file moves performed; user approves each action") | Structured line | The Tier-1 no-auto-mutation statement |
-| 4. Metadata header | artifact-generator-format frontmatter (artifact_type: analysis, target_folder, confidence, created, source, dependencies, reversibility, artifact_state: DRAFT) | YAML frontmatter | The report stages like any Domain-C artifact |
+| 4. Metadata header | artifact-generator-format frontmatter (artifact_type: analysis, target_folder, confidence, created, source, dependencies, reversibility, lifecycle_state: draft, promotion_state: staged) | YAML frontmatter | The report stages like any Domain-C artifact |
 
 ### Required Elements
 
-**Five checks, each recommend-only:** orphan (dangling/empty-source), sibling duplicate (strict-key match), stale draft (dual state-read + age threshold), displaced content (folder-vs-canonical-home), version chain (ordered chain + break detection). Each finding cites the frontmatter evidence that triggered it.
+**Five checks, each recommend-only:** orphan (dangling/empty-source), sibling duplicate (strict-key match), stale draft (`lifecycle_state` content-maturity read + age threshold), displaced content (`promotion_state`-vs-folder), version chain (ordered chain + break detection). Each finding cites the frontmatter evidence that triggered it.
 
-**Dual state-read:** every state-keyed finding (stale draft, version chain) reads `artifact_state` primary → `lifecycle_state` fallback, and records which field fired in the evidence.
+**Canonical state-read:** the content-maturity checks (stale draft, version chain) read the canonical `lifecycle_state` field; the displaced-content check reads the orthogonal `promotion_state` (+ `folder`) location field. The lint records which field fired in the evidence. (No dual-read: the legacy conflated single-field machine is deprecated and no longer stamped — see `core/artifact-workflow-protocol.md`.)
 
 **Strict-match dedup key:** `parent_artifact + artifact_type + sibling_topic` (case-insensitive on sibling_topic), degrading to `parent_artifact + artifact_type` with a "missing sibling_topic — weak match" warning.
 

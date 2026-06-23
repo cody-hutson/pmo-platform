@@ -39,6 +39,20 @@ The Daily Status Log is a carry-forward tracker organized by category. It is the
    - Deadline: When decision is needed
    - Status: PENDING / DEFERRED / MADE
    - Evidence: Source of the decision need
+   - Blocking: `true` / `false` (optional; default `false` when absent). Marks a **gating-class**
+     decision (go/no-go, launch-sequence, and similar decisions that block project progress).
+     Only `blocking: true` entries are subject to the Overdue-Decision Escalation Protocol
+     (OPERATIONS.md). An entry with no `blocking` field is treated as non-blocking, and the
+     missing classification is surfaced as a coverage gap on first encounter — never silently
+     defaulted to blocking.
+   - Escalation state: `NOMINAL` / `WARN` / `ESCALATED` (optional; default `NOMINAL`). The
+     overdue-escalation band the decision is in, keyed on `today − Deadline` in business days:
+     `NOMINAL` ≤ 3 bd past due; `WARN` > 3 bd; `ESCALATED` > 5 bd (per the Overdue-Decision
+     Escalation Protocol in OPERATIONS.md, which cites
+     `ppm-agent/references/escalation-thresholds.md` §2 as doc-of-record for the routed tiers).
+   - Escalated to: Tier the overdue escalation routed to (populated when Escalation state =
+     `ESCALATED`; one step up the `escalation-thresholds.md` §2 ladder — Team / Project /
+     Program / Program-Critical / Portfolio). Blank otherwise.
 
 4. **Open Actions by Person** — Grouped by person. Each entry:
    - Person name (group header)
@@ -239,6 +253,63 @@ The RAID Log maintains two representations:
 ### Machine-Schema (entity-derived)
 **Companion schema:** [`raid-log.schema.json`](raid-log.schema.json) — machine-readable JSON Schema (draft-07) validating one RAID Log CSV row.
 **Entity-derivation note:** This artifact is NOT hand-schema'd — `raid-log.schema.json` is *derived* from the **RAID Item entity field schema** ([`entity-field-schemas.md`](entity-field-schemas.md)) via the **EAD** mechanism (Entity→Artifact-Schema Derivation: 7-class column crosswalk + L1-native/L2-L3-annotation projection). The entity model is authoritative (per ADR); the CSV above is its persistence *dialect*. The generalized `EAD` contract is the pattern the new-artifact templatization harness applies to all artifacts; Daily Status / Transcript Register machine-schemas are produced incrementally by that harness as their entities' field schemas land — **not** here.
+
+---
+
+## Tracker 6: Artifact Register
+**File pattern:** `[Project]_Artifact_Register.md`
+**Update tier:** Tier 2 (operational — auto-write within `cascade_scope`)
+**Update sources:** Tracker Manager (row writes on artifact-generate + phase-gate baselining)
+
+The per-project **configuration-management catalog** for the **Artifact** entity ([`project-entity-model.md`](../disciplines/project-entity-model.md) §4 entity 9): one row per project artifact (plans, RAID files, FDDs, charters, design docs, …), capturing its version, baseline status, owner, and retention so the operator can see at a glance which configuration items (CIs) exist for a project and which are baselined vs. in-flight. This closes the gap where `projects/` is gitignored and artifacts are updated in place with no version, no baseline, and no catalog — the Register is the durable CI history that the gitignore otherwise loses.
+
+### Structure
+**Format:** Markdown table — one row per artifact CI.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Artifact Name | String | Yes | Free text (= the Artifact entity's `artifact_title`) | The deliverable's name (e.g., "Cutover Plan v2"). |
+| Artifact Type | Enum | Yes | Charter, Plan, RAID, FDD, Design Doc, Requirements, Report, Tracker, … (= the Type Taxonomy in [`frontmatter-schema.md`](frontmatter-schema.md) — **referenced, not redefined**) | The Artifact entity's `artifact_type`. |
+| Current Version | String | No | Free text (e.g., `v2.0`) | The artifact's `version`. Blank for unversioned living docs. |
+| Baseline Status | Enum | Yes | `operational` \| `baselined-at-phase-gate` \| `superseded` | CI baseline state. Default `operational`; flips per the Baseline Rules below. |
+| Last Updated | Date | Yes | `YYYY-MM-DD` (not in the future) | When the artifact last changed. |
+| Owner | String | Yes | Person name / role | Accountable owner of the artifact. |
+| Retention | String | No | Free text / policy ref (e.g., `project+2yr`, `until-closeout`) | Retention policy. The records-management/retention *policy engine* is out of scope here — this column is the hook, not the engine. |
+
+### Baseline Rules (phase-gate baselining trigger)
+- **Default:** every new Artifact Register row enters `Baseline Status = operational`.
+- **Flip to `baselined-at-phase-gate`:** at a **phase-gate moment** — PRINCE2 configuration-management baselining. The platform already models phase-gate cadence (the Methodology Variation table below: Waterfall row → `phase-gate-log.md`; PRINCE2 row → `stage-boundary.md`). When a phase gate is reached, the artifacts in scope at that gate are baselined — Tracker Manager flips their Baseline Status to `baselined-at-phase-gate` and pins `Last Updated` to the gate date. This is a **Tier-2 row MODIFY** (auto-write within `cascade_scope`), **not** a Tier-1 approval gate: the artifact's *content* is not changing, only the CI baseline marker.
+- **Flip to `superseded`:** when a new version of the artifact supersedes it (the Artifact entity's `SUPERSEDES` self-edge). The prior row's Baseline Status → `superseded`, **append-only** — never delete the superseded row (it is the CI history the `projects/` gitignore otherwise loses).
+
+### Update Instruction Format
+Reuses the shared `TRACKER_UPDATE` block (see § Update Instruction Format below) with `target: [Project]_Artifact_Register.md`, `action: ADD | MODIFY`, and the artifact name as `entry_id`. ADD on artifact-generate; MODIFY to update `Last Updated` / `Current Version` / `Baseline Status` as the artifact or its baseline state changes.
+
+### Ownership seam (no owning-agent contradiction)
+The **Artifact ENTITY** (the record's fields, V-rules, Axis-1↔Axis-2 seam) stays maintained by **`ppm-agent`** (creates: `artifact-generator`; route: `file-router`) per [`project-entity-model.md`](../disciplines/project-entity-model.md) §6 + [`entity-field-schemas.md`](entity-field-schemas.md) §5 — **unchanged**. The Artifact Register is a Document-Tier-2 operational tracker, so its **ROW** writes are owned by **`tracker-manager`** like every other tracker in `04-PMO-Operations/`. This is the **identical entity-maintainer ≠ tracker-row-writer split already in production** for RAID Item and Decision (both entity-maintained yet `maintains: tracker-manager` in the owning-agent matrix). No new ownership model.
+
+---
+
+## Tracker 7: Milestone Tracker
+**File pattern:** `[Project]_Milestone_Tracker.md` (Waterfall / Hybrid; `milestone-status.md` per the Methodology Variation matrix below)
+**Update tier:** Tier 1 (stakeholder-facing — phase-gate status; requires user approval for changes)
+**Update sources:** Delivery Engine Mode F (DoD / phase-gate evaluation), Mode G (milestone artifact update), user input
+
+The per-project **phase-gate / milestone status tracker** for Waterfall and Hybrid projects (the predictive-phase tracker named in the Methodology Variation matrix). `project-initiator` Mode A Step 4 scaffolds it empty-but-properly-formatted for Waterfall/Hybrid projects; Delivery Engine reads it at the DoD / phase-gate gate. This section gives the milestone entry a defined field-set so the **evidence-backed gate-completion** rule has a field to read.
+
+### Structure
+**Format:** Markdown table — one row per milestone / phase gate.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Phase | String | Yes | Free text | The project phase the milestone belongs to. |
+| Milestone | String | Yes | Free text | The milestone / phase-gate name. |
+| Planned Date | Date | Yes | `YYYY-MM-DD` | Baselined target date (day-of-week validated). |
+| Actual Date | Date | No | `YYYY-MM-DD` | Achieved date (populated on completion). |
+| Status | Enum | Yes | `Not Started` / `In Progress` / `Complete` / `Slipped` | Current gate status. |
+| Evidence Artifact | String | No (**required when Status = `Complete`**) | Named closure/evidence artifact (free text — e.g., "UAT sign-off 2026-06-18", "Gate checklist GC-04") | The named, inspectable closure/evidence artifact that substantiates a `Complete` mark. An **inferred signal alone is insufficient**: a `Complete` row with a blank or absent Evidence Artifact is rejected by the Delivery Engine DoD gate (Mode F) under the NO-EVIDENCE→FAIL rule ("Complete asserted without a named closure/evidence artifact"). Carries a `[SOURCE]` evidence-quality label; an `[INFERRED]`-only mark does not satisfy the gate. |
+
+### Gate-Completion Rule (evidence-backed Complete)
+Marking a milestone `Complete` REQUIRES a named **Evidence Artifact** cited on the row. Delivery Engine Mode F treats a `Complete` mark with an empty/absent Evidence Artifact as **FAIL** (identical to its NO-EVIDENCE→PASS prohibition), names the milestone, states "Complete asserted without a named closure/evidence artifact", and gives the remediation (cite the artifact, or revert to `In Progress`). Reversibility **CHEAP** — the gate BLOCK prevents the unverifiable state from being recorded; reverting `Complete → In Progress` is a tracker edit.
 
 ---
 

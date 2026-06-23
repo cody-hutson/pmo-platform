@@ -9,7 +9,7 @@
 
 ## §1 Purpose
 
-The platform has **seven independent state-vocabulary spaces** spanning inbound content lifecycle (Context), outbound synthesis lifecycle (Domain C), generated-artifact workflow (Artifact, planned), source-artifact lifecycle (Domain A), managed-knowledge lifecycle (Domain B), trust classification (Trust), and KM-artifact lifecycle (KM). Several share lexically identical state names (`archived`, `draft`, `superseded`, `stale`, `Reviewed`, `Approved`) with different semantics in different machines — a documented collision risk for cross-machine prose, agent reasoning, and downstream consumers.
+The platform has **seven independent state-vocabulary spaces** spanning inbound content lifecycle (Context), outbound synthesis lifecycle (Domain C), generated-artifact workflow (Artifact — content-maturity reconciled onto `lifecycle_state`/`approval_state`; promotion-location on `promotion_state`; operational home [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md)), source-artifact lifecycle (Domain A), managed-knowledge lifecycle (Domain B), trust classification (Trust), and KM-artifact lifecycle (KM). Several share lexically identical state names (`archived`, `draft`, `superseded`, `stale`, `Reviewed`, `Approved`) with different semantics in different machines — a documented collision risk for cross-machine prose, agent reasoning, and downstream consumers.
 
 This document is the **canonical source** for lifecycle state semantics. It:
 
@@ -80,7 +80,7 @@ The `<Object>-<State>` convention is mechanical:
 
 ## §3 In-Scope Machines
 
-This canonical source covers three state machines in scope: Context Lifecycle (this release), Artifact Workflow (planned), and Domain C Lifecycle (existing).
+This canonical source covers three state machines in scope: Context Lifecycle, Artifact Workflow (operational home [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md); content-maturity reconciled onto `lifecycle_state`/`approval_state` per §3.2), and Domain C Lifecycle.
 
 ### §3.1 Context Lifecycle
 
@@ -104,42 +104,31 @@ See `context-lifecycle-model.md` for transition diagram (§3), per-state stall d
 
 **Object prefix:** `Artifact-`
 
-**Authoritative source (forward-binding to the planned protocol doc):** the Artifact Workflow state machine (`DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED`) is defined in-repo by this §3.2. The states + transition rules + frontmatter convention + lineage-graph fields are restated below; a future release will ship a co-located protocol doc at `core/artifact-workflow-protocol.md` that will become the authoritative home for the operational protocol (transitions, gates, automation hooks). Until then, this §3.2 is the canonical source for the vocabulary + state machine. The future implementation MUST use these state names verbatim per forward-binding contract (provenance: state semantics shipped this release; see `release/releases/RELEASE_LOG.md`).
+> **⚠️ `artifact_state` DEPRECATED as the content-maturity carrier (reconciled this release).** The legacy single-field `artifact_state` machine (`DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED`) **conflated two orthogonal concerns** onto one field: *content-maturity* (how authoritative the content is) and *promotion-location* (where the file physically sits). Per the artifact-state RCA, those are split:
+> - **Content-maturity** (`DRAFT / REVIEWED / APPROVED / ARCHIVED`) converges onto the **canonical `lifecycle_state` + Domain** model (the `project-entity-model.md §4 entity 9` delegation) and the existing `approval_state` field — `artifact_state` is **deprecated** as a content-maturity field (it is not a second field for the same concept; duplicate-source-discipline §1).
+> - **Promotion-location** (`PROMOTED` — the `08-Generated/` → `01-07` folder move) carves into a **new orthogonal field `promotion_state`** (enum `staged → promoted → archived-in-place`), schema-homed at `frontmatter-schema.md § Domain C`, owned by `artifact-generator`.
+>
+> See the §3.2 mapping table below. The **operational-protocol home** is now [`core/artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) (the doc this §3.2 reserved). The content-maturity authority is `frontmatter-schema.md § Category 2` (`lifecycle_state` + Domain); the promotion-location authority is `frontmatter-schema.md § Domain C` (`promotion_state`) + `artifact-workflow-protocol.md §4`.
 
-**States (5):**
+**Authoritative source:** the **operational protocol** (transitions, gates, the `promotion_state` field, the deprecation + migration contract) lives at [`core/artifact-workflow-protocol.md`](../artifact-workflow-protocol.md). The **content-maturity vocabulary** is the canonical Domain-C / Domain-A vocabulary at `frontmatter-schema.md § Category 2`. This §3.2 retains the legacy `Artifact-<STATE>` object-typed naming convention for cross-machine prose and documents the deprecation + the 3-way mapping (below); it no longer claims the in-repo content-maturity state machine as canonical.
 
-| Object-typed name | Bare name | Brief semantic |
-|---|---|---|
-| `Artifact-DRAFT` | `DRAFT` | AI-generated artifact authored; not yet reviewed. |
-| `Artifact-REVIEWED` | `REVIEWED` | Reviewed by an analytical skill / agent QA gate. |
-| `Artifact-APPROVED` | `APPROVED` | Human-approved as ready for downstream consumption. |
-| `Artifact-PROMOTED` | `PROMOTED` | Promoted from `08-Generated/` to the target project folder (01-07). |
-| `Artifact-ARCHIVED` | `ARCHIVED` | No longer current; retained per archive policy. |
+**The 3-way mapping (the legacy `artifact_state` values → their reconciled canonical homes):**
 
-**State-transition rules (in-repo restatement; supersedes external citation):**
-
-| From state | To state | Trigger | Authority |
+| `artifact_state` value (legacy, deprecated) | Concern | Reconciled canonical home | Mapped value |
 |---|---|---|---|
-| (none) | `Artifact-DRAFT` | New artifact authored by AI / agent | Authoring skill |
-| `Artifact-DRAFT` | `Artifact-REVIEWED` | Analytical skill or agent QA gate completes | Skill / gate |
-| `Artifact-REVIEWED` | `Artifact-APPROVED` | Human reviewer marks ready for downstream consumption | Operator |
-| `Artifact-APPROVED` | `Artifact-PROMOTED` | Promotion from `08-Generated/` to target project folder (01-07) | Skill / operator |
-| `Artifact-PROMOTED` | `Artifact-ARCHIVED` | No longer current; retained per archive policy | Skill / operator |
-| any | `Artifact-ARCHIVED` | Out-of-band archival (terminal state) | Operator |
+| `DRAFT` | content-maturity (entry) | `lifecycle_state` (Domain C) — `frontmatter-schema.md § Category 2` | `lifecycle_state: draft` |
+| `REVIEWED` | content-maturity (agent QA passed) | `approval_state` (Domain A) — `frontmatter-schema.md § Domain A` | `approval_state: under-review` |
+| `APPROVED` | content-maturity (human-confirmed) | `approval_state` (Domain A) | `approval_state: approved` |
+| `PROMOTED` | **promotion-location** | `promotion_state` (NEW) — `frontmatter-schema.md § Domain C` + `artifact-workflow-protocol.md §4` | `promotion_state: promoted` |
+| `ARCHIVED` | content-maturity (terminal) **or** location (Auto-Archive) | `lifecycle_state` / `promotion_state` | `lifecycle_state: archived` (content terminal) · `promotion_state: archived-in-place` (staging-sweep terminal) |
 
-**Frontmatter convention (in-repo restatement; the planned protocol doc will extend with automation hooks):**
+`REVIEWED` / `APPROVED` reuse the **existing** `approval_state` field (no third maturity field is minted — duplicate-source-discipline §1). The four content-maturity values map cleanly onto the existing `lifecycle_state` / `approval_state` carriers; only `PROMOTED` (a folder-move with no content-Domain analogue) needs the new `promotion_state` home — so this is a **carve, not a rename**.
 
-| Field | Type | Required | Semantic |
-|---|---|---|---|
-| `artifact_state` | enum | YES | One of the 5 bare-name states above |
-| `parent_artifact` | string | NO | Path to the artifact this derives from |
-| `supersedes` | string | NO | Path to an artifact this replaces |
-| `sibling_topic` | string | NO | Topic identifier for sibling-artifact grouping |
-| `origin_transcript` | string | NO | Path to the source transcript when artifact derives from one |
+**Object-typed naming convention (retained for cross-machine prose):** the `Artifact-<STATE>` object-prefixed forms (`Artifact-DRAFT`, `Artifact-REVIEWED`, etc.) remain the cross-machine disambiguation convention per §2.1. They now denote the *reconciled* values (e.g., `Artifact-DRAFT` ≡ the Domain-C `draft` content-maturity entry, not a separate `artifact_state: DRAFT` stamp).
 
-**Schema home:** the authoritative schema definition for the artifact-instance lineage fields (`parent_artifact`, `sibling_topic`, `supersedes`) is `core/schemas/frontmatter-schema.md` (Domain A / Domain C). This §3.2 restatement is the lifecycle-vocabulary canonical source; field types, the `supersedes`/`superseded_by` inverse pair, and the lineage-vs-provenance boundary are defined there.
+**Lineage fields:** the artifact-instance lineage fields (`parent_artifact`, `sibling_topic`, `supersedes`/`superseded_by`) are schema-defined at `core/schemas/frontmatter-schema.md` (Domain A / Domain C) — unchanged by this reconciliation; field types, the inverse pair, and the lineage-vs-provenance boundary are defined there.
 
-State semantics are a forward-binding contract — the future implementation MUST use these state names verbatim. That release's Stage 13 close action: register `core/artifact-workflow-protocol.md` as an additional Consumer Registry row at §6.1; the §3.2 authoritative-source pointer (this paragraph) updates to cross-reference the new protocol doc as the operational-protocol home, while the state machine + frontmatter restated above remains the vocabulary canonical source.
+> **§3-registration — DEFERRED to G8 / G10 (operator-gated; FLAGGED, NOT executed here).** Registering `promotion_state` as a **new in-scope state machine in §3** (a §3.4-style sibling to §3.1 Context / §3.2 Artifact / §3.3 Domain C) is an Autonomy-Tier-0 governance touch — the same class `project-entity-model.md §2` already defers (the registration of the entity Axis-1 state-machine family into `lifecycle-states-canonical.md §3` is owned by G8 / G10). To avoid a half-registration (`promotion_state` in §3 while the entity Axis-1 family is not), **`promotion_state` is defined this release in `artifact-workflow-protocol.md §4` + `frontmatter-schema.md § Domain C` only**, and its §3 machine-registration is deferred to the same G8/G10 cycle. *This §3.2 content edit — deprecating `artifact_state` as content-maturity and documenting the mapping — is authorized by the artifact-state reconciliation work item under the §8 Change Protocol (Issue + plan + Collective Review approval); it does not register a new §3 machine and does not change the count of registered in-scope machines (still three: §3.1, §3.2, §3.3).*
 
 ### §3.3 Domain C Lifecycle
 
@@ -217,10 +206,10 @@ The table below enumerates **bare state names** that appear in two or more state
 
 | Bare state name | Appears in | Object-typed forms | Disambiguation |
 |---|---|---|---|
-| `Reviewed` / `REVIEWED` | Context (§3.1), Artifact (§3.2) | `Context-Reviewed`, `Artifact-REVIEWED` | Context-Reviewed = inbound content processed by analytical skill; Artifact-REVIEWED = outbound artifact passed agent/skill review gate. Different actors, different evidence. |
-| `Approved` / `APPROVED` | (none currently — semantically adjacent to `Context-Decided` and `Artifact-APPROVED`) | `Artifact-APPROVED` only | The bare term "Approved" is intuitive but ambiguous. Context Lifecycle uses `Context-Decided` (item routed/rejected); Artifact Workflow uses `Artifact-APPROVED` (human-approved for downstream consumption). Cross-machine prose should use the object-typed form to avoid implying the wrong actor/gate. |
-| `draft` / `DRAFT` | Artifact (§3.2), Domain A (§4.1), Domain C (§3.3) | `Artifact-DRAFT`, `Domain-A-draft`, `Domain-C-draft` | 3-way collision. `Artifact-DRAFT` = AI-generated artifact not yet reviewed; `Domain-A-draft` = source artifact in formal-baseline draft; `Domain-C-draft` = synthesis artifact newly generated by Artifact Generator. Different actors (AI / human author / Artifact Generator) and different transition semantics. |
-| `archived` / `ARCHIVED` | Artifact (§3.2), Domain A (§4.1), Domain B (§4.2), Domain C (§3.3) | `Artifact-ARCHIVED`, `Domain-A-archived`, `Domain-B-archived`, `Domain-C-archived` | **4-way collision.** Terminal state across four machines with different retention semantics. Trust-lifecycle rule (`frontmatter-schema.md` § Category 5): `archived` lifecycle state requires `Trust-historical-record`. |
+| `Reviewed` / `REVIEWED` | Context (§3.1), Artifact (§3.2 — deprecated `artifact_state`; now `approval_state: under-review`) | `Context-Reviewed`, `Artifact-REVIEWED` | Context-Reviewed = inbound content processed by analytical skill; Artifact-REVIEWED = outbound artifact passed agent/skill review gate — now carried by `approval_state: under-review` per the §3.2 mapping (the standalone `artifact_state: REVIEWED` is deprecated). Different actors, different evidence. |
+| `Approved` / `APPROVED` | (none currently — semantically adjacent to `Context-Decided` and `Artifact-APPROVED`) | `Artifact-APPROVED` only | The bare term "Approved" is intuitive but ambiguous. Context Lifecycle uses `Context-Decided` (item routed/rejected); the Artifact Workflow's human-approved gate is now carried by `approval_state: approved` (the deprecated `artifact_state: APPROVED` per the §3.2 mapping). Cross-machine prose should use the object-typed form to avoid implying the wrong actor/gate. |
+| `draft` / `DRAFT` | Artifact (§3.2 — now `lifecycle_state: draft`), Domain A (§4.1), Domain C (§3.3) | `Artifact-DRAFT`, `Domain-A-draft`, `Domain-C-draft` | 3-way collision. `Artifact-DRAFT` = generated artifact at content-maturity entry — reconciled to the Domain-C `lifecycle_state: draft` (the deprecated `artifact_state: DRAFT` per §3.2); `Domain-A-draft` = source artifact in formal-baseline draft; `Domain-C-draft` = synthesis artifact newly generated by Artifact Generator. Different actors (AI / human author / Artifact Generator) and different transition semantics. |
+| `archived` / `ARCHIVED` | Artifact (§3.2 — now `lifecycle_state: archived`), Domain A (§4.1), Domain B (§4.2), Domain C (§3.3) | `Artifact-ARCHIVED`, `Domain-A-archived`, `Domain-B-archived`, `Domain-C-archived` | **4-way collision.** Terminal state across four machines with different retention semantics. The Artifact content-terminal is reconciled to `lifecycle_state: archived` (the staging-area Auto-Archive sweep is the *location* terminal `promotion_state: archived-in-place`, a separate concern — see §3.2). Trust-lifecycle rule (`frontmatter-schema.md` § Category 5): `archived` lifecycle state requires `Trust-historical-record`. |
 | `stale` | Domain B (§4.2), Domain C (§3.3) | `Domain-B-stale`, `Domain-C-stale` | Both = content no longer current. `Domain-B-stale` = tracker content past `staleness_threshold_days` without new evidence; `Domain-C-stale` = synthesis output where source material has changed (Query 6 staleness detection). Different detection mechanisms. |
 | `superseded` / `Superseded` | Domain A (§4.1), Domain B (§4.2), KM (§4.4) | `Domain-A-superseded`, `Domain-B-superseded`, `KM-Superseded` | All three = replaced by a newer artifact. `Domain-A-superseded` and `Domain-B-superseded` typically carry a `superseded_by` field pointing to the replacement; `KM-Superseded` follows the same convention per `km-protocols.md` §1 (mirrors `frontmatter-schema.md` § Category 2). Trust-lifecycle rule: `superseded` shifts `Trust-` to `historical-record`. |
 | `created` | Domain A (§4.1), Domain B (§4.2) | `Domain-A-created`, `Domain-B-created` | Both = entry-point state on ingest. `Domain-A-created` typically transitions to `Domain-A-draft` then `Domain-A-active` (Baselined pattern); `Domain-B-created` typically transitions to `Domain-B-emerging` then `Domain-B-current` (Living pattern). |
@@ -230,7 +219,7 @@ The table below enumerates **bare state names** that appear in two or more state
 | `Closed` | Context (§3.1) only | `Context-Closed` | Same as above — reserved. |
 | `validated` | Domain C (§3.3) only | `Domain-C-validated` | No current collision — reserved. |
 | `published` | Domain C (§3.3) only | `Domain-C-published` | No current collision — reserved. |
-| `PROMOTED` | Artifact (§3.2) only | `Artifact-PROMOTED` | No current collision — reserved. |
+| `promoted` / `PROMOTED` | Artifact promotion-location (§3.2 → `promotion_state`) only | `Artifact-PROMOTED` | No current collision. Carries the **promotion-location** concern (the `08-Generated/` → `01-07` folder move), now homed on the `promotion_state` field (enum `staged → promoted → archived-in-place`; `frontmatter-schema.md § Domain C` + `artifact-workflow-protocol.md §4`) — orthogonal to content-maturity (`lifecycle_state`). The deprecated `artifact_state: PROMOTED` is superseded by `promotion_state: promoted`. |
 | `active` / `Active` | Domain A (§4.1), KM (§4.4) | `Domain-A-active`, `KM-Active` | Case-variant collision (`active` lowercase vs `Active` Title-Case). `Domain-A-active` = source artifact in Baselined-pattern active state; `KM-Active` = managed-knowledge artifact ratified / published as current authoritative knowledge. Different machines, different actors, different evidence. |
 | `current` | Domain B (§4.2) only | `Domain-B-current` | No current collision — reserved. |
 | `emerging` | Domain B (§4.2) only | `Domain-B-emerging` | No current collision — reserved. |
@@ -258,7 +247,7 @@ Downstream consumers that cite this canonical source as authoritative for lifecy
 |---|---|---|
 | [`core/disciplines/context-lifecycle-model.md`](../disciplines/context-lifecycle-model.md) | Adopts `<Object>-<State>` convention for the 5 Context states; cross-references this doc in §2 (State Definitions) and §7 (Distinction from Domain C) | Framework doc §2 header note + §7 cross-reference + §8 Consumers table |
 | [`release/references/how-to/domain-c-lifecycle-protocol.md`](../../release/references/how-to/domain-c-lifecycle-protocol.md) | Registers Domain C 5 states under `Domain-C-` prefix; additive 1-line cross-reference in Purpose section | Domain C protocol Purpose section (additive line per F2 / Collective Review approval) |
-| Artifact Workflow release (planned; `core/artifact-workflow-protocol.md` once shipped) | Cites canonical source as authoritative for `Artifact-REVIEWED` / `Artifact-APPROVED` semantics; the Artifact Workflow uses object-typed names verbatim per forward-binding contract restated at §3.2 | Forward-binding row — the planned protocol doc registers as an additional Consumer Registry row at that release's Stage 13 close; the vocabulary + state machine are canonically defined in-repo at §3.2 |
+| [`core/artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) | The operational-protocol home for the Artifact entity. Cites this canonical source's §3.2 for the `Artifact-<STATE>` object-typed naming convention; documents the `artifact_state` deprecation + the 3-way mapping (content-maturity → `lifecycle_state`/`approval_state`; promotion-location → `promotion_state`). | §6 Consumer-Registry Hook of `artifact-workflow-protocol.md`; registered at this release's Stage 6. The content-maturity vocabulary is canonical at `frontmatter-schema.md § Category 2`; the operational protocol + `promotion_state` are canonical at `artifact-workflow-protocol.md`. |
 
 ### §6.2 Forward-citation consumers (future releases)
 
@@ -266,7 +255,6 @@ These consumers are designed but not yet authored. They will register here when 
 
 | Consumer | Planned release | Expected consumption |
 |---|---|---|
-| `core/artifact-workflow-protocol.md` | planned | When the protocol doc ships, this canonical source's §3.2 authoritative-source citation updates from "in-repo §3.2 restatement (vocabulary canonical source)" to additionally cross-reference the protocol doc as the operational-protocol home. The §3.2 vocabulary + state machine restatement remains the canonical source. Handled at that release's Stage 13 close. |
 | file-router ingest and KB capability | future | file-router attaches Context Lifecycle state metadata to routed files using `Context-Captured` / `Context-Structured` (soft outbound). |
 | Knowledge Architecture doc | shipped | Parallel companion to this canonical source; cites this doc for lifecycle vocabulary. |
 | Future cross-domain consistency checker | TBD | Reads §5 Collision Map programmatically; enforces object-prefix discipline in cross-machine prose. |

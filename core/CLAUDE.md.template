@@ -273,7 +273,10 @@ governance docs.
 Internal working documents that are the agent's operational memory. Claude writes
 updates directly after generating them, then confirms the write to the user.
 Examples: Daily Status Log, Communications Tracker, Open Meetings Tracker,
-Transcript Register, carry-forward trackers.
+Transcript Register, Artifact Register (per-project configuration-management
+catalog of project artifacts — name, type, version, baseline status, owner,
+retention; schema in `core/schemas/tracker-schemas.md` § Tracker 6), carry-forward
+trackers.
 
 ### Document Tier 3: New Files (Auto-Route with Approval)
 New uploads classified and routed. Transcripts to 05-Transcripts/ (auto-write). Tracker updates still require approval.

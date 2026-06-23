@@ -2,7 +2,7 @@
 name: artifact-lint
 description: >
   Scans a project's generated-artifact surface (08-Generated/ + promoted folders) and runs five graph-integrity checks — orphan, sibling duplicate, stale draft, displaced content, version chain — reading the horizontal-lineage frontmatter (parent_artifact / sibling_topic / supersedes) so duplicate, orphaned, stale, or displaced generated content is surfaced for operator approval instead of silently accumulating. Read-and-recommend only — no automatic file moves or deletes. Triggers: "lint the generated artifacts", "check 08-Generated for duplicates", "scan for orphaned artifacts", "find stale drafts", "run artifact lint", "are there duplicate generated artifacts", "check the artifact lineage graph", "version-chain check the generated folder."
-version: v1.00
+version: v2.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 delivery_approach: advisory
@@ -19,7 +19,7 @@ You do three things:
 2. **Run** the five graph-integrity checks (orphan / sibling duplicate / stale draft / displaced content / version chain), each emitting recommend-only findings.
 3. **Stage** a single report to `08-Generated/artifact-lint-YYYY-MM-DD.md` with per-finding recommended actions and reversibility tiers — the operator approves every action; the lint performs **no file moves** and no deletes.
 
-This skill is the **consumer / enforcement leg** of the artifact-lineage graph. The fields it reads land in `core/schemas/frontmatter-schema.md` (Domain A / Domain C lineage scalars) and `core/standards/lifecycle-states-canonical.md §3.2` (the five-state Artifact Workflow). It does not author lineage fields — the artifact-generator stamps them; artifact-lint reads them.
+This skill is the **consumer / enforcement leg** of the artifact-lineage graph. The fields it reads land in `core/schemas/frontmatter-schema.md` (Domain A / Domain C lineage scalars, plus the Domain-C `lifecycle_state` content-maturity field and the `promotion_state` promotion-location field). The operational model — the two-concern separation of content-maturity (`lifecycle_state`) from promotion-location (`promotion_state`) — is defined in `core/artifact-workflow-protocol.md` (the legacy conflated single-field workflow machine is deprecated per `lifecycle-states-canonical.md §3.2`). It does not author lineage fields — the artifact-generator stamps them; artifact-lint reads them.
 
 ## Triggers
 
@@ -48,22 +48,22 @@ The exclusion is honored on every run. **Project-level override:** a project may
 
 ## The Lineage Fields This Lint Reads
 
-Read these from embedded YAML frontmatter (markdown) OR from a `<file>.meta.yml` sidecar (non-markdown carriers). The authoritative schema is `core/schemas/frontmatter-schema.md` (Domain A §Domain-Specific Fields, Domain C §Domain C — Synthesized Intelligence); the lifecycle-vocabulary source is `core/standards/lifecycle-states-canonical.md §3.2`.
+Read these from embedded YAML frontmatter (markdown) OR from a `<file>.meta.yml` sidecar (non-markdown carriers). The authoritative schema is `core/schemas/frontmatter-schema.md` (Domain A §Domain-Specific Fields, Domain C §Domain C — Synthesized Intelligence, Category 2 `lifecycle_state`); the operational lifecycle model is `core/artifact-workflow-protocol.md`.
 
 | Field | Read for | Source |
 |---|---|---|
-| `parent_artifact` | orphan, sibling duplicate, version chain | `frontmatter-schema.md` Domain A / Domain C; `§3.2` frontmatter convention |
-| `sibling_topic` | sibling duplicate (strict-match key), version chain | `frontmatter-schema.md` Domain A / Domain C; `§3.2` |
-| `supersedes` / `superseded_by` | sibling duplicate (edge presence), version chain | `frontmatter-schema.md` (documented inverse pair); `§3.2` |
-| `artifact_state` (primary) | stale draft, version chain | `lifecycle-states-canonical.md §3.2` (5-state enum) |
-| `lifecycle_state` (fallback) | stale draft, version chain | `frontmatter-schema.md` Category 2 (REQUIRED field) |
+| `parent_artifact` | orphan, sibling duplicate, version chain | `frontmatter-schema.md` Domain A / Domain C |
+| `sibling_topic` | sibling duplicate (strict-match key), version chain | `frontmatter-schema.md` Domain A / Domain C |
+| `supersedes` / `superseded_by` | sibling duplicate (edge presence), version chain | `frontmatter-schema.md` (documented inverse pair) |
+| `lifecycle_state` | stale draft, version chain (content-maturity) | `frontmatter-schema.md` Category 2 (REQUIRED field) |
 | `lifecycle_changed` | stale draft (age threshold) | `frontmatter-schema.md` Category 2 |
-| `trigger_source`, `origin_transcript` | orphan (Domain-C source emptiness) | `frontmatter-schema.md` Domain C; `§3.2` |
+| `promotion_state` | displaced content (promotion-location) | `frontmatter-schema.md` Domain C; `artifact-workflow-protocol.md §4` |
+| `trigger_source`, `origin_transcript` | orphan (Domain-C source emptiness) | `frontmatter-schema.md` Domain C |
 | `folder` / `target_folder` | displaced content | `frontmatter-schema.md` Category 6; artifact-generator metadata header |
 
-### Dual state-read (the load-bearing input rule)
+### Canonical state-read (the input rule)
 
-`artifact_state` is the canonical Artifact Workflow enum (`DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED`) defined in `lifecycle-states-canonical.md §3.2` and stamped by the artifact-generator. It is NOT a field in `frontmatter-schema.md` — the schema's REQUIRED state field is `lifecycle_state` (Domain C values `draft / validated / published / stale / archived`). Because both forms appear in the wild, **read `artifact_state` first; when `artifact_state` is absent, fall back to `lifecycle_state`** and map `lifecycle_state: draft` → the DRAFT-equivalent for the stale-draft and version-chain checks. This dual-read is load-bearing: keying only on one field silently mis-reads every artifact carrying the other, producing false negatives on stale-draft and false chain heads on version-chain.
+The lint reads the **canonical content-maturity field `lifecycle_state`** (Domain C values `draft / validated / published / stale / archived`, the schema's REQUIRED state field per `frontmatter-schema.md` Category 2) for the stale-draft and version-chain checks, and the **promotion-location field `promotion_state`** (`staged / promoted / archived-in-place`) for the displaced-content check. These two fields are orthogonal — content-maturity and file-location vary independently (a `published` artifact may still be `staged`). The legacy conflated single-field workflow machine is deprecated and is no longer stamped by the artifact-generator (the sole writer), so there is no fallback read: the lint keys directly on the canonical fields the migrated generator writes.
 
 ## The Five Checks
 
@@ -81,12 +81,12 @@ Each check is **recommend-only**: it produces findings with a proposed action, a
 
 ### Check 3 — stale draft
 
-- **Detect:** `artifact_state == DRAFT` (primary read, per `§3.2`) — OR `lifecycle_state == draft` when `artifact_state` is absent (the dual-read fallback) — AND `lifecycle_changed` is **older than the threshold** (default **10 business days**, aligned to the artifact-generator 10-business-day Auto-Archive staging timeout).
+- **Detect:** `lifecycle_state == draft` (the canonical content-maturity read, per `frontmatter-schema.md` Category 2) AND `lifecycle_changed` is **older than the threshold** (default **10 business days**, aligned to the artifact-generator 10-business-day Auto-Archive staging timeout).
 - **Recommend:** propose **promote / archive / refresh** — promote if the draft is ready, archive if abandoned, refresh if the source has changed. Recommend-only.
 
 ### Check 4 — displaced content
 
-- **Detect:** the artifact's `folder`/`target_folder` **contradicts the `artifact_type` canonical home** per the work-plan taxonomy (`references/work-plan-taxonomy.md` canonical-target-folder column). The canonical case: an artifact whose `artifact_state` is `PROMOTED` (or `lifecycle_state: published`) but whose `folder` is still `08-Generated/` — promoted-but-not-moved.
+- **Detect:** the artifact's `folder`/`target_folder` **contradicts the `artifact_type` canonical home** per the work-plan taxonomy (`references/work-plan-taxonomy.md` canonical-target-folder column). The canonical case: an artifact whose `promotion_state` is `promoted` but whose `folder` is still `08-Generated/` — promoted-but-not-moved. This is the schema-declared `promotion_state: promoted ⇒ folder ≠ 08-generated` consistency rule (`frontmatter-schema.md` Domain C), read directly off the dedicated location field.
 - **Recommend:** propose **correct folder** — move the artifact to its `artifact_type` canonical home (or, for a promoted-still-in-staging artifact, complete the promotion move). Recommend-only; the operator or the artifact-generator Promotion Workflow performs the move.
 
 ### Check 5 — version chain
@@ -135,7 +135,7 @@ Lineage fields live in embedded frontmatter for markdown, and in a `<file>.meta.
 
 ## Output: Staged Report
 
-The lint emits a **single report** staged to **`08-Generated/artifact-lint-YYYY-MM-DD.md`**. The report is itself a Domain-C `analysis` artifact (it carries an artifact-generator metadata header with `artifact_state: DRAFT`). It is **recommend-only** and surfaces — for each finding — the check, the affected artifact(s), the evidence (the frontmatter values), the proposed action, and a reversibility tier + confidence. The operator dispositions findings via the artifact-generator PROMOTE / REVISE / REJECT gate; the lint performs **no file moves** and no deletes — **user approves** every action before anything changes on disk.
+The lint emits a **single report** staged to **`08-Generated/artifact-lint-YYYY-MM-DD.md`**. The report is itself a Domain-C `analysis` artifact (it carries an artifact-generator metadata header with `lifecycle_state: draft` + `promotion_state: staged`). It is **recommend-only** and surfaces — for each finding — the check, the affected artifact(s), the evidence (the frontmatter values), the proposed action, and a reversibility tier + confidence. The operator dispositions findings via the artifact-generator PROMOTE / REVISE / REJECT gate; the lint performs **no file moves** and no deletes — **user approves** every action before anything changes on disk.
 
 Report skeleton:
 
@@ -148,7 +148,8 @@ created: YYYY-MM-DD
 source: artifact-lint scan
 dependencies: <the artifacts scanned>
 reversibility: CHEAP
-artifact_state: DRAFT
+lifecycle_state: draft
+promotion_state: staged
 ---
 
 # Artifact Lint Report — YYYY-MM-DD
@@ -169,7 +170,7 @@ artifact_state: DRAFT
 |---|---|---|---|
 
 ### Stale Drafts (Check 3)
-| Artifact | State (artifact_state/lifecycle_state) · lifecycle_changed | Proposed Action | Reversibility · Confidence |
+| Artifact | State (lifecycle_state) · lifecycle_changed | Proposed Action | Reversibility · Confidence |
 |---|---|---|---|
 
 ### Displaced Content (Check 4)
@@ -192,14 +193,14 @@ Every artifact-lint run produces the staged report at `08-Generated/artifact-lin
 2. **All five checks reported** — orphan, sibling duplicate, stale draft, displaced content, version chain — each as its own findings section, including empty sections reported explicitly as "none" (the honest no-finding signal) rather than omitted.
 3. **Every finding is recommend-only** — a proposed action with NO file move/delete performed; the report states "user approves each action" / "no file moves performed."
 4. **Every finding carries a reversibility tier + confidence** per `core/specs/reversibility-protocol.md` (decision-class output discipline — pmo-qa-auditor G4).
-5. **Every finding cites its evidence** — the frontmatter values (the lineage fields, the state field read, the dual-read fallback when used) that triggered it; weak-matches carry the "missing sibling_topic" warning.
+5. **Every finding cites its evidence** — the frontmatter values (the lineage fields, the `lifecycle_state` content-maturity read or the `promotion_state` location read) that triggered it; weak-matches carry the "missing sibling_topic" warning.
 
 See `core/schemas/per-skill-output-contracts.md` (Artifact Lint entry) for the QA-gate validation checklist.
 
 ## Dependency Graph Node
 
-- **Reads (DEPENDS_ON, never writes):** `core/schemas/frontmatter-schema.md` (the lineage scalar fields + the dangling-lineage WARN rule + the sidecar spec) and `core/standards/lifecycle-states-canonical.md §3.2` (the 5-state Artifact Workflow + the `artifact_state` enum the stale-draft and version-chain checks key off).
-- **Relates to (RELATES_TO):** `artifact-generator` — the producer that stamps the lineage frontmatter + `artifact_state` and owns the `08-Generated/` staging, Promotion Workflow, and `_archived/` Auto-Archive; artifact-lint reads what artifact-generator stamps and recommends actions the artifact-generator workflows (or the operator) execute. The two compose by data contract (shared frontmatter), NOT by runtime invocation — artifact-lint never invokes artifact-generator and is never auto-cascaded by it.
+- **Reads (DEPENDS_ON, never writes):** `core/schemas/frontmatter-schema.md` (the lineage scalar fields + the `lifecycle_state` content-maturity field + the `promotion_state` location field + the dangling-lineage WARN rule + the sidecar spec) and `core/artifact-workflow-protocol.md` (the two-concern model — `lifecycle_state` for content-maturity that the stale-draft and version-chain checks key off, `promotion_state` for the promotion-location the displaced-content check keys off).
+- **Relates to (RELATES_TO):** `artifact-generator` — the producer that stamps the lineage frontmatter + `lifecycle_state` + `promotion_state` and owns the `08-Generated/` staging, Promotion Workflow, and `_archived/` Auto-Archive; artifact-lint reads what artifact-generator stamps and recommends actions the artifact-generator workflows (or the operator) execute. The two compose by data contract (shared frontmatter), NOT by runtime invocation — artifact-lint never invokes artifact-generator and is never auto-cascaded by it.
 - **Upstream invokers:** the operator directly (on-demand). No skill auto-invokes artifact-lint.
 - **Not coupled to:** the orphan-state cleanup script (`cleanup-orphan-state.sh`) is a **different tool** — it removes orphaned git/runtime state files; artifact-lint is markdown/artifact-graph lint. They are not wired together and must not be conflated.
 
@@ -227,7 +228,7 @@ Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* (a stric
 
 ## Principal Standard
 
-This skill's output is held to the principal-contributor standard (`core/standards/principal-standard-checklist.md`). A principal-grade lint report: reads BOTH state fields (never mis-reads an artifact on the wrong field), excludes version chains from duplicate flagging (never cries duplicate on a `_v1.._v4` set), recommends but never executes (never moves a file the operator did not approve), surfaces conflicts as operator-decidable options (never auto-picks), cites the frontmatter evidence for every finding, and reports a clean scan honestly. A junior report keys on one state field, flags version iterations as duplicates, auto-archives "obvious" superseded members, and returns an empty deliverable on a clean scan.
+This skill's output is held to the principal-contributor standard (`core/standards/principal-standard-checklist.md`). A principal-grade lint report: reads the canonical fields on their correct axes (content-maturity on `lifecycle_state` for stale-draft/version-chain; promotion-location on `promotion_state` for displaced-content — never conflating the two), excludes version chains from duplicate flagging (never cries duplicate on a `_v1.._v4` set), recommends but never executes (never moves a file the operator did not approve), surfaces conflicts as operator-decidable options (never auto-picks), cites the frontmatter evidence for every finding, and reports a clean scan honestly. A junior report keys displaced-content on content-maturity (or invents a deprecated state field), flags version iterations as duplicates, auto-archives "obvious" superseded members, and returns an empty deliverable on a clean scan.
 
 ## Guardrails (Platform)
 
@@ -237,13 +238,13 @@ Platform-wide generic guardrails inherited from CLAUDE.md § Universal Preferenc
 
 These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per `core/specs/failure-mode-standard.md` and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
-### Reading only one state field — INPUT
+### Keying displaced-content on content-maturity instead of the location field — PROC
 
-- **Signature (observable signal):** The stale-draft or version-chain check evaluates `lifecycle_state` only (or `artifact_state` only), and an artifact carrying the other field is mis-classified — a `DRAFT` artifact-generator artifact (which stamps `artifact_state`) is read as "no state, skip," or a schema-conformant `lifecycle_state: draft` artifact is never evaluated for staleness.
-- **Conditional:** do NOT evaluate artifact state on a single state field when an artifact may carry `artifact_state` OR `lifecycle_state`, because `artifact_state` (the §3.2 Artifact Workflow enum stamped by artifact-generator) is absent from `frontmatter-schema.md` while `lifecycle_state` is the schema's REQUIRED field — keying on one silently mis-reads every artifact carrying the other, producing false-negative stale drafts and phantom version-chain heads.
-- **Root cause:** The two state fields look interchangeable and the lint author picks whichever surfaced first in the sample. The dual-source reality (generator stamps `artifact_state`; schema requires `lifecycle_state`) is invisible until a mixed corpus is scanned.
-- **Mitigation:** Always read `artifact_state` first; when absent, fall back to `lifecycle_state` and map `lifecycle_state: draft` to the DRAFT-equivalent. Apply the dual-read in both the stale-draft check and the version-chain check. Record which field was read in the finding's evidence so the read is auditable.
-- **Principal response vs. junior response:** Principal reads both fields with a documented precedence and cites which one fired per finding. Junior keys on the one field in the first artifact they inspected and ships a report that silently skips half the corpus.
+- **Signature (observable signal):** The displaced-content check (Check 4) fires (or fails to fire) based on `lifecycle_state` — e.g., a `lifecycle_state: published` artifact still legitimately in `08-Generated/` is flagged as displaced even though it was never promoted, or a `promotion_state: promoted` artifact left in `08-Generated/` is missed because its `lifecycle_state` is only `draft`.
+- **Conditional:** do NOT key the displaced-content check on `lifecycle_state` (content-maturity) when `promotion_state` is the dedicated promotion-location field, because content-maturity and file-location are orthogonal (a `published` artifact may still be `staged`, an unpublished `draft` may be `promoted`) — inferring "should have moved" from content-maturity re-introduces the exact content-vs-location conflation the promotion-location carve removed, producing false displaced findings on mature-but-staged artifacts and missing genuinely-displaced ones.
+- **Root cause:** Before the carve, location was inferred from the legacy conflated workflow value (`...: PROMOTED`), so "content state implies a move" feels intuitive; the carve into a dedicated `promotion_state` field is recent and the orthogonality (`published ⇏ promoted`) is not yet muscle-memory.
+- **Mitigation:** Read the displaced-content signal exclusively off `promotion_state` + `folder` — the schema-declared `promotion_state: promoted ⇒ folder ≠ 08-generated` invariant (`frontmatter-schema.md` Domain C). Reserve `lifecycle_state` for the content-maturity checks (stale-draft, version-chain) only. Working-state artifacts legitimately in `08-Generated/` (`promotion_state: staged`) are NOT displaced regardless of how mature their content is.
+- **Principal response vs. junior response:** Principal reads displaced-content off the dedicated `promotion_state` location field and treats content-maturity as orthogonal. Junior infers "should have moved" from `lifecycle_state: published` and flags every mature-but-still-staged artifact as displaced, burying the real promoted-but-not-moved signal.
 
 ### Flagging a version chain as a duplicate — OUT
 
@@ -280,7 +281,7 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 ## What This Skill Does NOT Do
 
 - **Does not move, rename, archive, or delete any artifact.** Its only write is the staged report. Every action is operator-approved (Autonomy Tier 1).
-- **Does not author or repair lineage frontmatter.** It reads `parent_artifact` / `sibling_topic` / `supersedes` / `artifact_state`; the artifact-generator stamps them.
+- **Does not author or repair lineage frontmatter.** It reads `parent_artifact` / `sibling_topic` / `supersedes` / `lifecycle_state` / `promotion_state`; the artifact-generator stamps them.
 - **Does not scan `09-Prototype/` or `_templates/`.** Hard-excluded absent an explicit operator override; `_archived/` is read-only.
 - **Does not run the orphan-state cleanup script.** `cleanup-orphan-state.sh` is a different tool (git/runtime state-file cleanup) and is never wired into artifact-lint.
 - **Does not duplicate the artifact-generator Artifact Health Check.** Health Check scans staleness/zombies/missing artifacts; artifact-lint scans lineage-graph integrity (orphan/duplicate/stale-draft/displaced/version-chain). They are complementary.

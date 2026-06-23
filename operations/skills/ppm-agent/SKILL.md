@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v2.01
+version: v2.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -379,6 +379,112 @@ Transcript Register (or equivalent for non-transcript artifacts):
 - CLOSED → all tracker updates applied or explicitly deferred with reason
 
 The pipeline does not close until all entries in the Impact Matrix are resolved.
+
+### 8.7. Entity lifecycle transition emission
+
+When processing an artifact surfaces evidence that an entity's **operational state** has
+changed, emit the transition as a field-update instruction. PPM Agent is the **emitter**
+for the entities it creates or maintains per the owning-agent matrix
+(`core/disciplines/project-entity-model.md` §6): it **creates** Decision, RAID Item, and
+Workstream and **maintains** Meeting, Workstream, Plan, Project, and the cross-project
+entities System / Vendor / Cross-Project Dependency. The legal `from → to` edges,
+their qualifying evidence, and side-effects are defined per entity in the transition
+protocol — `core/standards/entity-lifecycle-protocol.md` (project-scoped entities) and
+`core/standards/entity-lifecycle-protocol-shared-portfolio.md` (shared + portfolio
+entities). **PPM Agent emits; it does not write the field** — `tracker-manager` is the
+write side for Decision and RAID Item (§6), and Plan/Project are file-backed transitions
+PPM Agent maintains directly through the change summary.
+
+**Per-entity Axis-1 machines PPM Agent emits against** (states verbatim from §4; full
+`from → to · evidence · side-effect` rows live in the protocol, cited by reference — do
+NOT restate the per-entity tables here):
+
+| Entity | Axis-1 machine (§4) | PPM Agent role (§6) |
+|---|---|---|
+| Decision | `proposed → accepted → reversed \| superseded` | creates |
+| RAID Item | `open → in-progress → mitigating → resolved → closed` | creates |
+| Workstream | `active → paused → closed` | creates + maintains |
+| Meeting | `scheduled → held \| cancelled` | maintains |
+| Plan | `draft → approved → active → superseded → archived` | maintains |
+| Project | `ACTIVE → CLOSING → CLOSED` | maintains |
+| System | `active → deprecated → retired` | maintains |
+| Vendor | `active → inactive` | maintains |
+| Cross-Project Dependency | `open → satisfied \| broken \| waived` | maintains |
+
+**The emission carrier.** A transition rides the existing Section-8 `TRACKER_UPDATE`
+block as an optional field inside the `fields:` map:
+
+```
+TRACKER_UPDATE:
+  target: [tracker filename]
+  action: MODIFY
+  entry_id: [the entity's row/record ID]
+  fields:
+    lifecycle_transition: <Entity>-<from> → <Entity>-<to>   # e.g. RAIDItem-mitigating → RAIDItem-resolved
+  evidence: [SOURCE: citation establishing the state change]
+  reason: [why the transition fired]
+```
+
+The transition **value** uses the object-typed `<Entity>-<state>` form per
+`core/standards/lifecycle-states-canonical.md` §2.1 (e.g. `Decision-superseded`,
+`Meeting-held`, `Plan-active`); the write target field is the canonical `lifecycle_state`
+(`frontmatter-schema.md` § Category 2). PPM Agent NEVER stamps the **legacy single-field
+Artifact Workflow machine** — that machine is deprecated as a content-maturity carrier
+(`frontmatter-schema.md` § Category 2; `core/artifact-workflow-protocol.md`).
+
+**Evidence-gate refusal (load-bearing).** No `lifecycle_transition` is emitted without
+its qualifying evidence. A `[SOURCE]` or `[INFERRED]` citation authorizes the emission;
+an `[ASSUMPTION – CONFIRM]` **blocks** it — the candidate transition is surfaced as a
+Section-5 "Decisions needed" line instead of being emitted. This mirrors the platform
+Evidence Gate (`core/governance/OPERATIONS.md` § Evidence Gate) and the
+tracker-manager terminal-state evidence requirement. A transition into a terminal/closed
+state (`resolved`, `closed`, `accepted`, `superseded`, `held`, `cancelled`) carries the
+same evidence bar as a CLOSE action.
+
+**Autonomy Tier.** Emission is a **recommendation** — PPM Agent drafts the transition and
+the downstream write is gated:
+- **Autonomy Tier 1** for Decision-of-record and RAID-Log transitions (the RAID Log is
+  Document Tier 1; tracker-manager presents these for approval before writing).
+- **Autonomy Tier 2** for operational Meeting / Workstream / Decision-row transitions that
+  ride the auto-write tracker path within the declared `cascade_scope`.
+- **Never Autonomy Tier 0** — no governance file is touched by a lifecycle emission.
+
+**Cross-entity cascade hook.** When a transition fires a frozen §5.1 directed chain, PPM
+Agent emits the cascade as **SECONDARY** rows in the Section-8.6 Tracker Impact Matrix —
+the existing dependency-scan apparatus already carries cross-tracker secondary effects, so
+a cascade is one more SECONDARY-effect class. The three load-bearing cascades:
+
+**Cascade A — Decision `SUPERSEDES` Decision → comms entry (§5.1 chain 5, applied at
+Decision granularity via the `SUPERSEDES` MVP type).** A transcript records a new Decision
+overriding a prior one. PPM Agent (creates Decision) emits `Decision-proposed →
+Decision-accepted` on the new Decision **and** `Decision-accepted → Decision-superseded`
+on the prior one, carrying the `SUPERSEDES` relationship edge + qualifying evidence.
+tracker-manager (maintains Decision) writes both `lifecycle_state` field-updates on the
+Decisions-tracker rows (Tier 2 within `cascade_scope`; Tier 1 if the superseded Decision is
+a decision-of-record). Side-effect: the superseding event emits a Communications Tracker
+entry via comms-writer (on the C7 `[COMMS]` allowlist) so stakeholders see the reversal —
+PPM Agent surfaces it as a Section-8.6 SECONDARY row.
+
+**Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact → child records at
+entry state (§5.1 chains 6 / 7 / 8, all `GENERATES`).** PPM Agent processes a meeting
+transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. On `held`, PPM
+Agent (creates Decision + RAID) emits new child records — each Decision at
+`Decision-proposed`, each RAID Item at `RAIDItem-open` — with the `GENERATES` provenance
+edge back to the Meeting. tracker-manager writes the new rows at their entry
+`lifecycle_state` (RAID Log = Tier 1 approval-gated; Decision rows = Tier 2);
+artifact-generator sets the entry `lifecycle_state` + Domain for any generated Artifact
+(Tier 2, 08-Generated staging). The generated children inherit provenance so they trace
+back to origin.
+
+**Cascade C — RAID Item `BLOCKS` Milestone → milestone status flag (§5.1 chain 9,
+many:many).** A RAID Item carrying a `BLOCKS` edge to a Milestone is at — or transitions to
+— `RAIDItem-open` (or re-opens via REACTIVATE). PPM Agent emits/maintains the RAID
+`lifecycle_state`; tracker-manager writes it (RAID Log = Tier 1, approval-gated). Side-effect:
+while the blocking RAID is not `resolved`/`closed`, the blocked Milestone carries a status
+flag — `delivery-engine` maintains Milestone (§6) and `weekly-status-rollup` reads RAID, so
+PPM Agent surfaces the block as a Section-8.6 SECONDARY row **and** a Section-4 "Items
+Requiring Your Action". The flag is a **read-derived surfacing** (no governance write, never
+Tier 0); it clears when the RAID transitions to `resolved`/`closed` with evidence.
 
 ### 9. Proactive next steps
 

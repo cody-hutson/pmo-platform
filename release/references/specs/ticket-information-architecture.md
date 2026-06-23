@@ -408,10 +408,10 @@ Each pipeline stage's agent has explicitly defined write permissions. This follo
 | Stage | Body Updates | Comments | Sub-Issues | Labels | Projects Fields | Native Deps | Operator Approval Required |
 |---|---|---|---|---|---|---|---|
 | 1 (Intake) | Create issue | — | — | `improvement` (auto) | status: Proposed | — | No |
-| 2 (Triage) | Priority, category | Decision comment | — | Category label applied (from body Category dropdown per `improvement.yml`, or fallback to `improvement` if no specific category fits) | status: Approved/Rejected/Deferred | Mirror body `FS+0d #N` deps to native `blocked-by` via A3.5 substep (per § Native Dependencies) | Decision (Tier 3) |
-| 3 (Bundle) | — | Bundle rationale comment | — | — | status: Bundled; Milestone assignment | — | Scope approval (Tier 3) |
-| 4 (Planning) | — | Plan reference comment | — | — | stage: 4-Planning | — | No |
-| 5 (Solutioning) | AC refinement (if needed) | Design review comment | — | — | stage: 5-Solutioning | Re-trigger mirror logic if AC refinement touches Dependencies field (conditional) | Design decisions (Tier 3) |
+| 2 (Triage) | Proposed Change (R/U), AC (R/U), Priority (C\*/U), Category (C\*/U), Affected Files (U), Dependencies (U) | Decision comment | — | Category label applied (from body Category dropdown per `improvement.yml`, or fallback to `improvement` if no specific category fits) | status: Approved/Rejected/Deferred | Mirror body `FS+0d #N` deps to native `blocked-by` via A3.5 substep (per § Native Dependencies) | Decision (Tier 3) |
+| 3 (Bundle) | Dependencies (C\*/R) | Bundle rationale comment | — | — | status: Bundled; Milestone assignment | — | Scope approval (Tier 3) |
+| 4 (Planning) | Proposed Change (U), Affected Files (C\*/U), Dependencies (U) | Plan reference comment | — | — | stage: 4-Planning | — | No |
+| 5 (Solutioning) | Proposed Change (U), AC (U), Affected Files (U), Documentation Impact (U) | Design review comment | — | — | stage: 5-Solutioning | Re-trigger mirror logic if AC refinement touches Dependencies field (conditional) | Design decisions (Tier 3) |
 | 6 (Engineering) | — | — | Create sub-tasks | — | stage: 6-Engineering, status: In Progress | Populate sub-task native deps when parent is decomposed into sub-tasks with native-meaningful (`FS+0d`) edges | Decomposition checkpoint |
 | 7 (Dev Testing) | — | — | Create review pass sub-issues | — | stage: 7-DevTest | — | No |
 | 8 (QA Testing) | — | — | Create review pass sub-issues | — | stage: 8-QA | — | Acceptance (Tier 3) |
@@ -420,6 +420,8 @@ Each pipeline stage's agent has explicitly defined write permissions. This follo
 | 13 (Close) | — | Verification evidence comment | — | — | status: Done, stage: 13-Close | Re-run drift-check as QC4 verification parity-check (per § Native Dependencies) | No |
 
 > **Note:** Stages 10 and 11 are compressed into the git workflow (per release-process.md) and have no independent agent write permissions.
+
+**Source of truth for Body Updates:** The "Body Updates" cells above align to [field-lifecycle-matrix.md § Body Fields Lifecycle](../../../core/schemas/field-lifecycle-matrix.md#body-fields-lifecycle) (authoritative) — each cell lists every body field that matrix marks **U** (Updated) or **C\*** (Create-if-absent) at that stage, with the matrix notation in parentheses. Alignment is one-directional (this table → matrix); kept consistent so the two never re-diverge undetected.
 
 **Read permissions:** All stages have full read access to all layers (body, comments, sub-issues, labels, fields).
 
