@@ -298,6 +298,38 @@ Assumptions and Dependencies are not age-escalated by this protocol (no threshol
 
 ---
 
+### Overdue-Decision Escalation Protocol
+
+Open **blocking-class** decisions age past their deadline. This protocol defines due-date-based auto-escalation so an overdue gating decision surfaces a recommended escalation action instead of silently stalling the project. It is the decision-tracker sibling of the Stale-RAID Auto-Escalation Protocol above (RAID items age from their open-date; decisions age from their **deadline**). It is cross-skill: `weekly-status-rollup` surfaces the overdue-decision escalation in the portfolio roll-up; `ppm-agent` (which owns DECISION escalations per § Skills Section) is the router; `delivery-engine` Mode G records the decision-artifact update.
+
+**Doc-of-record.** The escalation **tiers** this protocol routes to are the canonical routing ladder in [`escalation-thresholds.md`](../../operations/skills/ppm-agent/references/escalation-thresholds.md) §2 (Team → Project → Program → Program-Critical/Sponsor → Portfolio). That doc is authoritative for the tier names and routing; this protocol adds the **decision-overdue trigger** and states the operational trigger (when the check runs, who acts, what action results). It does **not** author a parallel tier scheme (register-or-remove / duplicate-source-discipline). The `> 5 bd past deadline` escalate point reuses the existing deadline-keyed Overdue band in [`proactive-follow-up-tracking.md`](../../operations/skills/ppm-agent/references/proactive-follow-up-tracking.md) §Aging, which already covers decision follow-ups.
+
+**Scope (which decisions).** The escalation fires only for **blocking-class** decisions — the Daily Status Log §3 Decisions Pending entry's `blocking: true` field (schema: [`core/schemas/tracker-schemas.md`](../schemas/tracker-schemas.md) § Tracker 1 §3). A decision with no `blocking` field is treated as **non-blocking** (no escalation), and the missing classification is surfaced as a coverage gap on first encounter — never silently defaulted to blocking.
+
+**Overdue clock (business days past the decision's deadline).** A blocking decision's overdue age is `today − Deadline`, in business days, validated against the Daily Status Log (Document Tier 2). Two warning/escalate bands:
+
+| Decision class | Warning at | Escalate at |
+|---|---|---|
+| Blocking (`blocking: true`) | age > 3 business days past due | age > 5 business days past due |
+
+Non-blocking decisions are not escalated by this protocol.
+
+**Action by band (the warning → escalate ladder).**
+
+| Band | Condition | Agent action |
+|---|---|---|
+| **Nominal** | age ≤ 3 bd past due | No escalation. `escalation_state: NOMINAL`. Decision carries forward normally. |
+| **Warning** | 3 bd < age ≤ 5 bd past due | Flag the decision with a `[RECOMMENDED]` nudge to the decision-maker ("DEC-007 overdue 4 business days — past the 3-day blocking-decision warning threshold; confirm decision status"). `weekly-status-rollup`: surface in the Section 2 Decisions Pending block. `escalation_state: WARN`. No tier change. |
+| **Escalate** | age > 5 bd past due | Flag with an **escalation action**, naming the decision, the decision-maker, the breached 5-day threshold, and the routed tier. Bump the decision **one tier up** the `escalation-thresholds.md` §2 ladder. `weekly-status-rollup`: surface the escalation and hand the DECISION tag to `ppm-agent` for routing (no self-routing). `ppm-agent`: raise as a `[DECISION]` escalation (per § Follow-Up Tag Routing) and route to the bumped tier. `delivery-engine` Mode G: record the decision-artifact update. `escalation_state: ESCALATED`; `escalated_to:` = the routed tier. |
+
+**Reversibility.** Each escalation is a CHEAP, recommend-tier action (a flag + routed tag the operator reviews) — the protocol recommends; it never auto-decides the decision, auto-defers it, or mutates the Daily Status Log without the normal Document Tier 2 approval gate.
+
+**Worked example (AC).** A Daily Status Log blocking decision (`DEC-001`, `blocking: true`) with a deadline 6 business days ago: age 6 > 5 (escalate threshold) → **Escalate** band → agent flags `DEC-001` with an escalation action naming the decision-maker and the breached 5-day threshold, bumps one tier up per `escalation-thresholds.md` §2, and sets `escalation_state: ESCALATED` + `escalated_to:` the routed tier. A second blocking decision (`DEC-002`) 2 business days overdue stays **Nominal** (under the 3-day warn). A non-blocking decision (`DEC-003`) 8 business days overdue is **not** escalated (out of scope).
+
+**Evidence labels.** Overdue-age computations carry `[INFERRED: today − Deadline]`; threshold-breach claims cite the Daily Status Log row `[SOURCE: <DEC-ID>, Deadline]`. See § Evidence Quality Labeling above.
+
+---
+
 ## Methodology Awareness Protocol
 
 Skills that consume `PROJECT.md` MUST read the `delivery_approach` field at invocation and parameterize their behavior per the methodology archetype — not hardcode sprint-centric Agile assumptions. This protocol is load-bearing for the release-planner-bundle work (HARD handoff) and future role-skills work (HARD handoff).

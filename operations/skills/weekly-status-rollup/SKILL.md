@@ -90,7 +90,31 @@ For each active project, generate:
 
 **Decisions Pending:**
 - Open DEC-### entries with deadlines
-- Overdue decisions flagged
+- **Overdue blocking-decision escalation (thresholded + routed).** For each open
+  DEC-### entry, compute the overdue clock `today − Deadline` in **business days** (carries
+  `[INFERRED: today − Deadline]`; the deadline-keyed clock per
+  `../ppm-agent/references/proactive-follow-up-tracking.md` §Aging "starts from the deadline
+  date"). The escalation fires only for **blocking-class** decisions (the entry's
+  `blocking: true` field — go/no-go, launch-sequence, and similar gating decisions). Apply the
+  two-stage, due-date-keyed ladder:
+  - **WARN at `> 3 business days` past due** — emit a `[RECOMMENDED]` nudge to the
+    decision-maker in the rollup output. **No tier change** (parallel to the Stale-RAID
+    Warning band).
+  - **ESCALATE at `> 5 business days` past due** — emit an **escalation action** that bumps the
+    decision **one tier up** the existing routing ladder in
+    `../ppm-agent/references/escalation-thresholds.md` §2 (Team → Project → Program →
+    Program-Critical/Sponsor → Portfolio). The escalate action names the decision, the
+    decision-maker, the breached `5bd` threshold, and the routed tier. This consumes the
+    existing tier ladder by reference — it does **not** author a parallel tier scheme.
+  - **Coverage gap on absent `blocking`:** a DEC-### entry with no `blocking` field → treat as
+    **non-blocking** (no escalation) and flag the missing classification as a coverage gap on
+    first encounter; **never** silently default to blocking.
+  - **Cross-skill ownership (mirrors the Stale-RAID split):** this skill **surfaces** the
+    overdue-decision escalation in the roll-up; `ppm-agent` (which owns DECISION escalations) is
+    the **router**; `delivery-engine` Mode G is where the decision artifact is updated. See the
+    OPERATIONS.md **Overdue-Decision Escalation Protocol**. Reversibility **CHEAP** /
+    recommend-tier — a flag + routed tag the operator reviews; never auto-decides the decision
+    or mutates the tracker without approval (carry the tier per § Reversibility Discipline).
 
 **Next Week Focus:**
 - Top 3 priorities for next week

@@ -39,6 +39,20 @@ The Daily Status Log is a carry-forward tracker organized by category. It is the
    - Deadline: When decision is needed
    - Status: PENDING / DEFERRED / MADE
    - Evidence: Source of the decision need
+   - Blocking: `true` / `false` (optional; default `false` when absent). Marks a **gating-class**
+     decision (go/no-go, launch-sequence, and similar decisions that block project progress).
+     Only `blocking: true` entries are subject to the Overdue-Decision Escalation Protocol
+     (OPERATIONS.md). An entry with no `blocking` field is treated as non-blocking, and the
+     missing classification is surfaced as a coverage gap on first encounter — never silently
+     defaulted to blocking.
+   - Escalation state: `NOMINAL` / `WARN` / `ESCALATED` (optional; default `NOMINAL`). The
+     overdue-escalation band the decision is in, keyed on `today − Deadline` in business days:
+     `NOMINAL` ≤ 3 bd past due; `WARN` > 3 bd; `ESCALATED` > 5 bd (per the Overdue-Decision
+     Escalation Protocol in OPERATIONS.md, which cites
+     `ppm-agent/references/escalation-thresholds.md` §2 as doc-of-record for the routed tiers).
+   - Escalated to: Tier the overdue escalation routed to (populated when Escalation state =
+     `ESCALATED`; one step up the `escalation-thresholds.md` §2 ladder — Team / Project /
+     Program / Program-Critical / Portfolio). Blank otherwise.
 
 4. **Open Actions by Person** — Grouped by person. Each entry:
    - Person name (group header)
