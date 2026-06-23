@@ -289,6 +289,30 @@ The **Artifact ENTITY** (the record's fields, V-rules, Axis-1↔Axis-2 seam) sta
 
 ---
 
+## Tracker 7: Milestone Tracker
+**File pattern:** `[Project]_Milestone_Tracker.md` (Waterfall / Hybrid; `milestone-status.md` per the Methodology Variation matrix below)
+**Update tier:** Tier 1 (stakeholder-facing — phase-gate status; requires user approval for changes)
+**Update sources:** Delivery Engine Mode F (DoD / phase-gate evaluation), Mode G (milestone artifact update), user input
+
+The per-project **phase-gate / milestone status tracker** for Waterfall and Hybrid projects (the predictive-phase tracker named in the Methodology Variation matrix). `project-initiator` Mode A Step 4 scaffolds it empty-but-properly-formatted for Waterfall/Hybrid projects; Delivery Engine reads it at the DoD / phase-gate gate. This section gives the milestone entry a defined field-set so the **evidence-backed gate-completion** rule has a field to read.
+
+### Structure
+**Format:** Markdown table — one row per milestone / phase gate.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Phase | String | Yes | Free text | The project phase the milestone belongs to. |
+| Milestone | String | Yes | Free text | The milestone / phase-gate name. |
+| Planned Date | Date | Yes | `YYYY-MM-DD` | Baselined target date (day-of-week validated). |
+| Actual Date | Date | No | `YYYY-MM-DD` | Achieved date (populated on completion). |
+| Status | Enum | Yes | `Not Started` / `In Progress` / `Complete` / `Slipped` | Current gate status. |
+| Evidence Artifact | String | No (**required when Status = `Complete`**) | Named closure/evidence artifact (free text — e.g., "UAT sign-off 2026-06-18", "Gate checklist GC-04") | The named, inspectable closure/evidence artifact that substantiates a `Complete` mark. An **inferred signal alone is insufficient**: a `Complete` row with a blank or absent Evidence Artifact is rejected by the Delivery Engine DoD gate (Mode F) under the NO-EVIDENCE→FAIL rule ("Complete asserted without a named closure/evidence artifact"). Carries a `[SOURCE]` evidence-quality label; an `[INFERRED]`-only mark does not satisfy the gate. |
+
+### Gate-Completion Rule (evidence-backed Complete)
+Marking a milestone `Complete` REQUIRES a named **Evidence Artifact** cited on the row. Delivery Engine Mode F treats a `Complete` mark with an empty/absent Evidence Artifact as **FAIL** (identical to its NO-EVIDENCE→PASS prohibition), names the milestone, states "Complete asserted without a named closure/evidence artifact", and gives the remediation (cite the artifact, or revert to `In Progress`). Reversibility **CHEAP** — the gate BLOCK prevents the unverifiable state from being recorded; reverting `Complete → In Progress` is a tracker edit.
+
+---
+
 ## Extensibility
 To add a new tracker:
 1. Define schema in this file (columns, types, valid values)
