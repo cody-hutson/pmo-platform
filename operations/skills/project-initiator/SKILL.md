@@ -2,7 +2,7 @@
 name: project-initiator
 description: >
   Manages the full project lifecycle — scaffolding new projects and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]."
-version: v1.10
+version: v2.20
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -327,6 +327,33 @@ the project is read-only reference material with a complete audit trail.
 
 If PROJECT.md status is already `CLOSED`, stop and notify user: "This project is already
 marked CLOSED. Do you want to re-run closure (e.g., to regenerate the closure summary)?"
+
+#### Step B1a: Closure-Entry Dormancy Hook
+
+While reading project state (Step B1 already reads every tracker), compute the **same dormancy
+signal** the `weekly-status-rollup` §7.6 Portfolio Dormancy Sweep uses — the most-recent
+substantive modification across {Daily Status Log entries, any `04-PMO-Operations/` tracker
+update, any `05-Transcripts/` arrival}, aged as `today − last-artifact-activity-date` in
+business days (carries `[INFERRED: today − last-activity-date]`; no codified business-day
+primitive yet).
+
+- **If the project is over the `10 business days` dormancy window** at closure, surface it in
+  the Step B3 Closure Summary's **Outcome Summary** section as the **reason context** —
+  "project dormant N business days prior to closure [INFERRED: today − last-activity-date]" —
+  so the closure record states *why* the project was inactive going in.
+- **Detector / executor split (de-registration):** `weekly-status-rollup` §7.6 is the
+  **detector** that emits the dormancy disposition prompt (proceed / shelve / close); Mode B is
+  where the **close** disposition is **executed** (the Step B6 PORTFOLIO.md de-registration that
+  drops the project from the active list). A dormancy prompt's `close` option routes here; this
+  hook does **not** itself re-decide the disposition — it carries the detected dormancy into the
+  closure record and lets Step B6 perform the de-registration.
+- **Coverage-gap honesty:** if no tracker baseline exists (a project closed almost immediately
+  after initiation), record `dormancy: not assessable — no tracker baseline`; never read "no
+  trackers" as "dormant."
+
+This hook is read-only signal computation — it adds reason context, it does not change Mode B's
+disposition or archival logic. It is a decision-class surfacing; carry the reversibility tier
+per § Reversibility Discipline (the reason-context note is CHEAP).
 
 ### Step B2: Finalize Open Items
 
