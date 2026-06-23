@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 # Design-Principle Register — Agent Operating Principles
 
-**Origin:** #320 (decision-rendering-standardization keystone). **Tier:** K1 codified-knowledge reference (per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md)). **Primary consumer:** the Operator Decision Gate's `### Design-Principle Conformance` subsection at Stage 4 (per [`hub-spoke-bridge.md` § D-Gate Template](../../release/references/how-to/hub-spoke-bridge.md)). **Secondary consumers:** the Stage 8 QA Design-Principle Conformance dimension; the #321 per-gate-class framing directive `principles_emphasis` field.
+**Origin:** the decision-rendering-standardization milestone (Decision Briefing conformance-audit keystone). **Tier:** K1 codified-knowledge reference (per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md)). **Primary consumer:** the Operator Decision Gate's `### Design-Principle Conformance` subsection at Stage 4 (per [`hub-spoke-bridge.md` § D-Gate Template](../../release/references/how-to/hub-spoke-bridge.md)). **Secondary consumers:** the Stage 8 QA Design-Principle Conformance dimension; the per-gate-class framing directive `principles_emphasis` field (per [`engagement-charter.md`](../specs/engagement-charter.md)).
 
 ## Purpose
 
@@ -15,7 +15,7 @@ Every entry's `statement` is a faithful index of a principle **already defined a
 
 | Field | Type | Purpose |
 |---|---|---|
-| `principle_id` | `DP-N` | Stable identifier (DP = Design Principle). Referenced by D-Gate/QA verdicts and by #321 `principles_emphasis`. |
+| `principle_id` | `DP-N` | Stable identifier (DP = Design Principle). Referenced by D-Gate/QA verdicts and by the per-gate-class framing directive `principles_emphasis` field. |
 | `name` | string | Short principle name. |
 | `statement` | string | One-line normative statement — indexed from `governing_doc`, never originated here. |
 | `governing_doc` | `path:line` | Exact pin to the normative source where the principle is defined (the AC-1 resolution target + the Check 45 drift-guard target). |
