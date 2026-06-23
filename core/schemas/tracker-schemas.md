@@ -242,6 +242,39 @@ The RAID Log maintains two representations:
 
 ---
 
+## Tracker 6: Artifact Register
+**File pattern:** `[Project]_Artifact_Register.md`
+**Update tier:** Tier 2 (operational — auto-write within `cascade_scope`)
+**Update sources:** Tracker Manager (row writes on artifact-generate + phase-gate baselining)
+
+The per-project **configuration-management catalog** for the **Artifact** entity ([`project-entity-model.md`](../disciplines/project-entity-model.md) §4 #9): one row per project artifact (plans, RAID files, FDDs, charters, design docs, …), capturing its version, baseline status, owner, and retention so the operator can see at a glance which configuration items (CIs) exist for a project and which are baselined vs. in-flight. This closes the gap where `projects/` is gitignored and artifacts are updated in place with no version, no baseline, and no catalog — the Register is the durable CI history that the gitignore otherwise loses.
+
+### Structure
+**Format:** Markdown table — one row per artifact CI.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Artifact Name | String | Yes | Free text (= the Artifact entity's `artifact_title`) | The deliverable's name (e.g., "Cutover Plan v2"). |
+| Artifact Type | Enum | Yes | Charter, Plan, RAID, FDD, Design Doc, Requirements, Report, Tracker, … (= the Type Taxonomy in [`frontmatter-schema.md`](frontmatter-schema.md) — **referenced, not redefined**) | The Artifact entity's `artifact_type`. |
+| Current Version | String | No | Free text (e.g., `v2.0`) | The artifact's `version`. Blank for unversioned living docs. |
+| Baseline Status | Enum | Yes | `operational` \| `baselined-at-phase-gate` \| `superseded` | CI baseline state. Default `operational`; flips per the Baseline Rules below. |
+| Last Updated | Date | Yes | `YYYY-MM-DD` (not in the future) | When the artifact last changed. |
+| Owner | String | Yes | Person name / role | Accountable owner of the artifact. |
+| Retention | String | No | Free text / policy ref (e.g., `project+2yr`, `until-closeout`) | Retention policy. The records-management/retention *policy engine* is out of scope here — this column is the hook, not the engine. |
+
+### Baseline Rules (phase-gate baselining trigger)
+- **Default:** every new Artifact Register row enters `Baseline Status = operational`.
+- **Flip to `baselined-at-phase-gate`:** at a **phase-gate moment** — PRINCE2 configuration-management baselining. The platform already models phase-gate cadence (the Methodology Variation table below: Waterfall row → `phase-gate-log.md`; PRINCE2 row → `stage-boundary.md`). When a phase gate is reached, the artifacts in scope at that gate are baselined — Tracker Manager flips their Baseline Status to `baselined-at-phase-gate` and pins `Last Updated` to the gate date. This is a **Tier-2 row MODIFY** (auto-write within `cascade_scope`), **not** a Tier-1 approval gate: the artifact's *content* is not changing, only the CI baseline marker.
+- **Flip to `superseded`:** when a new version of the artifact supersedes it (the Artifact entity's `SUPERSEDES` self-edge). The prior row's Baseline Status → `superseded`, **append-only** — never delete the superseded row (it is the CI history the `projects/` gitignore otherwise loses).
+
+### Update Instruction Format
+Reuses the shared `TRACKER_UPDATE` block (see § Update Instruction Format below) with `target: [Project]_Artifact_Register.md`, `action: ADD | MODIFY`, and the artifact name as `entry_id`. ADD on artifact-generate; MODIFY to update `Last Updated` / `Current Version` / `Baseline Status` as the artifact or its baseline state changes.
+
+### Ownership seam (no owning-agent contradiction)
+The **Artifact ENTITY** (the record's fields, V-rules, Axis-1↔Axis-2 seam) stays maintained by **`ppm-agent`** (creates: `artifact-generator`; route: `file-router`) per [`project-entity-model.md`](../disciplines/project-entity-model.md) §6 + [`entity-field-schemas.md`](entity-field-schemas.md) §5 — **unchanged**. The Artifact Register is a Document-Tier-2 operational tracker, so its **ROW** writes are owned by **`tracker-manager`** like every other tracker in `04-PMO-Operations/`. This is the **identical entity-maintainer ≠ tracker-row-writer split already in production** for RAID Item and Decision (both entity-maintained yet `maintains: tracker-manager` in the owning-agent matrix). No new ownership model.
+
+---
+
 ## Extensibility
 To add a new tracker:
 1. Define schema in this file (columns, types, valid values)
