@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Frontmatter Schema — Document Ecosystem Metadata
 
 ## Purpose
@@ -74,7 +75,7 @@ Six categories. Every file has core fields (required across all domains). Domain
 - Domain B files follow the **Living Document** pattern (continuous updates, no formal baseline)
 - Domain C files follow a **hybrid** pattern (agent-initiated states + human-gated promotion) — full protocol in `domain-c-lifecycle-protocol.md`
 
-**Content-maturity vs. promotion-location (the two-concern separation).** `lifecycle_state` is the canonical **content-maturity** field — *how authoritative the content is* (this is the Artifact's Axis-1 delegation per `project-entity-model.md §4 #9`; `artifact_state` is **deprecated** as a content-maturity carrier, see `lifecycle-states-canonical.md §3.2`). A generated artifact's **promotion-location** — *where the file physically sits* (`08-Generated/` vs. its promoted `01-07` folder) — is a separate, orthogonal concern carried by the `promotion_state` Domain-C field (see § Domain C below), **not** by `lifecycle_state`. The two vary independently: a `published` artifact may still be `staged`. Full protocol: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md).
+**Content-maturity vs. promotion-location (the two-concern separation).** `lifecycle_state` is the canonical **content-maturity** field — *how authoritative the content is* (this is the Artifact's Axis-1 delegation per `project-entity-model.md §4 entity 9`; `artifact_state` is **deprecated** as a content-maturity carrier, see `lifecycle-states-canonical.md §3.2`). A generated artifact's **promotion-location** — *where the file physically sits* (`08-Generated/` vs. its promoted `01-07` folder) — is a separate, orthogonal concern carried by the `promotion_state` Domain-C field (see § Domain C below), **not** by `lifecycle_state`. The two vary independently: a `published` artifact may still be `staged`. Full protocol: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md).
 
 ### Category 3: Provenance
 

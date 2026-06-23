@@ -36,7 +36,7 @@ In cross-machine prose the object-typed `Artifact-<STATE>` form is used per the 
 Object-Typing Convention (`lifecycle-states-canonical.md` §2). The legacy single-field Artifact
 Workflow machine (`DRAFT → REVIEWED → APPROVED → PROMOTED → ARCHIVED`) is **deprecated** (see
 `core/artifact-workflow-protocol.md` §5): it conflated content-maturity and promotion-location
-onto one field, and those concerns are split across the two fields above (RCA #1861).
+onto one field, and those concerns are split across the two fields above (the artifact-state RCA).
 
 The skill needs only two facts from these machines to do its job:
 
@@ -76,8 +76,8 @@ The skill's responsibility in this machine is narrow and deliberate:
 
 This skill was first specified with a `status:` field and a six-state Title-case set {Draft,
 Review, Approved, Active, Superseded, Archived}. That set collided with the forward-binding
-canonical vocabulary. Per operator decision, the skill was re-specced — and, per the RCA on
-#1861, the conflated single field is now **split across the two orthogonal fields**
+canonical vocabulary. Per operator decision, the skill was re-specced — and, per the
+artifact-state RCA, the conflated single field is now **split across the two orthogonal fields**
 (`lifecycle_state` for content-maturity, `promotion_state` for promotion-location). The intent
 of each original state maps onto the reconciled model as follows:
 
@@ -178,7 +178,7 @@ content-maturity vocabulary at `core/schemas/frontmatter-schema.md` § Category 
 promotion-location field at the same schema's § Domain C, and the `Artifact-<STATE>` naming
 convention at [`lifecycle-states-canonical.md`](../../../../core/standards/lifecycle-states-canonical.md)
 §3.2. The legacy single-field Artifact Workflow machine that conflated those two concerns is
-**deprecated** (RCA #1861; see the protocol §5). The earlier divergence — a skill-local
+**deprecated** (the artifact-state RCA; see the protocol §5). The earlier divergence — a skill-local
 `status:` field with a six-state Title-case set — is **resolved**, not an open
 ticket-versus-architecture gap: the fields, the casing, and the membership now match the
 reconciled canonical model, and the one state with no value equivalent (Superseded) is

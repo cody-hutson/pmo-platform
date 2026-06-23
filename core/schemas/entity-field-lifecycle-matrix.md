@@ -3,13 +3,13 @@
 
 The per-entity × per-field × per-agent **write-permission** matrix for all 18 logical entities of the project-entity model — the entity-tier sibling of the ticket-tier [`field-lifecycle-matrix.md`](field-lifecycle-matrix.md). It answers, for a project-DATA record: *which agent may write which field of which entity at which lifecycle transition*, who wins when two agents claim the same field, and which writes must carry an audit label.
 
-**Scope — post-create only.** This matrix covers the **post-create write-lifecycle, conflict-winner, and audit-trail** dimensions ONLY. The **create-time field-supply** contract (which fields a skill MUST supply at create-time vs. MAY read, per creator/maintainer/reader) is already defined in [`entity-field-schemas.md` §5 Consumer Matrix](entity-field-schemas.md#5-consumer-matrix) + [`project-entity-model.md` §6 Owning-Agent Matrix](../disciplines/project-entity-model.md#6-owning-agent-matrix). Those are **referenced, never restated** here (duplicate-source-discipline). Every per-entity block carries a one-line `Create-time supply → §5` pointer instead of re-listing the triplet.
+**Scope — post-create only.** This matrix covers the **post-create write-lifecycle, conflict-winner, and audit-trail** dimensions ONLY. The **create-time field-supply** contract (which fields a skill MUST supply at create-time vs. MAY read, per creator/maintainer/reader) is already defined in [`entity-field-schemas.md` §5 Consumer Matrix](entity-field-schemas.md) + [`project-entity-model.md` §6 Owning-Agent Matrix](../disciplines/project-entity-model.md). Those are **referenced, never restated** here (duplicate-source-discipline). Every per-entity block carries a one-line `Create-time supply → §5` pointer instead of re-listing the triplet.
 
 **Consumers:** the G8 lifecycle-automation layer and the G9/G10 interface layer consume this matrix to route entity writes (which agent's write to honor at which transition). It is the entity-tier analogue of the [Agent Write Permissions](../../release/references/specs/ticket-information-architecture.md#agent-write-permissions) table for issues: that table governs ticket fields across the 13 pipeline stages; this matrix governs **entity** fields across each entity's **own** lifecycle machine.
 
 **Relationship to the architecture stack:**
-- [`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-18) — the 18 entities + their Axis-1 lifecycle machines (the column source; **referenced, not restated**).
-- [`project-entity-model.md` §6](../disciplines/project-entity-model.md#6-owning-agent-matrix) + [`entity-field-schemas.md` §5](entity-field-schemas.md#5-consumer-matrix) — creator / maintainer / reader per entity (the Owner column + create-time supply; **referenced, not restated**).
+- [`project-entity-model.md` §4](../disciplines/project-entity-model.md) — the 18 entities + their Axis-1 lifecycle machines (the column source; **referenced, not restated**).
+- [`project-entity-model.md` §6](../disciplines/project-entity-model.md) + [`entity-field-schemas.md` §5](entity-field-schemas.md) — creator / maintainer / reader per entity (the Owner column + create-time supply; **referenced, not restated**).
 - [`field-lifecycle-matrix.md`](field-lifecycle-matrix.md) — the ticket-tier sibling whose **C/R/U/A/L/—** Cell Taxonomy this matrix reuses verbatim (the taxonomy source; **referenced, not redefined**).
 - This matrix — entity-field write/append/read-only access per lifecycle transition + conflict-winner rules + audit-trail-per-write-class.
 
@@ -42,7 +42,7 @@ The ticket matrix has no append value because issue fields are single-author ove
 
 ## 2. Column Convention — the load-bearing adaptation
 
-The ticket matrix's columns are the **13 release-pipeline stages** (1-In … 13-Cl). **Entity records never traverse the release pipeline** — a `Milestone` record is not an issue moving Triage→Engineering; it is project-DATA with its own operational lifecycle. So this matrix's columns are each entity's **Axis-1 operational transitions** (the lifecycle machines frozen in [`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-18); the transition-table *format* is formalized by the W0 transition protocols [`entity-lifecycle-protocol.md`](../standards/entity-lifecycle-protocol.md) (project-scoped) and [`entity-lifecycle-protocol-shared-portfolio.md`](../standards/entity-lifecycle-protocol-shared-portfolio.md) (shared + portfolio)).
+The ticket matrix's columns are the **13 release-pipeline stages** (1-In … 13-Cl). **Entity records never traverse the release pipeline** — a `Milestone` record is not an issue moving Triage→Engineering; it is project-DATA with its own operational lifecycle. So this matrix's columns are each entity's **Axis-1 operational transitions** (the lifecycle machines frozen in [`project-entity-model.md` §4](../disciplines/project-entity-model.md); the transition-table *format* is formalized by the W0 transition protocols [`entity-lifecycle-protocol.md`](../standards/entity-lifecycle-protocol.md) (project-scoped) and [`entity-lifecycle-protocol-shared-portfolio.md`](../standards/entity-lifecycle-protocol-shared-portfolio.md) (shared + portfolio)).
 
 Per entity, the columns are: **`create`** (the §5 creator's write) **+ one column per Axis-1 transition edge** of that entity's machine. This is a **per-entity table** (18 of them), each sized to its own machine — **not** one mega-grid with 13 fixed columns. Worked shape for Milestone (`planned → in-progress → completed | cancelled`):
 
@@ -63,7 +63,7 @@ The matrix structure is therefore: per-entity blocks, each = field-rows × (`cre
 
 ### 3.1 CW-BASE — the deterministic base rule
 
-[`entity-field-schemas.md` §5](entity-field-schemas.md#5-consumer-matrix) and [`project-entity-model.md` §6](../disciplines/project-entity-model.md#6-owning-agent-matrix) already assign every entity exactly **one creator and one maintainer**. CW-BASE canonicalizes the *temporal* split those matrices imply but do not state:
+[`entity-field-schemas.md` §5](entity-field-schemas.md) and [`project-entity-model.md` §6](../disciplines/project-entity-model.md) already assign every entity exactly **one creator and one maintainer**. CW-BASE canonicalizes the *temporal* split those matrices imply but do not state:
 
 > **CW-BASE.** For any field of any entity, the **§5 maintainer owns every write after create-commit**. The §5 creator's write authority is **scoped to the create transaction only** and **terminates at create-commit**. After that instant, a creator-role skill attempting to write the field is **demoted to reader**; the maintainer wins. **Automation** (`A` cells) wins over both for its declared fields (G8 owns them). **`L`** (locked / immutable) fields are won by **no agent** post-lock — only the operator-gated correction protocol writes them.
 
@@ -93,38 +93,38 @@ Every field whose §5 creator ≠ maintainer is a conflict candidate. The regist
 
 ### 3.4 Worked conflict scenarios
 
-**CS-1 — ppm-agent vs tracker-manager on `RAID Item.lifecycle_state`** *(the #154-named case)*
+**CS-1 — ppm-agent vs tracker-manager on `RAID Item.lifecycle_state`** *(the named conflict-seam case)*
 - *Setup:* `RAID Item` §5 = creator `ppm-agent`, maintainer `tracker-manager`; Axis-1 `open → in-progress → mitigating → resolved → closed`. ppm-agent (which *created* the item at `open`) later tries to flip it to `mitigating` during a transcript sweep; tracker-manager simultaneously processes a TRACKER_UPDATE flipping it to `resolved`.
 - *Resolution:* **CW-BASE → tracker-manager wins.** `lifecycle_state` is a post-create state-transition field; the maintainer owns it. ppm-agent's authority on this RAID ended at create-commit (it set `open`); it is now a **reader** of `lifecycle_state` and must route any state-change *recommendation* through tracker-manager (the TRACKER_UPDATE channel, per [OPERATIONS.md § Closed-Loop Processing Protocol](../governance/OPERATIONS.md)), not write directly. **Winner: tracker-manager (maintainer). Loser action: ppm-agent emits a recommendation, does not write.**
 
-**CS-2 — creator vs maintainer on `Milestone.actual_date`** *(the #154-named case)*
+**CS-2 — creator vs maintainer on `Milestone.actual_date`** *(the named conflict-seam case)*
 - *Setup:* `Milestone` §5 = creator `release-planner`, maintainer `delivery-engine`. `actual_date` is stamped when the milestone reaches `→completed`. release-planner (creator) tries to backfill `actual_date` during a re-plan; delivery-engine (maintainer) is the legitimate updater.
-- *Resolution:* **Two rules fire and agree.** First, `actual_date` on `→completed` is an **`A` (automation) cell** — the G8 completion hook stamps it; *neither* agent should hand-write it (`DEFER-G8` disposition, [`entity-field-schemas.md` §2](entity-field-schemas.md#2-enforcement-level-taxonomy)). If automation is not yet wired, **CW-BASE → delivery-engine (maintainer) wins**; release-planner's create-scope ended at create-commit. **Winner: G8 automation (declared) → delivery-engine (maintainer) as the agent fallback. Loser action: release-planner is a reader of `actual_date`.**
+- *Resolution:* **Two rules fire and agree.** First, `actual_date` on `→completed` is an **`A` (automation) cell** — the G8 completion hook stamps it; *neither* agent should hand-write it (`DEFER-G8` disposition, [`entity-field-schemas.md` §2](entity-field-schemas.md)). If automation is not yet wired, **CW-BASE → delivery-engine (maintainer) wins**; release-planner's create-scope ended at create-commit. **Winner: G8 automation (declared) → delivery-engine (maintainer) as the agent fallback. Loser action: release-planner is a reader of `actual_date`.**
 
 **CS-3 — append-merge: ppm-agent and tracker-manager both write `RAID Item.action_plan`** *(residual `Ap` shape)*
 - *Setup:* Over the `open → in-progress → mitigating` arc, ppm-agent records the initial action plan and tracker-manager later adds a mitigation-status update. Under a naive `U` contract the second write **silently overwrites** the first — the data-loss failure this matrix exists to prevent.
 - *Resolution:* **`action_plan` is an `Ap` (Append) field → CW-LADDER rung 3: no winner, both entries land.** Each writer appends an attributed, timestamped entry; neither overwrites. The maintainer (tracker-manager) still owns the field's *lifecycle* (it can mark the parent transition), but appends are commutative and non-destructive. **Winner: both (append is the resolution). This is the case that motivates the additive `Ap` value.**
 
 **CS-4 — immutable-record write: tracker-manager vs operator on `Decision.decision_statement`** *(residual `L` shape)*
-- *Setup:* `Decision` is a Baselined / immutable record ([`project-entity-model.md` §4 #5](../disciplines/project-entity-model.md#4-entity-definitions-18)); §5 = creator `ppm-agent`, maintainer `tracker-manager`. After the decision is `accepted`, tracker-manager processes an edit that would rewrite `decision_statement`.
+- *Setup:* `Decision` is a Baselined / immutable record ([`project-entity-model.md` §4 entity 5](../disciplines/project-entity-model.md)); §5 = creator `ppm-agent`, maintainer `tracker-manager`. After the decision is `accepted`, tracker-manager processes an edit that would rewrite `decision_statement`.
 - *Resolution:* **`decision_statement` is `L` (locked) in every post-accept column → CW-BASE: no agent wins.** An immutable field post-lock is writable only via the **operator-gated correction protocol** (a Decision is `reversed → superseded`, not silently rewritten). tracker-manager's maintainer role covers *operational* fields (`lifecycle_state`), not the immutable statement. **Winner: nobody (operator correction protocol only). Loser action: tracker-manager refuses the write, surfaces a correction-protocol recommendation.**
 
 ---
 
 ## 4. Audit-Trail Requirement per Write Class
 
-The access-cell values collapse to **4 write classes** for audit purposes. The matrix states which classes MUST carry a [CLAUDE.md evidence-quality label](../../CLAUDE.md) (`[SOURCE]`, `[INFERRED]`, `[ASSUMPTION – CONFIRM]`, `[CONTEXT]`, `[RECOMMENDED]`). This **reuses the existing gate** — [OPERATIONS.md § Skill Chaining Protocol **C3**](../governance/OPERATIONS.md) already requires `evidence_quality ∈ {[SOURCE], [INFERRED]}` on any auto-cascaded tracker write, and `[ASSUMPTION – CONFIRM]` demotes a write to manual. This matrix **extends C3's existing bar** from "auto-cascade only" to "all entity-field writes, by class" — citing, not re-inventing, the label set and gate semantics.
+The access-cell values collapse to **4 write classes** for audit purposes. The matrix states which classes MUST carry a [CLAUDE.md evidence-quality label](../CLAUDE.md.template) (`[SOURCE]`, `[INFERRED]`, `[ASSUMPTION – CONFIRM]`, `[CONTEXT]`, `[RECOMMENDED]`). This **reuses the existing gate** — [OPERATIONS.md § Skill Chaining Protocol **C3**](../governance/OPERATIONS.md) already requires `evidence_quality ∈ {[SOURCE], [INFERRED]}` on any auto-cascaded tracker write, and `[ASSUMPTION – CONFIRM]` demotes a write to manual. This matrix **extends C3's existing bar** from "auto-cascade only" to "all entity-field writes, by class" — citing, not re-inventing, the label set and gate semantics.
 
 | Write class | Cell(s) | Evidence-quality label REQUIRED? | Rationale |
 |---|---|---|---|
 | **Create** | `C` | **YES — `[SOURCE]` or `[INFERRED]`** | The create-commit establishes the record; its provenance must be traceable (which transcript / issue / operator input sourced it). Matches C3's existing auto-cascade bar. |
 | **State-transition** | `U` on `lifecycle_state`; `A` state stamps | **YES — `[SOURCE]` or `[INFERRED]`** | A lifecycle flip is a load-bearing, often-irreversible event (`→closed`, `→cancelled`); the trail must say what evidence justified it. `[ASSUMPTION – CONFIRM]` **demotes the write to manual** (per C3) — an unverified transition never auto-fires. |
-| **Field-update** | `U` on non-state fields | **CONDITIONAL** — required for **portfolio-queried** fields (`RAID Item.impact`, `severity`, `target_date`); `[CONTEXT]` acceptable for cosmetic fields | The portfolio-rollup query keys on `impact` / `severity` ([§5 note](entity-field-schemas.md#5-consumer-matrix)); those updates must be graded so a rollup never aggregates unlabelled data. Purely cosmetic fields (a `*_name` typo fix) may carry `[CONTEXT]`. |
+| **Field-update** | `U` on non-state fields | **CONDITIONAL** — required for **portfolio-queried** fields (`RAID Item.impact`, `severity`, `target_date`); `[CONTEXT]` acceptable for cosmetic fields | The portfolio-rollup query keys on `impact` / `severity` ([§5 note](entity-field-schemas.md)); those updates must be graded so a rollup never aggregates unlabelled data. Purely cosmetic fields (a `*_name` typo fix) may carry `[CONTEXT]`. |
 | **Append** | `Ap` | **YES — each appended entry self-labels** | Each `Ap` entry is attributed + timestamped + carries its own evidence label (the append *is* the audit trail; entries are never overwritten, so the log *is* the provenance record). |
 | **Automation** | `A` (non-state) | **N/A — label is the hook identity** | A G8-hook write is audited by the hook's own commit / log identity, not an agent evidence label (agents do not author `A` cells). |
 | **Locked** | `L` | **N/A — no write occurs** | Post-lock writes happen only via the operator correction protocol, which carries its own approval trail. |
 
-**Audit-trail home (declared, not built here — boundary discipline).** This matrix **declares** the label requirement per write class. The **physical** capture surface (where the label is persisted — a frontmatter field, a tracker cell, a commit trailer) is **G8 automation / tracker-schema physicalization** — exactly the WHAT/HOW split the [`entity-field-schemas.md` §2](entity-field-schemas.md#2-enforcement-level-taxonomy) boundary axiom uses. The matrix is the logical contract; it does not over-reach into the persistence mechanism.
+**Audit-trail home (declared, not built here — boundary discipline).** This matrix **declares** the label requirement per write class. The **physical** capture surface (where the label is persisted — a frontmatter field, a tracker cell, a commit trailer) is **G8 automation / tracker-schema physicalization** — exactly the WHAT/HOW split the [`entity-field-schemas.md` §2](entity-field-schemas.md) boundary axiom uses. The matrix is the logical contract; it does not over-reach into the persistence mechanism.
 
 ---
 
@@ -132,17 +132,17 @@ The access-cell values collapse to **4 write classes** for audit purposes. The m
 
 This matrix canonicalizes three conventions that the corpus implied but never stated. Per the slim-to-kernel discipline, an application-of-existing-ADRs record folds into the artifact rather than a standalone ADR — CW-BASE is the *temporal completion* of the already-ratified §5/§6 ownership model (the Two-Axis Entity Lifecycle decision), not a new architectural decision.
 
-- **The `Ap` (Append) value** is additive (not a replacement) per CLAUDE.md "Prefer durable structures over static examples" and the `entity-field-schemas.md` duplicate-source-discipline (reuse the taxonomy, do not fork it). It is the minimal delta the entity model's **multi-writer fields** force, justified by the data-loss failure mode (a second `U` writer silently overwriting the first) that [`entity-field-schemas.md` §7](entity-field-schemas.md#7-validation-failure-handling) already names. **Reversibility: CHEAP / Confidence: HIGH.**
+- **The `Ap` (Append) value** is additive (not a replacement) per CLAUDE.md "Prefer durable structures over static examples" and the `entity-field-schemas.md` duplicate-source-discipline (reuse the taxonomy, do not fork it). It is the minimal delta the entity model's **multi-writer fields** force, justified by the data-loss failure mode (a second `U` writer silently overwriting the first) that [`entity-field-schemas.md` §7](entity-field-schemas.md) already names. **Reversibility: CHEAP / Confidence: HIGH.**
 - **CW-BASE** invents no authority: every winner is the §5/§6-named owner; the rule adds the missing *temporal* clause ("authority transfers at create-commit") to the already-canonical creator/maintainer split. The four worked scenarios each resolve to a §5 owner, demonstrating the rule adds temporal precision only. **Reversibility: CHEAP / Confidence: HIGH.**
 - **The audit-trail-per-write-class** requirement extends OPERATIONS.md C3's existing `{[SOURCE], [INFERRED]}` bar from auto-cascade to all entity-field writes by class; it cites (does not re-invent) the CLAUDE.md label set and the C3 gate semantics, and defers the persistence surface to G8 (boundary discipline). **Reversibility: CHEAP / Confidence: HIGH.**
 
-**Out of scope (deliberately not done here):** this matrix **keys on** the entity Axis-1 transitions; it does **not register** the entity state-machine family into [`lifecycle-states-canonical.md` §3](../standards/lifecycle-states-canonical.md) — that is the operator-gated downstream G8/G10 governance touch (flagged in [`project-entity-model.md` §2](../disciplines/project-entity-model.md#2-scope--boundary-axiom), FLAGGED-not-executed). It does not restate §5 create-time supply, redefine the C/R/U/A/L/— taxonomy, or re-list the Axis-1 state enums.
+**Out of scope (deliberately not done here):** this matrix **keys on** the entity Axis-1 transitions; it does **not register** the entity state-machine family into [`lifecycle-states-canonical.md` §3](../standards/lifecycle-states-canonical.md) — that is the operator-gated downstream G8/G10 governance touch (flagged in [`project-entity-model.md` §2](../disciplines/project-entity-model.md), FLAGGED-not-executed). It does not restate §5 create-time supply, redefine the C/R/U/A/L/— taxonomy, or re-list the Axis-1 state enums.
 
 ---
 
 ## 6. Per-Entity Access Blocks (×18)
 
-One table per entity. Columns = `create` + the entity's Axis-1 transition edges ([`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-18)). Cells ∈ `{C, R, U, A, L, Ap, —}` (§1). The `Owner` column names the §5/§6 role holding post-create write authority (per CW-BASE). Only discriminating fields + `lifecycle_state` are surfaced (house style); `Create-time supply → §5` is the per-block pointer (do not re-list the triplet).
+One table per entity. Columns = `create` + the entity's Axis-1 transition edges ([`project-entity-model.md` §4](../disciplines/project-entity-model.md)). Cells ∈ `{C, R, U, A, L, Ap, —}` (§1). The `Owner` column names the §5/§6 role holding post-create write authority (per CW-BASE). Only discriminating fields + `lifecycle_state` are surfaced (house style); `Create-time supply → §5` is the per-block pointer (do not re-list the triplet).
 
 ### Project-scoped entities (live in `[Project]/`)
 
@@ -343,7 +343,7 @@ The Artifact's Axis-1 *delegates to Axis-2* — `lifecycle_state` mirrors the ba
 ### Work-item tier entity (live in `[Project]/`)
 
 #### 6.18 Work Item (WI) — `backlog → ready → in-progress → in-review → done | cancelled`
-*Create-time supply → Work Item's §5 Consumer-Matrix row · creator `intake-desk` · maintainer `delivery-engine` (per [`project-entity-model.md` §4 #18](../disciplines/project-entity-model.md#4-entity-definitions-18) + [§6](../disciplines/project-entity-model.md#6-owning-agent-matrix)).*
+*Create-time supply → Work Item's §5 Consumer-Matrix row · creator `intake-desk` · maintainer `delivery-engine` (per [`project-entity-model.md` §4 entity 18](../disciplines/project-entity-model.md) + [§6](../disciplines/project-entity-model.md)).*
 
 | Field | create | →ready | →in-progress | →in-review | →done | →cancelled | Owner |
 |---|---|---|---|---|---|---|---|
@@ -351,18 +351,18 @@ The Artifact's Axis-1 *delegates to Axis-2* — `lifecycle_state` mirrors the ba
 | `parent_ref` | **C** | U | L | L | L | L | maintainer |
 | `lifecycle_state` | **C** (=`backlog`) | **U** | **U** | **U** | **U** | **U** | maintainer |
 
-> The C2 type-pack layer projects methodology labels onto this base machine and MAY add type-scoped sub-states over it ([`project-entity-model.md` §4 #18](../disciplines/project-entity-model.md#4-entity-definitions-18)). Those projected/extended transitions inherit the same access cells: maintainer owns post-create writes; create-time supply is the creator's.
+> The C2 type-pack layer projects methodology labels onto this base machine and MAY add type-scoped sub-states over it ([`project-entity-model.md` §4 entity 18](../disciplines/project-entity-model.md)). Those projected/extended transitions inherit the same access cells: maintainer owns post-create writes; create-time supply is the creator's.
 
 ---
 
 ## 7. Cross-References
 
 - [`field-lifecycle-matrix.md`](field-lifecycle-matrix.md) — the ticket-tier sibling; **source of the C/R/U/A/L/— Cell Taxonomy** reused here (§1).
-- [`entity-field-schemas.md` §5 Consumer Matrix](entity-field-schemas.md#5-consumer-matrix) — **create-time field-supply** contract (referenced, not restated; the per-block `→ §5` pointer).
-- [`entity-field-schemas.md` §2](entity-field-schemas.md#2-enforcement-level-taxonomy) — the `DEFER-G8` disposition + WHAT/HOW boundary axiom the audit-trail home (§4) cites.
-- [`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-18) — the 18 entities + **Axis-1 lifecycle machines** (the column source, §2).
-- [`project-entity-model.md` §6 Owning-Agent Matrix](../disciplines/project-entity-model.md#6-owning-agent-matrix) — creator / maintainer / reader per entity (the `Owner` column + CW-BASE source, §3).
+- [`entity-field-schemas.md` §5 Consumer Matrix](entity-field-schemas.md) — **create-time field-supply** contract (referenced, not restated; the per-block `→ §5` pointer).
+- [`entity-field-schemas.md` §2](entity-field-schemas.md) — the `DEFER-G8` disposition + WHAT/HOW boundary axiom the audit-trail home (§4) cites.
+- [`project-entity-model.md` §4](../disciplines/project-entity-model.md) — the 18 entities + **Axis-1 lifecycle machines** (the column source, §2).
+- [`project-entity-model.md` §6 Owning-Agent Matrix](../disciplines/project-entity-model.md) — creator / maintainer / reader per entity (the `Owner` column + CW-BASE source, §3).
 - [`entity-lifecycle-protocol.md`](../standards/entity-lifecycle-protocol.md) + [`entity-lifecycle-protocol-shared-portfolio.md`](../standards/entity-lifecycle-protocol-shared-portfolio.md) — the W0 Axis-1 transition protocols whose transition-table format the column headers bind to (§2).
 - [`artifact-workflow-protocol.md` §4](../artifact-workflow-protocol.md) — the Artifact `promotion_state` field (§6.9, referenced not restated).
 - [OPERATIONS.md § Skill Chaining Protocol](../governance/OPERATIONS.md) (C3) + [§ Closed-Loop Processing Protocol](../governance/OPERATIONS.md) — the consumers (the audit-label gate the matrix extends, §4; the TRACKER_UPDATE channel CS-1 routes through).
-- [CLAUDE.md](../../CLAUDE.md) — the 5 evidence-quality labels the audit-trail requirement cites (§4).
+- [CLAUDE.md](../CLAUDE.md.template) — the 5 evidence-quality labels the audit-trail requirement cites (§4).

@@ -454,7 +454,7 @@ Agent emits the cascade as **SECONDARY** rows in the Section-8.6 Tracker Impact 
 the existing dependency-scan apparatus already carries cross-tracker secondary effects, so
 a cascade is one more SECONDARY-effect class. The three load-bearing cascades:
 
-**Cascade A — Decision `SUPERSEDES` Decision → comms entry (§5.1 chain #5, applied at
+**Cascade A — Decision `SUPERSEDES` Decision → comms entry (§5.1 chain 5, applied at
 Decision granularity via the `SUPERSEDES` MVP type).** A transcript records a new Decision
 overriding a prior one. PPM Agent (creates Decision) emits `Decision-proposed →
 Decision-accepted` on the new Decision **and** `Decision-accepted → Decision-superseded`
@@ -466,7 +466,7 @@ entry via comms-writer (on the C7 `[COMMS]` allowlist) so stakeholders see the r
 PPM Agent surfaces it as a Section-8.6 SECONDARY row.
 
 **Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact → child records at
-entry state (§5.1 chains #6 / #7 / #8, all `GENERATES`).** PPM Agent processes a meeting
+entry state (§5.1 chains 6 / 7 / 8, all `GENERATES`).** PPM Agent processes a meeting
 transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. On `held`, PPM
 Agent (creates Decision + RAID) emits new child records — each Decision at
 `Decision-proposed`, each RAID Item at `RAIDItem-open` — with the `GENERATES` provenance
@@ -476,7 +476,7 @@ artifact-generator sets the entry `lifecycle_state` + Domain for any generated A
 (Tier 2, 08-Generated staging). The generated children inherit provenance so they trace
 back to origin.
 
-**Cascade C — RAID Item `BLOCKS` Milestone → milestone status flag (§5.1 chain #9,
+**Cascade C — RAID Item `BLOCKS` Milestone → milestone status flag (§5.1 chain 9,
 many:many).** A RAID Item carrying a `BLOCKS` edge to a Milestone is at — or transitions to
 — `RAIDItem-open` (or re-opens via REACTIVATE). PPM Agent emits/maintains the RAID
 `lifecycle_state`; tracker-manager writes it (RAID Log = Tier 1, approval-gated). Side-effect:

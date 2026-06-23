@@ -261,7 +261,7 @@ The RAID Log maintains two representations:
 **Update tier:** Tier 2 (operational — auto-write within `cascade_scope`)
 **Update sources:** Tracker Manager (row writes on artifact-generate + phase-gate baselining)
 
-The per-project **configuration-management catalog** for the **Artifact** entity ([`project-entity-model.md`](../disciplines/project-entity-model.md) §4 #9): one row per project artifact (plans, RAID files, FDDs, charters, design docs, …), capturing its version, baseline status, owner, and retention so the operator can see at a glance which configuration items (CIs) exist for a project and which are baselined vs. in-flight. This closes the gap where `projects/` is gitignored and artifacts are updated in place with no version, no baseline, and no catalog — the Register is the durable CI history that the gitignore otherwise loses.
+The per-project **configuration-management catalog** for the **Artifact** entity ([`project-entity-model.md`](../disciplines/project-entity-model.md) §4 entity 9): one row per project artifact (plans, RAID files, FDDs, charters, design docs, …), capturing its version, baseline status, owner, and retention so the operator can see at a glance which configuration items (CIs) exist for a project and which are baselined vs. in-flight. This closes the gap where `projects/` is gitignored and artifacts are updated in place with no version, no baseline, and no catalog — the Register is the durable CI history that the gitignore otherwise loses.
 
 ### Structure
 **Format:** Markdown table — one row per artifact CI.

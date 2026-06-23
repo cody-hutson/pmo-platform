@@ -285,7 +285,7 @@ it for the machine but fires only the create-entry row.
 
 **Artifact entity — Axis-1 delegates to Axis-2 (Domain A/B/C).** The Artifact entity's
 operational lifecycle **is** the Domain A/B/C content lifecycle of its backing file (the
-`project-entity-model.md` §4 #9 reconciliation seam). The entry `lifecycle_state` therefore
+`project-entity-model.md` §4 entity 9 reconciliation seam). The entry `lifecycle_state` therefore
 mirrors the backing file's Domain entry state per `core/schemas/frontmatter-schema.md`
 § Category 2 (cited as the delegation authority — the Domain state sets are NOT redefined
 here):
@@ -304,7 +304,7 @@ content-maturity, `promotion_state` carries location.
 **Plan entity — the Domain-A Baselined machine.** A Plan (cutover plan, test plan, comms
 plan, etc.) is a **distinct entity** artifact-generator creates (§6: creates `artifact-generator`,
 maintains `ppm-agent`), carrying its **own** Axis-1 machine `draft → approved → active →
-superseded → archived` (the Domain-A Baselined machine, `project-entity-model.md` §4 #4) —
+superseded → archived` (the Domain-A Baselined machine, `project-entity-model.md` §4 entity 4) —
 *not* the Domain-C Artifact machine. On create, artifact-generator stamps the entry state
 **`lifecycle_state: draft`** (`Plan-draft`). It never stamps a later state (`approved` is an
 operator-approval gate PPM Agent records; `active` makes the plan the live baseline; the
