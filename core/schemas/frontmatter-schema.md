@@ -74,6 +74,8 @@ Six categories. Every file has core fields (required across all domains). Domain
 - Domain B files follow the **Living Document** pattern (continuous updates, no formal baseline)
 - Domain C files follow a **hybrid** pattern (agent-initiated states + human-gated promotion) — full protocol in `domain-c-lifecycle-protocol.md`
 
+**Content-maturity vs. promotion-location (the two-concern separation).** `lifecycle_state` is the canonical **content-maturity** field — *how authoritative the content is* (this is the Artifact's Axis-1 delegation per `project-entity-model.md §4 #9`; `artifact_state` is **deprecated** as a content-maturity carrier, see `lifecycle-states-canonical.md §3.2`). A generated artifact's **promotion-location** — *where the file physically sits* (`08-Generated/` vs. its promoted `01-07` folder) — is a separate, orthogonal concern carried by the `promotion_state` Domain-C field (see § Domain C below), **not** by `lifecycle_state`. The two vary independently: a `published` artifact may still be `staged`. Full protocol: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md).
+
 ### Category 3: Provenance
 
 | Field | Type | Required | Valid Values | Description |
@@ -213,10 +215,15 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | `trigger_source` | String | Yes (Domain C) | Filename or event description | What triggered this synthesis (e.g., transcript, SteerCo meeting, user request) |
 | `synthesis_scope` | Array | No | List of filenames | Source files this synthesis draws from |
 | `validation_state` | String | No | `pending`, `passed`, `failed` | Agent consistency check result |
+| `promotion_state` | String | No | `staged`, `promoted`, `archived-in-place` | **Promotion-location** of the generated artifact's file — *where it physically sits*, orthogonal to `lifecycle_state` (which carries content-maturity). `staged` = in `08-Generated/`; `promoted` = physically moved to its `01-07` target folder; `archived-in-place` = moved to `08-Generated/_archived/` by the Auto-Archive sweep (a location terminal, distinct from the content terminal `lifecycle_state: archived`). Owner: `artifact-generator`. Full protocol: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) §4. Absent ⇒ not-yet-staged / not-applicable. |
 | `promoted_from` | String | No | Filename | If promoted from another synthesis, links to predecessor |
 | `parent_artifact` | String | No | Path/filename of the upstream generated artifact | The upstream generated artifact this synthesis derives from (horizontal lineage). A lineage edge MAY point at a Domain-A baselined parent — both Domain A and Domain C carry the field so an A↔C chain resolves. See Lineage Fields vs. Provenance Fields. |
 | `sibling_topic` | String | No | Scope descriptor string | Topic/scope descriptor that groups strict siblings for dedup matching. Verbatim-aligned with `lifecycle-states-canonical.md §3.2`. |
 | `supersedes` | String | No | Filename of the artifact this one replaces | Backward inverse of `superseded_by` — points to the prior artifact this one supersedes in a dedup/version chain. Distinct from the `SUPERSEDES` relationship verb (a per-artifact scalar carrier, not a `relationships[]` entry). |
+
+**Promotion-location consistency rules:**
+- `promotion_state: promoted` requires `folder ≠ 08-generated` (a promoted file has physically left the staging area; this is the rule artifact-lint Check 4 enforces, now schema-declared on the dedicated `promotion_state` field rather than inferred from the deprecated `artifact_state: PROMOTED`).
+- `promotion_state` (location) and `lifecycle_state` (content-maturity) are **orthogonal** — neither value constrains the other. Full transition rules: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) §4.
 
 ---
 
@@ -386,6 +393,7 @@ relationships:
 - [ ] (WARN) Lineage-field path values (`parent_artifact`, `supersedes`, `superseded_by`) resolve to existing artifacts — WARN, not BLOCK (consistent with relationship-target resolution; a dangling lineage pointer is a flag, not a hard failure)
 - [ ] Relationship `type` values are one of the 7 MVP types
 - [ ] Domain C files have `trigger_source` populated
+- [ ] (Domain C) if `promotion_state: promoted`, then `folder ≠ 08-generated` (promotion-location consistency)
 - [ ] Sidecar files follow the `{filename}.meta.yml` naming convention
 - [ ] `created_date` is not in the future
 - [ ] `lifecycle_changed` is not earlier than `created_date`
