@@ -1,17 +1,17 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-036 — Registry as CMDB / single skill catalog — core/skills/registry.md is evolved into the platform's single Configuration-Management catalog (all deployed skills are CIs carrying lifecycle-state, dependency, and owner axes; version and roster-existence are CITED from SKILL.md and deploy.sh, never stored); the pmo-skill-router classifies against a kind==role-Specialist filtered VIEW, so routing is unblurred; this SUPERSEDES ADR-035 §Decision part 4 (role-Specialists-only population) and PRESERVES ADR-035's central-index and no-SKILL.md-frontmatter decisions
+title: ADR-038 — Registry as CMDB / single skill catalog — core/skills/registry.md is evolved into the platform's single Configuration-Management catalog (all deployed skills are CIs carrying lifecycle-state, dependency, and owner axes; version and roster-existence are CITED from SKILL.md and deploy.sh, never stored); the pmo-skill-router classifies against a kind==role-Specialist filtered VIEW, so routing is unblurred; this SUPERSEDES ADR-035 §Decision part 4 (role-Specialists-only population) and PRESERVES ADR-035's central-index and no-SKILL.md-frontmatter decisions
 status: Proposed
 date: 2026-06-23
 release: 13-field-lifecycle-and-cmdb-automation (v2.20)
 deciders: "operator + Stage 5 Solutioning spoke"
 tags: [architecture, skills, cmdb, configuration-management, registry, single-catalog, routing-view, kind-discriminator, lifecycle-state, supersedes-adr-035, duplicate-source-discipline, core-module, reversibility]
 source_observations:
-  - "#202 (operator ruling on the approved Stage 4 plan) restored full scope — Artifact Register AND skill-CMDB — under the HARD CONSTRAINT 'a SINGLE skill registry/catalog; no second registry.' A prior Stage-5 spoke recommended Option B (CMDB as a separate core/schemas/ reference-schema). The operator OVERRODE that and selected Option A — evolve the single registry.md INTO the CMDB — on the rationale 'I don't want two skill registries': Option A yields ONE catalog (registry.md), Option B leaves two (registry.md + the new schema)."
+  - "The skill-CMDB work item (operator ruling on the approved Stage 4 plan) restored full scope — Artifact Register AND skill-CMDB — under the HARD CONSTRAINT 'a SINGLE skill registry/catalog; no second registry.' A prior Stage-5 spoke recommended Option B (CMDB as a separate core/schemas/ reference-schema). The operator OVERRODE that and selected Option A — evolve the single registry.md INTO the CMDB — on the rationale 'I don't want two skill registries': Option A yields ONE catalog (registry.md), Option B leaves two (registry.md + the new schema)."
   - "Live survey: the CMDB CI population is the 43 deployed skills (deploy.sh: 27 operations + 12 release + 4 core); registry.md holds 19 role-Specialist routing rows with 4 fields and no kind/lifecycle/deps/owner column; SKILL.md version: exists on 44 files; the 3 contract indexes exist; the System entity carries a frozen active→deprecated→retired Axis-1 machine (V-SYS-04); NO CMDB or skill-lifecycle artifact exists. Roster/version/contract already have authoritative homes (deploy.sh / SKILL.md / the 3 indexes), so the only net-new CMDB content is {kind, lifecycle-state, dependency-edges, owner}."
 ---
 
-# ADR-036 — Registry as CMDB / single skill catalog
+# ADR-038 — Registry as CMDB / single skill catalog
 
 ## Status
 
@@ -21,7 +21,7 @@ alongside the registry.md evolution it governs. Flips to Accepted at this releas
 Collective Review scope-lock — the release activates Stage 5 with two or more Solutioning
 issues, so Collective Review is the ratification gate, consistent with ADR-035 and ADR-019.
 Recorded as Proposed (not Accepted) at authoring because that gate has not yet run. On
-acceptance, ADR-035 receives an in-place "Superseded-in-part by ADR-036" note scoping the
+acceptance, ADR-035 receives an in-place "Superseded-in-part by ADR-038" note scoping the
 supersede to its §Decision part 4.
 
 ## Context
@@ -78,7 +78,7 @@ catalog (CMDB). There is exactly one skill catalog; routing is a typed view of i
 
 3. **The catalog stores the four net-new axes:** `kind` (`role-Specialist | function-skill | core |
    router`); `lifecycle-state` (REUSING the frozen `System` entity Axis-1 machine `active →
-   deprecated → retired`, `project-entity-model.md` §4 #11 / `entity-field-schemas.md` §3.11 V-SYS-04
+   deprecated → retired`, `project-entity-model.md` §4 entity 11 / `entity-field-schemas.md` §3.11 V-SYS-04
    — a skill-as-CI is the technical-system analogue and inherits that 3-state machine rather than
    originating a fourth vocabulary; default `active`); `dependencies` (CI-to-CI edges typed from the
    seven MVP relationship types in `frontmatter-schema.md` §Cat-4 — encoding the ADR-019
@@ -114,7 +114,7 @@ catalog (CMDB). There is exactly one skill catalog; routing is a typed view of i
   schema, no-SKILL.md-frontmatter registration, `core/` placement + allow-link) are preserved and
   remain load-bearing. ADR-035's protected property (clean role-Specialist classification) is kept,
   now enforced by the `kind` filter instead of by table membership. ADR-035 receives an in-place
-  "Superseded-in-part by ADR-036" note.
+  "Superseded-in-part by ADR-038" note.
 - **The router's classification is unchanged in substance.** A surgical, behavior-preserving edit to
   the router's read target; no change to classification logic, hints, ladder, or FMs. The router-itself
   and all function-skills become structurally unroutable via the `kind` filter (FM2 strengthened).
@@ -162,7 +162,7 @@ catalog (CMDB). There is exactly one skill catalog; routing is a typed view of i
 
 **EXPENSIVE / Confidence HIGH — once the CIs are populated** (same tier ADR-035 declares for the
 registry once role-Specialists register). The catalog at `core/skills/registry.md` is bound to by the
-`pmo-skill-router` (now via the routing-view read), ADR-035 (the status note), ADR-036 (this record), and
+`pmo-skill-router` (now via the routing-view read), ADR-035 (the status note), ADR-038 (this record), and
 every role-Specialist body that describes composition "through the core/-registry skill-chain." Backing
 the population out — collapsing the CIs back to the 19 role-Specialists and reverting the router's
 view-read — is a multi-surface cascade. **CHEAP pre-build** — before the rows are authored and the router
@@ -178,7 +178,7 @@ two catalogs; the operator accepted the higher reversibility tier for the single
   (single central index, extensible schema, no-SKILL.md-frontmatter registration, `core/` placement +
   allow-link) remain load-bearing; the `kind`-filtered routing view preserves part 4's protected property
   (clean role-Specialist classification) while reversing its population scope. ADR-035 receives an in-place
-  "Superseded-in-part by ADR-036" note.
+  "Superseded-in-part by ADR-038" note.
 - [ADR-019](ADR-019-specialists-compose-not-absorb.md) — Specialists compose, not absorb. The
   role-vs-function distinction the `kind` column encodes, and the compose-not-absorb graph the
   `dependencies` axis stores as CI-to-CI edges.
@@ -198,5 +198,5 @@ two catalogs; the operator accepted the higher reversibility tier for the single
 - The live survey: `deploy.sh` arrays (43 deployed skills), `registry.md` (19 rows, 4 fields, no CI
   columns), `SKILL.md version:` (44), the 3 contract indexes, the System `active→deprecated→retired`
   machine (V-SYS-04), and the zero-CMDB / zero-skill-lifecycle finding.
-- The reuse sources: `project-entity-model.md` §4 #11 (System Axis-1 machine) and `frontmatter-schema.md`
+- The reuse sources: `project-entity-model.md` §4 entity 11 (System Axis-1 machine) and `frontmatter-schema.md`
   §Cat-4 (the 7 MVP relationship types).
