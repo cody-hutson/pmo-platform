@@ -649,6 +649,7 @@ This extends the **owning-agent matrix** in [`project-entity-model.md` §6](../d
 | Cross-Project Dependency | `ppm-agent` | `ppm-agent` | `from_entity_ref`,`to_entity_ref`,`lifecycle_state` → `weekly-status-rollup` |
 | Cross-Project Resource Conflict | `delivery-engine` | `delivery-engine` | `person_id`,`competing_project_ids`,`over_allocation_pct` → `weekly-status-rollup` |
 | Strategic Initiative | `ppm-agent` | `weekly-status-rollup` | `sponsor`,`target_outcome`,`linked_program_ids` → `comms-writer` |
+| Work Item | `intake-desk` (supplies `work_item_type`,`parent_ref` — both `✅`) | `delivery-engine` | `work_item_type`,`parent_ref`,`lifecycle_state` → `ppm-agent`, `daily-status`, `weekly-status-rollup` (container rollup from work-item children) |
 
 ## 6. Worked Examples + Validation Trace
 
