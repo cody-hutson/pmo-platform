@@ -315,9 +315,19 @@ or "Architectural Decision Gates" section.
 **Gate input:** <what drives the decision — spoke output, audit finding,
   prior-release evidence, operator directive>
 **Pre-decided (if applicable):** <operator's pre-decided stance, citing
-  directive and date; OMIT if no pre-decision>
+  directive and date; OMIT if no pre-decision>. **Directive auto-population:**
+  when no per-decision pre-decided stance is on record AND the milestone
+  description's `## Gate-Class Framing Directives` block carries a
+  `pre_decided_default` for this gate's `gate_class`, the hub auto-populates
+  this field with that default, citing the directive block + milestone
+  description as the source (per `engagement-charter.md` § Per-gate-class
+  framing directives). A per-decision stance, when present, takes precedence
+  over the directive default (the default is the fallback). The field reads
+  OMIT only when neither a per-decision stance nor a matching
+  `pre_decided_default` exists.
 **Gate decision:** <specific options to choose between, enumerated>
 **Blocks:** <which sub-tasks/stages cannot start without this decision>
+**Gate-class directive injection (per `engagement-charter.md` § Per-gate-class framing directives):** When the milestone description carries a `## Gate-Class Framing Directives` block whose `gate_class` matches this gate, the rendered gate MUST include — IN ADDITION TO the hub-enumerated options/dimensions above — every `require_options` entry as a selectable option and every `surface_dimensions` entry as a displayed decision dimension, and emphasize each `principles_emphasis` (DP-N) conformance verdict. Directive items are ADD-only (the rendered set is the union of hub-defaults and directive items); the directive never removes a hub-surfaced option or dimension. Absent a matching directive block, the gate renders with hub defaults only (no regression).
 **Upstream compatibility:** (REQUIRED per §D-Gate Template — see applicability note)
   - Anthropic skill-creator convention: <quoted convention with source;
     e.g., "Frontmatter is `name:` + `description:` only per
@@ -1419,6 +1429,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
    - **Stage 12:** Execute authorization with deployment procedure summary, rendered in main-thread chat via `AskUserQuestion` or equivalent in-chat mechanism. Note any PRs already merged via Procedure 6 (Early Merge) — these skip the merge step but are included in the release tag and deployment.
    - **Stage 12 Empirical Verification:** Hub runs pre-merge metadata check via `gh pr view <PR> --json milestone,labels,assignees,reviewRequests,projectItems` and cites the JSON output in the briefing; verifies deploy targets exist via `gh api` / `ls` calls cited in the briefing. Concurrence-without-verification at Stage 12 is non-compliant — pre-merge metadata gaps surfaced by verification block the Execute decision pending operator resolution.
    - **Stage 12 chore-PR scope:** Execute authorization in the Decision Briefing covers (a) the release PR merge per Phase B1, AND (b) the Stage 12 chore PR for RELEASE_LOG row + visible-H4 Deployment Log per Phase B5 commit mechanism. The Decision Briefing enumerates both PRs separately when presenting the Stage 12 execution scope; the operator's GO authorizes both.
+   - **Gate-class directive enrichment (per `engagement-charter.md` § Per-gate-class framing directives):** Before rendering the `AskUserQuestion` (or equivalent), read the milestone description's `## Gate-Class Framing Directives` block (if present). For the directive whose `gate_class` matches this gate (`stage-9-go-no-go` at Stage 9; `stage-12-execute` at Stage 12), inject each `require_options` entry as an additional selectable option, surface each `surface_dimensions` entry as a displayed dimension, and emphasize each `principles_emphasis` (DP-N) conformance verdict. ADD-only — the directive enriches the briefing; it never suppresses a hub-surfaced item. Composes with the Information Sufficiency clause (the directive NAMES the dimensions; the sufficiency clause enforces they print before the prompt). Absent a matching directive, render hub defaults only.
 4. Document the operator's decision as a comment on the gate sub-task
 5. Close the gate sub-task
 

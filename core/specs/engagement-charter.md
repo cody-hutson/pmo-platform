@@ -54,6 +54,48 @@ The Autonomy Tier hierarchy above operates per-action. A release-level dispatch 
 
 Release Class and Autonomy Tier compose multiplicatively, not redundantly. Per-class engagement-posture recommendations are defaults; operator may override per-release with documented rationale in the milestone-description Rationale sub-field.
 
+#### Per-gate-class framing directives (standing config)
+
+The per-release override above lets the operator override per-class posture *defaults*. A **per-gate-class framing directive** is the finer-grained, additive companion: a standing block — authored once in the milestone description alongside the `## Release Class` H2 (NOT a separate config file) — that enriches what a NAMED gate-class renders, without re-deciding the gate. Each field rides an existing rail; together they are **ADD-only** (see the guardrail below).
+
+**Directive schema** (one block per gate-class the operator wishes to enrich):
+
+| Field | Type | Definition |
+|---|---|---|
+| `gate_class` | enum | The gate the directive applies to. Closed set: `stage-9-go-no-go`, `stage-12-execute`, `d-class-decision`, `collective-review-scope-lock` (the named gates the hub renders in main-thread chat). |
+| `require_options` | list[string] | Option labels the gate MUST surface IN ADDITION TO whatever the hub independently enumerates. ADD-only. |
+| `surface_dimensions` | list[string] | Decision dimensions the gate's briefing MUST display IN ADDITION TO the hub's defaults (e.g., `blast-radius`, `rollback-feasibility`). Composes with the Decision Briefing Information Sufficiency clause in `hub-spoke-bridge.md`: the directive NAMES the dimensions; the sufficiency clause enforces they are printed before the prompt. ADD-only. |
+| `principles_emphasis` | list[`principle_id`] | Design-principle register entry ids (`DP-N`, per `core/standards/design-principle-register.md`) whose conformance verdict the operator wants emphasized in this gate-class's briefing. Values are register `principle_id`s. ADD-only. |
+| `pre_decided_default` | string \| OMIT | A standing pre-decided stance for this gate-class that auto-populates the D-Gate `Pre-decided` field when no per-decision pre-decision is on record. A per-decision stance takes precedence (the default is the fallback, not an override). |
+
+**Applicability:**
+- A directive block is OPTIONAL per gate-class — omission means the gate renders with hub defaults only (the pre-directive behavior; no regression).
+- A directive's fields are individually optional.
+- Directives are RECOMMENDATION-enriching, never RECOMMENDATION-replacing: the hub's independent enumeration, dimension surfacing, and recommendation still fire; the directive only guarantees ADDITIONAL named items appear.
+- `principles_emphasis` values MUST be `principle_id`s defined in `core/standards/design-principle-register.md`; an id with no matching register entry is a `[STRUCTURAL-DEFECT]` (dangling reference), caught by `deploy.sh --check` Check 45's consumer-id resolution.
+
+**ADD-never-SUBTRACT guardrail:** Framing directives ADD options, dimensions, and principle-emphasis to a rendered gate; they NEVER remove, suppress, or override what the hub independently surfaces. The rendered set is the union of hub-defaults and directive items (`hub-defaults ⊆ rendered`); a directive that would hide a hub-enumerated option, drop a hub-surfaced dimension, or suppress a conformance verdict is a `[STRUCTURAL-DEFECT]`. This is an invariant the hub honors at gate-render time; runtime enforcement is deferred (this pass ships the schema + the render-time read, not a separate union-checking gate). The operator enriches the gate; the operator does not use the directive to render a thinner gate than the hub would produce unaided.
+
+**`principles_emphasis` → register binding:** the field's values are `DP-N` ids from `core/standards/design-principle-register.md` (the source of truth for the id set). A directive naming `principles_emphasis: DP-5, DP-4` instructs the hub to emphasize the Stability and Simplicity conformance verdicts in that gate-class's briefing.
+
+**Worked sample** (authored in the milestone description, alongside `## Release Class`):
+
+```
+## Gate-Class Framing Directives
+### gate_class: stage-9-go-no-go
+require_options:
+  - defer-to-next-release
+surface_dimensions:
+  - blast-radius
+  - rollback-feasibility
+principles_emphasis:
+  - DP-5   # Stability (design-principle-register.md)
+  - DP-4   # Simplicity
+pre_decided_default: OMIT
+```
+
+This directive guarantees the Stage 9 GO briefing surfaces a `defer-to-next-release` option (in addition to the hub's GO/NO-GO), prints the blast-radius + rollback-feasibility dimensions, and emphasizes the DP-5/DP-4 conformance verdicts — all ADD-only.
+
 Cutover discipline: Applies to all releases going forward.
 
 ### Applicability

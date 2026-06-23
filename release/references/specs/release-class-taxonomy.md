@@ -158,11 +158,12 @@ The Methodology Variation table parameterizes release cadence by `delivery_appro
 
 The Outcome Statement (release-outcome-statement-template.md) and Release Class (this doc) BOTH land sections in the milestone description. Position convention per [`release-outcome-statement-template.md § 2`](release-outcome-statement-template.md): `### Release Outcome Statement` H3 sits at top-of-description ABOVE any metadata bullets (operator-visible at-a-glance). `## Release Class` H2 sits below (drives subsequent posture; consumed by the 13-dim Readiness Scan dimension-3 anchor per release-readiness-scan-spec.md dim 3). The N-way consistency table at Collective Review confirms heading levels and positions.
 
-### With operator-touchpoint inventory + shadow→warn→enforce convention (future siblings)
+### With operator-touchpoint inventory, shadow→warn→enforce convention, and per-gate-class framing directives
 
-Release Class composes with two sibling surfaces:
+Release Class composes with three sibling surfaces:
 - **Operator-touchpoint inventory + phase-out schema** (LIVE — `core/schemas/touchpoint-phaseout-schema.md`): the inventory enumerates the operator-engagement points across the pipeline (with a `stage` and `current_phase` per touchpoint) so the per-class density column (Light/Standard/Tight) becomes auditable per-engagement-touchpoint, not just declaratively. The schema's `current_phase` consumes the progressive-rollout convention's enum, so a per-class touchpoint's phase-out state reads in the same `shadow → warn → enforce → removed` vocabulary as the convention below.
 - **Pipeline-wide shadow→warn→enforce convention** (LIVE — `core/standards/progressive-rollout-convention.md`): the convention provides a uniform graduation path (`shadow → warn → enforce → removed`) applicable to per-class checks (e.g., a hotfix-only gate may enter shadow at first hotfix release, warn at second, enforce at third). A per-class check cites the convention for its phase vocabulary rather than re-defining it.
+- **Per-gate-class framing directives** (LIVE — `core/specs/engagement-charter.md` § Per-gate-class framing directives): the standing directive block, authored in the milestone description alongside this `## Release Class` H2, enriches what a named gate-class renders (`require_options` / `surface_dimensions` / `principles_emphasis` / `pre_decided_default`), ADD-only. Where Release Class selects per-release engagement DENSITY (Light/Standard/Tight) and the touchpoint inventory makes density auditable per-touchpoint, the framing directive enriches the per-gate-class RENDERING beneath both — the three compose: class sets density, inventory audits it, directive enriches each rendered gate.
 
 This doctrine names the composition surface; the touchpoint inventory's per-class density audit is a downstream consumer of a populated inventory instance.
 
@@ -179,7 +180,7 @@ Applies to all releases entering Stage 3 going forward. Class assignment applies
 | Surface | Consumption |
 |---|---|
 | `release/references/pipeline/stage-03-bundle.md` | G3-10 gate criterion (Phase A1 table) + Phase 4 "Set at Bundle" field appended |
-| `core/specs/engagement-charter.md` | Section 1 Release-level dispatch axis sub-section added (release-level layer above per-action Autonomy Tier hierarchy) |
+| `core/specs/engagement-charter.md` | Section 1 Release-level dispatch axis sub-section added (release-level layer above per-action Autonomy Tier hierarchy); § Per-gate-class framing directives consumed (standing directive block co-located with the milestone-description Release Class) |
 | `release/references/how-to/hub-spoke-bridge.md` | Procedure 0 spoke-template bullet 7 (class proposal) + D-ReleaseClass D-Gate block; Procedure 1 Step 2.5 (class read at scaffolding); Procedure 5 Stage 9 row note (review-depth-by-class) |
 | `release/governance/release-process.md` + mirror | § Methodology Variation H3 Release-Class Variation table extension |
 | `core/specs/autonomy-tiers.md` | Tier Disambiguation Table extends to 5 conventions (Document / Skill / Automation / Autonomy / Release Class — see § Composition with Autonomy Tier above for orthogonality discipline) |
