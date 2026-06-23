@@ -99,7 +99,7 @@ The hub is the operator's command center. At every human touchpoint, the hub's p
 
 **At every touchpoint, the hub produces a Decision Briefing covering:**
 
-1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact.
+1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact. For each option in a trade-off, the hub renders a per-option `### Design-Principle Conformance` line set (ALIGNED / `**CONFLICT.**` / N-A against the matching [`design-principle-register.md`](../../../core/standards/design-principle-register.md) entries) per the D-Gate Template § Design-Principle Conformance — the structural twin of the per-option Upstream-compatibility verdict. Omission on a `scope_predicate`-matching option is a `[STRUCTURAL-DEFECT]` (per `decision-discipline.md` § 5 G2).
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions, discoveries outside the current issue's scope.
 3. **Status summary** — what completed, quality assessment, any blockers.
 4. **Action items surfaced this routing point** — hub-tracked AI-NNN rows from `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md` whose `trigger_type` predicate matches the current routing point per [`hub-action-tracking.md` § 4 Review Cadence](../../../core/standards/hub-action-tracking.md). Subsection format: `| AI-NNN | Category | Description | Trigger fired | Recommended disposition |`. When zero rows trigger, the subsection reads *"No action items triggered at this routing point"* — omission is a structural defect (forcing-function makes the scan observable). Schema + 6-value category enum + 4-value trigger-type enum + 5-state status lifecycle defined in `hub-action-tracking.md` — bridge doc does NOT duplicate normative content.
@@ -121,6 +121,36 @@ This pattern applies across all procedures:
 | P6 Early Merge | Routing reveals dependency bottleneck | Early merge recommendation with downstream impact |
 
 **When multiple spokes complete in a batch:** Produce a single consolidated briefing covering all spoke outputs. Group decisions by type (approvals needed, risks to accept, scope changes). Do not interleave routing with decisions — present all decisions first, get operator approval, then route.
+
+#### Decision Briefing Information Sufficiency
+
+A Decision Briefing is *information-sufficient* before it is rendered: the operator can render every decision in it without the hub going back to read a spec it should already have loaded, and without an unstated option surfacing after the operator has answered. This sub-section is the **construction precondition** on every briefing produced under this Operating Principle — load and enumerate first, render second, call `AskUserQuestion` third. It applies the Localization Check (Mechanism 1) of [`decision-discipline.md` § 2.1](../../../core/disciplines/decision-discipline.md) to the briefing's option space and the operator's stance; it does not redefine that mechanism — § 2.1 remains the parent discipline for localizing a decision against platform-specific context.
+
+The hub satisfies all five gates before the `AskUserQuestion` call (or equivalent in-chat mechanism per the [Channel subsection](#channel-main-thread-chat-canonical)) fires:
+
+1. **Pre-load referenced spec content.** Before drafting the briefing, the hub reads the actual content of every spec, governance rule, schema, register entry, or prior decision the briefing will cite — not the title, not a remembered summary. A decision framed against a citation the hub has not opened this session is under-loaded. (This is the briefing-construction application of the adversarial-evaluation R1 requirement above: the verification artifact cannot be cited if the source was never read.)
+2. **Enumerate the full option space, including stance-implied options.** The hub lists every option the decision admits — not only the options it recommends. This explicitly includes options the operator's own prior stance, correction, or directive implies (e.g., if the operator has previously preferred the least-destructive disposition, "park-in-container" is an option that must appear even when the hub recommends a different one). Presenting a curated subset that omits a live option the operator would plausibly choose is under-loading the option space.
+3. **Render the full briefing in chat *before* the `AskUserQuestion` call.** The complete briefing — decisions, options, recommendation, rationale, verification evidence — is printed as a chat turn *before* the structured-prompt call fires. The `AskUserQuestion` options are a selection affordance over a briefing the operator has already read in full, never the first place the operator sees the decision content. A gate whose immediately-preceding chat turn lacks the rendered full briefing is a structural defect — tag `[STRUCTURAL-DEFECT: unrendered-gate]`, consistent with the structural-defect marker convention used elsewhere in this document (e.g., the return-value-conformance gate). Warn-mode initial: the marker is logged and the briefing flagged for the operator; flip-to-enforce: the hub HALTS the gate and re-renders the full briefing before re-issuing the prompt.
+4. **Stance-scan pre-check.** Before finalizing the option space (gate 2), the hub scans for operator stance bearing on this decision class — prior corrections, standing directives, recorded preferences, and the active correction set — and confirms each stance-implied option is present in the enumeration or explicitly addressed as considered-and-excluded with a reason. A stance the hub is aware of but did not surface as an option (or an explicit exclusion) is a stance-scan miss.
+5. **Spec-content-loaded self-check gate.** As the final pre-render gate, the hub self-checks that gate 1 actually happened: for each citation in the drafted briefing, the hub confirms it read the cited content this session (the read is the evidence). A briefing citing a source the spec-content-loaded self-check cannot confirm was loaded is held — the hub loads the source and re-checks before rendering, rather than rendering on a remembered or assumed summary.
+
+**`preview`-field affordance (complement, not replacement).** The `AskUserQuestion` per-option `preview` field MAY carry a compact per-option mini-table — a one-glance trade-off / conformance / reversibility summary keyed to the option — as a structured complement to the full chat-printed briefing. The `preview` mini-table is never a substitute for gate 3: the full briefing is always rendered in chat first, and the `preview` is a convenience surface layered on top of it. A `preview` populated while the full briefing is absent is the gate-3 structural defect, not a satisfied gate.
+
+**Worked example — a compliant, information-sufficient Decision Briefing** (a Stage 5 skip-recommendation decision; demonstrates gates 1–2 — pre-loaded options + full option space including a stance-implied option):
+
+> **Decision required (D-StageSkip):** Skip Stage 7 Dev Testing for a sub-task?
+>
+> **Context (spec content pre-loaded — gate 1):** Read `release/references/pipeline/stage-07-dev-testing.md` § Applicability this session — Stage 7 applies when an issue ships executable behavior with a fixture. Read the sub-task's File Change Matrix: all edits are grep-verifiable doc/schema assertions, no executable surface. Read the Stage 4 plan's Stage Applicability Matrix row: REDUCE → doc-conformance.
+>
+> **Option space (full enumeration — gate 2):**
+> - **(A) Skip Stage 7 entirely** — no executable code, ACs are grep assertions. *(hub recommendation)*
+> - **(B) REDUCE to a doc-conformance grep pass** — run the AC greps as a lightweight Stage 7, no test authoring. *(stance-implied option — gate 4: the operator's standing preference is to keep a verification rung rather than fully skip; surfaced even though the hub leans (A).)*
+> - **(C) Apply full Stage 7** — author tests. *(enumerated for completeness; disproportionate to a doc-only change.)*
+>
+> **Hub recommendation + rationale:** (A), but (B) is the stance-aligned choice and is the hub's fallback if the operator wants a retained rung. (C) is over-process for grep-verifiable ACs.
+> **Reversibility / Confidence:** CHEAP / HIGH (a skip is re-openable at Stage 8 QA).
+>
+> *(This full block is printed in chat — gate 3 — before the `AskUserQuestion` call offering A / B / C, each with a `preview` mini-table summarizing its testing cost and verification coverage.)*
 
 #### Channel: main-thread chat (canonical)
 
@@ -285,9 +315,19 @@ or "Architectural Decision Gates" section.
 **Gate input:** <what drives the decision — spoke output, audit finding,
   prior-release evidence, operator directive>
 **Pre-decided (if applicable):** <operator's pre-decided stance, citing
-  directive and date; OMIT if no pre-decision>
+  directive and date; OMIT if no pre-decision>. **Directive auto-population:**
+  when no per-decision pre-decided stance is on record AND the milestone
+  description's `## Gate-Class Framing Directives` block carries a
+  `pre_decided_default` for this gate's `gate_class`, the hub auto-populates
+  this field with that default, citing the directive block + milestone
+  description as the source (per `engagement-charter.md` § Per-gate-class
+  framing directives). A per-decision stance, when present, takes precedence
+  over the directive default (the default is the fallback). The field reads
+  OMIT only when neither a per-decision stance nor a matching
+  `pre_decided_default` exists.
 **Gate decision:** <specific options to choose between, enumerated>
 **Blocks:** <which sub-tasks/stages cannot start without this decision>
+**Gate-class directive injection (per `engagement-charter.md` § Per-gate-class framing directives):** When the milestone description carries a `## Gate-Class Framing Directives` block whose `gate_class` matches this gate, the rendered gate MUST include — IN ADDITION TO the hub-enumerated options/dimensions above — every `require_options` entry as a selectable option and every `surface_dimensions` entry as a displayed decision dimension, and emphasize each `principles_emphasis` (DP-N) conformance verdict. Directive items are ADD-only (the rendered set is the union of hub-defaults and directive items); the directive never removes a hub-surfaced option or dimension. Absent a matching directive block, the gate renders with hub defaults only (no regression).
 **Upstream compatibility:** (REQUIRED per §D-Gate Template — see applicability note)
   - Anthropic skill-creator convention: <quoted convention with source;
     e.g., "Frontmatter is `name:` + `description:` only per
@@ -341,8 +381,65 @@ or "Architectural Decision Gates" section.
 - Compatible-path evidence: MUST cite the drift-check date and source
   (e.g., "skill-creator docs review 2026-04-24, schema v<n>, no
   `version:` field in scaffolder output — confirmed no conflict").
+- Design-principle citation: MUST name a specific register entry
+  (DP-N) + its `governing_doc` path:line. "Aligns with platform
+  principles" alone is not a citation (fails `decision-discipline.md`
+  § 5 G3).
+- Design-principle conflict statement: MUST use the literal string
+  `**CONFLICT.**` when a conflict against a design principle is
+  identified (structural flag for Check 45 + the CR scan).
+- Design-principle mitigation: MUST enumerate ≥1 named strategy
+  (e.g., "absorb into the milestone description", "cite the canonical
+  source instead of duplicating").
 
 **Upstream-reference catalog:** When the D-decision touches skill-authoring surface, consult [`core/standards/upstream-reference-catalog.md`](../../../core/standards/upstream-reference-catalog.md) for the canonical upstream-source entry (e.g., `skill-md-frontmatter` for frontmatter decisions; `skill-references-directory` for directory-naming decisions). The catalog entry's `upstream_required` / `upstream_optional` / `pmo_extensions` fields directly inform the verdict (aligned / diverged-with-rationale / N/A). When citing a catalog entry whose `last_verified_date` is older than 90 days, the D-Gate verdict notes the staleness — convention may still be aligned, but the catalog itself needs re-verification.
+
+**Design-Principle Conformance:** (REQUIRED when the option touches a
+  scope_predicate-matching surface — see applicability note)
+  Per option in the Gate decision, score conformance against each
+  design-principle register entry whose `scope_predicate` matches the
+  option's change surface:
+  - ALIGNED: `<DP-N name>` — option upholds the principle. Cite the
+    register entry id + `governing_doc` (e.g., "ALIGNED DP-3
+    (Maintainability, build-philosophy.md:50) — option cites the
+    canonical source, adds no second copy").
+  - `**CONFLICT.**` `<DP-N name>` — option violates the principle. State
+    the conflict, then enumerate ≥1 named mitigation (e.g.,
+    "`**CONFLICT.**` DP-4 (Simplicity) — option adds a parallel tracker;
+    mitigation: absorb into the existing milestone description"). A
+    CONFLICT is reversibility-tier-gated per the register entry's
+    `conflict_reversibility_default`: CHEAP/MODERATE → annotate and
+    proceed; EXPENSIVE/IRREVERSIBLE → HALT for operator sign-off (with a
+    rollback-infeasibility statement per `reversibility-protocol.md`).
+    Gate at the max of the register default and the option's own
+    reversibility.
+  - N-A: `<DP-N name>` — the principle's `scope_predicate` does not match
+    this option's change surface.
+
+**Design-Principle Conformance applicability:**
+- REQUIRED for every option whose change surface matches ≥1 register
+  entry's `scope_predicate`.
+- N/A-with-rationale permitted when NO register `scope_predicate` matches
+  the option (e.g., a pure sequencing or branch-naming decision). The
+  subsection then reads: "N/A — no design-principle scope_predicate
+  matches this option's change surface." Omission WITHOUT rationale on a
+  scope_predicate-matching surface is a `[STRUCTURAL-DEFECT]` per
+  `decision-discipline.md` § 5 G2 (omission-without-explicit-N/A is the
+  non-ceremony signal; here the surface DOES match, so the omission is
+  the defect). Check 45 (`deploy.sh --check`) catches the missing
+  subsection; the Collective Review cross-D scan aggregates it.
+- This check is a specific application of Mechanism 1 (Localization
+  Check) per `decision-discipline.md` § 2.1 — agent-operating-principle
+  is one localization dimension, the structural twin of the
+  upstream-Anthropic-convention dimension the Upstream compatibility
+  subsection covers.
+
+**Design-Principle register:** Score each option against
+  [`core/standards/design-principle-register.md`](../../../core/standards/design-principle-register.md).
+  The entry's statement + `governing_doc` inform the verdict; the
+  `scope_predicate` determines whether a verdict is REQUIRED for the
+  option. When citing an entry whose `last_verified_date` is older than
+  90 days, the verdict notes the staleness.
 
 **Recurring D-decisions:** Some D-decisions fire on every release with the same template shape, varying only by per-release evidence. The Release Planning spoke (Procedure 0 Step 7) renders these inline in the release plan's Operator Decisions block per the D-Gate Template above. The current recurring set:
 
@@ -1332,6 +1429,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
    - **Stage 12:** Execute authorization with deployment procedure summary, rendered in main-thread chat via `AskUserQuestion` or equivalent in-chat mechanism. Note any PRs already merged via Procedure 6 (Early Merge) — these skip the merge step but are included in the release tag and deployment.
    - **Stage 12 Empirical Verification:** Hub runs pre-merge metadata check via `gh pr view <PR> --json milestone,labels,assignees,reviewRequests,projectItems` and cites the JSON output in the briefing; verifies deploy targets exist via `gh api` / `ls` calls cited in the briefing. Concurrence-without-verification at Stage 12 is non-compliant — pre-merge metadata gaps surfaced by verification block the Execute decision pending operator resolution.
    - **Stage 12 chore-PR scope:** Execute authorization in the Decision Briefing covers (a) the release PR merge per Phase B1, AND (b) the Stage 12 chore PR for RELEASE_LOG row + visible-H4 Deployment Log per Phase B5 commit mechanism. The Decision Briefing enumerates both PRs separately when presenting the Stage 12 execution scope; the operator's GO authorizes both.
+   - **Gate-class directive enrichment (per `engagement-charter.md` § Per-gate-class framing directives):** Before rendering the `AskUserQuestion` (or equivalent), read the milestone description's `## Gate-Class Framing Directives` block (if present). For the directive whose `gate_class` matches this gate (`stage-9-go-no-go` at Stage 9; `stage-12-execute` at Stage 12), inject each `require_options` entry as an additional selectable option, surface each `surface_dimensions` entry as a displayed dimension, and emphasize each `principles_emphasis` (DP-N) conformance verdict. ADD-only — the directive enriches the briefing; it never suppresses a hub-surfaced item. Composes with the Information Sufficiency clause (the directive NAMES the dimensions; the sufficiency clause enforces they print before the prompt). Absent a matching directive, render hub defaults only.
 4. Document the operator's decision as a comment on the gate sub-task
 5. Close the gate sub-task
 

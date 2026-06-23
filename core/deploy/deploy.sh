@@ -5530,6 +5530,65 @@ cmd_check() {
     fi
   fi
 
+  # Check 45 — Design-principle conformance integrity (warn-mode initial) [#320]
+  #
+  # Three single-responsibility assertions:
+  #  (a) Conformance-mechanism presence — the **Design-Principle Conformance:**
+  #      D-Gate subsection MUST exist in hub-spoke-bridge.md (its absence means the
+  #      per-option conformance mechanism, sibling of Upstream compatibility, regressed).
+  #  (b) Register governing_doc drift guard (FMF-1, entry-row-scoped) — every
+  #      design-principle-register.md ENTRY ROW's governing_doc (path:line) MUST
+  #      resolve to a real, non-empty line. Extraction is scoped to entry rows
+  #      (^| DP-N ...) so schema/prose path:line mentions are not self-matched.
+  #  (c) Consumer-id resolution (FMF-2) — every DP-N id referenced in tracked
+  #      corpus (outside the register, which defines them) MUST resolve to a
+  #      defined register principle_id (catches a dangling principles_emphasis id).
+  # Clone of the Check-44 conformance-scan pattern (flag_warn_or_issue + shared
+  # deploy-check.mode). Companion to #321 (principles_emphasis references the
+  # register). Warn-mode initial per bypass-mode-readiness.md Shakedown.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 45: Design-principle conformance integrity (mechanism presence + register drift + consumer-id resolution)"
+    local c45_bridge="release/references/how-to/hub-spoke-bridge.md"
+    local c45_reg="core/standards/design-principle-register.md"
+    local c45_ok=1
+    # (a) Conformance-mechanism presence in the D-Gate Template region
+    if [[ -f "$c45_bridge" ]]; then
+      if ! grep -qE '^\*\*Design-Principle Conformance:\*\*' "$c45_bridge"; then
+        flag_warn_or_issue "design-principle-conformance" "the Design-Principle Conformance D-Gate subsection is absent from $c45_bridge — the per-option conformance mechanism (sibling of Upstream compatibility) regressed; restore it per the D-Gate Template"
+        c45_ok=0
+      fi
+    else
+      flag_warn_or_issue "design-principle-conformance" "D-Gate surface missing: $c45_bridge"
+      c45_ok=0
+    fi
+    if [[ -f "$c45_reg" ]]; then
+      local c45_gd c45_path c45_line c45_defined c45_ref
+      # (b) FMF-1 — entry-row-scoped governing_doc resolution
+      while IFS= read -r c45_gd; do
+        [[ -z "$c45_gd" ]] && continue
+        c45_path="${c45_gd%%:*}"
+        c45_line="${c45_gd##*:}"
+        if [[ ! -f "$c45_path" ]] || ! [[ "$c45_line" =~ ^[0-9]+$ ]] || [[ -z "$(sed -n "${c45_line}p" "$c45_path" 2>/dev/null)" ]]; then
+          flag_warn_or_issue "design-principle-conformance" "register governing_doc does not resolve to a real path:line: '$c45_gd' (drift — repoint to the principle's current normative line)"
+          c45_ok=0
+        fi
+      done < <(grep -E '^\| DP-[0-9]' "$c45_reg" | grep -oE '[A-Za-z0-9_./-]+\.md:[0-9]+' | sort -u)
+      # (c) FMF-2 — consumer-id resolution (every referenced DP-N resolves)
+      c45_defined="$(grep -E '^\| DP-[0-9]' "$c45_reg" | grep -oE 'DP-[0-9]+' | sort -u)"
+      while IFS= read -r c45_ref; do
+        [[ -z "$c45_ref" ]] && continue
+        if ! printf '%s\n' "$c45_defined" | grep -qxF "$c45_ref"; then
+          flag_warn_or_issue "design-principle-conformance" "DP-id '$c45_ref' is referenced in corpus but not defined in $c45_reg (dangling principle reference — define the entry or fix the reference)"
+          c45_ok=0
+        fi
+      done < <(grep -rohE 'DP-[0-9]+' --include='*.md' --exclude='design-principle-register.md' core release operations 2>/dev/null | sort -u)
+    else
+      flag_warn_or_issue "design-principle-conformance" "register missing: $c45_reg"
+      c45_ok=0
+    fi
+    [[ "$c45_ok" -eq 1 ]] && log "  OK:    conformance subsection present; all register governing_doc targets resolve; all DP-id references defined"
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
