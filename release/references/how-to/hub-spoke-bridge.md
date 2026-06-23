@@ -99,7 +99,7 @@ The hub is the operator's command center. At every human touchpoint, the hub's p
 
 **At every touchpoint, the hub produces a Decision Briefing covering:**
 
-1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact.
+1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact. For each option in a trade-off, the hub renders a per-option `### Design-Principle Conformance` line set (ALIGNED / `**CONFLICT.**` / N-A against the matching [`design-principle-register.md`](../../../core/standards/design-principle-register.md) entries) per the D-Gate Template § Design-Principle Conformance — the structural twin of the per-option Upstream-compatibility verdict. Omission on a `scope_predicate`-matching option is a `[STRUCTURAL-DEFECT]` (per `decision-discipline.md` § 5 G2).
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions, discoveries outside the current issue's scope.
 3. **Status summary** — what completed, quality assessment, any blockers.
 4. **Action items surfaced this routing point** — hub-tracked AI-NNN rows from `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md` whose `trigger_type` predicate matches the current routing point per [`hub-action-tracking.md` § 4 Review Cadence](../../../core/standards/hub-action-tracking.md). Subsection format: `| AI-NNN | Category | Description | Trigger fired | Recommended disposition |`. When zero rows trigger, the subsection reads *"No action items triggered at this routing point"* — omission is a structural defect (forcing-function makes the scan observable). Schema + 6-value category enum + 4-value trigger-type enum + 5-state status lifecycle defined in `hub-action-tracking.md` — bridge doc does NOT duplicate normative content.
@@ -371,8 +371,65 @@ or "Architectural Decision Gates" section.
 - Compatible-path evidence: MUST cite the drift-check date and source
   (e.g., "skill-creator docs review 2026-04-24, schema v<n>, no
   `version:` field in scaffolder output — confirmed no conflict").
+- Design-principle citation: MUST name a specific register entry
+  (DP-N) + its `governing_doc` path:line. "Aligns with platform
+  principles" alone is not a citation (fails `decision-discipline.md`
+  § 5 G3).
+- Design-principle conflict statement: MUST use the literal string
+  `**CONFLICT.**` when a conflict against a design principle is
+  identified (structural flag for Check 45 + the CR scan).
+- Design-principle mitigation: MUST enumerate ≥1 named strategy
+  (e.g., "absorb into the milestone description", "cite the canonical
+  source instead of duplicating").
 
 **Upstream-reference catalog:** When the D-decision touches skill-authoring surface, consult [`core/standards/upstream-reference-catalog.md`](../../../core/standards/upstream-reference-catalog.md) for the canonical upstream-source entry (e.g., `skill-md-frontmatter` for frontmatter decisions; `skill-references-directory` for directory-naming decisions). The catalog entry's `upstream_required` / `upstream_optional` / `pmo_extensions` fields directly inform the verdict (aligned / diverged-with-rationale / N/A). When citing a catalog entry whose `last_verified_date` is older than 90 days, the D-Gate verdict notes the staleness — convention may still be aligned, but the catalog itself needs re-verification.
+
+**Design-Principle Conformance:** (REQUIRED when the option touches a
+  scope_predicate-matching surface — see applicability note)
+  Per option in the Gate decision, score conformance against each
+  design-principle register entry whose `scope_predicate` matches the
+  option's change surface:
+  - ALIGNED: `<DP-N name>` — option upholds the principle. Cite the
+    register entry id + `governing_doc` (e.g., "ALIGNED DP-3
+    (Maintainability, build-philosophy.md:50) — option cites the
+    canonical source, adds no second copy").
+  - `**CONFLICT.**` `<DP-N name>` — option violates the principle. State
+    the conflict, then enumerate ≥1 named mitigation (e.g.,
+    "`**CONFLICT.**` DP-4 (Simplicity) — option adds a parallel tracker;
+    mitigation: absorb into the existing milestone description"). A
+    CONFLICT is reversibility-tier-gated per the register entry's
+    `conflict_reversibility_default`: CHEAP/MODERATE → annotate and
+    proceed; EXPENSIVE/IRREVERSIBLE → HALT for operator sign-off (with a
+    rollback-infeasibility statement per `reversibility-protocol.md`).
+    Gate at the max of the register default and the option's own
+    reversibility.
+  - N-A: `<DP-N name>` — the principle's `scope_predicate` does not match
+    this option's change surface.
+
+**Design-Principle Conformance applicability:**
+- REQUIRED for every option whose change surface matches ≥1 register
+  entry's `scope_predicate`.
+- N/A-with-rationale permitted when NO register `scope_predicate` matches
+  the option (e.g., a pure sequencing or branch-naming decision). The
+  subsection then reads: "N/A — no design-principle scope_predicate
+  matches this option's change surface." Omission WITHOUT rationale on a
+  scope_predicate-matching surface is a `[STRUCTURAL-DEFECT]` per
+  `decision-discipline.md` § 5 G2 (omission-without-explicit-N/A is the
+  non-ceremony signal; here the surface DOES match, so the omission is
+  the defect). Check 45 (`deploy.sh --check`) catches the missing
+  subsection; the Collective Review cross-D scan aggregates it.
+- This check is a specific application of Mechanism 1 (Localization
+  Check) per `decision-discipline.md` § 2.1 — agent-operating-principle
+  is one localization dimension, the structural twin of the
+  upstream-Anthropic-convention dimension the Upstream compatibility
+  subsection covers.
+
+**Design-Principle register:** Score each option against
+  [`core/standards/design-principle-register.md`](../../../core/standards/design-principle-register.md).
+  The entry's statement + `governing_doc` inform the verdict; the
+  `scope_predicate` determines whether a verdict is REQUIRED for the
+  option. When citing an entry whose `last_verified_date` is older than
+  90 days, the verdict notes the staleness.
 
 **Recurring D-decisions:** Some D-decisions fire on every release with the same template shape, varying only by per-release evidence. The Release Planning spoke (Procedure 0 Step 7) renders these inline in the release plan's Operator Decisions block per the D-Gate Template above. The current recurring set:
 
