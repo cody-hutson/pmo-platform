@@ -23,7 +23,7 @@ lives in one place and is read by reference.
 Per the Stage 5 design and the hub resolution, the EHR is a **staged artifact in
 `08-Generated/`**, produced by composing
 [`artifact-generator`](../../artifact-generator/SKILL.md) (Generate Mode → stage
-with `artifact_state: DRAFT`). Staging — rather than an in-conversation hand-off
+with `lifecycle_state: draft` + `promotion_state: staged`). Staging — rather than an in-conversation hand-off
 payload — gives every escalation an **auditable record** and matches
 `artifact-generator`'s established staging contract. Tier-2 reads the EHR from
 `08-Generated/`.
@@ -89,4 +89,4 @@ forces tier-2 to re-elicit what tier-1 already had in hand.
 - [`pmo-tier-2-support/SKILL.md`](../../pmo-tier-2-support/SKILL.md) — the **consumer** (RCA method input).
 - [`core/disciplines/root-cause-analysis.md`](../../../../core/disciplines/root-cause-analysis.md) — the RCA method tier-2 invokes; Step 1 mandates the evidence the EHR carries.
 - [`core/disciplines/review-discipline-principles.md`](../../../../core/disciplines/review-discipline-principles.md) — §5 severity model for the `severity` field.
-- [`artifact-generator/SKILL.md`](../../artifact-generator/SKILL.md) — the staging mechanism (`08-Generated/`, `artifact_state: DRAFT`) tier-1 composes to render the EHR.
+- [`artifact-generator/SKILL.md`](../../artifact-generator/SKILL.md) — the staging mechanism (`08-Generated/`, `lifecycle_state: draft` + `promotion_state: staged`) tier-1 composes to render the EHR.

@@ -2,7 +2,7 @@
 name: pmo-tier-1-support
 description: >
   First-line support Specialist — triages an incoming issue, resolves known/documented issues from runbooks and FAQs, and escalates anything out of first-line scope to pmo-tier-2-support with a structured Escalation Handoff Record. Owns no RCA — a novel problem is escalated, never root-caused inline. Composes artifact-generator (triage record + the EHR artifact) and hands genuinely-new intake to intake-desk — invokes them via the core/ registry skill-chain, never re-implements them (ADR-019). Modes: Triage · Resolve-Known · Escalate. Use when the question is a first-contact known-issue lookup or a triage. Triggers: "first-line support", "tier 1 support", "how do I…", "is this a known issue", "triage this issue", "what's the status of this issue", "is there a fix for this".
-version: v2.15
+version: v2.20
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true
@@ -21,7 +21,7 @@ This Specialist **composes** two function-skills by **invoking them through the 
 
 | Composed function-skill | Tier-1 invokes it for | Tier-1 does NOT |
 |---|---|---|
-| [`artifact-generator`](../artifact-generator/SKILL.md) | Produce the **triage record** and render the **Escalation Handoff Record** (EHR) artifact — staged in `08-Generated/` with `artifact_state: DRAFT` per its Generate Mode | re-implement artifact production or `08-Generated/` staging |
+| [`artifact-generator`](../artifact-generator/SKILL.md) | Produce the **triage record** and render the **Escalation Handoff Record** (EHR) artifact — staged in `08-Generated/` with `lifecycle_state: draft` + `promotion_state: staged` per its Generate Mode | re-implement artifact production or `08-Generated/` staging |
 | [`intake-desk`](../intake-desk/SKILL.md) | **Hand off** an item that is actually new intake (a feature request / a work item to track, not a support issue) | author the work item itself, run the 5-test, or auto-decompose |
 
 Cross-skill invocation is runtime skill-chaining through the `core/` registry (depth 0→1, within the C1 ≤2 bound). Tier-1 is **not** on the C7 auto-cascade allowlist and must not be added to it.
@@ -82,7 +82,7 @@ Select the mode in three steps (chain-skip → heuristic → fallback):
 
 **Purpose:** Hand a *first-line-exhausted* novel problem to tier-2 with a complete Escalation Handoff Record — so tier-2 root-causes with full context.
 
-**Composition:** composes [`artifact-generator`](../artifact-generator/SKILL.md) to render the **EHR** artifact, staged in `08-Generated/` (`artifact_state: DRAFT`).
+**Composition:** composes [`artifact-generator`](../artifact-generator/SKILL.md) to render the **EHR** artifact, staged in `08-Generated/` (`lifecycle_state: draft` + `promotion_state: staged`).
 
 **Process:** (1) assemble the EHR per [`references/escalation-handoff-record.md`](references/escalation-handoff-record.md) — the required core (`symptom · reproduction · what-was-tried · severity`) plus the justified additions (`evidence · escalation-reason`, and `searched-runbooks`/`environment` where applicable); (2) **fill every required field** — where a value is genuinely unknown (e.g., not reproduced), carry an explicit `[ASSUMPTION – CONFIRM] … — owner: tier-2`, never a blank; (3) stage the EHR via `artifact-generator` and **escalate to `pmo-tier-2-support`**. Tier-1 **never** attempts the RCA itself. Render with a reversibility tier + confidence on the escalation call.
 

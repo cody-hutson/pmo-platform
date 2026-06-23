@@ -2,7 +2,7 @@
 name: pmo-tier-2-support
 description: >
   Escalation/RCA support Specialist — consumes the pmo-tier-1-support Escalation Handoff Record, performs a structured root-cause analysis, drives the issue to resolution, and authors/updates a runbook so it becomes first-line-resolvable. Owns the RCA method (invokes core/disciplines/root-cause-analysis.md, never redefines it); composes artifact-generator (runbook + RCA record), routes via file-router / pmo-knowledge-manager (persist to the knowledge base), and intake-desk (tracked work items) — invokes them via the core/ registry skill-chain (ADR-019). Modes: RCA · Drive-to-Resolution · Runbook-Authorship. Use for an escalated or novel problem that needs a causal explanation. Triggers: "tier 2 support", "escalated issue", "root cause this", "RCA", "write a runbook for this", "why did this break", "this keeps happening — why".
-version: v2.15
+version: v2.20
 license: BUSL-1.1
 delivery_approach: context-aware
 skill_discipline_migrated_v10_2: true
@@ -21,7 +21,7 @@ This Specialist **owns the RCA method but composes everything else** by **invoki
 
 | Composed function-skill | Tier-2 invokes it for | Tier-2 does NOT |
 |---|---|---|
-| [`artifact-generator`](../artifact-generator/SKILL.md) | Produce the **runbook artifact** and the **RCA record** — staged per its Generate Mode (`08-Generated/`, `artifact_state: DRAFT`) | re-implement artifact production / staging / formatting |
+| [`artifact-generator`](../artifact-generator/SKILL.md) | Produce the **runbook artifact** and the **RCA record** — staged per its Generate Mode (`08-Generated/`, `lifecycle_state: draft` + `promotion_state: staged`) | re-implement artifact production / staging / formatting |
 | [`file-router`](../file-router/SKILL.md) | **Classify and route** the runbook to its governed knowledge-base location | re-implement three-layer classification or routing-target selection |
 | [`pmo-knowledge-manager`](../pmo-knowledge-manager/SKILL.md) | **Persist and steward** the runbook into the knowledge base as the durable first-line-resolvable record (the Knowledge Manager itself composes `artifact-generator` + `file-router` for the capture-route-steward pass) | own the knowledge-base persistence / stewardship mechanics |
 | [`intake-desk`](../intake-desk/SKILL.md) | File a **tracked work item** when the RCA reveals a defect/improvement that needs one | author the work item itself, run the 5-test, or auto-decompose |
