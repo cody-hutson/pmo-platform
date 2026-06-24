@@ -156,15 +156,15 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
 
 **Worked instances** (illustrative grammar — not shipped kinds; kinds are K4 user config per §1.4).
 
-*(a) Child cannot advance `ready → in-progress` until parent Epic is design-approved (BELONGS_TO).* Gates at the *pull-into-development* point of the lean cycle.
+*(a) Child cannot advance `refinement → ready` until parent Epic is design-approved (BELONGS_TO).* Gates at the *enter-ready* point of the lean cycle — a child Story cannot leave refinement for `ready` (committable for development) until its parent Epic's design is approved.
 
 ```yaml
 # inside a kind (e.g. a Story-class kind), criteria.gate.checks[]:
 - id: gate-parent-epic-design-approved
-  statement: "Cannot enter in-progress until the parent Epic is design-approved."
+  statement: "Cannot advance to ready until the parent Epic is design-approved."
   level: L2
   automatable: true
-  guards_transition: "ready -> in-progress"
+  guards_transition: "refinement -> ready"
   condition:
     kind: related-item-status
     edge: BELONGS_TO
