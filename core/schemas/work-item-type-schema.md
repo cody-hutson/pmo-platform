@@ -55,11 +55,169 @@ Each entry in `kinds[]` is a `Kind` object with exactly these fields:
 | `methodology_projection` | object | ✅ | The projection record. **Projects onto the general hierarchy via the work-organization mapping framework's Layer-2 map** (see §1.3). Fields: `archetype`, `general_level`, `projects_as`, `level_name_ref`. |
 | `fields` | object | ✅ | The field overlay. Two sub-keys: `core` (a const reference to the inherited Core 7 — never re-listed, per the `entity-field-schemas.md` §3.0 house style) and `kind_specific[]` (the array below). |
 | `fields.kind_specific[]` | array&lt;FieldDecl&gt; | ⚪ | Each `FieldDecl` reuses the §3.N row shape **verbatim**: `{ name, type, required (✅/⚪), cardinality, enum? (enum type), ref? (target entity for typed-ref), description }`. Empty array = a kind with no fields beyond Core 7 (valid — the thin-generic floor). |
-| `criteria` | object | ✅ | Three keyed sub-objects: `readiness` (DoR), `done` (DoD), `gate` (phase/stage gate). Each = `{ criteria_version (semver), checks[] }`, where each check = `{ id, statement, level (L1 structural / L2 referential / L3 judgment), automatable (bool) }`. **The criteria carry their own version**, independent of `pack_version` — the grandfather hook (§6.3). |
+| `criteria` | object | ✅ | Three keyed sub-objects: `readiness` (DoR), `done` (DoD), `gate` (phase/stage gate). Each = `{ criteria_version (semver), checks[] }`, where each check = `{ id, statement, level (L1 structural / L2 referential / L3 judgment), automatable (bool) }` plus the **two OPTIONAL keys** `guards_transition` + `condition` (the relationship-conditioned / set-aggregate gate construct — §1.2.1). **The criteria carry their own version**, independent of `pack_version` — the grandfather hook (§6.3). |
 | `relationships` | object | ✅ | `allowed_types[]` — a subset of the **7 MVP relationship types by reference** (`frontmatter-schema.md` §Category 4: `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO`). Plus `required_edges[]` (e.g., a kind MAY require a `BELONGS_TO` parent). **No type is defined here** — only referenced + constrained. A pack naming a relationship type outside the 7 is invalid (§5 enforcement). |
 | `lifecycle_behavior` | object | ✅ | The behavior map keyed off the **project's** `lifecycle` value (`{timeboxed, continuous, phased}` — read from `delivery_approach` / `custom_methodology_definition`, **NOT** from the kind). Value = the behavior selection (which `criteria.gate` set applies, which cadence primitive). **The explicit defense against the hardcoded-sprint-presumption failure mode:** a kind declares *what gates exist*; the project's lifecycle selects *which fire*. The kind never carries `sprint`/`phase` semantics directly. |
 | `axis1_state_machine` | ref OR inline | ✅ | The kind's operational lifecycle (Axis-1). **Default = inherit the generic `Work Item` Axis-1 base machine** `backlog → ready → in-progress → in-review → done | cancelled`, owned by the entity layer (ADR-018 D1; `entity-field-schemas.md` §3.18 V-WI-04). A kind declares this field as `inherit` unless it genuinely **narrows or extends** the generic states, in which case it declares the refinement inline (a type-scoped sub-state per D1 — type-packs project labels over the base, they never re-found it). |
 | `materialization` | object | ⚪ | EAD directives (§3): `{ schema_id (the output machine-schema $id), enforcement_mode (canonical-enforce / dialect-enforce), crosswalk_overrides[]? }`. When omitted, EAD derives a `canonical-enforce` schema mechanically from `fields` (the default path — §3). |
+
+### 1.2.1 Relationship-conditioned + set-aggregate gate construct (the `condition` discriminated union)
+
+A `criteria.checks[]` entry MAY carry **two OPTIONAL keys** beyond the four base fields (`id`, `statement`, `level`, `automatable`): `guards_transition` and `condition`. When `condition` is **absent**, the check is a plain self-evaluating criterion — **byte-identical to today's behavior** (the backward-compatibility guarantee that keeps the change additive; §6.1). When `condition` is **present**, `condition.kind` is a **required discriminator** selecting exactly one of three disjoint condition bodies — the §4 discriminated-union / table-per-type / anti-EAV pattern, applied one level down to criteria (the bodies are DISJOINT; no shared payload field beyond the envelope — the anti-EAV requirement).
+
+This construct lets a kind declare a gate whose pass/fail condition reads (a) the **workflow status of a *related* Work Item** across a declared `relationships` edge, or (b) an **aggregate over a scope-bounded *set*** of Work Items (the Kanban WIP / pull-limit gate). Both express gates in **methodology workflow statuses** (the kind's `axis1_state_machine`, keyed off the project `lifecycle`), never platform release-pipeline stages (the ADR-018 §7.2 kernel discipline; see §7.2 + §7.6).
+
+**The expanded check shape.** The 4 existing fields are UNCHANGED; `guards_transition` + `condition` are NEW + OPTIONAL.
+
+```yaml
+# A check entry in criteria.{readiness,done,gate}.checks[].
+# condition is permitted ONLY inside criteria.gate.checks[] (see the Firing rule below); a
+# condition on readiness/done is a pack-validation error.
+- id: <slug>                       # EXISTING — unique within the kind's check set
+  statement: <string>             # EXISTING — human-readable gate statement
+  level: <L1 | L2 | L3>           # EXISTING — projection level (a condition'd check is L2; see EAD §3)
+  automatable: <bool>             # EXISTING
+  guards_transition: "<from> -> <to>"   # NEW, OPTIONAL — the axis1_state_machine transition this gate
+                                  #   guards (from/to ∈ the kind's axis1_state_machine states).
+                                  #   REQUIRED when `condition` is present; omitted otherwise (D-A).
+  condition:                      # NEW, OPTIONAL — absent ⇒ today's self-evaluating check.
+    kind: <related-item-status | set-aggregate | control-field>   # REQUIRED discriminator.
+    # ... exactly ONE condition body below, selected by `kind`.
+```
+
+**Arm 1 — `related-item-status`.** Resolves a *single related Work Item's* axis-1 workflow status across a declared edge.
+
+```yaml
+  condition:
+    kind: related-item-status
+    edge: <BELONGS_TO | DEPENDS_ON | BLOCKS>   # REQUIRED — MUST ∈ this kind's relationships.allowed_types[]
+    edge_direction: <outbound | inbound>        # REQUIRED — which end of the directed edge THIS item occupies
+                                                #   (frontmatter-schema §Cat-4 directionality: BELONGS_TO = Part→Whole,
+                                                #    DEPENDS_ON = Dependent→Dependency, BLOCKS = Blocker→Blocked).
+                                                #   outbound = this item is the edge SOURCE; inbound = the TARGET.
+    target_status_in: [<state>, ...]            # REQUIRED — the related item's axis1_state_machine state(s)
+                                                #   that SATISFY the gate (≥1). Not validated against the target
+                                                #   kind's machine at pack-load (the target may be any kind);
+                                                #   an unresolvable/empty match fires on_unresolved.
+    on_unresolved: BLOCK-TRANSITION             # REQUIRED — gate-disposition when the edge/target can't be resolved.
+```
+
+**Arm 2 — `set-aggregate`.** Reduces an aggregate over a *scope-bounded set* of Work Items and compares it to a limit. The Kanban WIP / pull-limit gate.
+
+```yaml
+  condition:
+    kind: set-aggregate
+    set:                                        # REQUIRED — the POPULATION the aggregate runs over.
+      scope: <project | parent | board>         # REQUIRED — the in-graph container class the set is drawn from.
+                                                #   project = the Project entity; parent = this item's BELONGS_TO
+                                                #   container (chain 17); board = a named Workstream-class container.
+                                                #   Resolved from the ENTITY GRAPH — never an implicit "current view"
+                                                #   and never a release-pipeline construct (§7.2).
+      scope_ref: <entity-id>                    # REQUIRED when scope ∈ {board}; OPTIONAL when scope ∈ {project, parent}
+                                                #   (those resolve from the item's own context). The in-graph container id.
+      kind_filter: [<work_item_type>, ...]      # OPTIONAL — restrict the count to these kinds (class-of-service).
+                                                #   Omitted ⇒ all kinds in scope.
+      status_filter: [<state>, ...]             # REQUIRED — the axis1_state_machine state(s) that define set membership.
+      edge: BELONGS_TO                          # OPTIONAL — the membership edge when scope is container-relative;
+                                                #   MUST ∈ relationships.allowed_types[]; defaults to BELONGS_TO (chain 17).
+    aggregate: <count>                          # REQUIRED — the reduction. v1 value set = {count}; sum-of-<field> RESERVED.
+    comparator: <"<" | "<=" | ">" | ">=" | "==">   # REQUIRED — the relation the reduced value must satisfy to PASS.
+    limit: <integer>                            # REQUIRED unless limit_ref is set — the literal threshold.
+    limit_ref: <control-field-id>               # ALTERNATIVE to limit — a control-field holding the cap (composes with
+                                                #   the control-field arm; the WIP cap becomes config, not a literal).
+                                                #   Exactly ONE of {limit, limit_ref} is present (else pack-validation error).
+    on_unresolved: BLOCK-TRANSITION             # REQUIRED — gate-disposition when the set/scope can't be resolved.
+```
+
+**Arm 3 — `control-field` (slot RESERVED — NOT built here).** Documented as a reserved discriminator value so the cross-cutting control-**field** axis lands later without re-opening the criterion grammar; its body (`field_ref` / `value_in` / `scope`) is not specified by this construct.
+
+```yaml
+  condition:
+    kind: control-field        # RESERVED for the field-axis sibling. The discriminator value is registered;
+                               # the body is that work item's to specify. A pack using kind: control-field before
+                               # it is implemented is a pack-validation error ("reserved, not yet implemented") —
+                               # fail-loud, never silent.
+```
+
+**Discriminator table (the one-screen contract):**
+
+| `condition.kind` | Body fields | EAD level → annotation | Resolution | Edge? | Cycle class |
+|---|---|---|---|---|---|
+| (absent) | — (self-check) | L1/L2/L3 per existing §3.1 step 5 | local | no | none |
+| `related-item-status` | `edge` · `edge_direction` · `target_status_in[]` · `on_unresolved` | **L2** → `x-pmo-referential` (resolves STATE) | single edge → target state | yes | A↔B (refusable) |
+| `set-aggregate` | `set{scope, scope_ref?, kind_filter?, status_filter[], edge?}` · `aggregate` · `comparator` · `limit \| limit_ref` · `on_unresolved` | **L2** → `x-pmo-aggregate` (NEW; resolves a reduced value over a population) | set-enumerate (chain 17) + reduce + compare | optional (membership edge) | convergent self-edge (exempt) + mutual two-set (refusable) |
+| `control-field` | (reserved) | (reserved) | (reserved) | no | none |
+
+**Firing rule (the §7.4 hardcoded-sprint-presumption defense, by construction).** A `condition` is permitted **only inside a `criteria.gate` check**. Gate checks inherit `lifecycle_behavior`-keyed firing: the **kind declares the gate exists; the project's `lifecycle` (`{timeboxed, continuous, phased}`) selects whether it fires** (§1.2 + §7.4). The construct names only `axis1_state_machine` states + edges + generic container scopes — it adds **no** sprint/phase/cadence semantics to the kind, so §7.4 holds by construction. Set-aggregate is the **`continuous` lifecycle's signature gate** (Kanban WIP); a `timeboxed` (Scrum) project MAY declare the same check but its `lifecycle_behavior` need not fire it (Scrum bounds WIP by sprint commitment instead).
+
+**`guards_transition` requiredness (D-A).** `guards_transition` is REQUIRED whenever `condition` is present, omitted otherwise. Every condition kind gates a *transition* (the point of a relationship/aggregate gate is to block a state move); binding the construct to a transition by construction is what makes the `on_unresolved: BLOCK-TRANSITION` disposition meaningful (it blocks *that* transition). A self-evaluating check (no `condition`) keeps `guards_transition` optional — unchanged from today.
+
+**Gate-disposition definition (`on_unresolved`) — distinct from the entity-layer write-time enum (D-B).** A gate check's `on_unresolved` draws from the **gate-layer disposition set `{BLOCK-TRANSITION, WARN-HEALTH}`**, defined here in the meta-schema. This is **distinct from** the entity layer's frozen write-time `on-unresolved` enum `{BLOCK-WRITE, WARN-HEALTH, DEFER-G8}` (`entity-field-schemas.md` §on-unresolved): the two govern **different events on different layers**. The entity-layer enum governs a **write** of a malformed *referential field* (a dangling FK at row-write — `BLOCK-WRITE`); the gate `on_unresolved` governs a **transition** of a *well-formed* row whose *gate condition* can't be resolved or isn't satisfied (a state move — `BLOCK-TRANSITION`). `BLOCK-TRANSITION` is a **peer-by-posture** of the entity layer's `BLOCK-WRITE` — same refuse-and-route posture (refuse the move, surface the failing rule + expected-vs-actual, route to repair per `entity-field-schemas.md` §7), different governed event; `WARN-HEALTH` is reused by name from the entity-layer posture (a soft WIP gate may WARN; a hard gate BLOCKs). The frozen entity-layer enum is **cross-walked, not extended** — this construct adds no member to it.
+
+**Worked instances** (illustrative grammar — not shipped kinds; kinds are K4 user config per §1.4).
+
+*(a) Child cannot advance `ready → in-progress` until parent Epic is design-approved (BELONGS_TO).* Gates at the *pull-into-development* point of the lean cycle.
+
+```yaml
+# inside a kind (e.g. a Story-class kind), criteria.gate.checks[]:
+- id: gate-parent-epic-design-approved
+  statement: "Cannot enter in-progress until the parent Epic is design-approved."
+  level: L2
+  automatable: true
+  guards_transition: "ready -> in-progress"
+  condition:
+    kind: related-item-status
+    edge: BELONGS_TO
+    edge_direction: outbound          # this child is the Part (source) of BELONGS_TO → Whole (the Epic)
+    target_status_in: [design-approved]
+    on_unresolved: BLOCK-TRANSITION
+```
+
+*(b) A Story cannot leave `ready` until a blocking Spike is `done` (DEPENDS_ON / BLOCKS).* Gates at a *different* cycle point (leaving ready), proving multi-point support.
+
+```yaml
+- id: gate-blocking-spike-done
+  statement: "Cannot leave ready until the blocking Spike is done."
+  level: L2
+  automatable: true
+  guards_transition: "ready -> in-progress"
+  condition:
+    kind: related-item-status
+    edge: DEPENDS_ON
+    edge_direction: outbound          # this Story is the Dependent (source) of DEPENDS_ON → Dependency (the Spike)
+    target_status_in: [done]
+    on_unresolved: BLOCK-TRANSITION
+# Equivalent modeling via BLOCKS from the Spike's side: a Spike kind declares a guards_transition
+# gate on the items it BLOCKS with edge: BLOCKS, edge_direction: outbound (Spike = Blocker → Blocked).
+# Either direction is expressible; edge_direction disambiguates which end the gate-owning kind occupies.
+```
+
+*(c) Set-aggregate Kanban WIP — "< N items of kind=Story in status=in-progress within board scope" gates the pull.* The `continuous` lifecycle's signature gate.
+
+```yaml
+- id: gate-wip-pull-limit
+  statement: "Cannot pull a Story into in-progress while >= N Stories are already in-progress on this board."
+  level: L2
+  automatable: true
+  guards_transition: "ready -> in-progress"
+  condition:
+    kind: set-aggregate
+    set:
+      scope: board
+      scope_ref: board-eng-flow        # a Workstream-class container entity id
+      kind_filter: [story]             # class-of-service: count only Stories (an expedite lane = its own check + limit)
+      status_filter: [in-progress]     # the WIP column
+      edge: BELONGS_TO                 # membership = the board's BELONGS_TO children (chain 17)
+    aggregate: count
+    comparator: "<"                    # pull permitted only while count(set) < limit
+    limit: 3
+    on_unresolved: BLOCK-TRANSITION
+# limit_ref variant (composes with the control-field arm): replace `limit: 3` with
+#   limit_ref: wip-limit-eng-flow   → the cap is a control-field, config not hardcode.
+# Pull-capacity (free slots) is the same gate read as (limit - count).
+```
+
+*(d) GitHub use case — the first plug-and-play adapter.* The three rules above are **methodology-pack base function** (abstract, archetype-neutral, in the K1 grammar). The **GitHub adapter is the K4 operator-local expression** that binds them to GitHub Issues/Projects state — it is **not** committed to this corpus (adapter config is K4 per §1.4 / knowledge-architecture). The adapter maps: the related item's `axis1_state_machine` state → a GitHub Projects **Status** field value (e.g., Epic Status = "Design Approved"); the `BELONGS_TO` / `DEPENDS_ON` edges → GitHub native **parent/sub-issue** links and **tracked-by / blocked-by** relations; the set-aggregate `scope: board` → a GitHub **Project (board)**, `status_filter: [in-progress]` → the board's **In Progress** column, `count < limit` → the column's WIP cap. **GitHub is the first adapter**; the operator-local type-pack example (K4) expresses the Epic→child and Spike→dependent rules; further adapters (Jira / Linear) ride the existing adapter epics, out of scope here.
 
 ### 1.3 `methodology_projection` — projects onto the Layer-2 map
 
@@ -139,8 +297,54 @@ For each declared kind, EAD emits a JSON-Schema (draft-07) `work-item-<kind_id>.
 2. **`work_item_type` → a `const` property** = `kind_id` (the discriminator that lets a cross-kind query filter / group by kind — load-bearing for the cross-kind rollup in §4).
 3. **`parent_ref` → a typed-ref property** with `x-pmo-referential: { target: "Milestone.id | Workstream.id", level: "L2", on-unresolved: "BLOCK-WRITE" }` (the rollup edge; the entity's V-WI-03 / X-28 contract — the polymorphic `BELONGS_TO` parent).
 4. **Each `fields.kind_specific[]` FieldDecl → one property**, classified by the **7-class `x-pmo-class` column crosswalk** observed in `raid-log.schema.json`: `exact-map` · `rename-map` · `type-lift` · `dialect-projection` (with `x-pmo-canonical-enum` + `x-pmo-legacy-crosswalk` when a value set projects to a legacy/display set) · plus the `x-pmo-referential`, `x-pmo-temporal`, and `allOf` conditional-required annotations for L2/L3.
-5. **Each `criteria.checks[]` projects by level:** `automatable: true` ∧ `level: L1` → a schema-expressible constraint (enum / pattern / required); `level: L2` → an `x-pmo-referential` entry; `level: L3` → an `x-pmo-criteria-judgment` annotation (recorded so a reviewer/skill can surface it, not machine-enforced).
-6. **Negative tests generated 1:1 from the rules** (the `entity-field-schemas.md` §3.0b pattern + the `x-pmo-negative-tests` array `raid-log.schema.json` carries): each L1 enum → one out-of-enum NT; each L2 ref → one unresolvable-id NT. **A materialized kind ships ≥2 negative tests.**
+5. **Each `criteria.checks[]` projects by level:** `automatable: true` ∧ `level: L1` → a schema-expressible constraint (enum / pattern / required); `level: L2` → an `x-pmo-referential` entry; `level: L3` → an `x-pmo-criteria-judgment` annotation (recorded so a reviewer/skill can surface it, not machine-enforced). **When the L2 check carries a `condition` (§1.2.1), the annotation is selected by `condition.kind`:** `related-item-status` → an `x-pmo-referential` entry that resolves the target's *state* (not its existence), with the gate-layer `on-unresolved: BLOCK-TRANSITION`; `set-aggregate` → an `x-pmo-aggregate` annotation (the NEW class, §3.1a). A check with no `condition` keeps the existing behavior unchanged.
+6. **Negative tests generated 1:1 from the rules** (the `entity-field-schemas.md` §3.0b pattern + the `x-pmo-negative-tests` array `raid-log.schema.json` carries): each L1 enum → one out-of-enum NT; each L2 ref → one unresolvable-id NT. **A materialized kind ships ≥2 negative tests.** A `condition`'d gate check (§1.2.1) generates its negative tests 1:1 from the construct:
+   - **NT-status-1** — a `related-item-status` gate: a transition write while the related item (across `edge`) is NOT in `target_status_in` → referential gate FAIL (transition blocked).
+   - **NT-status-2** — a `related-item-status` gate: an unresolvable edge/target (related item missing) → `on-unresolved: BLOCK-TRANSITION` fires.
+   - **NT-agg-1** — a `set-aggregate` gate: the `guards_transition` write while `count(set) >= limit` (for `comparator: "<"`) → aggregate gate FAIL (pull blocked).
+   - **NT-agg-2** — a `set-aggregate` gate: an unresolvable `scope_ref` (board entity missing) → `on-unresolved: BLOCK-TRANSITION` fires.
+
+### 3.1a Condition'd-gate projection (the two annotation classes)
+
+A `condition`'d gate check (§1.2.1) is **L2** (it resolves other entities), so step 5 routes it to a referential-class annotation — projecting via the **existing §3.1 step-5 by-level rule**, with **no new physicalization** (the §3 discipline). Two annotation shapes apply, selected by `condition.kind`.
+
+**`related-item-status` → `x-pmo-referential` resolving STATE (extends the existing precedent).** The existing step-3 `parent_ref` precedent materializes `x-pmo-referential: { target, level: L2, on-unresolved: BLOCK-WRITE }` (resolves another entity's *existence*). The status arm **extends — does not replace** — that shape: the resolved object is the target's *state* (not its existence), and the disposition is the gate-layer `BLOCK-TRANSITION` (guard a state move) rather than `BLOCK-WRITE` (guard a row write).
+
+```jsonc
+// On the derived work-item-<kind>.schema.json, for a related-item-status gate check:
+"x-pmo-referential": {
+  "target": "WorkItem.lifecycle_state via <edge>",   // resolves the target's STATE, not its existence
+  "level": "L2",
+  "on-unresolved": "BLOCK-TRANSITION",               // gate-layer disposition (§1.2.1)
+  "x-pmo-edge": "<BELONGS_TO|DEPENDS_ON|BLOCKS>",
+  "x-pmo-edge-direction": "<outbound|inbound>",
+  "x-pmo-satisfying-states": ["<state>", "..."],
+  "x-pmo-guards-transition": "<from> -> <to>"
+}
+```
+
+**`set-aggregate` → a NEW `x-pmo-aggregate` annotation class (L2-aggregate sub-class).** A set-aggregate resolves a *reduced value over a population*, which the single-target `x-pmo-referential` shape cannot express. It is a **NEW sibling annotation**, modeled on `x-pmo-referential` (for level + disposition) **+ the chain-17 `BELONGS_TO` rollup traversal** (`project-entity-model.md` §18 / chain 17 — the kind-agnostic set enumeration the platform already specifies). **The set-aggregate gate does not invent set evaluation; it applies a comparator to the rollup traversal the entity model already specifies.**
+
+```jsonc
+// On the derived work-item-<kind>.schema.json, for a set-aggregate gate check — a NEW x-pmo-aggregate:
+"x-pmo-aggregate": {
+  "set": {
+    "scope": "<project|parent|board>",
+    "scope_ref": "<entity-id>",          // present when scope = board
+    "kind_filter": ["<work_item_type>", "..."],   // optional
+    "status_filter": ["<state>", "..."],
+    "edge": "BELONGS_TO"
+  },
+  "aggregate": "count",
+  "comparator": "<comparator>",
+  "limit": 0,                            // integer literal, OR "limit_ref": "<control-field-id>"
+  "level": "L2",                         // resolves other entities → L2 (the aggregate sub-class)
+  "on-unresolved": "BLOCK-TRANSITION",
+  "x-pmo-derives-via": "chain-17 BELONGS_TO set traversal + reduce"   // cites the EXISTING traversal; no new physicalization
+}
+```
+
+Both annotations bite where `parent_ref` (V-WI-03 / X-28) and the `BELONGS_TO` rollup (V-WI-06 / X-29) already bite — `tracker-manager`'s pre-write/transition validation pass (§5.2). **No new enforcer.** The cross-kind rollup (§4) is untouched — the construct adds a *check*, not a kind-specific *field*; the count groups by the same `work_item_type` discriminator the rollup already uses. The **only new evaluation surface** is the set-aggregate's **set-enumerate-and-reduce** contract (resolve `set.scope` → enumerate `BELONGS_TO` children via the chain-17 traversal → apply `status_filter` + optional `kind_filter` → `aggregate` → compare to `limit` / `limit_ref`), sited in the existing enforcer; the *physical* resolver (index scan / graph walk) is G3/G4 physicalization per the entity-model boundary axiom (`entity-field-schemas.md` §boundary-axiom), exactly as the single-referential resolver is.
 
 ### 3.2 Enforcement mode
 
@@ -245,6 +449,18 @@ Each anti-pattern below is conditional ("do NOT do X when Y, because Z"), distin
 
 A `test` **kind** is a Work Item — a tracked unit of work (the const `base` Work Item entity, distinguished by `work_item_type: test`). A test **deliverable** — a test plan, a test case, a test suite — is the **Artifact** entity, a different layer and a different record. The two relate via the `GENERATES` MVP edge (the work item generates the artifact), not by being the same row. Do NOT model a test plan or test case as a `work_item_type`, and do NOT fold a `test` work item into the Artifact entity: collapsing the two erases the work-vs-deliverable distinction the entity model draws and breaks the cross-kind rollup (§4), which keys on `work_item_type` over Work Item records only.
 
+### 7.6 Gating cycle in relationship-conditioned / set-aggregate gates (PROC)
+
+- **Signature.** Two `condition`'d gate checks (§1.2.1) form a mutual wait: a `related-item-status` standoff (A's gate reads B's status while B's gate reads A's status), or a `set-aggregate` mutual two-set / `limit_ref` cycle (set A's pull is gated on set B while B's is gated on A).
+- **Conditional.** Do NOT let a pack ship a gating cycle, because each gate then waits on the other forever — a deadlock that either freezes both transitions or, if silently broken, lets one item advance on a gate meant to hold (defeating the gate).
+- **Root cause.** Authoring two transition gates that each condition on the other's outcome, with no terminating state.
+- **Mitigation — detect-and-refuse, enforced at the existing single enforcement point (`tracker-manager`; no new enforcer):**
+  1. **Static gating-graph cycle detection (pack-validation — the primary defense).** At registry-load (§5.1/§5.2) build a directed gating graph: nodes = `(kind, transition)` pairs; a `related-item-status` check contributes an edge from its `guards_transition` to the `(target-kind, transition)` that moves the target into a `target_status_in` state; a `set-aggregate` check contributes an edge from its `guards_transition` to the transitions that move items INTO its `status_filter` set. Run DFS back-edge / topological-sort-failure detection. **A detected cycle is REFUSED** — the pack fails validation with the offending cycle path named (mirrors §5's "a pack naming a relationship type outside the 7 is invalid" posture).
+  2. **Two special cases.** The **set-aggregate convergent self-edge is EXEMPT** — a WIP gate that guards the same transition that fills its own set is *self-limiting* (it converges to ≤ limit and stops admitting), not a deadlock; the detector special-cases a node whose only "cycle" is its own fill-transition as converging, not refusable. **Mutual cycles are REFUSED** — two *different* transitions in a mutual wait (the A↔B status standoff or the two-set / `limit_ref` aggregate cycle) are named-and-refused.
+  3. **Runtime cut (write/transition time — the backstop).** `tracker-manager` evaluates the condition at transition time; `on_unresolved: BLOCK-TRANSITION` fires when the target/set/scope can't be resolved (deleted related item, missing board entity, a manual-edit standoff the static graph couldn't see at instance level). Two bounds prevent unbounded runtime evaluation: a **traversal-depth cap** on edge-following (status arm) and a **set-cardinality bound** (aggregate arm — refuse to evaluate a pathologically large/unbounded scope rather than enumerate unboundedly).
+  4. **Refuse, not auto-break.** A genuine mutual cycle is an operator-resolvable modeling error (remove one gate) — refuse-and-name routes the decision to the operator (Tier 1), consistent with `entity-field-schemas.md` §7 ("never silently default a field, drop a reference, or substitute a kind").
+- **Principal vs. junior.** Principal builds the gating graph at pack-load, exempts the convergent WIP self-edge, refuses-and-names a true mutual cycle, and bounds runtime traversal; junior ships two mutually-conditioned gates and discovers the deadlock when both items freeze in production.
+
 ---
 
 ## 8. Cross-References
@@ -254,7 +470,7 @@ This document **consumes** these sources by pointer (duplicate-source-discipline
 | Reference | Role relative to this document |
 |---|---|
 | [`../disciplines/work-organization-mapping-framework.md`](../disciplines/work-organization-mapping-framework.md) | **The projection target.** Layer 1 = the per-level-purpose taxonomy a kind's `general_level` resolves to; Layer 2 = the hierarchy-by-methodology map a kind projects onto (`methodology_projection`); Layer 3 = the best-practice default schemas this grammar consumes/accepts; Layer 4 = the K4 plug-and-play override model. **Upstream of this document.** |
-| [`../disciplines/project-entity-model.md`](../disciplines/project-entity-model.md) | The FROZEN entity substrate — §18 the thin generic `Work Item` entity (the const `base`), the Core 7, the `work_item_type` discriminator, the polymorphic `parent_ref`, the rollup chain 17. Cited; never restated. |
+| [`../disciplines/project-entity-model.md`](../disciplines/project-entity-model.md) | The FROZEN entity substrate — §18 the thin generic `Work Item` entity (the const `base`), the Core 7, the `work_item_type` discriminator, the polymorphic `parent_ref`, the rollup chain 17. Chain 17's `BELONGS_TO` rollup traversal is **also the set-aggregate enumeration substrate** (§1.2.1 / §3.1a — the set-aggregate gate applies a comparator to this existing traversal, inventing no new physicalization). Cited; never restated. |
 | [`entity-field-schemas.md`](entity-field-schemas.md) | §3.18 the `Work Item` field schema + V-WI-01..06 + the Axis-1 base machine; §3.0 the inherited Core 7 + the `FieldDecl` row shape this grammar reuses; §7 the validation-failure disposition `tracker-manager` applies. |
 | [`../ADRs/ADR-018-work-item-type-layer.md`](../ADRs/ADR-018-work-item-type-layer.md) | The establishing decision — D1 hybrid (thin entity + this declarative layer), D2 methodology-projected (project onto the general hierarchy via the work-organization mapping framework, not a release-pipeline tool), D4 Tier-2. This grammar is the D1/D2 implementation; it opens no competing ADR. |
 | [`frontmatter-schema.md`](frontmatter-schema.md) | §Category 4 — the built 7 MVP relationship types `relationships.allowed_types[]` references (no new vocabulary). |
