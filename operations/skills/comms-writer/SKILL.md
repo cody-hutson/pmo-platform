@@ -97,7 +97,7 @@ If this invocation was chained from ppm-agent (detected when the Skill-tool `arg
 
 ### Step 2 — Apply trigger-match heuristic
 
-Map the user's request to a communication type using the trigger-match table below. Exact or common-phrasing match qualifies. If a unique match is found, proceed directly to Step 4 with that type. If multiple types match or no match is found, continue to Step 3. When a recap also includes a status update, combine the types and organize the output clearly per the existing multi-type convention below.
+Map the user's request to a communication type using the trigger-match table below. Exact or common-phrasing match qualifies. If a unique match is found, proceed directly to Step 4 with that type. If multiple types match or no match is found, continue to Step 3. When a recap also includes a status update, combine the types and organize the output clearly per the existing multi-type convention below. Combining a recap with a status update still renders follow-ups as a **reference view** (citing `FU-MTG-NNN`; live state in the tracker) — never re-derive or duplicate follow-up state into the combined output.
 
 | Trigger phrase / context signal | Route to type |
 |---|---|
@@ -166,9 +166,21 @@ or when processing a transcript that needs a recap communication.
 [`meeting-recap-format.md`](../../../core/standards/meeting-recap-format.md) — the
 `[RECAP] [Meeting Name] — [date]` subject convention, the recipients rule (attendees +
 stakeholders needing visibility), the fixed body order **Decisions (attributed) →
-Action Items (`MM/DD/YY — @Owner: deliverable`) → Notes → Key Roadblocks (if
-applicable)**, and the timeliness (within 4 business hours / same-day standard) and
-distribution rules. The recap is a finished communication, not a blank template.
+Action Items → Notes → Key Roadblocks (if applicable)**, and the timeliness (within 4
+business hours / same-day standard) and distribution rules. The recap is a finished
+communication, not a blank template.
+
+The **Action Items** section is a **reference view** of the follow-up records emitted from
+meeting processing (ppm-agent §8.7) — it does not own or duplicate their state. Each line cites
+the record by its stable ID in the working/tracker-linked copy:
+`FU-MTG-NNN — @Owner — <one-line action> — <state as-of recap date>`, and the recap states that
+**live follow-up status is maintained in the tracker; the list is a snapshot as of the recap
+date.** "Open follow-ups from this meeting and their current status" is answerable by querying the
+tracker on `source_meeting`, never by parsing the recap. Per the canonical spec's
+§Recap ↔ Follow-Up Record Boundary, the recap **references** records, it does not contain them. The
+internal `FU-MTG-NNN` IDs are **stripped** from the stakeholder-facing send per PMO-Critical Rule 1
+(No internal IDs) — substitute the descriptive action line; the ID is retained only in the working
+copy.
 
 ### Escalation
 

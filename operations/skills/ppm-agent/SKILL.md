@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v2.20
+version: v2.22
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -465,7 +465,7 @@ a decision-of-record). Side-effect: the superseding event emits a Communications
 entry via comms-writer (on the C7 `[COMMS]` allowlist) so stakeholders see the reversal —
 PPM Agent surfaces it as a Section-8.6 SECONDARY row.
 
-**Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact → child records at
+**Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact / Follow-Up Record → child records at
 entry state (§5.1 chains 6 / 7 / 8, all `GENERATES`).** PPM Agent processes a meeting
 transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. On `held`, PPM
 Agent (creates Decision + RAID) emits new child records — each Decision at
@@ -475,6 +475,27 @@ edge back to the Meeting. tracker-manager writes the new rows at their entry
 artifact-generator sets the entry `lifecycle_state` + Domain for any generated Artifact
 (Tier 2, 08-Generated staging). The generated children inherit provenance so they trace
 back to origin.
+
+On the same `Meeting-held` trigger, PPM Agent also emits one **Meeting-Follow-Up-Record** per
+**actionable** follow-up — a follow-up carrying an owner **AND** a deadline (committed or
+`[RECOMMENDED]`). Each record rides one `TRACKER_UPDATE` carrying `id: FU-MTG-NNN` (stable,
+never reused — the same collision-avoiding `TYPE-PREFIX-NNN` form as `R-PPM-###`), the five
+content fields (What / Who / When / Why / Unblocking), `lifecycle_state: Created` (the
+follow-up's own 6-state machine per `references/proactive-follow-up-tracking.md` — distinct from
+the Meeting entity's `{scheduled, held, cancelled}` machine, never collapse the two), and
+`source_meeting: MTG-### (+ TR-###/transcript path)` as the `GENERATES` back-link. The record's
+home is routed by type: the **Open Meetings Tracker** `Follow-up actions` field by default
+(`MODIFY` the `MTG-###` row), promoted to the **Carry-Forward Tracker** (`ADD`) when the action
+crosses a processing cycle, or the **RAID Log** (`ADD`, Tier 1 approval) when it is a
+risk / issue / dependency / pending decision. The recap **references** these records by ID; it
+never owns their state (see [`core/standards/operational-artifacts.md`](../../../core/standards/operational-artifacts.md)
+§Recap ↔ Follow-Up boundary and [`core/standards/meeting-recap-format.md`](../../../core/standards/meeting-recap-format.md)
+§Recap ↔ Follow-Up Record Boundary). **Scope (the actionable filter):** a recap line that is pure
+context, narrative, or an undecided discussion item — no owner — is **NOT** emitted as a record;
+it stays in the recap's Notes section. The **Evidence-gate refusal** above binds unchanged: a
+candidate follow-up whose owner is unresolvable or whose evidence is `[ASSUMPTION – CONFIRM]` is
+**NOT** auto-emitted — it surfaces as a Section-5 "Decisions needed" line. This is an extension of
+the existing cascade, not a new emit mechanism.
 
 **Cascade C — RAID Item `BLOCKS` Milestone → milestone status flag (§5.1 chain 9,
 many:many).** A RAID Item carrying a `BLOCKS` edge to a Milestone is at — or transitions to

@@ -74,7 +74,32 @@ and actions (the load-bearing content), then context, then blockers.
 
 ## Recap ↔ Follow-Up Record Boundary
 
-*(Reserved — populated by #378 at Engineering.)*
+A meeting recap is a point-in-time communication. It is **NOT** the system of record for meeting
+follow-ups. Discrete, actionable follow-ups (owner **AND** deadline) are emitted as trackable
+follow-up records into their tracker home (Open Meetings Tracker / Carry-Forward Tracker / RAID
+Log) by ppm-agent meeting processing, per
+[`proactive-follow-up-tracking.md`](../../operations/skills/ppm-agent/references/proactive-follow-up-tracking.md)
+and the recap ↔ follow-up boundary in [`operational-artifacts.md`](operational-artifacts.md). The
+recap and the follow-up records are **two artifacts, two lifecycles, two homes**: the recap is a
+Point-in-Time Snapshot frozen at send; the records are Living tracked records mutated through their
+own lifecycle.
+
+In the recap, the **Action Items** section renders a **reference view** of those records — it does
+not own their state:
+
+- Each line cites the record's stable ID: `FU-MTG-NNN — @Owner — <one-line action> — <state as-of recap date>`.
+- The recap states explicitly: **live follow-up status is maintained in the tracker; the list below
+  is a snapshot as of the recap date.**
+- "Open follow-ups from this meeting and their current status" is answerable by querying the tracker
+  on `source_meeting`, **WITHOUT** parsing this recap.
+
+The recap **references** follow-up records by ID; it never **duplicates** or owns their mutable state.
+A recap that carries a mutable status column the reader is expected to trust as current is the
+anti-pattern this boundary exists to prevent.
+
+Internal `FU-MTG-NNN` IDs are **stripped** from stakeholder-facing sends per the comms-writer
+No-internal-IDs rule — substitute the descriptive action line; the ID is retained only in the
+working / tracker-linked copy.
 
 ## Cross-references
 

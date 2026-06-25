@@ -37,6 +37,12 @@ Follow-ups are generated automatically when any of these conditions are detected
 - **When:** Deadline (specific date, day-of-week validated)
 - **Why:** Context linking to source (transcript reference, RAID entry, meeting date)
 - **Unblocking conditions:** What must happen before this can be resolved (if applicable)
+- **`id`:** Stable record identifier `FU-MTG-NNN` — auto-incremented, zero-padded `NNN`, **never reused** (the same collision-avoiding `TYPE-PREFIX-NNN` form as `R-PPM-###`). This is the handle the recap cites and the tracker keys on.
+- **`source_meeting`:** The originating meeting's `MTG-###` ID + transcript `TR-###`/path. This back-link makes "open follow-ups from meeting X" answerable as a tracker filter on `source_meeting`, **without parsing the recap**.
+
+The `id` and `source_meeting` fields are the two traceability additions that bind a follow-up record to its meeting. The five content fields above and the lifecycle (§Follow-Up Lifecycle) are unchanged. The follow-up record's `lifecycle_state` (Created → Assigned → In Progress → Completed | Escalated | Deferred) is the record's own machine — distinct from, and never collapsed into, the Meeting entity's `{scheduled, held, cancelled}` machine.
+
+**Emission scope — discrete records vs. recap content.** A follow-up is emitted as a discrete trackable record (the `id` + `source_meeting` fields above, routed into its tracker home) **only when it carries an owner AND a deadline**. Lines that are pure context, narrative, or undecided discussion (no owner) are **NOT** emitted as records — they remain recap communication content (the recap's Notes section), keeping the tracker free of non-actionable noise. A candidate whose owner is unresolvable or whose evidence is `[ASSUMPTION – CONFIRM]` is not auto-emitted; it surfaces as a "Decisions needed" line per the Evidence Gate. Meeting-sourced records are emitted on the `Meeting-held` transition via the SKILL.md §8.7 Cascade B emit path; their tracker home (Open Meetings `Follow-up actions` field / Carry-Forward / RAID) follows the Proactive Generation Rules routing above. The recap **references** these records by `id`; it never owns or duplicates their mutable state (see [`operational-artifacts.md`](../../../../core/standards/operational-artifacts.md) §Recap ↔ Follow-Up boundary).
 
 ## Follow-Up Aging Rules
 

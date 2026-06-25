@@ -19,6 +19,7 @@ This document provides the authoritative inventory of operational artifacts on t
 | **Status Report** | Point-in-time snapshot of project health for stakeholders | Weekly or per cadence | PM / Agent | Tier 1 (Approval required) | Point-in-Time Snapshot |
 | **Test Plan** | Test strategy, scope, approach, schedule, entry/exit criteria | Per phase + change events | QA Lead | Tier 1 (Approval required) | Baselined Document |
 | **Carry-Forward Tracker** | Tracks items carrying across processing cycles (unresolved actions, pending decisions) | Per processing cycle | PM / Agent | Tier 2 (Auto-write) | Living Document |
+| **Meeting Follow-Up Record** | Discrete actionable follow-up emitted from meeting processing (What / Who / When / Why / Unblocking + lifecycle state + `source_meeting`); homed in Open Meetings / Carry-Forward / RAID — distinct from the recap, which references it by ID | Per meeting event | PM / Agent | Tier 2 (Auto-write; RAID-routed = Tier 1) | Living Document |
 
 ### Governance Artifacts (Platform-Level)
 
@@ -29,6 +30,10 @@ This document provides the authoritative inventory of operational artifacts on t
 | **PORTFOLIO.md** | Cross-project health snapshot | After any project state change | Tier 4 (Drift detection) | Living Document |
 | **SESSION_STATE.md** | Session handoff state between sessions | Per session end | Tier 2 (Auto-write) | Living Document |
 | **IMPROVEMENTS.md** | Continuous improvement backlog | On every gap/improvement identified | Tier 2 (Auto-write) | Living Document |
+
+### Recap ↔ Follow-Up boundary
+
+The meeting recap (a Point-in-Time communication) and meeting follow-up records (Living tracked records) are **distinct artifacts with distinct lifecycles and homes**. The recap *references* follow-up records by stable ID (`FU-MTG-NNN`); the tracker is the system of record for follow-up state. "Open follow-ups from meeting X" is answered by querying the tracker on `source_meeting`, never by parsing the recap. The recap renders a read-only reference projection (ID · action · owner · state-as-of-recap-date); it never owns or duplicates mutable follow-up state. This is the canonical home for the boundary contract that comms-writer (Meeting recap type), the meeting-recap output-format spec, and ppm-agent meeting processing all cite.
 
 ## Artifact Lifecycle Patterns
 
@@ -68,6 +73,7 @@ Artifacts feed each other in predictable patterns. Understanding these dependenc
 | Meeting Transcript | RAID Log | Action item / risk extraction | New risks/issues → RAID update (Tier 1 approval) |
 | Meeting Transcript | Communications Tracker | Communication record | Meeting recorded → tracker update (auto) |
 | Meeting Transcript | Carry-Forward Tracker | Unresolved action items | Open items → carry-forward update (auto) |
+| Meeting Transcript / Meeting (held) | Meeting Follow-Up Record | Actionable follow-up extraction | Held meeting → discrete follow-up records (owner + deadline only); the recap references them by ID, never owns their state (auto; RAID-routed = Tier 1 approval) |
 | RAID Log | Status Report | Risk/issue summary | RAID changes → status report refresh (next cadence) |
 | RAID Log | Project Plan | Timeline/scope impact | Critical risk materialized → plan review (Tier 1 approval) |
 | Daily Status Log | Weekly Status Rollup | Daily aggregation | Daily entries → weekly rollup (per cadence) |
