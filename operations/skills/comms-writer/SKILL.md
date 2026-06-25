@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v1.19
+version: v2.22
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -149,33 +149,26 @@ When multiple types apply (e.g., a recap that includes a status update), combine
 **Trigger**: "Set up the agenda for [meeting]", "prepare the [meeting] invite",
 any [COMMS] tag for meeting preparation, or when PPM identifies a meeting need.
 
-**What you produce**:
-1. Subject line — descriptive of the session purpose.
-2. Attendees (required, optional) — with rationale.
-3. Goal statement — one sentence describing the session outcome.
-4. Agenda items — numbered or lettered, with owners tagged via `@Name`, time
-   allocations when appropriate, and sub-items for complex topics.
-5. Pre-read or preparation requirements — what attendees need before the session.
-6. Meeting logistics — Teams link placeholder, dial-in reference.
-
-Calibrate formality to the meeting type: a cross-functional technical session
-uses structured numbered items with tagged owners; a quick internal sync uses
-brief discussion points; a refinement session uses a detailed loop structure.
+**What you produce**: a finished agenda per the canonical output-format spec
+[`meeting-agenda-format.md`](../../../core/standards/meeting-agenda-format.md) —
+the six required agenda elements (Subject / Attendees with rationale / one-sentence
+Goal / Agenda items with `@Name` owners + time allocations + sub-items / Pre-read /
+Logistics) and the formality-calibration rule (cross-functional technical session vs.
+quick internal sync vs. refinement loop). The agenda is a finished communication, not
+a blank template — every gap is a specific named need, never a fill-in placeholder.
 
 ### Meeting recap
 
 **Trigger**: "Write the recap for [meeting]", any [COMMS] tag for recap,
 or when processing a transcript that needs a recap communication.
 
-**What you produce**:
-1. Subject line — prefixed with `[RECAP]` and meeting title.
-2. Recipients — meeting attendees + stakeholders who need visibility.
-3. Body structured as:
-   - **Decisions**: What was agreed, attributed to the decision-maker.
-   - **Action Items**: Each with owner, deadline, and specific deliverable.
-     Format: `MM/DD/YY — @Owner: Action description.`
-   - **Notes**: Supporting context, technical constraints, open questions.
-   - **Key Roadblocks** (if applicable): What's blocking progress.
+**What you produce**: a finished recap per the canonical output-format spec
+[`meeting-recap-format.md`](../../../core/standards/meeting-recap-format.md) — the
+`[RECAP] [Meeting Name] — [date]` subject convention, the recipients rule (attendees +
+stakeholders needing visibility), the fixed body order **Decisions (attributed) →
+Action Items (`MM/DD/YY — @Owner: deliverable`) → Notes → Key Roadblocks (if
+applicable)**, and the timeliness (within 4 business hours / same-day standard) and
+distribution rules. The recap is a finished communication, not a blank template.
 
 ### Escalation
 
