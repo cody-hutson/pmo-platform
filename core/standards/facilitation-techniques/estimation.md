@@ -10,6 +10,7 @@ consumers: "operations/skills/delivery-engine/SKILL.md Mode D (Sprint Planning) 
 owner: "Workspace owner ([OPERATOR_NAME])"
 ---
 <!-- reference-durability: allow-version-ref -->
+<!-- reference-durability: allow-link -->
 
 # Facilitation Techniques — Estimation Domain
 
