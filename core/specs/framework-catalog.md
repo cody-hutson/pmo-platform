@@ -71,6 +71,7 @@ Authoritative registry of every named framework, methodology, or standard the pl
 | Bridges Transition | EXTERNAL | Bridges (Managing Transitions, 4th ed. 2017) | operations/skills/change-management/references/bridges-transition.md | pmo-skill-reference-substrate | change-management skill (methodology suite) | evolving | 12mo | 2026-06-14 | 2027-06-14 | Workspace owner ([OPERATOR_NAME]) |
 | McKinsey 7-S | EXTERNAL | McKinsey 7-S (Peters & Waterman / Pascale & Athos, 1980) | operations/skills/change-management/references/mckinsey-7s.md | pmo-skill-reference-substrate | change-management skill (methodology suite) | stable | 36mo | 2026-06-14 | 2029-06-14 | Workspace owner ([OPERATOR_NAME]) |
 | Fowler Technical Debt Quadrant | EXTERNAL | Fowler — Technical Debt Quadrant (2009 bliki) | operations/skills/delivery-engine/references/tech-debt-classification.md | v2.01 | tech-debt classification / Mode D sprint planning | evolving | 12mo | 2026-06-15 | 2027-06-15 | Workspace owner ([OPERATOR_NAME]) |
+| facilitation-techniques-corpus | INTERNAL | v2.22 | core/standards/facilitation-techniques/README.md | v2.22 | delivery-lifecycle facilitation-techniques corpus (in-execution technique surfacing); consumed by delivery-engine Mode D/E | emerging | continuous | 2026-06-25 | continuous | Workspace owner ([OPERATOR_NAME]) |
 
 ## Notes
 

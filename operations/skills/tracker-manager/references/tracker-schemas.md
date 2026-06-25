@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Tracker Schemas — PMO Operational Trackers
 
 ## Purpose
@@ -132,7 +133,7 @@ An item can only leave carry-forward if there is evidence:
 - Duration: Expected duration
 - Attendees: Required + optional
 - Objective: What the meeting should accomplish (1-2 sentences)
-- Agenda: Numbered items with time allocations
+- Agenda: Per the canonical meeting-agenda output-format spec [`meeting-agenda-format.md`](../../../../core/standards/meeting-agenda-format.md) — numbered items with `@Name` owners and time allocations (this MTG-### field stores the agenda; the spec is the single source for its structure)
 - Pre-reads: Documents attendees should review before
 - Status: NEEDS SCHEDULING / SCHEDULED / COMPLETED / CANCELLED
 - Outcome: Post-meeting summary (populated after completion)

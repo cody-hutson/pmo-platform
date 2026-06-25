@@ -43,6 +43,18 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 |---|---|
 | `PMO_Platform_Template.md` | Knowledge-transfer reference for the PMO platform itself |
 
+## Related Canonical Output-Format Specs (cited, not mirrored)
+
+These are **output-format specifications** for finished communications — not fill-in
+templates — so they live in `core/standards/`, not this folder, and consumers cite them
+**by path** (no `TEMPLATE_SYNC_MAP` mirror row). Registered here for discovery so the
+canonical home of each meeting-format spec is findable from the templates registry.
+
+| Spec | Canonical home | Defines |
+|---|---|---|
+| Meeting agenda output format | [`core/standards/meeting-agenda-format.md`](../../core/standards/meeting-agenda-format.md) | The six required agenda elements + formality-calibration rule. Consumed by comms-writer (Meeting agenda type), comms-writer's `references/channel-formats.md`, and tracker-manager's Open Meetings Tracker `MTG-###` `Agenda` field. |
+| Meeting recap output format | [`core/standards/meeting-recap-format.md`](../../core/standards/meeting-recap-format.md) | The `[RECAP]` subject convention + Decisions → Action Items → Notes → Key Roadblocks body order + timeliness/distribution rules. Consumed by comms-writer (Meeting recap type) and `references/channel-formats.md`. |
+
 ## Adding a New Template
 
 See [`../standards/template-storage.md` §6 Sync-Map Registration Protocol](../../core/standards/template-storage.md). Summary: (1) place file in this folder, (2) add `TEMPLATE_SYNC_MAP` entry to `deploy.sh`, (3) document in `template-storage.md` §7, (4) `./deploy.sh --deploy <skill>` for initial sync, (5) `./deploy.sh --check` to confirm Check 13 passes, (6) commit canonical + deploy.sh + storage doc together.

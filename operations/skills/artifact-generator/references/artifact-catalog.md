@@ -4,7 +4,7 @@ The complete catalog of artifacts this skill can produce, organized by category.
 includes the artifact type, typical target folder, and the specialist skill (if any) that
 provides domain depth.
 
-This catalog is scoped to **PMO-unique artifacts** — 27 artifacts in 6 categories. Technical
+This catalog is scoped to **PMO-unique artifacts** — 28 artifacts in 6 categories. Technical
 documentation (API docs, README, architecture docs, runbooks, onboarding guides, technical
 reference) and PRD / feature-spec artifacts (PRDs, new-feature user stories, acceptance-criteria
 docs, success-metric definitions) are **out of scope**: route them per
@@ -48,6 +48,7 @@ produce those artifacts; the Wrapper Mode re-ingests their output under PMO meta
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|
 | Daily Status Update | AM/PM formatted status for Teams posting | Daily Status |
+| Meeting Follow-Ups / Action Register | Discrete, trackable follow-up records (What/Who/When/Why/Unblocking + lifecycle state + `source_meeting`) emitted from meeting processing into Open Meetings / Carry-Forward / RAID. Living records — separate lifecycle and home from the recap, which references them by ID | PPM Agent (emit) / Tracker Manager (write) |
 | Weekly Status Roll-Up | Cross-project weekly summary for leadership | Weekly Roll-Up |
 | Sprint Review Summary | Sprint outcomes, velocity, carry-over, next sprint outlook | Delivery Engine |
 | Retrospective Notes | Structured retrospective: what worked, what didn't, action items | — (self-produced) |
@@ -66,6 +67,6 @@ produce those artifacts; the Wrapper Mode re-ingests their output under PMO meta
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|
 | Meeting Agenda | Structured agenda with objectives, timeboxes, pre-reads, attendees | Comms Writer |
-| Meeting Recap | Post-meeting summary: decisions, actions, follow-ups, attendees | Comms Writer |
+| Meeting Recap | Post-meeting **communication**: decisions, reference view of follow-up records, attendees. Point-in-time; references follow-up records by ID, does not own them | Comms Writer |
 | Escalation Draft | Escalation package: issue, impact, ask, timeline, recipient | Comms Writer |
 | Training Announcement | Go-live or training session announcement with logistics | Comms Writer |

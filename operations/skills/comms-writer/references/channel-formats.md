@@ -122,23 +122,22 @@ Is a formal record required (audit, compliance, decision documentation)?
 
 ### Meeting Agenda Format
 
-| Element | Specification |
-|---------|--------------|
-| **Subject line** | Descriptive of session purpose, not just meeting name. |
-| **Goal statement** | One sentence: what outcome this meeting produces. |
-| **Attendees** | Required vs. optional, with rationale for each. |
-| **Agenda items** | Numbered. Owner tagged via `@Name`. Time allocation per item. Sub-items for complex topics. |
-| **Pre-read** | Listed explicitly. Linked. "Please review X before the meeting" with specific sections to focus on. |
-| **Logistics** | Teams link placeholder, dial-in reference, recording notice if applicable. |
+The meeting-agenda output format — the six required agenda elements (Subject /
+Attendees with rationale / one-sentence Goal / Agenda items with `@Name` owners + time
+allocations + sub-items / Pre-read / Logistics) and the formality-calibration rule — is
+defined by the canonical output-format spec
+[`meeting-agenda-format.md`](../../../../core/standards/meeting-agenda-format.md). That
+spec is the single source; this section carries no inline element definition.
 
 ### Meeting Recap Format
 
-| Element | Specification |
-|---------|--------------|
-| **Subject line** | `[RECAP] [Meeting Name] — [date]` |
-| **Structure** | Decisions (attributed) → Action Items (owner + deadline + deliverable) → Notes (supporting context) → Key Roadblocks (if any) |
-| **Timeliness** | Sent within 4 business hours of meeting end. Same-day is the standard. |
-| **Distribution** | Meeting attendees + stakeholders identified during the meeting as needing visibility. |
+The meeting-recap output format — the `[RECAP] [Meeting Name] — [date]` subject
+convention, the recipients rule, the fixed body order Decisions (attributed) → Action
+Items (owner + deadline + deliverable) → Notes → Key Roadblocks (if any), and the
+timeliness (within 4 business hours / same-day standard) + distribution rules — is
+defined by the canonical output-format spec
+[`meeting-recap-format.md`](../../../../core/standards/meeting-recap-format.md). That
+spec is the single source; this section carries no inline format table.
 
 ---
 
