@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v2.07
+version: v2.28
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
