@@ -6,6 +6,8 @@ Regression test bank for the Skill Editor. After any skill edit, the editor runs
 
 This document is derived from production experience building the PMO Agent Suite through Phases 1-9 and represents 35+ regression checks organized by category with skill-to-check mapping for efficient testing workflows.
 
+**Scope (distinct from the per-skill regression baseline).** This is the **PMO Agent Suite** regression bank — content/contract/behavior checks the Skill Editor runs after a skill edit. It is intentionally distinct from `release/references/specs/skill-suite-regression-checks.md` ("Regression Checks — PMO **Skill Suite**"), which is the per-skill invocation/non-invocation/smoke-output baseline maintained by `pmo-skill-refiner`. Different basename, different purpose: this bank audits an edit against cross-skill contracts; that baseline audits a skill against its own prior-version behavior. The two are not duplicates and are not single-sourced to each other.
+
 ## How to Use
 
 1. Identify which skill was modified

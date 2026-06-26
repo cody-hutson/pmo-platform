@@ -191,8 +191,11 @@ HARNESS_OPERATOR_STATE=()
 # entries below. The canonical file now exists at core/standards/template-
 # protocol.md. #316 (single-source shared refs) added 8 further entries —
 # output-format.md (×6 consumers) + operational-artifacts.md (×2) — homed at
-# core/standards/ via the explicit-basename resolver rule. Check 13 verifies
-# all 39 entries (was 31 after L4 Stage 6; 25 at L3 Stage 6).
+# core/standards/ via the explicit-basename resolver rule. #94 added 1 further
+# entry — regression-checks.md (same explicit-basename resolver rule). Check 13
+# verifies every entry below (40 after #94; 39 after #316; 31 after L4 Stage 6;
+# 25 at L3 Stage 6); the live count is reported dynamically via
+# ${#TEMPLATE_SYNC_MAP[@]}.
 TEMPLATE_SYNC_MAP=(
   # ── Templates: project-initiator (12 entries — 11 mirror + 1 promotion AC6) ──
   "project-initiator:communications-tracker-template.md:references/templates/communications-tracker-template.md"
@@ -243,6 +246,15 @@ TEMPLATE_SYNC_MAP=(
   "ppm-agent:output-format.md:references/output-format.md"
   "comms-writer:operational-artifacts.md:references/operational-artifacts.md"
   "ppm-agent:operational-artifacts.md:references/operational-artifacts.md"
+  # ── Shared standards doc: regression-checks.md (1 consumer) — #94 single-source.
+  #    The pmo-skill-editor Mode-C regression bank was a near-duplicate (4-line
+  #    [PROJECT_KEY] localization diff) of core/standards/regression-checks.md.
+  #    Single-sourced to the core/standards/ canonical (explicit-basename resolver
+  #    rule); the source-tree mirror is deleted and injected at deploy/build time.
+  #    Check 13 owns byte-identity; Check 13b no longer sees a divergent same-base
+  #    pair. Distinct from release/references/specs/skill-suite-regression-checks.md
+  #    (35L PMO Skill Suite per-skill baseline — different basename + purpose).
+  "pmo-skill-editor:regression-checks.md:references/regression-checks.md"
   # ── Templates: people-graph consumption (leg D / #1899) — R5 (#315) + #1166 deferral ──
   # Roster template (#315, ships standalone) registered against its real readers:
   #   comms-writer (names/tone) + ppm-agent (escalation owner + Person maintainer §6).
@@ -887,20 +899,22 @@ resolve_template_sync_source() {
   # Convention:
   #   output-format.md          → core/standards/<name>   (explicit; #316)
   #   operational-artifacts.md  → core/standards/<name>   (explicit; #316)
+  #   regression-checks.md      → core/standards/<name>   (explicit; #94)
   #   template-*.md             → core/standards/<name>
   #   *-template.{md,csv}       → operations/templates/<name>
   # (templates → operations, template-* standards → core. The modular
   # canonical is operations/templates/ — the public-API surface per
   # docs/module-apis.md § Operations module § Public templates.)
   #
-  # The two explicit shared-standards-doc basenames (output-format.md,
-  # operational-artifacts.md) are single-sourced shared references homed in
-  # core/standards/ per template-storage.md §3 / §7.2. They match neither the
-  # template-*.md nor the *-template.{md,csv} pattern, so they are mapped by an
-  # explicit narrow basename rule rather than a broad "non-template →
-  # core/standards/" catch-all — a catch-all would silently re-home any future
-  # non-template basename and is deliberately avoided. Add a new explicit
-  # basename here when a further shared standards doc is single-sourced.
+  # The explicit shared-standards-doc basenames (output-format.md,
+  # operational-artifacts.md, regression-checks.md) are single-sourced shared
+  # references homed in core/standards/ per template-storage.md §3 / §7.2. They
+  # match neither the template-*.md nor the *-template.{md,csv} pattern, so they
+  # are mapped by an explicit narrow basename rule rather than a broad
+  # "non-template → core/standards/" catch-all — a catch-all would silently
+  # re-home any future non-template basename and is deliberately avoided. Add a
+  # new explicit basename here when a further shared standards doc is
+  # single-sourced.
   #
   # Args:
   #   $1 — canonical filename (e.g., raid-log-template.csv, template-storage.md,
@@ -909,7 +923,7 @@ resolve_template_sync_source() {
   # Echoes the resolved source path. Caller checks file existence.
   local name="$1"
   case "$name" in
-    output-format.md|operational-artifacts.md) echo "core/standards/$name" ;;
+    output-format.md|operational-artifacts.md|regression-checks.md) echo "core/standards/$name" ;;
     template-*.md)                             echo "core/standards/$name" ;;
     *)                                         echo "operations/templates/$name" ;;
   esac
