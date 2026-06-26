@@ -323,6 +323,18 @@ verdict is not declared until all five are satisfied.
    owners, and statuses before drafting; never invent; surface source conflicts as drift
    rather than silently resolving or generalizing them.
 
+   **People-graph name source (read-only).** Resolve named and owner people — preferred
+   name/spelling and role — from the capability/coverage graph view
+   ([`core/disciplines/people-coverage-graph.md`](../../../core/disciplines/people-coverage-graph.md),
+   query *who-does-what*) joined on `person_id`, then apply the **existing**
+   `references/audience-profiles.md` frameworks to the resolved person. The graph changes the
+   name *source* only; the audience-calibration frameworks are **unchanged** — the graph supplies
+   the person, the frameworks calibrate to them. For a Strategic Initiative `sponsor`, resolve the
+   `sponsor` ref → Person via the same view (or read `sponsor_external` when that slot is
+   populated, per the owner-reconciliation field readers). This is a **READ** — comms-writer never
+   writes the roster, the Person entity, or the graph; an unresolved name is surfaced (not
+   invented), the clarification-queue maintenance path owns identity creation.
+
 ## Output format
 
 Every comms-writer response follows this structure. Read `references/output-format.md`
