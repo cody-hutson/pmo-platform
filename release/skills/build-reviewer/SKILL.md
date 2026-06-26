@@ -12,7 +12,7 @@ description: >
   wants a final production-readiness review of a document pack, including:
   "review the copilot builder files", "audit the pmo platform",
   "review this document pack", "find gaps in the builder doc pack".
-version: v1.10
+version: v2.29
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -84,7 +84,7 @@ The specific dimensions depend on the pack. See:
 
 This skill inherits the shared review-class discipline from [`core/disciplines/review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md), which governs:
 
-- **Section 1 — Anti-Laziness Rules (10 rules):** no surface-level passes, no assumption of correctness, no finding-free dimensions without evidence of check, no symptom-only findings, no resolution-free findings, no scope avoidance, no severity inflation/deflation, no redundant findings, no narrative padding, no self-referential validation.
+- **Section 1 — Anti-Laziness Rules:** the full anti-laziness rule set defined in `review-discipline-principles.md` § Section 1 (rules 1–10 are the originals this skill authored — no surface-level passes, no assumption of correctness, no finding-free dimensions without evidence of check, no symptom-only findings, no resolution-free findings, no scope avoidance, no severity inflation/deflation, no redundant findings, no narrative padding, no self-referential validation; rules 11+ are added by the shared discipline). Apply the current canonical set, not a frozen subset — the rule count is owned by `review-discipline-principles.md`, not restated here.
 - **Section 2 — Root-Cause Requirement:** every finding must trace the [systemic pattern] → [proximal cause] → [observable signal] chain; symptom-only findings are rejected.
 - **Section 3 — Systemic Pattern Analysis:** recurring root causes across findings classified as design flaws / implementation gaps / interface mismatches / governance failures / capacity shortfalls.
 - **Section 4 — Residual Risk Register:** risks consciously carried forward with disposition reason and monitoring criteria.

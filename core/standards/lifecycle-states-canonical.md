@@ -256,7 +256,6 @@ These consumers are designed but not yet authored. They will register here when 
 | Consumer | Planned release | Expected consumption |
 |---|---|---|
 | file-router ingest and KB capability | future | file-router attaches Context Lifecycle state metadata to routed files using `Context-Captured` / `Context-Structured` (soft outbound). |
-| Knowledge Architecture doc | shipped | Parallel companion to this canonical source; cites this doc for lifecycle vocabulary. |
 | Future cross-domain consistency checker | TBD | Reads §5 Collision Map programmatically; enforces object-prefix discipline in cross-machine prose. |
 
 ### §6.3 Registration protocol
