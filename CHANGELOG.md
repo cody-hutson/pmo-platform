@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.30] - 2026-06-26
+
+Stale internal links across the platform's docs and skill files are corrected to their current locations.
+
+[Full notes](release/releases/notes/v2.30_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.30)
+
 ## [v2.29] - 2026-06-26
 
 Corpus-drift reconciliation — ten places where a reference or governance doc had drifted from its canonical source (a stale rule count, a divergent list, an old field name, an imprecise term, an incomplete check enumeration, and a duplicate file) are corrected so the docs say what the platform actually does. Documentation and governance accuracy only — no skill behavior, schema, or runtime-check change. routine class; the two text-edited skills (build-reviewer, pmo-skill-editor) have packages rebuilt at release-cut.
