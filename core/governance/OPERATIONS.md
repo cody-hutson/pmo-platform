@@ -864,6 +864,14 @@ These are living documents. Update cadence and ownership are defined below.
 | `[Project]_Artifact_Register.md` | Configuration-management catalog of project artifacts (name, type, version, baseline status, owner, retention) — the per-project CI catalog for the Artifact entity. Append-only superseded history. Schema in tracker-schemas.md § Tracker 6. | Document Tier 2 | Tracker Manager | On artifact-generate + phase-gate baselining |
 | `Key Terms Glossary.csv` | Terminology, acronyms, team-specific language. | Document Tier 1 | Process Designer | As-needed |
 
+#### People Capability/Coverage Graph (operator-instance, cross-cutting)
+
+Registered per the functional-people-graph milestone. Distinct from the per-project trackers above: the **filled** roster is operator-instance and **never committed** (out-of-tree placement is the primary protection; only a de-identified template ships in `operations/templates/`, registered in `TEMPLATE_SYNC_MAP`).
+
+| Artifact | Purpose | Owner | Cadence |
+|---|---|---|---|
+| `people-roster.yaml` (operator-instance) + the capability/coverage graph view (`core/disciplines/people-coverage-graph.md`) + the clarification-queue | Resolve who-does-what / who-covers-whom / coverage-by-capability — names, owners (the four leadership-owner `ref→Person` fields per ADR-040), and coverage — consumed read-only by comms-writer, tracker-manager, ppm-agent, and delivery-engine | Operator maintains the roster; the graph is maintained ambiently (Autonomy **Tier 1** — clarification queue, never auto-create); `core/deploy/extract-roster-needles.sh` keeps the PII pre-commit needle list current | Ambient / event-driven (roster-touch · owner/Resource write · external-name surface · ref-resolution miss); operator confirms unrecognized people via the clarification queue |
+
 ### Document Tier Definitions
 
 - **Document Tier 1 (Stakeholder-Facing):** FDDs, RAID logs, plans, requirements, governance docs. Updated manually by [OPERATOR_NAME] or on explicit direction.

@@ -333,6 +333,17 @@ Document Tier exactly as Step 3 already does:
 This is the literal contract: **Tier 1 RAID = approval; Tier 2 row = auto-write within
 `cascade_scope`.**
 
+**Owner resolution (read-only).** When writing or surfacing a RAID Item owner or Decision
+maker, resolve `owner_person_id` to a Person via the capability/coverage graph view
+([`core/disciplines/people-coverage-graph.md`](../../../core/disciplines/people-coverage-graph.md),
+query *who-does-what*) joined on `person_id`, per `entity-field-schemas.md` §5 Consumer Matrix
+(RAID Item `owner_person_id`; Decision maker) — full_name/role for display and identity
+confirmation. The graph read resolves the owner for **display/validation only**; the tracker-row
+write path (`TRACKER_UPDATE`, Steps 1→5) is **unchanged**, and the Person entity stays
+ppm-agent-maintained per `project-entity-model.md` §6. tracker-manager **reads** the Person from
+the graph; it never writes the roster, the Person entity, or the graph — an unresolved
+`owner_person_id` is flagged, not invented.
+
 **`cascade_scope` enforcement.** A Tier-2 lifecycle write must fall inside the authorized
 `cascade_scope` list carried on the upstream Handoff Manifest (the C6 cascade rule). An
 out-of-scope target **descends to Tier 1** (approval-gated) — it does not silently

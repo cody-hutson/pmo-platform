@@ -1,0 +1,52 @@
+# people-roster-template.yaml — de-identified template (CUSTOMIZABLE-PUBLIC, tracked)
+#
+# This is the SHIPPED TEMPLATE. The FILLED roster is OPERATOR-INSTANCE and is
+# NEVER committed. It lives OUT OF THE REPOSITORY TREE at
+#   $(pmo_instance_path)/people-roster.yaml   (default ~/Claude/personal/pmo-instance/)
+# which is a sibling of the repository — out-of-tree placement is the PRIMARY
+# protection: a repository commit cannot reach a path outside the repo tree. Two
+# further layers back it up: the `.gitignore` `**/people-roster.yaml` rule catches a
+# stray in-tree copy, and core/deploy/extract-roster-needles.sh feeds the roster
+# names into the PII pre-commit needle list so a commit containing a roster name is
+# blocked (when the hook is installed in enforce mode). Only this de-identified
+# template ships.
+#
+# ## Reading contract (honored by convention — no runtime enforcement on a read)
+# This roster is a FUNCTIONAL coordination artifact: who does what, how to reach
+# them professionally, who covers whom. It is NOT an HR or performance system.
+# Read ONLY the allow-list fields below. Do NOT infer, emit, or write any field
+# outside the allow-list (no ratings, no performance, no HR status, no
+# compensation, no free-text notes). Capability is expressed as TAGS, never a
+# rating. If a value is not known it is `unknown` — represent it as `unknown`,
+# never guess. Provenance-bearing fields carry `{value, source, last_verified}`;
+# an `operator` source wins over an `agent-inferred` one.
+#
+# Fill placeholders ([PREFERRED_NAME], person-id-001, …) only in your operator-
+# instance copy — never in this committed template.
+
+people:
+  - person_id: person-id-001              # stable identity; resolves to Person.person_id (entity-model §3.10 dedup anchor)
+    # --- core layer ---
+    preferred_name:    { value: "[PREFERRED_NAME]", source: operator, last_verified: "YYYY-MM-DD" }
+    name_spelling:     { value: "[PERSON_NAME]",     source: operator, last_verified: "YYYY-MM-DD" }
+    roles:             { value: ["[ROLE]"],          source: operator, last_verified: "YYYY-MM-DD" }
+    team:              { value: "[TEAM_NAME]",       source: operator, last_verified: "YYYY-MM-DD" }
+    capability_tags:   { value: ["[CAPABILITY_TAG]"], source: operator, last_verified: "YYYY-MM-DD" }  # TAGS, never ratings
+    backup_coverage:   { value: ["person-id-002"],   source: operator, last_verified: "YYYY-MM-DD" }   # refs other roster person_ids
+    status: active                          # active | on-leave | departed  — tombstone; a departed entry PERSISTS so prior refs still resolve
+    last_verified: "YYYY-MM-DD"
+    # --- comms-calibration layer ---
+    comms_calibration: { value: "unknown", source: operator, last_verified: "YYYY-MM-DD" }  # preferred tone/channel; `unknown` if not known
+    # --- escalation-routing layer ---
+    escalates_to:      { value: "person-id-002", source: operator, last_verified: "YYYY-MM-DD" }  # functional routing hint — NOT an HR reporting line
+    # --- project-linkage layer ---
+    linked_project_ids: { value: ["[PROJECT_ID]"], source: operator, last_verified: "YYYY-MM-DD" }
+
+# EXCLUDED by construction — these fields are NOT part of the closed allow-list and
+# must never be added (adding any one turns the roster into a shadow-HR system):
+#   salary · compensation · pay_band · performance_rating · review_score · rating ·
+#   ranking · hr_status · employment_type · manager (HR reporting line — escalates_to
+#   is a functional routing hint, not a manager link) · home_address · personal_phone ·
+#   personal_email · date_of_birth · nationality · gender · marital_status · health ·
+#   disability · disciplinary_* · attrition_risk · flight_risk · headcount_cost ·
+#   any free-text notes / comments field (an open shadow-HR vector).

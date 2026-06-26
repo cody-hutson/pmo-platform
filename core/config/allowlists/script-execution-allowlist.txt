@@ -102,3 +102,10 @@ release/tools/version-grammar.sh
 [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
 ./release/tools/claim-version.sh
 release/tools/claim-version.sh
+
+# extract-roster-needles.sh — generates PII needles from the operator-instance
+# people-roster into the localized-context needle file (people-graph data surface).
+[PMO_PLATFORM_ROOT]/core/deploy/extract-roster-needles.sh
+[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/core/deploy/extract-roster-needles.sh
+./core/deploy/extract-roster-needles.sh
+core/deploy/extract-roster-needles.sh
