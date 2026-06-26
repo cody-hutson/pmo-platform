@@ -383,6 +383,39 @@ scaffold_needles() {
   info "Scaffolded localized-context needle file → ${needle_file}"
 }
 
+# --- Phase 2.5c: people-roster scaffold (#2040) ---
+# Create-once ONLY: copy the tracked de-identified template to the operator's
+# people-roster.yaml if and only if it does NOT already exist. update.sh must
+# NEVER regenerate this file (it is pure operator PII, unlike the marker-fenced
+# composition surfaces Phase 3 regenerates) — the `[ -f ] ||` guard IS that
+# guarantee, and a clobber would be IRREVERSIBLE. A filled roster is therefore
+# byte-identical across repeated updates. Mirrors scaffold_needles exactly.
+scaffold_roster() {
+  info "Phase 2.5c: people-roster scaffold (create-once; never regenerated)"
+  resolve_instance_dir
+  local template="${REPO_ROOT}/operations/templates/people-roster-template.yaml"
+  if [ ! -f "${template}" ]; then
+    warn "Roster template not found at ${template}; skipping roster scaffold"
+    return 0
+  fi
+  if [ -z "${INSTANCE_DIR}" ]; then
+    warn "Instance dir unresolved; skipping roster scaffold"
+    return 0
+  fi
+  local roster_file; roster_file="$(pmo_people_roster_for "${WORKSPACE_ROOT}")"
+  if [ -f "${roster_file}" ]; then
+    info "PRESERVED (operator data, never regenerated): ${roster_file}"
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would scaffold roster → ${roster_file}"
+    return 0
+  fi
+  mkdir -p "$(dirname "${roster_file}")"
+  cp "${template}" "${roster_file}"
+  info "Scaffolded people-roster → ${roster_file}"
+}
+
 # --- Phase 4: State update ---
 write_last_update() {
   if [ "${DRY_RUN}" -eq 1 ]; then
@@ -517,6 +550,7 @@ preflight
 schema_migrate
 backup_instance_dir
 scaffold_needles
+scaffold_roster
 regenerate_managed_sections
 redeploy_skills
 refresh_version_snapshot
