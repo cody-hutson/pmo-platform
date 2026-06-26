@@ -1,6 +1,5 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
-<!-- The #413 references below are the load-bearing boundary statement this standard is required to carry (it bounds the confidence-REPRESENTATION axis against the response-POSTURE axis owned by reconcile-dont-annotate.md, whose origin issue is #413). The marker covers those in-prose boundary references, which sit outside a recognized reference block by design — the boundary statement reads naturally in context, not relegated to a footnote. -->
 # Staleness-Confidence Standard
 
 ## Purpose
@@ -10,13 +9,13 @@ Defines the **one** shared representation of staleness-confidence for the platfo
 This standard governs the **confidence-representation axis only**. It is bounded — strictly — away from two adjacent axes:
 
 - **Detection triggers** (*when* a mechanism fires) are owned by each mechanism's own spec. This standard never changes when a detector fires.
-- **Response posture** (*what an agent does* once a signal is classified) is owned by [`reconcile-dont-annotate.md`](../disciplines/reconcile-dont-annotate.md). See § Boundary with #413.
+- **Response posture** (*what an agent does* once a signal is classified) is owned by [`reconcile-dont-annotate.md`](../disciplines/reconcile-dont-annotate.md). See § Boundary with reconcile-don't-annotate.
 
 The decision rationale (why an ordinal depth scale and not the existing time-decay score) is recorded in [ADR-043](../ADRs/ADR-043-staleness-confidence-canonical-representation.md).
 
 ## The canonical scale — four ordinal depth bands
 
-The scale is ordered (`S0 < S1 < S2 < S3`) with stable identifiers. Each band names a **depth of staleness** — what *kind* of problem the signal indicates — and carries a state description (not an instruction; the action is the posture layer's to choose, per § Boundary with #413).
+The scale is ordered (`S0 < S1 < S2 < S3`) with stable identifiers. Each band names a **depth of staleness** — what *kind* of problem the signal indicates — and carries a state description (not an instruction; the action is the posture layer's to choose, per § Boundary with reconcile-don't-annotate).
 
 | Band | Identifier | Depth semantic (what the signal indicates) | State description |
 |---|---|---|---|
@@ -76,7 +75,7 @@ A two-state (binary) mechanism, or a bare elapsed-time signal, maps to a **singl
 
 Escalation to **S3-STRUCTURAL** — when the premise itself is invalid (a named premise artifact 404s, a governance file moved, the rule no longer maps) — is a **posture-layer move**, made by the response discipline ([`reconcile-dont-annotate.md`](../disciplines/reconcile-dont-annotate.md)) when *its* premise-rejection test fires, not a band the bare binary self-reports. This keeps the representation lossless and deterministic (a binary never needs an unstated "is the premise invalid?" judgment to pick its band) and keeps the depth scale honest (the same principle that caps backlog-aging at S2 — *structural requires a premise finding, not the bare signal* — generalizes to every binary).
 
-## Boundary with #413 (reconcile-don't-annotate)
+## Boundary with reconcile-don't-annotate
 
 This standard governs the **representation** of staleness-confidence — the shared scale a detector uses to report how stale, and how deeply, a signal is. It does **not** govern the **response posture** — what an agent does once a signal is classified (reconcile in place vs. annotate vs. escalate vs. defer). Response posture is owned by [`reconcile-dont-annotate.md`](../disciplines/reconcile-dont-annotate.md). The two compose: a detector emits a band on this scale (representation); the reconcile-don't-annotate decision consumes the band to choose the response (posture). An `S1-SUPERFICIAL` signal composes with "reconcile in place"; an `S3-STRUCTURAL` signal composes with "in-body authoritative reconciliation or file a follow-up" — but that mapping is reconcile-don't-annotate's to make, not this standard's. **This standard defines the band; it never prescribes the action.**
 
@@ -116,5 +115,5 @@ This standard canonicalizes one convention: the shared four-band staleness-confi
 ## Cross-references
 
 - [ADR-043](../ADRs/ADR-043-staleness-confidence-canonical-representation.md) — the decision record for this standard.
-- [`reconcile-dont-annotate.md`](../disciplines/reconcile-dont-annotate.md) — the response-posture discipline this standard composes with (the band feeds its decision tree). See § Boundary with #413.
+- [`reconcile-dont-annotate.md`](../disciplines/reconcile-dont-annotate.md) — the response-posture discipline this standard composes with (the band feeds its decision tree). See § Boundary with reconcile-don't-annotate.
 - [`health-check-specification.md`](health-check-specification.md) Check 2 + [`sqlite-index-schema.md`](../schemas/sqlite-index-schema.md) — owner of the one score this standard projects (the formula is cited, not redefined).

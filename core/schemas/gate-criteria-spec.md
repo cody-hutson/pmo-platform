@@ -1,4 +1,5 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- reference-durability: allow-link -->
 # Gate Criteria Specification
 
 Defines three named gates across the triage lifecycle — Triage Readiness, Workflow Readiness, Release Readiness — with structured criteria for validation, automation routing, and self-repair.
@@ -521,7 +522,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 - **Reconciled** the Enforcement-Layer-Split row (G1-01 description), the G1-01 self-repair rows (strip-not-prepend on bracket FAIL; return-to-author on substance FAIL), the bundle-precondition (a title's *presence*, not a prefix, no longer implies body fields; re-check set names "title-informativeness floor"), and the Template-Conversion Rule (title rewritten to the floor; no `[Category]:` added).
 - Pairs with the `deploy.sh` Check 22 (`g1-enforcement`) G1-01 block rewrite shipped alongside this schema change (rejects a `[...]:` prefix + the substance floor; **warn-tier unchanged** — legacy prefixed issues WARN, never FAIL `--check`; bulk re-title is a separately-authorized follow-up) and the three work-item templates' prefix-less `title: ""`.
 - Schema bump v1.15 → v1.16 (non-breaking minor; criterion-shape change). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no structural change — G1-01 keeps its ID, type, check, and automation columns; only its predicate and applicability triple change. Existing G1-01..G1-09 / G2-01..G2-12 / G3-01..G3-15 + G-BR1..G-BR4 + G-PR1..G-PR9 + G-EX1..G-EX8 + G-CL1..G-CL8 IDs unchanged; no ID renumber, no column/type change.
-- **Cutover discipline (v1.16):** the repurposed G1-01 applies to issues evaluated by `deploy.sh --check` strictly AFTER this change's introducing-release merge SHA recorded in the release log; pre-cutover evaluations are grandfathered; the introducing release itself is exempt (reflexive-pipeline-loop discipline).
+- **Warn-tier (G1-01):** legacy issues created before this change keep their bracket prefix and are reported as a non-blocking warning by `deploy.sh --check` — they never fail the gate, and no bulk re-title is required.
 
 **v1.15 changes (non-breaking — minor; additive only):**
 

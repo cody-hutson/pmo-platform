@@ -3,6 +3,7 @@ title: Staleness-confidence canonical representation — ordinal depth bands bac
 status: Proposed
 tags: [staleness-confidence, representation-standard, ordinal-scale, cross-mechanism, depth-axis]
 ---
+<!-- reference-durability: allow-link -->
 
 # ADR-043 — Staleness-confidence canonical representation: ordinal depth bands backed by an optional projected score
 
