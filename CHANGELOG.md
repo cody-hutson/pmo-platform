@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.28] - 2026-06-26
+
+Generated-vs-source provenance — when a skill writes a generated artifact, the artifact's frontmatter now records which skill and version produced it and what upstream evidence it drew from, plus a stable identifier, so generated content is traceable to its source and cleanly distinguished from human-authored artifacts. novel class; additive throughout (every field is optional, forward-only no back-fill); the five changed-skill packages rebuilt at release-cut.
+
+### Added
+
+- **Generated artifacts carry their own origin stamp.** A new artifact written by a skill now records the producing skill and its version in its frontmatter. *Why it matters:* you can tell which skill made a file and which version of it without inferring from the filename or folder. ([#205](https://github.com/cody-hutson/pmo-platform/issues/205))
+- **Generated artifacts list the evidence behind them.** An artifact now records the upstream inputs it drew from — the transcripts, messages, or files it was built on. *Why it matters:* you can trace a generated file back to its sources to check or re-derive it. ([#205](https://github.com/cody-hutson/pmo-platform/issues/205))
+- **Each generated artifact gets a stable identifier.** A generated artifact now carries a filename-independent identifier of its own. *Why it matters:* the file stays referenceable even if it is later renamed or moved. ([#205](https://github.com/cody-hutson/pmo-platform/issues/205))
+
+[Full notes](release/releases/notes/v2.28-15-generated-vs-source-provenance_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.28)
+
 ## [v2.27] - 2026-06-26
 
 Ticket information architecture — how a ticket carries confidence, how its title reads, and how its information is structured all get sharper. One four-level staleness scale replaces five incompatible formats so "how stale, and how deeply" means the same thing everywhere; work-item titles drop the redundant type prefix and become readable from the issue list alone, behind a logged-but-not-blocking floor that leaves legacy issues untouched; and a documented three-layer ticket information model adds a pipeline-Stage column to the backlog view. cross-cutting class; additive throughout; the two changed-skill packages rebuilt at release-cut.
