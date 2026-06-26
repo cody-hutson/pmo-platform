@@ -1,6 +1,6 @@
 # Failure Taxonomy: people-graph-consumption
 
-The failure modes this suite is built to catch. These are the *consumption* failures the parent issue (#2042) names: the read is instructional-but-unverified — nothing proves it fires, and nothing proves it stays read-only. Each maps to a Module 6 F-XX where the research supports it, else a local ID.
+The failure modes this suite is built to catch. These are the *consumption* failures the parent issue names: the read is instructional-but-unverified — nothing proves it fires, and nothing proves it stays read-only. Each maps to a Module 6 F-XX where the research supports it, else a local ID.
 
 ## Failure modes
 
