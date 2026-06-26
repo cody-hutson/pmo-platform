@@ -215,11 +215,11 @@ Full artifact format identical to § 1 Schema; effort tier may upgrade from Stag
 
 ## § 7 Effort-sizing
 
-Re-review artifact form scales with issue size and scope. The spoke determines tier from issue labels (`size:S/M/L/XL` + content scope) at the top of the re-review artifact. Tier downgrades require operator approval; tier upgrades are autonomous.
+Re-review artifact form scales with issue size and scope. The spoke determines tier from issue labels (`size:XS/S/M/L/XL` + content scope) at the top of the re-review artifact. Tier downgrades require operator approval; tier upgrades are autonomous.
 
 | Tier | Trigger | Artifact form |
 |---|---|---|
-| **Trivial** | Issue size = S AND scope = doc-only (no skill, no governance, no schema, no protocol change) | One-line-per-dimension artifact: each of D1 / D2 / D3 gets a single-line finding/verification with at least one citation. Per-requirement table optional. |
+| **Trivial** | Issue size = XS OR S AND scope = doc-only (no skill, no governance, no schema, no protocol change) — XS folds into Trivial alongside S because an XS-sized doc-only change carries the same minimal blast radius as S and warrants the same one-line-per-dimension form | One-line-per-dimension artifact: each of D1 / D2 / D3 gets a single-line finding/verification with at least one citation. Per-requirement table optional. |
 | **Standard** | Issue size = M OR scope touches governance / skill / schema / protocol | Full artifact with header metadata + per-requirement table + all 3 dimensions per requirement. |
 | **Complex** | Issue size = L/XL OR scope is cross-cutting (≥3 governance files) OR Solutioning activates with non-trivial blast radius | Standard artifact + cross-issue cross-reference section (citations to other issues in the same Milestone) + explicit blast-radius re-validation against the Solutioning Phase A3 output. |
 
