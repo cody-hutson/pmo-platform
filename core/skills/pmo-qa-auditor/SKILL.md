@@ -119,7 +119,7 @@ change-management, technical-analyst, process-designer).
 1. Identify which skill produced the output.
 2. Load that skill's output contract from `../../reference/schemas/per-skill-output-contracts.md`.
 3. Evaluate against 6 gate categories:
-   - **G1: Output contract compliance** — All required sections present with correct structure. **For ppm-agent outputs:** verify Section 10 Handoff Manifest is present (or explicit `HANDOFF_MANIFEST: None — no downstream work identified`); each `next_actions` entry has the required 5 fields (Tag, Context, Source, Scope, Inputs) plus cascade metadata (`target_skill`, `dependencies`, `dependency_satisfied`, `evidence_quality`, `cascade_scope`, `auto_invoke`) per the schema in `pmo-platform/skills/ppm-agent/SKILL.md` Section 10. Manifest absence or incomplete entries → G1 FAIL with specific missing-field finding.
+   - **G1: Output contract compliance** — All required sections present with correct structure. **For ppm-agent outputs:** verify Section 10 Handoff Manifest is present (or explicit `HANDOFF_MANIFEST: None — no downstream work identified`); each `next_actions` entry has the required 5 fields (Tag, Context, Source, Scope, Inputs) plus cascade metadata (`target_skill`, `dependencies`, `dependency_satisfied`, `evidence_quality`, `cascade_scope`, `auto_invoke`) per the schema in `operations/skills/ppm-agent/SKILL.md` Section 10. Manifest absence or incomplete entries → G1 FAIL with specific missing-field finding.
    - **G2: Principal standard adherence** — Systems thinking, ruthless clarity, judgment under
      uncertainty, evidence quality. See `../../reference/standards/principal-standard-checklist.md`.
    - **G3: Push-to-resolve compliance** — Items resolved vs. surfaced. See
@@ -690,7 +690,7 @@ cascade-completeness evidence-trust failure mode.
 ### G7 gate not fired on SKILL.md audit — TRIG
 
 - **Signature (observable signal):** A Mode A audit of a SKILL.md file (input is a
-  `pmo-platform/skills/*/SKILL.md` file) completes without a G7 row in the Gate
+  `{core,operations,release}/skills/*/SKILL.md` file) completes without a G7 row in the Gate
   Results Table, or the G7 row fires only Phase 1 structural checks without emitting
   Phase 2 content-check findings (G7-06 domain-specificity, G7-07 mitigation
   actionability, G7-08 principal-vs-junior gradient).
@@ -705,7 +705,7 @@ cascade-completeness evidence-trust failure mode.
   SKILL.md specifically. Phase 2 content checks add LLM grading cost, which also
   tempts skipping.
 - **Mitigation:** On audit entry, detect file type from path pattern
-  (`pmo-platform/skills/*/SKILL.md`) and from frontmatter structure (presence of
+  (`{core,operations,release}/skills/*/SKILL.md`) and from frontmatter structure (presence of
   `name`, `description` in frontmatter); when the input is a SKILL.md file, fire G7
   as a mandatory gate; run Phase 1 (structural regex — deterministic) and Phase 2
   (content — LLM-graded) checks; emit the verdict per the standard with specific

@@ -86,7 +86,7 @@ inside a playbook, stop — the playbook should dispatch into the core, not
 parallel it. This is the skill's primary failure mode (see Design Discipline
 below).
 
-**Template-protocol consumption.** When authoring eval rubric or judge templates, consult `pmo-platform/reference/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New eval-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `pmo-platform/reference/templates/`. See [`OPERATIONS.md § Template Protocol`](../../governance/OPERATIONS.md).
+**Template-protocol consumption.** When authoring eval rubric or judge templates, consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New eval-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../governance/OPERATIONS.md).
 
 ## Mode Selection
 
@@ -145,7 +145,7 @@ Decide mode and playbook **before** doing anything else.
 
 | Signal | Playbook |
 |---|---|
-| Path ending in `pmo-platform/skills/<name>/` or mentions a specific skill by name | **Per-skill** (Category A) — see `references/playbook-per-skill.md` |
+| Path ending in `{core,operations,release}/skills/<name>/` or mentions a specific skill by name | **Per-skill** (Category A) — see `references/playbook-per-skill.md` |
 | Mentions "stage", "gate", "Gate N", "Stage X→Y", or references `gate-evaluation-spec.md` / `pipeline/` | **Stage-gate** (Category B) — see `references/playbook-stage-gate.md` |
 | Anything else — generic AI system, external project, research agent, etc. | **Generic fallback** — apply `references/decision-tree.md` directly |
 
@@ -203,7 +203,7 @@ Always end with artifacts at their correct paths (Author mode) or a structured m
 
 ### Author mode, per-skill playbook
 
-Populate `pmo-platform/skills/<name>/evals/`:
+Populate `{core,operations,release}/skills/<name>/evals/`:
 
 - `evals.json` — test prompts in the preserved eval-harness schema (id, name, prompt, expected_output, files) — consumed by `pmo-skill-refiner/scripts/run_eval.py`
 - `judge_prompts/` — one file per judge: system + user prompts + substitution variables + CoT-blinding notes
@@ -218,7 +218,7 @@ Full layout and examples in `references/playbook-per-skill.md`.
 
 Content slots into the existing `gate-evaluation-spec.md` three-layer structure:
 
-- Judgment-layer content (per-criterion 1–5 judge prompts with evidence requirement) at `pmo-platform/reference/schemas/gate-prompts/<gate-id>/` (or propose a better home if you see one)
+- Judgment-layer content (per-criterion 1–5 judge prompts with evidence requirement) at `core/schemas/gate-prompts/<gate-id>/` (or propose a better home if you see one)
 - Optional companion calibration row template for `engineering/evals/results/calibration-data.md`
 
 Full layout in `references/playbook-stage-gate.md`.
@@ -342,7 +342,7 @@ when still in calibration.
 decision-class item without a reversibility tier label — authored artifacts,
 Review-mode rule coverage verdicts, Prioritized remediation recommendations, Recommended
 diffs. See `core/specs/reversibility-protocol.md` for the full protocol and
-`pmo-platform/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
+`core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
 ## Guardrails
 
@@ -359,7 +359,7 @@ diffs. See `core/specs/reversibility-protocol.md` for the full protocol and
 
 These domain-specific anti-patterns coexist with `## Guardrails` and `## Reversibility
 Discipline`. Each entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. The Module 6 anti-pattern catalog
+`core/standards/failure-mode-standard.md`. The Module 6 anti-pattern catalog
 (A-01..A-23) classifies *eval-quality* failures that this skill audits in other systems;
 the anti-patterns below are *meta* — failure modes of the eval-writer's own authoring
 behavior, distinct from the evals it produces.

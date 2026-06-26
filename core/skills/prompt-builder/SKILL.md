@@ -296,7 +296,7 @@ footprint.
 decision-class item without a reversibility tier label — the rewritten prompt, critique
 points, Design notes, labeled assumptions, target-type detection. See
 `core/specs/reversibility-protocol.md` for the full protocol and
-`pmo-platform/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
+`core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
 ## Guardrails
 
@@ -320,7 +320,7 @@ points, Design notes, labeled assumptions, target-type detection. See
 
 These domain-specific anti-patterns coexist with `## Guardrails` and `## Reversibility
 Discipline`. Each entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`.
+`core/standards/failure-mode-standard.md`.
 
 ### Target type misidentified (SKILL.md shape applied to everyday ask) — TRIG
 

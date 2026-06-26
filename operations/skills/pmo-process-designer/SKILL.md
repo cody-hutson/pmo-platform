@@ -64,7 +64,7 @@ the Jira ticket implementing it is blocked.
 **Max 5 clarifying questions** per invocation. Everything else becomes a labeled
 assumption with a deferred follow-up.
 
-**Template-protocol consumption.** When authoring requirements or process templates, consult `pmo-platform/reference/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New requirements templates must pass P1-P5 promotion gates before canonical placement under `pmo-platform/reference/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
+**Template-protocol consumption.** When authoring requirements or process templates, consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New requirements templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
 
 ## Follow-Up Tag Handoff Format
 
@@ -464,7 +464,7 @@ These are hard rejections — same standard as all suite skills:
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Orphan process step shipped without back-trace finding — HAND

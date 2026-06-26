@@ -23,7 +23,7 @@ never fabricate stakeholders, dates, technical details, or scope items.
 
 ## Operating Principles
 
-**Template-protocol consumption.** When scaffolding a project from a template (e.g., `PMO_Platform_Template.md`, `project-md-template.md`), consult `pmo-platform/reference/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New project-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `pmo-platform/reference/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
+**Template-protocol consumption.** When scaffolding a project from a template (e.g., `PMO_Platform_Template.md`, `project-md-template.md`), consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New project-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
 
 ## Mode Selection
 
@@ -570,7 +570,7 @@ and G4 gate algorithm.
 These domain-specific anti-patterns coexist with `## Evidence & Quality Rules` (platform-
 wide generic guardrails including SG-1/2/3) and `## Reversibility Discipline` (decision-
 class output discipline). Each entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### PROJECT.md populated with inferred fields without [ASSUMPTION – CONFIRM] label — INPUT
