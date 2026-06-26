@@ -8,6 +8,22 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.27] - 2026-06-26
+
+Ticket information architecture — how a ticket carries confidence, how its title reads, and how its information is structured all get sharper. One four-level staleness scale replaces five incompatible formats so "how stale, and how deeply" means the same thing everywhere; work-item titles drop the redundant type prefix and become readable from the issue list alone, behind a logged-but-not-blocking floor that leaves legacy issues untouched; and a documented three-layer ticket information model adds a pipeline-Stage column to the backlog view. cross-cutting class; additive throughout; the two changed-skill packages rebuilt at release-cut.
+
+### Added
+
+- **One staleness scale instead of five.** Staleness-confidence is now expressed in one four-level vocabulary — current, cosmetic drift, currency-in-question, or structural rot — that every staleness check maps onto, so it means the same thing everywhere it appears, with a new architecture decision record explaining the choice.
+- **A documented model for how tickets carry information.** A new spec defines the three layers a ticket carries — the body as source of truth, comments and sub-issues as the per-stage review trail, and Projects fields, labels, and Milestones as the machine-readable pipeline position — and the backlog triage view gains a Stage column so bundled work no longer collapses into one undifferentiated group.
+
+### Changed
+
+- **"Old" no longer reads as "broken".** Staleness now separates how long something has gone untouched from what kind of staleness it is — age alone never gets labelled as structural rot — so the top band means a real premise-level problem, not just elapsed time.
+- **Work-item titles you can read from the list.** New issues drop the `[Category]:` / `[Bug]:` title prefix — type now lives on the label and the title spends its space on what changed — with a floor check that keeps a title from being a bare slug or a single word. The check is logged-but-not-blocking for existing prefixed issues, so nothing fails and no bulk rename is forced.
+
+[Full notes](release/releases/notes/v2.27-ticket-information-architecture_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.27)
+
 ## [v2.25] - 2026-06-26
 
 Hub-spoke orchestration discipline — the orchestration failure-modes the platform learned by trial-and-error are codified into the bridge reference the hub reads at runtime, so a class of cross-ticket, cascade, and chip-safety failures is caught at authoring time rather than after a failed check or a mis-routed spoke. A paired empirical suite pins the subagent hook-inheritance behavior with a standing regression. Novel class; additive throughout (no skill files changed); two disjoint single-writer spokes.
