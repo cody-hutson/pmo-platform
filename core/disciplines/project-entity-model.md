@@ -170,6 +170,8 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 - **Axis-2:** Living (B) · **storage_tier:** project-scoped → `[Project]/` · **persistence_mode:** embedded-in-parent
 - **Owning agents:** creates `delivery-engine` · maintains `delivery-engine` · readers: `weekly-status-rollup`
 
+**Activation — people-roster join.** Resource's `person_id` join — previously defined but wired to nothing — is activated against the operator-instance people-roster: a Resource (project-scoped allocation) resolves its Person through `person_id`, and the roster supplies the functional/coverage view that makes "who is allocated, and who covers them" answerable. No Resource field changes; the roster is the functional read surface the join now resolves against.
+
 #### 9. Artifact
 
 **Rationale & first-class justification.** A project deliverable file (report, tracker, FDD, design doc, etc.). First-class because it is the explicit **reconciliation seam** to `frontmatter-schema.md`: its `domain` + `content_lifecycle_pattern` bind the entity to a backing file's Domain A/B/C lifecycle. Its Axis-1 *delegates to Axis-2* — the Artifact's operational lifecycle **is** the Domain A/B/C content lifecycle of its backing file. G3/G4 must honor this seam when physicalizing.
@@ -189,6 +191,8 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 - **Axis-1:** `active → inactive`
 - **Axis-2:** Living (B) · **storage_tier:** cross-project-shared → `_pmo/` · **persistence_mode:** file-backed
 - **Owning agents:** creates `project-initiator` / `file-router` · maintains `ppm-agent` · readers: all PMO skills
+
+**Operationalization — functional people-roster (ADR-018 declarative config-layer).** Person is operationalized for functional coordination via an operator-instance people-roster: a declarative YAML config-layer keyed on `person_id` (the §3.10 dedup anchor) carrying functional attributes — preferred name + spelling, role(s), team, capability tags, backup/coverage, comms-calibration, escalation-routing — WITHOUT amending the 4 frozen Person fields and without adding an entity (the ADR-018 thin-entity dividend: attribute variability lives in the separate declarative layer). The filled roster is operator-instance and never committed: out-of-tree placement is the primary protection — it lives outside the repository tree, so a repository commit cannot reach it — with the `.gitignore` `**/people-roster.yaml` rule as a stray-copy backstop and the PII pre-commit needle list (fed by `core/deploy/extract-roster-needles.sh`) as a third layer; only a de-identified template ships. Reading contract (honored, not runtime-enforced): the roster is a functional coordination artifact, not an HR/performance system — read only the closed allow-list fields, express capability as tags never ratings, and represent an unknown value as `unknown` rather than inferring it.
 
 #### 11. System
 

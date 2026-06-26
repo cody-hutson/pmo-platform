@@ -37,6 +37,13 @@ flip-scan-needles.txt
 **/localized-context-needles.txt
 !**/localized-context-needles.txt.example
 
+# people-roster stray-copy backstop. The filled roster is operator-instance and
+# out-of-tree (the PRIMARY protection — a repo commit cannot reach a sibling dir);
+# this pattern additionally blocks a stray in-tree copy anywhere, while the shipped
+# de-identified template stays tracked (negated). Mirrors the needle-file .example idiom.
+**/people-roster.yaml
+!**/people-roster-template.yaml
+
 # Secret files (per core/standards/secrets-handling-policy.md §3)
 # Categories C3 (MCP tokens) and C5 (project-specific) may land in .env;
 # .example / .template / .sample variants ARE tracked (public-facing schemas).
