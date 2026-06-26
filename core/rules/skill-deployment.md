@@ -190,17 +190,22 @@ The `version:` field in every SKILL.md frontmatter follows [version-field-semant
 
 ## Drift Check
 At session start, optionally run: `./deploy.sh --check --warn`
-This validates skill sync (Check 1), package sync (Check 2), duplicate detection (Check 3),
-governance presence (Check 4), skill-roster drift (Check 5), canonical-structure compliance
-(Check 6), package freshness (Check 7), canonical-session-path freshness (Check 8),
-rules-mirror sync (Check 9), editor audit-trail on migrated skills (Check 10),
-harness sync (Check 11), user-local skills mirror sync (Check 12), template-sync
-drift detection (Check 13) + shared-reference collision detection (Check 13b,
-warn-mode initial), doc-link maintenance — governance + skill SKILL.md
-scope (Check 14; the earlier release-corpus Check 15 was retired in v2),
-note-content lint — release-notes-standard.md §3.2 over the release notes
-(Check 20), framework-corpus version-anchor
-drift detection — catalog-registry scope (Check 18), RELEASE_LOG ↔ RELEASE_INDEX consistency (Check 23), universal-vs-localized-context authoring guardrail — DC1-DC4 signature scan over Layer-1 corpus (Check 25), doc-impact resolution at Stage 13 close — per-issue Documentation Impact declaration verified against release-branch commit range (Check 28), return-value-conformance for hub-spawned spokes — `.claude/agents/pmo-*.md` cross-reference scan (Check 29), slash-command quoting lint — pmo-authored slash commands under `harness/*/commands/*.md` scanned for unquoted `$ARGUMENTS` in Bash-execution context (Check 30), and platform-config surface integrity — `core/config/platform-config.toml.template` parses + every field ships a default + operator.toml `[adapters]` table present + the legacy `[platform].work_board` alias preserved (Check 33).
-Use `--check` (without `--warn`) to exit non-zero on any drift. Checks 6-7, 11-13 always-enforce;
-Checks 8-10, 13b, 14, 18, 20, 23, 25, 28, 29, 30, and 33 default to warn-mode per `.claude/hooks/deploy-check.mode` during their
-respective shakedown windows (Check 13b is the shared-reference collision sub-assertion — its parent Check 13 stays always-enforce). For structured output (Stage 13 evidence): `./deploy.sh --report`
+
+**The full check set is derived from `deploy.sh`, not enumerated here.** Every
+check `deploy.sh` runs logs its own label at runtime (`log "Check N: <label>"`);
+to list the live set deterministically, run
+`grep -oE 'log "Check [0-9]+[:.]?[^"]*' core/deploy/deploy.sh` (or just
+`./deploy.sh --check --warn` and read the per-check log lines). That source — not
+a hand-maintained prose list — is the single source of truth for which checks
+exist and what each asserts; a hardcoded enumeration here drifts every time a
+check is added to `deploy.sh` (the recurring drift this section previously
+carried, which left Checks 16/17/19/21/22/24/26/27/31/32/34–46 unlisted). Each
+check's `# Check N` comment block in `deploy.sh` carries its full description.
+
+Use `--check` (without `--warn`) to exit non-zero on any drift. Enforcement mode
+per check is **not** maintained here either: it is read from
+`.claude/hooks/deploy-check.mode` (a check in its shakedown window runs warn-mode;
+an always-enforce check is unaffected by that file). The mode file plus each
+check's own `Gate-efficacy posture:` header comment in `deploy.sh` are
+authoritative for whether a given check warns or fails. For structured output
+(Stage 13 evidence): `./deploy.sh --report`.
