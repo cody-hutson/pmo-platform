@@ -2,7 +2,7 @@
 
 **Invoked by:** "Write the judge for Stage X→Y", "author the calibration content for Gate N", "write the judgment layer for G3-04", or any reference to `gate-evaluation-spec.md`, `gate-criteria-spec.md`, or `pipeline/`.
 
-**Convention assumptions:** This playbook produces content that slots into the existing three-layer gate assessment protocol at `pmo-platform/reference/schemas/gate-evaluation-spec.md`. It authors the **Judgment layer** (and optionally companion calibration rows). It does not reinvent the Metrics layer — that stays deterministic and lives in the existing criteria spec.
+**Convention assumptions:** This playbook produces content that slots into the existing three-layer gate assessment protocol at `core/schemas/gate-evaluation-spec.md`. It authors the **Judgment layer** (and optionally companion calibration rows). It does not reinvent the Metrics layer — that stays deterministic and lives in the existing criteria spec.
 
 **Dispatches into:** the generic core — `decision-tree.md` rules apply. This playbook adds gate-specific convention knowledge.
 
@@ -37,7 +37,7 @@ When authoring, use Template 4 (handoff quality) as the structural base for gate
 
 1. **Which boundary?** Gate N→N+1. Record the transition and both stages.
 2. **Which criteria route to judgment?** From `gate-criteria-spec.md`, find criteria with `Check=judgment`. From each `pipeline/stage-NN-*.md` §7 (Stage-Transition Gate), find judgment dimensions. Each gets its own judge prompt.
-3. **Does this gate already have judge content?** Look at `pmo-platform/reference/schemas/gate-prompts/<gate-id>/` if it exists. Author mode = create; Review mode = audit.
+3. **Does this gate already have judge content?** Look at `core/schemas/gate-prompts/<gate-id>/` if it exists. Author mode = create; Review mode = audit.
 4. **Is there calibration data?** Check `calibration-data.md` for this boundary. ≥3 rows = calibration layer is active; <3 = note "insufficient calibration data" in the rubric.
 
 ## Author mode workflow
@@ -191,7 +191,7 @@ Accuracy column (last) computed when ≥3 rows per boundary exist.
 
 ### Step 6 — Output path
 
-Default: `pmo-platform/reference/schemas/gate-prompts/<gate-id>/`
+Default: `core/schemas/gate-prompts/<gate-id>/`
 ```
 gate-prompts/
 └── G3/

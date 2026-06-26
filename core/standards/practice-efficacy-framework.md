@@ -179,7 +179,7 @@ Detail per signal follows. Each signal is one third-level subsection so the veri
 
 **Class:** lagging.
 **Definition:** Number of pipeline-event-log entries with `event_subtype: practice-failure` AND payload citing the practice ID, measured over a 5-release rolling window.
-**Measurement mechanism:** `grep "event_subtype:practice-failure" pmo-platform/engineering/evals/results/pipeline-event-log.md | grep "practice:<practice-id>"` filtered by `version:` column within 5-release window.
+**Measurement mechanism:** `grep "event_subtype:practice-failure" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md | grep "practice:<practice-id>"` filtered by `version:` column within 5-release window.
 **Cadence:** 5-release rolling window.
 **Threshold bands:**
 
@@ -232,7 +232,7 @@ The 180-day staleness window matches the emergence-rule staleness window at [`de
 **Primitive 4 — Pipeline-event-log query.** Used by SIG-G4 (when schema extension lands) and SIG-L2 (when audit-trail lands).
 
 ```bash
-grep "event_subtype:<subtype>" pmo-platform/engineering/evals/results/pipeline-event-log.md \
+grep "event_subtype:<subtype>" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md \
   | awk -F'|' '{print $2}' | sort -u
 ```
 
@@ -317,7 +317,7 @@ git log --grep "^fix\|^chore" --since="<5-release-base-tag>" -- <practice-owned-
 **Mechanism (verifiable):**
 
 ```bash
-grep "event_subtype:practice-failure" pmo-platform/engineering/evals/results/pipeline-event-log.md \
+grep "event_subtype:practice-failure" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md \
   | grep "<practice-id>" \
   | awk -F'|' '$1 >= "<last-review-iso-date>"'
 ```
@@ -367,7 +367,7 @@ The §5 cadence-binding and §6 trigger-protocol compose into a 2D measurement p
 
 ## §7 Ledger Schema
 
-The **practice-efficacy-ledger** at [`pmo-platform/engineering/evals/results/practice-efficacy-ledger.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/practice-efficacy-ledger.md) is the durable operational record of efficacy measurements. Each row records ONE measurement of ONE signal for ONE practice over ONE observation window. The ledger is append-only; rows are never edited or deleted post-write (matches the pipeline-event-log discipline at [`pipeline-event-log-schema.md`](../../release/references/standards/pipeline-event-log-schema.md)).
+The **practice-efficacy-ledger** at [`<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/practice-efficacy-ledger.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/practice-efficacy-ledger.md) is the durable operational record of efficacy measurements. Each row records ONE measurement of ONE signal for ONE practice over ONE observation window. The ledger is append-only; rows are never edited or deleted post-write (matches the pipeline-event-log discipline at [`pipeline-event-log-schema.md`](../../release/references/standards/pipeline-event-log-schema.md)).
 
 ### Schema (10 columns)
 
@@ -533,7 +533,7 @@ Schema-stability constraint OVERRIDES downstream-consumer design convenience —
 
 ### Ship state
 
-At ship, the framework is published as this file plus the ledger at [`pmo-platform/engineering/evals/results/practice-efficacy-ledger.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/practice-efficacy-ledger.md). The ledger contains **1 demo row** synthesized from SIG-G3 (operator-correction frequency) measurement on the `decision-discipline.md` framework's own scope — demonstrating the schema is operational without overcommitting.
+At ship, the framework is published as this file plus the ledger at [`<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/practice-efficacy-ledger.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/practice-efficacy-ledger.md). The ledger contains **1 demo row** synthesized from SIG-G3 (operator-correction frequency) measurement on the `decision-discipline.md` framework's own scope — demonstrating the schema is operational without overcommitting.
 
 The demo row records: practice `decision-discipline-framework`, signal `SIG-G3`, observation window 2025-11-24 to 2026-05-23 (180-day rolling at ship), measured value `0` (no operator corrections in observation log overlapping `(general-agent-behavior, pattern-cache-infrastructure)`), threshold band `good`, trigger fired `no`, review due `2026-08-23` (3-month cadence for `decision-discipline` registered as `tier: stable` at framework-catalog — note: `stable` derives to 12mo per §5, so review_due_at would actually be 2027-05-23; the 3-month value above is computed against the practice as a NEWLY-MEASURED-CADENCE for demo purposes — the ledger row text is the canonical reference).
 

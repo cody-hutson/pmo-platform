@@ -1,8 +1,8 @@
 # Playbook: Per-Skill Evals
 
-**Invoked by:** "Write evals for <skill>", "audit my evals for <skill>", "what evals does <skill> need", or any reference to a specific pmo-platform skill path (`pmo-platform/skills/<name>/`).
+**Invoked by:** "Write evals for <skill>", "audit my evals for <skill>", "what evals does <skill> need", or any reference to a specific pmo-platform skill path (`<module>/skills/<name>/`).
 
-**Convention assumptions:** This playbook produces artifacts that slot into the `pmo-platform/skills/<name>/evals/` directory and are consumed by `anthropic-skills:skill-creator`'s harness (evals.json → grading.json → benchmark.json). If invoked against a non-pmo-platform skill with a different directory convention, adapt paths but preserve artifact semantics.
+**Convention assumptions:** This playbook produces artifacts that slot into the `<module>/skills/<name>/evals/` directory and are consumed by `anthropic-skills:skill-creator`'s harness (evals.json → grading.json → benchmark.json). If invoked against a non-pmo-platform skill with a different directory convention, adapt paths but preserve artifact semantics.
 
 **Dispatches into:** the generic core — `decision-tree.md` rules fire off the skill's Stage 0 characterization. This playbook adds convention knowledge, not rule logic.
 
@@ -10,7 +10,7 @@
 
 ## Inputs
 
-- Skill directory path (e.g., `pmo-platform/skills/daily-status/`)
+- Skill directory path (e.g., `operations/skills/daily-status/`)
 - Skill's SKILL.md (for understanding what it does and observable failure modes)
 - Any existing evals (`evals/evals.json`) for Review mode
 - User-described failure modes (if they've already hand-coded some)
@@ -56,7 +56,7 @@ Write the judges per rule.
 
 ### Step 5 — Produce artifacts
 
-Populate `pmo-platform/skills/<skill-name>/evals/` with:
+Populate `<module>/skills/<skill-name>/evals/` with:
 
 **`evals.json`** — anthropic-skills:skill-creator schema:
 ```json

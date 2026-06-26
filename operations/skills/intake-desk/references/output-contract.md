@@ -117,7 +117,7 @@ template's `labels:` array for the default label set rather than hardcoding it):
 |---|---|---|---|
 | `bug` | Severity (P1–P4) | NO — no severity label exists | **Severity-in-body:** first body line `**Severity:** P2 — Material` so a Triage reader and the close gate recover it. |
 | `bug` | (default labels) | YES — from the template `labels:` array | Pass the template's default labels (read from `bug.yml` `labels:`). |
-| `improvement` | Category (the template's dropdown options) | YES — but applied by Triage, not at intake | **Category-in-body:** first body line `**Category:** <value>` AND pass only the non-category default label(s) from the template `labels:`. Triage (Stage 2) applies the matching category label at CER Resolve per `pmo-platform/reference/label-taxonomy.md` — the desk does NOT pre-apply it. |
+| `improvement` | Category (the template's dropdown options) | YES — but applied by Triage, not at intake | **Category-in-body:** first body line `**Category:** <value>` AND pass only the non-category default label(s) from the template `labels:`. Triage (Stage 2) applies the matching category label at CER Resolve per `core/specs/label-taxonomy.md` — the desk does NOT pre-apply it. |
 | `improvement` | Priority (optional) | NO label at intake | Priority-in-body if the user gave one; otherwise omit (Triage validates priority). |
 | `observation` | (none) | YES — from the template `labels:` array | Pass the template's default labels (read from `observation.yml` `labels:`). |
 

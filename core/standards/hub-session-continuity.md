@@ -148,7 +148,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | 3 | `gh api repos/[OPERATOR_GITHUB]/pmo-platform/milestones?state=open --paginate` | Identify active milestone(s) | YES |
 | 4 | `release/releases/plans/vX.Y_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
 | 5 | `gh issue list --milestone "<name>" --label sub-task --state all --limit 500 --json number,title,state,labels,projectItems` | Per-stage sub-task states + GitHub Projects field anchors | YES |
-| 6 | `grep "\| v<X.Y> \|" pmo-platform/engineering/evals/results/pipeline-event-log.md` | Release-scoped decision history (D-class verdicts, scope-lock, gate outcomes, escalations) | YES |
+| 6 | `grep "\| v<X.Y> \|" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md` | Release-scoped decision history (D-class verdicts, scope-lock, gate outcomes, escalations) | YES |
 | 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/pending-approvals.md` | Queued approvals awaiting current session | YES — if exists |
 | 8 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/sessions.md` | Session lineage (informational) | OPTIONAL |
 | 9 | Drift check: cross-reference event-log decisions vs. release plan deviation log vs. sub-task closure states | Surface inconsistencies before acting | YES |

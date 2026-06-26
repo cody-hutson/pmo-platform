@@ -2,7 +2,7 @@
 name: release-notes-eval-rubric
 description: Binary pass/fail rubric for user-facing release notes, covering the 12 lint checks from release-notes-standard.md § 3.2. Used by eval-writer as a worked playbook and consumed by Stage 13 Close lint, release-executor Mode E, and pmo-qa-auditor.
 type: rubric
-source_standard: pmo-platform/reference/standards/release-notes-standard.md § 3.2
+source_standard: release/references/standards/release-notes-standard.md § 3.2
 ---
 <!-- reference-durability: allow-link -->
 
@@ -83,7 +83,7 @@ All 12 checks PASS:
 
 ### Worked FAIL — synthetic counter-example
 
-Operator-authored test fixture at [`pmo-platform/skills/eval-writer/evals/fixtures/release-notes-bad-vX.Y_RELEASE_NOTES.md`](../evals/fixtures/release-notes-bad-vX.Y_RELEASE_NOTES.md). Designed to FAIL L4 (3-sentence summary), L7 (`- Various improvements` bullet), L10 (`reflexive-pipeline self-exemption` in 6a), L11 (bullet without `*Why it matters:*`), L12 (`pmo-platform/skills/foo/SKILL.md` raw path in 6a bullet body). Invoking this rubric on the fixture MUST produce 5 FAILs naming the specific checks.
+Operator-authored test fixture at [`core/skills/eval-writer/evals/fixtures/release-notes-bad-vX.Y_RELEASE_NOTES.md`](../evals/fixtures/release-notes-bad-vX.Y_RELEASE_NOTES.md). Designed to FAIL L4 (3-sentence summary), L7 (`- Various improvements` bullet), L10 (`reflexive-pipeline self-exemption` in 6a), L11 (bullet without `*Why it matters:*`), L12 (`pmo-platform/skills/foo/SKILL.md` raw path in 6a bullet body). Invoking this rubric on the fixture MUST produce 5 FAILs naming the specific checks.
 
 ## Output Contract
 

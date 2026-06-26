@@ -610,7 +610,7 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   (UPDATE / PRESERVE / N/A) + rationale. Sweep command:
   `grep -nE '<old-value-regex>' <file>` for each pair; output preserved verbatim
   in the spec. Full schema at
-  [`pmo-platform/reference/pipeline/stage-05-solutioning.md § 5.6`](../../release/references/pipeline/stage-05-solutioning.md).
+  [`release/references/pipeline/stage-05-solutioning.md § 5.6`](../../release/references/pipeline/stage-05-solutioning.md).
   Forcing function: `design-review-checklist.md § Section 3.5` self-check at
   Phase A4 → A5 transition rejects incomplete sweep block.
   **Automated detection (L5):** `pmo-qa-auditor` gate **G8** (Cascade-Completeness
@@ -652,7 +652,7 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   Stage 6 will execute relative to UTC. The binding is asserted; reality
   diverges; Engineering pays the cost.
 - **Mitigation:** Apply
-  [`pmo-platform/reference/standards/date-variable-convention.md`](../standards/date-variable-convention.md) —
+  [`core/standards/date-variable-convention.md`](../standards/date-variable-convention.md) —
   define `${AUDIT_DATE_UTC}` at top of spec; reference variable (not literal)
   in all load-bearing positions; resolve at Stage 6 first commit via
   `date -u +%Y-%m-%d`. Engineering propagates the resolved value consistently
@@ -778,7 +778,7 @@ The entries below address the `snapshot-as-current-state` root failure mode at h
   § 2.1.1 Sub-mechanism — Audit-Snapshot Reconciliation](../disciplines/decision-discipline.md).
 - **Principal response vs. junior response:** Principal authors
   chip prompts that name the canonical source and direct the spoke
-  to read it (e.g., `"Read pmo-platform/reference/pipeline/stage-05-
+  to read it (e.g., `"Read release/references/pipeline/stage-05-
   solutioning.md § 5 directly for Phase A1-A5 procedure"`); the
   spoke executes against current source content. Junior compresses
   the source into a chip-prompt section and trusts the compression
@@ -910,7 +910,7 @@ The pmo-qa-auditor (QA Auditor — Add 8 failure mode detection) is **complement
 
 **Handoff specification for pmo-qa-auditor:** When Stage 4 Planning runs for pmo-qa-auditor, the release plan must direct:
 
-> *"Express the 8 failure-mode detectors using the 5-field conditional template and 5-category taxonomy per `pmo-platform/reference/standards/failure-mode-standard.md`."*
+> *"Express the 8 failure-mode detectors using the 5-field conditional template and 5-category taxonomy per `core/standards/failure-mode-standard.md`."*
 
 Each of pmo-qa-auditor's 8 detectors is written using this document's 5-field template when documented in `pmo-qa-auditor/SKILL.md`. Worked conversion for "Automation complacency" (category: PROC):
 
