@@ -1,0 +1,125 @@
+# roster-fixture.yaml — POPULATED de-identified eval fixture (TRACKED — committable)
+#
+# This is a FIXTURE, not an operator-instance roster. It carries de-identified
+# TEST people (synthetic person_ids + placeholder preferred names) so the
+# consumption eval can resolve a known name/owner/coverage answer against it.
+#
+# WHY THIS NAME (not people-roster.yaml): the `.gitignore` rule `**/people-roster.yaml`
+# (with the `!**/people-roster-template.yaml` carve-out) ignores any file named
+# people-roster.yaml so a filled operator roster can never be committed. A fixture
+# named people-roster.yaml would be silently un-committable. This file is named
+# roster-fixture.yaml precisely so it IS tracked; `git check-ignore` does not match it.
+#
+# It conforms to the SHIPPED schema (operations/templates/people-roster-template.yaml):
+# only allow-list fields appear; capability is TAGS not ratings; provenance-bearing
+# fields carry {value, source, last_verified}; status is the tombstone enum. No
+# EXCLUDED (shadow-HR) field appears. All names are synthetic placeholders.
+#
+# The composed people-coverage-graph view (core/disciplines/people-coverage-graph.md)
+# joins this roster's functional attributes with the FROZEN Person identity and the
+# FROZEN Resource allocation on `person_id`. The fixture supplies the roster leg and
+# an inline `_fixture_person_entity` / `_fixture_resource_allocations` block standing
+# in for the two frozen entities — so the runner can exercise all three view queries
+# (who-does-what / who-covers-whom / coverage-by-capability) self-contained, without
+# a live Person/Resource store. The `_fixture_*` keys are NOT roster schema fields;
+# they are eval-harness scaffolding and are ignored by any real roster consumer.
+
+people:
+  - person_id: person-id-001
+    preferred_name:    { value: "Wren",            source: operator, last_verified: "2026-06-20" }
+    name_spelling:     { value: "Wren Calloway",   source: operator, last_verified: "2026-06-20" }
+    roles:             { value: ["Program Manager"], source: operator, last_verified: "2026-06-20" }
+    team:              { value: "Delivery",        source: operator, last_verified: "2026-06-20" }
+    capability_tags:   { value: ["program-mgmt", "stakeholder-comms"], source: operator, last_verified: "2026-06-20" }
+    backup_coverage:   { value: ["person-id-002"], source: operator, last_verified: "2026-06-20" }   # person-id-002 covers Wren
+    status: active
+    last_verified: "2026-06-20"
+    comms_calibration: { value: "concise; Teams for routine, email for sign-off", source: operator, last_verified: "2026-06-20" }
+    escalates_to:      { value: "person-id-004",   source: operator, last_verified: "2026-06-20" }   # functional routing hint, NOT an HR line
+    linked_project_ids: { value: ["proj-atlas"],   source: operator, last_verified: "2026-06-20" }
+
+  - person_id: person-id-002
+    preferred_name:    { value: "Dax",             source: operator, last_verified: "2026-06-20" }
+    name_spelling:     { value: "Dax Moreno",      source: operator, last_verified: "2026-06-20" }
+    roles:             { value: ["Technical Program Manager"], source: operator, last_verified: "2026-06-20" }
+    team:              { value: "Delivery",        source: operator, last_verified: "2026-06-20" }
+    capability_tags:   { value: ["program-mgmt", "integration-design"], source: operator, last_verified: "2026-06-20" }
+    backup_coverage:   { value: ["person-id-001"], source: operator, last_verified: "2026-06-20" }
+    status: active
+    last_verified: "2026-06-20"
+    comms_calibration: { value: "unknown", source: operator, last_verified: "2026-06-20" }
+    escalates_to:      { value: "person-id-004",   source: operator, last_verified: "2026-06-20" }
+    linked_project_ids: { value: ["proj-atlas"],   source: operator, last_verified: "2026-06-20" }
+
+  - person_id: person-id-003
+    preferred_name:    { value: "Indira",          source: operator, last_verified: "2026-06-20" }
+    name_spelling:     { value: "Indira Vance",    source: operator, last_verified: "2026-06-20" }
+    roles:             { value: ["Business Analyst"], source: operator, last_verified: "2026-06-20" }
+    team:              { value: "Discovery",       source: operator, last_verified: "2026-06-20" }
+    capability_tags:   { value: ["requirements", "integration-design"], source: operator, last_verified: "2026-06-20" }
+    backup_coverage:   { value: ["person-id-002"], source: operator, last_verified: "2026-06-20" }
+    status: on-leave    # deliberately on-leave: must be FILTERED OUT of coverage-by-capability "who-can-cover-right-now"
+    last_verified: "2026-06-20"
+    comms_calibration: { value: "unknown", source: operator, last_verified: "2026-06-20" }
+    escalates_to:      { value: "person-id-001",   source: operator, last_verified: "2026-06-20" }
+    linked_project_ids: { value: ["proj-atlas"],   source: operator, last_verified: "2026-06-20" }
+
+  - person_id: person-id-004
+    preferred_name:    { value: "Soren",           source: operator, last_verified: "2026-06-20" }
+    name_spelling:     { value: "Soren Ashby",     source: operator, last_verified: "2026-06-20" }
+    roles:             { value: ["Portfolio Director"], source: operator, last_verified: "2026-06-20" }
+    team:              { value: "Leadership",      source: operator, last_verified: "2026-06-20" }
+    capability_tags:   { value: ["portfolio-governance"], source: operator, last_verified: "2026-06-20" }
+    backup_coverage:   { value: [], source: operator, last_verified: "2026-06-20" }
+    status: active
+    last_verified: "2026-06-20"
+    comms_calibration: { value: "exec-brief; decisions only", source: operator, last_verified: "2026-06-20" }
+    escalates_to:      { value: "unknown",         source: operator, last_verified: "2026-06-20" }   # top of the functional chain
+    linked_project_ids: { value: ["proj-atlas", "proj-borealis"], source: operator, last_verified: "2026-06-20" }
+
+  - person_id: person-id-005
+    preferred_name:    { value: "Tamsin",          source: operator, last_verified: "2026-06-20" }
+    name_spelling:     { value: "Tamsin Okafor",   source: operator, last_verified: "2026-06-20" }
+    roles:             { value: ["Engineer"],      source: operator, last_verified: "2026-06-20" }
+    team:              { value: "Delivery",        source: operator, last_verified: "2026-06-20" }
+    capability_tags:   { value: ["integration-design", "data-migration"], source: operator, last_verified: "2026-06-20" }
+    backup_coverage:   { value: ["person-id-002"], source: operator, last_verified: "2026-06-20" }
+    status: active
+    last_verified: "2026-06-20"
+    comms_calibration: { value: "unknown", source: operator, last_verified: "2026-06-20" }
+    escalates_to:      { value: "person-id-002",   source: operator, last_verified: "2026-06-20" }
+    linked_project_ids: { value: ["proj-atlas"],   source: operator, last_verified: "2026-06-20" }
+
+  - person_id: person-id-006
+    preferred_name:    { value: "Marek",           source: operator, last_verified: "2026-06-20" }
+    name_spelling:     { value: "Marek Lindqvist", source: operator, last_verified: "2026-06-20" }
+    roles:             { value: ["Engineer"],      source: operator, last_verified: "2026-06-20" }
+    team:              { value: "Delivery",        source: operator, last_verified: "2026-06-20" }
+    capability_tags:   { value: ["data-migration"], source: operator, last_verified: "2026-06-20" }
+    backup_coverage:   { value: ["person-id-005"], source: operator, last_verified: "2026-06-20" }
+    status: departed    # deliberately departed: persists as a tombstone so prior refs still resolve; FILTERED OUT of live coverage
+    last_verified: "2026-06-20"
+    comms_calibration: { value: "unknown", source: operator, last_verified: "2026-06-20" }
+    escalates_to:      { value: "person-id-002",   source: operator, last_verified: "2026-06-20" }
+    linked_project_ids: { value: ["proj-atlas"],   source: operator, last_verified: "2026-06-20" }
+
+# -----------------------------------------------------------------------------
+# Eval-harness scaffolding — NOT roster schema fields.
+# These two blocks stand in for the FROZEN Person + Resource entities the view
+# composes over (project-entity-model.md §4), keyed on `person_id`, so the runner
+# can exercise the who-does-what Resource leg and the Person identity anchor
+# self-contained. A real roster consumer ignores keys outside the `people:` list.
+# -----------------------------------------------------------------------------
+_fixture_person_entity:    # frozen Person identity anchor (read-only in the view)
+  - { person_id: person-id-001, full_name: "Wren Calloway",   primary_role: "Program Manager" }
+  - { person_id: person-id-002, full_name: "Dax Moreno",      primary_role: "Technical Program Manager" }
+  - { person_id: person-id-003, full_name: "Indira Vance",    primary_role: "Business Analyst" }
+  - { person_id: person-id-004, full_name: "Soren Ashby",     primary_role: "Portfolio Director" }
+  - { person_id: person-id-005, full_name: "Tamsin Okafor",   primary_role: "Engineer" }
+  - { person_id: person-id-006, full_name: "Marek Lindqvist", primary_role: "Engineer" }
+
+_fixture_resource_allocations:    # frozen Resource project-scoped allocation (read-only in the view)
+  - { person_id: person-id-001, project_id: proj-atlas,    role_on_project: "Program Manager",            allocation_pct: 60 }
+  - { person_id: person-id-002, project_id: proj-atlas,    role_on_project: "Technical Program Manager",  allocation_pct: 80 }
+  - { person_id: person-id-005, project_id: proj-atlas,    role_on_project: "Integration Engineer",       allocation_pct: 100 }
+  - { person_id: person-id-004, project_id: proj-borealis, role_on_project: "Portfolio Sponsor",          allocation_pct: 20 }

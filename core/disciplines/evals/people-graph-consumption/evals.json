@@ -1,0 +1,71 @@
+{
+  "suite_name": "people-graph-consumption",
+  "description": "Cross-skill consumption eval for the people capability/coverage graph (core/disciplines/people-coverage-graph.md). Verifies each of the 4 consuming skills resolves a name/owner/coverage answer FROM the populated fixture roster (fixtures/roster-fixture.yaml) via the composed view, AND asserts the read is read-only (zero write to the roster, the Person entity, or the graph). Binary judge (PASS/FAIL) per eval-writer convention. Skills under test: comms-writer (who-does-what), tracker-manager (who-does-what), ppm-agent (who-covers-whom + coverage-by-capability), delivery-engine (coverage-by-capability + who-does-what Resource leg). Each eval names a SPECIFIC expected resolved value so a no-op / empty-roster run FAILS.",
+  "fixture": "fixtures/roster-fixture.yaml",
+  "judge": "judge_prompts/people-graph-read-resolution.md",
+  "evals": [
+    {
+      "id": 1,
+      "name": "comms-writer-resolves-preferred-name-who-does-what",
+      "skill_under_test": "comms-writer",
+      "view_query": "who-does-what",
+      "prompt": "Draft a short Teams update from the owner of project proj-atlas. The owner is person-id-001. Resolve the owner's preferred name and spelling from the people-graph view before drafting, then write the message header addressing the team.",
+      "expected_output": "comms-writer resolves person-id-001 from the composed view (who-does-what), surfacing preferred name 'Wren' and spelling 'Wren Calloway' with role 'Program Manager', then drafts the message using the resolved name. The roster is READ only — no write to the roster, the Person entity, or the graph. An unresolved name would be surfaced, not invented.",
+      "files": ["fixtures/roster-fixture.yaml"],
+      "assertions": [
+        {"text": "Resolved preferred_name for person-id-001 is exactly 'Wren' (from the fixture roster who-does-what query)", "type": "resolution", "expected_value": "Wren"},
+        {"text": "Resolved name_spelling for person-id-001 is exactly 'Wren Calloway'", "type": "resolution", "expected_value": "Wren Calloway"},
+        {"text": "Resolved role surfaces 'Program Manager' (roster roles joined with Person.primary_role)", "type": "resolution", "expected_value": "Program Manager"},
+        {"text": "The resolution is non-trivial: an empty or unpopulated roster yields no name and FAILS this eval (proves the read fires, not a no-op)", "type": "non-triviality"},
+        {"text": "Zero write to people-roster.yaml, the Person entity, or the graph — comms-writer only READS the view (read-only assertion)", "type": "read-only"}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "tracker-manager-resolves-raid-owner-who-does-what",
+      "skill_under_test": "tracker-manager",
+      "view_query": "who-does-what",
+      "prompt": "A RAID Log item carries owner_person_id = person-id-002. Resolve the owner to a Person via the capability/coverage graph view (who-does-what) for display and identity confirmation before surfacing the RAID row.",
+      "expected_output": "tracker-manager resolves owner_person_id person-id-002 to full_name 'Dax Moreno', role 'Technical Program Manager' for display/validation only. The tracker-row write path is unchanged and the Person entity stays ppm-agent-maintained; tracker-manager READS the Person from the graph and never writes the roster, the Person entity, or the graph. An unresolved owner_person_id is flagged, not invented.",
+      "files": ["fixtures/roster-fixture.yaml"],
+      "assertions": [
+        {"text": "Resolved full_name for owner_person_id person-id-002 is exactly 'Dax Moreno' (from the fixture, who-does-what)", "type": "resolution", "expected_value": "Dax Moreno"},
+        {"text": "Resolved role for person-id-002 surfaces 'Technical Program Manager'", "type": "resolution", "expected_value": "Technical Program Manager"},
+        {"text": "The resolution is non-trivial: an empty roster leaves owner_person_id unresolved and FAILS this eval (proves the read fires)", "type": "non-triviality"},
+        {"text": "Zero write to people-roster.yaml, the Person entity, or the graph — tracker-manager only READS for display/validation (read-only assertion)", "type": "read-only"}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ppm-agent-resolves-escalation-target-who-covers-whom",
+      "skill_under_test": "ppm-agent",
+      "view_query": "who-covers-whom + coverage-by-capability",
+      "prompt": "A stale RAID item owned by person-id-001 has crossed the escalate threshold. Emit the escalation action: resolve the functional escalation target via the people-graph view (who-covers-whom, the escalates_to edge). Separately, the integration-design capability needs a backup right now — resolve who can cover it via coverage-by-capability, filtered by status.",
+      "expected_output": "ppm-agent follows the escalates_to edge for person-id-001 to the functional escalation target person-id-004 ('Soren Ashby', a routing hint NOT an HR line). For the coverage-by-capability query on tag 'integration-design', it surfaces the ACTIVE coverers and FILTERS OUT person-id-003 (on-leave) and person-id-006 (departed). The escalation tier/threshold values stay sourced from escalation-thresholds.md; the graph supplies only the routing target. This is a READ — ppm-agent emits escalation actions, never a graph write; an unresolved owner is surfaced, never invented.",
+      "files": ["fixtures/roster-fixture.yaml"],
+      "assertions": [
+        {"text": "Resolved escalates_to target for person-id-001 is person-id-004, surfacing 'Soren Ashby' (who-covers-whom)", "type": "resolution", "expected_value": "person-id-004"},
+        {"text": "coverage-by-capability for tag 'integration-design' includes active coverers person-id-002 and person-id-005", "type": "resolution", "expected_value": "person-id-002, person-id-005"},
+        {"text": "coverage-by-capability for tag 'integration-design' EXCLUDES person-id-003 (status on-leave) — status filter applied", "type": "resolution", "expected_value": "exclude person-id-003"},
+        {"text": "The resolution is non-trivial: an empty roster yields no escalation target and no coverer, FAILING this eval (proves the read fires)", "type": "non-triviality"},
+        {"text": "Zero write to people-roster.yaml, the Person entity, or the graph — ppm-agent emits actions, never a graph write (read-only assertion)", "type": "read-only"}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "delivery-engine-resolves-capability-coverage-status-filtered",
+      "skill_under_test": "delivery-engine",
+      "view_query": "coverage-by-capability + who-does-what (Resource leg)",
+      "prompt": "During sprint planning, answer read-only: who covers the 'data-migration' capability right now? Resolve via the people-graph coverage-by-capability index, filtered by status for who-can-cover-right-now. Also report project allocation for proj-atlas via the who-does-what Resource leg.",
+      "expected_output": "delivery-engine inverts the capability tag 'data-migration' to person_ids and filters by status: person-id-005 ('Tamsin Okafor') is ACTIVE and surfaces; person-id-006 ('Marek Lindqvist') is DEPARTED and is filtered out. For proj-atlas it reports the Resource allocations (person-id-001 60%, person-id-002 80%, person-id-005 100%). The capacity-model math and all 7 modes are unchanged — this adds a coverage-query answer, not new capacity logic. It is a READ: no write to the roster, the Resource/Person entities, or the graph.",
+      "files": ["fixtures/roster-fixture.yaml"],
+      "assertions": [
+        {"text": "coverage-by-capability for tag 'data-migration' surfaces active coverer person-id-005 ('Tamsin Okafor')", "type": "resolution", "expected_value": "person-id-005"},
+        {"text": "coverage-by-capability for tag 'data-migration' EXCLUDES person-id-006 (status departed) — status filter applied, departed tombstone not surfaced as live coverage", "type": "resolution", "expected_value": "exclude person-id-006"},
+        {"text": "who-does-what Resource leg reports person-id-005 allocated to proj-atlas at 100% (Resource allocation_pct)", "type": "resolution", "expected_value": "100"},
+        {"text": "The resolution is non-trivial: an empty roster yields no coverer for 'data-migration', FAILING this eval (proves the read fires)", "type": "non-triviality"},
+        {"text": "Zero write to people-roster.yaml, the Resource/Person entities, or the graph — delivery-engine only READS the view (read-only assertion)", "type": "read-only"}
+      ]
+    }
+  ]
+}
