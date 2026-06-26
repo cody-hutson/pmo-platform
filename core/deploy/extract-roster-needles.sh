@@ -47,7 +47,8 @@ extract_names() {
   grep -E '^[[:space:]]*(preferred_name|name_spelling):' "$ROSTER" \
     | sed -E 's/.*value:[[:space:]]*"?([^"}]*)"?.*/\1/' \
     | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
-    | grep -vE '^(unknown|\[[A-Z0-9_]+\]|)$' || true
+    | grep -vE '^(unknown|\[[A-Z0-9_]+\])$' \
+    | grep -vE '^[[:space:]]*$' || true
 }
 
 added=0
