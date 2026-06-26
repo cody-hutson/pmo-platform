@@ -1471,8 +1471,8 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
    - Release plan fidelity: does the recommendation deviate from the approved release plan (scope, sequence, stage applicability)?
    - Downstream tier impact: for dependency-tiered execution, does accepting this affect blocked issues in later tiers?
    - **Necessity / value-add:** does this recommendation add something that needs
-     to exist? Apply the two-question test: (a) *Does this add actionable
-     information that doesn't already exist in the artifact or its
+     to exist? Apply the two-question test: (a) *Does this add
+     actionable information that doesn't already exist in the artifact or its
      cross-references?* and (b) *Would removing it change agent or operator
      behavior?* If the answer to both is no, **diverge from the spoke and
      recommend dropping it** — a technically-correct recommendation is not
