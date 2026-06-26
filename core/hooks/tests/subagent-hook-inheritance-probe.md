@@ -4,7 +4,7 @@
 
 **Status:** Runnable operator procedure (NOT a CI test). Pairs with the Layer-A
 CI regression `core/hooks/tests/subagent-hook-inheritance.test.sh`.
-**Origin:** v2.23, #189 (Phase-2 empirical-verification suite).
+**Origin:** v2.25, #189 (Phase-2 empirical-verification suite).
 **Consumed by:** the `subagent-security-posture.md` §1/§3 reconcile decision — the
 verdict this probe records selects between the **Branch V** (delivery confirmed →
 EMPIRICALLY-VERIFIED) and **Branch G** (worktree delivery fails → DOCUMENTED
@@ -160,5 +160,5 @@ Fill § 4. The recorded verdict selects the reconcile branch:
 
 - Layer A regression: [`subagent-hook-inheritance.test.sh`](subagent-hook-inheritance.test.sh) — proves hook LOGIC; auto-run by `test-runner.sh` / the `install-tests` hook-tests CI job.
 - Posture doc reconciled by this probe's verdict: [`../../standards/subagent-security-posture.md`](../../standards/subagent-security-posture.md) §1 + §3 Mechanism 2.
-- The two-layer-probe decision: ADR-041 (`core/ADRs/`).
+- The two-layer-probe decision: ADR-042 (`core/ADRs/`).
 - Worktree hook-load gap this probe surfaces: #1472.

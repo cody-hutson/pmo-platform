@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-041 — Subagent hook-inheritance is verified by a two-layer probe (CI logic-regression + manual live-delivery procedure), not a single CI suite
+title: ADR-042 — Subagent hook-inheritance is verified by a two-layer probe (CI logic-regression + manual live-delivery procedure), not a single CI suite
 status: Accepted
 deciders: Workspace owner
 tags: [architecture, security, hooks, subagent, testing, empirical-verification, pretooluse]
@@ -11,7 +11,7 @@ source_observations:
   - "#1472 (PreToolUse hooks wired at workspace root only; do not load for repo/worktree sessions) means a spoke — which runs in a worktree — may not fire hooks at all, an enforcement gap a logic-regression cannot see and only a live worktree-session probe surfaces."
 ---
 
-# ADR-041 — Subagent hook-inheritance: two-layer probe, not a single CI suite
+# ADR-042 — Subagent hook-inheritance: two-layer probe, not a single CI suite
 
 ## Status
 
