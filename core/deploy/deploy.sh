@@ -243,6 +243,16 @@ TEMPLATE_SYNC_MAP=(
   "ppm-agent:output-format.md:references/output-format.md"
   "comms-writer:operational-artifacts.md:references/operational-artifacts.md"
   "ppm-agent:operational-artifacts.md:references/operational-artifacts.md"
+  # ── Templates: people-graph consumption (leg D / #1899) — R5 (#315) + #1166 deferral ──
+  # Roster template (#315, ships standalone) registered against its real readers:
+  #   comms-writer (names/tone) + ppm-agent (escalation owner + Person maintainer §6).
+  # Clarification-queue template (leg C / #1166, ships standalone) → ppm-agent (Tier-1
+  #   resolution surface). tracker-manager + delivery-engine read the COMPOSED VIEW
+  #   (people-coverage-graph.md), not these template files — so they are NOT injection
+  #   targets (registering a non-reader = orphaned injected reference, the #315 R5 risk).
+  "comms-writer:people-roster-template.yaml:references/people-roster-template.yaml"
+  "ppm-agent:people-roster-template.yaml:references/people-roster-template.yaml"
+  "ppm-agent:people-graph-clarification-queue-template.md:references/people-graph-clarification-queue-template.md"
 )
 
 # ─── Shared Functions ────────────────────────────────────────────────────────

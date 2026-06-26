@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.23] - 2026-06-26
+
+Functional people-graph — PMO agents now resolve people from one maintained, never-committed people-graph instead of per-project free-text names; the four leadership-owner fields become typed person references; and the filled roster stays out of the repository by construction. Novel class; additive; functional-coordination only — explicitly not an HR or performance system.
+
+### Added
+
+- **A maintained people-graph that agents read from.** Skills that need a person's name, the owner of a project, or who-covers-whom now read from one maintained people-graph — a closed-allow-list roster composed at read time with the existing Person and Resource entities into a capability-and-coverage view that answers who-does-what, who-covers-whom, and coverage-by-capability.
+- **A never-committed roster with a de-identified template.** The actual roster lives outside the repository and is protected from accidental commit by out-of-tree placement, a gitignore backstop, and a pre-commit name scan; only a de-identified template ships in the repo, so personal data stays out of the codebase by construction.
+
+### Changed
+
+- **Leadership owners are now typed person references.** The project, portfolio, and program owner fields and the initiative-sponsor field move from free text to a structured reference to a person, with a defined fallback for people outside the roster — so an owner resolves to a real, consistent person instead of an unparseable string.
+
+[Full notes](release/releases/notes/v2.23-functional-people-graph_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.23)
+
 ## [v2.20] - 2026-06-23
 
 Field-lifecycle and CMDB automation — the platform's entity fields now have a governed lifecycle (who may write which field, at which stage, driven by agents), the artifact-state model is reconciled onto one canonical lifecycle, and the skill registry becomes the platform's configuration-management catalog with a per-project Artifact Register. A project-tracking integrity sweep adds dormancy and overdue-decision detection with an evidence-backed gate. Cross-cutting; QA ACCEPT (~48/48 acceptance criteria, 0 defects). *(Numbering note: `v2.20` was tagged after `v2.21` — a concurrent release claimed the higher number first and the operator kept `v2.20` for this one; the claim order is non-monotonic by version and self-heals on the next allocation.)*

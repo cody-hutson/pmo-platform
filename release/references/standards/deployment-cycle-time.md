@@ -7,6 +7,7 @@ reversibility: CHEAP (forward-only metric; pre-cutover releases exempt; baseline
 consumers: "release/governance/release-process.md Stage 12 § Phase B5 emit format; release-planner Mode B (capacity calibration); automated-closeout.sh (cycle-time read consumer); synthesize-release-learnings.sh (cross-release synthesizer); pmo-qa-auditor (decision-outcome review)"
 version: v12.12
 ---
+<!-- reference-durability: allow-link -->
 
 # Deployment Cycle Time
 
@@ -147,7 +148,7 @@ Reference implementation: [`release/tools/compute-cycle-time.sh`](../../tools/co
 
 ## 10. Failure modes
 
-Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
+Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
 
 | # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
 |---|---|---|---|---|---|---|
@@ -169,7 +170,7 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), 
 | Stage 12 deploy emission | [`pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md) | T_DEPLOY source — hub-emitted `deploy-skill` / `deploy-harness` events at Phase H |
 | Pipeline rules cross-reference | [`release/governance/release-process.md`](../../governance/release-process.md) Stage 12 Phase B5 + Stage 13 § Post-deploy verification | Stage 12 spoke invokes `compute-cycle-time.sh`; Stage 13 spoke maintains baseline |
 | K1 placement | [`knowledge-architecture.md § 3`](../../../core/disciplines/knowledge-architecture.md) | K1 standards live at `core/standards/` |
-| Failure-mode schema | [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
+| Failure-mode schema | [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
 | Chore PR convention | [`release/governance/release-process.md`](../../governance/release-process.md) Stage 12 / Stage 13 § Chore PR convention | All RELEASE_LOG.md cycle-time edits land via chore PR, never direct-to-main |
 | Cross-issue (decision-outcome) | `decision-outcome-tracking.md` (sibling release) | Decision-outcome spec MAY reference cycle-time as one input to decision-outcome correlation |
 | Cross-issue (automated-closeout) | `automated-closeout.sh` (sibling release) | Reads cycle-time from RELEASE_LOG.md visible-H4 Deployment Log block |

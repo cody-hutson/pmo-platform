@@ -278,7 +278,7 @@ to "request the missing artifact" — a distinct, valuable auditor action — no
 
 These anti-patterns govern the AUDITOR applying watermelon detection (distinct from the
 signals, which describe the *project's* reporting failure). Per
-`core/specs/failure-mode-standard.md` 5-field template; ≥3 entries; category tags.
+`core/standards/failure-mode-standard.md` 5-field template; ≥3 entries; category tags.
 
 ### Reported RAG accepted as evaluated without running the signals — INPUT
 
@@ -374,7 +374,7 @@ signals, which describe the *project's* reporting failure). Per
 - `escalation-thresholds.md` (owned by the ppm-agent skill) — per-item RAID **AGE**-escalation
   timing; the registry references it for age timing and this doc defers to the registry for it
   (single-sourced).
-- `core/specs/failure-mode-standard.md` — the Watermelon-RAG-acceptance INPUT entry W8 aligns
+- `core/standards/failure-mode-standard.md` — the Watermelon-RAG-acceptance INPUT entry W8 aligns
   to; the 5-field template this doc's failure-mode section uses.
 - The auditor consults this doc in Mode A (Single Output Review) + Mode C (Push-to-Resolve
   Audit) per [`../SKILL.md`](../SKILL.md).

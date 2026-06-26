@@ -546,7 +546,7 @@ protocol, worked examples, and G4 gate algorithm.
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`core/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Direct write to target folder bypassing 08-Generated/ — PROC

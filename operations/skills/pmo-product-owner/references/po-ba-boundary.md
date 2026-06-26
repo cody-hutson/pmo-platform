@@ -43,5 +43,5 @@ If either skill's copy of this sentence is edited, the twin's copy must be updat
 ## Cross-references
 
 - [ADR-019 — Specialists compose, not absorb](../../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) — the 3-conjunct boundary test and the compose-by-invocation rule.
-- [`failure-mode-standard.md`](../../../../core/specs/failure-mode-standard.md) — the 5-field template the SKILL.md cross-fire failure mode follows.
+- [`failure-mode-standard.md`](../../../../core/standards/failure-mode-standard.md) — the 5-field template the SKILL.md cross-fire failure mode follows.
 - `pmo-business-analyst` SKILL.md — the twin; carries the verbatim boundary sentence and the symmetric cross-fire failure mode.

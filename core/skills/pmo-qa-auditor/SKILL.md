@@ -144,7 +144,7 @@ change-management, technical-analyst, process-designer).
    - **G7: Domain-specific failure-mode discipline** — When the output under audit is a
      SKILL.md file, verify ≥ 3 domain-specific failure modes are documented in
      `## Domain-Specific Failure Modes` using the 5-field conditional template per
-     `../../specs/failure-mode-standard.md`. Phase 1 structural checks
+     `../../standards/failure-mode-standard.md`. Phase 1 structural checks
      (regex-based, deterministic): section heading present (G7-01), ≥ 3 `###` subsections
      (G7-02), each subsection header carries one of 5 category tags TRIG / INPUT / PROC /
      OUT / HAND (G7-03), each subsection contains all 5 required fields (G7-04), Conditional
@@ -377,7 +377,7 @@ Mode D uses the dual-output checklist.
 | G4 | Evidence quality | PASS/FAIL | [specific finding] |
 | G5 | Operational value | PASS/FAIL | [specific finding] |
 | G6 | Anti-pattern check | PASS/FAIL | [specific finding] |
-| G7 | Domain-specific failure-mode discipline | PASS / FAIL / CONDITIONAL PASS | [Phase 1 structural regex + Phase 2 LLM content check; see `../../specs/failure-mode-standard.md`. Fires only when output under audit is a SKILL.md file.] |
+| G7 | Domain-specific failure-mode discipline | PASS / FAIL / CONDITIONAL PASS | [Phase 1 structural regex + Phase 2 LLM content check; see `../../standards/failure-mode-standard.md`. Fires only when output under audit is a SKILL.md file.] |
 | G8 | Cascade-completeness verification | PASS / FAIL / CONDITIONAL PASS | [Phase 1 deterministic re-run (G8-02/03/04) + Phase 2 LLM judgment (G8-01/05/06); see `references/cascade-completeness-detection.md`. Fires only when output under audit is a Stage 5 spec carrying a `### Cascade-Sweep` block. Un-swept occurrence cited as `file:line` with Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] routing.] |
 | G9 | RACI validation (ownership clarity) | PASS / FAIL | [Fires only when the output asserts ownership of an action / decision / deliverable / risk. One or more owned items with no single clear Responsible+Accountable cited as the finding with the suggested owner-line; see `references/failure-mode-detectors.md`. Consulted/Informed gaps are OBSERVATIONs, not findings.] |
 
@@ -594,7 +594,7 @@ In addition to the guardrails above, apply these suite-wide guardrail checks whe
 
 These domain-specific anti-patterns coexist with `## Guardrails`, `## Guardrails
 (Extended)`, and `## Reversibility Discipline`. Each entry uses the 5-field conditional
-template per `../../specs/failure-mode-standard.md`.
+template per `../../standards/failure-mode-standard.md`.
 
 **Self-compliance note:** This auditor's own failure-mode section satisfies G7-01
 through G7-05 — the enforcer is itself compliant with the rule it enforces. The five
@@ -780,7 +780,7 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `references/push-to-resolve-rubric.md` | Mode C | Classification rules and examples for item resolution |
 | `references/dual-output-compliance.md` | Mode D | Full dual-output checklist and compliance criteria |
 | `../../reference/reversibility-protocol.md` | Mode A G4 | 4-tier reversibility vocabulary and decision-class algorithm |
-| `../../specs/failure-mode-standard.md` | Mode A G7, Mode A G8 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline; the `### Cascade-omission at count update — PROC` entry names G8 as the L5 automated detection surface |
+| `../../standards/failure-mode-standard.md` | Mode A G7, Mode A G8 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline; the `### Cascade-omission at count update — PROC` entry names G8 as the L5 automated detection surface |
 | `references/failure-mode-detectors.md` | Mode E, Mode A G9 | The 8 named platform failure-mode detectors (D1–D8: automation complacency, faceless PMO, echo chamber, quality drift, SPOF, breadth burnout, AI hallucination, trust erosion) — signature, threshold, data source, current-status read for each; plus the RACI validation gate (G9) data source and the Mode E battery-section reporting format |
 | `../../reference/review-discipline-principles.md` | When auditing review-class skill outputs | Shared 10 anti-laziness rules and 6-deliverable output structure |
 | `../../../release/references/protocols/platform-health-audit-framework.md` | Mode E | Audit methodology + cadence policy; §4 is the Mode E integration spec |

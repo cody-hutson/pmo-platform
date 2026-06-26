@@ -513,7 +513,7 @@ cd /tmp && zip -r /mnt/user-data/outputs/[skill-name].skill [skill-name]/
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails for the editor) and `## Reversibility Discipline` (decision-class output
 discipline). Each entry uses the 5-field conditional template per
-`core/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Mode A edit without dependency-graph consultation — PROC

@@ -10,7 +10,7 @@
 
 Every Stage 5 Solutioning spoke output that **canonicalizes a convention** must include an inspectable Evidence-Grounding artifact. The artifact lives as a `### Evidence-Grounding (per R1 )` subsection inside the spoke output, placed **after** the per-R Detail subsections and **before** the `### Decisions & Recommendations` section. Collective Review Decision Briefing rejects scope-lock approval when a canonicalization is detected without the artifact (the R4 N-way scan catches this).
 
-This standard codifies the schema, load-bearing test, and rejection criteria the consumers reference. It complements but does not replace: the spoke prompt language at [`hub-spoke-bridge.md` Procedure 3](../../release/references/how-to/hub-spoke-bridge.md) (injection point at Stage 5 entry), the Collective Review rejection schema at [`.claude/rules/release-process.md`](../../release/governance/release-process.md) Collective Review Protocol bullet 6 (rejection-gate point at scope-lock), and the failure-mode entry `spec-vs-reality-divergence` at [`failure-mode-standard.md`](../specs/failure-mode-standard.md) (anti-pattern catalog).
+This standard codifies the schema, load-bearing test, and rejection criteria the consumers reference. It complements but does not replace: the spoke prompt language at [`hub-spoke-bridge.md` Procedure 3](../../release/references/how-to/hub-spoke-bridge.md) (injection point at Stage 5 entry), the Collective Review rejection schema at [`.claude/rules/release-process.md`](../../release/governance/release-process.md) Collective Review Protocol bullet 6 (rejection-gate point at scope-lock), and the failure-mode entry `spec-vs-reality-divergence` at [`failure-mode-standard.md`](../standards/failure-mode-standard.md) (anti-pattern catalog).
 
 ## What counts as "canonicalizing a convention"
 
@@ -128,8 +128,8 @@ This composition is why operator pre-decision LOCKED D-D KEEP STANDALONE (single
 |---|---|---|
 | Spoke prompt template | [`hub-spoke-bridge.md` Procedure 3 Spoke Template](../../release/references/how-to/hub-spoke-bridge.md) | Injection point at Stage 5 entry |
 | Collective Review rejection | [`.claude/rules/release-process.md` Collective Review Protocol bullet 6](../../release/governance/release-process.md) | Rejection-gate point at scope-lock |
-| Failure-mode entry (R1) | [`failure-mode-standard.md` § Reorg / structure-change examples](../specs/failure-mode-standard.md) | Anti-pattern catalog (`spec-vs-reality-divergence`) |
-| Failure-mode entry (R3) | [`failure-mode-standard.md` § Reorg / structure-change examples](../specs/failure-mode-standard.md) | Anti-pattern catalog (`concurrence-without-verification`) — composes with R1 evidence-citation |
+| Failure-mode entry (R1) | [`failure-mode-standard.md` § Reorg / structure-change examples](../standards/failure-mode-standard.md) | Anti-pattern catalog (`spec-vs-reality-divergence`) |
+| Failure-mode entry (R3) | [`failure-mode-standard.md` § Reorg / structure-change examples](../standards/failure-mode-standard.md) | Anti-pattern catalog (`concurrence-without-verification`) — composes with R1 evidence-citation |
 | Persona behavioral marker (Stage 5) | [`release-personas.md` § Stage 5: Solutioning](../../release/references/specs/release-personas.md) | Stage 5 persona binding (R1) |
 | Persona behavioral marker (Stage 9) | [`release-personas.md` § Stage 9: Plan Review](../../release/references/specs/release-personas.md) | Stage 9 persona binding (R3 — empirical verification before go/no-go) |
 | Decision-discipline ceremony guards | [`decision-discipline.md` § 5](../disciplines/decision-discipline.md) | Load-bearing test parent framework (G1 / G3) |

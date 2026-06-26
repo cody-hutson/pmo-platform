@@ -576,7 +576,7 @@ These domain-specific anti-patterns coexist with the `## Operating Principles` (
 wide generic guardrails including plan-driven, snapshot-first, write-verify, atomic
 intent) and `## Reversibility Discipline` (decision-class output discipline). Each entry
 uses the 5-field conditional template per
-`core/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Mode A execution without a Dry-Run Record in the plan — PROC

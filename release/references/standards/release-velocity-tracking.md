@@ -175,7 +175,7 @@ The `**Velocity:**` field lives in the `#### Deployment Log v<X.Y>` visible-H4 b
 
 ## 13. Failure modes
 
-Per `core/specs/failure-mode-standard.md`, every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
+Per `core/standards/failure-mode-standard.md`, every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
 
 | # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
 |---|---|---|---|---|---|---|
@@ -201,7 +201,7 @@ Per `core/specs/failure-mode-standard.md`, every K1 standard documents ≥ 3 dom
 | Chip pattern | `release/references/how-to/hub-spoke-bridge.md` Stage 13 chip | Carries the field into the spawned Stage-13 spoke's instruction |
 | Delivery-team boundary | `operations/skills/delivery-engine/references/capacity-model.md` + `estimation-standards.md` | The project-delivery-altitude capacity model this instrument is explicitly NOT (§ 8) |
 | Chore-PR convention | `release/governance/release-process.md` Stage 13 § chore-PR mechanism | All RELEASE_LOG velocity edits land via chore PR, never direct-to-main |
-| Failure-mode schema | `core/specs/failure-mode-standard.md` | 5-field schema + 5 category tags |
+| Failure-mode schema | `core/standards/failure-mode-standard.md` | 5-field schema + 5 category tags |
 | K1 placement | `core/disciplines/knowledge-architecture.md § 3` | K1 standards live at the standards set |
 
 ## Version History

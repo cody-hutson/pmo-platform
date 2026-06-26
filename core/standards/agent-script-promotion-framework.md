@@ -176,7 +176,7 @@ The framework catalog's per-row `canonical_doc` column drives anchor validation,
 
 ## Failure Modes
 
-Per the 5-field template and category tags in `core/specs/failure-mode-standard.md`; reversibility tiers per `core/specs/reversibility-protocol.md`.
+Per the 5-field template and category tags in `core/standards/failure-mode-standard.md`; reversibility tiers per `core/specs/reversibility-protocol.md`.
 
 **Premature promotion — PROC**
 - **Signature:** a pattern is scripted in the same release that last changed it; the script's flags/paths churn within 2 releases.
@@ -212,7 +212,7 @@ Per the 5-field template and category tags in `core/specs/failure-mode-standard.
 
 | Surface | Role for this framework |
 |---|---|
-| `core/specs/failure-mode-standard.md` | The 5-field template + category tags the Failure Modes section conforms to |
+| `core/standards/failure-mode-standard.md` | The 5-field template + category tags the Failure Modes section conforms to |
 | `core/specs/reversibility-protocol.md` | The CHEAP/MODERATE/EXPENSIVE/IRREVERSIBLE tiers the per-rung promotion/demotion costs cite |
 | `core/schemas/gate-criteria-spec.md` | The Check enum (structural/metrics/judgment) — the work-class axis the ladder composes with; T-DET reads it |
 | `core/specs/autonomy-tiers.md` | The prefixed-tier discipline and the WHO-acts axis; the disambiguation table this ladder's `AS` prefix keeps clean |

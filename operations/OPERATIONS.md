@@ -326,7 +326,7 @@ When `delivery_approach: Custom`, skills MUST read the `custom_methodology_defin
 
 ### Rule 4 — Failure modes to avoid
 
-See [`methodology-parameterization-v1.md § 6 Failure Modes`](../release/references/specs/methodology-parameterization-v1.md) for the 5 domain-specific anti-patterns (category tags per [`failure-mode-standard.md`](../core/specs/failure-mode-standard.md)):
+See [`methodology-parameterization-v1.md § 6 Failure Modes`](../release/references/specs/methodology-parameterization-v1.md) for the 5 domain-specific anti-patterns (category tags per [`failure-mode-standard.md`](../core/standards/failure-mode-standard.md)):
 
 - **INPUT-1 Methodology conflation** — conflating `delivery_approach` with `dual_framing_enabled`.
 - **PROC-2 Custom-block skip** — reading `Custom` without reading the block.

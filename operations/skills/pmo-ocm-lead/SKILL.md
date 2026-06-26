@@ -154,7 +154,7 @@ These are hard rejections — the suite-wide standard plus the role's own:
 
 ## Domain-Specific Failure Modes
 
-These coexist with `## Guardrails (Platform)` and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). Each is composition-specific or ADKAR-ordering-specific — distinct from `change-management`'s own failure modes (which fire *inside* the composed modes) and from the platform guardrails. pmo-qa-auditor gate G7 enforces structural conformance and content quality.
+These coexist with `## Guardrails (Platform)` and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). Each is composition-specific or ADKAR-ordering-specific — distinct from `change-management`'s own failure modes (which fire *inside* the composed modes) and from the platform guardrails. pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Training scheduled before the Awareness/Desire gate (ADKAR ordering) — PROC
 
