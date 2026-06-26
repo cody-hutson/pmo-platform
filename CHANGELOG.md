@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.30] - 2026-06-26
+
+Stale internal links across the platform's docs and skill files are corrected to their current locations.
+
+[Full notes](release/releases/notes/v2.30_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.30)
+
 ## [v2.28] - 2026-06-26
 
 Generated-vs-source provenance — when a skill writes a generated artifact, the artifact's frontmatter now records which skill and version produced it and what upstream evidence it drew from, plus a stable identifier, so generated content is traceable to its source and cleanly distinguished from human-authored artifacts. novel class; additive throughout (every field is optional, forward-only no back-fill); the five changed-skill packages rebuilt at release-cut.
