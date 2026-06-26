@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
-version: v2.00
+version: v2.28
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
