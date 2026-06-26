@@ -120,6 +120,8 @@ Open the generated `PROJECT.md` and set the frontmatter. The fields the skills d
 
 `delivery_approach` is load-bearing: skills parameterize their behavior to it (a Waterfall project gets phase-gate framing; a Scrum project gets sprint/velocity framing) instead of assuming Agile. The full schema, including the `Custom` extension block, is [core/schemas/project-schema.md](../core/schemas/project-schema.md).
 
+`project_owner` is a reference into your **people-roster** (a `ref→Person`, resolved on `person_id`) — the same operator-instance roster the portfolio, program, and initiative-sponsor owner-refs point into, so one roster serves every tier and four skills (`comms-writer`, `tracker-manager`, `ppm-agent`, `delivery-engine`) resolve people from it read-only. For the end-to-end adoption flow — where the roster lives (auto-seeded on install), how to fill it, and how the per-tier owner-refs wire in — see [GETTING_STARTED.md § 7 — People-graph adoption](GETTING_STARTED.md#7-people-graph-adoption--one-roster-every-tier).
+
 ### Do something real
 
 With a project configured, the daily skills have context to work from:

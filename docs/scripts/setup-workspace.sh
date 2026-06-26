@@ -1284,6 +1284,46 @@ scaffold_localized_needles() {
   printf 'rm-file:%s\n' "${needle_file}" >> "${ROLLBACK_OPS_FILE}"
 }
 
+# --- Section 15d: people-roster scaffold (#2040) ---
+# Create the operator's people-roster.yaml from the tracked de-identified template
+# ONLY IF it does not already exist (create-once — NEVER clobbers a filled roster,
+# which is operator PII; a clobber is IRREVERSIBLE). This is the PRIMARY seed site
+# (the install.sh guard is belt-and-suspenders; update.sh preserves). Mirrors
+# scaffold_localized_needles() byte-for-byte, substituting the roster source/target
+# and resolving the path via pmo_people_roster_for (keyed on WORKSPACE_ROOT so a
+# sandboxed install lands inside the sandbox).
+scaffold_localized_roster() {
+  local lib="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  if [ ! -f "${lib}" ]; then
+    warn "Instance-path resolver not found at ${lib}; skipping roster scaffold"
+    return 0
+  fi
+  # shellcheck source=/dev/null
+  source "${lib}"
+  local template="${SOURCE_REPO}/operations/templates/people-roster-template.yaml"
+  if [ ! -f "${template}" ]; then
+    warn "Roster template not found at ${template}; skipping roster scaffold"
+    return 0
+  fi
+  # Resolve via the single accessor, keyed on WORKSPACE_ROOT (honors
+  # PMO_PEOPLE_ROSTER / PMO_INSTANCE_PATH overrides; falls back to
+  # <workspace-root>/personal/pmo-instance/people-roster.yaml — never the $HOME
+  # default — so a sandboxed --workspace-root is respected).
+  local roster_file; roster_file="$(pmo_people_roster_for "${WORKSPACE_ROOT}")"
+  if [ -f "${roster_file}" ]; then
+    info "PRESERVED (operator-state): people-roster.yaml"
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would scaffold roster → ${roster_file}"
+    return 0
+  fi
+  mkdir -p "$(dirname "${roster_file}")" || { err "mkdir failed: $(dirname "${roster_file}")"; exit 73; }
+  cp "${template}" "${roster_file}" || { err "roster scaffold copy failed → ${roster_file}"; exit 74; }
+  info "INSTALLED roster template: ${roster_file}"
+  printf 'rm-file:%s\n' "${roster_file}" >> "${ROLLBACK_OPS_FILE}"
+}
+
 # --- Section 16: Hook behavioral verification (CD-5 absorption) ---
 verify_hooks_invokable() {
   local sample_hook="${WORKSPACE_ROOT}/.claude/hooks/block-destructive.sh"
@@ -1520,6 +1560,7 @@ fresh_install() {
   install_hooks
   install_composition_surface_files
   scaffold_localized_needles
+  scaffold_localized_roster
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1
@@ -1543,6 +1584,7 @@ rebootstrap() {
   install_hooks
   install_composition_surface_files
   scaffold_localized_needles
+  scaffold_localized_roster
   if run_verification_gate; then
     write_state_file "true"
     INSTALL_COMPLETE=1

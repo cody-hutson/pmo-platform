@@ -149,6 +149,36 @@ scaffold_needles() {
   info "Scaffolded localized-context needle file → ${needle_file}"
 }
 
+# --- people-roster scaffold (#2040) ---
+# Create-once: copy the tracked de-identified template to the operator's
+# people-roster.yaml ONLY IF absent. Phase 1 (setup-workspace.sh) already does
+# this on a normal install; this is an idempotent belt-and-suspenders guard keyed
+# on the same resolver, so it is a no-op when the file already exists — and it
+# NEVER clobbers a filled roster (operator PII; a clobber is IRREVERSIBLE).
+# <ws_root> empty → resolver default. No dry-run branch: install main returns
+# before this is reached under --dry-run (mirrors scaffold_needles exactly).
+scaffold_roster() {
+  local ws_root="$1"
+  local lib="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
+  local template="${REPO_ROOT}/operations/templates/people-roster-template.yaml"
+  [ -f "${lib}" ] || { info "Resolver lib absent; roster scaffold handled by Phase 1."; return 0; }
+  [ -f "${template}" ] || { info "Roster template absent; skipping scaffold."; return 0; }
+  # shellcheck disable=SC1090
+  source "${lib}"
+  local roster_file
+  if [ -n "${ws_root}" ]; then
+    roster_file="$(pmo_people_roster_for "${ws_root}")"
+  else
+    roster_file="$(pmo_people_roster)"
+  fi
+  if [ -f "${roster_file}" ]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "${roster_file}")"
+  cp "${template}" "${roster_file}"
+  info "Scaffolded people-roster → ${roster_file}"
+}
+
 # --- Main ---
 main() {
   # Short-circuit on --help so we don't run skill deployment after a usage print.
@@ -191,6 +221,9 @@ main() {
 
   # Idempotent needle scaffold (no-op if Phase 1 already created it).
   scaffold_needles "${ws_root}"
+
+  # Idempotent roster scaffold (no-op if Phase 1 already created it; never clobbers).
+  scaffold_roster "${ws_root}"
 
   phase_skill_deploy
 

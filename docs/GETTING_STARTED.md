@@ -1,4 +1,6 @@
 # GETTING_STARTED.md — pmo-platform
+<!-- repo-integrity: allow-memory-ref -->
+<!-- §7 names the schema field `project_owner_external` (ADR-040), which matches the operator-memory-slug regex but is a schema field, not a memory reference. Mirrors the markers on core/schemas/project-schema.md + core/disciplines/project-entity-model.md. -->
 
 > The "try this" companion to [INSTALL.md](INSTALL.md) ("do this") and [workspace-setup.md](workspace-setup.md) ("why this").
 > Audience: operators who completed INSTALL.md and want a first hands-on touch.
@@ -109,7 +111,78 @@ For the cross-module composition patterns in detail — including how `operation
 
 ---
 
-## 7. Where to go next
+## 7. People-graph adoption — one roster, every tier
+
+The skills you just met can resolve *people* — owners, escalation targets, who-covers-whom — from a single source you fill once. This is the **people-graph**: an operator-instance roster that the platform reads at every tier (project, portfolio, program, initiative) so you never re-enter a name. This section is the end-to-end adoption path: where the roster lives, how to fill it, how each tier's owner points into it, and how four skills consume it.
+
+### 7.1 Where the roster lives (auto-seeded on install)
+
+The filled roster is **operator-instance** — it holds real people's names, so it is never committed to the repository. As of v2.26 it is **auto-seeded on install**: `setup-workspace.sh` copies the de-identified template to your instance directory on a fresh install, create-once (it never clobbers a roster you've already filled — that would be an irreversible loss of your data).
+
+Its path is resolved by the `pmo_people_roster()` accessor in `core/deploy/lib-instance-path.sh`, not hardcoded:
+
+```
+pmo_people_roster()  →  ${PMO_PEOPLE_ROSTER:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/people-roster.yaml}
+```
+
+- **Default:** `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/people-roster.yaml`.
+- **Overridable:** set `PMO_PEOPLE_ROSTER` to point at an explicit file, or `PMO_INSTANCE_PATH` to relocate the whole instance directory (the roster leaf is appended to it).
+- **Never committed:** the file sits *outside* the repository tree (primary protection), is matched by the `**/people-roster.yaml` `.gitignore` rule (catches a stray in-tree copy), and its names are fed into the PII pre-commit needle list. Three layers, all pointing the same way: roster data does not enter git.
+
+To find your seeded copy:
+
+```bash
+echo "${PMO_PEOPLE_ROSTER:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/people-roster.yaml}"
+```
+
+### 7.2 Fill it (post-seed)
+
+The seeded file is the de-identified template with `[PLACEHOLDER]` fields. Open your instance copy and fill one entry per person — never edit the tracked template at `operations/templates/people-roster-template.yaml`. The fields each entry carries:
+
+| Field | What it is |
+|---|---|
+| `person_id` | Stable identity (e.g. `person-id-001`). The spine — every owner-ref and coverage edge joins on this. |
+| `preferred_name` / `name_spelling` | How to address and spell the person. |
+| `roles` / `capability_tags` | Functional roles and capability **tags** (tags, never ratings). |
+| `escalates_to` | A *functional* escalation target (a `person_id`) — a routing hint, **not** an HR reporting line. |
+| `backup_coverage` | The `person_id`s who cover this person. |
+| `comms_calibration` | Preferred tone/channel; `unknown` if not known. |
+| `status` | `active` / `on-leave` / `departed`. A departed entry **persists** (a tombstone) so prior refs still resolve. |
+| `linked_project_ids` | Projects this person is linked to. |
+
+The roster is a *functional coordination* artifact — who does what, how to reach them, who covers whom. It is **not** an HR or performance system: capability is a tag, never a rating, and the excluded-fields list in the template header (no compensation, no performance, no free-text notes) is closed by construction. Unknown values stay `unknown` — never guessed. Full schema and the reading contract: [`operations/templates/people-roster-template.yaml`](../operations/templates/people-roster-template.yaml).
+
+### 7.3 Wire the owner-refs — one roster serves all tiers
+
+You don't keep a separate owner list per tier. Each tier's owner field is a **typed reference into the roster** (`ref→Person`, resolving on `person_id`), so one filled roster grounds every tier:
+
+| Tier | Owner field | Where it lives |
+|---|---|---|
+| Project | `project_owner` → Person | `PROJECT.md` frontmatter |
+| Portfolio | `portfolio_owner` → Person | the Portfolio entity |
+| Program | `program_owner` → Person | the Program entity |
+| Initiative | `sponsor` → Person | the Strategic-Initiative entity |
+
+For an owner who is **not** in your roster (an external client or vendor contact), each tier carries an optional `*_external` free-text fallback (`project_owner_external`, etc.) — exactly one of {the ref, the external fallback} is populated. A populated ref that does not resolve to a roster Person is a malformed write (blocked); an existing free-text owner name migrates by resolving against the roster — a unique match becomes the ref, an ambiguous match routes to the operator clarification queue rather than being silently dropped.
+
+The operational owner fields work the same way: a RAID item's `owner_person_id` and a decision's `decision_maker_person_id` are also refs that resolve on `person_id`. So setting `project_owner: person-id-001` in `PROJECT.md` and writing a RAID item owned by `person-id-001` both point at the same roster entry — the leadership-owner axis and the operational-owner axis unify on one anchor. Schema: [`core/schemas/project-schema.md`](../core/schemas/project-schema.md); the full entity model: [`core/disciplines/project-entity-model.md`](../core/disciplines/project-entity-model.md).
+
+### 7.4 How four skills consume it (read-only)
+
+The skills read the people-graph as a **composed view** — a read-time join, never a materialized copy. The view composes three sources on `person_id`: your roster (functional attributes), the Person entity (the global identity anchor), and the Resource entity (project-scoped allocation). It answers three queries: *who-does-what*, *who-covers-whom* (the `escalates_to` / `backup_coverage` edges), and *coverage-by-capability* (which active people carry a capability tag right now). The contract: [`core/disciplines/people-coverage-graph.md`](../core/disciplines/people-coverage-graph.md).
+
+Four skills read that view — and only read it. None of them writes the roster, the Person entity, or the graph; an unresolved name is surfaced for you to confirm, never invented:
+
+- **`comms-writer`** — resolves the preferred name and spelling of named and owner people for the message it drafts (*who-does-what*).
+- **`tracker-manager`** — resolves a RAID item's `owner_person_id` and a decision-maker ref to a Person for display and identity (*who-does-what*).
+- **`ppm-agent`** — finds the right owner, follows `escalates_to` for the functional escalation target, and uses coverage-by-capability to find a backup when the primary owner is unavailable.
+- **`delivery-engine`** — answers read-only "who covers capability X / project Y" from the coverage-by-capability index, filtered by `status` for who-can-cover-right-now.
+
+Fill the roster once, point your tier owners at it, and these four skills resolve people consistently across every project — no per-skill configuration, no duplicated people list.
+
+---
+
+## 8. Where to go next
 
 Now that you've seen one composition, the rest of the platform is yours to explore.
 
