@@ -1,5 +1,8 @@
 # Project Entity Model
 
+<!-- repo-integrity: allow-memory-ref -->
+<!-- schema field names like `project_owner_external` match the memory-slug pattern but are not memory references -->
+
 **Status:** Canonical
 **Owner:** `../disciplines/project-entity-model.md`
 **Introduced:** project-data-foundation (2026-05-16) — initiative project-data-architecture, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
@@ -102,10 +105,12 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 
 **Rationale & first-class justification.** The top-level unit of delivery the PMO tracks; every operational artifact is either project-scoped or explicitly cross-project. First-class because it owns the lifecycle (`ACTIVE→CLOSING→CLOSED`) that gates *all* skill processing (CLAUDE.md § Project Lifecycle) and is the anchor every project-scoped entity's `project_id` resolves to. The Project entity ⊇ `PROJECT.md`; `project-schema.md` is the persistence dialect of this entity's frontmatter.
 
-- **Fields:** `project_name`✅ str·1 · `project_owner`✅ str·1 · `status`✅ enum·1 · `delivery_approach`✅ enum8·1 · `portfolio_id`⚪ ref·1 · `program_id`⚪ ref·1
+- **Fields:** `project_name`✅ str·1 · `project_owner`⚪ ref·1 → `Person.person_id` · `project_owner_external`⚪ str·1 *(external fallback — exactly-one-of {`project_owner`, `project_owner_external`}; Tier-2 SCOPE CHANGE — ADR-040)* · `status`✅ enum·1 · `delivery_approach`✅ enum8·1 · `portfolio_id`⚪ ref·1 · `program_id`⚪ ref·1
 - **Axis-1:** `ACTIVE → CLOSING → CLOSED` (reconciles 1:1 with `project-schema.md status`; Project ⊇ PROJECT.md)
 - **Axis-2:** Living (B) · **storage_tier:** project-scoped → `[Project]/` · **persistence_mode:** file-backed
 - **Owning agents:** creates `project-initiator` · maintains `ppm-agent` · readers: all PMO skills
+
+**Amended per [SCOPE CHANGE — RESOLVED via ADR-040] (functional-people-graph, Tier-2):** `project_owner` lifted from `string` to `ref → Person.person_id` + an optional `project_owner_external` free-text fallback for non-roster owners (leadership-owner reconciliation). The required-presence guarantee moves to a record-level invariant — *exactly-one-of* {`project_owner` ref, `project_owner_external`} populated (additive: the ref is the new primary, the external fallback preserves non-roster people). Surface RE-FROZEN with this amendment.
 
 #### 2. Milestone
 
@@ -170,6 +175,8 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 - **Axis-2:** Living (B) · **storage_tier:** project-scoped → `[Project]/` · **persistence_mode:** embedded-in-parent
 - **Owning agents:** creates `delivery-engine` · maintains `delivery-engine` · readers: `weekly-status-rollup`
 
+**Activation — people-roster join.** Resource's `person_id` join — previously defined but wired to nothing — is activated against the operator-instance people-roster: a Resource (project-scoped allocation) resolves its Person through `person_id`, and the roster supplies the functional/coverage view that makes "who is allocated, and who covers them" answerable. No Resource field changes; the roster is the functional read surface the join now resolves against.
+
 #### 9. Artifact
 
 **Rationale & first-class justification.** A project deliverable file (report, tracker, FDD, design doc, etc.). First-class because it is the explicit **reconciliation seam** to `frontmatter-schema.md`: its `domain` + `content_lifecycle_pattern` bind the entity to a backing file's Domain A/B/C lifecycle. Its Axis-1 *delegates to Axis-2* — the Artifact's operational lifecycle **is** the Domain A/B/C content lifecycle of its backing file. G3/G4 must honor this seam when physicalizing.
@@ -189,6 +196,8 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 - **Axis-1:** `active → inactive`
 - **Axis-2:** Living (B) · **storage_tier:** cross-project-shared → `_pmo/` · **persistence_mode:** file-backed
 - **Owning agents:** creates `project-initiator` / `file-router` · maintains `ppm-agent` · readers: all PMO skills
+
+**Operationalization — functional people-roster (ADR-018 declarative config-layer).** Person is operationalized for functional coordination via an operator-instance people-roster: a declarative YAML config-layer keyed on `person_id` (the §3.10 dedup anchor) carrying functional attributes — preferred name + spelling, role(s), team, capability tags, backup/coverage, comms-calibration, escalation-routing — WITHOUT amending the 4 frozen Person fields and without adding an entity (the ADR-018 thin-entity dividend: attribute variability lives in the separate declarative layer). The filled roster is operator-instance and never committed: out-of-tree placement is the primary protection — it lives outside the repository tree, so a repository commit cannot reach it — with the `.gitignore` `**/people-roster.yaml` rule as a stray-copy backstop and the PII pre-commit needle list (fed by `core/deploy/extract-roster-needles.sh`) as a third layer; only a de-identified template ships. Reading contract (honored, not runtime-enforced): the roster is a functional coordination artifact, not an HR/performance system — read only the closed allow-list fields, express capability as tags never ratings, and represent an unknown value as `unknown` rather than inferring it. The capability/coverage graph (who-does-what / who-covers-whom / coverage-by-capability) composes this Person entity with the Resource entity (§4) and this functional roster at read time, keyed on `person_id` — see [`people-coverage-graph.md`](people-coverage-graph.md). That composition reads the three sources and adds no frozen field to either entity.
 
 #### 11. System
 
@@ -214,19 +223,23 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 
 **Rationale & first-class justification.** The top-level grouping of programs/projects. First-class portfolio-level record (`active→archived`) that Projects `BELONG_TO`; the root of the portfolio → program → project hierarchy.
 
-- **Fields:** `portfolio_name`✅ str·1 · `portfolio_id`✅ str·1 · `portfolio_owner`✅ str·1
+- **Fields:** `portfolio_name`✅ str·1 · `portfolio_id`✅ str·1 · `portfolio_owner`⚪ ref·1 → `Person.person_id` · `portfolio_owner_external`⚪ str·1 *(external fallback — exactly-one-of {`portfolio_owner`, `portfolio_owner_external`}; Tier-2 SCOPE CHANGE — ADR-040)*
 - **Axis-1:** `active → archived`
 - **Axis-2:** Living (B) · **storage_tier:** portfolio-level → `projects/_config/` · **persistence_mode:** file-backed
 - **Owning agents:** creates `weekly-status-rollup` · maintains `weekly-status-rollup` · readers: `ppm-agent`
+
+**Amended per [SCOPE CHANGE — RESOLVED via ADR-040] (functional-people-graph, Tier-2):** `portfolio_owner` lifted from `string` to `ref → Person.person_id` + an optional `portfolio_owner_external` free-text fallback for non-roster owners (leadership-owner reconciliation). The required-presence guarantee moves to a record-level invariant — *exactly-one-of* {`portfolio_owner` ref, `portfolio_owner_external`} populated (additive). Surface RE-FROZEN with this amendment.
 
 #### 14. Program
 
 **Rationale & first-class justification.** A grouping of related projects within a portfolio. First-class because it has its own owner and `active→closing→closed` lifecycle and is the `BELONGS_TO` target for Strategic Initiatives' generated work — the mid-tier of the portfolio hierarchy.
 
-- **Fields:** `program_name`✅ str·1 · `program_id`✅ str·1 · `portfolio_id`✅ ref·1 · `program_owner`✅ str·1
+- **Fields:** `program_name`✅ str·1 · `program_id`✅ str·1 · `portfolio_id`✅ ref·1 · `program_owner`⚪ ref·1 → `Person.person_id` · `program_owner_external`⚪ str·1 *(external fallback — exactly-one-of {`program_owner`, `program_owner_external`}; Tier-2 SCOPE CHANGE — ADR-040)*
 - **Axis-1:** `active → closing → closed`
 - **Axis-2:** Living (B) · **storage_tier:** portfolio-level → `projects/_config/` · **persistence_mode:** embedded-in-parent
 - **Owning agents:** creates `weekly-status-rollup` · maintains `weekly-status-rollup` · readers: `ppm-agent`
+
+**Amended per [SCOPE CHANGE — RESOLVED via ADR-040] (functional-people-graph, Tier-2):** `program_owner` lifted from `string` to `ref → Person.person_id` + an optional `program_owner_external` free-text fallback for non-roster owners (leadership-owner reconciliation). The required-presence guarantee moves to a record-level invariant — *exactly-one-of* {`program_owner` ref, `program_owner_external`} populated (additive). Surface RE-FROZEN with this amendment.
 
 #### 15. Cross-Project Dependency
 
@@ -250,10 +263,12 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 
 **Rationale & first-class justification.** A portfolio-level strategic thrust spanning programs. First-class because it is the only **Hybrid (C)** content-pattern entity (agent-drafted, human-ratified), `GENERATES` Programs, and tracks `proposed→active→completed|cancelled` at the strategy tier — distinct from the delivery tiers below it.
 
-- **Fields:** `initiative_name`✅ str·1 · `initiative_id`✅ str·1 · `sponsor`✅ str·1 · `linked_program_ids`⚪ ref·0..* · `target_outcome`⚪ str·1
+- **Fields:** `initiative_name`✅ str·1 · `initiative_id`✅ str·1 · `sponsor`⚪ ref·1 → `Person.person_id` · `sponsor_external`⚪ str·1 *(external fallback — exactly-one-of {`sponsor`, `sponsor_external`}; sponsors are the most-likely-external case; Tier-2 SCOPE CHANGE — ADR-040)* · `linked_program_ids`⚪ ref·0..* · `target_outcome`⚪ str·1
 - **Axis-1:** `proposed → active → completed | cancelled`
 - **Axis-2:** Hybrid (C — agent-drafted, human-ratified) · **storage_tier:** portfolio-level → `projects/_config/` · **persistence_mode:** file-backed
 - **Owning agents:** creates `ppm-agent` · maintains `weekly-status-rollup` · readers: `comms-writer`
+
+**Amended per [SCOPE CHANGE — RESOLVED via ADR-040] (functional-people-graph, Tier-2):** `sponsor` lifted from `string` to `ref → Person.person_id` + an optional `sponsor_external` free-text fallback for non-roster sponsors (leadership-owner reconciliation — a sponsor is often a legitimately external party, e.g. a client executive). The required-presence guarantee moves to a record-level invariant — *exactly-one-of* {`sponsor` ref, `sponsor_external`} populated (additive). Surface RE-FROZEN with this amendment.
 
 ### Work-item tier entity (added by Tier-2 SCOPE CHANGE — ADR-018)
 

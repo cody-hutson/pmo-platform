@@ -192,6 +192,18 @@ discussion, any [DELIVERY] tag referencing sprint planning.
 4. Produce a sprint plan:
    - **Capacity model**: available hours/points by team member (if data available),
      accounting for PTO, meetings, known distractions — expressed as **focus-adjusted** capacity (FF applied per step 3), never raw.
+   - **Resource/coverage query (read-only)**: answer "who covers capability X / project Y" from the
+     capability/coverage graph view
+     ([`core/disciplines/people-coverage-graph.md`](../../../core/disciplines/people-coverage-graph.md))
+     joined on `person_id` — *coverage-by-capability* (inverted capability `tag → [person_id]`,
+     filtered by `status` for who-can-cover-right-now) for capability coverage, and the
+     *who-does-what* Resource leg (`{project_id, role_on_project, allocation_pct}`) for project
+     coverage. delivery-engine reads the Resource allocations it already owns
+     (`project-entity-model.md` §6) joined to the capability index; the **capacity-model math
+     and all 7 modes (A–G) are unchanged** — this adds a coverage-query *answer*, not new capacity
+     logic. It is a **READ** of the view: no write to the roster, the Resource/Person entities, or
+     the graph (Resource records continue to be written via the existing §6 maintainer path, which
+     is entity maintenance, not a graph-view write).
    - **Buffer-consumption zone**: when an iteration-buffer figure is available, report buffer consumption in the 🟢/🟡/🔴 band per `estimation-standards.md` §4.1 and **name the active zone** with its decision rule. When no iteration-buffer figure exists, state the zone cannot be computed and recommend establishing it (zone a, ~15–30%) — do not default to GREEN.
    - **Tech-debt capacity floor**: compute the tech-debt **allocation ratio** (tech-debt-allocated ÷ sprint capacity) and render the 🟢/🟡/🔴 **floor-RAG** per `tech-debt-capacity.md` §1 (the floor *value* is owned by `sprint-defaults.md` §1.2 — referenced by role, never restated). On **🔴 RED (allocation < the floor)**, emit the **"tech debt under floor — capacity over-committed to new features"** warning and require an explicit PM override (**declared and RAID-logged**, per `tech-debt-capacity.md` §1) or re-scope to restore the slice — never silently absorb an under-floor plan. Calibrate the methodology-upper (🟡) edge from the existing `delivery_approach` enum; on absent `delivery_approach`, default to the canonical 15% floor and label the methodology `[ASSUMPTION – CONFIRM]`. When no tech-debt allocation is stated, flag that the floor cannot be verified, default to requiring ≥ the floor, and cite the canonical source — do not default the band to GREEN. Name it "tech-debt floor / allocation ratio" — never "debt budget overage" / "debt RAG"; this floor-RAG is orthogonal to the §4.1 buffer-consumption band and the `capacity-model.md` §9 demand-supply band.
    - **Proposed sprint scope**: prioritized list of items with story points (as ranges per step 3), assignees,
