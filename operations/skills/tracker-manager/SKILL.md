@@ -571,7 +571,7 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 These domain-specific anti-patterns coexist with the `### Guardrails` subsection above
 (platform-wide generic guardrails) and `## Reversibility Discipline` (decision-class
 output discipline). Each entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Evidence Gate bypass on a CLOSE action — INPUT

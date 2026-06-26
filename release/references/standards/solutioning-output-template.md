@@ -80,7 +80,7 @@ The `## Design Decisions` content bucket — emitted as `#### Design Decisions` 
 
 **Cross-references:**
 - [`decision-discipline.md` § 3](../../../core/disciplines/decision-discipline.md) — ADR threshold; M1/M2/M3 mechanisms
-- [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — anti-pattern catalog
+- [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — anti-pattern catalog
 
 ## Blast Radius
 
@@ -388,7 +388,7 @@ Stage 5 spokes use the scaffold below as starting draft. Replace bracketed place
 
 ## § 6. Failure Modes
 
-Domain-specific anti-patterns observed during Stage 5 spoke authoring. Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), each entry uses the 5-field template (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries a category tag.
+Domain-specific anti-patterns observed during Stage 5 spoke authoring. Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), each entry uses the 5-field template (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries a category tag.
 
 ### F-1. Empty Detail / over-structured admin (PROC)
 
@@ -466,7 +466,7 @@ Future revisions append rows here. Per workspace precedent (git is canonical ret
 - [`stage-io-contracts.md`](../../../core/schemas/stage-io-contracts.md) — Stage 5→6 boundary contract; consumed by `### Output for Stage 6` H3 format.
 - [`hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedure 3 Spoke Template — Chip-prompt injection point at Stage 5 entry.
 - [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md) — ADR threshold + M1/M2/M3 mechanisms referenced by `#### Design Decisions` content bucket spec.
-- [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — 5-field anti-pattern template applied in § 6 Failure Modes.
+- [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — 5-field anti-pattern template applied in § 6 Failure Modes.
 - [`upstream-reference-catalog.md`](../../../core/standards/upstream-reference-catalog.md) — Upstream-compatibility citation source for Cross-D scan.
 - [`release-notes-standard.md`](release-notes-standard.md) — Sibling K1 standards doc; Part 1 copy-paste scaffold pattern precedent.
 - [`canonical-skill-structure.md`](../../../core/standards/canonical-skill-structure.md) — Sibling K1 standards doc; H2 section-numbering convention precedent.

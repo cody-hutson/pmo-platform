@@ -188,7 +188,7 @@ The following are **NOT** valid uses of the Outcome field:
 
 ## 11. Failure modes
 
-Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
+Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
 
 | # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
 |---|---|---|---|---|---|---|
@@ -213,7 +213,7 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), 
 | Rollback semantics | [`autonomous-execution-model.md § Rollback Pattern`](../../../core/disciplines/autonomous-execution-model.md) | `**Outcome:** ROLLBACK` value is set after operator-authorized rollback per this pattern |
 | Single-source-of-truth discipline | [`duplicate-source-discipline.md`](../../../core/standards/duplicate-source-discipline.md) | RELEASE_LOG.md `**Outcome:**` field IS the register; no parallel duplicate in pipeline-event-log |
 | K1 placement | [`knowledge-architecture.md § 3`](../../../core/disciplines/knowledge-architecture.md) | K1 standards live at `core/standards/` |
-| Failure-mode schema | [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
+| Failure-mode schema | [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
 | Cross-issue (cycle-time) | `deployment-cycle-time.md` (sibling release) | Co-resident sibling field inside the same visible-H4 block |
 | Cross-issue (PARTIAL) | `partial-deployment-recovery.md` (sibling release) | This standard owns field schema; partial-deployment-recovery.md owns the value's recovery protocol |
 | Cross-issue (closeout) | `automated-closeout.sh` (sibling release) | Reads `**Outcome:**` field for closeout report |

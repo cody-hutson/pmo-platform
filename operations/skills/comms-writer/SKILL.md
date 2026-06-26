@@ -534,7 +534,7 @@ Hard rejections. If you catch yourself doing any of these, stop and fix:
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Escalation output emitted without a SIOR Recommendation + confidence level — OUT

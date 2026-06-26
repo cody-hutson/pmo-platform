@@ -72,7 +72,7 @@ These are the migrations this playbook generalizes from. Each is named descripti
 
 ## Anti-patterns
 
-Three migration-specific anti-patterns, each per the 5-field template in [`../../specs/failure-mode-standard.md`](../../specs/failure-mode-standard.md), with one category tag (TRIG / INPUT / PROC / OUT / HAND).
+Three migration-specific anti-patterns, each per the 5-field template in [`../../standards/failure-mode-standard.md`](../../standards/failure-mode-standard.md), with one category tag (TRIG / INPUT / PROC / OUT / HAND).
 
 ### Version-pinned-early — PROC
 

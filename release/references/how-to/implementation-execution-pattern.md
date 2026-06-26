@@ -200,7 +200,7 @@ The 7 steps above are the **reference catalog** (concept-by-tool). The actual ti
 
 ## Failure Modes
 
-Three domain-specific failure modes govern workflow execution. Each follows the 5-field conditional template per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md). G7 gate-enforcement in pmo-qa-auditor only fires on SKILL.md files — this doc is a reference workflow, not a skill, so ≥3 floor is authored here as principal-grade discipline rather than gate-enforced.
+Three domain-specific failure modes govern workflow execution. Each follows the 5-field conditional template per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md). G7 gate-enforcement in pmo-qa-auditor only fires on SKILL.md files — this doc is a reference workflow, not a skill, so ≥3 floor is authored here as principal-grade discipline rather than gate-enforced.
 
 ### Skipping write-verify under batch-completion pressure — PROC
 
@@ -272,7 +272,7 @@ This workflow has been demonstrated end-to-end executing a single real RT-1 fix 
 ## See Also
 
 - [`release/skills/implementation-planner/references/output-format-spec.md`](../../skills/implementation-planner/references/output-format-spec.md) — input contract (Spec 5).
-- [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — 5-field conditional template used by Failure Modes section above.
+- [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — 5-field conditional template used by Failure Modes section above.
 - [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) — reversibility tier vocabulary.
 - [`pipeline/stage-11-snapshot.md`](../pipeline/stage-11-snapshot.md) — Snapshot compression for git-native releases.
 - [`release/governance/release-process.md`](../../governance/release-process.md) — git-native compression model.

@@ -161,7 +161,7 @@ The following are **NOT** valid uses of this protocol:
 
 ## 11. Failure modes
 
-Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
+Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), every K1 standard documents ≥ 3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
 
 | # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
 |---|---|---|---|---|---|---|
@@ -182,7 +182,7 @@ Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), 
 | Stage 13 pipeline shard | [`pipeline/stage-13-close.md`](../pipeline/stage-13-close.md) § Phase A2 | Cross-reference to this standard for the enumerated procedure |
 | Chore PR convention | [`release-process.md`](../../governance/release-process.md) Stage 13 § Chore PR convention | Disposition summary lands in the Stage 13 chore PR body, never direct-to-main |
 | Single-source-of-truth discipline | [`duplicate-source-discipline.md`](../../../core/standards/duplicate-source-discipline.md) | Label IS the body-level current-state signal; no parallel label; no body field |
-| Failure-mode schema | [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
+| Failure-mode schema | [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
 | K1 placement | [`knowledge-architecture.md § 3`](../../../core/disciplines/knowledge-architecture.md) | K1 standards live at `core/standards/` |
 | Cross-issue (closeout) | `automated-closeout.sh` (sibling release) | Reads `status: deferred` label via `gh issue list --milestone X.Y --label "status: deferred"` |
 | Cross-issue (terminal-archive precedent) | Terminal-archive precedent | Distinct disposition pattern (terminal-archive — confirmed-obsolete); this standard's deferral path is the park-in-container default |
@@ -290,7 +290,7 @@ Forward-compat: §13 adds no schema field, no label, and no pipeline-event subty
 
 ### 13.10 Anti-Patterns
 
-Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), the following are **NOT** valid uses of the mid-pipeline deferral protocol. Each uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior) and a category tag (TRIG / INPUT / PROC / OUT / HAND). These are distinct from the § 11 release-boundary failure modes (which govern the Stage-13 §1–§12 case).
+Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), the following are **NOT** valid uses of the mid-pipeline deferral protocol. Each uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior) and a category tag (TRIG / INPUT / PROC / OUT / HAND). These are distinct from the § 11 release-boundary failure modes (which govern the Stage-13 §1–§12 case).
 
 | # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
 |---|---|---|---|---|---|---|

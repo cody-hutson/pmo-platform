@@ -21,7 +21,7 @@ Process step 3) points here for the full tables.
 - `../../../../release/references/pipeline/stage-05-solutioning.md` § 5.6 — the `### Cascade-Sweep`
   block schema, the T1/T2/T3 trigger conditions, and the value-scope derivative rule. G8 reads
   this block; it does not define a new schema.
-- `../../../specs/failure-mode-standard.md` — the `### Cascade-omission at count update — PROC`
+- `../../../standards/failure-mode-standard.md` — the `### Cascade-omission at count update — PROC`
   entry (the failure mode G8 detects) names G8 as the L5 detection surface.
 
 ---

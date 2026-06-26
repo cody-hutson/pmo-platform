@@ -910,7 +910,7 @@ The pmo-qa-auditor (QA Auditor — Add 8 failure mode detection) is **complement
 
 **Handoff specification for pmo-qa-auditor:** When Stage 4 Planning runs for pmo-qa-auditor, the release plan must direct:
 
-> *"Express the 8 failure-mode detectors using the 5-field conditional template and 5-category taxonomy per `pmo-platform/reference/specs/failure-mode-standard.md`."*
+> *"Express the 8 failure-mode detectors using the 5-field conditional template and 5-category taxonomy per `pmo-platform/reference/standards/failure-mode-standard.md`."*
 
 Each of pmo-qa-auditor's 8 detectors is written using this document's 5-field template when documented in `pmo-qa-auditor/SKILL.md`. Worked conversion for "Automation complacency" (category: PROC):
 

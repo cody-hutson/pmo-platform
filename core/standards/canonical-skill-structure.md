@@ -33,7 +33,7 @@ NEW skill creation. A skill may be authored via:
 - `pmo-skill-refiner` Mode 2 "Create New" (PMO wrapper that applies 7-field injection + pre-handoff Principal Standard gate)
 - Direct authoring
 
-PMO tooling does NOT gate the NEW-skill authoring path. **Rationale:** per D-Creator Option A, new skills cannot yet have chained dependencies that require coherence enforcement; the forcing function applies to modifications of the existing-skill surface. Direct authoring does NOT automatically satisfy [principal-standard-checklist.md](principal-standard-checklist.md) or [failure-mode-standard.md](../specs/failure-mode-standard.md); those are checked at PR review time and at `pmo-qa-auditor` invocation, not by this spec.
+PMO tooling does NOT gate the NEW-skill authoring path. **Rationale:** per D-Creator Option A, new skills cannot yet have chained dependencies that require coherence enforcement; the forcing function applies to modifications of the existing-skill surface. Direct authoring does NOT automatically satisfy [principal-standard-checklist.md](principal-standard-checklist.md) or [failure-mode-standard.md](../standards/failure-mode-standard.md); those are checked at PR review time and at `pmo-qa-auditor` invocation, not by this spec.
 
 ### Excluded skills
 
@@ -85,7 +85,7 @@ A skill MUST have a non-empty `reference/` subdirectory (≥1 `*.md` file) when 
 
 1. `wc -l SKILL.md` > **400**
 2. `wc -c SKILL.md` > **25600** (25 KB)
-3. The `## Domain-Specific Failure Modes` section has **≥ 4** entries (regex `^### .+ — (TRIG|INPUT|PROC|OUT|HAND)`, per [failure-mode-standard.md](../specs/failure-mode-standard.md)) **AND** the skill had `references/*.md` files in its baseline `.skill` package tarball
+3. The `## Domain-Specific Failure Modes` section has **≥ 4** entries (regex `^### .+ — (TRIG|INPUT|PROC|OUT|HAND)`, per [failure-mode-standard.md](../standards/failure-mode-standard.md)) **AND** the skill had `references/*.md` files in its baseline `.skill` package tarball
 
 ### Exemption
 
@@ -115,7 +115,7 @@ Version semantics — including bump criteria, backfill policy, and maintenance 
 
 ## §7 Failure-Mode Discipline
 
-Every skill must document ≥3 domain-specific failure modes per [failure-mode-standard.md](../specs/failure-mode-standard.md). Each entry uses the 5-field template (Signature, Conditional, Root cause, Mitigation, Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
+Every skill must document ≥3 domain-specific failure modes per [failure-mode-standard.md](../standards/failure-mode-standard.md). Each entry uses the 5-field template (Signature, Conditional, Root cause, Mitigation, Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
 
 **Structural validation** is already enforced by `pmo-qa-auditor` gate G7. This canonical spec ratifies that gate and extends deploy-time enforcement: Check 6 FAILs if `## Domain-Specific Failure Modes` is missing or has <3 entries.
 
@@ -168,4 +168,4 @@ This canonical spec is itself a governance document. Modifications require the "
 
 **Document Owner:** PMO Engineering
 **Status:** Active
-**Cross-references:** [version-field-semantics.md](version-field-semantics.md) · [principal-standard-checklist.md](principal-standard-checklist.md) · [failure-mode-standard.md](../specs/failure-mode-standard.md) · [reversibility-protocol.md](../specs/reversibility-protocol.md)
+**Cross-references:** [version-field-semantics.md](version-field-semantics.md) · [principal-standard-checklist.md](principal-standard-checklist.md) · [failure-mode-standard.md](../standards/failure-mode-standard.md) · [reversibility-protocol.md](../specs/reversibility-protocol.md)

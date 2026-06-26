@@ -570,7 +570,7 @@ and G4 gate algorithm.
 These domain-specific anti-patterns coexist with `## Evidence & Quality Rules` (platform-
 wide generic guardrails including SG-1/2/3) and `## Reversibility Discipline` (decision-
 class output discipline). Each entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### PROJECT.md populated with inferred fields without [ASSUMPTION – CONFIRM] label — INPUT

@@ -20,7 +20,7 @@ skill_discipline_migrated_v10_2: true
 > **See also:**
 > - [`references/domain-packs/README.md`](references/domain-packs/README.md) — domain-pack registry, shared schema, domain-detection rules.
 > - [`references/output-format-spec.md`](references/output-format-spec.md) — Edit-ready output contract (input contract for the downstream reference workflow).
-> - [`core/specs/failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — failure-mode format (governs `## Domain-Specific Failure Modes` section below).
+> - [`core/standards/failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — failure-mode format (governs `## Domain-Specific Failure Modes` section below).
 > - [`core/specs/reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) — reversibility tier vocabulary.
 > - [`release/references/how-to/implementation-execution-pattern.md`](../../references/how-to/implementation-execution-pattern.md) — downstream consumer (reference workflow).
 
@@ -388,7 +388,7 @@ Currently, the Calibration Context is loaded from the active pack's `operator_pr
 
 ## Domain-Specific Failure Modes
 
-These domain-specific anti-patterns coexist with `## Anti-Laziness Rules for the Remediation Planner` and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`core/specs/failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md). Examples reference the Copilot Builder pack (the original and most common application); the conditional grammar is domain-agnostic and applies equally to pmo-platform and generic packs. Placement after Anti-Laziness Rules and Reversibility Discipline follows the Batch 3 Finding F3 precedent for Copilot Builder skills — the section is additive, not a replacement for the Anti-Laziness Rules that already govern the planner's behavior.
+These domain-specific anti-patterns coexist with `## Anti-Laziness Rules for the Remediation Planner` and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`core/standards/failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md). Examples reference the Copilot Builder pack (the original and most common application); the conditional grammar is domain-agnostic and applies equally to pmo-platform and generic packs. Placement after Anti-Laziness Rules and Reversibility Discipline follows the Batch 3 Finding F3 precedent for Copilot Builder skills — the section is additive, not a replacement for the Anti-Laziness Rules that already govern the planner's behavior.
 
 ### Higher-numbered remediation type proposed when RT-1 closes the finding — PROC
 

@@ -2,7 +2,7 @@
 # Process-Flow Diagram Standards
 
 **Status:** Canonical
-**Owner:** `core/specs/process-flow-diagram-standards.md`
+**Owner:** `core/standards/process-flow-diagram-standards.md`
 **Introduced:** 2026-05-15
 **Consumers:** Every skill or reference doc that authors/modifies a process-flow diagram. The retrofit track consumes the Adoption § Exemptions Registry anchor.
 **Cross-references:** see § Related References at the foot of this file.
@@ -115,5 +115,5 @@ Inline options analysis (no separate ADR Issue — single reasonable approach pe
 
 - [`design-artifact-standard.md`](../standards/design-artifact-standard.md) — META / parent framework for all 7 design-artifact flow types; this standard governs the process-flow class specifically. Composed per `design-artifact-standard.md` § 6 Tool Selection.
 - [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md) — the platform's self-declared canonical anchor for cross-cutting process flows; reciprocates the inbound citation from its § Related References.
-- [`terminology-glossary.md`](terminology-glossary.md) — canonical term definitions (Function, Process, Methodology, Framework).
+- [`terminology-glossary.md`](../specs/terminology-glossary.md) — canonical term definitions (Function, Process, Methodology, Framework).
 - [`pipeline/README.md`](../../release/references/pipeline/README.md) — 13-stage pipeline reference directory.
