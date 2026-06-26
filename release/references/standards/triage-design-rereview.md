@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Triage→Design Re-Review Standard
 
 ## Purpose
@@ -56,7 +57,7 @@ Every requirement is evaluated against three named dimensions. Each dimension MU
 
 | Dim | Name | Definition | Required citations |
 |---|---|---|---|
-| **D1** | **Best practices** | Applicable patterns from platform reference docs that govern review/decision/principal/failure-mode/reversibility discipline. | Cite specific section(s) of [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md), [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md), [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md), [`principal-standard-checklist.md`](../../../core/standards/principal-standard-checklist.md), or [`AUDIT_FRAMEWORK.md`](../../../core/standards/AUDIT_FRAMEWORK.md) if invoked. "Platform conventions" alone is not a citation. |
+| **D1** | **Best practices** | Applicable patterns from platform reference docs that govern review/decision/principal/failure-mode/reversibility discipline. | Cite specific section(s) of [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md), [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md), [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md), [`principal-standard-checklist.md`](../../../core/standards/principal-standard-checklist.md), or [`AUDIT_FRAMEWORK.md`](../../../core/standards/AUDIT_FRAMEWORK.md) if invoked. "Platform conventions" alone is not a citation. |
 | **D2** | **Platform-localized knowledge** | Existing patterns, prior decisions, governance constraints, current architecture. | Cite specific files/sections (e.g., [`architecture-overview.md`](../../../core/disciplines/architecture-overview.md), governance file map in [`CLAUDE.md`](<OPERATOR_INSTANCE_CLAUDE_MD>)), closed ADR issue numbers, or recent merged releases by version. "Architecture" alone is not a citation. |
 | **D3** | **Learnings** | Outcomes from prior cycles (release retrospectives, deviation logs, post-deploy verification, calibration data, iteration logs, memory feedback). | Cite specific release version + retro section, deviation log entry in [`release/releases/plans/<vX.Y>_RELEASE_PLAN.md`](../../releases/plans/), post-deploy verification line in [`RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>), [`calibration-data.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/calibration-data.md) row, or [`iteration-log.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/iteration-log.md) row. "Prior experience" is not a citation. |
 
@@ -215,11 +216,11 @@ Full artifact format identical to § 1 Schema; effort tier may upgrade from Stag
 
 ## § 7 Effort-sizing
 
-Re-review artifact form scales with issue size and scope. The spoke determines tier from issue labels (`size:S/M/L/XL` + content scope) at the top of the re-review artifact. Tier downgrades require operator approval; tier upgrades are autonomous.
+Re-review artifact form scales with issue size and scope. The spoke determines tier from issue labels (`size:XS/S/M/L/XL` + content scope) at the top of the re-review artifact. Tier downgrades require operator approval; tier upgrades are autonomous.
 
 | Tier | Trigger | Artifact form |
 |---|---|---|
-| **Trivial** | Issue size = S AND scope = doc-only (no skill, no governance, no schema, no protocol change) | One-line-per-dimension artifact: each of D1 / D2 / D3 gets a single-line finding/verification with at least one citation. Per-requirement table optional. |
+| **Trivial** | Issue size = XS OR S AND scope = doc-only (no skill, no governance, no schema, no protocol change) — XS folds into Trivial alongside S because an XS-sized doc-only change carries the same minimal blast radius as S and warrants the same one-line-per-dimension form | One-line-per-dimension artifact: each of D1 / D2 / D3 gets a single-line finding/verification with at least one citation. Per-requirement table optional. |
 | **Standard** | Issue size = M OR scope touches governance / skill / schema / protocol | Full artifact with header metadata + per-requirement table + all 3 dimensions per requirement. |
 | **Complex** | Issue size = L/XL OR scope is cross-cutting (≥3 governance files) OR Solutioning activates with non-trivial blast radius | Standard artifact + cross-issue cross-reference section (citations to other issues in the same Milestone) + explicit blast-radius re-validation against the Solutioning Phase A3 output. |
 

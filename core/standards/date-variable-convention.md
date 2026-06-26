@@ -126,7 +126,7 @@ This convention applies to any Stage 5 spec meeting the trigger predicate. Cutov
 |---|---|---|
 | Stage 5 protocol | [`pipeline/stage-05-solutioning.md` § 6 Outputs](../../release/references/pipeline/stage-05-solutioning.md) | Thin cross-reference at output enumeration |
 | Stage 5 spoke prompt template | [`hub-spoke-bridge.md` Procedure 3](../../release/references/how-to/hub-spoke-bridge.md) | Inject convention reference alongside R1 Evidence-Grounding block |
-| Failure-mode catalog | [`failure-mode-standard.md`](../specs/failure-mode-standard.md) | Anti-pattern `utc-drift-spec-contradiction` (added by Engineering at Stage 6) |
+| Failure-mode catalog | [`failure-mode-standard.md`](../standards/failure-mode-standard.md) | Anti-pattern `utc-drift-spec-contradiction` (added by Engineering at Stage 6) |
 | Originating evidence | `pmo-platform/analysis/file-overlap-audit-2026-05-01/SUMMARY.md` § 1 | UTC drift incident |
 
 ## Version History

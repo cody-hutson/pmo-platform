@@ -89,6 +89,9 @@ No exemption-list file is created. The principle doc names `.claude/duplicate-so
 
 ## §7 Cross-references
 
+**Umbrella discipline (the broader authoring rule this register-or-remove principle is one facet of):**
+- [minimal-addition-discipline.md](../disciplines/minimal-addition-discipline.md) — the **umbrella authoring discipline** (add the minimum that carries the meaning, in service of *simplicity*) that this register-or-remove rule is **one facet** of (the duplication facet).
+
 **Consolidated guardrails (the three implicit anti-duplication rules this principle makes explicit):**
 - [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) line 134 — Pre-creation governance check (operative gate)
 - [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) line 135 — Intermediate-artifact discipline

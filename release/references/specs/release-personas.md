@@ -191,7 +191,7 @@ This variant applies when the release deliverable is a research artifact; the ba
 - Applies the 10 anti-laziness rules from [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) § 1 to every finding (no "looks good" verdicts; cite line + name root cause)
 - Produces 3 structured-list outputs per D-OutputContract:
   - **Premise-Rejection-Findings** — premises challenged with concrete counter-evidence; C3 classification per [`triage-design-rereview.md` § 3](../standards/triage-design-rereview.md) (PT-1/PT-2/PT-3/PT-4). A premise challenged specifically on **abstraction altitude** (per the scoped altitude exception in the anti-patterns below) is tagged a **Premise-Altitude-Finding** — an advisory altitude flag weighed by the operator at Collective Review scope-lock, never an autonomous reversal.
-  - **Failure-Mode-Findings** — failure modes identified per the 5-field template + 5-category tag from [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md)
+  - **Failure-Mode-Findings** — failure modes identified per the 5-field template + 5-category tag from [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md)
   - **Counter-Design-Findings** — alternative architectures with explicit trade-off matrices (Reversibility × Confidence × Blast radius × Upstream-compat)
 - Feeds findings into Collective Review as advisory input — Operator weighs at scope-lock decision per the Collective Review Protocol bullet on adversarial-review consumption
 

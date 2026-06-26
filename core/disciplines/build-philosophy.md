@@ -65,7 +65,7 @@ the value does not apply to that surface.
 | **Scalability** | `knowledge-architecture` · `universal-vs-localized-context` · ADR-006/007 | **GAP** | `methodology-parameterization-v1` | `composition-surface` boundary | **GAP** |
 | **BP — coding** | `domain-best-practices/software` | thin | (Stage-5/7 review) | n/a | n/a |
 | **BP — governance** | `domain-best-practices/governance` · `decision-discipline` | thin | `release-process` | n/a | n/a |
-| **BP — process** | (`discovery`/`decision`/`review` disciplines) | **GAP** | pipeline `stage-*` · `release-process` | n/a | **GAP** · *no `process.md` domain doc* |
+| **BP — process** | `domain-best-practices/process` · (`discovery`/`decision`/`review` disciplines) | thin | pipeline `stage-*` · `release-process` | n/a | n/a |
 | **Maintainability** | `duplicate-source-discipline` · `reference-durability-standard` · `framework-corpus-discipline` | **GAP** | cite-not-duplicate (ADR-003) | Check 9/11/13 · `doc-link-maintenance-protocol` | rules-mirror (Check 9) |
 | **Simplicity** | `software.md` §YAGNI · `principal-standard-checklist` | thin (ADR-020) | `release-process` Tier-1 `[ADJUST]` | minimal by design | **GAP** |
 | **Stability** | `reversibility-protocol` · `version-field-semantics` · `failure-mode-standard` · `canonical-skill-structure` | **GAP** | reversibility in stage outputs | ADR-014 tamper · `bypass-mode-readiness` · version-skew | Check 30 quoting (partial) |
@@ -76,16 +76,18 @@ the value does not apply to that surface.
 
 The matrix's headline is read **down the Agents column**: agents (skill-embedded
 subagents) inherit their host skill's discipline *indirectly* but have **no
-agent-specific enforcement** for Scalability, process best-practice, Maintainability,
+agent-specific enforcement** for Scalability, Maintainability,
 Stability, or read-before-edit. [ADR-020](../ADRs/ADR-020-agent-script-promotion-ladder.md)
 (agent-script promotion ladder) is the natural anchor to extend. **Slash-commands** are
 the second-thinnest column (GAP on Simplicity and partial on Track-all-edits for
 unregistered commands).
 
-These empty cells are the **prioritized gap backlog** — not omissions. Three are already
+These empty cells are the **prioritized gap backlog** — not omissions. Two remain
 in flight under the Knowledge-Architecture initiative (epic `knowledge-corpus`): the
-**process** best-practice domain doc, the **read-before-edit** general-enforcement
-codification, and the skill **sourcing** posture (ADR-023, below). The Agents-column gaps
+**read-before-edit** general-enforcement codification and the skill **sourcing** posture
+(ADR-023, below); the **process** best-practice domain doc has since shipped
+([`domain-best-practices/process.md`](../standards/domain-best-practices/process.md)),
+completing the three best-practice domain guides. The Agents-column gaps
 are logged for sequencing, not silently dropped (per the auto-logging rule in
 [`OPERATIONS.md`](../governance/OPERATIONS.md)).
 
@@ -97,10 +99,10 @@ terse):
 - **Scalability** — [`knowledge-architecture.md`](knowledge-architecture.md), [`universal-vs-localized-context.md`](../standards/universal-vs-localized-context.md), [ADR-006](../ADRs/ADR-006-skill-to-module-map.md) / [ADR-007](../ADRs/ADR-007-core-module-boundary.md), [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md).
 - **BP — coding** — [`domain-best-practices/software.md`](../standards/domain-best-practices/software.md).
 - **BP — governance** — [`domain-best-practices/governance.md`](../standards/domain-best-practices/governance.md), [`decision-discipline.md`](decision-discipline.md), [`release-process.md`](../../release/governance/release-process.md).
-- **BP — process** — pipeline [`stage-*.md`](../../release/references/pipeline/), [`release-process.md`](../../release/governance/release-process.md), [`discovery-discipline.md`](discovery-discipline.md) / [`decision-discipline.md`](decision-discipline.md) / [`review-discipline-principles.md`](review-discipline-principles.md). *Domain doc `core/standards/domain-best-practices/process.md` is a GAP (pending).*
+- **BP — process** — [`domain-best-practices/process.md`](../standards/domain-best-practices/process.md), pipeline [`stage-*.md`](../../release/references/pipeline/), [`release-process.md`](../../release/governance/release-process.md), [`discovery-discipline.md`](discovery-discipline.md) / [`decision-discipline.md`](decision-discipline.md) / [`review-discipline-principles.md`](review-discipline-principles.md).
 - **Maintainability** — [`duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md), [`reference-durability-standard.md`](../standards/reference-durability-standard.md), [`doc-link-maintenance-protocol.md`](../standards/doc-link-maintenance-protocol.md), [`framework-corpus-discipline.md`](../standards/framework-corpus-discipline.md), [ADR-003](../ADRs/ADR-003-operating-model-composition.md).
 - **Simplicity** — [`domain-best-practices/software.md`](../standards/domain-best-practices/software.md) §YAGNI, [`principal-standard-checklist.md`](../standards/principal-standard-checklist.md), [`release-process.md`](../../release/governance/release-process.md) (Tier-1 adjust), [ADR-020](../ADRs/ADR-020-agent-script-promotion-ladder.md).
-- **Stability** — [`reversibility-protocol.md`](../specs/reversibility-protocol.md), [`version-field-semantics.md`](../standards/version-field-semantics.md), [`failure-mode-standard.md`](../specs/failure-mode-standard.md), [`canonical-skill-structure.md`](../standards/canonical-skill-structure.md), [ADR-014](../ADRs/ADR-014-managed-section-two-hash-tamper-detection.md), [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md). Skill↔Anthropic sourcing posture: [`anthropic-base-vs-build-registry.md`](../specs/anthropic-base-vs-build-registry.md) (ledger) governed by [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md) (skill sourcing-coupling posture).
+- **Stability** — [`reversibility-protocol.md`](../specs/reversibility-protocol.md), [`version-field-semantics.md`](../standards/version-field-semantics.md), [`failure-mode-standard.md`](../standards/failure-mode-standard.md), [`canonical-skill-structure.md`](../standards/canonical-skill-structure.md), [ADR-014](../ADRs/ADR-014-managed-section-two-hash-tamper-detection.md), [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md). Skill↔Anthropic sourcing posture: [`anthropic-base-vs-build-registry.md`](../specs/anthropic-base-vs-build-registry.md) (ledger) governed by [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md) (skill sourcing-coupling posture).
 - **D1 — read-before-edit** — [`review-discipline-principles.md`](review-discipline-principles.md), [`principal-standard-checklist.md`](../standards/principal-standard-checklist.md), [`block-skill-direct-edit.sh`](../hooks/block-skill-direct-edit.sh) (skill-edit-path only; general enforcement is a GAP, in flight).
 - **D2 — track-all-edits** — [`skill-deployment.md`](../rules/skill-deployment.md), [`release-process.md`](../../release/governance/release-process.md), [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md), [`duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md) (Check 9/11/13).
 

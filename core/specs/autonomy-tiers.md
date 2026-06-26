@@ -251,7 +251,7 @@ A Tier 1 skill (per OPERATIONS.md skill classification — e.g., comms-writer) c
 
 - [reversibility-protocol.md](reversibility-protocol.md) — orthogonal companion (reversibility = how-much-ceremony per act); see § Composition with reversibility-protocol.md
 - [decision-discipline.md](../disciplines/decision-discipline.md) — § 2 cross-framework composition pattern; § 3 triage rules; § 4.1 observation log
-- [failure-mode-standard.md](failure-mode-standard.md) — 5-field template + 5 category tags used in § Failure modes (FM-1..FM-4)
+- [failure-mode-standard.md](../standards/failure-mode-standard.md) — 5-field template + 5 category tags used in § Failure modes (FM-1..FM-4)
 - [review-discipline-principles.md](../disciplines/review-discipline-principles.md) — review-class output discipline (parallel, no inheritance)
 - [OPERATIONS.md](../governance/OPERATIONS.md) — Skill Tier classification (1-2) + cascade rules C1-C7
 - [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) — File Management Protocol (Document Tier 1-4); Quality Standards (Reversibility discipline, No ungoverned changes); Prohibited Actions

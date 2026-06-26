@@ -316,7 +316,7 @@ and G4 gate algorithm.
 These domain-specific anti-patterns coexist with the `## Operating Principles` (platform-
 wide generic guardrails including read-only, protocol-referenced, evidence-grounded) and
 `## Reversibility Discipline` (decision-class output discipline). Each entry uses the
-5-field conditional template per `core/specs/failure-mode-standard.md`.
+5-field conditional template per `core/standards/failure-mode-standard.md`.
 pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Circular dependency silently bundled — PROC

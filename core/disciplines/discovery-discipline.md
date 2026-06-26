@@ -5,7 +5,7 @@ applies_to: hub-spoke-bridge.md Stage 4/5 phases, release-personas.md Stage 5, r
 parallel_to:
   - ../disciplines/decision-discipline.md
   - ../disciplines/review-discipline-principles.md
-  - ../specs/failure-mode-standard.md
+  - ../standards/failure-mode-standard.md
   - ../specs/reversibility-protocol.md
 source: premise-interrogation at Triage→Design (first concrete shipped instance) + initiative-roadmap F9 gap-analysis + Review Composition Framework (adjacent classes) + Stage 13 self-learnings (pattern-emergence instance) + 2026-04-25 forked-session observation surfacing the parts-without-whole gap
 ---
@@ -20,7 +20,7 @@ Shared discipline methodology for discovery-class work. When a consumer's primar
 |---|---|---|---|
 | `explanation/decision-discipline.md` | Decision | "What should we choose?" | At the decision point (recommendation drafted; operator about to act) |
 | `explanation/review-discipline-principles.md` | Review | "Is this correct?" | After the artifact exists (audit / QA / review of produced output) |
-| `specs/failure-mode-standard.md` | Failure-mode authoring | "What fails, why, and how?" | Pre-authoring (skill spec definition); enforced at G7 |
+| `standards/failure-mode-standard.md` | Failure-mode authoring | "What fails, why, and how?" | Pre-authoring (skill spec definition); enforced at G7 |
 | `specs/reversibility-protocol.md` | Tier classification | "What's the cost of being wrong?" | At decision-output time (paired with recommendation); enforced at G4 |
 | `explanation/discovery-discipline.md` (this file) | **Discovery** | **"What should this be? What don't we know?"** | **Before the artifact exists** (pre-shape, pre-decision, pre-review) |
 
@@ -437,7 +437,7 @@ Applies to all discovery activity going forward. The release that shipped this p
 
 - `../disciplines/decision-discipline.md` — decision-class output discipline (downstream of discovery)
 - `../disciplines/review-discipline-principles.md` — review-class output discipline (temporal-anchor distinction § 5.2)
-- `../specs/failure-mode-standard.md` — failure-mode authoring template (discovery surfaces failure modes ahead of authoring § 5.3)
+- `../standards/failure-mode-standard.md` — failure-mode authoring template (discovery surfaces failure modes ahead of authoring § 5.3)
 - `../specs/reversibility-protocol.md` — reversibility tier classification (discovery may shift tier § 5.4)
 - `release/references/standards/triage-design-rereview.md` — premise-interrogation operationalization (§ 6 currency-check schema; § 9 Tier 0 escalation template)
 - `../standards/initiative-roadmap-framework.md` §7.4 — F9 4-case gap-analysis diagnostic source (referenced in § 2.2; codified in the framework, instances operator-local)

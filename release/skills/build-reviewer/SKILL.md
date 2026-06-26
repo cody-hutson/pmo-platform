@@ -16,11 +16,12 @@ version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
+<!-- reference-durability: allow-link -->
 
 > **See also:**
 > - [`core/disciplines/review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) — shared review discipline (anti-laziness rules, root-cause requirement, 6-deliverable output structure, reviewer calibration, anti-patterns for reviewers).
 > - [`references/dimension-packs/README.md`](references/dimension-packs/README.md) — dimension-pack registry and domain-detection rules.
-> - [`core/specs/failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — failure-mode format (governs `## Domain-Specific Failure Modes` section below).
+> - [`core/standards/failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — failure-mode format (governs `## Domain-Specific Failure Modes` section below).
 > - [`core/specs/reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) — reversibility tier vocabulary (governs Reversibility Discipline section below).
 
 # Build Reviewer — Pluggable-Domain Production-Readiness Review
@@ -175,7 +176,7 @@ The following 3 dimensions extend the pack-specific dimensions with principal-le
 
 These domain-specific anti-patterns coexist with `## Review Discipline` and
 `## Reversibility Discipline`. Each entry uses the 5-field conditional template per
-`core/specs/failure-mode-standard.md`. Placement after Review Discipline
+`core/standards/failure-mode-standard.md`. Placement after Review Discipline
 and Reversibility Discipline follows the Batch 3 Finding F3 precedent for Copilot
 Builder skills — the section is additive, not a replacement for the review discipline
 that already governs review behavior.

@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Execution Framework
 
 ## Purpose
@@ -282,7 +283,7 @@ Execution tools and skills that "implement the framework" MUST:
 
 ## Failure Modes
 
-Per [failure-mode-standard.md](../specs/failure-mode-standard.md), this framework authors 3 domain-specific failure modes using the 5-field template (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response). Tags follow the `failure-mode-standard.md` category taxonomy: TRIG (triggering), INPUT (input handling), PROC (processing), OUT (output), HAND (handoff).
+Per [failure-mode-standard.md](../standards/failure-mode-standard.md), this framework authors 3 domain-specific failure modes using the 5-field template (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response). Tags follow the `failure-mode-standard.md` category taxonomy: TRIG (triggering), INPUT (input handling), PROC (processing), OUT (output), HAND (handoff).
 
 ### FM-EF-1 [OUT] — Tool confused with Framework
 
@@ -320,4 +321,4 @@ Per [failure-mode-standard.md](../specs/failure-mode-standard.md), this framewor
 - [implementation-execution-pattern.md](../../release/references/how-to/implementation-execution-pattern.md) — another example Tool-layer implementation (retrofit-citation candidate)
 - [release-personas.md](../../release/references/specs/release-personas.md) — Persona source (Dimension 2 consumer)
 - [`release/governance/release-process.md`](../../release/governance/release-process.md) — Governance layer
-- [failure-mode-standard.md](../specs/failure-mode-standard.md) — 5-field template + category tags used in § Failure Modes
+- [failure-mode-standard.md](../standards/failure-mode-standard.md) — 5-field template + category tags used in § Failure Modes

@@ -94,3 +94,13 @@ release/references/pipeline/stage-02-triage.md
 # re-flagging pre-existing constructs surfaced incidentally by that edit.
 core/disciplines/five-function-spine-and-process-flows.md
 core/standards/subagent-security-posture.md
+
+# Mermaid hex-color grammar table false-positive. process-flow-diagram-standards.md
+# documents the palette (`#28A745` / `#17A2B8` / `#6C757D`) in a markdown table; the
+# positional issue-ref detector's `#[0-9]+` matcher reads the hex prefixes as issue
+# refs (#28/#17/#6). The corpus-hygiene release relocated this file specs/->standards/,
+# which re-presents it as added content and re-scans the pre-existing palette table.
+# Hex are color codes, not issue references, and the issue-ref class has no per-file
+# marker, so the path allowlist is the sanctioned exemption. (Gate-hardening follow-up
+# filed to exclude hex from ISSUEREF_RE, after which this entry can be removed.)
+core/standards/process-flow-diagram-standards.md

@@ -9,6 +9,7 @@ consumers: "release/governance/release-process.md Stage 12 § Self-repair (cross
 glossary_anchor: "(none)"
 version: v12.12
 ---
+<!-- reference-durability: allow-link -->
 
 # Partial Deployment Recovery
 
@@ -173,7 +174,7 @@ Per [`RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Rollback pr
 
 ## 9. Failure modes
 
-Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), every K1 standard documents ≥3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
+Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), every K1 standard documents ≥3 domain-specific "do NOT do X when Y, because Z" scenarios distinct from platform-wide guardrails. Each entry uses the 5-field schema (Signature / Conditional / Root cause / Mitigation / Principal-vs-junior response) and carries one of 5 category tags (TRIG / INPUT / PROC / OUT / HAND).
 
 | # | Tag | Signature | Conditional | Root cause | Mitigation | Principal-vs-junior response |
 |---|---|---|---|---|---|---|
@@ -213,7 +214,7 @@ decision-outcome-tracking.md (sibling) declares a PARTIAL outcome value for the 
 | Rollback procedure authority | [`RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Rollback protocol | Canonical rollback procedure including snapshot-restore semantics for Cowork's non-git surface |
 | Rollback skill entrypoint | [`release-executor` SKILL.md](../../skills/release-executor/SKILL.md) Mode C | Existing rollback entrypoint; this standard does NOT modify Mode C semantics |
 | Fix-forward precedent | [`pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md) § Phase J.5 rebuild-then-commit pattern | Rebuilt-package commit pattern; structurally a fix-forward primitive for cascade-modified-package class |
-| Failure-mode schema | [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
+| Failure-mode schema | [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
 | Chore PR convention | [`release-process.md`](../../governance/release-process.md) Stage 13 § Chore PR convention | Deployment Log Result field updates land via chore PR, never direct-to-main |
 | K1 placement | [`knowledge-architecture.md § 3`](../../../core/disciplines/knowledge-architecture.md) | K1 standards live at `core/standards/` |
 | Cross-issue (PARTIAL semantics) | `decision-outcome-tracking.md` (sibling release) | decision-outcome-tracking.md defines the Outcome field; this standard defines PARTIAL's recovery semantics |

@@ -179,7 +179,7 @@ These are hard rejections — the suite-wide standard (the workspace-global CLAU
 
 ## Domain-Specific Failure Modes
 
-These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md), in the detection-grade signal → anti-pattern → corrective framing, and carries one category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
+These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md), in the detection-grade signal → anti-pattern → corrective framing, and carries one category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Authorizing deploy without an approved plan + Dry-Run Record / Stage-9 GO — PROC
 

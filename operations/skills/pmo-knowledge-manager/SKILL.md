@@ -137,7 +137,7 @@ Hard rejections — the suite-wide standard plus the role's own:
 
 ## Domain-Specific Failure Modes
 
-These coexist with `## Guardrails` (platform-wide) and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
+These coexist with `## Guardrails` (platform-wide) and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Authoring a knowledge asset when a governed home already exists — TRIG
 

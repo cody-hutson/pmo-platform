@@ -114,9 +114,9 @@ The model organizes ownership along a **single accountability root** (Workspace 
 │  `owner` col (col 11 of        │    │  `owner:` frontmatter field    │
 │  11-col schema)                │    │                                │
 │                                │    │  Currently 4 docs populated;   │
-│  All 17 seed rows +            │    │  ~20 backfill deferred         │
-│  4 new framework rows          │    │                                │
-│  populated                     │    │                                │
+│  Every catalogued row carries  │    │  ~20 backfill deferred         │
+│  an `owner` value (catalog =   │    │                                │
+│  source of truth)              │    │                                │
 └────────────────────────────────┘    └────────────────────────────────┘
        │                                       │
        │  Conflict resolution: registry WINS   │
@@ -144,7 +144,7 @@ An `owner` field value uses the format: `<owner-class>:<owner-identifier>`. For 
 
 | Tier | Storage location | Authoritative? | Scope at ship |
 |---|---|---|---|
-| **Tier 1 — Registry** | [`framework-catalog.md`](../specs/framework-catalog.md) `owner` column (col 11 of 11-col schema) | **YES** (wins on conflict) | All 21 ship framework-catalog entries (17 seed rows + 4 new framework rows: practice-efficacy-framework, review-composition-framework, initiative-roadmap-framework, km-governance-framework) |
+| **Tier 1 — Registry** | [`framework-catalog.md`](../specs/framework-catalog.md) `owner` column (col 11 of 11-col schema) | **YES** (wins on conflict) | Every catalogued framework row carries an `owner` value — the [`framework-catalog.md`](../specs/framework-catalog.md) catalog is the live source of truth for which frameworks exist and their owners (no row count is restated here; it drifts as frameworks are added) |
 | **Tier 2 — Frontmatter cache** | K1 reference doc YAML frontmatter `owner:` field | NO (mirrors registry; for in-context discoverability) | 4 K1 reference docs currently carry `owner:` frontmatter (framework-catalog.md, PMO_Platform_Template.md, framework-corpus-discipline.md, template-protocol.md); ~20 others deferred — backfill out of scope for this release (separate Issue + plan for a future release) |
 
 **Conflict resolution.** If the framework-catalog `owner` column and a per-doc frontmatter `owner:` field disagree, the framework-catalog row WINS. Frontmatter cache MUST be amended to match. Drift detection for this consistency check is a future enhancement (parallel to existing `deploy.sh` Check 18b for `framework_version_anchor:`); not shipped.
@@ -346,7 +346,7 @@ The ownership-class semantics defined in §2 propagate into [`framework-catalog.
 
 ### §7.1 Existing state at ship
 
-[`framework-catalog.md`](../specs/framework-catalog.md) col 11 (`owner`) IS the authoritative ownership registry for catalogued frameworks per §2.4 Tier 1. All 17 seed rows are populated with `Workspace owner ([OPERATOR_NAME])` (operator-class bare form). The 4 new framework rows (practice-efficacy-framework, review-composition-framework, initiative-roadmap-framework, km-governance-framework) are added by their respective release commits, also populated with the operator-class bare form. This framework does NOT modify the schema; it DOCUMENTS the owner-column semantics + the owner-class enum that future rows MUST conform to (governance-discipline language).
+[`framework-catalog.md`](../specs/framework-catalog.md) col 11 (`owner`) IS the authoritative ownership registry for catalogued frameworks per §2.4 Tier 1 — that catalog is the live source of truth for which frameworks exist and their owners (this framework does not restate the row count, which drifts as frameworks are added). Every catalogued row is populated with an owner value; operator-owned rows use `Workspace owner ([OPERATOR_NAME])` (operator-class bare form), and new framework rows are added by their respective release commits in the same bare form. This framework does NOT modify the schema; it DOCUMENTS the owner-column semantics + the owner-class enum that future rows MUST conform to (governance-discipline language).
 
 ### §7.2 Adding new framework rows
 

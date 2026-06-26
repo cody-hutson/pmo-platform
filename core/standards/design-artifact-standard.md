@@ -17,7 +17,7 @@ This standard is the **META framework** governing design-artifact discipline. It
 
 | Concern owned by THIS standard | Concern delegated to per-class standards |
 |---|---|
-| When to produce an artifact (activation) | How to draw a process-flow diagram → [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md) |
+| When to produce an artifact (activation) | How to draw a process-flow diagram → [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) |
 | When to refresh an artifact (Stage 13 G-CL6) | Mermaid syntax, color/shape grammar, swimlane idiom → `process-flow-diagram-standards.md` |
 | Where to store artifacts (hybrid model) | Per-class rendering rules for architecture / concept-model classes → this standard § 6 |
 | Naming convention | Per-class rendering rules for data-flow class → this standard § 6 |
@@ -26,7 +26,7 @@ This standard is the **META framework** governing design-artifact discipline. It
 | Ownership + agent read/write | — |
 | Refresh-gate (G-CL6 in `gate-criteria-spec.md`) | — |
 
-**Non-goal:** This standard does NOT replace [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md). It composes with it. The existing standard remains the canonical authority for Mermaid syntax, swimlane notation, color/shape grammar, and the diagram-form decision rule when the flow class is process-flow.
+**Non-goal:** This standard does NOT replace [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md). It composes with it. The existing standard remains the canonical authority for Mermaid syntax, swimlane notation, color/shape grammar, and the diagram-form decision rule when the flow class is process-flow.
 
 **Audience:** Stage 5 Solutioning spoke (produces artifacts) + Stage 13 Close spoke (refreshes artifacts) + release-plan author (declares Tier-A activated artifacts).
 
@@ -36,7 +36,7 @@ This standard is the **META framework** governing design-artifact discipline. It
 |---|---|---|---|---|---|
 | **Architecture** | Structural map of files, layers, components, or systems | ASCII tree in plain fenced code block | Embedded in parent doc by default | Section anchor in parent | [`architecture-overview.md`](../disciplines/architecture-overview.md), [`operating-model.md`](../disciplines/operating-model.md) |
 | **Data flow** | Producer→consumer relationships, schemas, contracts | Markdown tables; Mermaid when ≥2 actors | Embedded in parent doc | Section anchor in parent | [`per-skill-output-contracts.md`](../schemas/per-skill-output-contracts.md), [`stage-io-contracts.md`](../schemas/stage-io-contracts.md), [`tracker-schemas.md`](../schemas/tracker-schemas.md) |
-| **Agent process** | Steps an agent (skill, hub, spoke) takes through a workflow | Mermaid or ASCII flow-block per [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md) decision rule | Embedded in parent doc (skill SKILL.md, pipeline-stage doc) | Section anchor in parent | `process-flow-diagram-standards.md` examples |
+| **Agent process** | Steps an agent (skill, hub, spoke) takes through a workflow | Mermaid or ASCII flow-block per [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) decision rule | Embedded in parent doc (skill SKILL.md, pipeline-stage doc) | Section anchor in parent | `process-flow-diagram-standards.md` examples |
 | **Human process** | Steps a human operator takes through a workflow | Same as agent process | Same | Same | Same |
 | **Concept model** | Named structural concept and its relationships | ASCII tree + structured tables | Embedded in parent doc (explanation/ folder) | Section anchor in parent | [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md), [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) |
 | **Skill flow** | Mode-routing, internal phases, or invocation flow for a skill | Mermaid OR Mode-card tables per `process-flow-diagram-standards.md` | Co-located: `{core,operations,release}/skills/<skill>/SKILL.md` (embedded) or `{core,operations,release}/skills/<skill>/diagrams/` (dedicated, rare) | `skill-flow-<skill-name>.md` (dedicated); section anchor (embedded) | `pmo-skill-refiner/SKILL.md`, `delivery-engine/SKILL.md` |
@@ -49,7 +49,7 @@ For each class, the tool column names the source-of-truth format. All formats ar
 **Decision:** Hybrid co-location/centralized.
 
 - **Centralized at `core/diagrams/`** for cross-cutting / platform-anchor diagrams that are referenced from **≥3 parent docs**.
-- **Embedded in parent doc** for diagrams that exist primarily to explain a specific doc's content (the dominant existing pattern — Mermaid blocks in [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md), ASCII trees in [`architecture-overview.md`](../disciplines/architecture-overview.md)).
+- **Embedded in parent doc** for diagrams that exist primarily to explain a specific doc's content (the dominant existing pattern — Mermaid blocks in [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md), ASCII trees in [`architecture-overview.md`](../disciplines/architecture-overview.md)).
 - **Co-located at `{core,operations,release}/skills/<skill>/diagrams/`** for skill-specific flow diagrams when the diagram is owned by the skill's behavior, not a cross-cutting concern.
 
 **Centralization-test (the only rule that triggers a dedicated diagram file in `core/diagrams/`):** A diagram is centralized only when it is referenced from ≥3 distinct parent docs. Below the threshold, embed.
@@ -106,7 +106,7 @@ The current file is the current state. Git is the version database. This matches
 
 | Flow class | Tool | Authoritative standard | Rationale |
 |---|---|---|---|
-| Agent process | Mermaid (≥1 gate/actor) OR ASCII flow-block (linear) | [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md) | Defers to existing canonical authority. No new tool decision. |
+| Agent process | Mermaid (≥1 gate/actor) OR ASCII flow-block (linear) | [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) | Defers to existing canonical authority. No new tool decision. |
 | Human process | Same as agent process | Same | Same. |
 | Skill flow | Same as agent process; OR Mode-card tables when modes are the dominant structure | Same | Same. |
 | Decision tree | Mermaid (gate nodes) per `process-flow-diagram-standards.md` decision rule | Same | Same. |
@@ -262,7 +262,7 @@ Revisions are tracked in git history. Per § 5, git history is the canonical ret
 
 ## Related References
 
-- [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md) — canonical authority for the process-flow class (Mermaid syntax, swimlane idiom, color/shape grammar). Composed per § 6 Tool Selection.
+- [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) — canonical authority for the process-flow class (Mermaid syntax, swimlane idiom, color/shape grammar). Composed per § 6 Tool Selection.
 - [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) — canonical schema for Gate 13 G-CL6 row + self-repair action.
 - [`pipeline/stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) — Stage 5 PRODUCES surface (Phase A6).
 - [`pipeline/stage-13-close.md`](../../release/references/pipeline/stage-13-close.md) — Stage 13 REFRESH-GATE surface (Phase A5 G-CL6).

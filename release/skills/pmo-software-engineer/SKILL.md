@@ -113,7 +113,7 @@ These are hard rejections — the suite-wide standard plus the role's own:
 
 ## Domain-Specific Failure Modes
 
-These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
+These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Planner logic re-implemented inside the Specialist — PROC
 

@@ -10,7 +10,7 @@
 - [`methodology-archetype-matrix.md`](methodology-archetype-matrix.md) — per-archetype variation table (lifecycle / ceremonies / artifacts / cadence / consumers / sample-types / distinguishing-constraint)
 - [`terminology-glossary.md`](../../../core/specs/terminology-glossary.md) — canonical definitions of Process / Methodology / Framework (owned by terminology-glossary.md)
 - [`OPERATIONS.md § Methodology Awareness Protocol`](../../../core/governance/OPERATIONS.md) — skill consumption rule
-- [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — 5-field template + 5-category taxonomy
+- [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — 5-field template + 5-category taxonomy
 - [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md) — § 4.2 emergence rule (governance-promotion of recurring Custom variants)
 
 ---
@@ -242,7 +242,7 @@ Stage 9 operator verifies pickup-readiness per AC-R3.
 
 ## 6. Failure Modes (domain-specific)
 
-Per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) 5-field template + 5-category taxonomy. Five failure modes the methodology parameterization creates. Future skills (e.g., a `methodology-aware` audit) and `pmo-qa-auditor` consumers cite these when reviewing skill outputs.
+Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) 5-field template + 5-category taxonomy. Five failure modes the methodology parameterization creates. Future skills (e.g., a `methodology-aware` audit) and `pmo-qa-auditor` consumers cite these when reviewing skill outputs.
 
 ### 6.1 Methodology conflation — INPUT
 

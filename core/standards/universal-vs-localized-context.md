@@ -200,7 +200,7 @@ The Q1/Q2/Q3 ordering is the §10.2 decision tree formalized as prose. The §5 e
 
 ### §10.2 Decision tree
 
-The decision tree governs Stage 6 authoring + Stage 5 design selection of which replacement pattern (R1–R4) applies to a given `#N` instance. Gate nodes encode the §10.1 rubric; branches encode the replacement choice. Per [`process-flow-diagram-standards.md`](../specs/process-flow-diagram-standards.md) decision rule (≥1 gate, ≥1 actor): mermaid with gate nodes.
+The decision tree governs Stage 6 authoring + Stage 5 design selection of which replacement pattern (R1–R4) applies to a given `#N` instance. Gate nodes encode the §10.1 rubric; branches encode the replacement choice. Per [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) decision rule (≥1 gate, ≥1 actor): mermaid with gate nodes.
 
 ```mermaid
 flowchart TD

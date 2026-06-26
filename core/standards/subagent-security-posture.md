@@ -206,7 +206,7 @@ This counter-design sidesteps the unknown-upstream-semantic gap entirely: regard
 
 ---
 
-## § 6. Failure Modes (per [`failure-mode-standard.md`](../specs/failure-mode-standard.md) 5-field template)
+## § 6. Failure Modes (per [`failure-mode-standard.md`](../standards/failure-mode-standard.md) 5-field template)
 
 ### FM-1 — Subagent attempts recursive spawn — TRIG
 

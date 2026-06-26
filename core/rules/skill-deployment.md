@@ -65,16 +65,17 @@ roster; `deploy.sh --check` Check 5 asserts they match the directory listings at
 
 **Count convention (derive from the arrays; do not hardcode a number here —
 Check 5(c) forbids it).** Three coherent totals, each derived from a different
-array view:
+array view. The array contents are the only source of truth — read them in
+`deploy.sh`; no literal count is maintained here:
 
-- **Deployed roster** = `OPERATIONS_SKILLS` (12) + `RELEASE_SKILLS` (6) +
-  `CORE_SKILLS` (3) = the deployed-skill set. Every member has a `.skill`
-  package in `packages/` (package-freshness enforced by Check 7), so the package
-  count equals the deployed-roster size.
-- **Directory listing** = deployed roster + `CANARY_SKILLS` (1). The canary adds
-  one source-only directory under `release/skills/` with no package (ADR-04), so
-  the directory total is one more than the deployed/package total. Check 5
-  reconciles this set against the on-disk directories.
+- **Deployed roster** = `OPERATIONS_SKILLS` + `RELEASE_SKILLS` + `CORE_SKILLS` =
+  the deployed-skill set (the concatenation of the three module arrays). Every
+  member has a `.skill` package in `packages/` (package-freshness enforced by
+  Check 7), so the package count equals the deployed-roster size.
+- **Directory listing** = deployed roster + `CANARY_SKILLS`. The canary adds
+  source-only directories under `release/skills/` with no package (ADR-04), so
+  the directory total exceeds the deployed/package total by the canary count.
+  Check 5 reconciles this set against the on-disk directories.
 - **`SUPPLEMENTARY_SKILLS`** (`pmo-skill-refiner`, `prompt-builder`) is a *subset
   annotation* of the module arrays — it flags which already-rostered skills carry
   supplementary content beyond `SKILL.md` (full-tree copy on deploy). It is **not
@@ -138,15 +139,26 @@ Manual explicit-name deploys install each named skill's package too. Running
 `.skill` package alongside its source dir, so `./deploy.sh --check` Check 2
 reports OK for those packages (it no longer leaves them uninstalled). A
 source-only skill with no package — the canary — is skipped; only skills that
-have a package get one. The explicit equivalent of the auto-bootstrap is the
-full roster by name:
+have a package get one.
+
+The explicit equivalent of the auto-bootstrap is the full roster by name. Do
+not hand-maintain that name list here — it would drift from the arrays (the same
+drift class Check 5 guards against). Derive the names from the module arrays in
+`deploy.sh` at the moment you need them, then pass them to an explicit-name
+deploy:
 ```bash
-./deploy.sh --deploy artifact-generator build-reviewer change-management comms-writer \
-  daily-status delivery-engine eval-writer file-router implementation-planner \
-  pmo-process-designer pmo-qa-auditor pmo-skill-editor pmo-skill-refiner \
-  pmo-technical-analyst ppm-agent project-initiator prompt-builder \
-  release-executor release-planner tracker-manager weekly-status-rollup
+# Extract the OPERATIONS_SKILLS + RELEASE_SKILLS + CORE_SKILLS array contents
+# from deploy.sh (text-extraction — does NOT execute deploy.sh) and feed the
+# array-derived roster to an explicit-name deploy. CANARY_SKILLS is source-only
+# (no package, ADR-04) and is intentionally excluded by listing only the three
+# module arrays.
+roster=$(awk '/^(OPERATIONS|RELEASE|CORE)_SKILLS=\(/{f=1;next} f&&/^\)/{f=0} \
+  f&&NF&&$0!~/^[[:space:]]*#/{print $1}' core/deploy/deploy.sh)
+./deploy.sh --deploy $roster
 ```
+Equivalently — and simpler — `./deploy.sh --all` deploys the same array-derived
+roster (and all packages) in one command without re-listing any names; prefer it
+when you just want the full roster.
 
 After bootstrap, a bare `./deploy.sh --deploy` reverts to incremental
 tag-diff deployment (the populated mirror is no longer "empty"), keeping the
