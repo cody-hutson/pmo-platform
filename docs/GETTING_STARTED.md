@@ -1,4 +1,6 @@
 # GETTING_STARTED.md — pmo-platform
+<!-- repo-integrity: allow-memory-ref -->
+<!-- §7 names the schema field `project_owner_external` (ADR-040), which matches the operator-memory-slug regex but is a schema field, not a memory reference. Mirrors the markers on core/schemas/project-schema.md + core/disciplines/project-entity-model.md. -->
 
 > The "try this" companion to [INSTALL.md](INSTALL.md) ("do this") and [workspace-setup.md](workspace-setup.md) ("why this").
 > Audience: operators who completed INSTALL.md and want a first hands-on touch.
