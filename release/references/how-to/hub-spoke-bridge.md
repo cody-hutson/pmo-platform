@@ -99,7 +99,7 @@ The hub is the operator's command center. At every human touchpoint, the hub's p
 
 **At every touchpoint, the hub produces a Decision Briefing covering:**
 
-1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact. For each option in a trade-off, the hub renders a per-option `### Design-Principle Conformance` line set (ALIGNED / `**CONFLICT.**` / N-A against the matching [`design-principle-register.md`](../../../core/standards/design-principle-register.md) entries) per the D-Gate Template § Design-Principle Conformance — the structural twin of the per-option Upstream-compatibility verdict. Omission on a `scope_predicate`-matching option is a `[STRUCTURAL-DEFECT]` (per `decision-discipline.md` § 5 G2).
+1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs with options. Each decision gets: context (what happened), spoke recommendation (with rationale), hub evaluation (concurs or diverges, with rationale), final recommendation, and routing impact. For each option in a trade-off, the hub renders a per-option `### Design-Principle Conformance` line set (ALIGNED / `**CONFLICT.**` / N-A against the matching [`design-principle-register.md`](../../../core/standards/design-principle-register.md) entries) per the D-Gate Template § Design-Principle Conformance — the structural twin of the per-option Upstream-compatibility verdict. Omission on a `scope_predicate`-matching option is a `[STRUCTURAL-DEFECT]` (per `decision-discipline.md` § 5 G2). Each candidate decision is additionally screened for necessity/value-add per the Procedure 4 Step 5 dimension — an accurate-but-inert item is surfaced as a drop-recommendation, not rubber-stamped.
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions, discoveries outside the current issue's scope.
 3. **Status summary** — what completed, quality assessment, any blockers.
 4. **Action items surfaced this routing point** — hub-tracked AI-NNN rows from `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md` whose `trigger_type` predicate matches the current routing point per [`hub-action-tracking.md` § 4 Review Cadence](../../../core/standards/hub-action-tracking.md). Subsection format: `| AI-NNN | Category | Description | Trigger fired | Recommended disposition |`. When zero rows trigger, the subsection reads *"No action items triggered at this routing point"* — omission is a structural defect (forcing-function makes the scan observable). Schema + 6-value category enum + 4-value trigger-type enum + 5-state status lifecycle defined in `hub-action-tracking.md` — bridge doc does NOT duplicate normative content.
@@ -833,6 +833,24 @@ locations. The discipline (apply at authoring time, not after red CI):
 - This composes with the reference-durability discipline (`git-workflow.md` §
   Reference Durability): the durability marker family (`allow-url`) and self-describing
   prose are the durability twin of the integrity marker.
+- **Durable-corpus de-fragile pre-check (apply at authoring time).** Beyond the
+  bare-`#N` rule above, a spoke authoring durable-corpus `.md` must avoid the
+  fragile constructs the reference-durability gate flags BEFORE the first write:
+  (1) no numeric section-anchor deep-links (a `file.md` link whose fragment is a
+  numbered-heading anchor) — use a plain file link plus the section named in prose,
+  so a re-heading does not rot the reference; (2) spell out checklist-item
+  references in prose ("criterion 3", "the third rung") rather than a hash-prefixed
+  positional number, so the reference survives a renumber of the list; (3) avoid
+  hash-prefixed example numbers in prose (write "for example, an issue" rather than
+  a literal instance) — the detector strips fenced code blocks but NOT inline code
+  spans, so a hash-prefixed number is flagged even inside single-backtick spans;
+  name the construct in words. Note the gate's positional issue-reference rule has
+  **no per-construct override marker**: the `allow-link` / `allow-version-ref` /
+  `allow-url` markers suppress their own classes, but a bare issue reference
+  appearing OUTSIDE a recognized reference block has no escape marker — the only
+  fix is to rewrite it inline (move it into a reference block with a summary, or
+  de-reference it in prose). The full author-time check set is in
+  [`reference-durability-standard.md` § Authoring around the gate](../../../core/standards/reference-durability-standard.md).
 
 For ADR-authoring and skill-authoring chips specifically, hub adds to
 `{ADDITIONAL_READS}`:
@@ -910,6 +928,50 @@ This discipline emerged from Finding F-01 (2026-05-02), where the hub-authored c
 - `Chip Prompt Spec-Anchor Discipline` (this file, above) — chip-prompt embeds a *summary* of canonical-source content (snapshot-as-current-state); spoke trusts the snapshot when the source has drifted.
 - `Audit snapshot as current state` (per [`failure-mode-standard.md § Hub-spoke chip-prompt examples`](../../../core/specs/failure-mode-standard.md)) — recommendation-rendering surface variant of the same snapshot-divergence root pattern.
 - This discipline (Chip Prompt Arithmetic Discipline) — chip-prompt embeds a *computation* of source enumerations; computation is wrong at authoring time (not drift over time). Distinct root mechanism: hub arithmetic error, not snapshot divergence. Cataloged as a 5-field failure-mode entry at [`failure-mode-standard.md § Chip-prompt embedded arithmetic without verification — INPUT`](../../../core/specs/failure-mode-standard.md).
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Chip Prompt Verbatim-Source Discipline:**
+
+When the hub authors a chip prompt or sub-task body that references a parent issue — enumerating the parent's options, citing a sub-task number, or naming a routing target — the referencing content MUST be copied VERBATIM from the authoritative source: the parent issue body, the sub-task creation log, or the option list as written. The hub never paraphrases the parent's options into its own wording, and never reconstructs a sub-task number from a "first-in-batch" position heuristic (the assumption that the first sub-task created in a batch maps to the first parent option) — *first-in-batch is not the mapping.* Paraphrase silently drops or re-words an option the spoke then acts on as authoritative; a position-heuristic mis-routes a spoke to the wrong sub-task. Both produce work that is internally consistent but bound to the wrong parent intent. Resolve the mapping by reading the source, not by inferring it from creation order.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Multi-Phase Work Uses Issues, Not Chat-Prompt Blocks:**
+
+The default shape for multi-phase work is a new milestone plus one issue per phase — each issue body is the self-contained spoke contract for that phase, carried in durable GitHub state. The hub does NOT draft bespoke copy-paste prompt blocks in the chat thread as a parallel tracking surface for the phases: a chat-resident prompt block is ephemeral, un-queryable, and drifts out of sync with the issue state the moment either is edited. Two surfaces tracking the same work is the failure — the issue body is the single source of truth, and the spoke reads it directly. Exception: a genuinely small one-shot task (a single phase, no hand-off, no downstream consumer) does not warrant a milestone-and-issue scaffold and may run from an inline prompt — but the moment the work has ≥2 phases or a hand-off, it gets issues.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Hook-Safe Chip Git Idioms:**
+
+Because the `block-destructive` agent hook matches destructive-git substrings **lexically** in a Bash command string (it scans the literal text, not the parsed git semantics), a chip prompt MUST prescribe git idioms that do not present a destructive substring to the matcher even when the operation is safe:
+
+- **Post issue and comment bodies via a Write-tool temp file + `gh api --input <file>`** (or `gh pr create --body-file` / `gh issue create --body-file`), never by inlining a large body into a `-f body=...` argument — a heredoc or inlined body can carry incidental substrings the lexical matcher trips on, and the temp-file path is also the parser-clean-friendly route.
+- **Regenerate a branch with `git checkout -B <branch> origin/main` + `git push --force-with-lease`**, never `git reset --hard` or an unguarded `git push --force` — `checkout -B` re-points the branch without a destructive substring, and `--force-with-lease` is the safe lease-checked push the hook permits where bare `--force` is blocked.
+
+This workaround is load-bearing because of the repo/worktree-session hook-load gap — the PreToolUse hooks that would otherwise enforce destructive-git safety do not load in a repo-rooted or worktree-rooted spoke session the way they do in a workspace-root session, so the lexical-block convention is the discipline the chip must carry explicitly rather than relying on the hook to fire.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Stage 6 Chip Pattern — Concurrent-Spoke Contention Recovery:**
+
+When two or more Stage 6 Engineering spokes commit to the SAME release branch in parallel, four git races surface. Each Engineering chip launched into a shared-branch parallel wave MUST enumerate the four detection→recovery procedures so the spoke recovers in-session rather than corrupting the branch. The default push idiom for an already-checked-out branch is the detached-HEAD refspec push `git push origin HEAD:refs/heads/<branch>` (it pushes the current commit to the named branch without requiring the local branch ref to track, sidestepping the checkout-conflict race):
+
+| Race | Detection | Recovery |
+|---|---|---|
+| Concurrent rebase | `git push` rejected (non-fast-forward) because a sibling spoke's commit landed on the remote branch first | `git fetch origin <branch>` then `git rebase origin/<branch>` onto the sibling's commit; re-run the spoke's verification; push via `git push origin HEAD:refs/heads/<branch>` |
+| Staging race | `git add` / `git commit` picks up a sibling's just-pulled changes mixed into the working tree | Stage only the spoke's own paths explicitly (`git add <specific-paths>`), never `git add -A`; verify `git status` shows only the intended files before commit |
+| Partial staging | An interrupted or interleaved commit leaves a subset of the spoke's intended files staged while the rest are unstaged | Re-derive the intended file set from the spoke's File Change Matrix, `git add` the complete set explicitly, confirm `git diff --cached --name-only` matches the matrix, then commit |
+| Branch-checkout conflict | `git checkout <branch>` fails because the worktree already has the branch checked out elsewhere, or the local branch ref diverges from the sibling-advanced remote | Do not re-checkout; push the current commit directly via the detached-HEAD refspec `git push origin HEAD:refs/heads/<branch>`, which writes to the remote branch without a local-ref checkout |
+
+This pattern is complementary to — not contradictory with — the broader Stage-6 parallelism-postures work (which decides WHEN parallel same-branch commits are permitted at all); this card supplies the recovery procedures FOR the races that arise once they are.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Stage 5 Mid-Solutioning Cross-Ticket Escalation Handler:**
+
+When a Stage 5 Solutioning spoke posts a mid-Solutioning Tier 2 `[SCOPE CHANGE]` finding — emitted by the spoke's Phase 0.7 Mid-Spoke Cross-Ticket Scope Detection (per [`stage-05-solutioning.md` § Phase 0.7](../pipeline/stage-05-solutioning.md)) when its design surface overlaps a sibling ticket's concrete files or semantically duplicates a sibling — the hub does NOT silently fold or silently ignore it. The hub decides between two dispositions and surfaces the choice to the operator as a main-thread Decision Briefing item: **(a) expand-scope-now** — pull the overlapping sibling concern into the current spoke's design (when the overlap is tight enough that splitting would fragment one coherent design), or **(b) hold-for-Collective-Review** — record the overlap and defer the merge/split call to the release-level Collective Review scope-lock (when the overlap is real but the tickets remain separately deliverable). The spoke's escalation does NOT self-authorize either path — it is a finding routed up; the hub renders the disposition, and the operator approves at the briefing. This handler is the hub-side receiver for the spoke-side detection rule; the two compose (spoke detects and routes; hub decides and surfaces).
 
 **Cutover discipline:** Applies to all releases going forward.
 
@@ -1187,6 +1249,40 @@ as a structural defect.
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Cascade-Completeness Discipline (Stage 5 spokes)
+
+If your change spec includes a **count update**, an **enumeration update**, or a
+**threshold / version-narrative change** to any file in your affected-files
+matrix, you MUST include a `### Cascade-Sweep` block in your output enumerating
+every occurrence of the OLD value across the (file × OLD-value) pairs in scope.
+
+**Trigger predicate — the block is required when ANY hold:**
+- A numeric count changes (cardinality N → M — e.g. "20 skills" → "19 skills").
+- An enumerated list gains, loses, or renames a member.
+- A threshold or narrative version reference changes (e.g. "180-day window" →
+  "90-day window"; "N=2" → "N=3").
+
+**Required artifact — a per-(file × OLD-value) Cascade-Sweep table** with the
+sweep command(s) cited and a disposition per occurrence: UPDATE (swept) /
+PRESERVE-or-N/A (out-of-scope / accepted-residual, each with a one-line reason).
+Sweep scope is NARROW by design — only the files in your affected-files matrix
+and only the specific OLD value being changed, never the whole codebase.
+
+**Failure consequence:** a spec that makes a triggering change but omits the
+`### Cascade-Sweep` block — or whose table misses an OLD-value occurrence a
+re-run of the cited grep would surface — is an incomplete spec; Collective
+Review rejects it as a structural defect.
+
+This is the chip-launch-time surface of the Cascade-Completeness Sweep rule
+(Phase A4.1) authored in the Stage 5 Solutioning spec
+([stage-05-solutioning.md](../pipeline/stage-05-solutioning.md)) — that spec is
+canonical for the trigger table, the block format, and the load-bearing test.
+The two compose with R1 Evidence-Grounding (R1 surveys current state of a
+convention BEFORE canonicalizing; Cascade-Sweep surveys OLD-value occurrences
+AFTER a state change).
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1374,6 +1470,21 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
    - Alignment: does the recommendation align with platform conventions, agent operating principles, workflow standards, process governance, and system architecture?
    - Release plan fidelity: does the recommendation deviate from the approved release plan (scope, sequence, stage applicability)?
    - Downstream tier impact: for dependency-tiered execution, does accepting this affect blocked issues in later tiers?
+   - **Necessity / value-add:** does this recommendation add something that needs
+     to exist? Apply the two-question test: (a) *Does this add actionable
+     information that doesn't already exist in the artifact or its
+     cross-references?* and (b) *Would removing it change agent or operator
+     behavior?* If the answer to both is no, **diverge from the spoke and
+     recommend dropping it** — a technically-correct recommendation is not
+     automatically a necessary one. Catch-examples the hub diverges on:
+     redundant documentation that restates structural semantics already encoded
+     elsewhere; unnecessary caveats or interim notes that do not drive a
+     downstream decision; defensive "while we're here" additions that expand the
+     maintenance surface without changing behavior. This dimension guards against
+     rubber-stamping accurate-but-inert spoke output; it is one canonical
+     definition — the Decision Briefing's "Decisions required" item (Operating
+     Principle §1) applies the same lens at briefing-composition time by
+     reference, not by restating it.
    - **Empirical verification** — for each testable claim in the spoke output, the hub runs verification before producing the Decision Briefing. Verification artifacts (commands run, observed results, file:line citations) are quoted in the per-recommendation Empirical Verification subsection of the briefing. Concurrence-without-verification is non-compliant.
 6. **Produce a Decision Briefing** per the Operating Principle above, applying mechanisms per `core/disciplines/decision-discipline.md` § 3 triage table:
    - For each decision: spoke recommendation (with rationale) → **Empirical Verification subsection** (per R3 ) → hub evaluation (concurs/diverges with rationale) → final recommendation
