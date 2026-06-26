@@ -278,6 +278,22 @@ Milestones assign issues to versioned releases. Set at Stage 3 (Bundle).
 
 This section defines the contract that PT-4 (Label/Status Rationalization) implements. The values and transitions above are the architecture; PT-4 deploys them as actual GitHub Projects fields, labels, and automation rules.
 
+### Design rationale — Status (coarse) / Stage (fine) two-field invariant
+
+**Decision: KEEP the 5 Status values.** Pipeline-phase granularity is carried by the **Stage** field, not by Status.
+
+The two fields are orthogonal axes by design (see the Stage-field note above: an issue can be `Status:In Progress / Stage:7-DevTest`). **Status** is the coarse *lifecycle* axis — it answers "what lifecycle phase?" (Proposed / Approved / Bundled / In Progress / Done) and is the at-a-glance Backlog-vs-Active-vs-Done lens the saved board views depend on. **Stage** is the fine *pipeline-position* axis — its 11 single-select values (`1-Intake … 13-Close`, stages 10–11 compressed) track where in the pipeline an issue sits, independently of Status. An issue that reads `Bundled` across Stages 3–5 is fully disambiguated by reading Status × Stage together (`Status:Bundled / Stage:5-Solutioning`).
+
+Because Stage already carries that granularity, proposals to add it to **Status** were rejected:
+
+| Rejected alternative | Why rejected |
+|---|---|
+| Add an intermediate Status value (e.g. `Designing` between Bundled and In Progress) | Duplicates a signal Stage already carries, and forces a second mid-stage Status write. |
+| Replace the flat Status field with a group + sub-status hierarchy | Re-implements the existing Status/Stage split inside one field. |
+| Collapse Status into the Stage values (1:1 alignment) | Destroys the coarse lifecycle axis the saved board views depend on. |
+
+All three pay MODERATE–HIGH cascade cost — the Status values are referenced across the corpus, the deployed GitHub Projects Status single-select, and every saved board view that filters or groups on Status — to buy granularity the platform already has. KEEP is the value-conserving choice: zero cascade cost, and the coarse/fine separation is preserved as a deliberate, documented invariant. The disambiguator's one rendered-surface gap (the Backlog table did not show Stage) is closed by a view-column change, not a Status-value change — see [`github-projects-guide.md`](../../../core/disciplines/github-projects-guide.md) § Saved Views (Backlog).
+
 ---
 
 ## Native Dependencies

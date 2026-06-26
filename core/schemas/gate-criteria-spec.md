@@ -1,4 +1,5 @@
 <!-- repo-integrity: allow-issue-ref -->
+<!-- reference-durability: allow-link -->
 # Gate Criteria Specification
 
 Defines three named gates across the triage lifecycle — Triage Readiness, Workflow Readiness, Release Readiness — with structured criteria for validation, automation routing, and self-repair.
@@ -57,7 +58,7 @@ Named gates inherit all structural checks from the corresponding [field-lifecycl
 
 | ID | Criterion | Type | Check | Automation | improvement | bug | observation |
 |---|---|---|---|---|---|---|---|
-| G1-01 | Title follows `[Category]: Description` format | field | structural | auto | `req` | `adapt:G1-01-Bug` | `adapt:G1-01-Obs` |
+| G1-01 | Title is an informative summary — **no leading `[...]:` type/category prefix** (type is carried by the label), AND meets the substance floor (≥ 2 words; not a bare slug; ≥ N chars). This is a SYNTACTIC floor; the semantic informativeness bar lives in [intake-style-guide.md §7](../../release/references/how-to/intake-style-guide.md) (not gate-enforced). | field | structural | auto | `req` | `req` | `req` |
 | G1-02 | Tier-branched: **(a) `improvement`-labeled** — Description field is actionable, not just observation. **(b) `observation`-labeled** — the three required `observation.yml` fields (what is missing / what good looks like / which file or section) contain enough signal that a Triage agent could draft a Proposal that itself meets G1-02 branch (a) post-promotion. | field | judgment | recommend | `req` (improvement branch) | `adapt:G1-02-Bug` | `req` (observation branch) |
 | G1-03 | Evidence contains >=1 evidence-labeled claim | field | structural | auto | `req` | `req` | `n/a` (no Evidence field) |
 | G1-04 | Proposed Change is specific (names files or protocols) | field | judgment | recommend | `req` | `n/a` (bug body is Reproduction Steps + Expected/Actual) | `n/a` (no Proposed Change field) |
@@ -81,7 +82,7 @@ The `structural | judgment` partition already in the **Check** column IS the HAR
 
 | Criterion | Layer-A form-required? | Layer-B (gate) | Enforcement class |
 |---|---|---|---|
-| G1-01 title prefix | — (title string, not a body field) | structural FAIL | HARD-STOP (gate) |
+| G1-01 title informativeness (no bracket prefix + substance floor) | — (title string, not a body field) | structural FAIL | HARD-STOP (gate) |
 | G1-02 description actionable | presence (`required: true`) | recommend-flag | SOFT-WARN |
 | G1-03 evidence label | presence (`required: true`) | structural FAIL | HARD-STOP |
 | G1-04 proposed-change specificity | presence (`required: true`) | recommend-flag | SOFT-WARN |
@@ -121,9 +122,7 @@ Step 3 (reconcile):
 
 ### Gate 1 Adapter Blocks (inline lexical/semantic translation)
 
-**Adapter G1-01-Bug:** bug.yml title prefix is the literal string `[Bug]:` (per `bug.yml` template line 3 `title: "[Bug]: "`); G1-01's `[Category]:` check accepts `[Bug]:` as canonical.
-
-**Adapter G1-01-Obs:** observation.yml title prefix is the literal string `[Observation]:` (per `observation.yml` template line 3); G1-01's `[Category]:` check accepts `[Observation]:` as canonical.
+**Adapters G1-01-Bug / G1-01-Obs — RETIRED (template-agnostic post-prefix-removal).** G1-01 no longer requires a per-template title prefix — all three work-item templates (`improvement.yml` / `bug.yml` / `observation.yml`) carry a prefix-less `title: ""` and share one informativeness floor (no `[...]:` prefix + substance floor). There is no per-template prefix literal left to translate, so the former `[Bug]:` / `[Observation]:` adapter translations are removed.
 
 **Adapter G1-02-Bug:** bug.yml has no Description field; G1-02 evaluates against the conjunction of `### Reproduction Steps` + `### Expected Behavior` + `### Actual Behavior` (collectively "the bug narrative"). The narrative is actionable iff a fresh agent can reproduce + observe expected vs. actual. Label-missing branch unchanged.
 
@@ -135,7 +134,8 @@ Step 3 (reconcile):
 
 | ID | On Failure | Action |
 |---|---|---|
-| G1-01 | Title missing category prefix | Auto-fix: prepend `[Category]: ` from category field. If category absent, flag for author. |
+| G1-01 | Title carries a leftover `[...]:` type/category prefix | Auto-fix: **strip** the leading `[...]:` token (type is carried by the label, not the title). |
+| G1-01 | Title fails the substance floor (bare slug / single token / too short) | Return to author: "Title names an area but not a change — state the object + what changes (≥ 2 words, no bare slug)." Not auto-fixable (no source field to synthesize a summary from). |
 | G1-02 (improvement) | `improvement`-labeled, Description is observational | Return to author: "Description states an observation but not an actionable change. Reframe as what should change and why. If this issue is a placeholder gap-capture (no actionable change yet), re-author as `observation.yml` instead." |
 | G1-02 (observation) | `observation`-labeled, ≥1 of the three required fields (what is missing / what good looks like / which file or section) is missing, vague, or non-promotable | Return to author: "Observation-tier fields must contain enough signal that a Triage agent could draft a Proposal whose Description would itself pass G1-02 branch (a). Identify which field is non-promotable: [field name]. Promotability test: would a Proposal-tier Description drafted from these three fields be actionable?" |
 | G1-02 (label missing) | Neither `observation` nor `improvement` label is present (or both are present) | Return to author or triage agent: "Issue lacks a single primary intake-tier label. Apply `observation` OR `improvement` per `pipeline/stage-01-intake.md` §5 Routing + `intake-style-guide.md` §2 (5-test rule)." |
@@ -277,7 +277,7 @@ Soft-language exclusion: "related to" / "similar to" / "see also" in body text i
 **Stage boundary:** 3->4 (Bundle -> Planning)
 **Inherits:** Gate 3->4 from [field-lifecycle-matrix.md](field-lifecycle-matrix.md#gate-3-4-bundle---planning)
 
-**Body-compliance precondition for the `status: bundled` transition.** Before transitioning any issue from a pre-bundled status (`status: proposed` / `status: approved`) to `status: bundled`, re-run the G1 (Triage Readiness) and G3 structural checks against the issue **body** — do not infer compliance from label state. Labels reflect intent, not body-level compliance: a `status: approved` label does not imply the body satisfies G1-01..G1-08, and a `[Category]:` title prefix does not imply the Priority / Affected Files / Acceptance Criteria fields exist. Verifying at bundle-time is strictly cheaper than discovering a body defect mid-Stage-4 Planning, which forces a rollback and re-triage. This precondition has highest value on the cases where label-to-body drift is most likely:
+**Body-compliance precondition for the `status: bundled` transition.** Before transitioning any issue from a pre-bundled status (`status: proposed` / `status: approved`) to `status: bundled`, re-run the G1 (Triage Readiness) and G3 structural checks against the issue **body** — do not infer compliance from label state. Labels reflect intent, not body-level compliance: a `status: approved` label does not imply the body satisfies G1-01..G1-08, and a title's **presence** does not imply the Priority / Affected Files / Acceptance Criteria fields exist. Verifying at bundle-time is strictly cheaper than discovering a body defect mid-Stage-4 Planning, which forces a rollback and re-triage. This precondition has highest value on the cases where label-to-body drift is most likely:
 
 - multi-issue bundling operations (several issues bound at once);
 - cross-milestone routing decisions;
@@ -285,7 +285,7 @@ Soft-language exclusion: "related to" / "similar to" / "see also" in body text i
 - any transition that skips the standalone `status: approved` state (`status: proposed` → `status: bundled` directly);
 - any bundling that pulls an `observation`-tier issue into a delivery milestone (the observation template cannot satisfy improvement-tier G1 — conversion per the Template-Conversion Rule below is required first).
 
-Minimum re-check set when the precondition applies: **G1-01** (title-prefix format), **G1-03** (≥1 evidence-labeled claim, per-template per the Adapter/applicability rules), **G1-06** (Priority/Severity present, multi-line-aware per Adapter G1-06-Bug), **G3-01** (every dependency reference in a compatible state), **G3-02** (no circular dependency chain — construct the intra-bundle graph and traverse it, do not merely scan). Single-issue milestone moves, sub-task decompositions within an already-bundled parent, and operator-explicit "skip with rationale" are out of scope (defer to the Stage 4 Planning gate).
+Minimum re-check set when the precondition applies: **G1-01** (title-informativeness floor), **G1-03** (≥1 evidence-labeled claim, per-template per the Adapter/applicability rules), **G1-06** (Priority/Severity present, multi-line-aware per Adapter G1-06-Bug), **G3-01** (every dependency reference in a compatible state), **G3-02** (no circular dependency chain — construct the intra-bundle graph and traverse it, do not merely scan). Single-issue milestone moves, sub-task decompositions within an already-bundled parent, and operator-explicit "skip with rationale" are out of scope (defer to the Stage 4 Planning gate).
 
 | ID | Criterion | Type | Check | Automation | improvement | bug | observation |
 |---|---|---|---|---|---|---|---|
@@ -311,7 +311,7 @@ Minimum re-check set when the precondition applies: **G1-01** (title-prefix form
 
 ### Template-Conversion Rule
 
-An issue with the `observation` intake-tier label cannot have the `status: bundled` label applied. Before bundling, the issue body must be rewritten in `improvement.yml` schema (all required improvement.yml fields populated) and the intake-tier label must transition `observation` → `improvement` atomically with the body rewrite. Title prefix updates from `[Observation]: ...` to `[Category]: ...` per the chosen improvement.yml Category.
+An issue with the `observation` intake-tier label cannot have the `status: bundled` label applied. Before bundling, the issue body must be rewritten in `improvement.yml` schema (all required improvement.yml fields populated) and the intake-tier label must transition `observation` → `improvement` atomically with the body rewrite. The title is rewritten to the informativeness floor (drop any `[Observation]:` prefix; no `[Category]:` prefix is added — type is carried by the label, not the title; see G1-01).
 
 **Enforcement surface:** Stage 3 Phase A1 (Bundle entry). Phase A1 reads candidate-issue labels before evaluating G3 criteria; any candidate with `observation` label halts with the failure signal `BUNDLE-BLOCKED: observation-template requires conversion`.
 
@@ -319,7 +319,7 @@ An issue with the `observation` intake-tier label cannot have the `status: bundl
 1. Triage agent re-runs G1-02 observation-branch promotability test;
 2. On promotability PASS: Triage agent drafts improvement.yml body from the 3-field observation;
 3. Operator approves the draft;
-4. Body is rewritten + label transitions `observation` → `improvement` + title prefix updates;
+4. Body is rewritten + label transitions `observation` → `improvement` + title is rewritten to the informativeness floor (any `[Observation]:` prefix dropped; no prefix added);
 5. Issue re-enters G1 evaluation under improvement-template applicability.
 
 **Out-of-conversion paths (operator decisions):**
@@ -512,7 +512,17 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 1.15
+**Schema version:** 1.16
+
+**v1.16 changes (non-breaking — minor; criterion-shape change, no ID renumber):**
+
+- **Repurposed G1-01 from a prefix-requirement to a title-informativeness floor.** The criterion was inverted in place: was "Title follows `[Category]: Description` format" (prefix REQUIRED); is now "Title is an informative summary — no leading `[...]:` type/category prefix (type is on the label) + a substance floor (≥ 2 words; not a bare slug; ≥ N chars)". The change holds every column value (`field` / `structural` / `auto`) and the ID, so the Gate 1→2 `structural_pass_rate` denominator at `gate-evaluation-spec.md` (`G1-01, G1-03, G1-05a, G1-06, G1-07` structural per gate-evaluation-spec.md) is **unchanged** — same discipline as the v1.13 G1-05a 4th-pattern extension (extend the criterion shape, do not renumber). The applies-to triple collapses to `req | req | req` (no per-template prefix literal remains).
+- **Honest-scope note (per review-discipline R1):** G1-01 is a **syntactic** floor only — it catches a leftover bracket prefix and a bare-slug/too-short title, and it cannot judge whether a well-formed multi-word title is actually informative (a vague-but-well-formed title passes the floor). The **semantic informativeness bar** lives in [intake-style-guide.md §7](../../release/references/how-to/intake-style-guide.md) (rubric) + intake-desk elicitation (judgment), NOT in this gate. No LLM grading is added.
+- **Retired Adapters G1-01-Bug / G1-01-Obs** — with no per-template prefix literal to translate, the `[Bug]:` / `[Observation]:` adapter translations are removed; a retirement note replaces them under § Gate 1 Adapter Blocks.
+- **Reconciled** the Enforcement-Layer-Split row (G1-01 description), the G1-01 self-repair rows (strip-not-prepend on bracket FAIL; return-to-author on substance FAIL), the bundle-precondition (a title's *presence*, not a prefix, no longer implies body fields; re-check set names "title-informativeness floor"), and the Template-Conversion Rule (title rewritten to the floor; no `[Category]:` added).
+- Pairs with the `deploy.sh` Check 22 (`g1-enforcement`) G1-01 block rewrite shipped alongside this schema change (rejects a `[...]:` prefix + the substance floor; **warn-tier unchanged** — legacy prefixed issues WARN, never FAIL `--check`; bulk re-title is a separately-authorized follow-up) and the three work-item templates' prefix-less `title: ""`.
+- Schema bump v1.15 → v1.16 (non-breaking minor; criterion-shape change). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no structural change — G1-01 keeps its ID, type, check, and automation columns; only its predicate and applicability triple change. Existing G1-01..G1-09 / G2-01..G2-12 / G3-01..G3-15 + G-BR1..G-BR4 + G-PR1..G-PR9 + G-EX1..G-EX8 + G-CL1..G-CL8 IDs unchanged; no ID renumber, no column/type change.
+- **Warn-tier (G1-01):** legacy issues created before this change keep their bracket prefix and are reported as a non-blocking warning by `deploy.sh --check` — they never fail the gate, and no bulk re-title is required.
 
 **v1.15 changes (non-breaking — minor; additive only):**
 

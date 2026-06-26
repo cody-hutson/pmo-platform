@@ -1,6 +1,7 @@
 name: Observation (Lightweight Gap Capture)
 description: Capture a gap or drift observation when a full Proposal is not yet authorable. Placeholder-class — Triage promotes to improvement.yml when ready.
-title: "[Observation]: "
+# Title = an informative summary (no type/category prefix — the label carries type). See release/references/how-to/intake-style-guide.md §7.
+title: ""
 labels: ["observation", "status: proposed"]
 body:
   - type: textarea

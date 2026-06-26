@@ -183,10 +183,12 @@ Triage and bundling workflow — what needs decisions?
 | Setting | Value |
 |---|---|
 | Layout | Table |
-| Visible columns | Title, Status, Priority, Milestone, Labels |
+| Visible columns | Title, Status, Stage, Priority, Milestone, Labels |
 | Filter | `status:Proposed,Approved,Bundled` |
 | Sort | Priority ascending |
 | Group by | Status |
+
+The **Stage** column is required here: this view groups the `Proposed/Approved/Bundled` cohort by Status, and `Bundled` spans Stages 3–5. Without Stage visible, every `Bundled` issue collapses into one group with no way to tell Stage-3 (Bundle) from Stage-4 (Planning) from Stage-5 (Solutioning) apart. Status is the coarse lifecycle axis; Stage renders the fine pipeline position the coarse axis cannot. (See [`ticket-information-architecture.md`](../../release/references/specs/ticket-information-architecture.md) § State Anchors → Design rationale.)
 
 ### Active Release (Board)
 

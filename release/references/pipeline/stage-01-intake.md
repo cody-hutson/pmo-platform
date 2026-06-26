@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Stage 1: Intake
 
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
@@ -82,7 +83,7 @@ In all cases the GitHub Issue IS the intake artifact — no separate intake docu
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-**Triage Readiness** — per [gate-criteria-spec.md](../../../core/schemas/gate-criteria-spec.md#gate-1-triage-readiness). All required fields populated (enforced by template validation), evidence section contains at least one evidence-labeled claim, dependencies reference valid issue numbers or "None", title follows `[Category]: Description` format, priority set (P1-P4), and pickup-readiness (G1-08) — ticket implementable by a fresh Claude Code session (CLAUDE.md + `core/rules/` loaded) without clarifying questions about terminology, cross-issue references, or scope. Gate 1 is two-tier: structural criteria auto-validate, while judgment criteria are LLM-assessed and recommend (Tier 2) at Gate-1 time per the Check/Automation columns above; the acceptance decision (Approved/Deferred/Rejected) is what happens at Stage 2 (Triage).
+**Triage Readiness** — per [gate-criteria-spec.md](../../../core/schemas/gate-criteria-spec.md#gate-1-triage-readiness). All required fields populated (enforced by template validation), evidence section contains at least one evidence-labeled claim, dependencies reference valid issue numbers or "None", title is an informative summary (no type/category prefix) per gate G1-01 + [intake-style-guide.md](../how-to/intake-style-guide.md) §7, priority set (P1-P4), and pickup-readiness (G1-08) — ticket implementable by a fresh Claude Code session (CLAUDE.md + `core/rules/` loaded) without clarifying questions about terminology, cross-issue references, or scope. Gate 1 is two-tier: structural criteria auto-validate, while judgment criteria are LLM-assessed and recommend (Tier 2) at Gate-1 time per the Check/Automation columns above; the acceptance decision (Approved/Deferred/Rejected) is what happens at Stage 2 (Triage).
 
 ## 8. Automation Level
 Overall Tier 1 (Auto) for agent path, Tier 3 (Human) for user path. Today: template enforces structure, agent auto-logging works, IMP promotion is semi-manual. Target: full Tier 1 for agent path — direct issue creation without bridge file.

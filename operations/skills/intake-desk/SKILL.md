@@ -15,7 +15,7 @@ description: >
   issue", "turn this into a work item", "log this idea", "what type of work item
   is this", "scope this idea for intake", "is this intake-ready", or "help me write
   up this bug/story/initiative".
-version: v1.23
+version: v2.25
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -135,7 +135,10 @@ table-driven and needs no rewrite.
 See `references/output-contract.md`. The intake-emit process is tool-agnostic:
 render the item against the target type's field set → run the 5-test clarity gate
 → confirm via AskUserQuestion → log the item to the configured work tracker → read
-back and confirm it landed → report the item reference. The skill NEVER writes a
+back and confirm it landed → report the item reference. The rendered title is an
+informative summary per [`intake-style-guide.md`](../../../release/references/how-to/intake-style-guide.md) §7
+(no type/category prefix — type is on the label; names the object + the change);
+the clarity gate includes a title-informativeness check before the confirm. The skill NEVER writes a
 tracked scratch file. The MVP target tracker is GitHub Issues, emitted via
 `gh issue create` after the binary confirmation; because the issue templates are
 GitHub Issue Forms with required dropdowns that a freeform-body create cannot

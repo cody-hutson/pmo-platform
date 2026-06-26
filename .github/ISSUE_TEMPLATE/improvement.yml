@@ -1,6 +1,7 @@
 name: Improvement Proposal
 description: Propose a platform improvement
-title: "[Category]: "
+# Title = an informative summary (no type/category prefix — the label carries type). See release/references/how-to/intake-style-guide.md §7.
+title: ""
 labels: ["status: proposed"]
 body:
   - type: dropdown
@@ -36,7 +37,7 @@ body:
     id: domain
     attributes:
       label: Domain
-      description: "Optional. The work *domain* this change targets — orthogonal to Category (which classifies how the change is governed). Lets a software / website / ERP / data / code-review ticket be filed honestly. Leave unset for governance-corpus work or pick `Governance`. Does not affect the `[Category]:` title prefix."
+      description: "Optional. The work *domain* this change targets — orthogonal to Category (which classifies how the change is governed). Lets a software / website / ERP / data / code-review ticket be filed honestly. Leave unset for governance-corpus work or pick `Governance`. Does not affect the title (titles carry no type/category prefix; see release/references/how-to/intake-style-guide.md §7)."
       options:
         - Software
         - Website
