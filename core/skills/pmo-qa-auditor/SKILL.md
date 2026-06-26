@@ -282,7 +282,17 @@ or any request to verify the dual-output rule and artifact update cycle.
    - States what changed?
    - States why (which [SOURCE] triggered the change)?
    - States which stakeholder-facing document needs the corresponding update?
-4. Produce the document management compliance report.
+4. **Provenance-marker presence spot-check (random ~5/week sample).** On a recurring cadence
+   (a random sample of ~5 newly generated `08-Generated/` artifacts per week), verify each sampled
+   artifact carries the `generated_by` provenance marker (`<skill> v<semver>`) defined at
+   `core/schemas/frontmatter-schema.md` § Category 3. This is the soft-enforcement lever for the
+   forward-only provenance policy: `generated_by` is `Required: No` in the schema (so existing
+   header-less artifacts stay valid — no back-fill), and this presence sample is what makes the
+   marker *de-facto* present on new writes without a hard schema gate. A sampled artifact missing
+   `generated_by` is a finding routed to the emitting skill (artifact-generator / comms-writer /
+   daily-status / ppm-agent) for its missing-header → regenerate-with-header rule — not a back-fill
+   of the historical corpus. Sample only; this is not an exhaustive corpus scan.
+5. Produce the document management compliance report.
 
 See `references/dual-output-compliance.md` for the full checklist.
 
