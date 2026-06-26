@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.25] - 2026-06-26
+
+Hub-spoke orchestration discipline — the orchestration failure-modes the platform learned by trial-and-error are codified into the bridge reference the hub reads at runtime, so a class of cross-ticket, cascade, and chip-safety failures is caught at authoring time rather than after a failed check or a mis-routed spoke. A paired empirical suite pins the subagent hook-inheritance behavior with a standing regression. Novel class; additive throughout (no skill files changed); two disjoint single-writer spokes.
+
+### Added
+
+- **Cascade-completeness on spoke launch.** When a spoke's spec changes a count, an enumeration, or a threshold, the hub now prompts it to enumerate every stale occurrence of that value — so a number changed in one place no longer leaves matching stale copies elsewhere.
+- **A necessity / value-add check on spoke recommendations.** The hub now weighs whether a spoke's recommendation actually adds value before adopting it, rather than rubber-stamping an accurate-but-inert one.
+- **Four orchestration disciplines moved from notes into the corpus.** Verbatim chip-source, treating issues (not chat blocks) as the spoke contract, hook-safe git idioms, and concurrent-spoke contention recovery now live in the reference the hub consults, not in scattered operator notes.
+- **An empirical hook-inheritance suite.** A continuous-integration regression layer plus an operator probe layer plus a new deploy-check report the real behavior of subagent hook inheritance — with the finding pinned so it cannot silently regress.
+
+### Changed
+
+- **A mid-build cross-ticket scope-detection rule.** When work on one item touches the scope of another mid-build, the hub now detects it and escalates rather than letting the cross-ticket change land silently — anchored by a new architecture decision record.
+- **A durable-corpus de-fragile authoring pre-check.** Reference content authored during a build is now checked for fragile constructs before it lands, at both the orchestration bridge and the reference-durability standard.
+
+[Full notes](release/releases/notes/v2.25-hub-spoke-orchestration-discipline_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.25)
+
 ## [v2.23] - 2026-06-26
 
 Functional people-graph — PMO agents now resolve people from one maintained, never-committed people-graph instead of per-project free-text names; the four leadership-owner fields become typed person references; and the filled roster stays out of the repository by construction. Novel class; additive; functional-coordination only — explicitly not an HR or performance system.
