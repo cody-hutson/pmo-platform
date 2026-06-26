@@ -128,7 +128,7 @@ The view contract, the trigger set, and the clarification-queue mechanics in thi
 
 ---
 
-## Reference
+## Provenance
 
 - People capability/coverage graph (leg C) — this spec: defines the read-time composed view, the ambient-maintenance trigger set, the clarification queue, the provenance precedence ladder, and the Tier-1 declaration; the work item is #1166.
 - Functional people-roster data surface — the operator-instance roster (`people-roster.yaml`), its `{value, source, last_verified}` provenance, its `status` tombstone enum, and the `backup_coverage` / `escalates_to` / `linked_project_ids` reference fields this graph composes over; the work item is #315.

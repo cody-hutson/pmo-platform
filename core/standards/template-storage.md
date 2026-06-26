@@ -171,9 +171,9 @@ The authoritative list is the `TEMPLATE_SYNC_MAP` array in [`deploy.sh`](../depl
 | project-initiator | `transcript-register-template.md` | `references/templates/transcript-register-template.md` |
 | project-initiator | `project-md-template.md` (AC6) | `references/project-md-template.md` (top-level; preserves SKILL.md line 167 read path) |
 | pmo-process-designer | `requirements-template.md` (AC7) | `references/requirements-template.md` (top-level; preserves SKILL.md lines 156, 513 read paths) |
-| comms-writer | `people-roster-template.yaml` (#315 / leg D #1899) | `references/people-roster-template.yaml` |
-| ppm-agent | `people-roster-template.yaml` (#315 / leg D #1899) | `references/people-roster-template.yaml` |
-| ppm-agent | `people-graph-clarification-queue-template.md` (leg C #1166 / leg D #1899) | `references/people-graph-clarification-queue-template.md` |
+| comms-writer | `people-roster-template.yaml` (people-roster data surface; leg-D consumer) | `references/people-roster-template.yaml` |
+| ppm-agent | `people-roster-template.yaml` (people-roster data surface; leg-D consumer) | `references/people-roster-template.yaml` |
+| ppm-agent | `people-graph-clarification-queue-template.md` (leg-C clarification queue; leg-D consumer) | `references/people-graph-clarification-queue-template.md` |
 
 ### §7.2 Template-architecture standards-doc mirrors (18 entries — 6 consumer skills × 3 standards docs, Option A)
 

@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
 # PROJECT.md Schema
 
 **Status:** Canonical

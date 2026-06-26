@@ -1,5 +1,8 @@
 # Project Entity Model
 
+<!-- repo-integrity: allow-memory-ref -->
+<!-- schema field names like `project_owner_external` match the memory-slug pattern but are not memory references -->
+
 **Status:** Canonical
 **Owner:** `../disciplines/project-entity-model.md`
 **Introduced:** project-data-foundation (2026-05-16) — initiative project-data-architecture, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
