@@ -464,7 +464,7 @@ the protocol implements the mode behavior.
 This skill produces **decision-class outputs** — gate verdicts, sprint plans, drafted
 remediations, escalation packages, RAID entries, and recommended dispositions the user is
 expected to act on. Every decision-class item must carry a **reversibility tier** paired
-with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -498,7 +498,7 @@ proceeds immediately.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, worked examples,
+`core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
 ## Guardrails
@@ -535,7 +535,7 @@ These are hard rejections — same standard as PPM:
   gate verdict, sprint plan, drafted remediation, escalation, RAID entry, recommended
   disposition — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE /
   IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per
-  `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class
+  `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class
   items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes

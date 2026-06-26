@@ -21,7 +21,7 @@ output format the team expects in their Teams channel.
 
 ## Reversibility Scope
 
-**Reversibility scope:** This skill does not produce decision-class outputs (recommendations, plans, escalations, or proposed actions). The reversibility tier check per pmo-platform/reference/specs/reversibility-protocol.md does not apply to this skill's outputs.
+**Reversibility scope:** This skill does not produce decision-class outputs (recommendations, plans, escalations, or proposed actions). The reversibility tier check per core/specs/reversibility-protocol.md does not apply to this skill's outputs.
 
 The skill's output is a Teams-ready status message that surfaces current carry-forward
 state (blockers, actions, decisions, retest queue, deferred items) from operational

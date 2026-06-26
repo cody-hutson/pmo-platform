@@ -272,7 +272,7 @@ business days, and single-source-recording flags. The HIGH-confidence auto-route
 execute without prompting are themselves decision-class — they are the skill taking a
 downstream-visible action on the filesystem — even though the tier for most auto-routes
 is CHEAP. Every decision-class item must carry a **reversibility tier** paired with a
-**confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+**confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -311,7 +311,7 @@ together.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — including MEDIUM-confidence
 proposed routes, downstream-trigger prompts, routing-rule update proposals, and queue
-escalation flags. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full
+escalation flags. See `core/specs/reversibility-protocol.md` for the full
 protocol, worked examples, and G4 gate algorithm.
 
 ## Domain-Specific Failure Modes
@@ -465,7 +465,7 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 
 - **SG-1 [CONTEXT]:** When using information from PROJECT.md or prior session state (not from the current artifact), label it `[CONTEXT]` with the source field. Do not present project memory as current-artifact evidence.
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
-- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — proposed route (MEDIUM confidence), downstream-trigger prompt, routing-rule update proposal, unclassified-queue escalation flag, multi-project routing recommendation — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a reversibility-confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. The existing classification confidence percentage is a separate dimension — both travel with a routing decision. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — proposed route (MEDIUM confidence), downstream-trigger prompt, routing-rule update proposal, unclassified-queue escalation flag, multi-project routing recommendation — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a reversibility-confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. The existing classification confidence percentage is a separate dimension — both travel with a routing decision. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Reference Files
 

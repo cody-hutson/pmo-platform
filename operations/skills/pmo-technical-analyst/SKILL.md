@@ -444,7 +444,7 @@ the PPM may have missed.
 This skill produces **decision-class outputs** — findings, risk assessments, drafted
 remediations, and escalations the user is expected to act on. Every decision-class item
 must carry a **reversibility tier** paired with a **confidence level** per
-`pmo-platform/reference/specs/reversibility-protocol.md`.
+`core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -475,7 +475,7 @@ proceeds immediately.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, worked examples,
+`core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
 ## Guardrails
@@ -508,7 +508,7 @@ These are hard rejections — same standard as all suite skills:
 - **Missing reversibility tier on decision-class items**: Every finding, drafted
   remediation, RAID entry, or next action must carry a reversibility tier label
   (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level
-  (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs
+  (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs
   missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline
   section above.
 

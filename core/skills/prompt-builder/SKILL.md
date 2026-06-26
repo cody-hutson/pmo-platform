@@ -260,7 +260,7 @@ critique findings with specific rewrites, design-note choices, and labeled assum
 The critique is in service of the rewrite (per Operating Principles); the rewrite is
 what the user paste into their workflow. Every decision-class item must carry a
 **reversibility tier** paired with a **confidence level** per
-`pmo-platform/reference/specs/reversibility-protocol.md`.
+`core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -295,7 +295,7 @@ footprint.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — the rewritten prompt, critique
 points, Design notes, labeled assumptions, target-type detection. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol and
+`core/specs/reversibility-protocol.md` for the full protocol and
 `pmo-platform/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
 ## Guardrails
@@ -314,7 +314,7 @@ points, Design notes, labeled assumptions, target-type detection. See
 - **Don't replace concrete subject matter with placeholders.** If the user's
   draft mentions "the Q4 sales report", the rewrite mentions "the Q4 sales
   report" — not "the [document]".
-- **No decision-class output without a reversibility tier.** Every rewritten prompt, built prompt, critique point, Design note, and labeled `[ASSUMPTION]` must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. The tier scales with the target type's deployment footprint: `everyday` target → usually CHEAP; `SKILL.md body` / `agent prompt` → tier scales to downstream deployment scope. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **No decision-class output without a reversibility tier.** Every rewritten prompt, built prompt, critique point, Design note, and labeled `[ASSUMPTION]` must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. The tier scales with the target type's deployment footprint: `everyday` target → usually CHEAP; `SKILL.md body` / `agent prompt` → tier scales to downstream deployment scope. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 

@@ -303,7 +303,7 @@ prioritized remediation lists, and recommended diffs. The Module 6 decision-tree
 anti-pattern catalog (A-01..A-23), and failure modes (F-01..F-47) classify *evaluation
 quality*; reversibility classifies the *undo cost of applying the eval-writer's
 recommendation*. Every decision-class item must carry a **reversibility tier** paired
-with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -341,7 +341,7 @@ when still in calibration.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — authored artifacts,
 Review-mode rule coverage verdicts, Prioritized remediation recommendations, Recommended
-diffs. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol and
+diffs. See `core/specs/reversibility-protocol.md` for the full protocol and
 `pmo-platform/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
 ## Guardrails
@@ -353,7 +353,7 @@ diffs. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full
 - **Don't produce evals that train against their own judge.** A-21. Validators held out from training loops; rotate periodically.
 - **Don't cite preliminary arXiv IDs as primary.** Module 6 §7 flags Tier-3 preliminary IDs (2601.*, 2602.*, 2604.*, etc.). Cite with caveat or omit.
 - **Don't replace concrete subject matter with placeholders.** If authoring evals for `daily-status`, the artifacts say `daily-status` — not `<skill name>`.
-- **No decision-class output without a reversibility tier.** Every authored eval artifact (evals.json, judge_prompts, rubrics, failure taxonomy, calibration protocol), every Review-mode rule coverage verdict, every anti-pattern hit, every Prioritized remediation item, and every Recommended diff must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. This is orthogonal to the Module 6 α/κ judge-validation confidence axis (which measures judge-vs-human agreement) — reversibility measures the undo cost of applying the eval-writer's recommendation. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **No decision-class output without a reversibility tier.** Every authored eval artifact (evals.json, judge_prompts, rubrics, failure taxonomy, calibration protocol), every Review-mode rule coverage verdict, every anti-pattern hit, every Prioritized remediation item, and every Recommended diff must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. This is orthogonal to the Module 6 α/κ judge-validation confidence axis (which measures judge-vs-human agreement) — reversibility measures the undo cost of applying the eval-writer's recommendation. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 

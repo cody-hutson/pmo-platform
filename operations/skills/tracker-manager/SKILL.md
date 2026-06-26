@@ -524,7 +524,7 @@ points: the consolidated change summary presented for user approval, rejection
 explanations that identify evidence gaps requiring user action, validation errors that
 block updates, rejection patterns (proposals for PPM learning), and the `NEXT: [follow-up
 actions needed]` field. Every decision-class item must carry a **reversibility tier**
-paired with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+paired with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -559,7 +559,7 @@ proceeds immediately.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — including change-summary
 proposals, rejection explanations, validation errors, rejection patterns, and NEXT
-follow-ups. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol,
+follow-ups. See `core/specs/reversibility-protocol.md` for the full protocol,
 worked examples, and G4 gate algorithm.
 
 ## Shared Behavioral Rules
@@ -575,7 +575,7 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 
 - **SG-1 [CONTEXT]:** When using information from PROJECT.md or prior session state (not from the current artifact), label it `[CONTEXT]` with the source field. Do not present project memory as current-artifact evidence.
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
-- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — change-summary proposal, rejection explanation, validation error, rejection pattern, NEXT follow-up — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — change-summary proposal, rejection explanation, validation error, rejection pattern, NEXT follow-up — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 

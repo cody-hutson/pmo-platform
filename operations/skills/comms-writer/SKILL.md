@@ -462,7 +462,7 @@ This skill produces **decision-class outputs** — drafted communications with r
 verdicts, escalation recommendations, audience-calibration decisions, recipient selections,
 and action-item framings that the user is expected to act on (typically by sending).
 Every decision-class item must carry a **reversibility tier** paired with a **confidence
-level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -500,7 +500,7 @@ the user is being asked to take is what establishes the downstream commitment.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, worked examples,
+`core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
 ## Guardrails
@@ -537,7 +537,7 @@ Hard rejections. If you catch yourself doing any of these, stop and fix:
   draft readiness verdict, recipient selection, audience-calibration recommendation,
   escalation ask, alternative-version recommendation — must carry a reversibility tier
   label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level
-  (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs
+  (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs
   missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility
   Discipline section above.
 
