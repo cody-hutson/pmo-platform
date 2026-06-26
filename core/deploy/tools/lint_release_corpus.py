@@ -68,9 +68,36 @@ CANONICAL_FILENAME_RE = re.compile(
 )
 
 FILENAME_ALLOWLIST = {
+    # Grandfathered exceptions (pre-convention phase/analysis artifacts).
     "v11.01-Z_PHASE_PLAN.md",
     "v11.01-I_PHASE_PLAN.md",
     "v10.3_retrospective_validation.md",
+    # Plans README (index for the plans/ directory, not a release plan).
+    "README.md",
+    # Version-less-by-design release plans: theme-named at authoring time per the
+    # theme-named-branch convention (the version binds only at the Stage 12 atomic
+    # claim, so a plan authored ahead of its release legitimately has no version
+    # stem). These are intentional, not naming drift — the canonical regex requires
+    # a vX.Y prefix these files do not yet carry. Allowlisted with rationale rather
+    # than renamed (renaming would invent a version the plan never claimed and break
+    # every reference to the theme slug).
+    "15-generated-vs-source-provenance_RELEASE_PLAN.md",
+    "22-ticket-information-architecture_RELEASE_PLAN.md",
+    "adapter-config-foundation_RELEASE_PLAN.md",
+    "architecture-altitude-discipline_RELEASE_PLAN.md",
+    "ci-gate-trustworthiness-and-parallel-pr-safety_RELEASE_PLAN.md",
+    "corpus-durability-enforcement_RELEASE_PLAN.md",
+    "cross-reference-integrity-ci_RELEASE_PLAN.md",
+    "cross-release-impact-model_RELEASE_PLAN.md",
+    "declarative-gating-model_RELEASE_PLAN.md",
+    "domain-aware-stage5-design_RELEASE_PLAN.md",
+    "field-lifecycle-and-cmdb-automation_RELEASE_PLAN.md",
+    "intake-elicitation-skill_RELEASE_PLAN.md",
+    "memory-to-corpus-codification_RELEASE_PLAN.md",
+    "parallel-launch-quota-budget-gate_RELEASE_PLAN.md",
+    "platform-self-measurement-and-quality-method_RELEASE_PLAN.md",
+    "public-flip-depersonalization-enforcement_RELEASE_PLAN.md",
+    "release-version-claim-determinism_RELEASE_PLAN.md",
 }
 
 CUTOVER_RELEASES = {"v11.04b-3", "v11.04b-3-doc-cleanup"}
