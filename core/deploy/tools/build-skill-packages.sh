@@ -43,15 +43,15 @@ fi
 # Canonical source resolver (mirrors deploy.sh resolve_template_sync_source).
 # Modular canonical: templates → operations/templates/, template-* standards →
 # core/standards/. See docs/module-apis.md § Public templates.
-# The two explicit shared-standards-doc basenames (output-format.md,
-# operational-artifacts.md, #316) are single-sourced in core/standards/ and
-# match neither the template-*.md nor the *-template.{md,csv} pattern — mapped
-# by an explicit narrow basename rule (NOT a broad catch-all). Keep byte-aligned
-# with deploy.sh resolve_template_sync_source().
+# The three explicit shared-standards-doc basenames (output-format.md,
+# operational-artifacts.md, #316; regression-checks.md, #94) are single-sourced
+# in core/standards/ and match neither the template-*.md nor the
+# *-template.{md,csv} pattern — mapped by an explicit narrow basename rule (NOT a
+# broad catch-all). Keep byte-aligned with deploy.sh resolve_template_sync_source().
 resolve_canonical_source() {
   local name="$1"
   case "$name" in
-    output-format.md|operational-artifacts.md) echo "core/standards/$name" ;;
+    output-format.md|operational-artifacts.md|regression-checks.md) echo "core/standards/$name" ;;
     template-*.md) echo "core/standards/$name" ;;
     *) echo "operations/templates/$name" ;;
   esac

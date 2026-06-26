@@ -8,6 +8,17 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.29] - 2026-06-26
+
+Corpus-drift reconciliation — ten places where a reference or governance doc had drifted from its canonical source (a stale rule count, a divergent list, an old field name, an imprecise term, an incomplete check enumeration, and a duplicate file) are corrected so the docs say what the platform actually does. Documentation and governance accuracy only — no skill behavior, schema, or runtime-check change. routine class; the two text-edited skills (build-reviewer, pmo-skill-editor) have packages rebuilt at release-cut.
+
+### Changed
+
+- **The configuration field for delivery method reads `delivery_approach` everywhere.** The navigation-layer schema's last reference to the old `methodology` field name now matches the canonical `delivery_approach` used in PROJECT.md. *Why it matters:* the field name in the docs matches the field you actually set, with no stale alias to second-guess. ([#857](https://github.com/cody-hutson/pmo-platform/issues/857))
+- **The deploy-check reference points at the live check list instead of a frozen copy.** The `skill-deployment.md` Drift Check section stopped listing checks by hand (a list that had fallen behind) and now tells you how to read the current checks from `deploy.sh`. *Why it matters:* the reference can no longer name a different set of checks than the one that actually runs. ([#2095](https://github.com/cody-hutson/pmo-platform/issues/2095))
+
+[Full notes](release/releases/notes/v2.29-corpus-drift-reconciliation_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.29)
+
 ## [v2.28] - 2026-06-26
 
 Generated-vs-source provenance — when a skill writes a generated artifact, the artifact's frontmatter now records which skill and version produced it and what upstream evidence it drew from, plus a stable identifier, so generated content is traceable to its source and cleanly distinguished from human-authored artifacts. novel class; additive throughout (every field is optional, forward-only no back-fill); the five changed-skill packages rebuilt at release-cut.
