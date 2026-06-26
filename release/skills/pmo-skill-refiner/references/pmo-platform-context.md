@@ -138,7 +138,7 @@ Core reference docs the refiner cites during Interview and injection:
 
 | Doc | Purpose |
 |---|---|
-| `core/specs/failure-mode-standard.md` | 5-field template + 5-category taxonomy for Domain-Specific Failure Modes |
+| `core/standards/failure-mode-standard.md` | 5-field template + 5-category taxonomy for Domain-Specific Failure Modes |
 | `core/specs/reversibility-protocol.md` | Tier vocabulary (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) |
 | `core/standards/principal-standard-checklist.md` | Principal Standard checklist and Scoring Guide; skills target CONDITIONAL PASS or better |
 | `core/schemas/per-skill-output-contracts.md` | Output schema registration (Skill N entry) |

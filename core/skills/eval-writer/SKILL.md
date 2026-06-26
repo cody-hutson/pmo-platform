@@ -359,7 +359,7 @@ diffs. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full
 
 These domain-specific anti-patterns coexist with `## Guardrails` and `## Reversibility
 Discipline`. Each entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. The Module 6 anti-pattern catalog
+`pmo-platform/reference/standards/failure-mode-standard.md`. The Module 6 anti-pattern catalog
 (A-01..A-23) classifies *eval-quality* failures that this skill audits in other systems;
 the anti-patterns below are *meta* — failure modes of the eval-writer's own authoring
 behavior, distinct from the evals it produces.

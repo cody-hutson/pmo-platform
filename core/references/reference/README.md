@@ -8,4 +8,6 @@
 
 > Quadrant taxonomy: see `core/README.md`.
 
-Key entries: [toolchain-operational-reference.md](toolchain-operational-reference.md) — non-obvious operational behaviors of the gh CLI, zsh, GitHub's repository/Projects surfaces, and a known third-party Claude plugin.
+Key entries:
+- [toolchain-operational-reference.md](toolchain-operational-reference.md) — non-obvious operational behaviors of the gh CLI, zsh, GitHub's repository/Projects surfaces, and a known third-party Claude plugin.
+- [claude-code-runtime-state.md](claude-code-runtime-state.md) — known Claude Code runtime-state surfaces: backups, session storage, keychain, env-var precedence.

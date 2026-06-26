@@ -320,7 +320,7 @@ points, Design notes, labeled assumptions, target-type detection. See
 
 These domain-specific anti-patterns coexist with `## Guardrails` and `## Reversibility
 Discipline`. Each entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`.
+`pmo-platform/reference/standards/failure-mode-standard.md`.
 
 ### Target type misidentified (SKILL.md shape applied to everyday ask) — TRIG
 

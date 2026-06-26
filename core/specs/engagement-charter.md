@@ -281,7 +281,7 @@ This charter composes with peer principle docs and is consumed by downstream spe
 | [decision-discipline.md](../disciplines/decision-discipline.md) | §3 (Approval ergonomics), §4 (Briefing class) | Decision Briefing format inherited verbatim; charter §4 names the class, decision-discipline owns the M1/M2/M3 mechanism templates |
 | [reversibility-protocol.md](reversibility-protocol.md) | §3 (multi-input gates), §4 (Approval Request reversibility tier field) | Tier vocabulary CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE consumed; process-weight scaling consumed |
 | [review-discipline-principles.md](../disciplines/review-discipline-principles.md) | §5 (observability between gates) | 6-deliverable output structure informs gate-transition comment structure |
-| [failure-mode-standard.md](failure-mode-standard.md) | §7 (templates) | 5-field anti-pattern template is one of the canonical templates |
+| [failure-mode-standard.md](../standards/failure-mode-standard.md) | §7 (templates) | 5-field anti-pattern template is one of the canonical templates |
 | [autonomy-tiers.md](autonomy-tiers.md) | §1 (engagement hierarchy) | Autonomy Tier 0–3 vocabulary consumed verbatim |
 | [stage-to-skill-mode-mapping.md](../../release/references/specs/stage-to-skill-mode-mapping.md) | §1, §5 (per-stage Automation Tier mapping) | Per-stage automation level consumed |
 | [autonomous-execution-model.md](../disciplines/autonomous-execution-model.md) | §3, §4 (Escalate Pattern), §5 (observability via Retry/Escalate audit trail) | Escalation block format, retry caps consumed |
@@ -299,7 +299,7 @@ This charter composes with peer principle docs and is consumed by downstream spe
 
 ### Index pattern
 
-Per Stage 4 D-2 (operator-rendered 2026-05-04), confirmed engagement-related patterns live at native specialized surfaces ([failure-mode-standard.md](failure-mode-standard.md), [review-discipline-principles.md](../disciplines/review-discipline-principles.md), [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>), [engineering/rules/](<OPERATOR_INSTANCE_ENGINEERING_RULES_PATH>)). This appendix is a **one-line index** — entries link to the native home; the home owns the canonical pattern body. Engagement patterns surface from operator corrections via the pattern-cache scan mechanism in [decision-discipline.md § 4](../disciplines/decision-discipline.md).
+Per Stage 4 D-2 (operator-rendered 2026-05-04), confirmed engagement-related patterns live at native specialized surfaces ([failure-mode-standard.md](../standards/failure-mode-standard.md), [review-discipline-principles.md](../disciplines/review-discipline-principles.md), [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>), [engineering/rules/](<OPERATOR_INSTANCE_ENGINEERING_RULES_PATH>)). This appendix is a **one-line index** — entries link to the native home; the home owns the canonical pattern body. Engagement patterns surface from operator corrections via the pattern-cache scan mechanism in [decision-discipline.md § 4](../disciplines/decision-discipline.md).
 
 ### Seed entries (13 patterns from 2026-04-24 reorg)
 

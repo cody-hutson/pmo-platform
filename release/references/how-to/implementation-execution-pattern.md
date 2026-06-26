@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Implementation Execution Pattern — Reference Workflow
 
 This reference document defines the 7-step Read+Edit+Bash workflow for executing implementation plans emitted by `implementation-planner` in the Edit-ready format specified by [`release/skills/implementation-planner/references/output-format-spec.md`](../../skills/implementation-planner/references/output-format-spec.md) (Spec 5). This workflow **replaces the deprecated `implementer` skill** — the skill was a thin wrapper over Claude Code's native Read/Edit/Write/Bash with no irreplaceable logic. This doc preserves the workflow discipline (drift checks, write-verify, snapshots, failure modes, reversibility) while eliminating the skill-deployment surface and domain-lock that the old skill carried.
@@ -200,7 +201,7 @@ The 7 steps above are the **reference catalog** (concept-by-tool). The actual ti
 
 ## Failure Modes
 
-Three domain-specific failure modes govern workflow execution. Each follows the 5-field conditional template per [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md). G7 gate-enforcement in pmo-qa-auditor only fires on SKILL.md files — this doc is a reference workflow, not a skill, so ≥3 floor is authored here as principal-grade discipline rather than gate-enforced.
+Three domain-specific failure modes govern workflow execution. Each follows the 5-field conditional template per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md). G7 gate-enforcement in pmo-qa-auditor only fires on SKILL.md files — this doc is a reference workflow, not a skill, so ≥3 floor is authored here as principal-grade discipline rather than gate-enforced.
 
 ### Skipping write-verify under batch-completion pressure — PROC
 
@@ -272,7 +273,7 @@ This workflow has been demonstrated end-to-end executing a single real RT-1 fix 
 ## See Also
 
 - [`release/skills/implementation-planner/references/output-format-spec.md`](../../skills/implementation-planner/references/output-format-spec.md) — input contract (Spec 5).
-- [`failure-mode-standard.md`](../../../core/specs/failure-mode-standard.md) — 5-field conditional template used by Failure Modes section above.
+- [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — 5-field conditional template used by Failure Modes section above.
 - [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) — reversibility tier vocabulary.
 - [`pipeline/stage-11-snapshot.md`](../pipeline/stage-11-snapshot.md) — Snapshot compression for git-native releases.
 - [`release/governance/release-process.md`](../../governance/release-process.md) — git-native compression model.

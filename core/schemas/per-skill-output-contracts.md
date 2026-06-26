@@ -62,7 +62,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`ppm-agent/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`ppm-agent/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Gate)
 - [ ] All 7 sections present
@@ -141,7 +141,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`delivery-engine/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`delivery-engine/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Gate)
 - [ ] All 8 sections present
@@ -239,7 +239,7 @@ All factual claims in drafts carry one of the 5 evidence labels per CLAUDE.md §
 
 ### Failure-Mode Conformance (G7)
 
-`comms-writer/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`comms-writer/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Gate)
 - [ ] All 6 sections present
@@ -356,7 +356,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`change-management/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`change-management/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Gate)
 - [ ] All 8 sections present
@@ -451,7 +451,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`pmo-technical-analyst/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`pmo-technical-analyst/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Gate)
 - [ ] All 8 sections present
@@ -560,7 +560,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`pmo-process-designer/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`pmo-process-designer/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Gate)
 - [ ] All 8 sections present
@@ -630,7 +630,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`pmo-qa-auditor/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`pmo-qa-auditor/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Auditor Self-Check)
 
@@ -706,7 +706,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`pmo-skill-editor/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
+`pmo-skill-editor/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings.
 
 ### Validation Checklist (QA Auditor Self-Check for Skill Editor)
 
@@ -1070,7 +1070,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ### Failure-Mode Conformance (G7)
 
-`artifact-lint/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../specs/failure-mode-standard.md` with the 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings. (Ships with 5: dual-state-read INPUT, version-chain-as-duplicate OUT, auto-execute PROC, excluded-path TRIG, cleanup-tool-conflation HAND.)
+`artifact-lint/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with the 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings. (Ships with 5: dual-state-read INPUT, version-chain-as-duplicate OUT, auto-execute PROC, excluded-path TRIG, cleanup-tool-conflation HAND.)
 
 ### Validation Checklist (QA Gate)
 - [ ] Report staged at `08-Generated/artifact-lint-YYYY-MM-DD.md` with the artifact-generator metadata header

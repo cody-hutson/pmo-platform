@@ -6,7 +6,7 @@ parallel_to:
   - ../disciplines/review-discipline-principles.md
   - ../disciplines/discovery-discipline.md
   - ../disciplines/decision-discipline.md
-  - ../specs/failure-mode-standard.md
+  - ../standards/failure-mode-standard.md
 source: promoted from the observation that root-cause analysis existed as a scattered principle with no invokable method, surfaced while building the intake front door — the open question "where is root cause performed today?" had no answer as a usable method, only as a scattered principle across review-discipline-principles.md / failure-mode-standard.md / decision-discipline.md
 ---
 
@@ -14,7 +14,7 @@ source: promoted from the observation that root-cause analysis existed as a scat
 
 # Root-Cause Analysis (RCA) Method
 
-The invokable method for root-causing a defect or failure. Root-causing exists across the platform as a *scattered principle* — the root-cause **format** lives in [`review-discipline-principles.md` §2](review-discipline-principles.md), the systemic-pattern **categories** live in [§3](review-discipline-principles.md), and root-cause **as a field** lives in the [`failure-mode-standard.md`](../specs/failure-mode-standard.md) 5-field template — but none of those is a *callable procedure* a stage can hand off to. This method is that procedure. It is a thin entry point: it **invokes** the existing format and categories as its output contract; it does **not** redefine or relocate them.
+The invokable method for root-causing a defect or failure. Root-causing exists across the platform as a *scattered principle* — the root-cause **format** lives in [`review-discipline-principles.md` §2](review-discipline-principles.md), the systemic-pattern **categories** live in [§3](review-discipline-principles.md), and root-cause **as a field** lives in the [`failure-mode-standard.md`](../standards/failure-mode-standard.md) 5-field template — but none of those is a *callable procedure* a stage can hand off to. This method is that procedure. It is a thin entry point: it **invokes** the existing format and categories as its output contract; it does **not** redefine or relocate them.
 
 **Distinction from the review-discipline ROOT-CAUSE FORMAT it consumes.** [`review-discipline-principles.md` §2](review-discipline-principles.md) defines *what a valid root cause looks like* (the chain `[systemic pattern] → [proximal cause] → [observable signal]` + the rejection threshold). This file defines *how you produce one for a given defect* — the 6 steps, the trigger predicate, and the invocation points. The format is the output contract; this method is the production procedure. The two are referenced by [`decision-discipline.md` §intro](decision-discipline.md), which places root-cause chains in the review audience.
 
@@ -37,7 +37,7 @@ Parallel, not extension. Each sibling governs a distinct activity-class at a dis
 | `discovery-discipline.md` | Discovery | "What should this be? What don't we know?" | Before the artifact exists (activity-entry) |
 | `decision-discipline.md` | Decision | "What should we choose?" | At the recommendation point |
 | `review-discipline-principles.md` | Review | "Is this correct?" | After the artifact exists |
-| `../specs/failure-mode-standard.md` | Failure-mode authoring | "What fails, why, and how?" | Pre-authoring (skill spec definition); enforced at G7 |
+| `../standards/failure-mode-standard.md` | Failure-mode authoring | "What fails, why, and how?" | Pre-authoring (skill spec definition); enforced at G7 |
 | `root-cause-analysis.md` (this file) | **RCA** | **"Why did this fail?"** | **After a defect/failure surfaces (activity-exit)** |
 
 RCA is **review-class adjacent** — it produces findings with root causes, the same artifact shape review produces — but it is narrower: review audits a *whole artifact* for correctness across many dimensions; RCA root-causes a *single defect or failure* down to its systemic pattern. A skill performing both cites both files. Cross-reference between the siblings and this file; no inheritance.
@@ -63,7 +63,7 @@ RCA fires conditionally — when a defect or failure surfaces that needs a cause
 | **Defect / bug intake** | A `bug`-type work item lands with an unknown cause | `intake-desk` hands off — emits `[ASSUMPTION – CONFIRM] <unknown cause> — owner: root-cause — to close: RCA per core/disciplines/root-cause-analysis.md`; does NOT root-cause inline (per [ADR-016 §3](../ADRs/ADR-016-intake-front-door-architectural-boundary.md)) |
 | **Post-failure / post-surprise** | A gate fails, a release regresses, an incident occurs | `delivery-engine` Mode E (Execution Control Tower) for a slip/regression; the pipeline stage that owns the failure |
 | **Systemic finding needing a cause** | A backlog scan surfaces a systemic issue ("42% of tickets lack AC"); a DoR check finds "fix the bug" with no success definition | `delivery-engine` Mode A (Backlog Scan → RAID entry for a systemic issue), Mode C (DoR gate), Mode G (RAID origination) |
-| **Recurring symptom (N≥2)** | Two or more same-signature defects | Promote the RCA output to a [`failure-mode-standard.md`](../specs/failure-mode-standard.md) entry (the RCA root cause becomes the "Root cause" field) |
+| **Recurring symptom (N≥2)** | Two or more same-signature defects | Promote the RCA output to a [`failure-mode-standard.md`](../standards/failure-mode-standard.md) entry (the RCA root cause becomes the "Root cause" field) |
 | **Triage of a root-cause-owned assumption** | A `bug`-type issue at triage carries an open `owner: root-cause` assumption from intake | The define/triage stage routes the assumption to this method for closure before bundling |
 
 **Non-fires (omission = correct, per the non-ceremony pattern).** A well-understood one-line fix with an obvious cause (a typo, a known-flaky test) does not need the 6-step walk — root-causing it is ceremony. A *feature request* has no failure to root-cause. When RCA does not fire, no root-cause record is produced; the omission is explicit, not silent.
@@ -86,7 +86,7 @@ Each step names what it consumes from where. The method does not duplicate the c
 
 6. **Route the output.** Emit the root-cause record to its consumer:
    - a **finding** (review / audit context) — carries the record per the `review-discipline-principles.md` §5 findings-register shape;
-   - a **failure-mode entry** — when the symptom is recurring (N≥2 same signature), the root cause becomes the "Root cause" field of a new [`failure-mode-standard.md`](../specs/failure-mode-standard.md) 5-field entry;
+   - a **failure-mode entry** — when the symptom is recurring (N≥2 same signature), the root cause becomes the "Root cause" field of a new [`failure-mode-standard.md`](../standards/failure-mode-standard.md) 5-field entry;
    - a **remediation work item** — when intake handed off an `owner: root-cause` assumption, the closed RCA is the evidence that closes it.
 
 ---
@@ -114,7 +114,7 @@ RCA composes with — does not replace — the siblings. Each composition direct
 
 **Direction:** RCA consumes review-discipline's format and categories. RCA is the production procedure; review-discipline §2/§3 is the output contract. A review that produces findings *uses* RCA per-finding (Rule 4 "no symptom-only findings" is the review-side enforcement of this method's step 2). Cross-reference rule: an RCA record cites `review-discipline-principles.md` §2 for its chain format and §3 for its category.
 
-### 5.2 Composition with `../specs/failure-mode-standard.md`
+### 5.2 Composition with `../standards/failure-mode-standard.md`
 
 **Direction:** RCA feeds the failure-mode template. When a defect recurs (N≥2 same signature), step 6 routes the root cause into the "Root cause" field of a 5-field failure-mode entry. RCA is the upstream producer; the failure-mode entry is the durable downstream record of the *pattern*. Cross-reference rule: a failure-mode entry whose "Root cause" field was produced by an RCA pass may cite this method.
 
@@ -130,7 +130,7 @@ RCA composes with — does not replace — the siblings. Each composition direct
 
 ## Section 6 — Anti-Patterns
 
-Three RCA-specific anti-patterns, each authored per the 5-field template in [`failure-mode-standard.md`](../specs/failure-mode-standard.md). Each carries one category tag (TRIG / INPUT / PROC / OUT / HAND).
+Three RCA-specific anti-patterns, each authored per the 5-field template in [`failure-mode-standard.md`](../standards/failure-mode-standard.md). Each carries one category tag (TRIG / INPUT / PROC / OUT / HAND).
 
 ### 6.1 Symptom-only closure — PROC
 
@@ -150,7 +150,7 @@ Three RCA-specific anti-patterns, each authored per the 5-field template in [`fa
 
 ### 6.3 Pattern-of-one inflation — OUT
 
-- **Signature (observable signal):** A single defect's RCA record is promoted to a [`failure-mode-standard.md`](../specs/failure-mode-standard.md) anti-pattern entry — a new failure-mode is authored on the evidence of one occurrence, with no second same-signature instance.
+- **Signature (observable signal):** A single defect's RCA record is promoted to a [`failure-mode-standard.md`](../standards/failure-mode-standard.md) anti-pattern entry — a new failure-mode is authored on the evidence of one occurrence, with no second same-signature instance.
 - **Conditional:** do NOT promote a single defect to a failure-mode entry via RCA when only one same-signature instance exists, because the emergence rule (N≥2 same signature) gates promotion — a pattern with one member is a *finding*, not a *pattern* (per [`review-discipline-principles.md` §3](review-discipline-principles.md): "a pattern with fewer than 2 member findings is a single finding, not a pattern — demote it").
 - **Root cause:** Pattern-hunger + the failure-mode template being the most durable home available. A clean root cause feels like it deserves permanence, so the agent reaches for the anti-pattern catalog before the second instance has appeared.
 - **Mitigation:** Route a single-instance RCA to a *finding* (step 6 finding path), not a failure-mode entry. Hold it as a finding until a second same-signature instance surfaces; only then does the emergence rule authorize a failure-mode entry whose "Root cause" field this RCA fills.
@@ -175,7 +175,7 @@ The protocol applies workspace-wide per the CLAUDE.md Universal Preferences acti
 ## See also
 
 - [`review-discipline-principles.md`](review-discipline-principles.md) — §2 the required root-cause FORMAT this method invokes; §3 the systemic-pattern categories (step 3); §5 the findings-register shape (step 6 finding path). **Cited, never relocated.**
-- [`../specs/failure-mode-standard.md`](../specs/failure-mode-standard.md) — the 5-field template; downstream consumer of RCA output (step 6 failure-mode path).
+- [`../standards/failure-mode-standard.md`](../standards/failure-mode-standard.md) — the 5-field template; downstream consumer of RCA output (step 6 failure-mode path).
 - [`discovery-discipline.md`](discovery-discipline.md) — inverse temporal anchor (activity-entry vs RCA's activity-exit); post-failure composition seam.
 - [`decision-discipline.md`](decision-discipline.md) — RCA is review-class, parallel to decision-class; remediation decisions derived from RCA cite the RCA record.
 - [`../specs/reversibility-protocol.md`](../specs/reversibility-protocol.md) — reversibility-tier vocabulary for step 5.

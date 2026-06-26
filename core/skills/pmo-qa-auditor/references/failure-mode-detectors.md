@@ -12,11 +12,11 @@ source.
 The 8 detectors are **runtime detection infrastructure**, distinct from the authoring
 discipline a SKILL.md documents in its own `## Domain-Specific Failure Modes` section. The
 authoring format is shared — each detector is written to the same 5-field conditional
-template per `core/specs/failure-mode-standard.md` — but the surface is different: these
+template per `core/standards/failure-mode-standard.md` — but the surface is different: these
 detectors describe the *platform-wide* failure modes the auditor detects in other skills'
 outputs and in platform state, not the auditor's own authoring-failure surface. The 8
 detectors and their category tags are pre-canonicalized in the
-`core/specs/failure-mode-standard.md` cross-validation mapping table (the 8-to-taxonomy
+`core/standards/failure-mode-standard.md` cross-validation mapping table (the 8-to-taxonomy
 mapping) and its worked "Automation complacency" conversion; this doc lifts that mapping
 and gives each detector an observable signature, a numeric threshold, and a current-status
 read.
@@ -35,7 +35,7 @@ ownership map:
 
 | Threshold | Owner / source (referenced, not re-derived) |
 |---|---|
-| Automation-sample interval (`1/N` runs) | `core/specs/failure-mode-standard.md` Relationship-to-pmo-qa-auditor worked conversion ("sample at rate 1/N runs"); N resolved in this doc. |
+| Automation-sample interval (`1/N` runs) | `core/standards/failure-mode-standard.md` Relationship-to-pmo-qa-auditor worked conversion ("sample at rate 1/N runs"); N resolved in this doc. |
 | RACI single-Accountable rule | `operations/skills/delivery-engine/references/gate-definitions.md` LG-2-EX-4 ("a RACI naming the single Accountable per gate type") + `gate-checklists.md` ("Clear RACI with single Accountable per gate"). Owns D2 + G9. |
 | Echo-chamber detection signal | `core/skills/eval-writer/references/failure-modes.md` F-30 ("Echo chamber / round-over-round opinion divergence / mandatory devil's-advocate; heterogeneity"). Owns the D3 signal + mitigation. |
 | Push-to-resolve target (`>= 80%`) | `core/skills/pmo-qa-auditor/SKILL.md` Mode C scorecard ("Target: >= 80%") + `references/push-to-resolve-rubric.md`. Owns the D4 floor. |
@@ -62,7 +62,7 @@ inline** — they resolve from the platform-behavior config surface at evaluatio
 ## Detector Schema
 
 Every detector is specified with the **5 template fields** per
-`core/specs/failure-mode-standard.md` — **Signature**, **Conditional** (the
+`core/standards/failure-mode-standard.md` — **Signature**, **Conditional** (the
 `do NOT X[, when Y], because Z` form), **Root cause**, **Mitigation**, **Principal vs.
 junior** — **plus** four detector-specific fields:
 
@@ -97,7 +97,7 @@ junior** — **plus** four detector-specific fields:
   last 5 gate-runs sampled; divergence: none / <cite>."
 - **Surface:** Mode E roll-up (with a Mode A signal when an output cites an automated result
   as its sole evidence).
-- **Threshold owner/source:** `core/specs/failure-mode-standard.md` worked conversion ("sample
+- **Threshold owner/source:** `core/standards/failure-mode-standard.md` worked conversion ("sample
   at rate 1/N runs"); N=5 chosen as the detection-latency-versus-sampling-cost balance (1/3
   over-samples a complacency trend, 1/10 too sparse to catch drift before it compounds).
   [SOURCE: failure-mode-standard.md worked conversion + INFERRED band]
@@ -385,7 +385,7 @@ issue-drafts it informs carry reversibility tiers per the Mode E output discipli
 
 ## References
 
-- `core/specs/failure-mode-standard.md` — the 8-to-taxonomy mapping (the category tags D1–D8
+- `core/standards/failure-mode-standard.md` — the 8-to-taxonomy mapping (the category tags D1–D8
   lift) + the worked "Automation complacency" conversion (the D1 conditional) + the 5-field
   template these detectors are authored to.
 - `operations/skills/pmo-technical-analyst/SKILL.md` — the SPOF "3+ contexts -> standalone RAID

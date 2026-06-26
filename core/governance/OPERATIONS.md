@@ -364,7 +364,7 @@ When `delivery_approach: Custom`, skills MUST read the `custom_methodology_defin
 
 ### Rule 4 — Failure modes to avoid
 
-See [`methodology-parameterization-v1.md § 6 Failure Modes`](../../release/references/specs/methodology-parameterization-v1.md) for the 5 domain-specific anti-patterns (category tags per [`failure-mode-standard.md`](../specs/failure-mode-standard.md)):
+See [`methodology-parameterization-v1.md § 6 Failure Modes`](../../release/references/specs/methodology-parameterization-v1.md) for the 5 domain-specific anti-patterns (category tags per [`failure-mode-standard.md`](../standards/failure-mode-standard.md)):
 
 - **INPUT-1 Methodology conflation** — conflating `delivery_approach` with `dual_framing_enabled`.
 - **PROC-2 Custom-block skip** — reading `Custom` without reading the block.
@@ -863,6 +863,14 @@ These are living documents. Update cadence and ownership are defined below.
 | `[Project]_RAID_Log.csv` | Risks, Assumptions, Issues, Dependencies. RAID_ID namespaced per skill. Active/Archive split — closed items archived, never purged. Schema in tracker-schemas.md. | Document Tier 1 | PPM Agent | Weekly review. Closure moves to ARCHIVE section. |
 | `[Project]_Artifact_Register.md` | Configuration-management catalog of project artifacts (name, type, version, baseline status, owner, retention) — the per-project CI catalog for the Artifact entity. Append-only superseded history. Schema in tracker-schemas.md § Tracker 6. | Document Tier 2 | Tracker Manager | On artifact-generate + phase-gate baselining |
 | `Key Terms Glossary.csv` | Terminology, acronyms, team-specific language. | Document Tier 1 | Process Designer | As-needed |
+
+#### People Capability/Coverage Graph (operator-instance, cross-cutting)
+
+Registered per the functional-people-graph milestone. Distinct from the per-project trackers above: the **filled** roster is operator-instance and **never committed** (out-of-tree placement is the primary protection; only a de-identified template ships in `operations/templates/`, registered in `TEMPLATE_SYNC_MAP`).
+
+| Artifact | Purpose | Owner | Cadence |
+|---|---|---|---|
+| `people-roster.yaml` (operator-instance) + the capability/coverage graph view (`core/disciplines/people-coverage-graph.md`) + the clarification-queue | Resolve who-does-what / who-covers-whom / coverage-by-capability — names, owners (the four leadership-owner `ref→Person` fields per ADR-040), and coverage — consumed read-only by comms-writer, tracker-manager, ppm-agent, and delivery-engine | Operator maintains the roster; the graph is maintained ambiently (Autonomy **Tier 1** — clarification queue, never auto-create); `core/deploy/extract-roster-needles.sh` keeps the PII pre-commit needle list current | Ambient / event-driven (roster-touch · owner/Resource write · external-name surface · ref-resolution miss); operator confirms unrecognized people via the clarification queue |
 
 ### Document Tier Definitions
 

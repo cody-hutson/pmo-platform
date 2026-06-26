@@ -236,7 +236,7 @@ Platform-wide generic guardrails inherited from CLAUDE.md § Universal Preferenc
 
 ## Domain-Specific Failure Modes
 
-These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per `core/specs/failure-mode-standard.md` and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
+These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (platform-wide) and `## Reversibility Discipline` (decision-class output discipline). Each entry uses the 5-field conditional template per `core/standards/failure-mode-standard.md` and carries a category tag (TRIG / INPUT / PROC / OUT / HAND). pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Keying displaced-content on content-maturity instead of the location field — PROC
 

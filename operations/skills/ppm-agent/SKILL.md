@@ -291,6 +291,18 @@ Section (6) and Section 9.4 as their consumers:
   age-derived step)` on the `escalation-thresholds.md §2` 5-step ladder (Team → Project →
   Program → Program-Critical/Sponsor → Portfolio). Surface the escalation here in Section 6.
 
+**Escalation owner resolution (read-only).** When the escalation action names *who* it routes to,
+resolve the right owner via the capability/coverage graph view
+([`core/disciplines/people-coverage-graph.md`](../../../core/disciplines/people-coverage-graph.md))
+joined on `person_id`: *who-does-what* for the owner's Person + functional role; *who-covers-whom*
+(`escalates_to`) for the functional escalation target — a routing **hint**, NOT an HR reporting
+line; *coverage-by-capability* (status-filtered) to find a backup when the primary owner is
+on-leave/departed. The escalation **tier/threshold values stay sourced from**
+`references/escalation-thresholds.md` (unchanged) — the graph supplies only the routing *target*,
+not the routing thresholds or ladder logic. This is a **READ** of the view: ppm-agent emits
+escalation actions, never a graph write; an unresolved owner is surfaced (the clarification-queue
+maintenance path owns identity creation), never invented.
+
 Reuse the **existing** `[STALE-WARN]` / `[STALE-ESCALATE]` flag tokens from
 `escalation-thresholds.md §3` verbatim — do not coin new flag names. **Negative path:** when a
 RAID item has no `Last Updated` field, or no RAID Log is present, do **not** fabricate an age —
@@ -808,7 +820,7 @@ These are hard rejections. If you catch yourself doing any of these, stop and fi
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/specs/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Push-to-resolve dilution into "should be scheduled" — OUT

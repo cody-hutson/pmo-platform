@@ -1,8 +1,9 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 # Process-Flow Diagram Standards
 
 **Status:** Canonical
-**Owner:** `core/specs/process-flow-diagram-standards.md`
+**Owner:** `core/standards/process-flow-diagram-standards.md`
 **Introduced:** 2026-05-15
 **Consumers:** Every skill or reference doc that authors/modifies a process-flow diagram. The retrofit track consumes the Adoption § Exemptions Registry anchor.
 **Cross-references:** see § Related References at the foot of this file.
@@ -93,13 +94,23 @@ Promote to Mermaid (per § Scope & Diagram-Form Decision Rule) the moment the fl
 
 **Conformance trigger:** a diagram becomes in-scope the first time its enclosing fenced block is added or edited. Editing surrounding prose without touching the diagram does **not** trigger conformance.
 
-### Exemptions Registry
+### Diagram Inventory & Exemptions Registry
 
-Diagrams that are intentionally exempt are listed here with rationale. **Initially empty** — under forward-only adoption no diagram is exempt by default. The retrofit track populates this registry when its retrofit audit determines a specific diagram should remain non-conforming with stated rationale (this anchor satisfies the retrofit AC1's "listed exempt with rationale in the standard's Adoption section").
+The retrofit track's one-time corpus audit recorded the diagram inventory and per-diagram conformance classification below. The inventory is **re-derivable** from the survey commands stated in the header — it is a snapshot of the audit's result, not a hand-maintained list. Three classes apply: **conforming** (Mermaid per the grammar, or an ASCII linear flow-block grandfathered by the § Scope decision rule), **needs-retrofit** (an ASCII flow-block carrying a decision/gate node or ≥2 actors — the rule mandates Mermaid — or a Mermaid block violating the shape grammar), and **exempt-with-rationale** (meets a needs-retrofit trigger but is intentionally kept non-conforming for a stated reason). Only exempt rows populate the Exempt-since / Rationale columns; conforming rows leave them `—`.
 
-| Diagram (file:anchor) | Exempt since | Rationale | Tracking |
-|---|---|---|---|
-| _(none — forward-only)_ | — | — | — |
+**Inventory derived:** 2026-06-25 at commit `e87bb22` via the two-surface enumeration. Surface A (Mermaid, deterministic) counts fenced `mermaid` blocks (lines opening a triple-backtick `mermaid` fence) across `core`, `release`, and `operations`, recursively — token mentions with zero opening fence are discarded. Surface B (plain-fence ASCII flow-blocks, eyeball-bounded per the § Scope decision rule — a naive arrow grep returns ~496 prose-laden files and is not an inventory; the rule grandfathers linear blocks, so Surface B hunts only the exceptions that carry a decision node or ≥2 actors). **Count observed:** 5 Mermaid fenced blocks across 4 diagram-bearing files, plus 1 grandfathered ASCII linear block in this standard; one in-scope ASCII flow-block carrying gate nodes was found to need retrofit (Surface B). Two grep hits were excluded as token-only false positives with zero diagram fences (`planning-solutioning-handoff.md` — "flowchart" in prose; the v2.23 release plan — prose referencing this very audit).
+
+| Diagram (file:anchor) | Form | Class | Exempt since | Rationale | Tracking |
+|---|---|---|---|---|---|
+| `core/standards/process-flow-diagram-standards.md` § Mermaid Syntax Template | Mermaid | conforming | — | — | — |
+| `core/standards/process-flow-diagram-standards.md` § Swimlane Notation Example | Mermaid | conforming | — | — | — |
+| `core/standards/process-flow-diagram-standards.md` § ASCII Flow-Block Convention (pipeline implementation-sequence block) | ASCII (linear) | conforming | — | — | — |
+| `core/standards/km-governance-framework.md` § 4.2 (4-step retirement flow) | Mermaid | conforming | — | — | — |
+| `core/standards/universal-vs-localized-context.md` § 10.2 (R1–R4 reference-form decision tree) | Mermaid | conforming | — | — | — |
+| `release/skills/release-planner/references/release-plan-template.md` (bundle dependency `graph LR`) | Mermaid | conforming | — | — | — |
+| `release/references/standards/design-exploration.md` § 7 (Tier-A process-flow artifact) | ASCII (2 gate nodes; cited-as-canonical) | needs-retrofit | — | — | reactive retrofit issue (route via `pmo-skill-editor` discipline) |
+
+**Needs-retrofit note (1).** `design-exploration.md` § 7 is a self-declared Tier-A *process-flow* artifact carrying two `GATE` decision nodes and an explicit canonical citation, rendered as a plain-fence ASCII block. Per § Scope & Diagram-Form Decision Rule, a gated and/or cited-as-canonical flow MUST use Mermaid. The block's enclosing fence was authored after this standard's adoption and materially modified thereafter (the worked-example revision that reshaped the Step-1 box), so it is **in-scope (not grandfathered)**. The retrofit is reactive — a follow-up issue redraws this single block in Mermaid per the grammar; the file is a reference doc (not a packaged skill), so no `.skill` rebuild applies. No diagram was classified exempt-with-rationale (the registry's Exempt-since / Rationale columns stay empty above).
 
 ## Design Rationale
 
@@ -115,5 +126,5 @@ Inline options analysis (no separate ADR Issue — single reasonable approach pe
 
 - [`design-artifact-standard.md`](../standards/design-artifact-standard.md) — META / parent framework for all 7 design-artifact flow types; this standard governs the process-flow class specifically. Composed per `design-artifact-standard.md` § 6 Tool Selection.
 - [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md) — the platform's self-declared canonical anchor for cross-cutting process flows; reciprocates the inbound citation from its § Related References.
-- [`terminology-glossary.md`](terminology-glossary.md) — canonical term definitions (Function, Process, Methodology, Framework).
+- [`terminology-glossary.md`](../specs/terminology-glossary.md) — canonical term definitions (Function, Process, Methodology, Framework).
 - [`pipeline/README.md`](../../release/references/pipeline/README.md) — 13-stage pipeline reference directory.
