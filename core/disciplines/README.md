@@ -44,6 +44,9 @@ These are parallel — each governs a distinct activity-class at a distinct temp
 
 Decision sub-mechanism (not a peer activity-class — an edit-time twin of `decision-discipline.md` §2.1.1):
 - [reconcile-dont-annotate.md](reconcile-dont-annotate.md) — when editing an artifact that carries stale/contradictory state, reconcile it to current state rather than annotating-and-deferring. The edit-time twin of verify-before-recommend (§2.1.1).
+
+Authoring sub-mechanism (not a peer activity-class — the default posture when ADDING durable-corpus content):
+- [minimal-addition-discipline.md](minimal-addition-discipline.md) — when adding content to governance/reference corpus, add the minimum that carries the meaning (in service of *simplicity*). The umbrella authoring discipline of which duplication is one facet; complements the reference-durability floor via the floor/ceiling boundary.
 | [root-cause-analysis.md](root-cause-analysis.md) | RCA | "Why did this fail?" | After a defect/failure surfaces (activity-exit) |
 | [autonomous-execution-model.md](autonomous-execution-model.md) | Self-repair | "What can be retried, escalated, rolled back?" | During pipeline execution between gates |
 | [three-gulfs-methodology.md](three-gulfs-methodology.md) | Diagnosis | "Intent / Execution / Evaluation — where is the gap?" | At skill creation, improvement, eval design |
