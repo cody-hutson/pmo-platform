@@ -9,4 +9,4 @@ tools: Read, Grep, Agent
 
 This fixture lists `Agent` in its `tools:` enumeration. The
 agent-tools-list-conformance check must flag it as finding (b) — a spoke that can
-spawn sub-spokes is precisely the prompt-only-enforced prohibition #189 hardens.
+spawn sub-spokes is precisely the recursion-prohibition surface the check hardens.
