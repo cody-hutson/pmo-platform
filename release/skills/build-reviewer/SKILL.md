@@ -16,6 +16,7 @@ version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
+<!-- reference-durability: allow-link -->
 
 > **See also:**
 > - [`core/disciplines/review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) — shared review discipline (anti-laziness rules, root-cause requirement, 6-deliverable output structure, reviewer calibration, anti-patterns for reviewers).

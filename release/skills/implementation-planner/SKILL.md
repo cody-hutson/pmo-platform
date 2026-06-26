@@ -16,6 +16,7 @@ version: v1.10
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
+<!-- reference-durability: allow-link -->
 
 > **See also:**
 > - [`references/domain-packs/README.md`](references/domain-packs/README.md) — domain-pack registry, shared schema, domain-detection rules.

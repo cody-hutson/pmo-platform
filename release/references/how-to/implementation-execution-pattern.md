@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Implementation Execution Pattern — Reference Workflow
 
 This reference document defines the 7-step Read+Edit+Bash workflow for executing implementation plans emitted by `implementation-planner` in the Edit-ready format specified by [`release/skills/implementation-planner/references/output-format-spec.md`](../../skills/implementation-planner/references/output-format-spec.md) (Spec 5). This workflow **replaces the deprecated `implementer` skill** — the skill was a thin wrapper over Claude Code's native Read/Edit/Write/Bash with no irreplaceable logic. This doc preserves the workflow discipline (drift checks, write-verify, snapshots, failure modes, reversibility) while eliminating the skill-deployment surface and domain-lock that the old skill carried.

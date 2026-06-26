@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Triage→Design Re-Review Standard
 
 ## Purpose

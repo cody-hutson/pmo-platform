@@ -9,6 +9,7 @@ consumers: "release/governance/release-process.md Stage 12 § Self-repair (cross
 glossary_anchor: "(none)"
 version: v12.12
 ---
+<!-- reference-durability: allow-link -->
 
 # Partial Deployment Recovery
 

@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Execution Framework
 
 ## Purpose

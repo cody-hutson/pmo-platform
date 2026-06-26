@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 # Process-Flow Diagram Standards
 
 **Status:** Canonical

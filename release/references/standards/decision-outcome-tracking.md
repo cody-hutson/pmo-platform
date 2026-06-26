@@ -7,6 +7,7 @@ reversibility: CHEAP (forward-only schema; pre-cutover releases lack the field a
 consumers: "release/governance/release-process.md Stage 13 § Audit-trail capture (capture surface); release-planner Mode B (per-release health check + velocity); pmo-qa-auditor (GO-decision quality calibration); automated-closeout.sh (closeout report consumer); synthesize-release-learnings.sh (MAY compose Outcome into release-synthesis row payload); Future Platform Health Audit"
 version: v12.12
 ---
+<!-- reference-durability: allow-link -->
 
 # Decision Outcome Tracking
 

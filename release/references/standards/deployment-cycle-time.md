@@ -7,6 +7,7 @@ reversibility: CHEAP (forward-only metric; pre-cutover releases exempt; baseline
 consumers: "release/governance/release-process.md Stage 12 § Phase B5 emit format; release-planner Mode B (capacity calibration); automated-closeout.sh (cycle-time read consumer); synthesize-release-learnings.sh (cross-release synthesizer); pmo-qa-auditor (decision-outcome review)"
 version: v12.12
 ---
+<!-- reference-durability: allow-link -->
 
 # Deployment Cycle Time
 
