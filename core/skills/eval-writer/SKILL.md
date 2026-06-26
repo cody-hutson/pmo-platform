@@ -16,6 +16,8 @@ license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
 
+<!-- reference-durability: allow-link -->
+
 # Eval Writer
 
 ## Use When
@@ -86,7 +88,7 @@ inside a playbook, stop — the playbook should dispatch into the core, not
 parallel it. This is the skill's primary failure mode (see Design Discipline
 below).
 
-**Template-protocol consumption.** When authoring eval rubric or judge templates, consult `pmo-platform/reference/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New eval-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `pmo-platform/reference/templates/`. See [`OPERATIONS.md § Template Protocol`](../../governance/OPERATIONS.md).
+**Template-protocol consumption.** When authoring eval rubric or judge templates, consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New eval-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../governance/OPERATIONS.md).
 
 ## Mode Selection
 
@@ -145,7 +147,7 @@ Decide mode and playbook **before** doing anything else.
 
 | Signal | Playbook |
 |---|---|
-| Path ending in `pmo-platform/skills/<name>/` or mentions a specific skill by name | **Per-skill** (Category A) — see `references/playbook-per-skill.md` |
+| Path ending in `{core,operations,release}/skills/<name>/` or mentions a specific skill by name | **Per-skill** (Category A) — see `references/playbook-per-skill.md` |
 | Mentions "stage", "gate", "Gate N", "Stage X→Y", or references `gate-evaluation-spec.md` / `pipeline/` | **Stage-gate** (Category B) — see `references/playbook-stage-gate.md` |
 | Anything else — generic AI system, external project, research agent, etc. | **Generic fallback** — apply `references/decision-tree.md` directly |
 
@@ -203,7 +205,7 @@ Always end with artifacts at their correct paths (Author mode) or a structured m
 
 ### Author mode, per-skill playbook
 
-Populate `pmo-platform/skills/<name>/evals/`:
+Populate `{core,operations,release}/skills/<name>/evals/`:
 
 - `evals.json` — test prompts in the preserved eval-harness schema (id, name, prompt, expected_output, files) — consumed by `pmo-skill-refiner/scripts/run_eval.py`
 - `judge_prompts/` — one file per judge: system + user prompts + substitution variables + CoT-blinding notes
@@ -218,7 +220,7 @@ Full layout and examples in `references/playbook-per-skill.md`.
 
 Content slots into the existing `gate-evaluation-spec.md` three-layer structure:
 
-- Judgment-layer content (per-criterion 1–5 judge prompts with evidence requirement) at `pmo-platform/reference/schemas/gate-prompts/<gate-id>/` (or propose a better home if you see one)
+- Judgment-layer content (per-criterion 1–5 judge prompts with evidence requirement) at `core/schemas/gate-prompts/<gate-id>/` (or propose a better home if you see one)
 - Optional companion calibration row template for `engineering/evals/results/calibration-data.md`
 
 Full layout in `references/playbook-stage-gate.md`.
@@ -303,7 +305,7 @@ prioritized remediation lists, and recommended diffs. The Module 6 decision-tree
 anti-pattern catalog (A-01..A-23), and failure modes (F-01..F-47) classify *evaluation
 quality*; reversibility classifies the *undo cost of applying the eval-writer's
 recommendation*. Every decision-class item must carry a **reversibility tier** paired
-with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -341,8 +343,8 @@ when still in calibration.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — authored artifacts,
 Review-mode rule coverage verdicts, Prioritized remediation recommendations, Recommended
-diffs. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol and
-`pmo-platform/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
+diffs. See `core/specs/reversibility-protocol.md` for the full protocol and
+`core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
 ## Guardrails
 
@@ -353,13 +355,13 @@ diffs. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full
 - **Don't produce evals that train against their own judge.** A-21. Validators held out from training loops; rotate periodically.
 - **Don't cite preliminary arXiv IDs as primary.** Module 6 §7 flags Tier-3 preliminary IDs (2601.*, 2602.*, 2604.*, etc.). Cite with caveat or omit.
 - **Don't replace concrete subject matter with placeholders.** If authoring evals for `daily-status`, the artifacts say `daily-status` — not `<skill name>`.
-- **No decision-class output without a reversibility tier.** Every authored eval artifact (evals.json, judge_prompts, rubrics, failure taxonomy, calibration protocol), every Review-mode rule coverage verdict, every anti-pattern hit, every Prioritized remediation item, and every Recommended diff must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. This is orthogonal to the Module 6 α/κ judge-validation confidence axis (which measures judge-vs-human agreement) — reversibility measures the undo cost of applying the eval-writer's recommendation. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **No decision-class output without a reversibility tier.** Every authored eval artifact (evals.json, judge_prompts, rubrics, failure taxonomy, calibration protocol), every Review-mode rule coverage verdict, every anti-pattern hit, every Prioritized remediation item, and every Recommended diff must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. This is orthogonal to the Module 6 α/κ judge-validation confidence axis (which measures judge-vs-human agreement) — reversibility measures the undo cost of applying the eval-writer's recommendation. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Guardrails` and `## Reversibility
 Discipline`. Each entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. The Module 6 anti-pattern catalog
+`core/standards/failure-mode-standard.md`. The Module 6 anti-pattern catalog
 (A-01..A-23) classifies *eval-quality* failures that this skill audits in other systems;
 the anti-patterns below are *meta* — failure modes of the eval-writer's own authoring
 behavior, distinct from the evals it produces.

@@ -64,7 +64,7 @@ the Jira ticket implementing it is blocked.
 **Max 5 clarifying questions** per invocation. Everything else becomes a labeled
 assumption with a deferred follow-up.
 
-**Template-protocol consumption.** When authoring requirements or process templates, consult `pmo-platform/reference/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New requirements templates must pass P1-P5 promotion gates before canonical placement under `pmo-platform/reference/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
+**Template-protocol consumption.** When authoring requirements or process templates, consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New requirements templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
 
 ## Follow-Up Tag Handoff Format
 
@@ -388,7 +388,7 @@ and dual-framing co-managed scenarios without assuming all projects require dual
 This skill produces **decision-class outputs** — drafted requirements, gap findings with
 remediations, traceability entries, and process-documentation recommendations the user is
 expected to act on. Every decision-class item must carry a **reversibility tier** paired
-with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -420,7 +420,7 @@ proceeds immediately.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, worked examples,
+`core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
 ## Guardrails
@@ -456,7 +456,7 @@ These are hard rejections — same standard as all suite skills:
   finding remediation, traceability recommendation, or next action must carry a
   reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a
   confidence level (HIGH / MEDIUM / LOW) per
-  `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on
+  `core/specs/reversibility-protocol.md`. Outputs missing tiers on
   decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
@@ -464,7 +464,7 @@ These are hard rejections — same standard as all suite skills:
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Orphan process step shipped without back-trace finding — HAND

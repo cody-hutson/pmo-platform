@@ -249,7 +249,7 @@ as resolved work.
 ### 5. Decisions needed
 Each decision includes: context, options with tradeoffs, a recommendation, reversibility
 tier (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE paired with HIGH / MEDIUM / LOW confidence
-per `pmo-platform/reference/specs/reversibility-protocol.md`), decision deadline, and who needs
+per `core/specs/reversibility-protocol.md`), decision deadline, and who needs
 to make it. Each decision frame must include the upstream/downstream dependency chain —
 which other decisions, milestones, or deliverables are affected by this decision. If you
 can frame the decision to a clear recommendation, do so. See the Reversibility Discipline
@@ -747,7 +747,7 @@ the triage read; this array handling is independent of `dual_framing_enabled`.
 This skill produces **decision-class outputs** — recommendations, plans, escalations, and
 proposed actions the user is expected to act on. Every decision-class item must carry a
 **reversibility tier** paired with a **confidence level** per
-`pmo-platform/reference/specs/reversibility-protocol.md`.
+`core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -779,7 +779,7 @@ proceeds immediately.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, examples (including
+`core/specs/reversibility-protocol.md` for the full protocol, examples (including
 a strategic ppm-agent multi-tier mix), and G4 gate algorithm.
 
 ## Guardrails
@@ -825,7 +825,7 @@ These are hard rejections. If you catch yourself doing any of these, stop and fi
 - **Missing reversibility tier on decision-class items**: Every decision-class output —
   recommendation, plan, escalation, proposed action — must carry a reversibility tier label
   (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level
-  (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs
+  (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs
   missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline
   section above.
 
@@ -834,7 +834,7 @@ These are hard rejections. If you catch yourself doing any of these, stop and fi
 These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide generic
 guardrails) and `## Reversibility Discipline` (decision-class output discipline). Each
 entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Push-to-resolve dilution into "should be scheduled" — OUT

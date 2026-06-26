@@ -23,7 +23,7 @@ never fabricate stakeholders, dates, technical details, or scope items.
 
 ## Operating Principles
 
-**Template-protocol consumption.** When scaffolding a project from a template (e.g., `PMO_Platform_Template.md`, `project-md-template.md`), consult `pmo-platform/reference/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New project-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `pmo-platform/reference/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
+**Template-protocol consumption.** When scaffolding a project from a template (e.g., `PMO_Platform_Template.md`, `project-md-template.md`), consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New project-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
 
 ## Mode Selection
 
@@ -520,7 +520,7 @@ Present the user with:
   recommendations, proposed dispositions, setup or teardown checklist items, next-step
   recommendations — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE /
   IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per
-  `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on
+  `core/specs/reversibility-protocol.md`. Outputs missing tiers on
   decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section below.
 
 ## Reversibility Discipline
@@ -529,7 +529,7 @@ This skill produces **decision-class outputs** across both modes. Mechanical sca
 steps (creating folders, instantiating template files) are not themselves decision-class,
 but the recommendations, dispositions, and checklist items produced alongside them are.
 Every decision-class item must carry a **reversibility tier** paired with a **confidence
-level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -562,7 +562,7 @@ proceeds immediately.
 
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol, worked examples,
+`core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
 ## Domain-Specific Failure Modes
@@ -570,7 +570,7 @@ and G4 gate algorithm.
 These domain-specific anti-patterns coexist with `## Evidence & Quality Rules` (platform-
 wide generic guardrails including SG-1/2/3) and `## Reversibility Discipline` (decision-
 class output discipline). Each entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### PROJECT.md populated with inferred fields without [ASSUMPTION – CONFIRM] label — INPUT

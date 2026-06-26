@@ -174,7 +174,7 @@ Both are non-negotiable — every skill description rewrite must include them.
   may hurt because the model skims.
 - **Avoid keyword salad.** Don't list 30 verbs. List 4–8 specific phrases that
   are realistic things a user would type.
-- **Test with the description optimizer** (`scripts/run_loop.py` in `pmo-platform/skills/pmo-skill-refiner/`, the preserved eval/optimization harness).
+- **Test with the description optimizer** (`scripts/run_loop.py` in `release/skills/pmo-skill-refiner/`, the preserved eval/optimization harness).
 
 ### Example
 

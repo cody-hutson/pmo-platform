@@ -214,7 +214,7 @@ The mechanism is **NOT real-time feedback** between active-release stages. It IS
 
 ## §6 Calibration Ledger Schema
 
-The Calibration Ledger records per-(dimension × stage) judge-vs-operator agreement over time. The ledger lives at [`pmo-platform/engineering/evals/judge-calibration/`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/) (peer to the existing `results/calibration-data.md` which carries the distinct 12-column stage-gate calibration schema). The judge-calibration ledger is per-DIMENSION granularity, not per-STAGE-BOUNDARY.
+The Calibration Ledger records per-(dimension × stage) judge-vs-operator agreement over time. The ledger lives at [`<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/) (peer to the existing `results/calibration-data.md` which carries the distinct 12-column stage-gate calibration schema). The judge-calibration ledger is per-DIMENSION granularity, not per-STAGE-BOUNDARY.
 
 ### §6.1 Per-dimension ledger schema
 
@@ -253,7 +253,7 @@ The framework does NOT auto-classify which root cause applies. The flag SURFACES
 
 ### §6.5 Cross-reference
 
-The full schema, creation protocol, and seed dimension are documented at the directory README: [`pmo-platform/engineering/evals/judge-calibration/README.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/README.md). The seed dimension is [`focus-correctness-stage-7-dt.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/focus-correctness-stage-7-dt.md).
+The full schema, creation protocol, and seed dimension are documented at the directory README: [`<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/README.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/README.md). The seed dimension is [`focus-correctness-stage-7-dt.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/focus-correctness-stage-7-dt.md).
 
 ---
 
@@ -383,8 +383,8 @@ The Agent-Correction Layer inherits 14 anti-laziness rules from [`review-discipl
 - [`evidence-grounding-standard.md`](evidence-grounding-standard.md) — R1 governs § 3 + § 4 canonicalizations.
 - [`framework-corpus-discipline.md`](framework-corpus-discipline.md) — framework-tier classification + cadence + corpus-discipline rules.
 - [`framework-catalog.md`](../specs/framework-catalog.md) — registry row + version anchor.
-- [`pmo-platform/engineering/evals/judge-calibration/README.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/README.md) — per-dimension Calibration Ledger schema + creation protocol + seed dimension.
-- [`pmo-platform/engineering/evals/judge-calibration/focus-correctness-stage-7-dt.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/focus-correctness-stage-7-dt.md) — seed ledger demonstrating the schema with 3 synthesized rows.
+- [`<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/README.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/README.md) — per-dimension Calibration Ledger schema + creation protocol + seed dimension.
+- [`<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/focus-correctness-stage-7-dt.md`](<OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/focus-correctness-stage-7-dt.md) — seed ledger demonstrating the schema with 3 synthesized rows.
 
 ---
 

@@ -377,7 +377,7 @@ recommendations, and "required decisions with deadlines" flagged for leadership 
 Although the executive summary sections (Sections 1–5) primarily surface tracker state,
 Section 6 (Portfolio Write-Back) and the forward-looking priority framings are
 decision-class. Every decision-class item must carry a **reversibility tier** paired
-with a **confidence level** per `pmo-platform/reference/specs/reversibility-protocol.md`.
+with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 **Decision-class outputs in this skill:**
 
@@ -408,7 +408,7 @@ proceeds immediately.
 **Enforcement:** pmo-qa-auditor G4 will FAIL any output of this skill that contains a
 decision-class item without a reversibility tier label — including any portfolio
 write-back proposal, health-color transition, or Next Week Focus recommendation that lacks
-a tier. See `pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol,
+a tier. See `core/specs/reversibility-protocol.md` for the full protocol,
 worked examples, and G4 gate algorithm.
 
 ## Shared Behavioral Rules
@@ -424,14 +424,14 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 
 - **SG-1 [CONTEXT]:** When using information from PROJECT.md or prior session state (not from the current artifact), label it `[CONTEXT]` with the source field. Do not present project memory as current-artifact evidence.
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
-- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — portfolio write-back proposal, health-color transition, Next Week Focus priority, required-decision surfacing — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **SG-3 Reversibility tier on decision-class items:** Every decision-class output — portfolio write-back proposal, health-color transition, Next Week Focus priority, required-decision surfacing — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with the `### Guardrails` subsection above
 (platform-wide generic guardrails) and `## Reversibility Discipline` (decision-class
 output discipline). Each entry uses the 5-field conditional template per
-`pmo-platform/reference/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
+`core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
 ### Health color reported without transition reasoning — OUT

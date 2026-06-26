@@ -119,7 +119,7 @@ change-management, technical-analyst, process-designer).
 1. Identify which skill produced the output.
 2. Load that skill's output contract from `../../reference/schemas/per-skill-output-contracts.md`.
 3. Evaluate against 6 gate categories:
-   - **G1: Output contract compliance** — All required sections present with correct structure. **For ppm-agent outputs:** verify Section 10 Handoff Manifest is present (or explicit `HANDOFF_MANIFEST: None — no downstream work identified`); each `next_actions` entry has the required 5 fields (Tag, Context, Source, Scope, Inputs) plus cascade metadata (`target_skill`, `dependencies`, `dependency_satisfied`, `evidence_quality`, `cascade_scope`, `auto_invoke`) per the schema in `pmo-platform/skills/ppm-agent/SKILL.md` Section 10. Manifest absence or incomplete entries → G1 FAIL with specific missing-field finding.
+   - **G1: Output contract compliance** — All required sections present with correct structure. **For ppm-agent outputs:** verify Section 10 Handoff Manifest is present (or explicit `HANDOFF_MANIFEST: None — no downstream work identified`); each `next_actions` entry has the required 5 fields (Tag, Context, Source, Scope, Inputs) plus cascade metadata (`target_skill`, `dependencies`, `dependency_satisfied`, `evidence_quality`, `cascade_scope`, `auto_invoke`) per the schema in `operations/skills/ppm-agent/SKILL.md` Section 10. Manifest absence or incomplete entries → G1 FAIL with specific missing-field finding.
    - **G2: Principal standard adherence** — Systems thinking, ruthless clarity, judgment under
      uncertainty, evidence quality. See `../../reference/standards/principal-standard-checklist.md`.
    - **G3: Push-to-resolve compliance** — Items resolved vs. surfaced. See
@@ -133,7 +133,7 @@ change-management, technical-analyst, process-designer).
      structured decision frames. If a skill declares itself report-only in its SKILL.md (no
      decisions produced), skip the reversibility check. Decision-class items missing a tier
      label → G4 FAIL with the exact suggested tier and rationale in the remediation field. See
-     `pmo-platform/reference/specs/reversibility-protocol.md` for the full 4-step algorithm and tier
+     `core/specs/reversibility-protocol.md` for the full 4-step algorithm and tier
      vocabulary.
    - **G5: Operational value** — Would a principal-level PM act on this output without
      rework? Are copy/paste blocks actually paste-ready? Are recommendations specific
@@ -510,7 +510,7 @@ AND **produces its own decision-class outputs** that must themselves carry rever
 tier labels. The G4 check is bidirectional: as the enforcing skill, pmo-qa-auditor must
 be compliant with the protocol it enforces. Every decision-class item in this skill's own
 output must carry a **reversibility tier** paired with a **confidence level** per
-`pmo-platform/reference/specs/reversibility-protocol.md`.
+`core/specs/reversibility-protocol.md`.
 
 Scope note: an earlier release already landed the G4 algorithmic extension — the check the
 skill performs against the outputs of *other* skills. This section covers the
@@ -558,7 +558,7 @@ recommendations. A pmo-qa-auditor output missing a tier on any of its own decisi
 items is a self-compliance failure (the enforcer is not compliant with the rule it
 enforces). Surface this explicitly in the output: either the audit applies the protocol
 to itself, or the audit is not trustworthy. See
-`pmo-platform/reference/specs/reversibility-protocol.md` for the full protocol and
+`core/specs/reversibility-protocol.md` for the full protocol and
 `../../reference/standards/principal-standard-checklist.md` §4 for the source concept.
 
 ## Guardrails
@@ -598,7 +598,7 @@ In addition to the guardrails above, apply these suite-wide guardrail checks whe
 
 - **SG-1 [CONTEXT]:** When using information from PROJECT.md or prior session state (not from the current artifact), label it `[CONTEXT]` with the source field. Do not present project memory as current-artifact evidence.
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
-- **SG-3 Reversibility tier on this skill's own decision-class outputs:** This skill's own findings, remediations, gate verdicts, and summary recommendations must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `pmo-platform/reference/specs/reversibility-protocol.md`. This is bidirectional with the G4 check (which audits *other* skills' outputs) — the enforcer must itself be compliant with the rule it enforces. See Reversibility Discipline section above.
+- **SG-3 Reversibility tier on this skill's own decision-class outputs:** This skill's own findings, remediations, gate verdicts, and summary recommendations must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. This is bidirectional with the G4 check (which audits *other* skills' outputs) — the enforcer must itself be compliant with the rule it enforces. See Reversibility Discipline section above.
 
 ## Domain-Specific Failure Modes
 
@@ -700,7 +700,7 @@ cascade-completeness evidence-trust failure mode.
 ### G7 gate not fired on SKILL.md audit — TRIG
 
 - **Signature (observable signal):** A Mode A audit of a SKILL.md file (input is a
-  `pmo-platform/skills/*/SKILL.md` file) completes without a G7 row in the Gate
+  `{core,operations,release}/skills/*/SKILL.md` file) completes without a G7 row in the Gate
   Results Table, or the G7 row fires only Phase 1 structural checks without emitting
   Phase 2 content-check findings (G7-06 domain-specificity, G7-07 mitigation
   actionability, G7-08 principal-vs-junior gradient).
@@ -715,7 +715,7 @@ cascade-completeness evidence-trust failure mode.
   SKILL.md specifically. Phase 2 content checks add LLM grading cost, which also
   tempts skipping.
 - **Mitigation:** On audit entry, detect file type from path pattern
-  (`pmo-platform/skills/*/SKILL.md`) and from frontmatter structure (presence of
+  (`{core,operations,release}/skills/*/SKILL.md`) and from frontmatter structure (presence of
   `name`, `description` in frontmatter); when the input is a SKILL.md file, fire G7
   as a mandatory gate; run Phase 1 (structural regex — deterministic) and Phase 2
   (content — LLM-graded) checks; emit the verdict per the standard with specific
