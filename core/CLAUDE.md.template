@@ -94,7 +94,8 @@ Claude/
 │   │   ├── references/          ← Pipeline specs, how-to guides, standards
 │   │   ├── releases/            ← RELEASE_LOG.md, plans/, notes/, archive/
 │   │   ├── skills/              ← Release skills (release-planner, pmo-skill-editor, …)
-│   │   └── tools/               ← Release-support scripts
+│   │   ├── tools/               ← Release-support scripts
+│   │   └── ADRs/                ← Release-scoped ADRs (pipeline/SDLC decisions)
 │   ├── docs/                    ← Install/setup docs + scripts
 │   └── packages/                ← Compiled .skill packages (one per deployed skill)
 ├── projects/                    ← Operations domain (git-ignored)
