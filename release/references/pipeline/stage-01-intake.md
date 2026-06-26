@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Stage 1: Intake
 
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.

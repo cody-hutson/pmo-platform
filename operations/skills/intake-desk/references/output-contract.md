@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Output Contract
 
 How the desk emits a well-formed, correctly-typed work item to the configured work
