@@ -4,7 +4,7 @@
 
 **Milestone:** `38-governance-cross-reference-currency` (#123)
 **Branch:** `release/38-governance-cross-reference-currency` (theme-named; version-insulated)
-**Bump-class:** `minor` — Phase 1 intent per RELEASE_PROTOCOL § Versioning. **Provisional-display:** `v2.28` is a LABEL only; the concrete number is computed next-free over `anchor()` and atomically claimed at Stage 12 (defer-to-merge, ADR-036). Anchor at plan time = `v2.27` (latest published Release).
+**Bump-class:** `minor` — Phase 1 intent per RELEASE_PROTOCOL § Versioning. **Provisional-display:** `v2.29` is a LABEL only; the concrete number is computed next-free over `anchor()` and atomically claimed at Stage 12 (defer-to-merge, ADR-036). Anchor re-verified 2026-06-26 = `v2.28` (sibling `15-generated-vs-source-provenance` shipped v2.28 mid-run; the provisional drifted v2.28→v2.29 per defer-to-merge) → next-free = `v2.29`. Re-verified again at the Stage 12 atomic claim.
 **Release Class:** `cross-cutting` (operator-rendered 2026-06-26) → engagement Tight · Stage 9 review Deep · Stage 5 bias ALL · outcome-window 30-day.
 **Full Stage 4 plan:** sub-task #2087 comment (dependency graph, D-gate detail, full risk register).
 
