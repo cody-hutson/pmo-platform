@@ -23,6 +23,33 @@ Functional people-graph — PMO agents now resolve people from one maintained, n
 
 [Full notes](release/releases/notes/v2.23-functional-people-graph_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.23)
 
+## [v2.22] - 2026-06-25
+
+Comms-and-facilitation reference substrate — meeting agendas and recaps now follow one canonical format instead of copies spread across skills, a recap points to tracked follow-up records rather than being their only home, and facilitation techniques get a reference library a delivery skill can surface in context. Novel class; additive; QA PASS on all 3 cards, 0 defects.
+
+### Added
+
+- **One canonical meeting-agenda format.** Agenda requests follow a single canonical definition — the six required parts (subject, attendees with rationale, a one-sentence goal, numbered items with owners and time, pre-read, logistics) — authored once and single-sourced out of `comms-writer`, so it cannot drift between skills.
+- **One canonical meeting-recap format.** Recaps follow a fixed order — Decisions, Action Items, Notes, Key Roadblocks — with a `[RECAP]` subject line, so the most decision-relevant content is always in the same place.
+- **A facilitation-techniques reference library.** A governed library of facilitation techniques ships seeded with its first area, estimation, and a delivery skill can suggest a relevant technique in context.
+
+### Changed
+
+- **Recaps point to follow-ups instead of holding them.** A recap now references discrete, trackable follow-up records rather than being their sole container, so an action item lives as a record that can be followed to closure.
+
+[Full notes](release/releases/notes/v2.22-comms-and-facilitation-reference-substrate_RELEASE_NOTES.md)
+
+## [declarative-gating-model] - 2026-06-24
+
+Declarative cross-methodology gate conditions — a work-item type-pack gate can now depend on a *related* item's workflow status, or on an *aggregate over a set* of related items (a Kanban WIP limit), instead of only the item's own fields. Version-less (theme-named); research-led; additive (the meta-schema stays v1).
+
+### Added
+
+- **Related-item-status gates.** A gate can depend on the workflow status of a related work item — a child Story can't be groomed to `ready` until its parent Epic is design-approved; a Story can't leave `ready` while a blocking Spike isn't `done`. The condition resolves across the relationship you declare (parent/child, depends-on, blocks).
+- **Set-aggregate gates.** A gate can depend on an aggregate over a set of related items — most importantly a Kanban WIP limit ("no more than N items in-progress at once") — making pull/flow limits first-class instead of inexpressible. Mutually-gating loops are detected and refused rather than deadlocking.
+
+[Full notes](release/releases/notes/declarative-gating-model_RELEASE_NOTES.md)
+
 ## [v2.20] - 2026-06-23
 
 Field-lifecycle and CMDB automation — the platform's entity fields now have a governed lifecycle (who may write which field, at which stage, driven by agents), the artifact-state model is reconciled onto one canonical lifecycle, and the skill registry becomes the platform's configuration-management catalog with a per-project Artifact Register. A project-tracking integrity sweep adds dormancy and overdue-decision detection with an evidence-backed gate. Cross-cutting; QA ACCEPT (~48/48 acceptance criteria, 0 defects). *(Numbering note: `v2.20` was tagged after `v2.21` — a concurrent release claimed the higher number first and the operator kept `v2.20` for this one; the claim order is non-monotonic by version and self-heals on the next allocation.)*
@@ -39,6 +66,18 @@ Field-lifecycle and CMDB automation — the platform's entity fields now have a 
 - **The artifact-state model is reconciled onto the canonical lifecycle.** What used to be a separate `artifact_state` is reconciled into the canonical `lifecycle_state` + Domain model (with a `promotion_state` carve-out for the staging→promoted axis), and artifact-generator and artifact-lint are migrated onto the reconciled model. The transitional dual-read path is removed. A new `artifact-workflow-protocol.md` documents the workflow.
 
 [Full notes](release/releases/notes/v2.20-field-lifecycle-and-cmdb-automation_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.20)
+
+## [v2.21] - 2026-06-23
+
+Decision-rendering standardization — when the release hub reaches a decision point (a go/no-go, a version choice, a scope-lock) it now loads the relevant specs first, lays out the full option space before asking, and scores each option against the platform's design principles. Cross-cutting; 3 cards; non-breaking. *(Numbering note: `v2.21` was claimed before `v2.20` — the two releases landed close together and the claim order is non-monotonic by version.)*
+
+### Added
+
+- **Decision briefings show the full picture first.** Before a decision prompt appears, the hub reads every spec the decision rests on, prints the complete briefing in chat, and lays out the full option space — including the option your own past preference implies — so no better option surfaces after you have already answered.
+- **Design-principle conformance scoring.** A new design-principle register (Scalability, Maintainability, Simplicity, Stability, and the rest) lets the hub mark each option ALIGNED with or in CONFLICT with a named principle; a conflict with a high-stakes principle is flagged for your sign-off rather than quietly accepted.
+- **Standing per-decision-type instructions.** You can set directives per decision type (for example, "always offer a 'defer to next release' option and show the rollback path"); these only ever add to what the hub surfaces, never hide an option or dimension.
+
+[Full notes](release/releases/notes/v2.21-decision-rendering-standardization_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.21)
 
 ## [v2.19] - 2026-06-22
 
