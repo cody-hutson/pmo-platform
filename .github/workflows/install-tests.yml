@@ -27,8 +27,12 @@ name: Install tests
 #   - test_version_stamping.sh     .version release-cut ownership: phase_bump_version
 #                                  stage/skip/idempotency + Check 39 signed-minor-
 #                                  distance verdict algorithm (#1643)
+#   - test_agent_tools_conformance.sh  deploy.sh Check 46 (agent-tools-list-
+#                                  conformance) scan logic: ≥2 findings on a bad
+#                                  agents-dir fixture (missing tools: + recursion
+#                                  surface), 0 on a good fixture (#189)
 #
-# hook-tests — runs the 8 core/hooks/tests/*.test.sh bypass-mode hook tests +
+# hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
 # layout (hooks + token-resolved allowlists + .mode co-located) via
 # core/hooks/tests/setup-ci-layout.sh. The runner gates: any test-file FAIL
@@ -130,6 +134,9 @@ jobs:
 
       - name: Run version-stamping regression (test_version_stamping.sh)
         run: bash core/deploy/tests/test_version_stamping.sh
+
+      - name: Run agent-tools-conformance regression (test_agent_tools_conformance.sh)
+        run: bash core/deploy/tests/test_agent_tools_conformance.sh
 
   hook-tests:
     name: Hook test harness (macOS)

@@ -1675,8 +1675,8 @@ cmd_check_lifecycle() {
   cat <<'LIFECYCLE'
 deploy.sh check lifecycle registry
 ===================================
-Live check sequence: 1-14, 16-23, 25-44   (gaps: 15, 24 — both reserved)
-Next NEW top-level check number: 45
+Live check sequence: 1-14, 16-23, 25-46   (gaps: 15, 24 — both reserved)
+Next NEW top-level check number: 47
   (15 and 24 are RETIRED-RESERVED; never reuse. Sub-checks extend an existing
    number, e.g. 18a/18b/18c/18d, and do NOT consume a new top-level number.)
 
@@ -5597,6 +5597,90 @@ cmd_check() {
       c45_ok=0
     fi
     [[ "$c45_ok" -eq 1 ]] && log "  OK:    conformance subsection present; all register governing_doc targets resolve; all DP-id references defined"
+  fi
+
+
+  # ─── Check 46: agent-tools-list-conformance (recursion-surface ratchet) ──
+  # Per the subagent-security-posture.md § 4 counter-design (CDF-2) + #189 AC2:
+  # validate every release/.claude/agents/pmo-*.md `tools:` enumeration against the
+  # recursion-prohibition surface. Two findings per file:
+  #   (a) missing `tools:` field entirely — frontmatter does not enumerate the
+  #       authorized tool set (an un-enumerated persona is an unbounded surface);
+  #   (b) recursion surface — the `tools:` line lists Agent / spawn_task /
+  #       mcp__ccd_session__spawn_task (a spoke that can spawn sub-spokes —
+  #       precisely the prompt-only-enforced prohibition #189 hardens).
+  # This is the deploy-time structural sibling of the runtime block-autonomy-ceiling
+  # hook: regardless of whether the harness STRUCTURALLY refuses out-of-list tool
+  # calls (the empirically-undetermined Mechanism-1 question), this check catches
+  # authoring-time drift. Same pattern as Check 27 (designated-model) / Check 29
+  # (return-value-conformance) — agents-dir scan + flag_warn_or_issue.
+  #
+  # Dir-absent + zero-files tolerance: agents live under release/.claude/agents/
+  # (primary) with a .claude/agents/ fallback; NEITHER directory exists in the
+  # tracked source tree, so a fresh clone MUST warn (non-blocking via
+  # flag_warn_or_issue), never hard-error. POSIX-ERE only (BSD grep; no `\b`).
+  # PMO_AGENTS_DIR_OVERRIDE points the scan at a fixture dir for the regression
+  # test (core/deploy/tests/test_agent_tools_conformance.sh).
+  #
+  # Warn-mode initial per bypass-mode-readiness.md § Shakedown (Checks 8/9/10/14/
+  # 18-23/25/27/28/29/43/44/45 precedent); flip-to-enforce after the ≥2-3-release
+  # warn-log review threshold.
+  #
+  # Cutover (reflexive-pipeline-loop discipline): applies to ./deploy.sh --check
+  # invocations on or after the introducing release's merge SHA in RELEASE_LOG.md.
+  # That release itself is exempt — the introducing release IS orchestrated by the
+  # Agent-tool subagent mechanism, and the release/.claude/agents/pmo-*.md files
+  # are created/populated by later work, so the check cannot assert against state
+  # that does not yet exist at this release's Stage 12 deploy-check.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 46: agent-tools-list-conformance (release/.claude/agents/pmo-*.md recursion surface)"
+    # PMO_AGENTS_DIR_OVERRIDE (fixture seam) wins; else release/.claude/agents
+    # primary with the .claude/agents fallback (Check 27/29 resolution order).
+    local c46_agents_dir="${PMO_AGENTS_DIR_OVERRIDE:-release/.claude/agents}"
+    if [[ -z "${PMO_AGENTS_DIR_OVERRIDE:-}" ]]; then
+      [[ -d "$c46_agents_dir" ]] || c46_agents_dir=".claude/agents"
+    fi
+    # Recursion-surface tokens on the tools: line. POSIX-ERE word boundaries via
+    # explicit start/separator/end classes (no `\b` — unsupported by BSD grep).
+    local c46_recursion_re='(^|[[:space:],])(Agent|spawn_task|mcp__ccd_session__spawn_task)([[:space:],]|$)'
+    local c46_findings=0
+    local c46_output=""
+    local c46_files_scanned=0
+
+    if [[ ! -d "$c46_agents_dir" ]]; then
+      flag_warn_or_issue "agent-tools-list-conformance" \
+        "$c46_agents_dir directory does not exist — agent definitions expected per subagent-security-posture.md § 3 Mechanism 1 (neither release/.claude/agents/ nor .claude/agents/ present in a fresh clone — warn, non-blocking)"
+    else
+      local _agent_file _agent_name _tools_line
+      for _agent_file in "$c46_agents_dir"/pmo-*.md; do
+        [[ -f "$_agent_file" ]] || continue
+        c46_files_scanned=$((c46_files_scanned + 1))
+        _agent_name=$(/usr/bin/basename "$_agent_file" .md)
+        # grep exits 1 when no `tools:` line exists; guard so the empty result
+        # flows to finding (a) instead of aborting under set -e + pipefail.
+        _tools_line=$(/usr/bin/grep -E '^tools:' "$_agent_file" 2>/dev/null | /usr/bin/head -1) || _tools_line=""
+        if [[ -z "$_tools_line" ]]; then
+          # Finding (a): missing tools: field
+          c46_output+="${_agent_file}: missing frontmatter \`tools:\` field — an un-enumerated persona is an unbounded tool surface (subagent-security-posture.md § 3 Mechanism 1)"$'\n'
+          c46_findings=$((c46_findings + 1))
+        elif /usr/bin/printf '%s' "$_tools_line" | /usr/bin/grep -qE "$c46_recursion_re"; then
+          # Finding (b): recursion surface in tools:
+          c46_output+="${_agent_file}: \`tools:\` lists a recursion-surface tool (Agent / spawn_task / mcp__ccd_session__spawn_task) — spokes must NOT spawn sub-spokes (#189; subagent-security-posture.md § 3 Mechanism 1 uniform exclusions)"$'\n'
+          c46_findings=$((c46_findings + 1))
+        fi
+      done
+
+      if [[ $c46_files_scanned -eq 0 ]]; then
+        flag_warn_or_issue "agent-tools-list-conformance" \
+          "$c46_agents_dir/ contains zero pmo-*.md files — agent definitions expected per subagent-security-posture.md § 3 Mechanism 1 (warn, non-blocking on a fresh clone)"
+      elif [[ $c46_findings -eq 0 ]]; then
+        log "  OK:    all $c46_files_scanned agent definition file(s) declare \`tools:\` with no recursion surface"
+      else
+        flag_warn_or_issue "agent-tools-list-conformance" \
+          "$c46_findings agent definition file(s) of $c46_files_scanned have tools-list conformance drift — see counter-design at core/standards/subagent-security-posture.md § 4 (CDF-2)"
+        printf '%s' "$c46_output" | sed 's/^/         /'
+      fi
+    fi
   fi
 
 
