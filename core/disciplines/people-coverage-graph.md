@@ -2,11 +2,10 @@
 
 <!-- repo-integrity: allow-issue-ref -->
 <!-- reference-durability: allow-link -->
-<!-- The `§4 #N` forms below are project-entity-model entity-anchor notation (Person #10, Resource #8), NOT GitHub issue references; work-item references are confined to the Provenance block. -->
 
 **Status:** Canonical (K1 codified-knowledge spec)
 **Owner:** `core/disciplines/people-coverage-graph.md`
-**Composes:** the operator-instance functional people-roster (`people-roster.yaml`) + the FROZEN Person entity (`project-entity-model.md` §4 #10) + the FROZEN Resource entity (`project-entity-model.md` §4 #8), joined on `person_id`.
+**Composes:** the operator-instance functional people-roster (`people-roster.yaml`) + the FROZEN Person entity (`project-entity-model.md` §4) + the FROZEN Resource entity (`project-entity-model.md` §4), joined on `person_id`.
 
 ---
 
@@ -29,8 +28,8 @@ The view is computed on demand by a consumer from the three sources below. Each 
 | Source | Role in the view | Join key | Frozen? |
 |---|---|---|---|
 | `people-roster.yaml` (operator-instance functional roster) | functional attributes — preferred name and spelling, roles, capability **tags**, `backup_coverage`, `escalates_to`, `status`, `linked_project_ids` | `person_id` (top-level entry key) | No — operator-instance declarative config-layer |
-| **Person** (`project-entity-model.md` §4 #10) | global identity anchor — `full_name`, `person_id`, `primary_role` | `person_id` (`Person.person_id`) | **FROZEN — read-only, composed not absorbed** |
-| **Resource** (`project-entity-model.md` §4 #8) | project-scoped allocation — `project_id`, `allocation_pct`, `role_on_project` | `person_id` (`Resource.person_id` resolves to `Person.person_id`) | **FROZEN — read-only, composed not absorbed** |
+| **Person** (`project-entity-model.md` §4) | global identity anchor — `full_name`, `person_id`, `primary_role` | `person_id` (`Person.person_id`) | **FROZEN — read-only, composed not absorbed** |
+| **Resource** (`project-entity-model.md` §4) | project-scoped allocation — `project_id`, `allocation_pct`, `role_on_project` | `person_id` (`Resource.person_id` resolves to `Person.person_id`) | **FROZEN — read-only, composed not absorbed** |
 
 ### 2.1 The three view queries
 
@@ -124,7 +123,7 @@ An unrecognized or ambiguous person is never silently invented; it waits in the 
 
 ## 6. Verification
 
-The view contract, the trigger set, and the clarification-queue mechanics in this document are verified at authoring against the cited sources: the frozen Person and Resource field lists in `project-entity-model.md` §4 #10 and §4 #8 (unchanged by this spec); the `person_id` deduplication anchor and the no-silent-default unresolved-reference rule in `core/schemas/entity-field-schemas.md`; the operator-instance roster contract in `operations/templates/people-roster-template.yaml`; the single operator-instance path resolver in `core/deploy/lib-instance-path.sh`; and the needle extractor in `core/deploy/extract-roster-needles.sh`. No file under `core/schemas/` and no frozen field list is modified by this spec — the design composes, it does not mutate.
+The view contract, the trigger set, and the clarification-queue mechanics in this document are verified at authoring against the cited sources: the frozen Person and Resource field lists in `project-entity-model.md` §4 and §4 (unchanged by this spec); the `person_id` deduplication anchor and the no-silent-default unresolved-reference rule in `core/schemas/entity-field-schemas.md`; the operator-instance roster contract in `operations/templates/people-roster-template.yaml`; the single operator-instance path resolver in `core/deploy/lib-instance-path.sh`; and the needle extractor in `core/deploy/extract-roster-needles.sh`. No file under `core/schemas/` and no frozen field list is modified by this spec — the design composes, it does not mutate.
 
 ---
 
