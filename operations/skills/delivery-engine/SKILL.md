@@ -2,7 +2,7 @@
 name: delivery-engine
 description: >
   Operational backbone for backlog health through release readiness. Modes: Backlog scan · Ticket insight · DoR gate · Sprint planning · Execution control · DoD gate · RAID updates. Use for sprint planning, backlog review, quality gates, or velocity tracking across Agile and Waterfall governance. Triggers: "run DoR on this", "run DoD on this", "check this backlog", "plan the sprint", "velocity check", "is this release ready", "update the RAID log."
-version: v2.22
+version: v2.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
