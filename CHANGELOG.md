@@ -26,6 +26,10 @@ Hub-spoke orchestration discipline — the orchestration failure-modes the platf
 
 [Full notes](release/releases/notes/v2.25-hub-spoke-orchestration-discipline_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.25)
 
+## [v2.26] - 2026-06-26
+
+People-graph activation — the functional people-graph that shipped structurally in v2.23 is now active on a fresh install: install and update seed the operator-instance people-roster create-once (never-clobber) at three sites behind a new single-resolution accessor; GETTING_STARTED documents the adoption path and the per-tier owner-to-Person reference flow; and a binary-judge eval verifies the four consuming skills resolve read-only from a populated roster. routine class; additive; activation layer only. The filled roster stays out-of-tree and gitignored.
+
 ## [v2.23] - 2026-06-26
 
 Functional people-graph — PMO agents now resolve people from one maintained, never-committed people-graph instead of per-project free-text names; the four leadership-owner fields become typed person references; and the filled roster stays out of the repository by construction. Novel class; additive; functional-coordination only — explicitly not an HR or performance system.
