@@ -15,7 +15,7 @@ Execute the release plan by decomposing issues into sub-tasks, implementing file
 | Artifact Inputs | Requirements, design docs, architecture standards | Release plan (from Planning), design specs + ADRs (from Solutioning, when activated), platform architecture (CLAUDE.md, core/rules/) |
 | Artifact Outputs | Source code, unit tests, build artifacts | Committed files on release branch, PR ready for review, deployed skill copies (if applicable), sub-task completion evidence |
 
-Key compression: Multi-developer teams with CI/CD → single agent implementing on a release branch per plan. "Code review" = PR diff review by operator. "CI/CD" = pre-commit hooks + manual deployment. "Automated tests" = eval assertions (future, per the canonical eval-type taxonomy). Delivery Strategy from Planning (Stage 4, Revision 1) provides git workflow specifics — Engineering consumes, doesn't reinvent.
+Key compression: Multi-developer teams with CI/CD → single agent implementing on a release branch per plan. "Code review" = PR diff review by operator. "CI/CD" = PreToolUse hooks (`.claude/hooks/`) + manual deployment. "Automated tests" = eval assertions (future, per the canonical eval-type taxonomy). Delivery Strategy from Planning (Stage 4, Revision 1) provides git workflow specifics — Engineering consumes, doesn't reinvent.
 
 ## 3. Persona
 
