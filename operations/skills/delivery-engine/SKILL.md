@@ -2,7 +2,7 @@
 name: delivery-engine
 description: >
   Operational backbone for backlog health through release readiness. Modes: Backlog scan · Ticket insight · DoR gate · Sprint planning · Execution control · DoD gate · RAID updates. Use for sprint planning, backlog review, quality gates, or velocity tracking across Agile and Waterfall governance. Triggers: "run DoR on this", "run DoD on this", "check this backlog", "plan the sprint", "velocity check", "is this release ready", "update the RAID log."
-version: v2.23
+version: v2.25
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -118,7 +118,7 @@ any [DELIVERY] tag referencing backlog health.
      priority, story points, sprint assignment, epic link
    - **Status distribution**: counts by status, identify bottlenecks (e.g., 40% in
      "In Review" suggests a review bottleneck)
-   - **Aging**: tickets open >30/60/90 days, tickets in same status >14 days
+   - **Aging**: tickets open >30/60/90 days, tickets in same status >14 days. Report aging on the shared staleness-confidence scale (`core/specs/staleness-confidence-standard.md`): >14d same-status / >30d open → `S1-SUPERFICIAL`, >60d → `S2-SUBSTANTIVE`, >90d → `S2-SUBSTANTIVE` with escalation. Age alone never implies `S3-STRUCTURAL` — structural staleness requires a premise/path finding, not elapsed time.
    - **Priority distribution**: P1/P2 without assignees, P1s not in current sprint
    - **Sprint hygiene**: items in sprint without estimates, items assigned to closed
      sprints, items cycling between sprints (appeared in 3+ sprints)

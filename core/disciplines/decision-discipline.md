@@ -124,6 +124,8 @@ For recommendations derived from analysis artifacts > 24 hours old, see § 2.1.1
 
 Apply at least primitives 1 + 2 for every audit-derived recommendation. Apply primitive 3 when the recommendation names a specific symbol or section to add. Negative result on all three (no Issue match, no post-artifact commits, no grep hit) is the load-bearing case for proceeding with the recommendation; positive result on any primitive surfaces "potentially-shipped" — surface evidence to operator BEFORE recommending.
 
+On the shared staleness-confidence scale, this binary verified/unverified outcome maps to a single band: verified-current (negative on all primitives) → `S0-NONE`; currency-in-question (any primitive surfaces potentially-shipped) → `S2-SUBSTANTIVE`. Escalation to `S3-STRUCTURAL` — the artifact's premise itself is invalid — is a posture-layer move (reconcile-don't-annotate), not a band the bare reconciliation outcome self-reports. See [`staleness-confidence-standard.md`](../specs/staleness-confidence-standard.md).
+
 **Evidence trailer format:** Recommendations that cite audit-snapshot reconciliation MUST end with one or more `[VERIFIED <YYYY-MM-DD>: <command> → <result>]` trailers naming the specific primitives executed. Format is structural, not optional — auditors scan for this trailer to confirm verification ran.
 
 ```

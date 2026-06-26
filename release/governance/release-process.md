@@ -69,6 +69,7 @@ Stage 4 Phase A0 or Stage 5 Phase 0.5 re-review identifies a fundamental premise
   - **(B) Override + proceed with deviation log** — operator records the override decision with rationale on the issue; Stage proceeds; deviation log entry appended to release plan's Deviation Log section. Sub-task continues.
   - **(C) Defer to next release** — Issue Status → Approved; issue removed from current Milestone via `gh issue edit --remove-milestone`; Stage 4/5 sub-task closed with `Deferred to next release per Tier 0 — Premise Rejection`.
 - **Phase 1 default:** All Tier 0 escalations are operator-approved on all premise-problem types (PT-1 / PT-2 / PT-3 / PT-4). No autonomous returns.
+- **Staleness-confidence mapping:** PT-1..PT-4 all project onto the `S3-STRUCTURAL` band of the shared staleness-confidence scale — they are an orthogonal *cause* sub-classification of structural staleness (*why* the premise is rejected), not points spread across the depth scale (Tier 0 fires only on a C3 premise-level finding). See [`core/specs/staleness-confidence-standard.md`](../../core/specs/staleness-confidence-standard.md).
 - **Phase 2 protocol:** Tiered (Tier 0a autonomous-minor for PT-1 / PT-2 + Tier 0b operator-approved-major for PT-3 / PT-4). Phase 2 cutover gated on graduation thresholds per [triage-design-rereview.md](../references/standards/triage-design-rereview.md) § 10. Phase 1 → Phase 2 cutover is operator-approved; Phase 2 → Phase 1 reversion is auto-trigger.
 - **Cutover discipline:** Applies to all releases going forward.
 - **Gate impact:** Sub-task HOLDS pending operator (Phase 1) or autonomous Tier 0a routing (Phase 2). Other issues in the same release may continue.
@@ -106,6 +107,8 @@ Stage 4 Phase A0 (Triage→Design Re-Review per [`release/references/standards/t
 - AC text contains a named upstream artifact (issue #, sub-task #) → `gh issue view #N --json state` against current GitHub state. State change since Intake (e.g., the referenced issue closed-by-merge that subsumes this AC's premise) → CURRENCY-MISMATCH finding.
 
 CURRENCY-MISMATCH findings route as Tier 1 [ADJUST] per § Inter-Stage Feedback Protocol when the AC can be locally refined to match current context (Planning spoke amends the AC text in the issue body via `gh issue edit --body`, commits a `[ADJUST]` deviation-log entry in the release plan). When the mismatch indicates the AC's premise itself is invalid (the rule the AC was asserting no longer maps to current platform shape), Planning escalates Tier 2 [SCOPE CHANGE] per § Inter-Stage Feedback Protocol for operator decision: refine, defer, or reject the AC. Composes with Bundle Mutability Protocol A7 sub-window B (Stage 4 Planning entry → Stage 5 per-issue Solutioning) — AC refinement is a permitted mutation in sub-window B with `[BUNDLE *]` comment + release plan deviation log entry.
+
+On the shared staleness-confidence scale, this binary maps to a single band: no finding → `S0-NONE`, `CURRENCY-MISMATCH` → `S2-SUBSTANTIVE` (currency in question); the premise-invalid escalation above (Tier 2 [SCOPE CHANGE]) is the posture-layer `S3-STRUCTURAL` move, not a second representation-side judgment. See [`core/specs/staleness-confidence-standard.md`](../../core/specs/staleness-confidence-standard.md).
 
 ##### QA-side interpretation (downstream verdict enum extension)
 
