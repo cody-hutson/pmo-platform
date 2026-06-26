@@ -154,6 +154,7 @@ are lost, and it is recorded `unrecoverable` (the reaper reads, never reaps it).
 
 | slug | abandoned_version | final_version | claimed_versions | abandoned_tag_pushed | merge_sha | collided_with | resolved_at_stage | disposition | residual_labels | reaped_ref | date |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| 26-corpus-conventions-and-standards-hygiene | v2.23 | v2.24 | v2.23 → v2.24 | false | fb0d88af4de5a45612564942636022537a1108d0 | 14-functional-people-graph@v2.23 | S12 | none | branch release/v2.23-corpus-conventions-and-standards-hygiene + PR #2019 title retain as-authored v2.23 | — | 2026-06-26 |
 | 12-field-first-intake-enforcement | v2.14 | v2.12 | v2.12 → v2.14 → v2.12 | false | 28860f1c76cc7889a225d1f109b16ed6e185d831 | 71-autonomy-phaseout-foundation@v2.14 | S12 | none | branch + milestone named for provisional v2.12 | — | 2026-06-20 |
 | 05-ROLE-sustain-coverage-router | v2.12 | v2.15 | v2.12 → v2.15 | false | b8ce4f3540035a28f8ebfffbadb05ca453c3e5c7 | 12-field-first-intake-enforcement@v2.12 | S12 | none | branch + milestone named for provisional v2.12 | — | 2026-06-20 |
 | 05-ROLE-sustain-coverage-router | v2.13 | v2.15 | v2.12 → v2.15 | false | b8ce4f3540035a28f8ebfffbadb05ca453c3e5c7 | 63-finding-disposition-discipline@v2.13 | S12 | none | branch + milestone named for provisional v2.12 | — | 2026-06-20 |

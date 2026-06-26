@@ -8,6 +8,30 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.24] - 2026-06-26
+
+Corpus conventions and standards hygiene — a documentation and governance housekeeping release with no executable surface. Two standards documents move into the standards folder (with every inbound reference updated), four new reference documents fill known gaps, several stale counts and paths are reconciled to live state, and an audit confirms the platform stays a methodology-neutral toolkit. Novel class; additive; no skill behavior, schema, or deploy-state change.
+
+### Added
+
+- **A minimal-addition authoring discipline.** A new discipline document defines a "minimal-addition" standard for authoring governance and reference corpus content, so additions stay lean and on-purpose.
+- **A third domain-best-practices domain.** A new process domain fills the missing third area of the domain-best-practices set.
+- **An audit-recommendation status-badge convention.** A new standard defines per-recommendation status badges for audit recommendations files.
+- **A Claude Code runtime-state catalog.** A new reference document catalogs Claude Code runtime state surfaces — backup snapshots, session storage, and environment-variable precedence.
+
+### Changed
+
+- **Two standards documents relocated.** `failure-mode-standard.md` and `process-flow-diagram-standards.md` move into `core/standards/`, with a live-verified 90-file inbound reference sweep updated to the new paths so no link is left dangling.
+- **The toolkit is confirmed methodology-neutral.** A substrate-neutrality audit confirms the core documentation bakes in no single methodology's assumptions beyond the configurable delivery-approach resolver.
+
+### Fixed
+
+- **Skill-deployment roster counts.** The roster counts in the skill-deployment reference are reconciled to the live deploy arrays (12 vs 13; the bootstrap example no longer omits a skill).
+- **Framework-catalog paths and counts.** Stale canonical-document paths on the catalog's internal rows and a knowledge-management count narrative are corrected.
+- **A missing size value.** The size enumeration in the triage-design-rereview standard now includes the previously-missing extra-small size.
+
+[Full notes](release/releases/notes/v2.24_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.24)
+
 ## [v2.23] - 2026-06-26
 
 Functional people-graph — PMO agents now resolve people from one maintained, never-committed people-graph instead of per-project free-text names; the four leadership-owner fields become typed person references; and the filled roster stays out of the repository by construction. Novel class; additive; functional-coordination only — explicitly not an HR or performance system.
