@@ -265,7 +265,22 @@ read.
 
 After generating a status update:
 
-1. **Save** to `08-Generated/` with the filename pattern above
+1. **Save** to `08-Generated/` with the filename pattern above, stamping the two Category-3
+   **provenance markers** defined at `core/schemas/frontmatter-schema.md` § Category 3 on the
+   saved `daily-status-output` artifact:
+   - `generated_by: daily-status v<semver>` (the skill's own current `version:` from this SKILL.md
+     frontmatter) — the **versioned** generating skill, distinct from `created_by` (who, no
+     version), so a regression traces to the exact skill version.
+   - `source_inputs:` — the upstream human evidence the update drew from (`TR-###` transcript-register
+     IDs / `MSG-###` communication IDs / the carry-forward tracker + transcript source paths).
+     Emit `source_inputs` (the canonical cross-domain carrier), **not** the deprecated
+     `synthesis_scope` alias. (`source_inputs` carries the structured IDs **after** the
+     **No internal IDs in stakeholder output** strip pass — the strip applies to the Teams-ready
+     body, not to the artifact's provenance frontmatter.)
+   - **Missing-header → regenerate-with-header.** If a saved status artifact is found without these
+     markers, regenerate it with the full provenance header rather than handing back a header-less
+     artifact. Forward-only: no back-fill of historical artifacts in place; every fresh save carries
+     the markers.
 2. **Prompt:** "Status update ready. Copy/paste to Teams? After posting, I'll append it to
    the Daily Status Log."
 3. After user confirms posting:

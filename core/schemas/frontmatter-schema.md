@@ -27,6 +27,7 @@ Frontmatter is the storage mechanism: YAML metadata that agents maintain on ever
 - **Markdown files (.md):** embedded YAML frontmatter block (standard `---` delimiters)
 - **Non-markdown files (.txt, .csv, .xlsx, .pdf, .docx, .html):** sidecar `.meta.yml` file (see Sidecar Specification below)
 - **Exclusions:** navigation layer pages (`_pmo/`) have their own simplified frontmatter; governance files at `Projects/_governance/` are exempt (governed by CLAUDE.md tier system)
+- **Generated-vs-source separation:** the `domain` (A/B/C, Category 6) and `folder` (`08-generated` vs `01-07`, Category 6) fields, together with the Domain-A-vs-Domain-C field split, are the schema's canonical generated-vs-source boundary — a generated artifact is `domain: C` + `folder: 08-generated`; a source artifact is `domain: A` + an `01-07` folder.
 
 ---
 
@@ -81,10 +82,13 @@ Six categories. Every file has core fields (required across all domains). Domain
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
+| `id` | String | No | Stable slug: `<type-slug>-<project-slug>-<YYYY-MM-DD>-<nn>` (e.g., `decision-package-acme-2026-04-09-01`) | A **stable, filename-independent** artifact identifier, assigned at generation and never changed on rename/move. Decouples addressability from `original_filename` so a back-link survives a rename and a **missing back-link is a detectable dangling edge** (a referrer cites an `id` that resolves to no artifact). Distinct from the SQLite `file_id` (a disposable cache key, rebuilt per index) and from the tracker-row entity `id` in [`entity-field-schemas.md`](entity-field-schemas.md) (which identifies a RAID/decision *row*, not a generated *file*). The structured `source_ref` tracker field + `relationships[]` edge population that consume this id are **out of scope here** (header field only). |
 | `created_date` | ISO Date | Yes | `YYYY-MM-DD` | When the file entered the ecosystem |
 | `created_by` | String | Yes | Person name or skill name | Who created or ingested this file |
 | `source_system` | String | No | `teams`, `jira`, `email`, `confluence`, `manual`, `agent-generated` | Originating system |
 | `original_filename` | String | No | Original filename | Preserved if file was renamed during routing |
+| `generated_by` | String | No | `<skill-name> v<semver>` (e.g., `ppm-agent v6.3`) | The generating skill **plus its version** that synthesized this artifact **instance**. Distinct from `created_by`: `created_by` is *who* (person-or-skill name, no version) ingested/created the file; `generated_by` is the *versioned generator* of an AI-synthesized artifact, so a regression can be traced to the exact skill version that produced it. Recommended for any AI-derived artifact (Domain C in particular). Carries **dual semantics** across the template/instance boundary — see the dual-semantics note below. |
+| `source_inputs` | Array | No | List of `TR-###` \| `MSG-###` \| source-file path strings | The list of **upstream human evidence** this artifact derives from — transcript-register IDs (`TR-###`), communication IDs (`MSG-###`), or source-file paths/filenames. The **cross-domain** provenance carrier (Domain A and Domain C); generalizes the Domain-C-only `synthesis_scope` (now its deprecated alias — see Domain C). Provenance scope (outward, to human evidence), distinct from the `parent_artifact` lineage edge (horizontal, to a generated artifact) — see Lineage Fields vs. Provenance Fields. |
 
 ### Category 4: Connections
 
@@ -129,7 +133,9 @@ The horizontal-lineage scalar fields (`parent_artifact`, `sibling_topic`, `super
 
 **Field vs. verb (composition).** These lineage entries are **scalar frontmatter keys**, NOT `relationships[]` MVP-type verbs. They **compose against** the 7 MVP relationship types above rather than extending them: a `supersedes:` scalar denotes the same edge a `type: SUPERSEDES` relationship entry expresses, but is the lightweight per-artifact carrier. No new enum value is added and the 7-MVP-type constraint is unchanged.
 
-**`source_inputs` scope note.** `source_inputs` is a separate **provenance** scope (upstream human evidence, outward) and is **not** part of this lineage field set; it is not yet defined in this schema and is listed here only to fix the lineage-vs-provenance boundary.
+**`source_inputs` scope note.** `source_inputs` is a separate **provenance** scope (upstream human evidence, outward) and is **not** part of this lineage field set; it is **defined as a Category 3 Provenance field** (see Category 3 above) and is referenced here only to fix the lineage-vs-provenance boundary.
+
+**`generated_by` dual-semantics note.** `generated_by` is a **dual-semantics field name** shared with the L4 template schema in [`template-protocol.md`](../standards/template-protocol.md) §4.2/§8. **Here (the artifact-instance schema) it is the versioned generating skill of a Domain-C instance** (e.g., `ppm-agent v6.3`); **there (`operations/templates/`) it is the template-authoring skill OR operator name.** Same field NAME, scope-localized value — NOT a naming conflict. This note satisfies the both-locations flag mandated by `template-protocol.md` §8.2 **drift-prevention rule 5** ("Dual-semantics field names MUST be flagged in BOTH locations"), and closes the §4.2/§4.3/§8.1 forward-reference that names this instance-side field as its comparison anchor. File scope distinguishes the two populations: templates at `operations/templates/`; instances at `projects/*/08-Generated/`.
 
 ### Category 5: Trust
 
@@ -214,7 +220,7 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
 | `trigger_source` | String | Yes (Domain C) | Filename or event description | What triggered this synthesis (e.g., transcript, SteerCo meeting, user request) |
-| `synthesis_scope` | Array | No | List of filenames | Source files this synthesis draws from |
+| `synthesis_scope` | Array | No | List of filenames | **DEPRECATED → alias of `source_inputs` (Category 3).** The Domain-C-only narrower instance of the cross-domain `source_inputs` provenance carrier. During the migration window, readers MAY find either field; writers SHOULD emit `source_inputs`. Migration tail (emit sites + the `sqlite-index-schema.md` junction table) is sequenced in the build; on completion, exactly **one live field** (`source_inputs`) carries the concept (duplicate-source-discipline §1). `trigger_source` is a **distinct** concern and is NOT deprecated — see note below. |
 | `validation_state` | String | No | `pending`, `passed`, `failed` | Agent consistency check result |
 | `promotion_state` | String | No | `staged`, `promoted`, `archived-in-place` | **Promotion-location** of the generated artifact's file — *where it physically sits*, orthogonal to `lifecycle_state` (which carries content-maturity). `staged` = in `08-Generated/`; `promoted` = physically moved to its `01-07` target folder; `archived-in-place` = moved to `08-Generated/_archived/` by the Auto-Archive sweep (a location terminal, distinct from the content terminal `lifecycle_state: archived`). Owner: `artifact-generator`. Full protocol: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) §4. Absent ⇒ not-yet-staged / not-applicable. |
 | `promoted_from` | String | No | Filename | If promoted from another synthesis, links to predecessor |
@@ -225,6 +231,8 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 **Promotion-location consistency rules:**
 - `promotion_state: promoted` requires `folder ≠ 08-generated` (a promoted file has physically left the staging area; this is the rule artifact-lint Check 4 enforces, now schema-declared on the dedicated `promotion_state` field rather than inferred from the deprecated `artifact_state: PROMOTED`).
 - `promotion_state` (location) and `lifecycle_state` (content-maturity) are **orthogonal** — neither value constrains the other. Full transition rules: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) §4.
+
+**`trigger_source` vs `source_inputs` (distinct concerns — both live).** `trigger_source` records **what triggered** the synthesis (the event/file that prompted generation — e.g., a SteerCo meeting, a user request); `source_inputs` (Category 3) records **what evidence** the synthesis drew from. A synthesis may be *triggered by* one transcript while *drawing on* several. These are orthogonal and both remain live fields; only `synthesis_scope` (the "what evidence" duplicate) is deprecated.
 
 ---
 
@@ -355,6 +363,7 @@ relationships:
 
 ```yaml
 ---
+id: decision-package-acme-2026-04-09-01
 type: decision-package
 managed_by: artifact-generator
 parent: [PROJECT_KEY] Implementation
@@ -368,11 +377,13 @@ lifecycle_trigger: ppm-agent-processing
 trust_category: interpretation
 created_date: 2026-04-09
 created_by: artifact-generator
+generated_by: artifact-generator v3.1
 trigger_source: "SteerCo_2026-04-08.txt"
-synthesis_scope:
-  - "SteerCo_2026-04-08.txt"
+source_inputs:
+  - "TR-034"
+  - "MSG-047"
   - "[PROJECT_KEY]_RAID_Log"
-  - "[PROJECT_KEY]_Daily_Status_Log"
+  - "05-transcripts/SteerCo_2026-04-08.txt"
 validation_state: pending
 relationships:
   - type: GENERATES
