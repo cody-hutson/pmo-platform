@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v2.23
+version: v2.28
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -342,6 +342,23 @@ for field definitions.
 
 ### 1. Communication metadata
 Type, audience, channel, urgency, related project/workstream.
+
+**Provenance markers when the draft is persisted to `08-Generated/`.** A communication that is
+staged as a Domain-C artifact (owned-generation routed through artifact-generator's `08-Generated/`
+flow, or a `draft-communication` written directly) carries the two Category-3 provenance markers
+defined at `core/schemas/frontmatter-schema.md` § Category 3:
+- `generated_by: comms-writer v<semver>` (the skill's own current `version:` from this SKILL.md
+  frontmatter) — the **versioned** generating skill, distinct from `created_by` (who, no version),
+  so a regression traces to the exact skill version.
+- `source_inputs:` — the upstream human evidence the draft derives from (`TR-###` / `MSG-###` /
+  source-file paths). Emit `source_inputs` (the canonical cross-domain carrier), **not** the
+  deprecated `synthesis_scope` alias.
+- **Missing-header → regenerate-with-header.** If a persisted communication artifact is found
+  without these markers, regenerate it with the full provenance header rather than handing back a
+  header-less artifact. Forward-only: the policy does not back-fill historical artifacts in place,
+  but any artifact this skill writes fresh carries the markers. (A copy/paste-only draft that never
+  lands in `08-Generated/` — a Teams post, an inline email body — is not a persisted artifact and
+  needs no frontmatter.)
 
 ### 2. Readiness assessment
 **READY FOR SEND** or **NOT READY** — with specific gaps listed for NOT READY.

@@ -261,6 +261,30 @@ This protocol applies to PPM Agent processing. See § Skill Chaining Protocol ab
 
 Governs when a skill should produce an artifact via a canonical template versus author it ad-hoc. The protocol owns artifact-family classification, lifecycle state machine (DRAFT→REVIEWED→APPROVED→DEPRECATED→ARCHIVED), provenance schema, and 5 trigger conditions (T1-T5) + 5 promotion gates (P1-P5). Authoritative spec lives at [`core/standards/template-protocol.md`](../standards/template-protocol.md); canonical template-family taxonomy lives at [`core/standards/template-taxonomy.md`](../standards/template-taxonomy.md). Consumer skills (the 6 template-authoring skills: project-initiator, delivery-engine, eval-writer, pmo-process-designer, pmo-skill-refiner, release-planner) consult the protocol's T1-T5 trigger evaluation before authoring a templatizable artifact and the P1-P5 promotion gates before promoting a skill-internal template to canonical. See the [`template-architecture` roadmap](<OPERATOR_INSTANCE_ROADMAPS_PATH>/template-architecture.md) (operator-local) for the architected path-to-done across downstream initiatives.
 
+### Generated-Artifact Provenance Marker Protocol
+
+Every AI-generated artifact staged in a project's `08-Generated/` folder carries a **provenance
+marker** so a downstream regression or a missing back-link is traceable to its source. The marker
+is the pair of Category-3 fields defined canonically at
+[`core/schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 3 — this
+protocol records the *requirement* and the *back-fill policy*; the schema owns the field shapes.
+
+- **The two markers (emit on every write).** `generated_by` — the **versioned** generating skill
+  (`<skill> v<semver>`, e.g. `ppm-agent v6.3`), distinct from `created_by` (the who, no version),
+  so a regression traces to the exact skill version. `source_inputs` — the upstream human evidence
+  the artifact derives from (`TR-###` transcript-register IDs / `MSG-###` communication IDs /
+  source-file paths), the canonical cross-domain provenance carrier. (The Domain-C `synthesis_scope`
+  field is its deprecated alias; emit `source_inputs`.)
+- **Which skills emit them.** The four emitters — artifact-generator, comms-writer, daily-status,
+  ppm-agent — stamp both markers when they write a Domain-C artifact, and apply the
+  **missing-header → regenerate-with-header** rule: an artifact found without the markers is
+  regenerated with the full provenance header rather than handed back header-less.
+- **Forward-only (no-backfill) policy.** The markers are `Required: No` in the schema, so existing
+  header-less artifacts already in `08-Generated/` **stay valid and are NOT back-filled in place**.
+  The policy applies forward: every *fresh* write carries the markers. The soft-enforcement lever is
+  the pmo-qa-auditor presence spot-check (Mode D, a random ~5/week sample) — not a hard schema gate
+  that would retroactively invalidate the existing corpus.
+
 ### Release Management Protocol
 
 Platform changes follow the release lifecycle defined in `release/governance/RELEASE_PROTOCOL.md`. That file governs: lifecycle steps (intake → triage → bundle → plan → dry-run → snapshot → execute → close → verify), versioning, GitHub Issue requirements, implementation plan format, dry-run protocol, pre-change snapshot protocol with retention policy, and rollback procedures.

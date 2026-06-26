@@ -2,7 +2,7 @@
 name: artifact-generator
 description: >
   Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in 08-Generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
-version: v2.22
+version: v2.28
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -266,6 +266,27 @@ The prior `PENDING_REVIEW` value is retired in favor of the reconciled two-field
 of the former staged-awaiting-promotion state, so every consumer that previously keyed on a
 staged artifact (the Promotion Workflow, the Artifact Health Check scan, the Auto-Archive Policy)
 now keys on `promotion_state: staged` (staging is a location fact).
+
+**Provenance markers (`generated_by` + `source_inputs`) — emit on every write.** Every artifact
+this skill generates carries the two Category-3 provenance markers defined at
+`core/schemas/frontmatter-schema.md` § Category 3:
+- `generated_by: <this-skill> v<semver>` (e.g., `artifact-generator v3.1`) — the **versioned**
+  generating skill, so a later regression traces to the exact skill version that produced the
+  artifact. This is distinct from `created_by` (the who, no version). Stamp the skill's own
+  current `version:` (from this SKILL.md frontmatter) as the semver.
+- `source_inputs:` — the array of **upstream human evidence** the synthesis drew from, as
+  `TR-###` (transcript-register IDs) / `MSG-###` (communication IDs) / source-file paths. This is
+  the canonical cross-domain provenance carrier; **emit `source_inputs`, not the deprecated
+  `synthesis_scope` alias.** Where a prior run would have written `synthesis_scope`, write
+  `source_inputs` (the alias keeps old reads valid during the migration window). `trigger_source`
+  (what *triggered* the run) stays distinct and is still emitted.
+- **Missing-header → regenerate-with-header.** If an artifact is found in `08-Generated/`
+  **without** the provenance markers (a pre-policy artifact, or one another path emitted without
+  them), do not silently hand it back: **regenerate it with the full provenance header**
+  (`generated_by` + `source_inputs` alongside the existing `lifecycle_state`/`promotion_state`
+  block) rather than promoting a header-less artifact. This is the forward-only enforcement edge
+  — the policy never back-fills historical artifacts in place, but any artifact this skill touches
+  on a fresh write gets the markers.
 
 **File naming convention**: `[ProjectAbbrev]_[ArtifactType]_[Identifier]_[Date].md`
 - Example: `ABC_FDD_Review_FDD002_2026-03-18.md`

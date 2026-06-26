@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v2.23
+version: v2.28
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -223,7 +223,21 @@ readiness state (READY / DRAFT / NEEDS INPUT). When producing or updating operat
 `references/operational-artifacts.md` and note moves in the change summary. When producing
 new artifacts (not updating existing ones), stage them in the project's 08-Generated/ folder
 with metadata noting: artifact type, target folder for promotion, confidence level, and creation
-date. Artifacts move from 08-Generated/ to their target folder only on user approval. This
+date, **plus the two Category-3 provenance markers** defined at
+`core/schemas/frontmatter-schema.md` § Category 3:
+- `generated_by: ppm-agent v<semver>` (the skill's own current `version:` from this SKILL.md
+  frontmatter) — the **versioned** generating skill, distinct from `created_by` (who, no version),
+  so a regression traces to the exact skill version.
+- `source_inputs:` — the upstream human evidence the synthesis drew from (`TR-###` transcript-register
+  IDs / `MSG-###` communication IDs / source-file paths). Emit `source_inputs` (the canonical
+  cross-domain carrier); where a prior run would have written the Domain-C `synthesis_scope` field,
+  write `source_inputs` instead (the alias keeps old reads valid during the migration window).
+  `trigger_source` (what *triggered* the run) stays distinct.
+- **Missing-header → regenerate-with-header.** If a staged artifact is found without these markers,
+  regenerate it with the full provenance header rather than handing back a header-less artifact.
+  Forward-only: no back-fill of historical artifacts in place; every fresh write carries the markers.
+
+Artifacts move from 08-Generated/ to their target folder only on user approval. This
 prevents generated content from polluting the accepted project record.
 
 ### 4. Items requiring your action
