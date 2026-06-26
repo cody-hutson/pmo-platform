@@ -70,6 +70,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | declarative-gating-model (version-less) | declarative-gating-model | #1870 (engineered); #1875, #1876 (research spikes) | #1890 | `1dfa3488778b7c96ffc1ccb7d22981f97497026f` | (none) | VERIFIED | 2026-06-24 |
 | v2.22 | 25-comms-and-facilitation-reference-substrate | #317, #378, #56 | #1919 | `1e5b6bace819a672faaedde24504c6101d986c72` | `v2.22` | VERIFIED | 2026-06-25 |
 | v2.23 | 14-functional-people-graph | #1897, #315, #1166, #1898, #1899, #1900 | #2020 | `ca2015a8dd025601f52f1c86ba79fc9529bf9e34` | `v2.23` | VERIFIED | 2026-06-26 |
+| v2.26 | 85-people-graph-activation | #2040, #2041, #2042 | #2072 | `2426d92520bda725b9e96c8cca205edfdff239f8` | `v2.26` | VERIFIED | 2026-06-26 |
 | v2.24 | 26-corpus-conventions-and-standards-hygiene | #77, #81, #113, #1094, #751, #764, #171, #163, #580, #663 | #2019 | `fb0d88af4de5a45612564942636022537a1108d0` | `v2.24` | VERIFIED | 2026-06-26 |
 | v2.25 | 76-hub-spoke-orchestration-discipline | #31, #78, #189, #210, #879, #1669 | #2016, #2017 | `029b5c6320bb873f681c5f7a04195112ef99040e` | `v2.25` | VERIFIED | 2026-06-26 |
 
