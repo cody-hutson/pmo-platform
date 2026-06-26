@@ -34,7 +34,8 @@ Canonical YAML frontmatter shape. Fields are listed in canonical order — Engin
 ---
 # Identity
 project_name: string                       # REQUIRED — display name
-project_owner: string                      # REQUIRED — primary accountable owner
+project_owner: ref→Person.person_id        # REQUIRED* — accountable owner, resolves to a roster Person (ADR-040)
+project_owner_external: string             # OPTIONAL — owner NOT in the roster; *exactly one of {project_owner, project_owner_external}
 status: ACTIVE | CLOSING | CLOSED          # REQUIRED — lifecycle state (per CLAUDE.md Project Lifecycle)
 
 # Dual-framing co-management trigger (decoupled from delivery_approach — orthogonal)
@@ -66,7 +67,8 @@ Field presence rules summary:
 | Field | Required | Conditional |
 |---|---|---|
 | `project_name` | ✅ Always | — |
-| `project_owner` | ✅ Always | — |
+| `project_owner` | ✅ Exactly-one-of† | †one of {`project_owner` ref→Person, `project_owner_external`} per ADR-040 |
+| `project_owner_external` | ⚪ Conditional | populated iff the owner is not in the roster; mutually exclusive with `project_owner` |
 | `status` | ✅ Always | — |
 | `dual_framing_enabled` | ⚪ Optional | — |
 | `delivery_approach` | ✅ Always | — (new) |
@@ -80,9 +82,9 @@ One subsection per field. Values, semantics, and consumer expectations. Evidence
 
 Free-form string. Used in status output headers, artifact titles, and cross-project reports. Convention: title-case; match the project folder name under `projects/` when possible. `[SOURCE]` — `operations/skills/project-initiator/SKILL.md` (governs PROJECT.md scaffolding).
 
-### `project_owner`
+### `project_owner` / `project_owner_external`
 
-Primary accountable owner (single person). Free-form string. Used in routing status output and escalation chains. `[SOURCE]` — observed convention across all projects under `projects/`.
+Primary accountable owner. **Type-lifted per ADR-040** (functional-people-graph, Tier-2) from a free-text string to a typed reference: `project_owner` is a `ref→Person.person_id` resolving to a roster Person, unifying the leadership-owner axis on the `person_id` anchor. For an owner NOT in the people roster (an external client/vendor contact), use the optional `project_owner_external` free-text field instead — e.g. `project_owner_external: [EXTERNAL_OWNER_NAME]`. **Exactly one** of {`project_owner`, `project_owner_external`} is populated — the L1 mutual-exclusion invariant (both-populated, or neither, is malformed; this preserves the original required-owner guarantee). On-unresolved: a populated `project_owner` ref that does not resolve → BLOCK-WRITE; a populated `project_owner_external` → WARN-HEALTH (X-30). **Migration:** an existing free-text owner name resolves-by-name against the roster — a unique match becomes the ref; zero or ambiguous (≥2) matches route to the operator clarification queue, never silently dropped. The worked examples below that show an owner as a name illustrate this pre-migration free-text resolving to a `person_id` ref. Used in routing, status output, and escalation chains. `[SOURCE]` — observed convention across all projects under `projects/`; type-lifted per ADR-040.
 
 ### `status`
 
