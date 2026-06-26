@@ -2,7 +2,7 @@
 name: tracker-manager
 description: >
   Generic update engine for all operational trackers in 04-PMO-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
-version: v2.22
+version: v2.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
