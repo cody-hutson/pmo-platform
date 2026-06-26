@@ -245,7 +245,7 @@ Project: [[{Project Name}]] | Index: [[Phases]]
 - [[{file related to this phase}]]
 ```
 
-**Methodology parameterization (C02):** The 15-stage universal lifecycle (Capture → Prepare → Build → Validate → Deliver) compresses/expands per methodology. PROJECT.md's `methodology` field determines which phases are active:
+**Methodology parameterization (C02):** The 15-stage universal lifecycle (Capture → Prepare → Build → Validate → Deliver) compresses/expands per delivery approach. PROJECT.md's `delivery_approach` field determines which phases are active:
 
 | Methodology | Phases Shown | Gate Model |
 |-------------|-------------|------------|
