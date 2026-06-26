@@ -33,9 +33,14 @@ tracker" / "work item" / "item reference", not a specific tool's nouns.
    deferrable fields, or "None — …" where the template allows it). Include the
    owned-assumption block (see § Assumptions-as-owned-items) so every unresolved
    unknown is a stage-owned body item before confirm. Carry structured-field values
-   that a freeform body cannot set per § Structured-field carriage.
+   that a freeform body cannot set per § Structured-field carriage. **Render the title
+   as an informative summary** per [`intake-style-guide.md`](../../../../release/references/how-to/intake-style-guide.md) §7 —
+   names the object + the change, no `[...]:` type/category prefix (type is on the
+   label, not the title).
 2. **Gate.** Run the 5-test (T1–T5 per `references/elicitation-loop.md`) as the clarity
-   gate. If any test fails and cannot be resolved after one re-elicitation, route to
+   gate, **plus a title-informativeness check** against `intake-style-guide.md` §7
+   (no bracket prefix; names object + change; not a bare slug) before the confirm.
+   If any test fails and cannot be resolved after one re-elicitation, route to
    the observation tier rather than emit a malformed typed item.
 3. **Confirm (AskUserQuestion).** Present the rendered body plus the 5-test verdict,
    then obtain an explicit binary approval via AskUserQuestion (see § Confirm gate).
@@ -44,7 +49,9 @@ tracker" / "work item" / "item reference", not a specific tool's nouns.
    recommendation (a logged item is CHEAP — close or delete it).
 4. **Log.** On approval, write the confirmed body to a process-local temp file and run
    the configured tracker's create command (the MVP binding is GitHub — see below)
-   with the title (carrying the type prefix) and the labels the type declares.
+   with the title (an informative summary per [`intake-style-guide.md`](../../../../release/references/how-to/intake-style-guide.md) §7 —
+   no type/category prefix; type travels on the label, not the title) and the labels
+   the type declares.
 5. **Read back.** Read the created item and confirm it landed — state is open, the
    labels are present, and the in-body-carried structured fields are present. A
    read-back mismatch halts and reports which field failed to land.
@@ -145,9 +152,9 @@ After the AskUserQuestion approval, with the rendered body in a process-local te
 (pass the template's own default labels read from its `labels:` array; the shapes below
 show the convention, not a hardcoded label list):
 
-- `bug`: `gh issue create -F <body> --title "[Bug]: <summary>"` + the labels from `bug.yml`'s `labels:`.
-- `improvement`: `gh issue create -F <body> --title "[<Category>]: <summary>"` + the non-category labels from `improvement.yml`'s `labels:` (Triage applies the category label; the title prefix carries the Category value per the template's title convention).
-- `observation`: `gh issue create -F <body> --title "[Observation]: <summary>"` + the labels from `observation.yml`'s `labels:`.
+- `bug`: `gh issue create -F <body> --title "<informative summary>"` + the labels from `bug.yml`'s `labels:`. The title carries no `[Bug]:` prefix — type is on the `bug` label.
+- `improvement`: `gh issue create -F <body> --title "<informative summary>"` + the non-category labels from `improvement.yml`'s `labels:`. Triage applies the category label; the Category value travels in the in-body `**Category:**` line only — **not** in the title (titles carry no type/category prefix).
+- `observation`: `gh issue create -F <body> --title "<informative summary>"` + the labels from `observation.yml`'s `labels:`. The title carries no `[Observation]:` prefix — type is on the `observation` label.
 
 Read back the created item after emit (`gh issue view <new> --json state,labels,body`)
 and confirm state is open, the labels are present, and the body carries the

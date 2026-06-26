@@ -3447,7 +3447,7 @@ cmd_check() {
       #     applies-to triple
       local _num _title _body _labels _label_template _inferred _template
       local _has_imp _has_bug _has_obs _label_total
-      local _bm_repro _bm_obswhat _bm_propchange _title_ok
+      local _bm_repro _bm_obswhat _bm_propchange _title_ok _title_reason
       local _ac_lines _ac_total _ac_bad _ac_line _ac_norm _ac_ok
       while IFS= read -r _issue_line; do
         [[ -n "$_issue_line" ]] || continue
@@ -3500,31 +3500,28 @@ cmd_check() {
           continue
         fi
 
-        # G1-01 — title prefix per applies-to triple + Adapter Blocks
+        # G1-01 — title informativeness floor (SYNTACTIC floor only; the
+        # semantic informativeness BAR lives in the intake-style-guide.md §7
+        # rubric + intake-desk elicitation, not here). Template-agnostic — the
+        # former per-template prefix adapters (G1-01-Bug/G1-01-Obs) are retired;
+        # all three templates share one prefix-less floor. This catches a
+        # leftover '[...]:' type prefix (type is on the label, not the title)
+        # and a bare area-slug / single-token title; it does NOT and cannot
+        # judge whether a well-formed multi-word title is actually informative.
         _title_ok=true
-        case "$_template" in
-          improvement)
-            # Generic [Category]: prefix — accept any [<word(s)>]: prefix
-            if ! printf '%s' "$_title" | /usr/bin/grep -qE '^\[[A-Za-z][A-Za-z /-]*\]:[[:space:]]'; then
-              _title_ok=false
-            fi
-            ;;
-          bug)
-            # Adapter G1-01-Bug — literal [Bug]: prefix
-            if ! printf '%s' "$_title" | /usr/bin/grep -qE '^\[Bug\]:[[:space:]]'; then
-              _title_ok=false
-            fi
-            ;;
-          observation)
-            # Adapter G1-01-Obs — literal [Observation]: prefix
-            if ! printf '%s' "$_title" | /usr/bin/grep -qE '^\[Observation\]:[[:space:]]'; then
-              _title_ok=false
-            fi
-            ;;
-        esac
+        _title_reason=""
+        # F1 — no leading bracket type/category prefix
+        if printf '%s' "$_title" | /usr/bin/grep -qE '^[[:space:]]*\[[^]]+\]:[[:space:]]'; then
+          _title_ok=false; _title_reason="leftover '[...]:' type prefix (type is on the label — drop it)"
+        # F2/F3 — substance floor: bare slug (no internal whitespace) OR too short
+        elif ! printf '%s' "$_title" | /usr/bin/grep -qE '[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
+          _title_ok=false; _title_reason="bare slug / single token (name the object + the change, >= 2 words)"
+        elif [[ "${#_title}" -lt "${G1_TITLE_MIN_CHARS:-12}" ]]; then
+          _title_ok=false; _title_reason="too short (${#_title} chars; informative summary expected)"
+        fi
         if [[ "$_title_ok" != "true" ]]; then
           flag_g1_enforcement "g1-enforcement" \
-            "issue #${_num} — G1-01 FAIL: title prefix mismatch for template '${_template}' (expected '[Category]:' / '[Bug]:' / '[Observation]:' per Adapter Blocks)"
+            "issue #${_num} — G1-01 FAIL: title not an informative summary — ${_title_reason} (see intake-style-guide.md §7)"
           c22_finding_count=$((c22_finding_count + 1))
         fi
 

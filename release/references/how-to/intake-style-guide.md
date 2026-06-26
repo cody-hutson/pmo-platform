@@ -276,6 +276,7 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `core/disciplines/root-cause-analysis.md` | §2 (trigger), §4 (invocation points) | The proven `owner:` / `to close:` form (for the bug/unknown-cause class) that §5c generalizes to every intake assumption. |
 | `release/references/standards/solutioning-output-template.md` | § 3.5 (The Solutioning Pre-Read) | Intake-authority mirror pair: this guide's §5c governs intake-*emitted* `[ASSUMPTION – CONFIRM]` assumptions (directional, owned downstream); § 3.5 governs Stage-5-*emitted* advisory pre-reads (non-binding, the issue body stays the contract). Same theme, different emitting stage — the two complete the WHAT-vs-HOW-vs-advisory authority boundary. |
 | `core/schemas/gate-criteria-spec.md` | G1-04 (Proposed Change specificity), G1-05 (AC verifiability) | Triage gates that operationalize T2 (G1-04) and T3 (G1-05). |
+| `core/schemas/gate-criteria-spec.md` + `core/deploy/deploy.sh` Check 22 | G1-01 (title informativeness floor) | Enforcement surfaces for the §7 title rubric. The gate enforces the **syntactic floor only** (no bracket prefix + substance floor); the §7 rubric carries the semantic informativeness bar (judgment, not gate-enforced). |
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
 | `.github/ISSUE_TEMPLATE/improvement.yml` | Description, Proposed Change fields | Field descriptions point authors to this guide for the 5-test rule. |
 | `.github/ISSUE_TEMPLATE/observation.yml` | All fields | Lightweight intake form used when T3/T4/T5 fail and the author cannot fix at authoring time. |
@@ -283,3 +284,34 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `core/governance/OPERATIONS.md` | § Continuous Improvement Protocol Path A | Path A intake-template selection is preceded by Anti-pattern D check: temporal-window AC content routes to Notes (or stays in AC with merge-time rewrite). |
 
 `[CONTEXT: core/governance/OPERATIONS.md Continuous Improvement Protocol]` — operational expansion of the auto-logging rule with the tier-selection test workflow.
+
+## 7. Title Summary-Informativeness
+
+A work-item title is a **self-contained, outcome-shaped summary** — understandable from the issue list alone, with no label click and no body read needed. **Type lives on the label; the title spends its whole space on the change.** Titles carry no bracketed `[...]:` type/category prefix.
+
+This section is the doctrine. The **enforcement** surfaces (gate G1-01 + `deploy.sh` Check 22) enforce only the **syntactic floor** below; the **quality bar** (the heuristics and worked examples that follow) is judgment — `intake-desk` elicits to it, and a reviewer reads it; neither the gate nor any LLM scores it. A title can clear the floor and still be a poor summary (e.g. "Update the gate" passes the floor yet names no object — the floor cannot catch that; this rubric can).
+
+### Structural floor (the mechanical minimum — what the gate enforces)
+
+| # | Floor rule | Rationale |
+|---|---|---|
+| F1 | **No bracketed type/category prefix.** A title must not lead with `[...]:`. | The label carries type; a prefix duplicates it and burns title space. |
+| F2 | **Names an object + a change.** ≥ 2 words; not a bare area-slug (`intake-desk`, `repo-platform`). | A bare noun names *where*, not *what changed*. |
+| F3 | **Sentence case, ≤ ~70 chars, no trailing period.** | Reads cleanly in the GitHub issue-list column. (The gate enforces a minimum length as a backstop; the upper bound and casing are author discipline.) |
+
+### Quality heuristics (the bar — `intake-desk` elicits to these; NOT gate-enforced)
+
+| Heuristic | Bad | Good |
+|---|---|---|
+| Lead with the change, not the area | `intake-desk titles` | `Drop the redundant type prefix from issue titles` |
+| Name the object **and** the action | `Fix title format` | `Make issue titles human-readable; remove the category prefix` |
+| Disambiguate from neighbours — if two open issues could share it, it is too vague | `Update the gate` | `Repurpose G1-01 into a title-informativeness floor` |
+| The dropped prefix **buys back** space — spend it on specificity | `deploy fails` | `Fix deploy.sh unbound-variable crash on empty package set` |
+
+### Worked good/bad set (type-agnostic — not tied to live issue numbers)
+
+- ✓ `Make work-item titles human-informative — drop the redundant type prefix`
+- ✓ `Cache the issue-list query in the bundle parser to cut Stage-3 runtime`
+- ✗ `[Enhancement]: titles` (bracket prefix + bare area — fails F1 + F2)
+- ✗ `fix-titles` (slug, one token — fails F2)
+- ✗ `Update the gate` (clears the floor, but names no object — fails the *disambiguation* heuristic, which the gate cannot enforce; this is exactly where author/`intake-desk` judgment is the only control)

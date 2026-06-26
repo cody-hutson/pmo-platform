@@ -207,7 +207,7 @@ All skills auto-log improvements by creating a GitHub Issue via the `improvement
 - A process friction point (manual step that could be automated, repeated workaround)
 - A quality finding (evidence quality failure, guardrail violation pattern)
 
-**Format:** Use the GitHub Issue improvement template. Include: title with [Category] prefix, severity (P1-P4 in body Priority field), category (selected from required Category dropdown in `improvement.yml`), and body sections (Description, Evidence, Affected Files, Proposed Change, Acceptance Criteria) with enough detail to generate an implementation plan without re-reading the original conversation. The category label corresponding to the dropdown selection is applied at Stage 2 Triage CER Resolve.
+**Format:** Use the GitHub Issue improvement template. Include: an informative summary title (no type/category prefix — the label carries type; see `release/references/how-to/intake-style-guide.md` §7), severity (P1-P4 in body Priority field), category (selected from required Category dropdown in `improvement.yml`), and body sections (Description, Evidence, Affected Files, Proposed Change, Acceptance Criteria) with enough detail to generate an implementation plan without re-reading the original conversation. The category label corresponding to the dropdown selection is applied at Stage 2 Triage CER Resolve.
 
 **Do not:** Ask the user before creating the Issue. Do not mention it conversationally without also creating the Issue. Do not filter by perceived importance — log everything, let the user triage on GitHub.
 
