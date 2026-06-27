@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit. Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality."
-version: v2.28
+version: v2.31
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -341,12 +341,26 @@ author's creation PR, structurally distinct from an audit mode.
    clean. Emit a `## Failure-Mode Detector Battery` section in `findings-register.md` listing
    **all 8 detectors with current-status read + threshold** (one row per detector; the table
    format is in the ref doc's Verdict/reporting section).
+5.5. **Run the KM check-set** per [`references/km-scanning.md`](references/km-scanning.md) — four
+   mechanical scans over the K1 corpus (`core/**/*.md` + `release/**/*.md` durable docs): the
+   documentation-debt audit (`doc_debt(a) = 3S+2C+2E+2L+1·min(B,3)`, banded P1/P2/P3), the
+   staleness scan (`staleness_due(a)`, ranked by criticality), the artifact lifecycle-state check
+   (terminal `KM-*` states + stale-while-`KM-Active`), and in-flight-capture verification (the §6
+   timing table). **All thresholds, weights, bands, and states are consumed from
+   [`km-protocols.md`](../../disciplines/km-protocols.md) §2/§5/§6/§1 + the `KM-<State>` convention
+   from [`lifecycle-states-canonical.md`](../../standards/lifecycle-states-canonical.md) §4.4 — this
+   step redefines nothing.** Any artifact with an unresolvable K-tier/`published_date`/ET-tier/state
+   reports INDETERMINATE with the missing field named (never silently clean). Emits two artifacts
+   into the audit folder (`km-doc-debt-register.md`, `km-staleness-report.md`) + a `## KM In-Flight
+   Capture` subsection in `findings-register.md` (present-but-empty if nothing observed).
 6. **Emit the audit folder** at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/`
    (operator-instance, git-ignored; `${AUDIT_DATE_UTC}` = `date -u +%Y-%m-%d` at run time) —
    `SUMMARY.md` (with the Scorecard Weighting header), `findings-register.md` (carrying the
-   `## Failure-Mode Detector Battery` section from step 5), `base-build-deltas.md`, and ≥3
-   `issue-drafts/NNN-*.md` in **observation format** (`observation.yml` 3-field schema — drift
-   findings are observations until the operator triages them).
+   `## Failure-Mode Detector Battery` section from step 5 + the `## KM In-Flight Capture` subsection
+   from step 5.5), `base-build-deltas.md`, the two KM-scan artifacts from step 5.5
+   (`km-doc-debt-register.md`, `km-staleness-report.md`), and ≥3 `issue-drafts/NNN-*.md` in
+   **observation format** (`observation.yml` 3-field schema — drift findings are observations until
+   the operator triages them).
 7. **Observational-discipline self-check.** Before emitting, scan all output for prescriptive
    verbs (`recommend`, `migrate`, `consolidate`, `should`) per the framework Observational
    discipline + [review-discipline-principles.md](../../disciplines/review-discipline-principles.md)
@@ -491,14 +505,18 @@ It produces a **dated audit folder** plus an **in-chat SUMMARY echo**.
 | File | Contents |
 |------|----------|
 | `SUMMARY.md` | Top-level report; header carries the Scorecard Weighting (cited from the registry header, not duplicated); records baseline SHA + audit date; observational posture only. |
-| `findings-register.md` | One row per drift item: T1–T5 classification, §3.3 (a/b/c) update-path, Overlap Detection Rubric score. Carries the `## Failure-Mode Detector Battery` section: all 8 detectors (D1–D8) with current-status read + threshold per `references/failure-mode-detectors.md`. |
+| `findings-register.md` | One row per drift item: T1–T5 classification, §3.3 (a/b/c) update-path, Overlap Detection Rubric score. Carries the `## Failure-Mode Detector Battery` section: all 8 detectors (D1–D8) with current-status read + threshold per `references/failure-mode-detectors.md`. Also carries the `## KM In-Flight Capture` subsection (step 5.5): EXPENSIVE/IRREVERSIBLE decisions or class-potential corrections in the audit window with no `KM-Proposed` capture, per `references/km-scanning.md` §6 / `km-protocols.md` §6 (present-but-empty if none observed). |
 | `base-build-deltas.md` | The Anthropic-catalog-vs-baseline + roster-vs-registry raw enumeration deltas. |
+| `km-doc-debt-register.md` | The KM check-set doc-debt register (step 5.5): one row per K1 artifact with `doc_debt > 0`, banded P1/P2/P3, sorted by debt. Schema + derivation in [`references/km-scanning.md`](references/km-scanning.md) §3; thresholds consumed from `km-protocols.md` §5. |
+| `km-staleness-report.md` | The KM check-set staleness report (step 5.5): one row per stale / due-soon artifact, ranked by criticality. Schema in [`references/km-scanning.md`](references/km-scanning.md) §4; thresholds consumed from `km-protocols.md` §2. |
 | `issue-drafts/NNN-kebab-name.md` | ≥3 drafts in observation format (`observation.yml` 3-field schema). |
 
 **In-chat SUMMARY echo:** baseline SHA + audit date, the drift-item count by trigger type
 (T1–T5), the health posture per the Scorecard Weighting, a **detector-battery status line**
 (count of fired detectors among D1–D8 + the headline posture, pointing to the
-`## Failure-Mode Detector Battery` section in `findings-register.md`), and a pointer to the
+`## Failure-Mode Detector Battery` section in `findings-register.md`), a **KM-scan status line**
+(doc-debt band counts P1/P2/P3 + the stale-artifact count + the INDETERMINATE count, pointing to
+`km-doc-debt-register.md` + `km-staleness-report.md`), and a pointer to the
 audit folder. No prescriptive verbs — every line describes an observed state, not an action.
 Decision-class items (the observation issue-drafts) carry reversibility tiers; there is no
 gate verdict to tier.
@@ -792,6 +810,7 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `../../reference/reversibility-protocol.md` | Mode A G4 | 4-tier reversibility vocabulary and decision-class algorithm |
 | `../../standards/failure-mode-standard.md` | Mode A G7, Mode A G8 | Format spec, taxonomy, and regex patterns for domain-specific failure-mode discipline; the `### Cascade-omission at count update — PROC` entry names G8 as the L5 automated detection surface |
 | `references/failure-mode-detectors.md` | Mode E, Mode A G9 | The 8 named platform failure-mode detectors (D1–D8: automation complacency, faceless PMO, echo chamber, quality drift, SPOF, breadth burnout, AI hallucination, trust erosion) — signature, threshold, data source, current-status read for each; plus the RACI validation gate (G9) data source and the Mode E battery-section reporting format |
+| `references/km-scanning.md` | Mode E (step 5.5) | The KM check-set spec: doc-debt register schema, staleness report schema, in-flight-capture predicate, INDETERMINATE posture, and the Mode E integration point. Thresholds/weights/bands/states are consumed (not redefined) from `km-protocols.md` §2/§5/§6/§1 + `lifecycle-states-canonical.md` §4.4 |
 | `../../reference/review-discipline-principles.md` | When auditing review-class skill outputs | Shared 10 anti-laziness rules and 6-deliverable output structure |
 | `../../../release/references/protocols/platform-health-audit-framework.md` | Mode E | Audit methodology + cadence policy; §4 is the Mode E integration spec |
 | `../../specs/anthropic-base-vs-build-registry.md` | Mode E | The base-vs-build registry instance Mode E audits; header carries the Overlap Detection Rubric + Scorecard Weighting |
