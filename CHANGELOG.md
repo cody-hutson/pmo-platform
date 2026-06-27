@@ -23,7 +23,7 @@ Corpus-drift reconciliation — ten places where a reference or governance doc h
 - **The configuration field for delivery method reads `delivery_approach` everywhere.** The navigation-layer schema's last reference to the old `methodology` field name now matches the canonical `delivery_approach` used in PROJECT.md. *Why it matters:* the field name in the docs matches the field you actually set, with no stale alias to second-guess. ([#857](https://github.com/cody-hutson/pmo-platform/issues/857))
 - **The deploy-check reference points at the live check list instead of a frozen copy.** The `skill-deployment.md` Drift Check section stopped listing checks by hand (a list that had fallen behind) and now tells you how to read the current checks from `deploy.sh`. *Why it matters:* the reference can no longer name a different set of checks than the one that actually runs. ([#2095](https://github.com/cody-hutson/pmo-platform/issues/2095))
 
-[Full notes](release/releases/notes/v2.29-corpus-drift-reconciliation_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.29)
+[Full notes](release/releases/notes/v2.29_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.29)
 
 ## [v2.28] - 2026-06-26
 
@@ -35,7 +35,7 @@ Generated-vs-source provenance — when a skill writes a generated artifact, the
 - **Generated artifacts list the evidence behind them.** An artifact now records the upstream inputs it drew from — the transcripts, messages, or files it was built on. *Why it matters:* you can trace a generated file back to its sources to check or re-derive it. ([#205](https://github.com/cody-hutson/pmo-platform/issues/205))
 - **Each generated artifact gets a stable identifier.** A generated artifact now carries a filename-independent identifier of its own. *Why it matters:* the file stays referenceable even if it is later renamed or moved. ([#205](https://github.com/cody-hutson/pmo-platform/issues/205))
 
-[Full notes](release/releases/notes/v2.28-15-generated-vs-source-provenance_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.28)
+[Full notes](release/releases/notes/v2.28_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.28)
 
 ## [v2.27] - 2026-06-26
 
@@ -51,7 +51,7 @@ Ticket information architecture — how a ticket carries confidence, how its tit
 - **"Old" no longer reads as "broken".** Staleness now separates how long something has gone untouched from what kind of staleness it is — age alone never gets labelled as structural rot — so the top band means a real premise-level problem, not just elapsed time.
 - **Work-item titles you can read from the list.** New issues drop the `[Category]:` / `[Bug]:` title prefix — type now lives on the label and the title spends its space on what changed — with a floor check that keeps a title from being a bare slug or a single word. The check is logged-but-not-blocking for existing prefixed issues, so nothing fails and no bulk rename is forced.
 
-[Full notes](release/releases/notes/v2.27-ticket-information-architecture_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.27)
+[Full notes](release/releases/notes/v2.27_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.27)
 
 ## [v2.25] - 2026-06-26
 
@@ -69,7 +69,7 @@ Hub-spoke orchestration discipline — the orchestration failure-modes the platf
 - **A mid-build cross-ticket scope-detection rule.** When work on one item touches the scope of another mid-build, the hub now detects it and escalates rather than letting the cross-ticket change land silently — anchored by a new architecture decision record.
 - **A durable-corpus de-fragile authoring pre-check.** Reference content authored during a build is now checked for fragile constructs before it lands, at both the orchestration bridge and the reference-durability standard.
 
-[Full notes](release/releases/notes/v2.25-hub-spoke-orchestration-discipline_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.25)
+[Full notes](release/releases/notes/v2.25_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.25)
 
 ## [v2.26] - 2026-06-26
 
@@ -88,7 +88,7 @@ Functional people-graph — PMO agents now resolve people from one maintained, n
 
 - **Leadership owners are now typed person references.** The project, portfolio, and program owner fields and the initiative-sponsor field move from free text to a structured reference to a person, with a defined fallback for people outside the roster — so an owner resolves to a real, consistent person instead of an unparseable string.
 
-[Full notes](release/releases/notes/v2.23-functional-people-graph_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.23)
+[Full notes](release/releases/notes/v2.23_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.23)
 
 ## [v2.22] - 2026-06-25
 
@@ -104,7 +104,7 @@ Comms-and-facilitation reference substrate — meeting agendas and recaps now fo
 
 - **Recaps point to follow-ups instead of holding them.** A recap now references discrete, trackable follow-up records rather than being their sole container, so an action item lives as a record that can be followed to closure.
 
-[Full notes](release/releases/notes/v2.22-comms-and-facilitation-reference-substrate_RELEASE_NOTES.md)
+[Full notes](release/releases/notes/v2.22_RELEASE_NOTES.md)
 
 ## [declarative-gating-model] - 2026-06-24
 
@@ -132,7 +132,7 @@ Field-lifecycle and CMDB automation — the platform's entity fields now have a 
 
 - **The artifact-state model is reconciled onto the canonical lifecycle.** What used to be a separate `artifact_state` is reconciled into the canonical `lifecycle_state` + Domain model (with a `promotion_state` carve-out for the staging→promoted axis), and artifact-generator and artifact-lint are migrated onto the reconciled model. The transitional dual-read path is removed. A new `artifact-workflow-protocol.md` documents the workflow.
 
-[Full notes](release/releases/notes/v2.20-field-lifecycle-and-cmdb-automation_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.20)
+[Full notes](release/releases/notes/v2.20_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.20)
 
 ## [v2.21] - 2026-06-23
 
@@ -144,7 +144,7 @@ Decision-rendering standardization — when the release hub reaches a decision p
 - **Design-principle conformance scoring.** A new design-principle register (Scalability, Maintainability, Simplicity, Stability, and the rest) lets the hub mark each option ALIGNED with or in CONFLICT with a named principle; a conflict with a high-stakes principle is flagged for your sign-off rather than quietly accepted.
 - **Standing per-decision-type instructions.** You can set directives per decision type (for example, "always offer a 'defer to next release' option and show the rollback path"); these only ever add to what the hub surfaces, never hide an option or dimension.
 
-[Full notes](release/releases/notes/v2.21-decision-rendering-standardization_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.21)
+[Full notes](release/releases/notes/v2.21_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.21)
 
 ## [v2.19] - 2026-06-22
 
