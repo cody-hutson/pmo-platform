@@ -128,6 +128,8 @@ Read context in order of specificity. More-specific files override less-specific
 | 3 (Project) | [Project]/PROJECT.md | Phase, team, dates, systems, artifacts | Per processing cycle |
 | 4 (Portfolio) | projects/_config/PORTFOLIO.md | Cross-project health, resource conflicts | After any project state change |
 
+The read order above governs *which* file wins on a shared claim. For the cross-surface read-vs-write decision — which surface owns a fact, and whether a given surface is read-only / auto-write / operator-write-only — consult `pmo-platform/core/disciplines/memory-architecture.md` (the unified memory contract).
+
 ## Governance File Map
 
 Every governance file has a defined placement tier, location, and rationale. This map determines where new governance files should be placed and how the workspace scales.

@@ -50,6 +50,12 @@ The authoritative ownership registry of record is [`framework-catalog.md`](../sp
 
 ---
 
+## Memory Read/Write Contract
+
+The cross-surface read/write contract for platform memory is [`core/disciplines/memory-architecture.md`](../disciplines/memory-architecture.md) — the single SSOT enumerating every memory surface (the corpus, the governance context files, the `~/.claude/memory/` store, the `projects/_config/` state files, the operational trackers, the People surface, and `operator.toml`) with its memory-type, reader/writer, write-authority (Autonomy Tier), cadence, read-only/auto-write/operator-write-only class, and trigger. Consult it to decide read-vs-write for a surface and where a fact belongs; it absorbs the no-shadow-SSOT invariant (ratified in [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md), generalized in [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md)) so no surface holds a shadow copy of another's SSOT.
+
+---
+
 ## Follow-Up Tag Routing
 
 After PPM Agent triage, specialist work is routed via tags. Each tag maps to a target skill and defines which skills may emit it.
