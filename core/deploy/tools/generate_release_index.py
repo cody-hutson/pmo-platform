@@ -119,7 +119,12 @@ def find_artifact(version_key: str, milestone: str, kind: str) -> str | None:
         for key in keys:
             if stem_key == key:
                 return f"{directory.name}/{name}"
-            if key and stem_key.startswith(key):
+            # Slug suffix only ('<key>-<slug>'); never a patch sibling. A bare
+            # startswith(key) makes vX.Y greedily match vX.Y.Z (e.g. v2.06 -> the
+            # v2.06.1 note), since the patch note sorts first and is a string prefix
+            # of the base version. Requiring the '-' separator admits the legitimate
+            # vX.Y-<theme-slug> form while rejecting the vX.Y.Z patch form.
+            if key and stem_key.startswith(key + "-"):
                 return f"{directory.name}/{name}"
         if short and (vslug.startswith(stem_key + "-") and stem_key.startswith(short)):
             return f"{directory.name}/{name}"
