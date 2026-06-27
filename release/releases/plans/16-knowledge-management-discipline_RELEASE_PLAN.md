@@ -1,3 +1,4 @@
+<!-- repo-integrity: allow-memory-ref -->
 ## Stage 4 Release Planning — 16-knowledge-management-discipline
 
 ### Summary (30 seconds)

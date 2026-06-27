@@ -114,6 +114,8 @@ This contract is the cross-surface **index**, not the union of every surface's f
 - **People surface** — [`people-coverage-graph.md`](people-coverage-graph.md) (the shipped read-time graph view over the operator-instance roster).
 - **Layer boundary** — [`operations-bridge.md`](../rules/operations-bridge.md): the Layer-1 / Layer-2 write boundary this contract's §5 Rule 3 cites.
 
+### Provenance
+
 <!-- repo-integrity: allow-issue-ref -->
 
 > Issue numbers below are **traceability pointers, not load-bearing references** — repository re-versioning renumbers them. Each entry leads with a self-describing name so the reference survives the number; if a number no longer resolves, locate the work by its name. This block is the *only* place in this document where issue numbers appear; the body reads complete without them.

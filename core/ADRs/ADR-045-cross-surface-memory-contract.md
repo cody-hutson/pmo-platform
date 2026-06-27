@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
 ---
 title: ADR-045 — Memory SSOT model — the generalized cross-surface read/write contract across all four memory types
 status: Proposed (supersedes ADR-029; flips to Accepted at the Stage 9 review)

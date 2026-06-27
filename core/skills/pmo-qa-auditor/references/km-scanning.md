@@ -128,7 +128,7 @@ One row per scanned K1 artifact with `doc_debt(a) > 0`. Clean artifacts (`doc_de
 ## §4 Output 2 — staleness report (`km-staleness-report.md`)
 
 One row per artifact flagged **stale** OR **within 25% of due** (DUE-SOON), **ranked by
-criticality** (the ranking key #249 requires). Sort: `Criticality rank` **descending**, then
+criticality** (the ranking key the staleness report requires). Sort: `Criticality rank` **descending**, then
 `staleness_due` **ascending** (most-overdue-most-critical first).
 
 | Column | Source / derivation | Notes |

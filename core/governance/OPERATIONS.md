@@ -1,3 +1,4 @@
+<!-- repo-integrity: allow-memory-ref -->
 # OPERATIONS.md – Program-Level Context for Project Management
 
 **Effective:** 2026-03-18

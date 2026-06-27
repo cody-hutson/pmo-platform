@@ -142,6 +142,8 @@ The edit changes **zero behavior** — `daily-status` already read and wrote the
 
 ---
 
+## Provenance
+
 <!-- repo-integrity: allow-issue-ref -->
 
 > Issue numbers below are **traceability pointers, not load-bearing references** — repository re-versioning renumbers them. Each entry leads with a self-describing name so the reference survives the number; if a number no longer resolves, locate the work by its name. This block is the *only* place in this document where issue numbers appear; the body reads complete without them.

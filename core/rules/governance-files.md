@@ -4,6 +4,8 @@ paths:
   - "pmo-platform/governance/**"
 ---
 
+<!-- reference-durability: allow-link -->
+
 # Governance File Editing Rules
 
 These files govern the platform. Extra caution applies.
