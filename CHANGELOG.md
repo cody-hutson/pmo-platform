@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.31] - 2026-06-27
+
+Knowledge-management discipline — the platform's memory gets one written rulebook saying, for every place it stores a fact, which place is the source of truth and who may change it; and the quality audit starts reporting documentation that has gone stale or is missing. Additive throughout — new and edited documentation plus two reviewed skill edits, no data migration and no stored-content move. novel class; the two edited skills (pmo-qa-auditor, daily-status) have packages rebuilt at release-cut.
+
+### Added
+
+- **The quality audit now reports stale and missing documentation.** The platform health audit gained a knowledge-management scan that produces two new reports — one ranking documentation overdue for review, one listing documentation gaps — alongside its existing findings. *Why it matters:* drifted or absent reference docs surface in the audit for you to triage instead of sitting unnoticed until something breaks. ([#249](https://github.com/cody-hutson/pmo-platform/issues/249))
+- **One written rulebook for where each kind of fact lives.** A new reference doc lists every place the platform stores information and, for each one, which place is the source of truth and who may write to it. *Why it matters:* when the same fact could appear in more than one place, agents read it from the one authoritative place, so a stale copy cannot quietly override the real value. ([#1074](https://github.com/cody-hutson/pmo-platform/issues/1074))
+
+### Changed
+
+- **Behavioral corrections now get a scheduled review instead of piling up forever.** Corrections you give are reviewed on the platform's existing pattern-review rhythm — a recurring one becomes a permanent rule, an obsolete one is retired, and the rest stay active. *Why it matters:* the corrections list stays current rather than growing without bound and silently shadowing the platform's own rules. ([#1076](https://github.com/cody-hutson/pmo-platform/issues/1076))
+
+[Full notes](release/releases/notes/v2.31_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.31)
+
 ## [v2.30] - 2026-06-26
 
 Stale internal links across the platform's docs and skill files are corrected to their current locations.
