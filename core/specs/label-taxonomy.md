@@ -57,7 +57,7 @@ Classify issues by capability cluster for triage. Applied during Run 1 of backlo
 
 ### Initiative Labels
 
-Group issues by long-running multi-milestone initiative. An issue may have one initiative label. Initiative labels are the binding mechanism between the umbrella ticket, child tickets, and the corresponding roadmap doc (authored operator-local at `<OPERATOR_INSTANCE_ROADMAPS_PATH>` per ADR-012). Applied at intake (when issue is part of a known initiative) or via comment/relabel when an existing issue is absorbed under an initiative umbrella.
+Group issues by a long-running, multi-milestone initiative. **An initiative label is a *grouping mechanism*, not a hierarchy level.** The work-item hierarchy is methodology-invariant and single-sourced in [`work-organization-mapping-framework.md`](../disciplines/work-organization-mapping-framework.md): its levels — Portfolio → Program → Project → Milestone/Workstream → Work Item — are fixed; methodologies and users vary the level *names* and the *work-item kinds* that land on Work Item, never the levels themselves. An "initiative" is therefore a cross-milestone grouping theme that labels related issues — never a container tier or a `parent_ref` target. An issue may carry one initiative label, binding the umbrella ticket, its child tickets, and the corresponding operator-local roadmap doc (authored at `<OPERATOR_INSTANCE_ROADMAPS_PATH>` per ADR-012). Applied at intake (when an issue is part of a known initiative) or via comment/relabel when an existing issue is absorbed under an initiative umbrella.
 
 | Label | Color | Description | Umbrella | Roadmap |
 |---|---|---|---|---|
