@@ -4027,11 +4027,12 @@ cmd_check() {
   # initiative-roadmap-framework.md §10. Check 24 was the roadmap-freshness
   # enforcement surface (24a: frontmatter schema lint; 24b: 90-day
   # `last_reviewed:` staleness scan over the roadmap corpus). It was DELETED when
-  # initiative-roadmap *instances* moved from the tracked tree to operator-local
-  # authoring (<OPERATOR_INSTANCE_ROADMAPS_PATH>, untracked) — no in-repo roadmap
-  # corpus remains for it to scan. Roadmap freshness is now an operator-local
-  # discipline (the framework convention is retained; its in-repo enforcement is
-  # not).
+  # initiative-roadmap *instances* moved from the tracked tree to git-ignored
+  # authoring (<OPERATOR_INSTANCE_ROADMAPS_PATH>, default the in-repo /roadmaps/
+  # home per ADR-046 — folder + README tracked, instances git-ignored). No
+  # *tracked* roadmap corpus remains for this check to scan, and roadmap freshness
+  # stays an operator-local discipline — the /roadmaps/ home does NOT revive the
+  # in-repo enforcement (the framework convention is retained; the check is not).
   #
   # Check numbering: gap (24 retired) is RESERVED for citation continuity — the
   # number is referenced by ADR-012, the roadmap framework, and the v1.21 release

@@ -75,10 +75,17 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ### ADR-012 — Roadmap-instance de-scope (amends ADR-006 + ADR-007)
 
-**Status:** Accepted (operator directive 2026-06-02).
+**Status:** Accepted (operator directive 2026-06-02). **Location clause superseded-in-part by ADR-046 (2026-06-27, below)** — the "not tracked" decision stands; the per-instance *location* is now the shipped `/roadmaps/` folder.
 **Decision:** Initiative-roadmap *instances* de-scoped from the tracked tree to operator-local authoring (`<OPERATOR_INSTANCE_ROADMAPS_PATH>`); the roadmap *framework* is retained as the reusable convention; the 4 in-repo enforcement surfaces (deploy.sh Check 24, gate-criteria-spec G3-13, Stage 13 forcing-function, Stage 5 cohesion-check) are dropped. Amends the roadmap-placement clauses of ADR-006/007 — all non-roadmap decisions stand.
 **Reversibility:** MODERATE.
 **File:** [ADR-012-roadmap-instance-descope.md](ADR-012-roadmap-instance-descope.md)
+
+### ADR-046 — Roadmap-instance in-repo home — shipped /roadmaps/ folder + token-as-override
+
+**Status:** Proposed (supersedes-in-part ADR-012's location clause + ADR-017's roadmaps placement in the operator-instance path family; flips to Accepted at the Stage 9 review).
+**Decision:** Roadmap instances get a single canonical in-repo home at repo-root `/roadmaps/` (folder + `README` tracked, instances git-ignored — the `analysis/` workspace pattern); the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token default moves to `${CLAUDE_WORKSPACE_ROOT}/pmo-platform/roadmaps` across the SSOT surfaces (depersonalization-spec registry + operator.toml.template) and remains the per-deployment override. Roadmaps leave the `personal/pmo-instance/` family by design (authored content ships in-repo like `analysis/`; runtime state stays operator-local). Preserves ADR-012's "instances not tracked" decision; includes a copy-migration for existing instances.
+**Reversibility:** MODERATE.
+**File:** [ADR-046-roadmap-instance-in-repo-home.md](ADR-046-roadmap-instance-in-repo-home.md)
 
 ### ADR-013 — detect_install_path session-resolution policy + COWORK_AVAILABLE seam
 

@@ -11,7 +11,14 @@ pmo-instance/
 
 # Initiative-roadmap instances — operator-local planning artifacts, never tracked
 # (the roadmap *framework* at core/standards/initiative-roadmap-framework.md stays
-#  tracked; the *instances* are authored operator-local per core/ADRs/ADR-012)
+#  tracked; the *instances* are authored operator-local per core/ADRs/ADR-012).
+# Canonical home is repo-root /roadmaps/ (ships on install: folder + README tracked,
+# instances git-ignored — the analysis/ workspace pattern, per ADR-046). The
+# <OPERATOR_INSTANCE_ROADMAPS_PATH> token defaults to /roadmaps/ and is repointable.
+/roadmaps/*
+!/roadmaps/README.md
+# Legacy pre-/roadmaps/ module dirs — kept ignored so any existing local content stays
+# untracked; superseded as the canonical home by /roadmaps/ (ADR-046).
 core/governance/roadmaps/
 release/governance/roadmaps/
 operations/governance/roadmaps/

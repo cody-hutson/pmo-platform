@@ -91,10 +91,13 @@ pmo_platform_repo_name = "pmo-platform"
 operator_instance_hub_state_path = ""
 
 # Resolves <OPERATOR_INSTANCE_ROADMAPS_PATH>.
-# Default: ${claude_workspace_root}/personal/pmo-instance/roadmaps
-# Consumer: initiative-roadmap *instances* are authored operator-local here,
-# de-scoped from the tracked tree per core/ADRs/ADR-012. The roadmap
-# *framework* convention stays in-repo at
+# Default: ${claude_workspace_root}/pmo-platform/roadmaps  (the shipped in-repo
+# /roadmaps/ home — folder + README tracked, instances git-ignored, the analysis/
+# workspace pattern; ships on install). Per core/ADRs/ADR-046 (in-repo location;
+# supersedes-in-part the operator-local placement of ADR-012 + ADR-017). ADR-012's
+# "instances are not tracked" decision is preserved — instances stay git-ignored.
+# Leave empty to use the default; set a path to repoint (plug-and-play storage).
+# The roadmap *framework* convention stays at
 # core/standards/initiative-roadmap-framework.md.
 operator_instance_roadmaps_path = ""
 
