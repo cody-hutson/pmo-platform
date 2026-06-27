@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v2.28
+version: v2.31
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -70,6 +70,16 @@ Before generating any status update, read these files in order:
    Read **only when rendering the Ambient Sweep Digest**. Append-only JSONL; read the latest
    record (last line). Absent → "not configured." Producer schema:
    `core/standards/c3-external-sync-path-b.md`.
+
+**Memory-surface contract.** The inputs above are **memory surfaces** governed by the
+cross-surface read/write contract at
+[`memory-architecture.md`](../../../core/disciplines/memory-architecture.md). Before reading,
+consult that contract for each surface's read/write **class** and **SSOT owner**: the **Daily
+Status Log** and **Communications Tracker** are `class: auto-write` Work-type operational
+trackers (this skill is an authorized reader and writer of them); **PROJECT.md** is
+`class: operator-write-only` Work-type — read-only here, so surface drift routes to
+drift-detection (propose → approve), never an inline write. Read each surface from its SSOT,
+never a shadow copy (the no-shadow-SSOT invariant).
 
 ## Update Types
 
@@ -284,7 +294,11 @@ After generating a status update:
 2. **Prompt:** "Status update ready. Copy/paste to Teams? After posting, I'll append it to
    the Daily Status Log."
 3. After user confirms posting:
-   - Append the update to `[Project]_Daily_Status_Log.md` under the date header
+   - Append the update to `[Project]_Daily_Status_Log.md` under the date header. This write is
+     governed by the [`memory-architecture.md`](../../../core/disciplines/memory-architecture.md)
+     contract: the Daily Status Log is `class: auto-write` (Document Tier 2, Autonomy Tier 2) —
+     the append is authorized only post-confirmation, writes only this skill's own surface, and
+     never mutates a higher-tier surface (PROJECT.md / governance) inline.
    - Update the Open Meetings Tracker if the meeting that produced the transcript is tracked
 
 ## Shared Behavioral Rules
