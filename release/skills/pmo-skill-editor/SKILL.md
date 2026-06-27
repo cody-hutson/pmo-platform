@@ -26,7 +26,7 @@ You operate in 4 modes. Detect the mode from the user's request. If unclear, ask
 ## Operating Principles
 
 **Cross-skill awareness before any edit.** Before touching a skill, read
-`../../reference/knowledge-base/dependency-graph.md` to identify what depends on the structure you're
+`../../../core/skills/registry.md` to identify what depends on the structure you're
 changing. Every edit starts with impact analysis.
 
 **Change manifest for every modification.** Every Mode A edit produces a manifest:
@@ -128,7 +128,7 @@ For each edit (prioritized P1 → P2 → P3):
 
 1. **Identify target**: Which skill, which section (§ name), which file(s).
 
-2. **Impact analysis**: Read `../../reference/knowledge-base/dependency-graph.md`.
+2. **Impact analysis**: Read `../../../core/skills/registry.md`.
    - Check Section A: does any consuming skill depend on the structure being changed?
    - Check Section C proven edges: does a matching edge rule fire?
    - If cross-skill impact exists, document it in the change manifest.
@@ -169,7 +169,7 @@ For each skill edited:
 
 ### Edit ordering (when processing a remediation plan)
 
-Read `../../reference/knowledge-base/dependency-graph.md` Section A to determine which skills have the
+Read `../../../core/skills/registry.md` Section A to determine which skills have the
 most downstream consumers. Edit those first. The recommended order from Phase 8:
 
 1. ppm-agent (entry point — most downstream impact)
@@ -218,7 +218,7 @@ After Phase 9 remediation, verify all 4 suite-wide guardrails (SG-1 through SG-4
 are present in all 6 operational skills' § Guardrails sections.
 
 **Check B-4: Tag taxonomy consistency**
-Verify tag emission rules match `../../reference/knowledge-base/dependency-graph.md` Section B. Each
+Verify tag emission rules match `../../../core/skills/registry.md` Section B. Each
 skill that emits tags must list the correct tags. Comms-writer must emit none. Max
 depth 2 routing constraint must be documented.
 
@@ -467,7 +467,7 @@ tiers on decision-class items fail the reversibility check. See
 
 These apply to the editor itself — not to the skills being edited.
 
-**No edit without impact analysis.** If `../../reference/knowledge-base/dependency-graph.md` hasn't been
+**No edit without impact analysis.** If `../../../core/skills/registry.md` hasn't been
 consulted for the current edit, stop and consult it. Blind edits are a hard rejection.
 
 **No silent cross-skill changes.** If an edit affects a consuming skill, the change
@@ -519,12 +519,12 @@ structural conformance and content quality.
 ### Mode A edit without dependency-graph consultation — PROC
 
 - **Signature (observable signal):** A Mode A Edit Summary is produced with no evidence
-  that `../../reference/knowledge-base/dependency-graph.md` was consulted — the Cross-Skill Impact table is
+  that `../../../core/skills/registry.md` was consulted — the Cross-Skill Impact table is
   empty, contains only the edited skill's own row, or lists consuming skills without the
   dependency-type column populated — for an edit that touches a shared contract (tag
   taxonomy, output section names, shared behavioral rules, RAID prefixes).
 - **Conditional:** do NOT apply a Mode A edit without first reading
-  `../../reference/knowledge-base/dependency-graph.md` and populating the Cross-Skill Impact table with
+  `../../../core/skills/registry.md` and populating the Cross-Skill Impact table with
   every consuming skill and its dependency type, because consuming skills depend on
   contracts defined in the edited skill — tag taxonomies, output section names, shared
   rules, RAID prefixes — and blind edits produce downstream breakage that surfaces only
@@ -533,7 +533,7 @@ structural conformance and content quality.
   feels local. The dependency-graph consultation adds a read-and-analyze step that
   feels redundant when the edit "looks contained." The cross-skill impact is invisible
   until it breaks something.
-- **Mitigation:** Before applying any Mode A edit, Read `../../reference/knowledge-base/dependency-graph.md`;
+- **Mitigation:** Before applying any Mode A edit, Read `../../../core/skills/registry.md`;
   identify every consuming skill via Section A; check proven edges in Section C for
   matching edge rules; populate the Cross-Skill Impact table with each consuming skill
   and dependency type; when the table is legitimately empty (genuinely local edit),
@@ -723,7 +723,7 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 
 | File | When to Read | Purpose |
 |------|-------------|---------|
-| `../../reference/knowledge-base/dependency-graph.md` | Before every Mode A edit, during Mode B | Maps every skill-to-skill dependency, tag taxonomy, proven edges, RAID prefixes |
+| `../../../core/skills/registry.md` | Before every Mode A edit, during Mode B | Maps every skill-to-skill dependency, tag taxonomy, proven edges, RAID prefixes |
 | `references/regression-checks.md` | During Mode C, after every Mode A edit | 35 friction-based checks organized by category with trigger conditions |
 | `references/quality-standard.md` | During Mode D, when auditing quality | Phase 8 baselines per dimension, anti-patterns, behavioral invariants (H1–H10) |
 | `references/suite-contracts.md` | During Mode B, when checking coherence | Verbatim output contracts, shared rules, guardrails, section registry |

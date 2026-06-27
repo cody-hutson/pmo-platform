@@ -42,8 +42,8 @@ Each entry conforms to the `failure-mode-standard.md` 5-field template (Signatur
 
 ## 5. Dependency-graph node undeclared — HAND
 
-- **Signature (observable signal):** A skill has real upstream (reads from another skill's output) and downstream (produces output consumed by another skill) edges, but no entry in `core/knowledge-base/dependency-graph.md`. Cross-skill impact analysis (e.g., pmo-skill-editor's suite coherence check) misses the edges.
-- **Conditional:** do NOT ship a skill without registering its dependency edges in dependency-graph.md, because cross-skill impact analysis depends on the graph being complete — missing edges lead to regression risk when an upstream skill changes and the downstream skill's assumptions silently break.
+- **Signature (observable signal):** A skill has real upstream (reads from another skill's output) and downstream (produces output consumed by another skill) edges, but no CI row in `core/skills/registry.md`. Cross-skill impact analysis (e.g., pmo-skill-editor's suite coherence check) misses the edges.
+- **Conditional:** do NOT ship a skill without registering its dependency edges in registry.md, because cross-skill impact analysis depends on the edge set being complete — missing edges lead to regression risk when an upstream skill changes and the downstream skill's assumptions silently break.
 - **Root cause:** Similar to anti-pattern 4 — registration is an extra step. Authors think of the skill as standalone and miss the edges.
 - **Mitigation:** Interview Q6 elicits upstream and downstream edges. The refiner's step 8 registers the `### <skill-name>` node concurrently with the body injection. For new skills that genuinely have no dependencies (pure utilities), the node still registers with `Upstream: None (entry point or standalone)` so the graph is complete.
 - **Principal response vs. junior response:** Principal enumerates dependencies explicitly — even declaring "none" is informative. Junior declines to register "because the skill has no dependencies," leaving the graph ambiguous.
@@ -82,7 +82,7 @@ Each entry conforms to the `failure-mode-standard.md` 5-field template (Signatur
 | 2. Reversibility tier omitted | `reversibility-protocol.md` | Field 6 (Reversibility Discipline) |
 | 3. Methodology assumed | `pmo-platform-context.md` § Methodology | Field 1 (`delivery_approach` frontmatter) |
 | 4. Output contract unregistered | `per-skill-output-contracts.md` | Field 2 (Output Contract stub) + concurrent registration |
-| 5. Dependency-graph node undeclared | `dependency-graph.md` | Field 3 (Dependency Graph Node stub) + concurrent registration |
+| 5. Dependency-graph node undeclared | `registry.md` | Field 3 (Dependency Graph Node stub) + concurrent registration |
 | 6. Evidence labels missing internal | CLAUDE.md § Universal Preferences | Field 4 (Evidence Quality Protocol clause) |
 | 7. Synthetic triggers | skill-creator § Review Trigger Set Discipline (archival reference in this refiner) | Interview Q2 evidence requirement |
 | 8. Principal Standard untargeted | `principal-standard-checklist.md` | Field 7 (Principal Standard Target) + pre-handoff check |

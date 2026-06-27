@@ -93,7 +93,7 @@ Mitigation: Parallel testing [ASSUMPTION – CONFIRM: Assumes parallel testing a
 
 This protocol governs auto-invocation policy. The framework spec consumers bind against is at [`agent-handoff-framework.md`](../core/standards/agent-handoff-framework.md).
 
-Governs auto-invocation from one skill to another (skill chaining) and post-approval cascade (a single user approval authorizing downstream dependent updates). Operationalizes the existing max-depth-2 architectural constraint codified in **XC-05** (`core/standards/regression-checks.md`) and the routing tree in `core/knowledge-base/dependency-graph.md` for the specific case of auto-invocation and cascading writes. This subsection does not modify XC-05 or dependency-graph.md — it cites them as the architectural source of the depth bound and extends their scope to programmatic invocation.
+Governs auto-invocation from one skill to another (skill chaining) and post-approval cascade (a single user approval authorizing downstream dependent updates). Operationalizes the existing max-depth-2 architectural constraint codified in **XC-05** (`core/standards/regression-checks.md`) and the dependency edges in [`core/skills/registry.md`](../core/skills/registry.md) for the specific case of auto-invocation and cascading writes. This subsection does not modify XC-05 or the registry — it cites them as the architectural source of the depth bound and extends their scope to programmatic invocation.
 
 **Platform capability.** The Cowork `Skill` tool permits programmatic invocation from within one skill's execution. Rules C1–C7 constrain when that capability fires automatically; outside these rules, the capability is still present but invocation remains manual (informational handoff tags for the operator).
 

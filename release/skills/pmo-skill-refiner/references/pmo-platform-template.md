@@ -75,13 +75,13 @@ elements, validation checklist, and RAID prefix.
 
 ### Dependency Graph Node
 
-Injection field 3. Stubs a reference; the authoritative dependency edges live in `dependency-graph.md`, which the refiner registers concurrently.
+Injection field 3. Stubs a reference; the authoritative dependency edges live in `registry.md`, which the refiner registers concurrently.
 
 ```markdown
 ## Dependency Graph Node
 
-This skill's dependency edges are declared in
-`core/knowledge-base/dependency-graph.md` § {{skill-name}}.
+This skill's dependency edges are declared in its CI row in
+`core/skills/registry.md`.
 - Upstream: {{upstreams}}
 - Downstream: {{downstreams}}
 - Shared contracts: {{shared-contracts}}
@@ -190,7 +190,7 @@ Competencies this skill is at risk for:
 
 ## Cross-reference resolution
 
-After all 7 injections, the refiner runs a cross-reference resolution pass. Every `reference/*.md` path, every platform-doc link (`per-skill-output-contracts.md`, `dependency-graph.md`, `failure-mode-standard.md`, `reversibility-protocol.md`, `principal-standard-checklist.md`) must resolve to an existing file at pre-handoff time. Broken references fail the pre-handoff gate.
+After all 7 injections, the refiner runs a cross-reference resolution pass. Every `reference/*.md` path, every platform-doc link (`per-skill-output-contracts.md`, `registry.md`, `failure-mode-standard.md`, `reversibility-protocol.md`, `principal-standard-checklist.md`) must resolve to an existing file at pre-handoff time. Broken references fail the pre-handoff gate.
 
 ## Integration with Interview packet
 
@@ -210,7 +210,7 @@ Field-to-Interview mapping:
 
 - [ ] YAML frontmatter parses; `delivery_approach` present and valid enum
 - [ ] `## Output Contract` stub resolves to an actual Skill N entry in per-skill-output-contracts.md
-- [ ] `## Dependency Graph Node` stub resolves to an actual `### <skill-name>` entry in dependency-graph.md
+- [ ] `## Dependency Graph Node` stub resolves to an actual CI row for `<skill-name>` in registry.md
 - [ ] `## Evidence Quality Protocol` clause present
 - [ ] `## Domain-Specific Failure Modes` has ≥ 3 entries; each matches the 5-field template; each heading carries a TRIG/INPUT/PROC/OUT/HAND tag
 - [ ] `## Reversibility Discipline` is Form A (tier vocabulary + typical-tier-mix table) or Form B (explicit opt-out)

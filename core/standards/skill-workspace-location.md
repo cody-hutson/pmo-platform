@@ -11,7 +11,7 @@ Disambiguate two PMO-internal organizational conventions for skill-adjacent arti
 
 Both are **PMO-only conventions that extend — but do not modify — the Anthropic `anthropic-skills:skill-creator` scaffolder output**. The Anthropic scaffolder operates on the skill directory at `skills/<skill>/` and remains the authority over its contents; PMO conventions govern the sibling/parallel surfaces (`skills/<skill>-workspace/`) and the parent `analysis/` directory.
 
-**Reversibility tier:** MODERATE — Confidence: HIGH. Convention documentation is reversible via doc edit, but existing canonical references in 5+ files use `skills/<skill>-workspace/` already (`pmo-skill-refiner/SKILL.md`, `regression-protocol.md`, `eval-framework.md`, `regression-checks.md` entry format, `dependency-graph.md` refiner writes-to declaration). Reversal would require coordinated edits to those files.
+**Reversibility tier:** MODERATE — Confidence: HIGH. Convention documentation is reversible via doc edit, but existing canonical references in 5+ files use `skills/<skill>-workspace/` already (`pmo-skill-refiner/SKILL.md`, `regression-protocol.md`, `eval-framework.md`, `regression-checks.md` entry format, `registry.md` refiner dependency-edge declaration). Reversal would require coordinated edits to those files.
 
 ## §2 Decision rule
 
@@ -60,7 +60,7 @@ This convention governs the sibling/parallel surfaces to `skills/<skill>/`, not 
 - `release/skills/pmo-skill-refiner/references/regression-protocol.md` — regression protocol declares `<skill>-workspace/iteration-N/` benchmark path.
 - `release/skills/pmo-skill-refiner/references/eval-framework.md` — eval framework declares same.
 - `release/references/specs/skill-suite-regression-checks.md` — entry format declares `release/skills/<skill>-workspace/iteration-<N>/benchmark.json` as the canonical regression iteration reference path.
-- `core/knowledge-base/dependency-graph.md` — pmo-skill-refiner writes-to declaration includes `release/skills/<skill>-workspace/iteration-N/`.
+- `core/skills/registry.md` — pmo-skill-refiner dependency-edge declaration; the refiner writes-to path includes `release/skills/<skill>-workspace/iteration-N/`.
 - `CLAUDE.md § Governance File Map` — declares `pmo-platform/analysis/<audit-name>-YYYY-MM-DD/` for read-once engineering analysis artifacts.
 
 ## §7 Upstream compatibility
