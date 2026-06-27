@@ -114,6 +114,14 @@ core/skills/*-workspace/
 # (cross-module-audit.sh default output path)
 audit-output/
 
+# Repo-scoped analysis workspace — operator working material, never committed.
+# Read-once release/backlog/audit analysis ABOUT the platform (NOT projects/other). The
+# empty folder + its README signpost ship (tracked); everything written here (dated
+# <name>-YYYY-MM-DD/ subfolders) is git-ignored. Convention + frontmatter + sunset rule:
+# core/standards/analysis-workspace-standard.md.
+/analysis/*
+!/analysis/README.md
+
 # Legacy _validation/ folder — historical evidence removed; ignored to prevent accidental regeneration
 _validation/
 
