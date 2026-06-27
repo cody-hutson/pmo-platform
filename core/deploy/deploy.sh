@@ -2033,6 +2033,57 @@ cmd_check() {
     # Missing-predicate pattern (parity with Check 6): graceful skip + WARN, not FAIL.
     log "  WARN:  registry catalog $REGISTRY_CATALOG absent — skipping registry-currency (Check 5(d))"
   else
+    # ── #1658 FIELD-CURRENCY mode + emit helper (warn-mode-initial) ─────────
+    # The inner field layer (#1658) ships warn-mode-initial, decoupled from the
+    # ~12-check shared deploy-check.mode cohort via a dedicated
+    # `registry-field-currency.mode` operator-instance file (the Check-22
+    # g1-enforcement graduation precedent). NOTE on ordering: the shared
+    # resolve_check_mode / flag_warn_or_issue / $DEPLOY_CHECK_MODE / $WARN_LOG
+    # are defined LATER in cmd_check (~lines 2350-2413) — they are NOT yet in
+    # scope at this seam. So the field layer resolves its mode and defines its
+    # emit helper INLINE here, self-contained, replicating the same warn-mode
+    # semantics (warn → WARN + jsonl, no ISSUES increment; enforce → FAIL +
+    # ISSUES) without forward-referencing the later cohort. The row layer
+    # (#1811) above is always-enforce and depends on NONE of this.
+    #
+    # Resolution: read `<instance>/registry-field-currency.mode` (operator-
+    # instance, NOT committed), legacy `.claude/hooks/` fallback; absent/invalid
+    # → fall back to the shared default `warn`. So with no mode file present
+    # (the shipped state, and what CI sees) the field layer is WARN-only and
+    # cannot push `--check` exit non-zero — satisfying #1658's "exits 0 on the
+    # current roster when fields are faithful" regardless of residual divergence.
+    local REGISTRY_FIELD_MODE="warn"
+    local _rfc_mode_file="$(pmo_instance_path)/registry-field-currency.mode"
+    [[ -f "$_rfc_mode_file" ]] || _rfc_mode_file=".claude/hooks/registry-field-currency.mode"
+    if [[ -f "$_rfc_mode_file" ]]; then
+      local _rfc_mode
+      _rfc_mode=$(cat "$_rfc_mode_file" 2>/dev/null | tr -d '[:space:]')
+      case "$_rfc_mode" in
+        enforce|warn|off) REGISTRY_FIELD_MODE="$_rfc_mode" ;;
+      esac
+    fi
+    local _rfc_warn_log="$(pmo_instance_path)/deploy-check-warn-log.jsonl"
+    # flag_registry_field — field-layer gating emit (clone of flag_g1_enforcement
+    # semantics). enforce → FAIL + ISSUES; warn → WARN + jsonl, no increment;
+    # off → silent (parity with the cohort helpers).
+    flag_registry_field() {
+      local _frf_detail="$1"
+      case "$REGISTRY_FIELD_MODE" in
+        enforce)
+          log "  FAIL:  registry-field-currency — $_frf_detail"
+          ISSUES=$((ISSUES + 1))
+          ;;
+        warn)
+          log "  WARN:  registry-field-currency — $_frf_detail (warn-mode; flip registry-field-currency.mode to 'enforce' after the shakedown window)"
+          local _frf_ts
+          _frf_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          local _frf_esc="${_frf_detail//\\/\\\\}"
+          _frf_esc="${_frf_esc//\"/\\\"}"
+          printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_frf_ts" "registry-field-currency" "$_frf_esc" >> "$_rfc_warn_log" 2>/dev/null || true
+          ;;
+      esac
+    }
+
     # Deployed roster for 5(d): the 3 module arrays, canary EXCLUDED (ADR-04).
     # set -u guard: ${ARR[@]+...} expands to nothing for an unset/empty array.
     local -a DEPLOYED_ROSTER=()
@@ -2114,16 +2165,112 @@ cmd_check() {
           ISSUES=$((ISSUES + 1))
           registry_currency_ok=false
         fi
-        # ── #1658 FIELD-CURRENCY SEAM ──────────────────────────────────────
-        # #1658 extends HERE: for this $_row (when its kind==role-Specialist),
-        # assert modes/dependencies/trigger-surface against "$_row_skill_md"
-        # via flag_registry_field (warn-mode-initial). Nested inside this row
-        # loop so the two layers share one roster source and cannot fork.
+
+        # ── #1658 FIELD-CURRENCY (inner field assertion, warn-mode-initial) ──
+        # For THIS $_row, assert its declared registry fields against the live
+        # SKILL.md. The CI table column order (registry.md § Configuration Items
+        # header) is: name|kind|module|lifecycle-state|dependencies|owner|
+        # trigger surface|modes — so, splitting the pipe row on '|' (the leading
+        # '|' makes `name` field 2): kind=field 3, dependencies=field 6,
+        # trigger surface=field 8, modes=field 9.
+        #
+        # Per-field match strategy (the #2235 design, validated full-roster at
+        # this commit):
+        #   • modes        → SET-EQUALITY (order-insensitive ` · `-split member
+        #                    set) — modes are an exact structural lift of the
+        #                    SKILL.md `Modes:`/`Mode:` clause; reuses the Check-35
+        #                    `Modes?:` extraction idiom.
+        #   • dependencies → skill-name-SET-EQUALITY — the registry re-encodes
+        #                    `Composes a + b` as `DEPENDS_ON a · DEPENDS_ON b`
+        #                    (different surface form, same edge set); compare the
+        #                    SET of skill names (surface-form-independent). Source
+        #                    side: harvest roster names appearing in the SKILL.md
+        #                    composition region (the `Composes…` clause up to the
+        #                    Modes/Use/Triggers boundary) — scoping to that region
+        #                    (not the whole description) avoids harvesting an
+        #                    incidentally-named skill from an input/consumes clause.
+        #   • trigger surface → PRESENCE-ONLY (non-empty AND ≠ `—`) — it is a
+        #                    LOSSY hand-paraphrase of `description:`; any content
+        #                    match false-FAILs by construction, so it is only
+        #                    checked for presence.
+        # All three route divergence via flag_registry_field (warn-mode → WARN,
+        # exit-code-neutral). Skip if the row had no live SKILL.md (already FAILed
+        # by (iii) — nothing to assert against). Every grep/sed is `|| true`-guarded
+        # under the inherited set +e (ADR-008 FM-1).
+        if [[ "$REGISTRY_FIELD_MODE" != "off" && -n "$_row_skill_md" ]]; then
+          # Fetch THIS row's full pipe-delimited line from the registry to read
+          # its field cells. The CI rows are uniquely keyed by the backtick-
+          # wrapped name in cell 1, so an anchored grep on `| [\`<name>\`]` returns
+          # exactly one line (head -1 defensively). The registry is small; this
+          # per-row re-read is deterministic and keeps the parse local.
+          local _row_line_cache
+          _row_line_cache=$(/usr/bin/grep -E "^\| \[\`${_row}\`\]" "$REGISTRY_CATALOG" 2>/dev/null | /usr/bin/head -1) || _row_line_cache=""
+          local _row_kind
+          _row_kind=$(printf '%s' "$_row_line_cache" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}') || _row_kind=""
+          local _row_trig _row_modes _row_deps
+          _row_trig=$(printf  '%s' "$_row_line_cache" | awk -F'|' '{gsub(/^ +| +$/,"",$8); print $8}') || _row_trig=""
+          _row_modes=$(printf '%s' "$_row_line_cache" | awk -F'|' '{gsub(/^ +| +$/,"",$9); print $9}') || _row_modes=""
+          _row_deps=$(printf  '%s' "$_row_line_cache" | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}') || _row_deps=""
+
+          if [[ "$_row_kind" == "role-Specialist" ]]; then
+            # --- modes: set-equality (registry cell ↔ SKILL.md Modes?: clause) ---
+            # SKILL.md side: text after `Modes:`/`Mode:` on its line, trimmed of
+            # the trailing sentence (`. Use…`/`. Triggers…`/etc.) and any final dot.
+            local _smd_modes _reg_modes_sorted _smd_modes_sorted
+            _smd_modes=$(/usr/bin/grep -oE 'Modes?:[^.]*' "$_row_skill_md" 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed -E 's/^Modes?:[[:space:]]*//') || _smd_modes=""
+            _reg_modes_sorted=$(printf '%s' "$_row_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _reg_modes_sorted=""
+            _smd_modes_sorted=$(printf '%s' "$_smd_modes" | /usr/bin/tr '·' '\n' | /usr/bin/sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _smd_modes_sorted=""
+            if [[ "$_reg_modes_sorted" != "$_smd_modes_sorted" ]]; then
+              flag_registry_field "row '$_row' modes diverge — registry [$(printf '%s' "$_reg_modes_sorted" | /usr/bin/paste -sd'·' -)] != SKILL.md Modes: [$(printf '%s' "$_smd_modes_sorted" | /usr/bin/paste -sd'·' -)]"
+            fi
+
+            # --- dependencies: skill-name-set-equality ---
+            # Registry side: strip the edge-type prefix, take the target names.
+            local _reg_dep_names _smd_comp_region _smd_dep_names
+            _reg_dep_names=$(printf '%s' "$_row_deps" | /usr/bin/grep -oE '(DEPENDS_ON|RELATES_TO) [a-z0-9-]+' | /usr/bin/sed -E 's/^(DEPENDS_ON|RELATES_TO) //' | /usr/bin/sort -u) || _reg_dep_names=""
+            # SKILL.md side: isolate the composition region (the `Composes…`
+            # clause up to the Modes/Use/Triggers boundary), then which deployed-
+            # roster names appear in it (deterministic against the known roster).
+            local _smd_desc
+            _smd_desc=$(/usr/bin/awk '/description: >/{f=1;next} f&&/^[a-z_0-9]+:/{exit} f{print}' "$_row_skill_md" 2>/dev/null) || _smd_desc=""
+            _smd_comp_region=$(printf '%s' "$_smd_desc" | /usr/bin/grep -oiE '[Cc]omposes.*' | /usr/bin/sed -E 's/[[:space:]]*(Modes?:|Use |Triggers:).*//') || _smd_comp_region=""
+            _smd_dep_names=""
+            if [[ -n "$_smd_comp_region" ]]; then
+              local _cand
+              for _cand in ${DEPLOYED_ROSTER[@]+"${DEPLOYED_ROSTER[@]}"}; do
+                if printf '%s' "$_smd_comp_region" | /usr/bin/grep -qF -- "$_cand"; then
+                  _smd_dep_names+="$_cand"$'\n'
+                fi
+              done
+            fi
+            _smd_dep_names=$(printf '%s' "$_smd_dep_names" | /usr/bin/grep -v '^$' | /usr/bin/sort -u) || _smd_dep_names=""
+            if [[ "$_reg_dep_names" != "$_smd_dep_names" ]]; then
+              flag_registry_field "row '$_row' dependencies diverge — registry skill-name set [$(printf '%s' "$_reg_dep_names" | /usr/bin/paste -sd' ' -)] != SKILL.md Composes set [$(printf '%s' "$_smd_dep_names" | /usr/bin/paste -sd' ' -)]"
+            fi
+
+            # --- trigger surface: presence-only (non-empty AND ≠ em-dash) ---
+            if [[ -z "$_row_trig" || "$_row_trig" == "—" ]]; then
+              flag_registry_field "row '$_row' (role-Specialist) has an empty/'—' trigger surface — a routing target must carry a non-empty trigger surface"
+            fi
+          else
+            # --- non-role-Specialist rows: the three routing-view fields must be
+            # '—' (function-skill/core/router are not routing targets). A non-'—'
+            # value would wrongly surface the row in the routing view — that is
+            # the drift, so the inversion is the correct finding. (lifecycle-state
+            # / module / owner are NOT asserted here — only the routing-view trio.)
+            if [[ "$_row_trig" != "—" ]]; then
+              flag_registry_field "row '$_row' (kind=$_row_kind) carries a non-'—' trigger surface — only role-Specialist rows populate the routing view"
+            fi
+            if [[ "$_row_modes" != "—" ]]; then
+              flag_registry_field "row '$_row' (kind=$_row_kind) carries a non-'—' modes cell — only role-Specialist rows populate modes"
+            fi
+          fi
+        fi
       done
     fi
 
     if [[ "$registry_currency_ok" == "true" ]]; then
-      log "  OK:    registry catalog current — ${#REGISTRY_ROWS[@]} rows <-> roster (symmetric; canary excluded), every row resolves to a live SKILL.md"
+      log "  OK:    registry catalog current — ${#REGISTRY_ROWS[@]} rows <-> roster (symmetric; canary excluded), every row resolves to a live SKILL.md; field-currency asserted per role-Specialist row (modes/dependencies set-equality, trigger-surface presence; mode=$REGISTRY_FIELD_MODE)"
     fi
   fi
 
