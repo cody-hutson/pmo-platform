@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-044 — Skill output ownership is entity-keyed in the data architecture; the skill registry stays a skill catalog
-status: Proposed
+status: Accepted
 date: 2026-06-26
 release: "skill-output-ownership (design; not yet bundled)"
 deciders: "operator + Stage 5 Solutioning (pmo-architect)"
@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-Proposed. Drafted at Stage 5 Solutioning for the skill-output-ownership design. Flips to Accepted at operator ratification (Collective Review or equivalent gate); recorded as Proposed because that gate has not yet run.
+Accepted — operator-ratified by merge of the ADR-044 PR (2026-06-27 UTC). Drafted at Stage 5 Solutioning for the skill-output-ownership design; recorded as Proposed at authoring and flipped to Accepted on the operator's review-and-merge, which served as the ratification gate.
 
 ## Context
 
