@@ -127,7 +127,7 @@ Tools and rules that reference this semantics doc:
 - `release/skills/pmo-skill-editor/SKILL.md` — editor workflow respects this contract
 - `release/skills/pmo-skill-refiner/SKILL.md` — refiner workflow sets initial value at skill creation
 - `.claude/rules/skill-deployment.md` (and engineering mirror) — deployment doc cross-references this
-- `core/knowledge-base/dependency-graph.md` — Shared Reference Documents subsection lists this doc as a contract source
+- [`core/skills/registry.md`](../skills/registry.md) — the skill catalog (CMDB) cites this doc as the authoritative home for the version-field contract
 
 ## Reversibility
 

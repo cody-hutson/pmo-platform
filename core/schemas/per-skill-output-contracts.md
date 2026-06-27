@@ -869,7 +869,7 @@ No Mode D cross-cutting — planning is pack-scoped by definition (findings regi
 | 2. Interview Packet | 9 Q&A exchanges from Interview mode | Structured Q&A | Q1–Q9 complete; under-specification surfaced with loop-back |
 | 3. Refined SKILL.md | Complete produced SKILL.md with all 7 PMO fields injected | Code block or file | Ready for commit; G7 Phase 1 regex matches ≥ 3 |
 | 4. Eval Evidence | Workspace path + benchmark.json + run_loop_output.json + description delta | Paste-ready table | Variance-analyzed; gaming-detection flagged; best_description applied if delta crosses threshold |
-| 5. Contracts Registered | per-skill-output-contracts.md Skill N entry added; dependency-graph.md node added; regression-checks.md entry added | Structured list | Each with ✓ / ✗ and link to edited file |
+| 5. Contracts Registered | per-skill-output-contracts.md Skill N entry added; registry.md CI row added; regression-checks.md entry added | Structured list | Each with ✓ / ✗ and link to edited file |
 | 6. Pre-Handoff Gate Evidence | G7 Phase 1 (≥ 3 failure modes), Principal Standard self-check (CONDITIONAL PASS or better per `principal-standard-checklist.md` Scoring Guide), reversibility section present, zero placeholders, cross-references resolve | Pass/fail checklist | Gate fail → iterate, do not hand off |
 | 7. Handoff Instructions | Paste-ready deploy command + canonical-session pre-check + downstream next-step (pmo-skill-editor routing if Refine-Existing spanned scope) | Code block + prose | D6 canonical-session check paired with every --deploy instruction |
 
@@ -886,7 +886,7 @@ Reversibility tier defaults (per `../specs/reversibility-protocol.md`):
 - Refined SKILL.md (Refine-Existing): typically MODERATE · MEDIUM
 - `best_description` selection: CHEAP · HIGH
 - Handoff decision (proceed vs. route to editor): CHEAP · HIGH
-- Registration in per-skill-output-contracts.md / dependency-graph.md / regression-checks.md: CHEAP · HIGH
+- Registration in per-skill-output-contracts.md / registry.md / regression-checks.md: CHEAP · HIGH
 
 **Principal Standard Target:**
 - Refiner itself: CONDITIONAL PASS or better per `../standards/principal-standard-checklist.md` Scoring Guide (≤ 2 competency FAILs; neither may be Push-to-Resolve or Evidence-Based Execution)
@@ -901,7 +901,7 @@ Reversibility tier defaults (per `../specs/reversibility-protocol.md`):
 - [ ] Refined SKILL.md contains all 7 PMO injection fields (delivery_approach, Output Contract stub, Dependency Graph Node stub, Evidence Quality Protocol, Domain-Specific Failure Modes ≥ 3 with TRIG/INPUT/PROC/OUT/HAND tags, Reversibility Discipline, Principal Standard Target)
 - [ ] Eval evidence includes workspace path + at least iteration-1 benchmark.json + run_loop_output.json (if description-optimization requested)
 - [ ] Pre-Handoff Gate: G7 Phase 1 regex ≥ 3 matches; Principal Standard CONDITIONAL PASS or better per Scoring Guide; reversibility section present; zero `[INSERT]`/`[TBD]`; all cross-refs resolve
-- [ ] Contracts registered: per-skill-output-contracts.md Skill N edit, dependency-graph.md node edit, regression-checks.md entry (create-if-missing supported)
+- [ ] Contracts registered: per-skill-output-contracts.md Skill N edit, registry.md CI row edit, regression-checks.md entry (create-if-missing supported)
 - [ ] Handoff instructions include D6 canonical-session pre-check paired with deploy command
 - [ ] No scope creep into pmo-skill-editor territory (structural edits routed, not performed)
 

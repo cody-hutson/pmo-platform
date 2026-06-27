@@ -64,7 +64,7 @@ Inline output shape:
 
 ## Dependency Graph Node
 
-This skill's dependency edges are declared in `core/knowledge-base/dependency-graph.md` § pmo-skill-refiner-selftest-canary.
+This skill's dependency edges are declared in its CI row in `core/skills/registry.md`.
 - Upstream: `release/skills/` directory listing, `deploy.sh` SKILL_LIST array
 - Downstream: User (review)
 - Shared contracts: none (report-only; no follow-up tags emitted)
