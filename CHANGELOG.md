@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.32] - 2026-06-27
+
+Skill-registry identity and currency — the skill catalog (`registry.md`) now checks itself against the skills actually deployed, so a missing, extra, or dangling catalog entry fails the build instead of drifting unnoticed; and several docs that pointed at a catalog file which never shipped are corrected to point at the real registry. Additive build check plus corrected citations — no data migration and no stored-content move. routine class; four drifted skill packages (build-reviewer, pmo-architect, pmo-skill-editor, pmo-skill-refiner) rebuilt at release-cut.
+
+### Added
+
+- **The skill catalog is now checked against the deployed skills.** The build validation compares every catalog entry against the live skill roster in both directions and confirms each entry points at a skill that exists. *Why it matters:* a forgotten catalog entry now stops the build instead of letting the catalog quietly go out of date. ([#1811](https://github.com/cody-hutson/pmo-platform/issues/1811))
+- **A second, gentler check watches each entry's recorded details.** For role-specialist entries, the build also compares the recorded modes and composition against the skill itself and logs any mismatch (reported, not yet blocking). *Why it matters:* the catalog stays trustworthy as a description of each skill, not just a list of names. ([#1658](https://github.com/cody-hutson/pmo-platform/issues/1658))
+
+### Fixed
+
+- **Docs that pointed at a catalog file which never shipped now point at the real registry.** Several reference docs and skills cited a `dependency-graph.md` that was never created; they now cite the live `registry.md`. *Why it matters:* following one of those references used to lead to a dead end. ([#1211](https://github.com/cody-hutson/pmo-platform/issues/1211))
+
+[Full notes](release/releases/notes/v2.32_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.32)
+
 ## [v2.31] - 2026-06-27
 
 Knowledge-management discipline — the platform's memory gets one written rulebook saying, for every place it stores a fact, which place is the source of truth and who may change it; and the quality audit starts reporting documentation that has gone stale or is missing. Additive throughout — new and edited documentation plus two reviewed skill edits, no data migration and no stored-content move. novel class; the two edited skills (pmo-qa-auditor, daily-status) have packages rebuilt at release-cut.
