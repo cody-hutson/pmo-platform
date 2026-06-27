@@ -320,6 +320,7 @@ Mode E emits the audit folder at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-hea
 - `SUMMARY.md` — top-level report; header carries the Scorecard Weighting (single-sourced from the registry header; SUMMARY cites it); records baseline SHA + audit date; observational posture only.
 - `findings-register.md` — one row per drift item (T1–T5 classification, §3.3 update-path, Overlap Detection Rubric score).
 - `base-build-deltas.md` — the Anthropic-catalog-vs-baseline + roster-vs-registry raw enumeration deltas.
+- `km-doc-debt-register.md` + `km-staleness-report.md` — the KM check-set artifacts (Mode E step 5.5): a doc-debt register (banded P1/P2/P3) and a criticality-ranked staleness report, per [`../../../core/skills/pmo-qa-auditor/references/km-scanning.md`](../../../core/skills/pmo-qa-auditor/references/km-scanning.md); thresholds consumed from `km-protocols.md` §2/§5 (a `## KM In-Flight Capture` subsection folds into `findings-register.md`).
 - `issue-drafts/NNN-kebab-name.md` — ≥3 drafts in **observation format** (`observation.yml` 3-field schema — drift findings are observations until the operator triages them).
 
 Because this folder is operator-instance/git-ignored, it is **produced by a Mode E run at runtime** (cadence or operator invocation), NOT authored as tracked corpus.

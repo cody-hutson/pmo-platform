@@ -1,3 +1,4 @@
+<!-- repo-integrity: allow-memory-ref -->
 # OPERATIONS.md – Program-Level Context for Project Management
 
 **Effective:** 2026-03-18
@@ -47,6 +48,12 @@ The PMO skill suite consists of 16 production skills. Each skill has a defined s
 KM corpus governance — ownership / approval / retirement / meta-governance for K1 codified-knowledge artifacts — is delegated to [`core/standards/km-governance-framework.md`](../standards/km-governance-framework.md). The framework codifies the 4-value owner-class enum (`operator-class` / `role-class` / `artifact-class` / `future-collective-class`), the 2-tier storage model (framework-catalog `owner` column authoritative + frontmatter `owner:` cache for K1 reference docs), the approval protocol composing with [`corpus-curation.md`](../disciplines/corpus-curation.md) ET1–ET5, and the 4-source retirement protocol composing with [`practice-efficacy-framework.md`](../standards/practice-efficacy-framework.md) (efficacy) + [`corpus-curation.md`](../disciplines/corpus-curation.md) (curation) + [`km-protocols.md`](../disciplines/km-protocols.md) (staleness) + reserved slot for contraindication-prevalence.
 
 The authoritative ownership registry of record is [`framework-catalog.md`](../specs/framework-catalog.md) `owner` column (col 11 of 11-col schema) per `km-governance-framework.md` §2.4 Tier 1. Frontmatter `owner:` field on K1 reference docs is the Tier 2 cache; conflict resolution rule: registry wins. Cadence + amendment protocol + Tier 2 [SCOPE CHANGE] escalation are defined in `km-governance-framework.md` §5 (Meta-Governance) and apply reflexively to the framework itself per §5.5 cutover discipline.
+
+---
+
+## Memory Read/Write Contract
+
+The cross-surface read/write contract for platform memory is [`core/disciplines/memory-architecture.md`](../disciplines/memory-architecture.md) — the single SSOT enumerating every memory surface (the corpus, the governance context files, the `~/.claude/memory/` store, the `projects/_config/` state files, the operational trackers, the People surface, and `operator.toml`) with its memory-type, reader/writer, write-authority (Autonomy Tier), cadence, read-only/auto-write/operator-write-only class, and trigger. Consult it to decide read-vs-write for a surface and where a fact belongs; it absorbs the no-shadow-SSOT invariant (ratified in [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md), generalized in [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md)) so no surface holds a shadow copy of another's SSOT.
 
 ---
 
@@ -624,6 +631,34 @@ optional_fields:
 **Emission location.** Stage 13 Close emits this event row to `<OPERATOR_INSTANCE_PIPELINE_EVENT_LOG>` (resolved per OPERATOR_INSTANCE_PIPELINE_EVENT_LOG variable — operator-instance path). For runs where Mode G fired (PROMOTE verdicts rendered), Mode G ALSO emits the same event row at its Step 5 (the duplicate emission is intentional — Mode G's emission captures the post-execution state; Stage 13's emission captures the cadence audit-trail; both are reconcilable via shared `timestamp` field). If a `pipeline-event-log-schema.md` is authored in a future release, the schema migrates there with a back-reference from this section.
 
 **Cutover discipline:** Applies to all releases entering Stage 12 going forward.
+
+---
+
+## CORRECTIONS Graduation & Expiry Protocol
+
+This protocol is a **thin CORRECTIONS-specific binding into the existing graduation pipeline** — it does NOT introduce a parallel mechanism. It composes with (and does not restate) [`decision-discipline.md`](../disciplines/decision-discipline.md) § 4 (the observation log + the N=2 same-(domain, theme) within-180-days emergence rule — single home for the schema and threshold), the **Pattern Review Cadence Protocol** above (the scan cadence and its `release-planner` Mode D / `release-executor` Mode G producer/writer split), [`km-protocols.md`](../disciplines/km-protocols.md) § 3 (the K5→K1 Integrate step), and [`ADR-029`](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) (the encode-and-evict eviction lifecycle). It exists because `projects/_config/CORRECTIONS.md` is read at every session start yet has **no scheduled graduation/expiry review** — an `append-correction` surface that can accumulate indefinitely and silently shadow governance. The protocol adds exactly the two things the pipeline lacks for this surface: a scheduled review trigger (Rule 3) and an expiry/retirement disposition (Rule 4). The lifecycle row for CORRECTIONS lives in [`operational-artifact-inventory.md`](../specs/operational-artifact-inventory.md) § 8; the read/write authority for the surface lives in the cross-surface memory contract ([`memory-architecture.md`](../disciplines/memory-architecture.md), Learning-type row) — this protocol owns only the graduation/expiry behavior and references those homes (single-home / no shadow copy).
+
+### Rule 1 — Scope
+
+Governs `projects/_config/CORRECTIONS.md` (Context-Tier 1.7; read at every session start per CLAUDE.md). CORRECTIONS holds **active behavioral redirects** (the Learning memory-type per the cross-surface memory contract). A correction is a candidate for **graduation** (→ governance) when it generalizes to a class, or for **expiry** (→ retire) when it no longer applies (superseded by a governance change, project closed, or the behavior is now the default). A correction that is neither stays **active** — this protocol never force-promotes.
+
+### Rule 2 — Graduation trigger (mature correction → governance)
+
+A CORRECTIONS entry graduates when it meets the **same emergence bar already in force** in [`decision-discipline.md`](../disciplines/decision-discipline.md) § 4.2 — N=2 same-(domain, theme) within 180 days (cited, not redefined here). Corrections are first-class observation-equivalents: when an active correction has driven ≥ 2 distinct course-corrections (the emergence signal), it is a graduation candidate. The promotion path is **the release process, unchanged**: graduation candidate → `improvement.yml` Proposal (via the Pattern Review Cadence Protocol Rule 3 field-mapping, reused verbatim) → Triage → Milestone → release → corpus encode → **encode-and-evict retires the CORRECTIONS entry** (encode the corpus rule on the main branch → archive the correction body into the Pattern-Review Decision-Briefing record → verify the corpus → evict the CORRECTIONS line). This realizes *observation → confirmed pattern → governance* on the existing rails.
+
+### Rule 3 — Review cadence (the scheduled review the surface lacks today)
+
+CORRECTIONS graduation/expiry review **piggybacks on the Pattern Review Cadence Protocol's existing triggers** (T1 ≥ N=2-since-last · T2 60-day fallback · T4 operator-explicit) — no new calendar is added. The single addition: when Pattern Review fires, the `release-planner` Mode D scan **also enumerates open CORRECTIONS entries** alongside the observation log, applies the same (domain, theme) emergence test, and surfaces CORRECTIONS graduation/expiry candidates in the same read-only Decision Briefing. The operator renders **PROMOTE (graduate) / KEEP (still active) / EXPIRE (retire)** per entry — the same three-verdict shape as Pattern Review's PROMOTE / DEFER / CLOSE. This is a one-paragraph extension of an existing scan, not a second cadence engine.
+
+### Rule 4 — Expiry / retirement disposition (the second gap)
+
+A correction the operator marks **EXPIRE** is retired **ARCHIVE-first**: paste the entry verbatim into the Pattern-Review Decision-Briefing record before deletion (mirroring the encode-and-evict ARCHIVE-first, CHEAP-reversibility posture), then trim it from CORRECTIONS.md. Expiry does **not** require a corpus encode (nothing graduated) — it is a clean retirement. A correction that is neither graduated nor expired stays **KEEP** (active); the protocol never force-promotes — a low graduation/expiry rate is a healthy state, the same posture as Pattern Review Rule 4(c).
+
+### Rule 5 — Responsible party + audit-trail
+
+The operator renders PROMOTE / KEEP / EXPIRE verdicts (the irreducible-human step). The CORRECTIONS review rides the **same** `RELEASE_LOG.md` Pattern Review row and `pattern-review-row` event already emitted (Pattern Review Cadence Protocol Rule 5) — extended with two additive fields, `corrections_scanned_count` (integer — open CORRECTIONS entries enumerated at scan time) and `corrections_verdicts` (map<entry_id, enum {PROMOTE, KEEP, EXPIRE}>), NOT a new event. The CORRECTIONS.md Management Protocol (the view/add/remove affordance CLAUDE.md already cites) gains a one-line pointer to this protocol for the graduation/expiry path.
+
+> **Generalizes ADR-029 § Decision step 3.** [`ADR-029`](../ADRs/ADR-029-memory-corpus-ssot-boundary.md)'s encode-and-evict is the *Knowledge-cut instance* of the general graduation lifecycle; this protocol is the *CORRECTIONS (Learning-type) instance* of the same lifecycle — the same encode → archive → verify-corpus → evict spine for the graduation path, plus a clean-retirement (EXPIRE) path the Knowledge cut did not need. ADR-029's own Revisit trigger names "the operational-state graduation lifecycle" as the generalization target; this protocol is part of that generalization, surfaced through the superseding [`ADR-045`](../ADRs/ADR-045-cross-surface-memory-contract.md) (the cross-surface memory contract) — referenced by, not duplicated into, that ADR. No new ADR is authored for this protocol.
 
 ---
 

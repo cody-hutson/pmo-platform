@@ -88,6 +88,32 @@ Two **orthogonal** axes describe any knowledge artifact. Conflating them is the 
 
 **The dispositive insight:** the matrix proves **custom ≠ contextual**. The authorship axis alone cannot detect local-context leakage because a leak is a **universality-axis** violation (contextual content K2–K5 embedded in a universal container K1), *independent of authorship*. `comms-writer` hardcoding `[OPERATOR_NAME], Senior Program Manager • [OPERATOR_PHONE]` is **custom + contextual** — invisible to an authorship-only audit. This is the structural reason this doc's universality axis is a required net-new artifact and not a duplicate of the authorship registry.
 
+### §2.1 The four-memory-type model and four-axis reconciliation {#four-type-reconciliation}
+
+The four memory **types** — *Work / Knowledge / People / Learning* (the [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) / [§6](#memory-corpus-boundary) set) — are a **functional** partition: each answers *what is the memory FOR?* The table below maps each type to ≥1 memory surface and cross-walks it against the three classification axes already in use: **K1–K5** (universality, [§1](#five-tier-classification)), **Context Tier 1–4** (context-file read-precedence, [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Context File Hierarchy), and **Document-Tier 1–4** (write-approval gate, CLAUDE.md File Management Protocol). The four-type taxonomy is therefore a **composed model** over these axes — not a fourth axis stacked on three others.
+
+| Memory type (what it's *for*) | Primary memory surface(s) | K1–K5 (universality) | Context Tier (1–4, where it's read) | Document-Tier (write-approval) | SSOT verdict |
+|---|---|---|---|---|---|
+| **Work** — active projects, current decisions, open tasks, session continuity | Operational trackers (`projects/[Project]/04-PMO-Operations/`); the `projects/_config/` state files — `SESSION_STATE.md`, `PORTFOLIO.md`; `PROJECT.md` | **K4** Instance (project-specific state) | **Tier 3** (PROJECT.md) · **Tier 4** (PORTFOLIO.md) · session/state files read at session start | **Document Tier 2** (operational trackers, auto-write) · **Tier 1** (RAID Log, Key Terms) · context-file (PORTFOLIO = bridge) | Operational surface is SSOT (the `projects/` tree + state files); never the corpus |
+| **Knowledge** — domain expertise, reusable disciplines, frameworks, gate/CI behavior, methodology | The codified **corpus** (`core/`, `release/skills/*/SKILL.md` + `references/`, `core/rules/`, `CLAUDE.md`) | **K1** Codified (universal) — the corpus IS the K1 set | **Tier 1** (CLAUDE.md) · **Tier 2** (OPERATIONS.md) · K1 corpus read by all agents | **Document Tier 1** (governance/stakeholder-facing, approval-gated) · **Tier 4** (context files: drift-detection) | **Corpus is SSOT** when universal (K1); memory holds it only as a temporary eviction-pointer (ADR-029 Knowledge cut) |
+| **People** — contacts, organizations, relationship context | The **shipped functional people-graph**: an operator-instance roster (operator-local, never repo-tracked) read through the in-tree graph view [`people-coverage-graph.md`](people-coverage-graph.md) | **K3** Institutional (persistent org facts — roster, owner identity/contact) | read by comms-writer / tracker-manager / ppm-agent / delivery-engine (operator-instance) | operator-write-only (the roster); the graph view is **Document Tier 1** governance | Operator-local toolkit home is SSOT (the roster + `CLAUDE.md §Workspace Owner` for identity); **never repo-tracked PII** |
+| **Learning** — patterns, mistakes, what works for the operator specifically | The operator auto-memory store **`~/.claude/memory/`** (+ its `MEMORY.md` index) | **K5** Tacit/situated (the CORRECTIONS.md class) | **Tier 1.7** (CORRECTIONS.md) · the `~/.claude/memory/` store loaded via `autoMemoryDirectory` | operator-write-only (CORRECTIONS.md, the memory store); graduation → corpus runs the release process | **Memory store is SSOT** for tacit/situated K5; it is the **graduation source** for Knowledge (encode-and-evict) |
+
+**Reading note:** a type may touch more than one surface and more than one Document-Tier (Work spans Tier-1 RAID + Tier-2 trackers); the cells name the *dominant* tier with the spread parenthesized — this is the composite-multi-entity discipline already used in [`operational-artifact-inventory.md` §4](../specs/operational-artifact-inventory.md), not a collision.
+
+#### Axis-collision resolution {#four-axis-collision}
+
+> **Collisions / open: None — axes compose cleanly.**
+
+Four distinct questions are asked over the same memory artifact, and a given artifact carries exactly one value on each axis *simultaneously* with no contradiction:
+
+- **Memory-type axis** answers *what is the memory FOR?* (Work / Knowledge / People / Learning) — a **functional** partition.
+- **K1–K5 axis** answers *whose context does it apply to?* (universal ↔ contextual) — the **universality** partition ([§2 universality axis](#universality-axis)).
+- **Context Tier (1–4)** answers *how specific is the file that holds it, and in what read-order?* — a **read-precedence** partition (CLAUDE.md Context File Hierarchy).
+- **Document-Tier (1–4)** answers *what approval gate governs writing it?* — a **write-authority** partition (CLAUDE.md File Management Protocol).
+
+Orthogonality is *demonstrable, not asserted*: fixing one axis does not determine the others. A CORRECTIONS.md entry is simultaneously **Learning** type / **K5** universality / **Tier-1.7** read-precedence / **operator-write-only** authority — four independent coordinates. This is the same orthogonality the [§2 2×2 matrix](#axis-2x2) proves for the universality×authorship pair, extended to four axes. The reconciliation is therefore a **composition**, not a fourth axis "stacked on three others" (the explicit anti-goal in this taxonomy's source).
+
 ---
 
 ## §3 Placement Model {#placement-model}
@@ -181,7 +207,7 @@ This section names **which surface is the source of truth (SSOT) when a fact cou
 
 Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a different org/project ⇒ K1 ⇒ corpus-SSOT; otherwise it is K2–K5 contextual and its SSOT is the placement-model home in §3. The auto-memory store is the §3 home for K5-tacit only.
 
-**Position in the memory architecture.** This boundary is the **Knowledge cut** of the platform's four-type memory model — *Work* (active projects/tasks → operational state), *Knowledge* (domain expertise, frameworks → codified, corpus-SSOT), *People* (contacts/relationships → a net-new surface), and *Learning* (patterns/what-works → tacit/situated K5, memory-store-SSOT). Codified Knowledge is corpus-SSOT; the Learning class is memory-store-SSOT; the encode-and-evict lifecycle below is the *graduation* path between them. The architecture, the rejected alternatives, and the extensibility to the other three types are recorded in [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md); the whole model slots into the platform's broader cross-surface memory-architecture epic.
+**Position in the memory architecture.** This boundary is the **Knowledge cut** of the platform's four-type memory model — *Work* (active projects/tasks → operational state), *Knowledge* (domain expertise, frameworks → codified, corpus-SSOT), *People* (contacts/relationships → the shipped functional people-graph: an operator-instance roster read through the in-tree [`people-coverage-graph.md`](people-coverage-graph.md) view), and *Learning* (patterns/what-works → tacit/situated K5, memory-store-SSOT). Codified Knowledge is corpus-SSOT; the Learning class is memory-store-SSOT; the encode-and-evict lifecycle below is the *graduation* path between them. The architecture, the rejected alternatives, and the extensibility to the other three types are recorded in [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md); the full four-axis reconciliation of these types against the K1–K5 / Context-Tier / Document-Tier axes is [§2.1](#four-type-reconciliation), and the whole model slots into the platform's broader cross-surface memory-architecture epic.
 
 <!-- repo-integrity: allow-memory-ref -->
 

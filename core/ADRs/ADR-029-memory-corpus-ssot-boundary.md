@@ -3,7 +3,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-029 — Memory SSOT model — corpus-SSOT for codified Knowledge within the four-type memory architecture
-status: Accepted (interim — resolves the Knowledge↔corpus cut of a larger memory architecture; see § Position in the broader architecture)
+status: Superseded by ADR-045 (the cross-surface memory contract — the Knowledge cut here is reconciled into it; this record remains for audit trail). Originally Accepted (interim — resolved the Knowledge↔corpus cut of a larger memory architecture; see § Position in the broader architecture).
 date: 2026-06-19
 release: 35-agent-discipline-codification (v2.05)
 deciders: "Workspace owner (architecture refined + ratified at the v2.05 Stage 9 review); design authored at Stage 5 Solutioning"
@@ -17,6 +17,8 @@ source_observations:
 # ADR-029 — Memory SSOT model
 
 ## Status
+
+**Superseded by [ADR-045](ADR-045-cross-surface-memory-contract.md)** (the generalized cross-surface memory read/write contract). ADR-045 is the reconciliation this ADR's Revisit trigger named: the SSOT assignment and the no-shadow invariant move verbatim into the unified contract ([`core/disciplines/memory-architecture.md`](../disciplines/memory-architecture.md)), and the encode-and-evict lifecycle becomes the Knowledge instance of the general graduation flow. This record remains unchanged for audit trail; the historical status follows.
 
 **Accepted (interim).** This ADR resolves **one boundary** — the SSOT cut between codified *Knowledge* and the operator memory store — within a larger, four-type memory architecture (see [§ The memory architecture](#the-memory-architecture-organizing-model) and [§ Position in the broader architecture](#position-in-the-broader-architecture-future-direction)). The decision and its mechanism are ratified for v2.05; the surrounding architecture — a unified cross-surface read/write contract spanning all four memory types — is tracked under the cohesive cross-surface memory-architecture epic and its cluster (see References), and this boundary is designed to **slot into** that contract when it lands.
 

@@ -4,6 +4,8 @@ paths:
   - "pmo-platform/governance/**"
 ---
 
+<!-- reference-durability: allow-link -->
+
 # Governance File Editing Rules
 
 These files govern the platform. Extra caution applies.
@@ -23,6 +25,8 @@ When editing one governance file, check if the change affects others:
 - CLAUDE.md change → does core/governance/OPERATIONS.md need updating?
 - OPERATIONS.md change → do skills reference the changed section?
 - RELEASE_PROTOCOL.md change → does release-process.md need updating?
+
+Before writing to **any** memory surface (a governance file, a state file, the auto-memory store, a tracker), consult [`memory-architecture.md`](../disciplines/memory-architecture.md) — the unified cross-surface contract — for that surface's read/write class (read-only / auto-write / operator-write-only) and its SSOT, so a write never creates a shadow copy of a fact another surface owns.
 
 ## Post-Edit Verification
 After committing governance changes:
