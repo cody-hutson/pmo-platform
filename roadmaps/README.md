@@ -11,6 +11,11 @@ Capability Outcome.
 > git history. This preserves ADR-012's "instances are not tracked" decision and
 > corrects only its *location* indirection (see
 > [ADR-046](../core/ADRs/ADR-046-roadmap-instance-in-repo-home.md)).
+>
+> **Update-safe:** nothing in the platform's update path (`update.sh`,
+> `setup-workspace.sh`, `git pull`) reads or overwrites this folder's contents —
+> it is absent from the regeneration manifest and the instances are git-ignored.
+> Your roadmaps survive updates; only this tracked `README` can change.
 
 ## Where roadmaps live
 

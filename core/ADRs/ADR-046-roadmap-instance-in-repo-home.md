@@ -37,6 +37,7 @@ Existing roadmap instances at the prior operator-local home (the `<OPERATOR_INST
 
 - **Plug-and-play home ships out of the box.** Agents and operators have a known default location without per-user configuration, while users who need bespoke storage repoint one token. The `analysis/`-pattern precedent means one mechanism governs both operator-working-material folders.
 - **ADR-012 is preserved as a historical record** (immutable-ADR posture); it carries a supersession-in-part pointer to this ADR for the location clause only — its de-scope, framework-retention, and enforcement-drop decisions stand.
+- **Update-safe by design.** `/roadmaps/` is absent from `update.sh`'s composition-surface regeneration manifest, and its contents are git-ignored — so no update path (managed-section regeneration, `git pull`, or `setup-workspace.sh`) reads, overwrites, or deletes operator roadmap instances. Only the tracked `README` marker is ever touched. This is the same structural guarantee `analysis/` carries: content survival on update is a *consequence of the git-ignored-plus-not-in-manifest design*, not a feature that must be separately protected.
 
 ## Reversibility
 
