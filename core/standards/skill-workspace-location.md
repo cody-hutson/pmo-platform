@@ -60,7 +60,7 @@ This convention governs the sibling/parallel surfaces to `skills/<skill>/`, not 
 - `release/skills/pmo-skill-refiner/references/regression-protocol.md` — regression protocol declares `<skill>-workspace/iteration-N/` benchmark path.
 - `release/skills/pmo-skill-refiner/references/eval-framework.md` — eval framework declares same.
 - `release/references/specs/skill-suite-regression-checks.md` — entry format declares `release/skills/<skill>-workspace/iteration-<N>/benchmark.json` as the canonical regression iteration reference path.
-- [`core/skills/registry.md`](../skills/registry.md) — pmo-skill-refiner dependency-edge declaration; the refiner writes-to path includes `release/skills/<skill>-workspace/iteration-N/`.
+- `core/skills/registry.md` — pmo-skill-refiner dependency-edge declaration; the refiner writes-to path includes `release/skills/<skill>-workspace/iteration-N/`.
 - `CLAUDE.md § Governance File Map` — declares `pmo-platform/analysis/<audit-name>-YYYY-MM-DD/` for read-once engineering analysis artifacts.
 
 ## §7 Upstream compatibility
