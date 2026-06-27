@@ -52,17 +52,17 @@ Every analysis artifact (at minimum its `SUMMARY.md`) carries:
 
 ```yaml
 ---
-analysis_type: release | backlog | audit | review | gap-analysis
+analysis_type: release | backlog | audit | review | gap-analysis | research | design | ...   # open enum
 work_item: "<#issue | milestone-NNN | epic #NNN>"   # the work item this analysis serves — REQUIRED
 created: YYYY-MM-DD
 sunset: YYYY-MM-DD          # the date this artifact goes stale (see §4)
-status: active | stale | archived
+status: active | stale | archived          # set per §4 (active until sunset; then stale)
 ---
 ```
 
 | Field | Required | Meaning |
 |---|---|---|
-| `analysis_type` | ✅ | The kind of analysis. |
+| `analysis_type` | ✅ | The kind of analysis. **Open enum** — common values are `release` / `backlog` / `audit` / `review` / `gap-analysis` / `research` / `design`; add a lowercase-kebab type when none fits (validate shape, not a closed set — mirrors the `delivery_approach` / `work_item_type` / `deliverable_type` openness). |
 | `work_item` | ✅ | The linked work item (issue / milestone / epic). **Analysis is linked to its work item** — this is the back-reference that lets a reader find why the analysis exists and whether it is still live. |
 | `created` | ✅ | Authoring date (YYYY-MM-DD). |
 | `sunset` | ✅ | The staleness date (§4). |
@@ -77,18 +77,24 @@ drift surface. The sunset rule bounds it:
    close + 30 days**, whichever is **first**. (An analysis whose work item ships is stale
    30 days later; one whose work item lingers is stale at 90 days regardless.) An operator
    may set an explicit later `sunset` with a one-line reason in the artifact.
-2. **Past `sunset` → `status: stale`.** A stale analysis is no longer current evidence;
-   anything still needed from it should have been promoted to its work item or to
-   governance (per the K5 promotion path in `core/disciplines/knowledge-architecture.md`:
-   observation → pattern → (maybe) governance).
+2. **Past `sunset` → `status: stale`.** `status` is operator-maintained: an artifact is
+   authored `active` and advances to `stale` once its `sunset` passes (the operator flips
+   it at review, or simply deletes the artifact) — until the §4 Enforcement automation
+   flags it. A stale analysis is no longer current evidence; anything still needed from it
+   should have been promoted to its work item or to governance (per the K5 promotion path
+   in `core/disciplines/knowledge-architecture.md`: observation → pattern → (maybe) governance).
 3. **Stale → archived or deleted.** Because the workspace is git-ignored, removal is a
    local delete (CHEAP, reversible only from local backups) — there is no history to
    prune and no CI to gate it.
 
-> **Enforcement.** This standard ships the convention + frontmatter. An automated sweep
-> (list/age/purge past-`sunset` artifacts in one pass) is a deferred follow-up; until it
-> lands, the rule is convention-enforced at authoring + review time. The folder being
-> git-ignored means a sweep is necessarily an operator-local helper, not a CI gate.
+> **Enforcement (how `stale` is detected).** This standard ships the convention +
+> frontmatter; `status` is operator-maintained today (advanced to `stale` at review when
+> `sunset` passes). The intended automation — a **deferred follow-up** — wires staleness
+> into the **platform health-tooling / lint** surface: the health/lint pass flags every
+> past-`sunset` artifact (and any analysis missing the required frontmatter) so staleness
+> is *detected*, not relied upon, and a one-pass purge of stale artifacts becomes
+> actionable. The folder being git-ignored means that pass is an operator-local health
+> check, not a CI gate.
 
 ## 5. Knowledge-tier placement
 

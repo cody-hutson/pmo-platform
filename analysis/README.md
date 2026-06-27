@@ -19,17 +19,19 @@ other-work-area analysis does not belong here — it lives with its project/work
 
   ```yaml
   ---
-  analysis_type: release | backlog | audit | review | gap-analysis
+  analysis_type: release | backlog | audit | review | gap-analysis | research | design | ...   # open enum
   work_item: "<#issue | milestone-NNN | epic #NNN>"   # the work item this analysis serves
   created: YYYY-MM-DD
   sunset: YYYY-MM-DD          # when this goes stale (see the sunset rule)
-  status: active | stale | archived
+  status: active | stale | archived   # active until sunset passes, then stale (flagged by health-tooling/lint — see standard §4)
   ---
   ```
 
-- Obey the **sunset rule** so analysis does not accumulate: an artifact goes `stale`
-  once past its `sunset` date (default: `created + 90d`, or `work_item` close + 30d —
-  whichever is first), then is archived or deleted.
+- Obey the **sunset rule** so analysis does not accumulate: an artifact is `active`
+  until its `sunset` date passes (default: `created + 90d`, or `work_item` close + 30d —
+  whichever is first), at which point it is `stale` and should be archived or deleted.
+  `stale` is operator-set today; the intended automation flags past-`sunset` artifacts via
+  the platform health-tooling / lint surface (deferred follow-up — see the standard §4).
 
 **Full convention** — frontmatter schema, sunset/retention rule, folder layout, and the
 relationship to the operator-local personal analysis space:
