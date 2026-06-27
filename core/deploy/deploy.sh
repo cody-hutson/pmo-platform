@@ -1985,6 +1985,148 @@ cmd_check() {
     fi
   done
 
+  # ── Check 5(d) — Registry-currency (rows) ───────────────────────────────
+  # Per the skill-registry-identity-and-currency design (milestone 104, #1811):
+  # assert the catalog (core/skills/registry.md) is CURRENT against the deployed
+  # roster — one surface deeper than Check 5(a)/(b) (catalog-vs-roster, not
+  # dir-vs-roster). This is structural and zero-FP, so it is ALWAYS-ENFORCE:
+  # findings increment ISSUES directly (same profile as Checks 6/7), no warn
+  # window. It reuses Check 5's roster machinery rather than re-resolving — the
+  # registry-currency assertion IS a roster-drift assertion (does the catalog
+  # match the roster?), conceptually Check 5's own concern.
+  #
+  # Three row-level assertions (#1811):
+  #   (i)   every registry row name ∈ the deployed roster
+  #   (ii)  every deployed-roster member ∈ the registry rows   (FAIL on asymmetry, BOTH directions)
+  #   (iii) every registry row name resolves to a live SKILL.md
+  #
+  # Canary exclusion (ADR-04 / source-only canary; registry § Configuration
+  # Items states the source-only canary is NOT a CI): the roster for 5(d) is
+  # OPERATIONS_SKILLS + RELEASE_SKILLS + CORE_SKILLS ONLY — CANARY_SKILLS is
+  # NOT unioned in. This is the deliberate divergence from Check 5's
+  # EXPECTED_ROSTER (which DOES include the canary for the *directory*
+  # assertion): the canary has a source dir but no registry row, so including
+  # it here would false-FAIL "roster member has no registry row". DO NOT "fix"
+  # this by adding the canary.
+  #
+  # set +e / set -u discipline (ADR-008 FM-1): runs inside cmd_check's set +e
+  # body; every array expansion is `${ARR[@]+"${ARR[@]}"}`-guarded and every
+  # grep/sed parse is `|| true`-guarded so an empty array or a benign no-match
+  # cannot abort the run before the summary gate.
+  #
+  # ── #1658 SEAM (field-currency, warn-mode-initial) ──────────────────────
+  # The inner per-row FIELD assertion (#1658) nests INSIDE the row loop (iii)
+  # below, at the marked seam. #1658 will:
+  #   • resolve REGISTRY_FIELD_MODE=$(resolve_check_mode "registry-field-currency")
+  #     (the helper is defined later in cmd_check, ~line 2258; 5(d) row-currency
+  #     does NOT depend on it — only the #1658 field layer does);
+  #   • parse the row `kind` (table cell 3) and, for kind==role-Specialist rows,
+  #     assert modes (set-equality) / dependencies (skill-name-set equality) /
+  #     trigger surface (presence-only) against the live SKILL.md, routing
+  #     divergence via a flag_registry_field helper (clone of flag_g1_enforcement);
+  #   • for non-role-Specialist rows, assert the three field cells == `—`.
+  # The seam is a single nesting point; #1811 and #1658 are never two blocks.
+  log "Check 5(d): Registry-currency (rows)"
+  local REGISTRY_CATALOG="core/skills/registry.md"
+  local registry_currency_ok=true
+  if [[ ! -f "$REGISTRY_CATALOG" ]]; then
+    # Missing-predicate pattern (parity with Check 6): graceful skip + WARN, not FAIL.
+    log "  WARN:  registry catalog $REGISTRY_CATALOG absent — skipping registry-currency (Check 5(d))"
+  else
+    # Deployed roster for 5(d): the 3 module arrays, canary EXCLUDED (ADR-04).
+    # set -u guard: ${ARR[@]+...} expands to nothing for an unset/empty array.
+    local -a DEPLOYED_ROSTER=()
+    local _dr_line
+    while IFS= read -r _dr_line; do
+      [[ -n "$_dr_line" ]] && DEPLOYED_ROSTER+=("$_dr_line")
+    done < <(printf '%s\n' \
+      ${OPERATIONS_SKILLS[@]+"${OPERATIONS_SKILLS[@]}"} \
+      ${RELEASE_SKILLS[@]+"${RELEASE_SKILLS[@]}"} \
+      ${CORE_SKILLS[@]+"${CORE_SKILLS[@]}"} | sort -u)
+
+    # Parse registry row names — every CI row, first backtick-wrapped token in
+    # cell 1: `| [`<name>`](<relpath>) | ...`. Deterministic; canary returns 0.
+    local -a REGISTRY_ROWS=()
+    local _rr_line
+    while IFS= read -r _rr_line; do
+      [[ -n "$_rr_line" ]] && REGISTRY_ROWS+=("$_rr_line")
+    done < <(grep -E '^\| \[' "$REGISTRY_CATALOG" 2>/dev/null \
+      | sed -E 's/^\| \[`([^`]+)`\].*/\1/' || true)
+
+    # Audit-baseline guard (BR-3, Check-35 precedent): an empty parse is itself
+    # suspect — a registry reformat or a moved file would silently break the row
+    # parse and produce a false "every roster member has no row" storm. If the
+    # parse yields 0 rows, FAIL LOUDLY once and do NOT proceed to the membership
+    # diff. (The deployed roster is never empty in practice; the registry having
+    # ≥1 CI row is the invariant here.)
+    if [[ "${#REGISTRY_ROWS[@]}" -eq 0 ]]; then
+      log "  FAIL:  registry-currency — parsed 0 rows from $REGISTRY_CATALOG (expected >=1; parse broke or file moved). Not running the membership diff."
+      ISSUES=$((ISSUES + 1))
+      registry_currency_ok=false
+    else
+      # (i) every registry row name must be a deployed-roster member.
+      local _row
+      for _row in ${REGISTRY_ROWS[@]+"${REGISTRY_ROWS[@]}"}; do
+        local _row_found=false
+        local _rs
+        for _rs in ${DEPLOYED_ROSTER[@]+"${DEPLOYED_ROSTER[@]}"}; do
+          [[ "$_row" == "$_rs" ]] && { _row_found=true; break; }
+        done
+        if [[ "$_row_found" == "false" ]]; then
+          log "  FAIL:  registry-currency — registry row '$_row' has no roster member (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS). Add the skill to deploy.sh or remove the registry row."
+          ISSUES=$((ISSUES + 1))
+          registry_currency_ok=false
+        fi
+      done
+
+      # (ii) every deployed-roster member must have a registry row (asymmetry FAILs).
+      local _member
+      for _member in ${DEPLOYED_ROSTER[@]+"${DEPLOYED_ROSTER[@]}"}; do
+        local _member_found=false
+        local _rw
+        for _rw in ${REGISTRY_ROWS[@]+"${REGISTRY_ROWS[@]}"}; do
+          [[ "$_member" == "$_rw" ]] && { _member_found=true; break; }
+        done
+        if [[ "$_member_found" == "false" ]]; then
+          log "  FAIL:  registry-currency — roster member '$_member' has no registry row in $REGISTRY_CATALOG. Add a Configuration-Item row or remove the skill from deploy.sh."
+          ISSUES=$((ISSUES + 1))
+          registry_currency_ok=false
+        fi
+      done
+
+      # (iii) every registry row name must resolve to a live SKILL.md.
+      # Module resolution is done WITHOUT resolve_skill_module (which die()s on a
+      # name not in any array — a row that already failed (i) would otherwise
+      # abort the run under the inherited set +e via die's exit). Resolve the
+      # module by direct existence probe across the 3 module dirs instead, so a
+      # stray registry row degrades to a clean FAIL rather than a hard die.
+      for _row in ${REGISTRY_ROWS[@]+"${REGISTRY_ROWS[@]}"}; do
+        local _row_skill_md=""
+        local _mod
+        for _mod in operations release core; do
+          if [[ -f "$_mod/skills/$_row/SKILL.md" ]]; then
+            _row_skill_md="$_mod/skills/$_row/SKILL.md"
+            break
+          fi
+        done
+        if [[ -z "$_row_skill_md" ]]; then
+          log "  FAIL:  registry-currency — registry row '$_row' resolves to no live SKILL.md under operations/|release/|core/skills/. Fix the row name or create the skill."
+          ISSUES=$((ISSUES + 1))
+          registry_currency_ok=false
+        fi
+        # ── #1658 FIELD-CURRENCY SEAM ──────────────────────────────────────
+        # #1658 extends HERE: for this $_row (when its kind==role-Specialist),
+        # assert modes/dependencies/trigger-surface against "$_row_skill_md"
+        # via flag_registry_field (warn-mode-initial). Nested inside this row
+        # loop so the two layers share one roster source and cannot fork.
+      done
+    fi
+
+    if [[ "$registry_currency_ok" == "true" ]]; then
+      log "  OK:    registry catalog current — ${#REGISTRY_ROWS[@]} rows <-> roster (symmetric; canary excluded), every row resolves to a live SKILL.md"
+    fi
+  fi
+
   # If all sub-assertions clean, log a single OK
   local roster_ok=true
   for s in "${EXPECTED_ROSTER[@]}"; do
