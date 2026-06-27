@@ -74,7 +74,7 @@ For the authoring-time checklist that determines the tier choice (the 5-test rul
 
 Path A produces one of two artifact types per the tier-selection test in §5:
 
-- **Proposal artifact** — GitHub Issue authored via `improvement.yml` with all template fields populated (Description, Evidence with evidence-quality labels, Affected Files, Proposed Change, Dependencies, Acceptance Criteria), `improvement` label applied, board status Proposed.
+- **Proposal artifact** — GitHub Issue authored via `improvement.yml` with all template fields populated (Description, Evidence with evidence-quality labels, Affected Files, Proposed Change, Dependencies, Acceptance Criteria), `improvement` label applied, board status Proposed. The structural fields of this artifact (Proposed Change, Affected Files) are **directional, not authoritative** as to design — a proposal that downstream Solutioning confirms or overturns; the canonical statement of this directional-not-authoritative handoff lives at the Stage 2 intake/triage boundary (Stage 2 §4 Inputs).
 - **Observation artifact** — GitHub Issue authored via `observation.yml` (per the observation-tier spec) with three required fields populated (what is missing, what good looks like in one sentence, which file or section this touches), `observation` label applied (per the observation-tier spec), board status Proposed. Observations are placeholder captures awaiting promotion to Proposal at Stage 2 Triage.
 
 Path B (human intake) and Path C (IMP bridge promotion) produce Proposal artifacts only.
