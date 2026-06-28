@@ -1696,6 +1696,13 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    gh release view v<X.Y> --repo {REPO} >/dev/null 2>&1 \
      || echo "MISSING GitHub Release v<X.Y> — operator decision required (invoke Mode F to publish, OR accept residual)"
 
+   # 6b. (Layer-1 dual-write) Surface 1 body == frontmatter-stripped in-repo note (release-notes-standard.md §5.1)
+   # Asserts the published Release body is the deterministic transform of the source-of-record note — not an ad-hoc
+   # draft and not stale after a note correction. Single source of the equality logic (shared with deploy.sh Check 47);
+   # detective-only (it never re-emits). Exit 0 = match; 1 = DRIFT (re-emit per §5.6 / Mode F); 2 = N/A (gh offline); 3 = Surface 1 / note absent.
+   REPO={REPO} ./release/tools/check-release-body-drift.sh v<X.Y> \
+     || echo "DRIFT — published Release body diverged from the in-repo note (§5.1); re-emit the body via the §5.6 deterministic transform OR release-executor Mode F"
+
    # 7. (Layer-1 dual-write) CHANGELOG.md entry present (Surface 2)
    # SKIP semantics: if CHANGELOG.md does not exist at repo root (pre-CHANGELOG state), the check resolves to N/A
    if git show origin/main:CHANGELOG.md >/dev/null 2>&1; then
@@ -1726,6 +1733,7 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | RELEASE_LOG entry | `git log --grep ...` | PASS/FAIL |
    | Sub-issues closed | `gh issue list --state open` | PASS/FAIL |
    | GitHub Release (Surface 1, Layer-1 dual-write) | `gh release view v<X.Y> --repo {REPO}` exit 0 | PASS/FAIL |
+   | Surface 1 body matches in-repo note (§5.1 enforced transform) | `./release/tools/check-release-body-drift.sh v<X.Y>` exit 0 (published body == frontmatter-stripped note); detective-only, shares logic with deploy.sh Check 47; N/A if gh offline | PASS/FAIL/N/A |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | `git show origin/main:CHANGELOG.md \| grep -qE "^## \[?v<X.Y>\]?[[:space:]]"` exit 0; N/A if CHANGELOG.md absent (pre-CHANGELOG state) | PASS/FAIL/N/A |
    | .version stamped (release-cut-owned) | `git show origin/main:.version \| grep -qx v<X.Y>` exit 0; N/A for version-less release (Phase B5.7 SKIP) | PASS/FAIL/N/A |
    | Posted Release TITLE versioned (Surface 1, posted-surface) | `gh release view v<X.Y> --repo {REPO} --json name --jq '.name' \| grep -qE '^v[0-9]+\.[0-9]+([a-z]\|-[0-9a-z][-0-9a-z]*)? — .'` exit 0 — the posted title reads `vX.Y — <headline>`, not the bare H1 headline; N/A for a version-less release | PASS/FAIL/N/A |

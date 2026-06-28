@@ -159,6 +159,10 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
+# Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
+# source of the published-body-vs-stripped-note equality logic; phase 15.6 below
+# invokes it as the post-emit detective assert (warn-mode — never blocks close).
+DRIFT_CHECK_TOOL="$SCRIPT_DIR/check-release-body-drift.sh"
 # The deterministic INDEX generator lives in core/deploy/tools/, NOT alongside
 # this script. The prior "$SCRIPT_DIR/generate_release_index.py" pointed at a
 # non-existent release/tools/ path, so the "[[ -x "$GENERATE_INDEX" ]]" guard in
@@ -1447,6 +1451,72 @@ phase_publish_github_release() {
   return 3
 }
 
+# ─── Phase 15.6: check_release_body_drift (post-emit §5.1 drift assert) ──────────
+#
+# DETECTIVE-ONLY post-emit verification that the just-published Release body
+# equals the frontmatter-stripped in-repo note (release-notes-standard.md §5.1).
+# Runs AFTER phase_publish_github_release converges Surface 1 — a standing assert
+# that the emit landed the canonical body, catching the v2.26-class defect
+# (ad-hoc body / un-stripped frontmatter) on the mandated close path.
+#
+# This phase COEXISTS with phase_lint_release_notes (§3.2 note-content close
+# gate): that phase lints the in-repo note file (network-free, BLOCKS close on a
+# this-version finding); THIS phase compares the published Release body against
+# the note (network-dependent, NEVER blocks). Distinct concerns, distinct phases.
+#
+# WARN-MODE / non-blocking by design (reflexive-pipeline-loop discipline): the
+# drift check is the detective backstop, NOT a close gate — a drift finding or a
+# tool-edge-case (CRLF / GitHub body normalization) must not hard-block a close,
+# least of all v2.37's own close (which rides the path it hardens). So this phase
+# ALWAYS returns 0; exit codes from the tool map to PASS / WARN / N/A only.
+# Detective-only: it never re-emits the Release (auto-remediation is out of scope).
+phase_check_release_body_drift() {
+  if [[ ! -x "$DRIFT_CHECK_TOOL" ]]; then
+    mark_phase "check_release_body_drift" "SKIPPED" "check-release-body-drift.sh not executable at $DRIFT_CHECK_TOOL"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "check_release_body_drift" "DRY-RUN" "would assert published Release body == frontmatter-stripped in-repo note for $VERSION (detective-only; warn-mode; per release-notes-standard.md §5.1)"
+    return 0
+  fi
+
+  # If Surface 1 was not published this run (publish phase FAILed / SKIPPED via a
+  # missing tag/notes), there is nothing to compare — record N/A, never WARN.
+  local pub_result
+  pub_result="$(get_phase "publish_github_release")"
+  pub_result="${pub_result%%|*}"
+
+  local drift_out drift_exit=0
+  drift_out="$(REPO="$REPO_SLUG" "$DRIFT_CHECK_TOOL" "$VERSION" --quiet 2>&1)" || drift_exit=$?
+
+  case "$drift_exit" in
+    0)
+      mark_phase "check_release_body_drift" "PASS" "published Release body matches the frontmatter-stripped in-repo note for $VERSION (§5.1 invariant holds)"
+      ;;
+    1)
+      # DRIFT — warn-mode: surface it, do NOT block the close (return 0 below).
+      mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. Detective-only (warn-mode); close NOT blocked. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      ;;
+    2)
+      mark_phase "check_release_body_drift" "N/A" "gh offline/unauthenticated — body-drift check skipped for $VERSION (never FAIL; mirrors Check 32/39 gh-guard)"
+      ;;
+    3)
+      # MISSING note or Release. If publish phase did not land Surface 1 this run,
+      # this is expected (N/A); otherwise it is a genuine gap (still warn-mode).
+      if [[ "$pub_result" != "PASS" ]]; then
+        mark_phase "check_release_body_drift" "N/A" "no published Release / note to compare for $VERSION (Surface 1 not emitted this run: publish phase=$pub_result)"
+      else
+        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (warn-mode; close NOT blocked). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      fi
+      ;;
+    *)
+      mark_phase "check_release_body_drift" "WARN" "body-drift check returned unexpected exit $drift_exit for $VERSION (warn-mode; close NOT blocked)"
+      ;;
+  esac
+  return 0
+}
+
 # ─── Phase 16: invoke_orphan_cleanup ─────────────────────────────────────────
 
 phase_invoke_orphan_cleanup() {
@@ -1526,7 +1596,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -2000,6 +2070,7 @@ phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
+phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (detective-only; warn-mode never blocks)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
 

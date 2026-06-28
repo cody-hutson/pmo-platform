@@ -4918,6 +4918,106 @@ cmd_check() {
     fi
   fi
 
+  # ─── Check 47: Release-body drift (published Release body == in-repo note) ──
+  # Standing audit gate for the release-notes-standard.md §5.1 invariant: the
+  # published GitHub Release body MUST equal the frontmatter-stripped in-repo
+  # source-of-record note. Sits BESIDE Check 32 (release-corpus completeness):
+  # Check 32 verifies a published Release EXISTS for a post-cutover row; this
+  # check verifies its BODY has not drifted from the note. The canonical incident
+  # (the v2.26 close) shipped an ad-hoc Release body that diverged from the in-repo
+  # note and stayed stale through a note-correction PR — nothing flagged it until
+  # the operator caught it. This is the standing detective backstop for that class.
+  #
+  # DELEGATES to release/tools/check-release-body-drift.sh — the SINGLE source of
+  # the body-equality logic (the §5.1 sed-strip + the json-body compare live in
+  # exactly one place; this check does not re-derive them). DETECTIVE-ONLY: it
+  # flags drift, never re-emits the Release.
+  #
+  # gh-GUARDED (reuses Check 32's guard verbatim): the compare needs a network
+  # read (gh release view). When gh is absent OR unauthenticated the check
+  # resolves to N/A (never FAIL), so a disconnected deploy.sh --check run does
+  # not red-fail here — the tool itself also returns exit 2 (N/A) in that case.
+  #
+  # CUTOVER-SCOPED + DORMANT-BY-DEFAULT: like Check 32's published-Release
+  # sub-check, the drift assertion runs only for LOG rows at/after a SEPARATE,
+  # later $c47_cutoff (RELEASE_BODY_DRIFT_CHECK_CUTOFF), which defaults to the
+  # __none__ sentinel — so the network-dependent check is DORMANT until an
+  # operator opts in. This (a) avoids retroactively warning on legitimate
+  # historical rows whose Release bodies predate the §5.1 transform, and (b)
+  # honors the reflexive-pipeline-loop discipline — the introducing release
+  # closes under pre-merge rules and is NOT bound by its own check.
+  #
+  # Warn-mode initial per .claude/hooks/deploy-check.mode (Checks 8/9/10/14/15/18-
+  # 23/25-29/31/32 precedent); flip-to-enforce after a >=3-day warn-log review with
+  # zero false positives (GitHub body normalization edge cases — CRLF / trailing
+  # newline — are the calibration target; the tool already trims a trailing nl).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 47: Release-body drift (published Release body == frontmatter-stripped in-repo note)"
+    local c47_log="release/releases/RELEASE_LOG.md"
+    local c47_tool="release/tools/check-release-body-drift.sh"
+    # Separate, later cutover for this network-dependent assertion. Sentinel
+    # __none__ => no row is in scope (the drift check is dormant by default).
+    local c47_cutoff="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-__none__}"
+
+    if [[ "$c47_cutoff" == "__none__" ]]; then
+      log "  N/A:   release-body drift check dormant (RELEASE_BODY_DRIFT_CHECK_CUTOFF unset) — opt in by setting it to the first §5.1-transform release"
+    elif [[ ! -x "$c47_tool" ]]; then
+      flag_warn_or_issue "release-body-drift" \
+        "drift tool not executable: $c47_tool — cannot assert the §5.1 published-body invariant"
+    elif ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+      # gh-guard: offline/unauth => N/A (never FAIL), mirroring Check 32/39.
+      log "  N/A:   release-body drift check skipped (gh offline/unauthenticated) — reuses Check 32/39 gh-guard SKIP semantics"
+    elif [[ ! -f "$c47_log" ]]; then
+      flag_warn_or_issue "release-body-drift" \
+        "$c47_log not found; cannot enumerate logged releases for the §5.1 drift check"
+    else
+      # Enumerate post-cutover release versions from the LOG (LOG file order).
+      local c47_rows
+      c47_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c47_log" 2>/dev/null \
+        | /usr/bin/awk -F ' \\| ' '{
+            v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v); print v
+          }') || c47_rows=""
+
+      local c47_past_cutoff=false
+      local c47_targets=0
+      local c47_findings=0
+      local c47_output=""
+      local _v47 _d47_out _d47_exit
+      while IFS= read -r _v47; do
+        [[ -n "$_v47" ]] || continue
+        if [[ "$c47_past_cutoff" == "false" && "$_v47" == "$c47_cutoff"* ]]; then
+          c47_past_cutoff=true
+        fi
+        [[ "$c47_past_cutoff" == "true" ]] || continue
+        c47_targets=$((c47_targets + 1))
+
+        _d47_exit=0
+        _d47_out=$("$c47_tool" "$_v47" --quiet 2>&1) || _d47_exit=$?
+        case "$_d47_exit" in
+          0) : ;;  # MATCH — no finding
+          1)       # DRIFT — warn (never FAIL)
+            c47_output+="${_v47}: published Release body != frontmatter-stripped in-repo note (§5.1 drift)"$'\n'
+            c47_findings=$((c47_findings + 1))
+            ;;
+          2) log "  N/A:   ${_v47} drift sub-check skipped (gh offline/unauth at tool layer)" ;;
+          3) log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
+          *) c47_output+="${_v47}: drift tool returned unexpected exit ${_d47_exit}"$'\n'; c47_findings=$((c47_findings + 1)) ;;
+        esac
+      done <<<"$c47_rows"
+
+      if [[ $c47_findings -eq 0 ]]; then
+        log "  OK:    all $c47_targets logged release(s) on/after $c47_cutoff have a published Release body matching their in-repo note (§5.1 invariant holds)"
+      else
+        flag_warn_or_issue "release-body-drift" \
+          "$c47_findings §5.1 body-drift finding(s) across $c47_targets logged release(s) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
+        printf '%s' "$c47_output" | head -10 | sed 's/^/         /'
+        if [[ $c47_findings -gt 10 ]]; then
+          log "         ... ($((c47_findings - 10)) more)"
+        fi
+      fi
+    fi
+  fi
+
   # Check 33 — Platform-config surface integrity (adapter-config-foundation, #22).
   # Asserts: (a) core/config/platform-config.toml.template exists + parses as TOML
   # (every non-comment, non-blank, non-section line is a `key = value` assignment);
