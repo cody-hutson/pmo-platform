@@ -451,7 +451,7 @@ When emergence fires (within-domain N = 2) OR operator elevates cross-domain, th
 
 ## Section 5 — Ceremony-Management Guards
 
-Seven guards prevent the 3 mechanisms from becoming formatting theater. All 7 apply unchanged regardless of domain or context scope.
+Seven guards prevent the 3 mechanisms from becoming formatting theater. All 7 apply unchanged regardless of domain or context scope. An eighth guard (G8, below) extends the same ceremony-management posture to a different surface — the bounded pause-to-learn loop — applying the identical question ("did observable work happen, or only paperwork?") to a pause rather than to a Decision Briefing section.
 
 **G1 — Load-bearing test (applies to all 3 mechanisms)**
 
@@ -487,6 +487,27 @@ Mechanisms apply to the consumer's recommendations, not to its evaluation of mec
 **G7 — Load-bearing trumps completeness**
 
 A Decision Briefing with ONE load-bearing mechanism section (e.g., M1 cited a specific file; M2/M3 honestly reported "none applicable") is STRONGER than a briefing with THREE filled-but-hollow sections. Completeness for its own sake is the exact failure the mechanisms prevent.
+
+**G8 — Anti-theater guard for the bounded pause-to-learn loop**
+
+G1–G7 keep the three Decision Briefing mechanisms (§ 2) honest. G8 extends the same ceremony-management posture to a *different* decision-class surface: the **bounded pause-to-learn loop** — the pre-action loop an agent runs when a pending decision's grounds are weak, specified by the Decision-Confidence Protocol (`core/specs/decision-confidence-protocol.md`) and registered as a control-flow sibling to Retry/Escalate in `core/disciplines/autonomous-execution-model.md`. That protocol's anti-theater guard is defined to *reuse this section's ceremony-management posture as its enforcement posture*; G8 is where that reuse is wired. The guard's purpose is identical to G1's: a pause that produces no observable work is theater, and must be flagged — the question is the same one § 5 asks of any process step, "did observable work happen, or only paperwork?"
+
+A pause-to-learn is **load-bearing** (not a stall dressed up as diligence) iff it can demonstrate **all three** of the observable signals below. These are the enforceable test that distinguishes a real pause from a stall; a pause that cannot demonstrate all three is a guard violation, exactly as a G1 section that cites no evidence is.
+
+| Guard signal | What is observable (the load-bearing evidence) | Violation reads as (the stall it catches) |
+|---|---|---|
+| **New-signal-injected** | The pause cites a *specific* external fetch, tool call, or re-derivation that was **not** in the inputs before the pause began — a named file read, a query result, a second derivation. The injected signal is the thing that grounds (or revises) the decision. | A pause that re-states the same inputs already in hand and "concludes" without fetching anything — deliberation re-labeled as learning. |
+| **Bounded** | The loop ran **≤ its budget** (the protocol's default 1 cycle, hard cap 2) and the **cycle count is reportable** — the agent can state how many cycles it ran. | An open-ended re-think with no cycle ceiling and no reportable count — "let me reconsider" without end. |
+| **Has-exit** | The loop **terminated on a named exit condition** — resolved (signal grounded → proceed at the existing authorization tier), routed out (the gap is not knowable now → spike / ship-and-observe), cost-changed (re-enter at a higher reversibility tier), or escalated on budget-exhaustion. | A pause that neither resolved, routed out, nor escalated — a silent stall with no termination the agent can name. |
+
+**The non-ceremony reading (extends G7):** the three signals are not a completeness checklist to be filled — they are the observable residue a real pause necessarily leaves. As with G7, a pause that genuinely injected one named signal, ran one cycle, and exited on a named condition is load-bearing; a pause that *narrates* all three without the underlying fetch/count/termination is the exact theater this guard exists to catch. And per the brake-not-accelerator invariant the protocol carries, a resolved pause proceeds **only at the action's existing authorization tier** — G8 never reads as license to act at a higher autonomy tier than was already granted.
+
+**Falsification test (G8) — the load-bearing-vs-ceremony test-case pair.** Per the falsification-test convention (a concrete repro that MUST flip a verdict — the gate-efficacy standard `core/standards/gate-efficacy-standard.md` for automated-assertion gates; the counterfactual step of the RCA method in `core/disciplines/root-cause-analysis.md` for causal chains), a governance guard earns trust only when a checkable input that *should* be rejected actually is. G8 is verified by the following pair: a reviewer (or a Dev-Testing spoke) confirms the guard **rejects** the first case and **passes** the second. A guard that cannot be made to reject the ceremony-only case is itself theater.
+
+- **Case A — ceremony-only pause (MUST be REJECTED as a stall).** A pause that reports: *"Paused to reconsider the estimate. On reflection, I'm now confident; proceeding."* — no named external fetch (fails **new-signal-injected**), no reportable cycle count (fails **bounded**), no named exit condition (fails **has-exit**). G8 verdict: **REJECT** — this is a stall re-labeled as a pause; it satisfies **zero of three** signals. The reviewer confirms the guard fires. (If G8 were to pass this case, the guard is toothless and is itself the theater it claims to catch.)
+- **Case B — load-bearing pause (MUST PASS).** A pause that reports: *"Estimate confidence LOW on a MODERATE-reversibility decision. Named gap: the dependency's current state. Cycle 1 of budget — fetched the canonical dependency status (`gh issue view #N` → state: closed); re-evaluated: the dependency is met. Exit E1 (resolved) → proceeding at the existing authorization tier."* — cites a specific external fetch not in the prior inputs (**new-signal-injected** ✓), reports cycle 1 of a bounded budget (**bounded** ✓), terminates on named exit E1-resolved (**has-exit** ✓). G8 verdict: **PASS** — all three signals demonstrated; the pause learned something it did not previously know and terminated cleanly. The reviewer confirms the guard does not false-positive on a real pause.
+
+The pair is co-located here, adjacent to the guard it falsifies, because the anti-theater guard is a **governance/documentation mechanism**, not an automated-assertion gate — it has no `deploy.sh --check` Check and no CI workflow, so per the gate-efficacy standard's scope boundary (two gate classes; the gate-coverage register seeds only the automated-assertion class) the seeded gate-coverage register is not its home. The test-case pair is the falsification artifact for a documented guard, kept beside the mechanism so a reviewer reads guard-and-test together.
 
 ---
 
