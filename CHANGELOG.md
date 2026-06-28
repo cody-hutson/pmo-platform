@@ -8,6 +8,23 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.34] - 2026-06-28
+
+Knowledge and decision confidence — the corpus gains the design-time and capture-time scaffolding that makes knowledge land in the right place and stay current: a written set of evaluative lenses for sizing and routing new work, a scope dimension that records what altitude a learning came from, two more facilitation-technique domains, and a skill that keeps the living roadmap current as issues arrive; a long-standing knowledge-eviction gap is also closed. Additive throughout — new and edited reference docs, a new skill, and one build-check extension; no data migration and no stored-content move. routine class.
+
+### Added
+
+- **A written set of design-time lenses for sizing and routing new work.** A new reference doc names the cross-cutting questions to ask when scoping a piece of work — is it the right skill, the right method, and the right altitude, and is it universal or install-specific — and wires them in as a design check. *Why it matters:* new work gets classified the same way every time instead of relying on recall, so it lands in the right place. ([#1102](https://github.com/cody-hutson/pmo-platform/issues/1102))
+- **Learnings now record the scope they came from.** The knowledge model gains an organizational-altitude axis (from a single unit of work up to the whole organization) that sits alongside the existing universality tiers, plus a defined way for lower-scope learnings to roll up to the next scope. *Why it matters:* a captured learning now says at what scope of work it was generated, so related learnings can be aggregated rather than read in isolation. ([#564](https://github.com/cody-hutson/pmo-platform/issues/564))
+- **Two more facilitation-technique domains are catalogued.** The facilitation-techniques corpus adds the retrospective and planning domains on top of the existing estimation foundation, surfaced through the same delivery-engine trigger. *Why it matters:* technique surfacing now covers more of the delivery lifecycle, not just estimation. ([#1945](https://github.com/cody-hutson/pmo-platform/issues/1945))
+- **A skill that keeps the living roadmap current as issues arrive.** A new roadmap-curator skill classifies new and changed issues against the established initiative set, updates the roadmap, and surfaces drift — with a separate operator-triggered mode for a full re-baseline. *Why it matters:* the roadmap stays sequenced and current as work arrives instead of drifting back into an unsequenced pile. ([#453](https://github.com/cody-hutson/pmo-platform/issues/453))
+
+### Fixed
+
+- **Evicting a codified note no longer leaves dead links or stranded notes behind.** The knowledge-eviction lifecycle now re-points or drops links to an evicted note and reconciles notes against their tracking issue at close, and the build validation reports both gaps. *Why it matters:* retiring a note that has been folded into the corpus no longer leaves links that go nowhere or notes that can never be retired. ([#2214](https://github.com/cody-hutson/pmo-platform/issues/2214))
+
+[Full notes](release/releases/notes/v2.34_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.34)
+
 ## [v2.33] - 2026-06-27
 
 Roadmaps get a shipped in-repo home, and "initiative" labels are reframed as a grouping rather than a hierarchy tier. Additive — a new git-ignored `/roadmaps/` folder (ships on install, survives updates), a token-default rewire to it across the SSOT surfaces, and a one-line label-taxonomy reframe; existing roadmaps migrate by copy with no history effect. ADR-046 supersedes-in-part ADR-012 + ADR-017. routine class.
