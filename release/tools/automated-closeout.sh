@@ -539,10 +539,29 @@ phase_transition_release_log() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
 
-  # Idempotent: skip if row already VERIFIED
+  # VERIFIED re-derivation guard (#1681) — runs FIRST, BEFORE the idempotent
+  # SKIP-on-VERIFIED early-return. A row flipped to VERIFIED by a partial or
+  # concurrent run would otherwise SKIP-as-PASS with no independent check that
+  # the release actually landed. Re-derive from deploy reality: a VERIFIED row is
+  # only legitimate if THIS release's PR ($PR_NUMBER) actually merged to main.
+  #   - confirmed MERGED to main → legitimate idempotent re-run → SKIP-as-PASS
+  #   - NOT merged (open / closed-unmerged) yet row reads VERIFIED → the
+  #     concurrency-induced false-VERIFIED #1681 targets → FAIL (do not trust the
+  #     in-memory string blind). Check 48 detects this post-hoc; this prevents it
+  #     at source.
+  # gh-offline degradation: if `gh pr view` cannot resolve (no network / bad PR),
+  # the merge fact is UNVERIFIABLE — FAIL fail-loud rather than vacuously SKIP.
   if [[ "$STATE_LOG_ROW_STATE" == "VERIFIED" ]]; then
-    mark_phase "transition_release_log" "SKIPPED" "row already VERIFIED"
-    return 0
+    local pr_json pr_state pr_base
+    pr_json="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json state,baseRefName --jq '"\(.state)/\(.baseRefName)"' 2>/dev/null || echo "")"
+    pr_state="${pr_json%%/*}"
+    pr_base="${pr_json#*/}"
+    if [[ "$pr_json" == "MERGED/main" || ( "$pr_state" == "MERGED" && "$pr_base" == "main" ) ]]; then
+      mark_phase "transition_release_log" "SKIPPED" "row already VERIFIED and release PR #${PR_NUMBER} is MERGED to main — legitimate idempotent re-run"
+      return 0
+    fi
+    mark_phase "transition_release_log" "FAIL" "row reads VERIFIED but release PR #${PR_NUMBER} is not confirmed MERGED to main (got '${pr_json:-<unresolved>}') — false-VERIFIED (partial/concurrent run, or gh unresolvable); re-derive, do not SKIP-as-PASS (#1681)"
+    return 3
   fi
 
   local row
@@ -1621,7 +1640,21 @@ phase_run_verification() {
   v_notes="$([[ -f "${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md" ]] && echo PASS || echo FAIL)"
   v_tag="$([[ "$STATE_TAG_EXISTS" -eq 1 ]] && echo PASS || echo FAIL)"
   v_milestone="$([[ "$STATE_MILESTONE_STATE" == "closed" ]] && echo PASS || echo PENDING)"
-  v_log="$([[ "$STATE_LOG_ROW_STATE" == "VERIFIED" ]] && echo PASS || echo PENDING)"
+  # Check 4 (#1681): the row-state string is NOT trusted blind — a VERIFIED PASS
+  # is corroborated by the merge fact (release PR $PR_NUMBER MERGED to main). In
+  # --apply, query `gh pr view`; a VERIFIED string with an unmerged/unresolvable
+  # PR reads FALSE-VERIFIED rather than PASS. (Dry-run keeps the string-only read
+  # — it is a preview, and the transition guard already fail-loud'd the apply.)
+  if [[ "$STATE_LOG_ROW_STATE" == "VERIFIED" ]]; then
+    if [[ "$MODE" == "dry-run" ]]; then
+      v_log="PASS"
+    else
+      local _v_pr; _v_pr="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json state,baseRefName --jq '"\(.state)/\(.baseRefName)"' 2>/dev/null || echo "")"
+      if [[ "$_v_pr" == "MERGED/main" ]]; then v_log="PASS"; else v_log="FALSE-VERIFIED (PR #${PR_NUMBER}=${_v_pr:-<unresolved>})"; fi
+    fi
+  else
+    v_log="PENDING"
+  fi
   v_subs="$([[ "$OPEN_ISSUE_COUNT" -eq 0 ]] && echo PASS || echo "PARTIAL (${OPEN_ISSUE_COUNT} open)")"
 
   VERIFICATION_RESULTS=$(/bin/cat <<EOF
@@ -1630,7 +1663,7 @@ phase_run_verification() {
 | 1 | RELEASE_NOTES.md present | test -f releases/notes/${VERSION}_RELEASE_NOTES.md | ${v_notes} |
 | 2 | Annotated tag present | git tag -l ${VERSION} | ${v_tag} |
 | 3 | Milestone closed | gh api milestones/${MILESTONE} | ${v_milestone} |
-| 4 | RELEASE_LOG row VERIFIED | grep '\| ${slug} \|' RELEASE_LOG.md | ${v_log} |
+| 4 | RELEASE_LOG row VERIFIED (corroborated by release-PR merge to main) | grep + gh pr view ${PR_NUMBER} | ${v_log} |
 | 5 | All release issues closed | gh issue list --milestone | ${v_subs} |
 EOF
 )
@@ -2408,6 +2441,64 @@ STUB
   MERGE_TIMEOUT="$_mt_saved_timeout"; MERGE_POLL_STEP="$_mt_saved_step"; REPO_SLUG="$_mt_saved_slug"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4f: phase_transition_release_log VERIFIED re-derivation guard (#1681) —
+  # offline, hermetic. Stubs $GH so `pr view` reports the release-PR merge state,
+  # then asserts: a VERIFIED row + MERGED-to-main PR → SKIPPED-as-PASS (legitimate
+  # idempotent re-run); a VERIFIED row + UNMERGED PR → FAIL (false-VERIFIED, do not
+  # trust the string blind); a DEPLOYED row → normal transition (regression guard).
+  local _td_saved_gh="$GH" _td_saved_mode="$MODE" _td_saved_state="$STATE_LOG_ROW_STATE"
+  local _td_saved_pr="$PR_NUMBER" _td_saved_slug="$REPO_SLUG" _td_saved_log="$RELEASE_LOG"
+  local _td_saved_msslug="$STATE_MILESTONE_SLUG" _td_saved_version="$VERSION"
+  local _td_tmp; _td_tmp="$(/usr/bin/mktemp -d -t transition-selftest.XXXXXX)"
+  PR_NUMBER="4242"; REPO_SLUG="x/y"; STATE_MILESTONE_SLUG="88-some-milestone"; VERSION="v9.93"
+  RELEASE_LOG="$_td_tmp/RELEASE_LOG.md"
+  local _td_stub_merged="$_td_tmp/gh-merged.sh" _td_stub_open="$_td_tmp/gh-open.sh"
+  /bin/cat > "$_td_stub_merged" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "MERGED/main"; exit 0; fi
+exit 0
+STUB
+  /bin/cat > "$_td_stub_open" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "OPEN/main"; exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_td_stub_merged" "$_td_stub_open"
+
+  # (a) VERIFIED row + MERGED-to-main PR → SKIPPED-as-PASS
+  GH="$_td_stub_merged"; MODE="apply"; STATE_LOG_ROW_STATE="VERIFIED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_release_log >/dev/null 2>&1
+  [[ "$(get_phase transition_release_log)" == SKIPPED\|* ]] || { echo "FAIL: transition VERIFIED+merged-PR must SKIP-as-PASS, got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+
+  # (b) VERIFIED row + UNMERGED PR → FAIL (false-VERIFIED)
+  GH="$_td_stub_open"; STATE_LOG_ROW_STATE="VERIFIED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_transition_release_log >/dev/null 2>&1; then
+    echo "FAIL: transition VERIFIED+unmerged-PR must FAIL (false-VERIFIED)"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase transition_release_log | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: VERIFIED+unmerged must mark FAIL (#1681)"; failures=$((failures+1)); }
+
+  # (c) DEPLOYED row → normal transition to VERIFIED (regression guard). Needs a
+  #     sandbox RELEASE_LOG with a DEPLOYED row for slug=88-some-milestone.
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.93 | 88-some-milestone | #1 | #4242 | sha | v9.93 | DEPLOYED | 2026-06-28 |
+EOF
+  GH="$_td_stub_merged"; STATE_LOG_ROW_STATE="DEPLOYED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_release_log >/dev/null 2>&1
+  [[ "$(get_phase transition_release_log)" == PASS\|* ]] || { echo "FAIL: transition DEPLOYED row must PASS (normal transition), got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| v9\.93 \| 88-some-milestone \|.*\| VERIFIED \|' "$RELEASE_LOG" || { echo "FAIL: DEPLOYED→VERIFIED transition must flip the v9.93 row state"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_td_tmp" 2>/dev/null || true
+  GH="$_td_saved_gh"; MODE="$_td_saved_mode"; STATE_LOG_ROW_STATE="$_td_saved_state"
+  PR_NUMBER="$_td_saved_pr"; REPO_SLUG="$_td_saved_slug"; RELEASE_LOG="$_td_saved_log"
+  STATE_MILESTONE_SLUG="$_td_saved_msslug"; VERSION="$_td_saved_version"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -2556,6 +2647,7 @@ STUB
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
+  echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
