@@ -8,6 +8,20 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.33] - 2026-06-27
+
+Roadmaps get a shipped in-repo home, and "initiative" labels are reframed as a grouping rather than a hierarchy tier. Additive — a new git-ignored `/roadmaps/` folder (ships on install, survives updates), a token-default rewire to it across the SSOT surfaces, and a one-line label-taxonomy reframe; existing roadmaps migrate by copy with no history effect. ADR-046 supersedes-in-part ADR-012 + ADR-017. routine class.
+
+### Added
+
+- **Roadmaps now have a shipped in-repo home.** A `/roadmaps/` folder is present on a fresh clone (folder + README tracked, instances git-ignored) and survives updates (absent from the regeneration manifest). The `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token now defaults to it across the registry + config, and is still repointable. *Why it matters:* operators have a known, plug-and-play place for roadmap instances that updates never overwrite. ([#416](https://github.com/cody-hutson/pmo-platform/issues/416))
+
+### Changed
+
+- **"Initiative" labels read as a grouping, not a hierarchy tier.** `label-taxonomy.md §Initiative Labels` is reframed and now cites the single source of the work-item hierarchy. *Why it matters:* the docs no longer imply a container level the platform doesn't have. ([#1038](https://github.com/cody-hutson/pmo-platform/issues/1038))
+
+[Full notes](release/releases/notes/v2.33_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.33)
+
 ## [v2.32] - 2026-06-27
 
 Skill-registry identity and currency — the skill catalog (`registry.md`) now checks itself against the skills actually deployed, so a missing, extra, or dangling catalog entry fails the build instead of drifting unnoticed; and several docs that pointed at a catalog file which never shipped are corrected to point at the real registry. Additive build check plus corrected citations — no data migration and no stored-content move. routine class; four drifted skill packages (build-reviewer, pmo-architect, pmo-skill-editor, pmo-skill-refiner) rebuilt at release-cut.
