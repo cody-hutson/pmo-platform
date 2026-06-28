@@ -8,7 +8,7 @@
 # Phases (sequenced; each idempotent — re-running is safe):
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row, tag exists
-#   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state
+#   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
 #   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask title-regex auto-exclude)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
@@ -234,6 +234,12 @@ OPEN_ISSUE_COUNT=0
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
+MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
+                         # read-state from the RELEASE PR (not the chore PR — the
+                         # release content merged via the release PR, and the
+                         # signed tag is cut at that SHA per stage-12 Phase B3).
+                         # phase_publish_github_release binds the Release --target
+                         # to it and asserts the tag points at it.
 
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
@@ -433,6 +439,14 @@ phase_preflight() {
 phase_read_state() {
   STATE_MILESTONE_STATE="$($GH api "repos/${REPO_SLUG}/milestones/${MILESTONE}" --jq '.state' 2>/dev/null || echo "unknown")"
 
+  # MERGE_SHA capture (#1682) — ONCE, here, from the RELEASE PR. The release
+  # identity is the release PR's merge commit to main (what the RELEASE_LOG row's
+  # Merge SHA column records and where stage-12 Phase B3 cuts the signed tag) —
+  # NOT the chore PR (corpus-only). The release PR has already merged before
+  # close-out runs (a precondition), so its mergeCommit is available. Both #1705
+  # and #1682's publish consumer read this single global (no double-population).
+  MERGE_SHA="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json mergeCommit --jq '.mergeCommit.oid // ""' 2>/dev/null || echo "")"
+
   # Cycle time (read-only; may be N/A pre-instrumentation)
   if [[ -x "$COMPUTE_CYCLE_TIME" ]]; then
     STATE_CYCLE_TIME="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" 2>/dev/null || echo "N/A")"
@@ -440,7 +454,7 @@ phase_read_state() {
     STATE_CYCLE_TIME="N/A (compute-cycle-time.sh not executable)"
   fi
 
-  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=$STATE_CYCLE_TIME"
+  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=$STATE_CYCLE_TIME; release-PR merge SHA=${MERGE_SHA:-<unresolved>}"
   return 0
 }
 
@@ -1862,6 +1876,21 @@ phase_publish_github_release() {
     return 3
   fi
 
+  # Preflight 1.5: tag ↔ MERGE_SHA identity assertion (#1682). The tag must point
+  # at THIS release's merge commit (captured at read-state from the release PR).
+  # If the tag resolves to a different SHA, a Release bound to it would tie to the
+  # wrong commit — do NOT publish. Skipped only when MERGE_SHA is unresolved (e.g.
+  # gh offline at read-state) — degrade to a warning rather than block on a
+  # capture miss, but never publish a KNOWN mismatch.
+  if [[ -n "$MERGE_SHA" ]]; then
+    local tag_sha
+    tag_sha="$(git_net -C "$REPO_ROOT" rev-list -n1 "$VERSION" 2>/dev/null || echo "")"
+    if [[ -n "$tag_sha" && "$tag_sha" != "$MERGE_SHA" ]]; then
+      mark_phase "publish_github_release" "FAIL" "tag $VERSION points at $tag_sha, not the release-PR merge commit $MERGE_SHA — identity mismatch (#1682); do NOT publish a Release bound to the wrong commit (re-cut the tag at the merge SHA, or re-verify the release PR)"
+      return 3
+    fi
+  fi
+
   # Preflight 2: notes file should be resolvable (warning, not blocker)
   if [[ ! -f "$notes_path" ]]; then
     mark_phase "publish_github_release" "FAIL" "RELEASE_NOTES file not present at $notes_path (Stage 13 chore PR may not have merged or scaffold step may not have run)"
@@ -1908,19 +1937,21 @@ phase_publish_github_release() {
   local notes_body
   notes_body="$(/usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$notes_path" 2>/dev/null)"
 
-  # MERGE_SHA: if available from prior phase capture, use it; otherwise omit --target
-  local target_args=""
-  if [[ -n "${MERGE_SHA:-}" ]]; then
-    target_args="--target $MERGE_SHA"
+  # MERGE_SHA --target is NON-OPTIONAL on create (#1682): the Release is explicitly
+  # bound to the release-PR merge commit (the identity assertion above proved the
+  # tag agrees with it). If MERGE_SHA is unresolved (gh offline at read-state),
+  # FAIL rather than create an unbound Release — binding is the point of #1682.
+  if [[ -z "$MERGE_SHA" ]]; then
+    mark_phase "publish_github_release" "FAIL" "MERGE_SHA unresolved (release-PR merge commit not captured at read-state) — cannot bind the GitHub Release --target (#1682); re-run with gh online so the release-PR merge SHA resolves"
+    return 3
   fi
 
-  # shellcheck disable=SC2086
   if $GH release create "$VERSION" \
     --repo "$REPO_SLUG" \
     --title "$VERSION — $headline" \
     --notes "$notes_body" \
-    $target_args >/dev/null 2>&1; then
-    mark_phase "publish_github_release" "PASS" "created GitHub Release $VERSION (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
+    --target "$MERGE_SHA" >/dev/null 2>&1; then
+    mark_phase "publish_github_release" "PASS" "created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
     return 0
   fi
   mark_phase "publish_github_release" "FAIL" "gh release create failed for new release $VERSION (canonical recovery: re-run Phase 15.5 OR invoke release-executor Mode F standalone)"
@@ -2754,6 +2785,87 @@ EOF
     echo "  (skipped #1680 ledger-guard/reparse self-test — git not executable at $GIT)" >&2
   fi
 
+  # Test 4h: MERGE_SHA capture + tag↔SHA identity assertion (#1682) — offline,
+  # hermetic. Part 1 (capture) stubs $GH so `pr view --json mergeCommit` returns a
+  # fixed oid and asserts phase_read_state populates MERGE_SHA. Part 2 (identity)
+  # uses a real local git sandbox with a tag at a known commit pushed to origin,
+  # and a $GH stub (release view fails → create path; release create records its
+  # args) to assert: tag-at-MERGE_SHA → publish PASS + `--target <sha>` on the
+  # create command; tag-at-different-SHA → publish FAIL (identity mismatch).
+  local _ms_saved_gh="$GH" _ms_saved_pr="$PR_NUMBER" _ms_saved_slug="$REPO_SLUG" _ms_saved_mergesha="$MERGE_SHA"
+
+  # Part 1 — capture
+  local _ms_tmp; _ms_tmp="$(/usr/bin/mktemp -d -t mergesha-selftest.XXXXXX)"
+  local _ms_cap_stub="$_ms_tmp/gh-cap.sh"
+  /bin/cat > "$_ms_cap_stub" <<'STUB'
+#!/usr/bin/env bash
+# pr view --json mergeCommit → fixed oid; api milestones → state; else empty.
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "feedfacecafebeadfeedfacecafebeadfeedface"; exit 0; fi
+if [[ "$1" == "api" ]]; then echo "closed"; exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_ms_cap_stub"
+  GH="$_ms_cap_stub"; PR_NUMBER="5151"; REPO_SLUG="x/y"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_read_state >/dev/null 2>&1
+  [[ "$MERGE_SHA" == "feedfacecafebeadfeedfacecafebeadfeedface" ]] || { echo "FAIL: phase_read_state must capture MERGE_SHA from the release PR, got '$MERGE_SHA'"; failures=$((failures+1)); }
+
+  # Part 2 — identity assertion (needs git)
+  if [[ -x "$GIT" ]]; then
+    local _ms_saved_root="$REPO_ROOT" _ms_saved_mode="$MODE" _ms_saved_version="$VERSION" _ms_saved_notesdir="$RELEASE_NOTES_DIR"
+    local _ms_origin="$_ms_tmp/origin.git" _ms_work="$_ms_tmp/work"
+    $GIT init --bare -q "$_ms_origin" 2>/dev/null
+    $GIT init -q -b main "$_ms_work" 2>/dev/null || { $GIT init -q "$_ms_work"; ( cd "$_ms_work" && $GIT checkout -q -b main 2>/dev/null ); }
+    /bin/mkdir -p "$_ms_work/release/releases/notes"
+    /usr/bin/printf -- '---\nversion: v9.89\n---\n\n# Real headline\n\nbody\n' > "$_ms_work/release/releases/notes/v9.89_RELEASE_NOTES.md"
+    local _ms_commit
+    ( cd "$_ms_work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm seed >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t tag -a -m v9.89 v9.89 >/dev/null 2>&1 \
+      && $GIT remote add origin "$_ms_origin" >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 \
+      && $GIT push -q origin v9.89 >/dev/null 2>&1 ) || true
+    _ms_commit="$( cd "$_ms_work" && $GIT rev-list -n1 v9.89 2>/dev/null )"
+
+    # $GH stub: release view → fail (State 0 / create path); release create → ok +
+    # record its argv so we can assert --target was passed; ls-remote is git_net.
+    local _ms_argfile="$_ms_tmp/create-args"
+    local _ms_pub_stub="$_ms_tmp/gh-pub.sh"
+    /bin/cat > "$_ms_pub_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then exit 1; fi
+if [[ "\$1" == "release" && "\$2" == "create" ]]; then printf '%s\n' "\$*" > "$_ms_argfile"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_ms_pub_stub"
+    GH="$_ms_pub_stub"; REPO_ROOT="$_ms_work"; MODE="apply"; VERSION="v9.89"
+    RELEASE_NOTES_DIR="$_ms_work/release/releases/notes"
+
+    # (a) tag-at-MERGE_SHA → PASS + --target on the create command
+    MERGE_SHA="$_ms_commit"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    [[ "$(get_phase publish_github_release)" == PASS\|* ]] || { echo "FAIL: publish must PASS when the tag == MERGE_SHA, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF -- "--target $_ms_commit" "$_ms_argfile" 2>/dev/null || { echo "FAIL: gh release create must include '--target <MERGE_SHA>' (#1682 non-optional bind)"; failures=$((failures+1)); }
+
+    # (b) tag-at-different-SHA → FAIL (identity mismatch)
+    MERGE_SHA="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_publish_github_release >/dev/null 2>&1; then
+      echo "FAIL: publish must FAIL when the tag points at a different SHA than MERGE_SHA (#1682 identity mismatch)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: tag↔MERGE_SHA mismatch must mark publish FAIL"; failures=$((failures+1)); }
+
+    REPO_ROOT="$_ms_saved_root"; MODE="$_ms_saved_mode"; VERSION="$_ms_saved_version"; RELEASE_NOTES_DIR="$_ms_saved_notesdir"
+  else
+    echo "  (skipped #1682 identity-assertion self-test — git not executable at $GIT)" >&2
+  fi
+
+  /bin/rm -rf "$_ms_tmp" 2>/dev/null || true
+  GH="$_ms_saved_gh"; PR_NUMBER="$_ms_saved_pr"; REPO_SLUG="$_ms_saved_slug"; MERGE_SHA="$_ms_saved_mergesha"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -2904,6 +3016,7 @@ STUB
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
+  echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
