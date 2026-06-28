@@ -577,6 +577,10 @@ Cutover discipline for D-Version: applies to all releases going forward.
 
 **Trigger:** Release plan from Procedure 0 is approved by operator.
 
+**Rigor-Invariance Principle (scaffolding selects tasks; it never attenuates rigor).** A work-item scaffold determines WHICH tasks exist; it MUST NOT determine the rigor with which any task's codified Phase checklist is reviewed or verified. Every codified Phase step (e.g. `pipeline/stage-12-execute.md` Phase B5.5 Surface-1 emit, `pipeline/stage-13-close.md` Phase B5.6 verify + the Procedure 7 Step 4 completion-verification table) runs whether or not the scaffolded sub-task body names it, and whether the stage runs as a spawned spoke or hub-direct. A sub-task body that paraphrases — rather than binds to — the canonical Phase checklist is therefore a scaffold abbreviation only, never a license to drop a codified step. Two mechanisms enforce this invariant so it does not depend on the hub remembering it: (1) **bind-by-reference** — every sub-task body cites its canonical stage-spec Phase checklist and carries a canonical-checklist attestation (Sub-Task Template below); (2) **the scaffold-independent completion gate** — `deploy.sh --check` Check 48 (the `--check-close-completeness` CI probe) asserts the complete Step 4 output-set on main for every `VERIFIED` `RELEASE_LOG` row, firing with no scaffold, no sub-task body, and no hub session in the loop. The gate is the machine backstop; the attestation is the human-readable forcing function — neither alone is the sole control.
+
+**Hub-direct ≡ spoke (execution-path-agnostic rigor).** Whether a stage is executed by a spawned spoke or run hub-direct, it binds to the **identical** canonical Phase checklist (per the bind-by-reference rule above). Hub-direct execution is NOT an abbreviated path: collapsing stages (e.g. a "combined Stage 12+13" run) does not waive any codified Phase step of either stage, and a hub-direct run is held to the same completion gate (Check 48 is execution-path-agnostic — it reads main's state, not the execution path that produced it). This generalizes the merge-ahead clause in Procedure 7 ("operator direct-merge does NOT waive the close outputs") from the merge-ahead case to **all** hub-direct execution.
+
 **Steps:**
 1. Read the approved release plan (Stage 4 spoke output on the release planning sub-task)
 2. For each OPEN issue, use the release plan's stage applicability matrix to determine which stages apply:
@@ -613,6 +617,7 @@ Per pipeline/stage-{NN}-{name}.md:
 - Purpose: {COPY FROM PIPELINE_STAGES}
 - Inputs: {COPY FROM PIPELINE_STAGES}
 - Outputs: {COPY FROM PIPELINE_STAGES}
+**Canonical checklist (bind-by-reference):** This sub-task is bound to the canonical Phase checklist in `pipeline/stage-{NN}-{name}.md` §{Phase range}. Execute every codified Phase step there; this body never narrows it. The Purpose/Inputs/Outputs above are stage metadata, NOT the checklist — the stage spec's Phase steps are authoritative, and a step absent from this body is still in scope (Rigor-Invariance Principle, Procedure 1). [Full transcription of the Phase checklist into this body is the permitted alternative to binding-by-reference; binding is the default — it cannot drift from the spec.]
 
 ### Instructions
 {STAGE_SPECIFIC_INSTRUCTIONS — what the spoke should do for THIS
@@ -625,6 +630,7 @@ Post output as a comment on THIS sub-task using the format:
 ### Detail
 ### Evidence
 ### Output for Stage {NEXT_STAGE}
+**Canonical-checklist attestation:** every codified Phase step in `pipeline/stage-{NN}-{name}.md` §{Phase range} ran, or is explicitly recorded N/A-with-reason. (This attestation is the spoke-side forcing function for the Rigor-Invariance Principle; the scaffold-independent completion gate — Check 48 — is the machine backstop.)
 
 Close this sub-task when output is posted and reviewed by operator.
 ```
@@ -640,6 +646,8 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 ### Procedure 2: Routing (What's Next)
 
 **Trigger:** Operator asks "what's next?" or a spoke completes.
+
+**Hub-direct ≡ spoke (routing mirror).** When routing elects to run a stage hub-direct instead of spawning a spoke (a permitted choice), the hub-direct run binds to the **identical** canonical Phase checklist the spoke would have — see the Hub-Direct ≡ spoke equivalence clause in Procedure 1. Hub-direct is a spawn-vs-inline choice, never a rigor choice; the completion gate (Check 48) is execution-path-agnostic.
 
 **Steps:**
 1. List all sub-tasks across all issues in the Milestone
@@ -1614,6 +1622,8 @@ The actually-consequential, hard-to-reverse step (merge to main) executes under 
 This mandate is consistent with — and bounded by — the **operator-agency carve-out** directly above: the mandate binds the **output set** (every canonical Stage 13 output exists on main), NOT the *option* for a human to perform an individual mechanical state-flip. The operator MAY still close the Milestone or merge a chore PR via the UI, and MAY perform any single mechanical step of the close by hand; what is mandated is that the outcome — the complete output set, verified — holds however it was produced. A reading that bars a legitimate operator keystroke is a misreading.
 
 **Two gates enforce completeness at different moments.** (1) **Close-time, on-main, full set:** the Step 4 completion-verification table runs before milestone-close and asserts every canonical output is present on main — including the RELEASE_LOG row itself. This gate blocks an incomplete close. (2) **CI regression catch:** `deploy.sh --check` Check 32 is LOG-row-driven and asserts, for each already-landed RELEASE_LOG row, that its INDEX / DIGEST / NOTES (plus post-cutover tag / Release) companions exist (warn-mode-initial during shakedown, per the bypass-mode-readiness ladder). Check 32 cannot flag a release whose LOG row was never written (it iterates LOG rows); LOG-row presence is the Step 4 table's responsibility, not Check 32's.
+
+**Scaffold-independent enforcement of this Step 4 table (Check 48).** The Step 4 completion-verification above is hub-narrative-executed — it fires only if the hub remembers to run Procedure 7. `deploy.sh --check` **Check 48** is its scaffold-independent mirror: it iterates every `VERIFIED` `RELEASE_LOG` row at/after its cutover and asserts the complete canonical Stage 13 output-set (this table's machine-checkable rows) is present on main, **delegating** the note-content sub-assertion to `lint_release_corpus.py --check note-content`, the body-drift sub-assertion to `check-release-body-drift.sh`, and companion-presence to the same path resolution Check 32 uses — no logic is re-implemented. Check 48 fires on a plain `git`-checkout + `deploy.sh --check` with no scaffold, no sub-task body, and no hub session in the loop; the `--check-close-completeness` verdict-driven probe maps the result to a CI exit (fail-closed at the gate surface, swallowed non-blocking by a committed `.github/close-completeness.enforce` sentinel during calibration). Check 48 sits in lane (2) with Check 32 and **inherits the same LOG-row blind spot** — a release whose LOG row was never written is invisible to it; LOG-row presence remains the Step 4 table's responsibility. This is the scaffold-independent completeness gate the Rigor-Invariance Principle (Procedure 1) names as the machine backstop.
 
 **Merge-ahead close-out (operator direct-merge does NOT waive the close outputs):** When the operator merges the release PR directly — bypassing the Stage 12 gate (e.g., an early-merge under Procedure 6, or a direct UI merge to main) — the completeness binding is unchanged: a direct merge satisfies only the "merge to main" step (the one genuinely-consequential, hard-to-reverse action under the Stage 9 GO); it does NOT satisfy, and does NOT waive, the downstream close outputs. The hub still produces the complete canonical Stage 13 output set (the Step 4 Verification table) — default path the automated close-out, fallback the Phase B chore-PR mechanism when preflight blocks (per the outcome-bound mandate above). Where the merge-ahead skipped the signed-annotated tag (per Stage 12 Phase B3) or the published GitHub Release (Surface 1), those are backfilled. Empirical motivation: the recent incomplete closes all originated from a release PR merged directly, after which the close was improvised and dropped outputs. The merge-ahead path is therefore an explicit, supported close path — not an exception that licenses hand-assembly. `automated-closeout.sh` is idempotent per phase, so re-entry after a merge-ahead is safe and converges on the complete output set. The Step 4 completion-verification (below) proves all outputs landed regardless of whether the merge went through the Stage 12 gate or ahead of it.
 
