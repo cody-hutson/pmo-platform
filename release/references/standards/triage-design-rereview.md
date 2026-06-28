@@ -36,11 +36,13 @@ The re-review artifact is the **first** section of every Stage 4 sub-task commen
 | `triage_decision_date` | ISO date | Date Stage 2 rendered Approved |
 | `effort_tier` | `trivial` / `standard` / `complex` | Per § 7 effort-sizing |
 
-### Per-requirement table (6 columns)
+### Per-requirement table (7 columns)
 
-| Requirement | D1 finding | D2 finding | D3 finding | Classification | Delta or Premise-Problem Type |
-|---|---|---|---|---|---|
-| AC1 / AC2 / proposed-change-N / risk-N | finding + citation | finding + citation | finding + citation | C1 / C2 / C3 | (C2) proposed delta text; (C3) PT-1 / PT-2 / PT-3 / PT-4 |
+| Requirement | D1 finding | D2 finding | D3 finding | Classification | Confidence signal | Delta or Premise-Problem Type |
+|---|---|---|---|---|---|---|
+| AC1 / AC2 / proposed-change-N / risk-N | finding + citation | finding + citation | finding + citation | C1 / C2 / C3 | `CONVERGENT` / `DIVERGENT` / `UNGROUNDED` (per § 3.0) | (C2) proposed delta text; (C3) PT-1 / PT-2 / PT-3 / PT-4 |
+
+**Confidence-signal column (§ 3.0 confidence gate).** The `Confidence signal` column records the consistency-signal state that the **C1/C2 proceed-gate** (§ 3.0) reads before a proceed-classification (C1 or C2) may be committed. It is the observable input to the gate, not the agent's verbalized self-confidence (a self-report is the rejected input per `decision-confidence-protocol.md` § 1.3). A proceed-classification whose signal is `DIVERGENT`/`UNGROUNDED` at a non-trivial reversibility tier must show the bounded pause-to-learn artifact (§ 3.0) before it resolves to C1/C2. A `CONVERGENT` signal — or any proceed at the CHEAP reversibility tier — fills this column and proceeds with no added ceremony. The column is **delta-skippable** under the § 6 delta-only Stage 5 procedure exactly as D1 is (record `delta-skip — gate re-evaluated only on changed signal`).
 
 **Output discipline (inherited verbatim from [`review-discipline-principles.md`](../../../core/disciplines/review-discipline-principles.md) § 1):**
 
@@ -68,6 +70,32 @@ Every requirement is evaluated against three named dimensions. Each dimension MU
 ## § 3 Classifications
 
 Each requirement is classified as exactly one of three states. The classification determines stage routing.
+
+### § 3.0 Confidence gate on the C1/C2 proceed-classification
+
+A C1 or C2 classification is a **proceed decision**: the spoke records the requirement as correct (C1) or correctable-and-correct (C2) and the stage moves forward on that premise. The danger this gate addresses is a **low-confidence proceed** — the spoke commits a C1/C2 on an upstream premise it is not actually grounded on, and a wrong premise then propagates into the release plan or design (undone only in days-to-weeks of downstream rework). This gate promotes the **passive** `Reversibility / Confidence` descriptor the § 9 escalation block already carries into an **active pre-commit check**: before a requirement may be recorded **C1 or C2**, the spoke evaluates decision-confidence per [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) § From Label to Gate (the canonical mechanism is `decision-confidence-protocol.md`).
+
+**The gate predicate (reversibility × confidence-signal, autonomy-modulated).** The spoke reads the **confidence signal** — the three-value consistency state `CONVERGENT` / `DIVERGENT` / `UNGROUNDED`, derived from observable cross-checks, never a verbalized self-report (the rejected input per `decision-confidence-protocol.md` § 1.3) — against the **reversibility of proceeding on this premise**. Proceeding on a stale-but-not-obviously-wrong premise at Stage 4/5 is typically **MODERATE–EXPENSIVE** (the cost-of-error is non-trivial — the wrong premise reaches the plan/design), and the spoke executes under **Autonomy Tier 2/3** (bounded-auto / autonomous within the framework). The disposition follows the `reversibility-protocol.md` § From Label to Gate matrix cell-for-cell:
+
+| Confidence signal | Disposition at the C1/C2 commit point |
+|---|---|
+| **`CONVERGENT`** (cross-checks corroborate; weakest evidence label ≥ `[INFERRED]`) | **PROCEED** — record C1/C2 with no added ceremony. |
+| **`DIVERGENT`** / **`UNGROUNDED`** at **CHEAP** reversibility | **PROCEED** — the cost of a wrong premise is trivial; pausing would be theater. |
+| **`DIVERGENT`** / **`UNGROUNDED`** at **MODERATE / EXPENSIVE** reversibility | **PAUSE-TO-LEARN** — the proceed-classification is **gated**; run the bounded loop below before recording C1/C2. |
+| **`DIVERGENT`** / **`UNGROUNDED`** at **EXPENSIVE-unresolved or IRREVERSIBLE** reversibility | **ESCALATE** — route to C3 / Tier 0 (§ 9), or to the operator per the Escalate pattern. |
+
+**The bounded pause-to-learn loop (the gated path).** When the predicate returns **PAUSE-TO-LEARN**, the spoke runs the loop specified in [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md) § Pause-to-Learn Pattern — it does **not** silently emit the proceed-classification:
+
+1. **Name the specific gap** — the file, value, version, or dependency state the C1/C2 proceed rests on (CS-2 named gap; an un-nameable gap routes to ESCALATE, not pause).
+2. **Inject a new external signal** — fetch the cited canonical source (a `[verify-before-recommend]` read), or, when the premise cites other-release state ("vX.Y has / has not shipped"), **run the § 3.1 freshness-check** as the external-signal injection. The freshness-check is this consumer's ready-made injector — its command + result line **is** the new signal the loop requires. A cycle that injects nothing new is a stall, not a learn-step.
+3. **Re-evaluate** the confidence signal with the new input and exit the loop on one of:
+   - **(a) resolved** → signal is now `CONVERGENT` → **record C1 / C2**;
+   - **(b) real premise problem** → the gap is a genuine stale/subsumed/conflicting premise → **escalate to C3 / Tier 0** (§ 9 block + § 10 authority);
+   - **(c) budget exhausted** (default 1 iteration, hard cap 2) without resolution → **escalate to the operator** via the [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md) § Escalate Pattern (HALT + Decision Briefing; the named gap + what the loop tried becomes the Briefing Context).
+
+**Anti-theater contract (load-bearing, not optional).** The gate fires **only where the pause changes the outcome**. A `CONVERGENT` signal, and any proceed at the **CHEAP** reversibility tier, pass the gate with **no** loop and **no** pause artifact — a pause on a certain or trivially-reversible call is the ceremony this contract exists to prevent. When the loop **does** fire, its three load-bearing properties are made observable in the re-review artifact so a downstream guard can confirm the pause was real: **new-signal-injected** (the freshness-check command + result, or the canonical-source fetch), **bounded** (the loop ran ≤ the budget; cycle count reportable), and **has-exit** (the resolution: C1/C2 | C3 | operator-escalate). A pause missing any one of the three is theater. `[per decision-confidence-protocol.md § 5 anti-theater guard]`
+
+**Scope discipline (additive — the C3 / Tier 0 path is unchanged).** This gate governs **only** the C1/C2 proceed-classification — the proceed side of the fork. The C3 path, the Tier 0 — Premise Rejection workflow (§ 9), and the § 10 phased authority are **untouched**: a requirement the spoke already judges a fundamental premise problem still classifies C3 directly and routes to Tier 0 without passing through this gate. The gate's only new outcome is that a **low-confidence would-be-C1/C2** can no longer be emitted silently — it must first close its named gap (pause-to-learn), legitimately resolve to C1/C2, or escalate (to C3/Tier 0 or operator).
 
 | Cls | Name | Definition | Routing |
 |---|---|---|---|
@@ -378,6 +406,18 @@ This standard inherits or cites the following anchor patterns:
 - **[`decision-discipline.md`](../../../core/disciplines/decision-discipline.md) § 2.1 Mechanism 1 (Localization Check)** — related-not-extension. Mechanism 1 fires at the decision-class briefing point (pre-decision interrogation); the re-review fires at the design-stage entry handoff (pre-design interrogation of upstream output). Cousin patterns; D2 cites Mechanism 1 as a pattern to apply, not a parent doc to extend.
 - **Inter-Stage Feedback Protocol Tier 1/2/3** ([`release/governance/release-process.md`](../../governance/release-process.md)) — pattern reused for Tier 0; numbering communicates earlier-temporal-position. Existing escalation rule "When in doubt between Tier N and Tier N+1, escalate" extends naturally to "When in doubt between Tier 0 and Tier 1, escalate to Tier 1" — but in practice, Tier 0 fires before Tier 1 has a chance, so the escalation goes the other direction (Tier 1 finding may be re-classified as Tier 0 if root cause traces to upstream premise).
 - **[`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) G2-09 / G2-10 / G3-08 / G3-09** — primary similarity / size detection surface at Triage and Bundle (Stage 2 / Stage 3 execution-time). The re-review's Tier 0 PT-1 stale-assumption escalations may cite specific G2-09 / G3-08 candidate-pair output OR G2-10 / G3-09 size-routing output as the citation backing when premise problem at Stage 4/5 entry traces to a similarity / size routing miss at Triage / Bundle. Operator Action (A) Return-to-Triage re-enters the gate surface where the new criteria fire on re-evaluation. Cross-reference, not invocation — Tier 0 protocol itself unchanged. Cutover: applies to all releases entering Stage 4 going forward.
+- **[`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) § From Label to Gate + `decision-confidence-protocol.md` + [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md) § Pause-to-Learn Pattern** — the decision-confidence gate this standard wires into the C1/C2 proceed-classification (§ 3.0). This re-review is the gate's first **live consumer**: § 3.0 reads the gate's `CONVERGENT`/`DIVERGENT`/`UNGROUNDED` signal × reversibility-of-proceeding to decide PROCEED / PAUSE-TO-LEARN / ESCALATE on the proceed side of the classification fork; the § 3.1 freshness-check supplies the loop's new-external-signal injection. The gate's mechanism (signal sources, threshold matrix, bounded loop, anti-theater guard) lives in those docs and is referenced, not restated here; this standard only routes the gate into its C1/C2 commit step. The C3 / Tier 0 path is not a consumer of the gate.
+
+---
+
+## Provenance
+
+Design lineage for audit only — not load-bearing on the standard's content (§ 3.0 reads version-agnostically above; the gate it consumes is named by canonical doc filename, never by issue number, in the prose).
+
+- #2289 — the Create ST2 sub-task that wired the decision-confidence gate into this consumer (the live-consumer integration; § 3.0).
+- #2288 — the Create ST1 sub-task that promoted the confidence label into the gate (`reversibility-protocol.md` § From Label to Gate) and registered the Pause-to-Learn Pattern as the 3rd pre-action sibling (`autonomous-execution-model.md`). The gate primitive this standard consumes.
+- #2286 — the Define ST1 sub-task that scoped the decision-confidence mechanism (signal, threshold matrix, bounded loop, six-domain application, named consumer).
+- #2283 — the Define task (spec + ADR) under which the mechanism was authored; named the Stage-4 currency-check (this re-review) as the candidate live consumer.
 
 ---
 
