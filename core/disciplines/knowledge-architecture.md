@@ -140,6 +140,8 @@ The model's load-bearing concept, consumed by . The **K1↔K2/K3 boundary** is e
 
 **Scope discipline (BOUNDED — per AC + Stage 4 plan "Discoveries outside scope"):** this register is a deliverable that **ENUMERATES and SIZES**; it does **not** remediate. Remediation is owned by **initiative-umbrella child issues**, milestone-agnostic and future. The Stage-4 plan's note tying the register to in-scope child issues is **stale post-D-NEW1(a)** — corrected here: register consumers are remediation children, **not** in-scope consumers (which consume the *taxonomy*, not the *register*).
 
+This register is **retrospective** — it catalogs leaks after they land. Its proposal-time twin is the [`architecture-evaluative-lens.md` §2 plug-and-play lens](architecture-evaluative-lens.md#plug-and-play), which applies this register's universality test *proactively* at design time to route a build's scope before the leak is authored.
+
 **Classification rubric** (the register is not a flat file list):
 
 | Class | Meaning |
@@ -198,6 +200,7 @@ The L1–L8 register above catalogs **identity/institutional** leaks — context
 | Universal-Protocol vs Localized-Context separation (audit + standard) | The audit + enforcement standard **consumes** this doc's universality axis. This doc = the *model*; the standard = the *audit + enforcement standard* on it. **Out of scope here.** | **Do NOT action.** Boundary stated to prevent future duplication. |
 | ** / [`operating-model.md`](../disciplines/operating-model.md)** — K2 model home | This doc's placement model assigns the K2 *model* to `operating-model.md`; K2 *values* are CLAUDE.md parameters. | Compose, do not restate. |
 | **[`terminology-glossary.md`](../specs/terminology-glossary.md)** — disjoint methodology glossary | Carries Area/Domain/Function/Process/Stage/WBS/Scope — **no** knowledge-tier terms. No collision, no redefinition risk. | Cross-reference; redefine nothing. |
+| **[`architecture-evaluative-lens.md`](architecture-evaluative-lens.md)** — design-time plug-and-play lens | The lens **consumes** this doc's [§1 Q1 universality classifier](#tier-classifier) + [§3 placement model](#placement-model) as the *proactive proposal-time* application; the [§4 leakage register](#local-context-leakage-register) is its *retrospective* twin. This doc = the taxonomy; the lens = its design-time application. | Cross-reference; redefine nothing. |
 
 ---
 
