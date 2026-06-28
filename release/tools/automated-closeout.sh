@@ -1374,6 +1374,79 @@ This chore PR ships release-corpus updates only. Release-issue auto-close was ha
 EOF
 }
 
+# ─── Phase 9.9: ledger_guard (#1680 — pre-commit read-modify-write guard) ─────
+#
+# Before phase_commit_chore_pr stages the 4 append-only ledgers, validate the
+# working-tree diff vs origin/main against the §220 I1/I2 invariants (the
+# concurrent-conflict doctrine #1092 codified). The platform has no lock
+# primitive — git IS the concurrency substrate; this guard makes the tool REFUSE
+# to commit a contaminated working copy.
+#
+# Adversarial-review mitigation: the guard does NOT assert "ONLY my row changed
+# vs origin/main" — after a correct §220 concurrent merge, main legitimately
+# carries a SIBLING release's additive row, so an exclusive-single-change
+# assertion would FALSE-FAIL a correctly-merged concurrent close. Instead it
+# encodes the actual invariants the doctrine defines:
+#   I1 (additive ledgers — INDEX/DIGEST/CHANGELOG): MY entry is PRESENT in the
+#      working tree, and every line REMOVED vs origin/main is one of MINE (a
+#      sibling's additive row is an ADD, never a removal — removing a foreign row
+#      is contamination).
+#   I2 (state-bearing — RELEASE_LOG status): no PRIOR row regressed VERIFIED →
+#      DEPLOYED (the dangerous state-lattice case — a blanket side-pick that
+#      overwrites a sibling's VERIFIED with my stale DEPLOYED).
+# §237 boundary: the `**Outcome:**` / Deployment-Log prose block is I1 (take-both
+# / presence), NEVER I2 — this guard does not apply the status-lattice rule to it.
+phase_ledger_guard() {
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "ledger_guard" "DRY-RUN" "would validate the 4-ledger working-tree diff vs origin/main against §220 I1 (additive: no foreign-row removal) + I2 (no VERIFIED→DEPLOYED regression)"
+    return 0
+  fi
+
+  local guard_findings=""
+
+  # I1 — additive ledgers: assert no line containing a FOREIGN `| vX.Y |` row (or
+  # `### vX.Y` DIGEST entry) was REMOVED vs origin/main. A removed line that names
+  # a version OTHER than mine is contamination (a 3-way merge that clobbered a
+  # sibling's additive entry).
+  local ledger
+  for ledger in "release/releases/RELEASE_INDEX.md" "release/releases/RELEASE_DIGEST.md" "CHANGELOG.md"; do
+    [[ -f "$REPO_ROOT/$ledger" ]] || continue
+    # Removed lines = diff lines starting with '-' (not the '---' header).
+    local removed_foreign
+    removed_foreign="$(git_net -C "$REPO_ROOT" diff "origin/main" -- "$ledger" 2>/dev/null \
+      | /usr/bin/grep -E '^-' | /usr/bin/grep -vE '^---' \
+      | /usr/bin/grep -E '(\| v[0-9]+\.[0-9]|^-### v[0-9]+\.[0-9])' \
+      | /usr/bin/grep -vF "$VERSION" || true)"
+    if [[ -n "$removed_foreign" ]]; then
+      guard_findings="${guard_findings}I1 contention in ${ledger}: a foreign version row/entry was removed vs origin/main (re-sync main + re-apply per §220 I1 additive — take-both, never re-sort). "
+    fi
+  done
+
+  # I2 — RELEASE_LOG status lattice: assert no PRIOR row regressed VERIFIED →
+  # DEPLOYED. Detect a removed `| ... | VERIFIED | ... |` line for a version OTHER
+  # than mine whose paired added line shows DEPLOYED (a blanket side-pick that
+  # overwrote a sibling's VERIFIED). A simpler robust check: any removed line that
+  # carries `| VERIFIED |` for a NON-$VERSION row is an I2 regression candidate.
+  if [[ -f "$REPO_ROOT/release/releases/RELEASE_LOG.md" ]]; then
+    local regressed
+    regressed="$(git_net -C "$REPO_ROOT" diff "origin/main" -- "release/releases/RELEASE_LOG.md" 2>/dev/null \
+      | /usr/bin/grep -E '^-' | /usr/bin/grep -vE '^---' \
+      | /usr/bin/grep -E '\| VERIFIED \|' \
+      | /usr/bin/grep -E '^\-\| v[0-9]+\.[0-9]' \
+      | /usr/bin/grep -vF "| $VERSION " || true)"
+    if [[ -n "$regressed" ]]; then
+      guard_findings="${guard_findings}I2 regression in RELEASE_LOG.md: a prior VERIFIED row for another version was removed/regressed (per-row max over DEPLOYED<VERIFIED — never a blanket side-pick that writes a false audit record). "
+    fi
+  fi
+
+  if [[ -n "$guard_findings" ]]; then
+    mark_phase "ledger_guard" "FAIL" "ledger contention vs origin/main — ${guard_findings}"
+    return 3
+  fi
+  mark_phase "ledger_guard" "PASS" "4-ledger working-tree diff is §220-clean (I1 no-foreign-removal; I2 no VERIFIED→DEPLOYED regression)"
+  return 0
+}
+
 phase_commit_chore_pr() {
   if [[ "$MODE" == "dry-run" ]]; then
     mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
@@ -1552,6 +1625,87 @@ phase_await_merge_chore_pr() {
   fi
   mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed"
   return 3
+}
+
+# ─── Phase 12.5: reparse_ledgers (#1680 — post-merge structural re-parse) ─────
+#
+# DETECTIVE-ONLY post-merge validation that the 3-way auto-merge landed a
+# well-formed corpus on main. After phase_await_merge_chore_pr succeeds, fetch
+# origin/main and structurally validate each of the 4 ledgers against #667's
+# CORRECTED schema (this is why #1680 builds AFTER #667 — the assertions must
+# encode the 6-col INDEX / H3 DIGEST shape, not the broken one):
+#   (a) RELEASE_INDEX — MY version row present, 6-column (no row with ≠6 fields);
+#   (b) RELEASE_DIGEST — exactly one `### vX.Y (` H3 for my version under the
+#       topmost working H2 (NOT duplicated — the §220 dedup);
+#   (c) RELEASE_LOG — exactly one row for my version; no DEPLOYED-regression on a
+#       previously-VERIFIED row;
+#   (d) CHANGELOG — `## [vX.Y]` block present once (SKIP if pre-CHANGELOG).
+# §237 boundary: the `**Outcome:**`/Deployment-Log prose block is I1 (presence/
+# dedup), NEVER I2 — this re-parse does not state-lattice it. On a structural
+# break → FAIL "manual reconcile required"; it NEVER auto-fixes (re-emitting a
+# merged ledger is out of scope). SKIPs cleanly when the chore PR was SKIPPED
+# (#1705 zero-commit) or under --no-merge (nothing newly merged to re-parse).
+phase_reparse_ledgers() {
+  if [[ "$CHORE_PR_SKIPPED" -eq 1 ]]; then
+    mark_phase "reparse_ledgers" "SKIPPED" "chore PR SKIPPED (zero-commit) — corpus already on main; nothing newly merged to re-parse"
+    return 0
+  fi
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "reparse_ledgers" "SKIPPED" "--no-merge: chore PR not merged; post-merge re-parse N/A"
+    return 0
+  fi
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "reparse_ledgers" "DRY-RUN" "would fetch origin/main and structurally validate the 4 ledgers (6-col INDEX / single H3 DIGEST / single LOG row + no VERIFIED→DEPLOYED regression / single CHANGELOG block)"
+    return 0
+  fi
+
+  git_net -C "$REPO_ROOT" fetch origin main >/dev/null 2>&1 || true
+  local reparse_findings=""
+  local vkey="${VERSION//./\\.}"
+
+  # (a) RELEASE_INDEX — my row present + 6-column.
+  local idx_content; idx_content="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null || echo "")"
+  local idx_row; idx_row="$(/usr/bin/printf '%s\n' "$idx_content" | /usr/bin/grep -E "^\|[[:space:]]*${vkey}[[:space:]]*\|" | /usr/bin/head -1)"
+  if [[ -z "$idx_row" ]]; then
+    reparse_findings="${reparse_findings}INDEX: no row for ${VERSION} on main. "
+  else
+    local idx_pipes; idx_pipes="$(/usr/bin/printf '%s' "$idx_row" | /usr/bin/tr -cd '|' | /usr/bin/wc -c | /usr/bin/tr -d ' ')"
+    [[ "$idx_pipes" -eq 7 ]] || reparse_findings="${reparse_findings}INDEX: ${VERSION} row is not 6-column (${idx_pipes} pipes; expected 7). "
+  fi
+
+  # (b) RELEASE_DIGEST — exactly one `### vX.Y (` H3.
+  local dig_n; dig_n="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${vkey}[[:space:](]" || true)"; dig_n="${dig_n:-0}"
+  if [[ "$dig_n" -eq 0 ]]; then
+    reparse_findings="${reparse_findings}DIGEST: no '### ${VERSION} (' H3 on main. "
+  elif [[ "$dig_n" -gt 1 ]]; then
+    reparse_findings="${reparse_findings}DIGEST: ${dig_n} duplicate '### ${VERSION}' H3 entries (concurrent merge dup — §220 dedup violated). "
+  fi
+
+  # (c) RELEASE_LOG — exactly one row for my version (the status-lattice regression
+  # is caught pre-commit by phase_ledger_guard; here we assert single-row presence).
+  local log_n; log_n="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_LOG.md" 2>/dev/null | /usr/bin/grep -cE "^\| ${vkey} \|" || true)"; log_n="${log_n:-0}"
+  if [[ "$log_n" -eq 0 ]]; then
+    reparse_findings="${reparse_findings}RELEASE_LOG: no row for ${VERSION} on main. "
+  elif [[ "$log_n" -gt 1 ]]; then
+    reparse_findings="${reparse_findings}RELEASE_LOG: ${log_n} rows for ${VERSION} (duplicate — concurrent merge dup). "
+  fi
+
+  # (d) CHANGELOG — `## [vX.Y]` block once (SKIP if pre-CHANGELOG).
+  if git_net -C "$REPO_ROOT" cat-file -e "origin/main:CHANGELOG.md" 2>/dev/null; then
+    local cl_n; cl_n="$(git_net -C "$REPO_ROOT" show "origin/main:CHANGELOG.md" 2>/dev/null | /usr/bin/grep -cE "^## \[?${vkey}\]?[[:space:]]" || true)"; cl_n="${cl_n:-0}"
+    if [[ "$cl_n" -eq 0 ]]; then
+      reparse_findings="${reparse_findings}CHANGELOG: no '## [${VERSION}]' block on main. "
+    elif [[ "$cl_n" -gt 1 ]]; then
+      reparse_findings="${reparse_findings}CHANGELOG: ${cl_n} duplicate '## [${VERSION}]' blocks. "
+    fi
+  fi
+
+  if [[ -n "$reparse_findings" ]]; then
+    mark_phase "reparse_ledgers" "FAIL" "post-merge ledger malformed — ${reparse_findings}— concurrent 3-way auto-merge landed badly per §220; manual reconcile required (this phase never auto-fixes)"
+    return 3
+  fi
+  mark_phase "reparse_ledgers" "PASS" "post-merge corpus structurally well-formed on main (6-col INDEX row / single DIGEST H3 / single LOG row / single CHANGELOG block)"
+  return 0
 }
 
 # ─── Phase 13: post_close_milestone (Hub Tier-1 mechanical) ──────────────────
@@ -1918,7 +2072,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -2499,6 +2653,107 @@ EOF
   STATE_MILESTONE_SLUG="$_td_saved_msslug"; VERSION="$_td_saved_version"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4g: phase_ledger_guard + phase_reparse_ledgers (#1680) — offline,
+  # hermetic via a REAL local git sandbox (a working repo + a `origin` bare remote
+  # so `git_net diff origin/main` / `git_net show origin/main:...` resolve without
+  # a network). Asserts: a clean additive working-tree diff → guard PASS; a diff
+  # that REMOVES a foreign version row (I1 contention) → guard FAIL; a diff that
+  # regresses a prior VERIFIED row (I2) → guard FAIL; a well-formed merged corpus →
+  # reparse PASS; a malformed corpus (8-col INDEX row OR duplicate DIGEST H3) →
+  # reparse FAIL. git is REQUIRED for this test — if absent, the block self-skips.
+  if [[ -x "$GIT" ]]; then
+    local _lg_saved_root="$REPO_ROOT" _lg_saved_mode="$MODE" _lg_saved_version="$VERSION"
+    local _lg_saved_skipped="$CHORE_PR_SKIPPED" _lg_saved_nomerge="$NO_MERGE"
+    local _lg_tmp; _lg_tmp="$(/usr/bin/mktemp -d -t ledgerguard-selftest.XXXXXX)"
+    local _lg_origin="$_lg_tmp/origin.git" _lg_work="$_lg_tmp/work"
+    # Build a bare origin + a working clone seeded with a baseline corpus carrying
+    # MY version (v9.91) AND a sibling (v9.90), all committed on main.
+    $GIT init --bare -q "$_lg_origin" 2>/dev/null
+    $GIT init -q -b main "$_lg_work" 2>/dev/null || { $GIT init -q "$_lg_work"; ( cd "$_lg_work" && $GIT checkout -q -b main 2>/dev/null ); }
+    /bin/mkdir -p "$_lg_work/release/releases/notes"
+    /bin/cat > "$_lg_work/release/releases/RELEASE_INDEX.md" <<'EOF'
+# RELEASE_INDEX
+
+| Version | Milestone | Date | Theme | Release PR | Release Notes |
+|---|---|---|---|---|---|
+| v9.91 | 91-mine | 2026-06-28 | — | #9100 | [notes/v9.91_RELEASE_NOTES.md](notes/v9.91_RELEASE_NOTES.md) |
+| v9.90 | 90-sibling | 2026-06-27 | sibling | #9000 | [notes/v9.90_RELEASE_NOTES.md](notes/v9.90_RELEASE_NOTES.md) |
+EOF
+    /bin/cat > "$_lg_work/release/releases/RELEASE_DIGEST.md" <<'EOF'
+# RELEASE_DIGEST
+
+## Knowledge Corpus
+
+### v9.91 (2026-06-28) — Mine
+### v9.90 (2026-06-27) — Sibling
+EOF
+    /bin/cat > "$_lg_work/release/releases/RELEASE_LOG.md" <<'EOF'
+# RELEASE_LOG
+| v9.91 | 91-mine | #1 | #9100 | sha | v9.91 | VERIFIED | 2026-06-28 |
+| v9.90 | 90-sibling | #2 | #9000 | sha | v9.90 | VERIFIED | 2026-06-27 |
+EOF
+    /usr/bin/printf '# Changelog\n\n## [v9.91] - 2026-06-28\nmine\n\n## [v9.90] - 2026-06-27\nsibling\n' > "$_lg_work/CHANGELOG.md"
+    ( cd "$_lg_work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm baseline >/dev/null 2>&1 \
+      && $GIT remote add origin "$_lg_origin" >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 \
+      && $GIT branch -q --set-upstream-to=origin/main main >/dev/null 2>&1 ) || true
+
+    REPO_ROOT="$_lg_work"; MODE="apply"; VERSION="v9.91"; CHORE_PR_SKIPPED=0; NO_MERGE=0
+
+    # (a) clean additive diff (touch only MY rows): re-write MY DIGEST headline +
+    #     MY INDEX theme — additive-style edit to my own entries → guard PASS.
+    /usr/bin/sed -i.bak 's/### v9.91 (2026-06-28) — Mine/### v9.91 (2026-06-28) — Mine updated/' "$_lg_work/release/releases/RELEASE_DIGEST.md" 2>/dev/null; /bin/rm -f "$_lg_work/release/releases/RELEASE_DIGEST.md.bak"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_ledger_guard >/dev/null 2>&1
+    [[ "$(get_phase ledger_guard)" == PASS\|* ]] || { echo "FAIL: ledger_guard must PASS on a clean my-own-rows diff, got '$(get_phase ledger_guard)'"; failures=$((failures+1)); }
+
+    # (b) I1 contention: REMOVE the sibling v9.90 INDEX row → guard FAIL.
+    ( cd "$_lg_work" && $GIT checkout -q -- . 2>/dev/null )   # reset working tree to baseline
+    /usr/bin/sed -i.bak '/^| v9.90 | 90-sibling |/d' "$_lg_work/release/releases/RELEASE_INDEX.md" 2>/dev/null; /bin/rm -f "$_lg_work/release/releases/RELEASE_INDEX.md.bak"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_ledger_guard >/dev/null 2>&1; then
+      echo "FAIL: ledger_guard must FAIL when a foreign (v9.90) INDEX row is removed (I1 contention)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase ledger_guard | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: I1 foreign-row removal must mark ledger_guard FAIL"; failures=$((failures+1)); }
+
+    # (c) I2 regression: regress the sibling v9.90 LOG row VERIFIED→DEPLOYED → FAIL.
+    ( cd "$_lg_work" && $GIT checkout -q -- . 2>/dev/null )
+    /usr/bin/sed -i.bak 's/| v9.90 | 90-sibling | #2 | #9000 | sha | v9.90 | VERIFIED |/| v9.90 | 90-sibling | #2 | #9000 | sha | v9.90 | DEPLOYED |/' "$_lg_work/release/releases/RELEASE_LOG.md" 2>/dev/null; /bin/rm -f "$_lg_work/release/releases/RELEASE_LOG.md.bak"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_ledger_guard >/dev/null 2>&1; then
+      echo "FAIL: ledger_guard must FAIL when a prior VERIFIED row (v9.90) regresses to DEPLOYED (I2)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase ledger_guard | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: I2 VERIFIED→DEPLOYED regression must mark ledger_guard FAIL"; failures=$((failures+1)); }
+    ( cd "$_lg_work" && $GIT checkout -q -- . 2>/dev/null )
+
+    # (d) reparse: well-formed merged corpus (origin/main as-seeded) → PASS.
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_reparse_ledgers >/dev/null 2>&1
+    [[ "$(get_phase reparse_ledgers)" == PASS\|* ]] || { echo "FAIL: reparse_ledgers must PASS on a well-formed merged corpus, got '$(get_phase reparse_ledgers)'"; failures=$((failures+1)); }
+
+    # (e) reparse FAIL: push a MALFORMED corpus to origin/main (duplicate DIGEST H3
+    #     for my version) → reparse FAIL.
+    /usr/bin/printf '### v9.91 (2026-06-28) — Mine DUP\n' >> "$_lg_work/release/releases/RELEASE_DIGEST.md"
+    ( cd "$_lg_work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm dup >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 ) || true
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_reparse_ledgers >/dev/null 2>&1; then
+      echo "FAIL: reparse_ledgers must FAIL on a duplicate DIGEST H3 (concurrent-merge dup)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase reparse_ledgers | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: duplicate DIGEST H3 must mark reparse_ledgers FAIL"; failures=$((failures+1)); }
+
+    /bin/rm -rf "$_lg_tmp" 2>/dev/null || true
+    REPO_ROOT="$_lg_saved_root"; MODE="$_lg_saved_mode"; VERSION="$_lg_saved_version"
+    CHORE_PR_SKIPPED="$_lg_saved_skipped"; NO_MERGE="$_lg_saved_nomerge"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  else
+    echo "  (skipped #1680 ledger-guard/reparse self-test — git not executable at $GIT)" >&2
+  fi
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -2648,6 +2903,7 @@ STUB
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition)" >&2
+  echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
@@ -2756,9 +3012,11 @@ phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
+phase_ledger_guard || { generate_report; exit 3; }                    # Phase 9.9 — pre-commit §220 I1/I2 read-modify-write guard (#1680)
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
+phase_reparse_ledgers || { generate_report; exit 3; }                 # Phase 12.5 — post-merge structural re-parse (#1680; detective-only)
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
