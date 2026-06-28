@@ -1,0 +1,24 @@
+# close-completeness gate — enforcement sentinel (#1290)
+#
+# This committed marker governs whether the close-completeness gate
+# (`deploy.sh --check-close-completeness`, i.e. Check 48's verdict) BLOCKS or merely
+# REPORTS on an INCOMPLETE verdict. The probe reads this file directly, so the
+# sentinel is load-bearing on its own; a thin CI workflow can additionally consume
+# the probe's exit code once wired.
+#
+# The first non-comment, non-blank line is the mode token:
+#   warn      → report only (exit-0); a finding is surfaced but does not block.
+#   enforce   → block on an INCOMPLETE verdict (exit-1 propagates to any CI caller).
+#
+# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
+# posture and the reflexive-pipeline-loop discipline (the introducing release
+# v2.37 closes under the pre-merge runbook; the gate's row-cutover is anchored
+# strictly AFTER this release's merge). Flip the token below to `enforce` after a
+# >=3-day warn-log review with zero false positives — that single edit, plus
+# setting CLOSE_COMPLETENESS_CHECK_CUTOFF to the first post-v2.37 release, arms
+# the gate. No code change is needed to graduate.
+#
+# (Content-flagged rather than presence-flagged so the file can ship now — the
+#  docs reference it — while the gate stays non-blocking; the version-freeness
+#  sentinel is presence-flagged, this one is mode-token-flagged.)
+warn

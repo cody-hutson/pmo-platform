@@ -491,6 +491,264 @@ _vf_compute_verdict() {
   esac
 }
 
+# ─── Close-completeness (Check 48 / --check-close-completeness) — #1290 ────────
+# The scaffold-independent close-completeness predicate, factored to TOP LEVEL so
+# it is shared by two surfaces with ONE body (mirroring the version-freeness DD1
+# pattern above): the lifecycle Check 48 (inside cmd_check, routing the verdict
+# through flag_warn_or_issue / close-completeness.mode) and the
+# --check-close-completeness probe (cmd_check_close_completeness, mapping the
+# verdict to an exit code for CI).
+#
+# THE INVARIANT (founding ADR-048): a work-item scaffold selects WHICH tasks exist;
+# it never attenuates the rigor of any task's codified Phase checklist. For every
+# `VERIFIED` `RELEASE_LOG` row at/after the cutover, the entire canonical Stage-13
+# output-set (the hub-spoke-bridge.md Procedure 7 Step 4 table) is present on main —
+# asserted with NO scaffold, NO sub-task body, and NO hub session in the loop. That
+# is scaffold-independence by construction: the gate reads main's state, not the
+# execution path (spoke / hub-direct / chore-PR fallback) that produced it.
+#
+# NO LOGIC DUPLICATION (the umbrella contract): this engine DELEGATES every
+# sub-assertion it can to an existing tool rather than re-deriving it —
+#   • §3.2 note-content  → core/deploy/tools/lint_release_corpus.py --check note-content
+#                          (the same engine automated-closeout.sh phase_lint_release_notes runs)
+#   • §5.1 body-drift     → release/tools/check-release-body-drift.sh (Check 47's engine)
+#   • companion-presence  → the SAME path resolution Check 32 uses (INDEX row / DIGEST
+#                          entry / NOTES file under version-stem OR milestone-slug)
+# It is an aggregating invariant, NOT a parallel checker.
+#
+# CUTOVER + DORMANCY (mirrors Check 32/47): the full assertion runs only for rows
+# at/after $cc_cutoff (CLOSE_COMPLETENESS_CHECK_CUTOFF), which DEFAULTS to the
+# __none__ sentinel — so the gate is DORMANT by default (no historical false-positive
+# storm; reflexive-pipeline-loop honored — the introducing release v2.37 closes under
+# the pre-merge runbook and the cutover is anchored strictly AFTER its merge). The
+# network sub-checks (Surface-1 Release + body-drift) need `gh`; offline ⇒ N/A on the
+# lifecycle surface, fail-closed on the gate surface (the merge gate must not certify
+# completeness blind, per the version-freeness FM-2 precedent).
+#
+# LOG-ROW BLIND SPOT (inherited, documented): like Check 32, this gate is LOG-row-
+# driven — a close that never wrote its `RELEASE_LOG` row is invisible to it. LOG-row
+# presence is the close-time Step 4 table's responsibility, not this gate's.
+
+# _cc_row_findings <surface> <version> <milestone> <tag>
+#   THE PER-ROW ASSERTION. Pure-ish: takes the row fields + the surface; reads
+#   in-repo corpus files (and, for the network sub-checks, the repo's own published
+#   Release via the delegated tools). Echoes ZERO or more finding lines on stdout
+#   (one per missing / drifted output, prefixed "<version>: "); echoes nothing when
+#   the row's full output-set is present. Network sub-checks resolve to N/A (no
+#   finding, a diagnostic to stderr) when gh is unavailable on the "lifecycle"
+#   surface; on the "gate" surface an unreadable network anchor is a finding
+#   (fail-closed). Corpus paths are read from CC_* (set by the orchestrator).
+_cc_row_findings() {
+  local surface="$1" _ver="$2" _ms="$3" _tag="$4"
+  local _index="${CC_INDEX:-release/releases/RELEASE_INDEX.md}"
+  local _digest="${CC_DIGEST:-release/releases/RELEASE_DIGEST.md}"
+  local _changelog="${CC_CHANGELOG:-CHANGELOG.md}"
+  local _notes_dir="${CC_NOTES_DIR:-release/releases/notes}"
+  local _lint="${CC_LINT:-core/deploy/tools/lint_release_corpus.py}"
+  local _drift="${CC_DRIFT:-release/tools/check-release-body-drift.sh}"
+  # The published-Release sub-check is itself cutover-gated + dormant-by-default,
+  # exactly like Check 32's $c32_release_cutoff. __none__ ⇒ the network surface
+  # sub-checks (Release existence + body-drift) are skipped (N/A) regardless of gh.
+  local _release_cutoff="${CLOSE_COMPLETENESS_RELEASE_CUTOFF:-__none__}"
+
+  # (a) NOTES file present (version stem OR milestone slug — Check 32's resolution)
+  local _notes_ok=0
+  [[ -f "${_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
+  [[ -n "$_ms" && -f "${_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
+  if [[ $_notes_ok -eq 0 ]]; then
+    printf '%s: missing notes file (%s_RELEASE_NOTES.md or %s_RELEASE_NOTES.md)\n' "$_ver" "$_ver" "$_ms"
+  fi
+
+  # (b) INDEX row present (version is the first table cell)
+  if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$_index" 2>/dev/null; then
+    printf '%s: missing RELEASE_INDEX.md row\n' "$_ver"
+  fi
+
+  # (c) DIGEST entry present (### vX.YZ heading)
+  if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$_digest" 2>/dev/null; then
+    printf '%s: missing RELEASE_DIGEST.md entry (### %s ...)\n' "$_ver" "$_ver"
+  fi
+
+  # (d) CHANGELOG section present — N/A (no finding) pre-CHANGELOG (file absent),
+  # mirroring automated-closeout.sh phase_append_changelog pre-CHANGELOG SKIP.
+  if [[ -f "$_changelog" ]]; then
+    if ! /usr/bin/grep -qE "^## \[?${_ver//./\\.}\]?[[:space:]]" "$_changelog" 2>/dev/null; then
+      printf '%s: missing CHANGELOG.md ## [%s] section\n' "$_ver" "$_ver"
+    fi
+  fi
+
+  # (e) .version is asserted in AGGREGATE by _cc_compute_verdict (the stamp is a
+  # single value — it must exist and equal the MOST-RECENT VERIFIED release; an
+  # older row's version legitimately differs from the live stamp, so a per-row
+  # equality check would false-positive). Not a per-row finding here.
+
+  # (f) signed-tag presence — read from the LOG Tag column (in-corpus; no network).
+  # Empty / em-dash / unrecoverable Tag column => missing tag for a VERIFIED row.
+  if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" || "$_tag" == *unrecoverable* ]]; then
+    printf '%s: VERIFIED row has no tag recorded in RELEASE_LOG Tag column\n' "$_ver"
+  fi
+
+  # (g) §3.2 note-content — DELEGATE to lint_release_corpus.py (version-scoped, the
+  # phase_lint_release_notes idiom: grep the finding lines for THIS note's path).
+  if [[ -f "$_lint" ]] && [[ -x "/usr/bin/python3" ]]; then
+    local _lint_out _lint_exit=0
+    _lint_out="$(/usr/bin/python3 "$_lint" --check note-content 2>&1)" || _lint_exit=$?
+    if [[ $_lint_exit -eq 3 ]]; then
+      printf '%s: §3.2 note-content lint path-unresolved (exit 3; corpus unverifiable)\n' "$_ver"
+    elif [[ $_lint_exit -ne 0 ]]; then
+      local _note_rel="${_notes_dir}/${_ver}_RELEASE_NOTES.md"
+      if printf '%s' "$_lint_out" | /usr/bin/grep -qF "$_note_rel" 2>/dev/null; then
+        printf '%s: §3.2 note-content finding for this version (lint_release_corpus.py)\n' "$_ver"
+      fi
+      # findings only for OTHER versions ⇒ out-of-scope legacy debt (audit-baseline)
+    fi
+  else
+    printf '%s: §3.2 note-content lint tooling unavailable (cannot verify note-content)\n' "$_ver"
+  fi
+
+  # Network sub-checks (h Surface-1 Release + i §5.1 body-drift) — cutover-gated +
+  # dormant by default (__none__). Run only for rows at/after the SEPARATE network
+  # cutover, and only when this row reached it.
+  if [[ "$_release_cutoff" != "__none__" && ( "$_ver" == "$_release_cutoff" || "$_ver" > "$_release_cutoff" ) ]]; then
+    local _gh_ok=0
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then _gh_ok=1; fi
+    if [[ $_gh_ok -eq 0 ]]; then
+      if [[ "$surface" == "gate" ]]; then
+        # Fail-closed at the gate surface (the merge gate must not certify blind).
+        printf '%s: Surface-1 Release + §5.1 body-drift unverifiable (gh offline at gate surface — fail-closed)\n' "$_ver"
+      else
+        printf 'close-completeness: %s network sub-checks N/A (gh offline) — reuses Check 32/47 gh-guard SKIP\n' "$_ver" >&2
+      fi
+    else
+      # (h) published GitHub Release present
+      if ! gh release view "$_ver" >/dev/null 2>&1; then
+        printf '%s: no published GitHub Release (Surface 1 absent on main)\n' "$_ver"
+      fi
+      # (i) §5.1 body-drift — DELEGATE to check-release-body-drift.sh
+      if [[ -x "$_drift" ]]; then
+        local _d_exit=0
+        "$_drift" "$_ver" --quiet >/dev/null 2>&1 || _d_exit=$?
+        case "$_d_exit" in
+          0) : ;;  # MATCH
+          1) printf '%s: published Release body != frontmatter-stripped note (§5.1 drift)\n' "$_ver" ;;
+          2) : ;;  # N/A at tool layer (gh offline) — already covered above
+          3) : ;;  # no Release/note to compare — Surface-1 existence owns it (h)
+          *) printf '%s: body-drift tool returned unexpected exit %s\n' "$_ver" "$_d_exit" ;;
+        esac
+      fi
+    fi
+  fi
+}
+
+# _cc_compute_verdict <surface>
+#   THE SHARED ORCHESTRATOR. Iterates VERIFIED RELEASE_LOG rows at/after the
+#   cutover (allowlist-filtered), aggregates _cc_row_findings, and echoes ONE
+#   protocol line on stdout (the CALLER maps it to a warn-emit OR an exit code):
+#     SKIP <reason>           dormant (cutoff __none__) / LOG absent — nothing to assert
+#     CLEAN <n>               n VERIFIED row(s) checked, full output-set present
+#     INCOMPLETE <n> <m>      n finding(s) across m checked row(s) — detail to stderr
+#   $1 = surface: "lifecycle" (gh-offline network sub-check ⇒ N/A) or "gate"
+#   (gh-offline network sub-check ⇒ finding / fail-closed).
+_cc_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local cc_log="${CC_LOG:-release/releases/RELEASE_LOG.md}"
+  local cc_allowlist="${CC_ALLOWLIST:-.claude/skip-close-completeness-check.txt}"
+  local cc_cutoff="${CLOSE_COMPLETENESS_CHECK_CUTOFF:-__none__}"
+
+  # Dormant by default — the cutover sentinel keeps the gate from retroactively
+  # flagging historical VERIFIED rows (and honors the reflexive-loop exemption).
+  if [[ "$cc_cutoff" == "__none__" ]]; then
+    printf 'SKIP close-completeness gate dormant (CLOSE_COMPLETENESS_CHECK_CUTOFF unset) — opt in by setting it to the first post-v2.37-merge release\n'
+    return 0
+  fi
+  if [[ ! -f "$cc_log" ]]; then
+    printf 'SKIP %s not found; cannot enumerate VERIFIED releases\n' "$cc_log"
+    return 0
+  fi
+
+  # Export corpus paths for _cc_row_findings (single resolution point).
+  export CC_INDEX="${CC_INDEX:-release/releases/RELEASE_INDEX.md}"
+  export CC_DIGEST="${CC_DIGEST:-release/releases/RELEASE_DIGEST.md}"
+  export CC_CHANGELOG="${CC_CHANGELOG:-CHANGELOG.md}"
+  export CC_VERSIONFILE="${CC_VERSIONFILE:-.version}"
+  export CC_NOTES_DIR="${CC_NOTES_DIR:-release/releases/notes}"
+  export CC_LINT="${CC_LINT:-core/deploy/tools/lint_release_corpus.py}"
+  export CC_DRIFT="${CC_DRIFT:-release/tools/check-release-body-drift.sh}"
+
+  # Allowlist filter (exact version match; trailing # comment supported) —
+  # mirrors Check 32's c32_is_allowlisted.
+  _cc_is_allowlisted() {
+    local _v="$1"
+    [[ -f "$cc_allowlist" ]] || return 1
+    /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$cc_allowlist"
+  }
+
+  # Enumerate logged releases in LOG file order, emitting "version|milestone|tag|state"
+  # for each `| vX.Y | <ms> | ... | <tag> | <state> | <date> |` row. The 8-col schema
+  # is Version(1) Milestone(2) Issues(3) ReleasePR(4) MergeSHA(5) Tag(6) State(7)
+  # Date(8) — so field 6 = Tag, field 7 = State (the VERIFIED filter).
+  local cc_rows
+  cc_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$cc_log" 2>/dev/null \
+    | /usr/bin/awk -F ' \\| ' '{
+        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
+        ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
+        tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
+        st=$7; gsub(/`/,"",st); sub(/^[[:space:]]*/,"",st); sub(/[[:space:]]*$/,"",st);
+        print v "|" ms "|" tg "|" st
+      }') || cc_rows=""
+
+  local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified=""
+  local _row _ver _ms _tag _state _rf
+  while IFS= read -r _row; do
+    [[ -n "$_row" ]] || continue
+    _ver="${_row%%|*}"
+    _ms="${_row#*|}"; _ms="${_ms%%|*}"
+    _tag="${_row%|*}"; _tag="${_tag##*|}"
+    _state="${_row##*|}"
+
+    # Cutover gate (walk LOG order; arm on first cutoff-prefix match).
+    if [[ "$cc_past_cutoff" == "false" && "$_ver" == "$cc_cutoff"* ]]; then
+      cc_past_cutoff=true
+    fi
+    [[ "$cc_past_cutoff" == "true" ]] || continue
+
+    # VERIFIED-only (the completeness contract is VERIFIED-scoped; a DEPLOYED-not-
+    # VERIFIED row is mid-close and correctly skipped).
+    [[ "$_state" == "VERIFIED" ]] || continue
+    _cc_is_allowlisted "$_ver" && continue
+    cc_targets=$((cc_targets + 1))
+    _last_verified="$_ver"   # LOG file order is chronological ⇒ last wins
+
+    _rf="$(_cc_row_findings "$surface" "$_ver" "$_ms" "$_tag")"
+    if [[ -n "$_rf" ]]; then
+      cc_detail+="$_rf"$'\n'
+      cc_findings=$((cc_findings + $(printf '%s\n' "$_rf" | /usr/bin/grep -c . )))
+    fi
+  done <<<"$cc_rows"
+
+  # (e-aggregate) .version stamp — must exist AND equal the most-recent VERIFIED
+  # in-scope release. N/A (no finding) when .version is absent (version-less /
+  # pre-stamp state), mirroring phase_bump_version's version-less SKIP.
+  local _vf="${CC_VERSIONFILE:-.version}"
+  if [[ -n "$_last_verified" && -f "$_vf" ]]; then
+    local _stamp
+    _stamp="$(/usr/bin/head -1 "$_vf" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
+    if [[ -n "$_stamp" && "$_stamp" != "$_last_verified" ]]; then
+      cc_detail+="${_last_verified}: .version stamp is '${_stamp}', expected the most-recent VERIFIED release '${_last_verified}'"$'\n'
+      cc_findings=$((cc_findings + 1))
+    fi
+  fi
+
+  if [[ $cc_findings -eq 0 ]]; then
+    printf 'CLEAN %s\n' "$cc_targets"
+  else
+    # Detail to stderr; the verdict line (stdout) carries the counts.
+    printf '%s' "$cc_detail" | /usr/bin/sed '/^$/d' >&2
+    printf 'INCOMPLETE %s %s\n' "$cc_findings" "$cc_targets"
+  fi
+  return 0
+}
+
 # Remove a derived-mirror subtree, self-healing read-only orphans and
 # failing loud (never silently) when removal is impossible. Returns 0 if the
 # path is gone after the call, non-zero (with an actionable error logged) if not.
@@ -4918,6 +5176,177 @@ cmd_check() {
     fi
   fi
 
+  # ─── Check 47: Release-body drift (published Release body == in-repo note) ──
+  # Standing audit gate for the release-notes-standard.md §5.1 invariant: the
+  # published GitHub Release body MUST equal the frontmatter-stripped in-repo
+  # source-of-record note. Sits BESIDE Check 32 (release-corpus completeness):
+  # Check 32 verifies a published Release EXISTS for a post-cutover row; this
+  # check verifies its BODY has not drifted from the note. The canonical incident
+  # (the v2.26 close) shipped an ad-hoc Release body that diverged from the in-repo
+  # note and stayed stale through a note-correction PR — nothing flagged it until
+  # the operator caught it. This is the standing detective backstop for that class.
+  #
+  # DELEGATES to release/tools/check-release-body-drift.sh — the SINGLE source of
+  # the body-equality logic (the §5.1 sed-strip + the json-body compare live in
+  # exactly one place; this check does not re-derive them). DETECTIVE-ONLY: it
+  # flags drift, never re-emits the Release.
+  #
+  # gh-GUARDED (reuses Check 32's guard verbatim): the compare needs a network
+  # read (gh release view). When gh is absent OR unauthenticated the check
+  # resolves to N/A (never FAIL), so a disconnected deploy.sh --check run does
+  # not red-fail here — the tool itself also returns exit 2 (N/A) in that case.
+  #
+  # CUTOVER-SCOPED + DORMANT-BY-DEFAULT: like Check 32's published-Release
+  # sub-check, the drift assertion runs only for LOG rows at/after a SEPARATE,
+  # later $c47_cutoff (RELEASE_BODY_DRIFT_CHECK_CUTOFF), which defaults to the
+  # __none__ sentinel — so the network-dependent check is DORMANT until an
+  # operator opts in. This (a) avoids retroactively warning on legitimate
+  # historical rows whose Release bodies predate the §5.1 transform, and (b)
+  # honors the reflexive-pipeline-loop discipline — the introducing release
+  # closes under pre-merge rules and is NOT bound by its own check.
+  #
+  # Warn-mode initial per .claude/hooks/deploy-check.mode (Checks 8/9/10/14/15/18-
+  # 23/25-29/31/32 precedent); flip-to-enforce after a >=3-day warn-log review with
+  # zero false positives (GitHub body normalization edge cases — CRLF / trailing
+  # newline — are the calibration target; the tool already trims a trailing nl).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 47: Release-body drift (published Release body == frontmatter-stripped in-repo note)"
+    local c47_log="release/releases/RELEASE_LOG.md"
+    local c47_tool="release/tools/check-release-body-drift.sh"
+    # Separate, later cutover for this network-dependent assertion. Sentinel
+    # __none__ => no row is in scope (the drift check is dormant by default).
+    local c47_cutoff="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-__none__}"
+
+    if [[ "$c47_cutoff" == "__none__" ]]; then
+      log "  N/A:   release-body drift check dormant (RELEASE_BODY_DRIFT_CHECK_CUTOFF unset) — opt in by setting it to the first §5.1-transform release"
+    elif [[ ! -x "$c47_tool" ]]; then
+      flag_warn_or_issue "release-body-drift" \
+        "drift tool not executable: $c47_tool — cannot assert the §5.1 published-body invariant"
+    elif ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+      # gh-guard: offline/unauth => N/A (never FAIL), mirroring Check 32/39.
+      log "  N/A:   release-body drift check skipped (gh offline/unauthenticated) — reuses Check 32/39 gh-guard SKIP semantics"
+    elif [[ ! -f "$c47_log" ]]; then
+      flag_warn_or_issue "release-body-drift" \
+        "$c47_log not found; cannot enumerate logged releases for the §5.1 drift check"
+    else
+      # Enumerate post-cutover release versions from the LOG (LOG file order).
+      local c47_rows
+      c47_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c47_log" 2>/dev/null \
+        | /usr/bin/awk -F ' \\| ' '{
+            v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v); print v
+          }') || c47_rows=""
+
+      local c47_past_cutoff=false
+      local c47_targets=0
+      local c47_findings=0
+      local c47_output=""
+      local _v47 _d47_out _d47_exit
+      while IFS= read -r _v47; do
+        [[ -n "$_v47" ]] || continue
+        if [[ "$c47_past_cutoff" == "false" && "$_v47" == "$c47_cutoff"* ]]; then
+          c47_past_cutoff=true
+        fi
+        [[ "$c47_past_cutoff" == "true" ]] || continue
+        c47_targets=$((c47_targets + 1))
+
+        _d47_exit=0
+        _d47_out=$("$c47_tool" "$_v47" --quiet 2>&1) || _d47_exit=$?
+        case "$_d47_exit" in
+          0) : ;;  # MATCH — no finding
+          1)       # DRIFT — warn (never FAIL)
+            c47_output+="${_v47}: published Release body != frontmatter-stripped in-repo note (§5.1 drift)"$'\n'
+            c47_findings=$((c47_findings + 1))
+            ;;
+          2) log "  N/A:   ${_v47} drift sub-check skipped (gh offline/unauth at tool layer)" ;;
+          3) log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
+          *) c47_output+="${_v47}: drift tool returned unexpected exit ${_d47_exit}"$'\n'; c47_findings=$((c47_findings + 1)) ;;
+        esac
+      done <<<"$c47_rows"
+
+      if [[ $c47_findings -eq 0 ]]; then
+        log "  OK:    all $c47_targets logged release(s) on/after $c47_cutoff have a published Release body matching their in-repo note (§5.1 invariant holds)"
+      else
+        flag_warn_or_issue "release-body-drift" \
+          "$c47_findings §5.1 body-drift finding(s) across $c47_targets logged release(s) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
+        printf '%s' "$c47_output" | head -10 | sed 's/^/         /'
+        if [[ $c47_findings -gt 10 ]]; then
+          log "         ... ($((c47_findings - 10)) more)"
+        fi
+      fi
+    fi
+  fi
+
+  # ─── Check 48: Close-completeness (scaffold-independent Stage-13 output-set) ──
+  # The scaffold-independent enforcement of the rigor-invariance principle
+  # (hub-spoke-bridge.md Procedure 1 + ADR-048). For every VERIFIED RELEASE_LOG row
+  # at/after the cutover, asserts the COMPLETE canonical Stage-13 output-set is
+  # present on main — the umbrella over Check 32 (companion-presence): same LOG-row
+  # iteration model, but VERIFIED-scoped and asserting the FULL set (NOTES + §3.2
+  # note-content + INDEX + DIGEST + CHANGELOG + .version + tag + Surface-1 Release +
+  # §5.1 body-drift). It re-implements NONE of those engines — note-content delegates
+  # to lint_release_corpus.py, body-drift to check-release-body-drift.sh, and
+  # companion-presence to the same path resolution Check 32 uses (the shared
+  # _cc_compute_verdict body, factored to top level above — DD1, like version-freeness).
+  #
+  # WHY scaffold-independent: it fires on a plain `git`-checkout + `deploy.sh --check`
+  # with no scaffold, no sub-task body, no hub session — it reads main's state, not
+  # the execution path (spoke / hub-direct / chore-PR fallback). That is the machine
+  # backstop the Rigor-Invariance Principle names; the Sub-Task Template attestation
+  # is the human-readable forcing function.
+  #
+  # Sits BESIDE Check 32 (not folded into it) so Check 32's in-flight warn-mode
+  # shakedown — DEPLOYED-companion-presence — is undisturbed while Check 48 owns the
+  # VERIFIED-full-set-completeness contract. Inherits Check 32's LOG-row blind spot
+  # (a never-written LOG row is invisible — owned by the close-time Step 4 table).
+  #
+  # DORMANT-BY-DEFAULT + warn-mode-initial: gated on a per-check mode via
+  # resolve_check_mode "close-completeness" (independent graduation from the shared
+  # cohort), and the assertion itself is DORMANT until CLOSE_COMPLETENESS_CHECK_CUTOFF
+  # is set (the verdict SKIPs). The cutover is anchored strictly AFTER this release's
+  # (v2.37) merge — the reflexive-pipeline-loop discipline: a release never gates its
+  # own close. The CI-blocking switch is the committed .github/close-completeness.enforce
+  # sentinel (read by the workflow, mirroring version-freeness).
+  CLOSE_COMPLETENESS_MODE="$(resolve_check_mode "close-completeness")"
+  if [[ "$CLOSE_COMPLETENESS_MODE" != "off" ]]; then
+    log "Check 48: Close-completeness (every VERIFIED RELEASE_LOG row has the full Stage-13 output-set on main)"
+    local cc48_verdict cc48_tok
+    # _cc_compute_verdict emits the verdict on stdout and any per-row detail on
+    # stderr; capture stdout for the token, let stderr flow to the run log.
+    cc48_verdict="$(_cc_compute_verdict "lifecycle")"
+    cc48_tok="${cc48_verdict%% *}"
+    case "$cc48_tok" in
+      SKIP)
+        log "  N/A:   ${cc48_verdict#SKIP }"
+        ;;
+      CLEAN)
+        log "  OK:    all ${cc48_verdict#CLEAN } VERIFIED release(s) in scope have the complete Stage-13 output-set on main"
+        ;;
+      INCOMPLETE)
+        # "INCOMPLETE <findings> <targets>"
+        local _cc48_rest="${cc48_verdict#INCOMPLETE }"
+        local _cc48_n="${_cc48_rest%% *}" _cc48_m="${_cc48_rest##* }"
+        # Route through the check-specific mode (close-completeness.mode), NOT the
+        # shared flag_warn_or_issue mode — Check 48 graduates independently.
+        case "$CLOSE_COMPLETENESS_MODE" in
+          enforce)
+            log "  FAIL:  close-completeness — $_cc48_n finding(s) across $_cc48_m VERIFIED row(s): a close dropped a Stage-13 output (see stderr detail); a scaffold abbreviation never waives a codified Phase step — hub-spoke-bridge.md Procedure 1 / ADR-048"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          warn)
+            log "  WARN:  close-completeness — $_cc48_n finding(s) across $_cc48_m VERIFIED row(s) (warn-mode; flip .claude/hooks/close-completeness.mode to 'enforce' after shakedown)"
+            local _cc48_ts
+            _cc48_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '{"ts":"%s","check":"%s","detail":"%s finding(s) across %s VERIFIED row(s)"}\n' \
+              "$_cc48_ts" "close-completeness" "$_cc48_n" "$_cc48_m" >> "$WARN_LOG" 2>/dev/null || true
+            ;;
+        esac
+        ;;
+      *)
+        log "  WARN:  close-completeness — unexpected verdict '$cc48_verdict'"
+        ;;
+    esac
+  fi
+
   # Check 33 — Platform-config surface integrity (adapter-config-foundation, #22).
   # Asserts: (a) core/config/platform-config.toml.template exists + parses as TOML
   # (every non-comment, non-blank, non-section line is a `key = value` assignment);
@@ -6137,6 +6566,191 @@ cmd_check_version_freeness() {
   esac
 }
 
+# ─── Mode: --self-test (close-completeness invariant regression) — #1290 AC5 ───
+#
+# Offline + hermetic. Proves the load-bearing invariant: a deliberately-abbreviated
+# scaffold — a VERIFIED RELEASE_LOG row whose Stage-13 output-set is incomplete (the
+# v2.02-class drop) — is STILL CAUGHT by the close-completeness gate (Check 48's
+# shared _cc_compute_verdict body) BEFORE the release can be reported "complete". The
+# fixture drives _cc_compute_verdict against a sandbox corpus (no network, no live
+# RELEASE_LOG, no gh) the same way automated-closeout.sh Test 5.5 stubs the lint —
+# CC_* env overrides re-point every corpus path at the sandbox.
+#
+# Assertions:
+#   (1) abbreviated  — a VERIFIED v9.99 row with NOTES/INDEX/DIGEST absent ⇒ verdict
+#                      INCOMPLETE (the missing codified step is caught).
+#   (2) complete     — the same row with the full output-set present ⇒ verdict CLEAN.
+#   (3) dormant      — cutover unset (__none__) ⇒ verdict SKIP (no false-positive on
+#                      historical rows; the reflexive-loop exemption holds).
+#   (4) state-scoped — a DEPLOYED-not-VERIFIED incomplete row ⇒ NOT counted (CLEAN);
+#                      the gate is VERIFIED-scoped (mid-close rows are skipped).
+cmd_self_test() {
+  echo "self-test: starting (close-completeness invariant, #1290 AC5)" >&2
+  local failures=0
+  local _t; _t="$(/usr/bin/mktemp -d -t closecomplete-selftest.XXXXXX)"
+
+  # --- sandbox corpus scaffolding ---
+  /bin/mkdir -p "$_t/notes" "$_t/tools"
+  local _log="$_t/RELEASE_LOG.md"
+  local _index="$_t/RELEASE_INDEX.md"
+  local _digest="$_t/RELEASE_DIGEST.md"
+  local _notes="$_t/notes"
+  local _changelog="$_t/CHANGELOG.md"
+  local _version="$_t/.version"
+  # A note-content lint STUB (mirrors automated-closeout.sh Test 5.5): always exit 0
+  # (clean) so §3.2 is not the variable under test — the test isolates the
+  # output-set-presence assertion, not the lint's own logic (covered by its own tests).
+  local _lint="$_t/tools/lint_release_corpus.py"
+  /bin/cat > "$_lint" <<'STUB'
+import sys
+sys.exit(0)
+STUB
+  # A body-drift STUB: exit 3 (no Release/note to compare) so the network sub-check
+  # never red-fails offline. Irrelevant here anyway — network cutover stays __none__.
+  local _drift="$_t/check-release-body-drift.sh"
+  /bin/cat > "$_drift" <<'STUB'
+#!/usr/bin/env bash
+exit 3
+STUB
+  /bin/chmod +x "$_drift"
+
+  # The LOG: one VERIFIED row (v9.99) — the release under test — plus a DEPLOYED row
+  # (v9.98, mid-close) used by assertion (4). 8-col schema matching live RELEASE_LOG.
+  /bin/cat > "$_log" <<'EOF'
+# RELEASE_LOG (self-test fixture)
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.98 | v9.98-midclose | #1 | #2 | `abc` | `v9.98` | DEPLOYED | 2026-06-28 |
+| v9.99 | v9.99-selftest | #1 | #2 | `def` | `v9.99` | VERIFIED | 2026-06-28 |
+EOF
+
+  # Common CC_* overrides (re-point every corpus path at the sandbox). Network
+  # cutover stays unset (__none__) ⇒ no gh dependency. The ROW cutover arms on v9.98
+  # so both fixture rows are in scope (the VERIFIED filter still excludes v9.98).
+  _cc_selftest_verdict() {
+    CC_LOG="$_log" CC_INDEX="$_index" CC_DIGEST="$_digest" CC_CHANGELOG="$_changelog" \
+    CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
+    CC_ALLOWLIST="$_t/none.txt" \
+    CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+    _cc_compute_verdict "lifecycle" 2>/dev/null
+  }
+
+  local _v _tok
+
+  # (3) dormant — cutover unset ⇒ SKIP (assert FIRST: the safe default).
+  _v="$(_cc_selftest_verdict "__none__")"; _tok="${_v%% *}"
+  [[ "$_tok" == "SKIP" ]] || { echo "FAIL: dormant (cutover __none__) must SKIP, got '$_v'"; failures=$((failures+1)); }
+
+  # (1) abbreviated — VERIFIED v9.99 with NOTES/INDEX/DIGEST absent ⇒ INCOMPLETE.
+  /usr/bin/printf '# RELEASE_INDEX (empty)\n' > "$_index"
+  /usr/bin/printf '# RELEASE_DIGEST (empty)\n' > "$_digest"
+  /usr/bin/printf 'v9.99\n' > "$_version"
+  _v="$(_cc_selftest_verdict "v9.98")"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: abbreviated scaffold (missing NOTES/INDEX/DIGEST) must be caught (INCOMPLETE), got '$_v'"; failures=$((failures+1)); }
+
+  # (2) complete — add NOTES + INDEX row + DIGEST entry + CHANGELOG section ⇒ CLEAN.
+  /usr/bin/printf '# v9.99 release notes\n' > "$_notes/v9.99_RELEASE_NOTES.md"
+  /usr/bin/printf '# RELEASE_INDEX\n| v9.99 | v9.99-selftest | 2026-06-28 |\n' > "$_index"
+  /usr/bin/printf '# RELEASE_DIGEST\n### v9.99 (2026-06-28)\nSelf-test entry.\n' > "$_digest"
+  /usr/bin/printf '# Changelog\n## [v9.99] - 2026-06-28\nSelf-test.\n' > "$_changelog"
+  _v="$(_cc_selftest_verdict "v9.98")"; _tok="${_v%% *}"
+  [[ "$_tok" == "CLEAN" ]] || { echo "FAIL: complete output-set must verify CLEAN, got '$_v' (detail: $(_cc_selftest_verdict "v9.98" 2>&1 >/dev/null | /usr/bin/tr '\n' ';'))"; failures=$((failures+1)); }
+  # And CLEAN must count exactly 1 VERIFIED row (v9.99) — v9.98 is DEPLOYED (excluded).
+  [[ "$_v" == "CLEAN 1" ]] || { echo "FAIL: CLEAN must report exactly 1 VERIFIED in-scope row (v9.98 DEPLOYED excluded), got '$_v'"; failures=$((failures+1)); }
+
+  # (4) state-scoped — flip v9.98 to VERIFIED but leave ITS output-set absent ⇒ now
+  # INCOMPLETE (it is in scope as VERIFIED); proves the VERIFIED filter is what gates
+  # inclusion, not row presence. (v9.99 stays complete; only v9.98 is the new finding.)
+  /usr/bin/sed 's/| `v9.98` | DEPLOYED |/| `v9.98` | VERIFIED |/' "$_log" > "$_t/log2.md" && /bin/mv "$_t/log2.md" "$_log"
+  _v="$(CC_LOG="$_log" CC_INDEX="$_index" CC_DIGEST="$_digest" CC_CHANGELOG="$_changelog" \
+        CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
+        CC_ALLOWLIST="$_t/none.txt" \
+        CLOSE_COMPLETENESS_CHECK_CUTOFF="v9.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+        _cc_compute_verdict "lifecycle" 2>/dev/null)"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: a now-VERIFIED incomplete row (v9.98) must be caught once it is VERIFIED-scoped, got '$_v'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_t" 2>/dev/null || true
+
+  if [[ "$failures" -gt 0 ]]; then
+    echo "self-test: FAIL ($failures failure(s))" >&2
+    return 1
+  fi
+  echo "self-test: PASS" >&2
+  echo "  close-completeness invariant validated (#1290 AC5):" >&2
+  echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
+  return 0
+}
+
+# ─── Mode: --check-close-completeness (the CI close-completeness probe) — #1290 ─
+#
+# Runs ONLY the close-completeness verdict (not the full --check suite) and maps the
+# verdict to an EXIT CODE — the verdict->exit contract a CI gate depends on. The exit
+# is VERDICT-DRIVEN, decoupled from the lifecycle Check 48's warn-mode emit: an
+# INCOMPLETE result red-exits even during the warn-mode calibration window, so the CI
+# gate (close-completeness.yml) reports the TRUE verdict via this exit code. Warn-mode-
+# vs-enforce at the CI surface is decided by the workflow's committed
+# `.github/close-completeness.enforce` sentinel (it swallows this exit 1 into a
+# non-blocking report during calibration) — this probe always reports the true verdict.
+#
+# Surface = "gate": a merely-offline network anchor (Surface-1 Release / body-drift)
+# is FAIL-CLOSED here (the gate must not certify completeness blind), NOT degraded to
+# N/A (that degradation is the lifecycle --check surface's posture only). This mirrors
+# cmd_check_version_freeness's gate-surface fail-closed contract.
+#
+#   exit 0  — CLEAN (full output-set present for every in-scope VERIFIED row), OR
+#             SKIP (gate dormant — no cutover set / no LOG; nothing to assert).
+#   exit 1  — INCOMPLETE (a VERIFIED row is missing a Stage-13 output) OR an
+#             unexpected verdict (fail-closed).
+cmd_check_close_completeness() {
+  validate_workspace
+  detect_install_path || true
+
+  # Sentinel-aware enforcement (the dormant-via-sentinel mechanism). The committed
+  # .github/close-completeness.enforce marker's first non-comment token decides whether
+  # an INCOMPLETE verdict BLOCKS (enforce ⇒ exit 1) or is SWALLOWED non-blocking
+  # (warn / absent ⇒ exit 0, true verdict still reported). This mirrors Check 47's
+  # dormant-by-default posture and version-freeness's committed-sentinel switch, while
+  # keeping the gate self-contained (the probe reads the sentinel directly, so the
+  # sentinel is load-bearing without requiring a CI workflow to be wired first; a
+  # thin CI caller can still consume this exit code once added).
+  local cc_enforce_file="${CLOSE_COMPLETENESS_ENFORCE_FILE:-.github/close-completeness.enforce}"
+  local cc_enforce="warn" _cc_tok_line
+  if [[ -f "$cc_enforce_file" ]]; then
+    _cc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$cc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_cc_tok_line" == "enforce" ]] && cc_enforce="enforce"
+  fi
+
+  local verdict tok
+  verdict="$(_cc_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    CLEAN)
+      log "close-completeness: ${verdict#CLEAN } VERIFIED release(s) in scope have the complete Stage-13 output-set — OK"
+      exit 0
+      ;;
+    SKIP)
+      log "close-completeness: SKIP — ${verdict#SKIP } (gate dormant; nothing to assert)"
+      exit 0
+      ;;
+    INCOMPLETE)
+      log "close-completeness: INCOMPLETE — ${verdict#INCOMPLETE } (findings count / checked-row count; see detail above)"
+      log "  A close dropped a Stage-13 output. The scaffold-independent gate fired regardless of how the close ran (spoke / hub-direct / chore-PR)."
+      log "  Backfill the missing output(s) per release/references/pipeline/stage-13-close.md Phase B; a scaffold abbreviation never waives a codified Phase step (ADR-048)."
+      if [[ "$cc_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$cc_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
+      exit 0
+      ;;
+    *)
+      log "close-completeness: unexpected verdict '$verdict' — fail-closed"
+      # An unexpected verdict is a tooling failure, not a calibration finding — always
+      # fail-closed regardless of the warn/enforce sentinel.
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Mode: --report ──────────────────────────────────────────────────────────
 
 cmd_report() {
@@ -6582,19 +7196,37 @@ main() {
       # (_vf_compute_verdict), no copy. Used by .github/workflows/version-freeness.yml.
       cmd_check_version_freeness
       ;;
+    --check-close-completeness)
+      # Single-check CI close-completeness probe (#1290): runs ONLY Check 48's
+      # verdict and exits per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE — fail-closed
+      # at the gate surface). The close-completeness logic ALSO fires inside the full
+      # --check suite (Check 48, gated on close-completeness.mode) — one shared body
+      # (_cc_compute_verdict), no copy. Used by .github/workflows/close-completeness.yml.
+      cmd_check_close_completeness
+      ;;
+    --self-test)
+      # Offline, hermetic regression for the close-completeness invariant (#1290 AC5):
+      # a deliberately-abbreviated scaffold (a VERIFIED row missing a Stage-13 output)
+      # is still CAUGHT by Check 48 before "complete". Proves the gate is scaffold-
+      # independent. Exit 0 on success, 1 on any failure.
+      cmd_self_test
+      exit 0
+      ;;
     --report)
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --self-test | --report]"
       echo ""
       echo "Modes:"
-      echo "  --deploy [skill...]        Deploy changed skills to Cowork install path (auto-detect or manual)"
-      echo "  --all                      Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
-      echo "  --check [--warn]           Validate platform health (--warn exits 0 even with issues)"
-      echo "  --check-lifecycle          List retired/dormant checks + dispositions + reactivation anchors"
-      echo "  --check-version-freeness   Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
-      echo "  --report                   Structured report for Stage 13 verification evidence"
+      echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
+      echo "  --all                        Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
+      echo "  --check [--warn]             Validate platform health (--warn exits 0 even with issues)"
+      echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
+      echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
+      echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
+      echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
+      echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""
       echo "Note: --init mode (a legacy cutover migration) was REMOVED per the"
       echo "      Stage 5 spec §1.7. v2 ships with the target layout; no migration needed."

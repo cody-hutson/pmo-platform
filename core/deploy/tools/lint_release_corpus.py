@@ -17,13 +17,22 @@ Validates:
   (c) INDEX surface row count >= LOG entry count.
   (d) Frontmatter `type:` field matches filename type-suffix (Tier 3
       discriminator coherence per release-corpus-schema.md).
-  (e) Note-content lint (release-notes-standard.md §3.2 checks 9-12):
+  (e) Note-content lint (release-notes-standard.md §3.2 checks 9-13):
       - 9: Section 6a present with >=1 bullet or 'No user-visible' placeholder
       - 10: Banned-jargon scan (§2.4 deny-list)
       - 11: 'Why it matters:' beat present per Section 6a bullet
             (or <!-- impact:foundational --> escape marker)
       - 12: No raw file paths in Section 6a bullet bodies
-      Floored at the lowest live version family (v1.x) per NOTE_CONTENT_CUTOVER.
+      - 13: Whole-published-body link purity — every markdown-link target in
+            the frontmatter-stripped body (the exact bytes that publish to the
+            GitHub Release page, Surface 1) must be absolute (https://, #, or
+            mailto:); a repo-relative target (../, ./, release/, core/, docs/,
+            .claude/, pmo-platform/) 404s on the Release surface and is flagged.
+            Floored at NOTE_LINK_CUTOVER (forward-only) so the historical notes
+            that carry the Section-6b ](../RELEASE_LOG.md) template link are not
+            retroactively failed.
+      Checks 9-12 floored at the lowest live version family (v1.x) per
+      NOTE_CONTENT_CUTOVER; check 13 floored at NOTE_LINK_CUTOVER.
 
 This validator handles the schema/structural checks that go beyond link
 resolution. (The doc-link primitive `check-doc-links.py` covers cross-link
@@ -121,6 +130,41 @@ PRE_CUTOVER_EXEMPT_VERSIONS: set[str] = set()
 SECTION_6A_HEADER_RE = re.compile(r"^##\s+What changed for everyone", re.IGNORECASE)
 NEXT_H2_RE = re.compile(r"^##\s+")
 VERSION_KEY_RE = re.compile(r"^v(\d+)\.(\d+)([a-z])?(?:-(\d+))?")
+
+# Check 13 (whole-body link purity) cutover floor. Forward-only at v2.37 — the
+# release that introduces the check. 42 of 64 historical version-keyed notes
+# carry the Section-6b `](../RELEASE_LOG.md)` / `](../plans/…)` template link
+# (a repo-relative target that 404s on the Release page); a floorless rule would
+# fail them all and red Check 20 on this release's own merge. The defect has
+# already stopped behaviorally (v2.28+ use absolute blob/main/… URLs) but had no
+# structural enforcement — this floor adds the enforcement going forward while
+# leaving the historical notes as authored (accepted-residual, consistent with
+# the NOTE_CONTENT_CUTOVER forward-only discipline). Mirrors NOTE_CONTENT_CUTOVER
+# tuple shape (major, minor, suffix, sub).
+NOTE_LINK_CUTOVER = (2, 37, "", 0)
+
+# Check 13 chronology-mismatch exemption. The corpus carries a v3.x note lineage
+# that predates the v1.x→v2.x mainline renumber, so a v3.x version-tuple sorts
+# ABOVE the (2,37) floor numerically while being chronologically OLDER than the
+# v2.37 release that introduces the check. Those older v3.x notes legitimately
+# carry the legacy Section-6b `](../RELEASE_LOG.md)` / `](../plans/…)` template
+# link — the exact accepted-residual the forward-only floor exists to protect.
+# A pure tuple comparison mis-classifies them as "new" and would flag the legacy
+# link, contradicting the floor's intent (and blocking Check 20's warn→enforce
+# flip on a false positive). Exempt them by version key, mirroring how
+# PRE_CUTOVER_EXEMPT_VERSIONS handles the same version-tuple/chronology mismatch
+# for checks 9-12. (Newly-authored v3.x+ notes would use absolute URLs, so this
+# set covers only the historical legacy-link members present at v2.37.)
+NOTE_LINK_EXEMPT_VERSIONS: set[str] = {"v3.20"}
+
+# Check 13 regexes. INLINE_LINK_RE captures a markdown link target (group 1).
+# REPO_RELATIVE_TARGET_RE flags targets that render broken on the Release page;
+# ABSOLUTE_TARGET_RE passes targets that render correctly there. A target that
+# matches neither (e.g. an unresolved <OPERATOR_INSTANCE_…> token starting with
+# '<') is not flagged — it is an operator-instance pointer, out of scope.
+INLINE_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+REPO_RELATIVE_TARGET_RE = re.compile(r"^(?:\.\.?/|release/|core/|docs/|\.claude/|pmo-platform/)")
+ABSOLUTE_TARGET_RE = re.compile(r"^(?:https?://|#|mailto:)")
 
 # §2.4 banned-jargon deny-list — literal substrings, case-insensitive.
 BANNED_JARGON_LITERAL = [
@@ -325,6 +369,56 @@ def extract_section_6a(text: str) -> str | None:
     return "\n".join(lines[start:end])
 
 
+def extract_body(text: str) -> str:
+    """Return the frontmatter-stripped body — the exact bytes that publish to
+    the GitHub Release page (Surface 1).
+
+    Mirrors the emit transform `sed '1,/^---$/d; 1,/^---$/d'` (release-notes-
+    standard.md §5.1 / stage-12-execute.md): drop every line through the SECOND
+    `---` delimiter. If the file does not open with a `---` frontmatter fence,
+    the whole text is the body (no stripping) — matching the sed behaviour when
+    the second address is never found is NOT relied upon here; absent a leading
+    fence the published body is the file verbatim, which is what we lint.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return text
+    # Find the closing fence of the frontmatter (second '---').
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return "\n".join(lines[i + 1 :])
+    # Opened a fence that never closed — degenerate; treat as no body stripped
+    # so a malformed note still gets its links scanned rather than silently
+    # passing on an empty body.
+    return text
+
+
+def check_body_link_purity(rel: str, body: str) -> list[str]:
+    """Check 13: flag repo-relative markdown-link targets in the published body.
+
+    Every inline markdown link target in the frontmatter-stripped body must be
+    absolute (https://, #, mailto:) because the body renders on the GitHub
+    Release page. A repo-relative target (../, ./, release/, core/, docs/,
+    .claude/, pmo-platform/) 404s there. Keyed on "renders on the Release
+    surface" — NOT a blanket relative-link ban (the committed note file
+    legitimately lives in release/releases/notes/, so a relative link is correct
+    in the file; it is only wrong for the published Surface-1 body).
+    """
+    findings: list[str] = []
+    for n, line in enumerate(body.splitlines(), start=1):
+        for m in INLINE_LINK_RE.finditer(line):
+            target = m.group(1).strip()
+            if ABSOLUTE_TARGET_RE.match(target):
+                continue
+            if REPO_RELATIVE_TARGET_RE.match(target):
+                findings.append(
+                    f"NOTE-BODY-RELATIVE-LINK: {rel} body link target '{target}' is repo-relative "
+                    f"— renders broken on the GitHub Release surface; use an absolute https://github.com/… URL "
+                    f"(release-notes-standard.md §5.1/§5.3 Surface-1 link rule). Line: {n}"
+                )
+    return findings
+
+
 def parse_bullets(section_text: str) -> list[str]:
     """Group lines into top-level bullets (lines starting with '- ' at column 0)."""
     bullets: list[str] = []
@@ -376,6 +470,19 @@ def check_note_content() -> list[str]:
 
         text = path.read_text(encoding="utf-8")
         rel = _rel(path)
+
+        # Check 13: whole-published-body link purity (release-notes-standard.md
+        # §3.2 check 13). Independent forward-only floor at NOTE_LINK_CUTOVER —
+        # runs on the frontmatter-stripped body (the Surface-1 published bytes),
+        # not just Section 6a. Gated separately from checks 9-12 because its
+        # floor (v2.37) is higher than NOTE_CONTENT_CUTOVER (v1.x): a note above
+        # the content floor but below the link floor still gets checks 9-12 but
+        # is exempt from check 13. NOTE_LINK_EXEMPT_VERSIONS additionally exempts
+        # the older v3.x lineage notes whose tuple sorts above the floor but
+        # which predate v2.37 and carry the legacy 6b template link.
+        if ver >= NOTE_LINK_CUTOVER and ver_key not in NOTE_LINK_EXEMPT_VERSIONS:
+            findings.extend(check_body_link_purity(rel, extract_body(text)))
+
         section_6a = extract_section_6a(text)
 
         if section_6a is None:
