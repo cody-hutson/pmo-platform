@@ -40,6 +40,43 @@ if [[ ${#TEMPLATE_SYNC_MAP[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# extract_roster_array — pull a named bash array literal out of deploy.sh at
+# runtime and print one element per line (same awk-window + sed-clean idiom used
+# for TEMPLATE_SYNC_MAP above, generalized to take the array name). Single source
+# of truth for the per-module roster: deploy.sh Check 5 asserts these arrays match
+# the on-disk skill dirs, so resolving + listing from them here keeps this builder
+# in lockstep with the deploy.sh authority instead of a hand-synced name list.
+#   $1 — array name (e.g. OPERATIONS_SKILLS); $2 — path to deploy.sh
+extract_roster_array() {
+  local array_name="$1" deploy_sh="$2"
+  awk -v name="$array_name" '
+    $0 ~ ("^" name "=\\(") { capture=1; next }
+    capture && /^\)/        { capture=0 }
+    capture {
+      line=$0
+      sub(/#.*/, "", line)
+      gsub(/[[:space:]]/, "", line)
+      if (line != "") print line
+    }
+  ' "$deploy_sh"
+}
+
+# Per-module skill arrays, single-sourced from deploy.sh — replaces BOTH the
+# hardcoded case map in resolve_skill_module() and the hardcoded ALL_SKILLS list
+# below, so neither can drift from the deploy.sh roster authority. (Append is
+# unconditional: extract_roster_array emits only non-empty lines, matching the
+# TEMPLATE_SYNC_MAP loop's style.)
+OPERATIONS_SKILLS=(); RELEASE_SKILLS=(); CORE_SKILLS=(); CANARY_SKILLS=()
+while IFS= read -r line; do OPERATIONS_SKILLS+=("$line"); done < <(extract_roster_array OPERATIONS_SKILLS core/deploy/deploy.sh)
+while IFS= read -r line; do RELEASE_SKILLS+=("$line");    done < <(extract_roster_array RELEASE_SKILLS    core/deploy/deploy.sh)
+while IFS= read -r line; do CORE_SKILLS+=("$line");       done < <(extract_roster_array CORE_SKILLS       core/deploy/deploy.sh)
+while IFS= read -r line; do CANARY_SKILLS+=("$line");     done < <(extract_roster_array CANARY_SKILLS     core/deploy/deploy.sh)
+
+if [[ ${#OPERATIONS_SKILLS[@]} -eq 0 || ${#RELEASE_SKILLS[@]} -eq 0 || ${#CORE_SKILLS[@]} -eq 0 ]]; then
+  echo "ERROR: Could not extract per-module skill arrays from core/deploy/deploy.sh" >&2
+  exit 1
+fi
+
 # Canonical source resolver (mirrors deploy.sh resolve_template_sync_source).
 # Modular canonical: templates → operations/templates/, template-* standards →
 # core/standards/. See docs/module-apis.md § Public templates.
@@ -57,14 +94,20 @@ resolve_canonical_source() {
   esac
 }
 
-# Skill → module resolver (mirrors deploy.sh resolve_skill_module)
+# Skill → module resolver — iterates the per-module arrays extracted from deploy.sh
+# above (mirrors deploy.sh resolve_skill_module). CANARY_SKILLS classifies to
+# release/. Bash 3.2 portable: explicit per-array loops + `${#ARR[@]} -gt 0`
+# empty-guards; no `local -n` nameref (4.3+). Returns non-zero on miss — the
+# build_one call site handles that as a per-skill failure (this script runs
+# `set -e`, so the call is guarded to avoid a silent whole-script abort per
+# ADR-008 Rule 3; deploy.sh die()s there, but this tool has no die()).
 resolve_skill_module() {
-  local skill="$1"
-  case "$skill" in
-    eval-writer|pmo-qa-auditor|pmo-skill-router|prompt-builder) echo "core" ;;
-    pmo-architect|pmo-devops-sre|pmo-skill-refiner|pmo-skill-refiner-selftest-canary|pmo-skill-editor|pmo-software-engineer|build-reviewer|release-executor|release-planner|implementation-planner|pmo-principal-engineer|pmo-qa-lead|pmo-release-manager) echo "release" ;;
-    *) echo "operations" ;;
-  esac
+  local skill="$1" s
+  if [[ ${#OPERATIONS_SKILLS[@]} -gt 0 ]]; then for s in "${OPERATIONS_SKILLS[@]}"; do [[ "$s" == "$skill" ]] && { echo "operations"; return 0; }; done; fi
+  if [[ ${#RELEASE_SKILLS[@]}    -gt 0 ]]; then for s in "${RELEASE_SKILLS[@]}";    do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
+  if [[ ${#CORE_SKILLS[@]}       -gt 0 ]]; then for s in "${CORE_SKILLS[@]}";       do [[ "$s" == "$skill" ]] && { echo "core";       return 0; }; done; fi
+  if [[ ${#CANARY_SKILLS[@]}     -gt 0 ]]; then for s in "${CANARY_SKILLS[@]}";     do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
+  return 1
 }
 
 # Rebuild-stable content-manifest hash of a .skill archive (BYTE-ALIGNED with
@@ -95,7 +138,12 @@ skill_content_hash() {
 build_one() {
   local skill="$1"
   local module
-  module=$(resolve_skill_module "$skill")
+  # Guarded so a resolver miss (skill not in any deploy.sh array) is a per-skill
+  # failure collected in FAILED, not a silent set -e abort of the whole build.
+  if ! module=$(resolve_skill_module "$skill"); then
+    echo "ERROR: cannot resolve module for '$skill' (not in deploy.sh OPERATIONS/RELEASE/CORE/CANARY arrays)" >&2
+    return 1
+  fi
   local source_dir="$module/skills/$skill"
 
   if [[ ! -d "$source_dir" ]]; then
@@ -154,57 +202,16 @@ build_one() {
   printf '%s\n' "$content_hash" > "$REPO_ROOT/packages/${skill}.skill.sha256"
 }
 
-# Default skill list — the full deployed roster (canary excluded from packaging).
-# MUST mirror deploy.sh's per-module arrays (OPERATIONS_SKILLS + RELEASE_SKILLS +
-# CORE_SKILLS) so every package that Check 7 iterates gets a rebuilt package AND
-# a regenerated content-baseline sidecar. Check 5 asserts the deploy.sh arrays
-# match the on-disk skill dirs; this list is the package-build projection of that
-# same roster.
-ALL_SKILLS=(
-  artifact-generator
-  artifact-lint
-  build-reviewer
-  change-management
-  comms-writer
-  daily-status
-  delivery-engine
-  eval-writer
-  file-router
-  implementation-planner
-  intake-desk
-  pmo-architect
-  pmo-business-analyst
-  pmo-devops-sre
-  pmo-knowledge-manager
-  pmo-ocm-lead
-  pmo-portfolio-manager
-  pmo-principal-engineer
-  pmo-process-designer
-  pmo-product-owner
-  pmo-program-coordinator
-  pmo-program-manager
-  pmo-project-manager
-  pmo-qa-auditor
-  pmo-qa-lead
-  pmo-release-manager
-  pmo-release-train-engineer
-  pmo-scrum-master
-  pmo-skill-editor
-  pmo-skill-refiner
-  pmo-skill-router
-  pmo-software-engineer
-  pmo-technical-analyst
-  pmo-technical-program-manager
-  pmo-tier-1-support
-  pmo-tier-2-support
-  ppm-agent
-  project-initiator
-  prompt-builder
-  release-executor
-  release-planner
-  tracker-manager
-  weekly-status-rollup
-)
+# Default skill list — the full deployed roster (canary excluded from packaging),
+# DERIVED from the per-module arrays extracted from deploy.sh above. No hardcoded
+# name list, so it cannot drift from deploy.sh: every package Check 7 iterates gets
+# a rebuilt package AND a regenerated content-baseline sidecar. Check 5 asserts the
+# deploy.sh arrays match the on-disk skill dirs; this list is the package-build
+# projection of that same roster (deployed three; canary is source-only per ADR-04).
+ALL_SKILLS=()
+if [[ ${#OPERATIONS_SKILLS[@]} -gt 0 ]]; then for s in "${OPERATIONS_SKILLS[@]}"; do ALL_SKILLS+=("$s"); done; fi
+if [[ ${#RELEASE_SKILLS[@]}    -gt 0 ]]; then for s in "${RELEASE_SKILLS[@]}";    do ALL_SKILLS+=("$s"); done; fi
+if [[ ${#CORE_SKILLS[@]}       -gt 0 ]]; then for s in "${CORE_SKILLS[@]}";       do ALL_SKILLS+=("$s"); done; fi
 
 if [[ $# -gt 0 ]]; then
   SKILLS_TO_BUILD=("$@")
