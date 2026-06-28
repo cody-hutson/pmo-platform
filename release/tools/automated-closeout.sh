@@ -12,6 +12,7 @@
 #   4  detect_open_issues auto-close anomaly enumeration
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
+#   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
@@ -47,6 +48,9 @@
 #     --json                   Machine-readable
 #   OPTIONAL:
 #     --with-pattern-scan      Invoke synthesize-release-learnings.sh --mode pattern-detect post-close
+#     --outcome <ENUM>         **Outcome:** value on the Deployment Log block (#37):
+#                              SUCCESS (default) / PARTIAL / ROLLBACK / DEFERRED
+#     --outcome-rationale <t>  One-line rationale; REQUIRED when --outcome != SUCCESS
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -184,6 +188,11 @@ CHECK_PATHS=0            # offline corpus-path resolution probe (CI smoke gate)
 REVERSION_SPEC=""        # --reversion "<final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>"
                          # set ONLY when this release re-versioned mid-pipeline;
                          # empty => phase_append_reversions records N/A (common path)
+OUTCOME=""               # --outcome <ENUM> (#37); empty => default SUCCESS at inject time
+                         # (per decision-outcome-tracking.md §4 autonomous path).
+                         # Closed enum: SUCCESS / PARTIAL / ROLLBACK / DEFERRED.
+OUTCOME_RATIONALE=""     # --outcome-rationale "<text>"; REQUIRED when OUTCOME != SUCCESS
+                         # (§5 conditional-required), OPTIONAL for SUCCESS.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -209,7 +218,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,67p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,69p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -506,6 +515,111 @@ PY
 
   STATE_LOG_ROW_STATE="VERIFIED"
   mark_phase "transition_release_log" "PASS" "transitioned $slug row DEPLOYED → VERIFIED"
+  return 0
+}
+
+# ─── Phase 6.5: inject_outcome_field (#37 — Outcome field on Deployment Log) ──
+#
+# Injects the structurally-elevated `**Outcome:**` field into the visible-H4
+# `#### Deployment Log v<X.Y>` block per decision-outcome-tracking.md §2-§5. A
+# SEPARATE phase (not folded into phase_transition_release_log) so the Deployment-
+# Log-block edit does not contend with #1681's VERIFIED-re-derivation guard and
+# #1680's concurrency wrapper on the table-row write (the 3-writer collision the
+# plan flagged — extraction reduces that function to 2 writers).
+#
+# Enum (closed, §2): SUCCESS / PARTIAL / ROLLBACK / DEFERRED.
+#   Default = SUCCESS (the §4 autonomous Stage-13-spoke path: QC4-clean close).
+#   --outcome <ENUM> overrides; an unknown value is rejected with `die`.
+# Rationale (§5): OPTIONAL for SUCCESS; REQUIRED for non-SUCCESS — a non-SUCCESS
+#   --outcome with no --outcome-rationale FAILs the phase (the §5 forcing fn).
+# Placement (§3): the `**Outcome:**` line lands immediately AFTER the `**Result:**`
+#   line in the v<X.Y> Deployment-Log block. Idempotent: skip if a `**Outcome:**`
+#   line is already present in that block.
+phase_inject_outcome_field() {
+  # Resolve + validate the outcome value (default SUCCESS per §4).
+  local outcome="${OUTCOME:-SUCCESS}"
+  case "$outcome" in
+    SUCCESS|PARTIAL|ROLLBACK|DEFERRED) : ;;
+    *) die "Invalid --outcome '$outcome' (closed enum: SUCCESS / PARTIAL / ROLLBACK / DEFERRED)" ;;
+  esac
+
+  # §5 conditional-required: non-SUCCESS demands a rationale.
+  if [[ "$outcome" != "SUCCESS" && -z "$OUTCOME_RATIONALE" ]]; then
+    mark_phase "inject_outcome_field" "FAIL" "--outcome $outcome requires --outcome-rationale (decision-outcome-tracking.md §5 REQUIRED for non-SUCCESS)"
+    return 3
+  fi
+
+  # Idempotent: skip if the v<X.Y> Deployment-Log block already carries Outcome.
+  # (Scope the grep to the block via awk so a sibling release's Outcome line does
+  # not false-positive.)
+  if /usr/bin/awk -v ver="$VERSION" '
+      $0 == "#### Deployment Log " ver { inblk=1; next }
+      /^#### / && inblk { inblk=0 }
+      inblk && /^\*\*Outcome:\*\*/ { found=1 }
+      END { exit(found ? 0 : 1) }
+    ' "$RELEASE_LOG" 2>/dev/null; then
+    mark_phase "inject_outcome_field" "SKIPPED" "**Outcome:** already present in the $VERSION Deployment Log block"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    local _r=""
+    [[ -n "$OUTCOME_RATIONALE" ]] && _r=" + **Outcome rationale:** $OUTCOME_RATIONALE"
+    mark_phase "inject_outcome_field" "DRY-RUN" "would inject '**Outcome:** $outcome'${_r} after **Result:** in the $VERSION Deployment Log block"
+    return 0
+  fi
+
+  # In-place edit: within the v<X.Y> Deployment-Log block, insert the Outcome
+  # line(s) immediately after the first `**Result:**` line. Bounded to the block
+  # (next `#### ` heading or EOF) so a later release's `**Result:**` is untouched.
+  /usr/bin/python3 - "$RELEASE_LOG" "$VERSION" "$outcome" "$OUTCOME_RATIONALE" <<'PY'
+import sys
+log_path, version, outcome, rationale = sys.argv[1:5]
+with open(log_path, "r", encoding="utf-8") as f:
+    lines = f.read().splitlines()
+
+block_hdr = f"#### Deployment Log {version}"
+start = None
+for i, line in enumerate(lines):
+    if line.strip() == block_hdr:
+        start = i
+        break
+if start is None:
+    print(f"ERROR: Deployment Log block for {version} not found", file=sys.stderr)
+    sys.exit(3)
+
+# Block end = next `#### ` heading after start, or EOF.
+end = len(lines)
+for j in range(start + 1, len(lines)):
+    if lines[j].startswith("#### "):
+        end = j
+        break
+
+# Find the `**Result:**` line within the block; insert after it.
+result_idx = None
+for j in range(start, end):
+    if lines[j].startswith("**Result:**"):
+        result_idx = j
+        break
+if result_idx is None:
+    print(f"ERROR: **Result:** line not found in the {version} Deployment Log block", file=sys.stderr)
+    sys.exit(3)
+
+inject = [f"**Outcome:** {outcome}"]
+if rationale:
+    inject.append(f"**Outcome rationale:** {rationale}")
+out = lines[:result_idx + 1] + inject + lines[result_idx + 1:]
+with open(log_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+PY
+  if [[ $? -ne 0 ]]; then
+    mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found)"
+    return 3
+  fi
+
+  local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block"
+  [[ -n "$OUTCOME_RATIONALE" ]] && _detail="$_detail (+ **Outcome rationale:**)"
+  mark_phase "inject_outcome_field" "PASS" "$_detail"
   return 0
 }
 
@@ -1140,7 +1254,7 @@ ${VERSION} Stage 13 close-out chore PR — release-corpus updates per pipeline/s
 
 | File | Change | Notes |
 |------|--------|-------|
-| release/releases/RELEASE_LOG.md | EDIT | Transition ${slug} row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write) |
+| release/releases/RELEASE_LOG.md | EDIT | Transition ${slug} row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write) + inject \`**Outcome:**\` on the visible-H4 Deployment Log block |
 | release/releases/RELEASE_INDEX.md | EDIT | Append ${slug} row per D6 |
 | release/releases/RELEASE_DIGEST.md | EDIT | Prepend \`### ${VERSION} (date) — …\` H3 under the topmost working H2 per D6 |
 | release/releases/RELEASE_REVERSIONS.md | EDIT | Append re-version row(s) — one per abandoned version — ONLY when this release re-versioned mid-pipeline (N/A on the common no-collision path) |
@@ -1624,7 +1738,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -1925,6 +2039,87 @@ EOF
   PR_NUMBER="$_ai_saved_pr"; RELEASE_NOTES_DIR="$_ai_saved_notesdir"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4c: phase_inject_outcome_field (#37) — offline, hermetic. Drives the
+  # phase against a sandbox RELEASE_LOG carrying a v9.95 Deployment-Log block and
+  # asserts: default-SUCCESS injects `**Outcome:** SUCCESS` immediately after
+  # `**Result:**`; a non-SUCCESS --outcome without a rationale FAILs; a non-SUCCESS
+  # --outcome WITH a rationale emits both lines; an unknown enum value is rejected;
+  # the inject is idempotent (skip when **Outcome:** already present in the block).
+  local _oc_saved_root="$REPO_ROOT" _oc_saved_mode="$MODE" _oc_saved_version="$VERSION"
+  local _oc_saved_log="$RELEASE_LOG" _oc_saved_outcome="$OUTCOME" _oc_saved_rat="$OUTCOME_RATIONALE"
+  local _oc_tmp; _oc_tmp="$(/usr/bin/mktemp -d -t outcome-selftest.XXXXXX)"
+  RELEASE_LOG="$_oc_tmp/RELEASE_LOG.md"; MODE="apply"; VERSION="v9.95"
+  # Fixture: two Deployment-Log blocks (v9.95 target + a sibling v9.94) so the
+  # block-bounded edit + idempotency grep are proven scoped to v9.95 only.
+  local _oc_write_log
+  _oc_write_log() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.95
+**Mechanism:** git merge.
+**Timestamp:** 2026-06-28.
+**Result:** SUCCESS — green CI.
+**Velocity:** 3 issues.
+
+#### Deployment Log v9.94
+**Result:** SUCCESS — prior release.
+EOF
+  }
+
+  # (a) default-SUCCESS → `**Outcome:** SUCCESS` immediately after `**Result:**`.
+  # NOTE: assertion greps use -F/-Fx (fixed-string) because the leading `**` is a
+  # repetition-operator to BSD grep under a regex pattern.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_log; OUTCOME=""; OUTCOME_RATIONALE=""
+  phase_inject_outcome_field >/dev/null 2>&1
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: phase_inject_outcome_field default should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  # the Outcome line must directly follow the v9.95 Result line (grep -A1)
+  /usr/bin/grep -A1 -F '**Result:** SUCCESS — green CI.' "$RELEASE_LOG" | /usr/bin/grep -qFx '**Outcome:** SUCCESS' || { echo "FAIL: '**Outcome:** SUCCESS' must directly follow the v9.95 **Result:** line"; failures=$((failures+1)); }
+  # the sibling v9.94 block must be untouched (no Outcome injected there)
+  /usr/bin/awk '/^#### Deployment Log v9\.94/{b=1} /^#### Deployment Log v9\.95/{b=0} b && /^\*\*Outcome:/{print "LEAK"}' "$RELEASE_LOG" | /usr/bin/grep -q LEAK && { echo "FAIL: Outcome leaked into the sibling v9.94 block"; failures=$((failures+1)); }
+
+  # (b) non-SUCCESS without rationale → FAIL (§5 conditional-required)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_log; OUTCOME="PARTIAL"; OUTCOME_RATIONALE=""
+  if phase_inject_outcome_field >/dev/null 2>&1; then
+    echo "FAIL: phase_inject_outcome_field --outcome PARTIAL without rationale must FAIL"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: non-SUCCESS-no-rationale must mark FAIL"; failures=$((failures+1)); }
+
+  # (c) non-SUCCESS WITH rationale → PASS; both lines emitted
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_log; OUTCOME="PARTIAL"; OUTCOME_RATIONALE="constituent 3 of 5 failed Phase H deploy"
+  phase_inject_outcome_field >/dev/null 2>&1
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: --outcome PARTIAL with rationale should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qFx '**Outcome:** PARTIAL' "$RELEASE_LOG" || { echo "FAIL: '**Outcome:** PARTIAL' line missing"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '**Outcome rationale:** constituent 3 of 5 failed Phase H deploy' "$RELEASE_LOG" || { echo "FAIL: '**Outcome rationale:**' line missing"; failures=$((failures+1)); }
+
+  # (d) unknown enum value → rejected. phase_inject_outcome_field calls `die`
+  # (which exits) on a bad enum, so run it in a SUBSHELL and assert non-zero exit.
+  _oc_write_log
+  if ( OUTCOME="BOGUS"; OUTCOME_RATIONALE=""; phase_inject_outcome_field ) >/dev/null 2>&1; then
+    echo "FAIL: phase_inject_outcome_field must reject an unknown --outcome value"; failures=$((failures+1))
+  fi
+
+  # (e) idempotency — inject once (PASS) on a FRESH block, then re-run → SKIPPED.
+  # (Case (d) rewrote the fixture; write a clean block first so this is a true
+  # inject-then-reinject sequence, not a re-run over a wiped block.)
+  _oc_write_log; OUTCOME=""; OUTCOME_RATIONALE=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_outcome_field >/dev/null 2>&1   # first inject → PASS
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: phase_inject_outcome_field first inject should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_outcome_field >/dev/null 2>&1   # second run → SKIPPED
+  [[ "$(get_phase inject_outcome_field)" == SKIPPED\|* ]] || { echo "FAIL: phase_inject_outcome_field re-run must SKIP (idempotency), got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the **Outcome:** line"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_oc_tmp" 2>/dev/null || true
+  unset -f _oc_write_log
+  REPO_ROOT="$_oc_saved_root"; MODE="$_oc_saved_mode"; VERSION="$_oc_saved_version"
+  RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -2025,7 +2220,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,67p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,69p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -2070,6 +2265,7 @@ STUB
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (incl. #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
+  echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
@@ -2138,6 +2334,8 @@ while [[ $# -gt 0 ]]; do
     --json) OUTPUT="json"; shift ;;
     --with-pattern-scan) WITH_PATTERN_SCAN=1; shift ;;
     --reversion) REVERSION_SPEC="$2"; shift 2 ;;
+    --outcome) OUTCOME="$2"; shift 2 ;;
+    --outcome-rationale) OUTCOME_RATIONALE="$2"; shift 2 ;;
     --self-test) SELF_TEST=1; shift ;;
     --check-paths) CHECK_PATHS=1; shift ;;
     --help|-h) usage ;;
@@ -2164,6 +2362,7 @@ phase_read_state || { generate_report; exit 3; }
 phase_detect_open_issues || { generate_report; exit 2; }
 phase_create_chore_branch || { generate_report; exit 3; }
 phase_transition_release_log || { generate_report; exit 3; }
+phase_inject_outcome_field || { generate_report; exit 3; }            # Phase 6.5 — **Outcome:** field on the visible-H4 Deployment Log block (#37)
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
