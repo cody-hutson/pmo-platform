@@ -5216,15 +5216,20 @@ cmd_check() {
 
   # Check 36 — Memory↔corpus tie-drift (warn-mode initial, #530). Standing
   # backstop for the memory↔corpus boundary contract (knowledge-architecture.md
-  # §6 + ADR-029). The PRIMARY eviction executor is the Stage-13 Phase B-OPS
-  # operational-deploy step (gate G-CL5); this check is the non-skippable audit
-  # that catches what a forgotten Phase B-OPS manifest entry misses.
+  # §7 + ADR-029, superseded-by/generalized-into ADR-045). The PRIMARY eviction
+  # executor is the Stage-13 Phase B-OPS operational-deploy step (gate G-CL5);
+  # this check is the non-skippable audit that catches what a forgotten Phase
+  # B-OPS manifest entry misses.
   #
   # CRITICAL: this check is READ-ONLY. A deploy validator must NEVER mutate the
   # operator memory store (Layer-2 mutation is an over-reach per ADR-029 + the
   # operations-bridge boundary). It enumerates and WARNS; it deletes nothing.
+  # The RE-POINT (re-point/drop dangling wikilinks) and close-time absorption
+  # reconciliation steps the §7 lifecycle defines are OPERATOR-AUTHORIZED Phase
+  # B-OPS executor actions — this check only DETECTS their omission, never enacts
+  # them (the new classes 4/5 below are detectors, not mutators).
   #
-  # Three drift classes (knowledge-architecture.md §6 The three drift classes):
+  # Five drift classes (knowledge-architecture.md §7 The five drift classes):
   #   deployed-but-not-evicted — a memory's #N tie is CLOSED, the corpus encoding
   #     is present, but the memory file still exists.
   #   dead-ref tie — a memory's #N tie no longer RESOLVES (re-versioning renumbered
@@ -5233,11 +5238,23 @@ cmd_check() {
   #     resolution probe is load-bearing — the issue-body-renumber-rot lesson).
   #   untied-encodeable — a memory matching encodeable signatures with no #N tie
   #     and no corpus pointer (heuristic; routed for operator triage, not action).
+  #   dangling-wikilink-to-evicted-memory — a surviving memory body links a
+  #     [[target]] whose memory file no longer exists (left dangling by an EVICT
+  #     that did not RE-POINT). Local-only (pure filesystem resolution; no gh) —
+  #     a routing signal for RE-POINT, never a FAIL in warn-mode (dangling links
+  #     are permitted by convention, not an error).
+  #   ledger-pointer-to-closed-issue — a ledger "Temporary enhancement pointer"
+  #     row ties a #N that is CLOSED yet the memory was not absorbed/evicted (the
+  #     partial-absorption residue: a closing issue absorbed a SUBSET of the
+  #     memories naming it, stranding the rest). Resolution-probing (requires gh).
+  #     Disambiguated from deployed-but-not-evicted by file-section: a ledger row
+  #     under MEMORY.md → class 5; a standalone topic memory file → class 1.
   #
   # Degrades gracefully: SKIP when ~/.claude/memory/ is absent (fresh install / CI
   # — mirror the Check 8 SKIP idiom, never FAIL); the resolution-probing classes
   # SKIP when gh is unavailable/unauthenticated (mirror the Check 32 gh-guard).
   # The human-runnable companion is release/references/how-to/memory-corpus-drift-audit.md.
+  # The fixture self-test is core/deploy/tests/test_check36_drift_classes.sh.
   # <!-- repo-integrity: allow-memory-ref -->  Check 36 legitimately names the ~/.claude/memory store it audits.
   # Cutover comment family-standard: applies to ./deploy.sh --check invocations
   # on/after the introducing release's merge SHA in RELEASE_LOG.md; that release
@@ -5281,6 +5298,43 @@ cmd_check() {
             c36_findings=$((c36_findings + 1))
           fi
         done < <(/usr/bin/grep -rlE '#[0-9]+' "$c36_mem_dir" 2>/dev/null || true)
+        # Class 5 — ledger-pointer-to-closed-issue (resolution-probing; the upstream
+        # partial-absorption backstop for the §7 close-time reconciliation). Scans
+        # ONLY the MEMORY.md ledger "Temporary enhancement pointers" section: each
+        # row that ties a CLOSED issue but was never absorbed/evicted strands the
+        # memory (a closing issue absorbed a SUBSET of the memories naming it).
+        # Disambiguation from deployed-but-not-evicted is by FILE-SECTION: this
+        # class is the MEMORY.md ledger-row scan; class 1 is the per-topic-file
+        # scan above. Predicate is mirrored verbatim in
+        # core/deploy/tests/test_check36_drift_classes.sh (drift-guarded there).
+        local c36_index="${c36_mem_dir}/MEMORY.md"
+        if [[ -f "$c36_index" ]]; then
+          # Extract the "Temporary enhancement pointers" section body (header line
+          # to the next top-level "## " heading), then probe each row's issue ties.
+          local c36_ledger c36_row c36_ln
+          c36_ledger=$(/usr/bin/awk '
+              /^## Temporary enhancement pointers/ { inblk=1; next }
+              /^## / { inblk=0 }
+              inblk && /^- / { print }
+            ' "$c36_index" 2>/dev/null || true)
+          while IFS= read -r c36_row; do
+            [[ -n "$c36_row" ]] || continue
+            # Each ledger row may cite several #N; flag the row on the FIRST CLOSED
+            # tie (one finding per stranded row, not per tie).
+            for c36_ln in $(printf '%s\n' "$c36_row" | /usr/bin/grep -oE '#[0-9]+' | /usr/bin/tr -d '#' | /usr/bin/sort -u); do
+              [[ -n "$c36_ln" ]] || continue
+              # Resolution probe first (a non-resolving tie is dead-ref's job, not this class's).
+              gh issue view "$c36_ln" --json number >/dev/null 2>&1 || continue
+              c36_state=$(gh issue view "$c36_ln" --json state --jq .state 2>/dev/null) || c36_state=""
+              if [[ "$c36_state" == "CLOSED" ]]; then
+                flag_warn_or_issue "memory-corpus-tie-drift" \
+                  "ledger-pointer-to-closed-issue: MEMORY.md ledger row \"$(printf '%s' "$c36_row" | /usr/bin/sed -E 's/^- \[([^]]*)\].*/\1/' | /usr/bin/cut -c1-48)\" ties #${c36_ln} which is CLOSED but the memory was not absorbed/evicted (re-home to a live issue per knowledge-architecture.md §7 / stage-13 Phase B-OPS5)"
+                c36_findings=$((c36_findings + 1))
+                break
+              fi
+            done
+          done < <(printf '%s\n' "$c36_ledger")
+        fi
       fi
       # untied-encodeable (local-only heuristic; routes for operator triage): a
       # memory matching encodeable signatures with NO #N tie and NO corpus pointer.
@@ -5292,10 +5346,35 @@ cmd_check() {
           c36_findings=$((c36_findings + 1))
         fi
       done < <(/usr/bin/grep -rLE '#[0-9]+|core/|release/|CLAUDE\.md' "$c36_mem_dir" 2>/dev/null || true)
+      # Class 4 — dangling-wikilink-to-evicted-memory (local-only; the downstream
+      # backstop for the §7 RE-POINT step). For each [[target]] wikilink in any
+      # memory file, the target resolves to ${c36_mem_dir}/<target>.md; if that
+      # file is ABSENT the link dangles (an EVICT that did not RE-POINT). Pure
+      # filesystem resolution — no gh — so it runs in the gh-unavailable branch
+      # too. Warn-only: dangling links are permitted by convention (not a FAIL),
+      # this is a routing signal for RE-POINT. A [[topic]] in a MEMORY.md index
+      # row resolves to topic.md the same way (its own entry is a file, so the
+      # row is not self-dangling). Predicate mirrored verbatim in the fixture
+      # self-test (drift-guarded there).
+      local c36_wl c36_target
+      while IFS= read -r c36_file; do
+        [[ -n "$c36_file" ]] || continue
+        while IFS= read -r c36_wl; do
+          [[ -n "$c36_wl" ]] || continue
+          c36_target=$(printf '%s' "$c36_wl" | /usr/bin/sed -E 's/^\[\[(.+)\]\]$/\1/')
+          [[ -n "$c36_target" ]] || continue
+          # Resolve [[target]] -> <target>.md under the store. Absent file = dangling.
+          if [[ ! -f "${c36_mem_dir}/${c36_target}.md" ]]; then
+            flag_warn_or_issue "memory-corpus-tie-drift" \
+              "dangling-wikilink-to-evicted-memory: $(basename "$c36_file") links [[${c36_target}]] which no longer exists (re-point to its corpus home or drop per knowledge-architecture.md §7 RE-POINT)"
+            c36_findings=$((c36_findings + 1))
+          fi
+        done < <(/usr/bin/grep -oE '\[\[[a-z0-9_]+\]\]' "$c36_file" 2>/dev/null | /usr/bin/sort -u || true)
+      done < <(/usr/bin/grep -rlE '\[\[[a-z0-9_]+\]\]' "$c36_mem_dir" 2>/dev/null || true)
       if [[ "$c36_findings" -eq 0 ]]; then
         log "  OK:    memory store in contract — no tie-drift detected"
       else
-        log "  ${c36_findings} memory↔corpus tie-drift signal(s) emitted (mode=${DEPLOY_CHECK_MODE}; deletes nothing — see knowledge-architecture.md §6)"
+        log "  ${c36_findings} memory↔corpus tie-drift signal(s) emitted (mode=${DEPLOY_CHECK_MODE}; deletes nothing — see knowledge-architecture.md §7)"
       fi
     fi
   fi
