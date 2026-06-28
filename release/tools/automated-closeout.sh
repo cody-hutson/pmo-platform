@@ -9,7 +9,7 @@
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row, tag exists
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state
-#   4  detect_open_issues auto-close anomaly enumeration
+#   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask title-regex auto-exclude)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
@@ -51,6 +51,10 @@
 #     --outcome <ENUM>         **Outcome:** value on the Deployment Log block (#37):
 #                              SUCCESS (default) / PARTIAL / ROLLBACK / DEFERRED
 #     --outcome-rationale <t>  One-line rationale; REQUIRED when --outcome != SUCCESS
+#     --exclude-issue <N>      Filter issue #N out of the auto-close loop (#38;
+#                              repeatable) — pass the Stage-13 sub-task # so it
+#                              cannot self-close mid-run
+#     --close-comment <N>:<t>  Per-issue close-comment override (#38; repeatable)
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -193,6 +197,13 @@ OUTCOME=""               # --outcome <ENUM> (#37); empty => default SUCCESS at i
                          # Closed enum: SUCCESS / PARTIAL / ROLLBACK / DEFERRED.
 OUTCOME_RATIONALE=""     # --outcome-rationale "<text>"; REQUIRED when OUTCOME != SUCCESS
                          # (§5 conditional-required), OPTIONAL for SUCCESS.
+EXCLUDE_ISSUES=()        # --exclude-issue <N> (#38; repeatable). Issues filtered out
+                         # of the auto-close-anomaly close loop — primarily the
+                         # Stage-13 orchestration sub-task (passed by number so it
+                         # cannot self-close mid-run, erasing its own Tier-0 evidence).
+CLOSE_COMMENTS=()        # --close-comment <N>:"<text>" (#38; repeatable). Per-issue
+                         # close-comment override for a Tier-0 disposition so it gets
+                         # the correct comment, not the generic auto-close-anomaly text.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -218,7 +229,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,69p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,73p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -423,7 +434,46 @@ phase_detect_open_issues() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
 
-  OPEN_ISSUE_LIST="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number --jq '.[].number' 2>/dev/null || true)"
+  # Fetch number+title so the Stage-13-subtask auto-exclude (title-regex fallback)
+  # can run. Format: "<number>\t<title>" per line (tab-separated).
+  local raw
+  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null || true)"
+
+  # Build the explicit-exclude set (#38 primary path). The Stage-13 orchestration
+  # sub-task is passed by NUMBER (--exclude-issue <N>) so it is deterministically
+  # filtered and cannot self-close mid-run (Risk R5).
+  local _excluded_detail=""
+  _is_excluded() {
+    local n="$1" e
+    for e in "${EXCLUDE_ISSUES[@]:-}"; do
+      [[ -n "$e" && "$n" == "$e" ]] && return 0
+    done
+    return 1
+  }
+
+  OPEN_ISSUE_LIST=""
+  local _n _title _line
+  while IFS= read -r _line; do
+    [[ -z "$_line" ]] && continue
+    _n="${_line%%$'\t'*}"
+    _title="${_line#*$'\t'}"
+    # (1) explicit --exclude-issue (deterministic, primary)
+    if _is_excluded "$_n"; then
+      _excluded_detail="${_excluded_detail}#${_n} (explicit --exclude-issue) "
+      continue
+    fi
+    # (2) title-regex fallback: a Stage-13 close orchestration sub-task that the
+    # hub did NOT pass by number is still excluded so it cannot self-close.
+    # Pattern: title matches `stage.?13` AND `close` (case-insensitive).
+    if /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
+      _excluded_detail="${_excluded_detail}#${_n} (title-regex stage-13-close) "
+      continue
+    fi
+    OPEN_ISSUE_LIST="${OPEN_ISSUE_LIST}${_n}"$'\n'
+  done <<< "$raw"
+  # Trim a trailing newline so grep -c counts correctly.
+  OPEN_ISSUE_LIST="$(/usr/bin/printf '%s' "$OPEN_ISSUE_LIST" | /usr/bin/sed '/^$/d')"
+
   if [[ -z "$OPEN_ISSUE_LIST" ]]; then
     OPEN_ISSUE_COUNT=0
   else
@@ -435,7 +485,9 @@ phase_detect_open_issues() {
     return 2
   fi
 
-  mark_phase "detect_open_issues" "PASS" "$OPEN_ISSUE_COUNT open release issues (auto-close anomaly candidates)"
+  local _exdetail=""
+  [[ -n "$_excluded_detail" ]] && _exdetail=" (excluded: ${_excluded_detail% })"
+  mark_phase "detect_open_issues" "PASS" "$OPEN_ISSUE_COUNT open release issues (auto-close anomaly candidates)${_exdetail}"
   return 0
 }
 
@@ -1442,24 +1494,47 @@ phase_manual_close_release_issues() {
   fi
 
   local plan_ref="release/releases/plans/${VERSION}_RELEASE_PLAN.md"
-  local comment_template="Manually closed at Stage 13 per D-1 — auto-close anomaly (constituent PRs merged to release branch, not default-branch). Per release plan ${plan_ref}."
+  # Default comment for the genuine auto-close-anomaly case. #38 Defect 1: this
+  # generic anomaly text must NOT be the single hardcoded template applied to
+  # every issue — a Tier-0 disposition needs the correct comment. Per-issue
+  # `--close-comment <N>:"<text>"` overrides the default for issue N.
+  local anomaly_template="Manually closed at Stage 13 per D-1 — auto-close anomaly (constituent PRs merged to release branch, not default-branch). Per release plan ${plan_ref}."
+
+  # Resolve the per-issue comment override: scan CLOSE_COMMENTS for an "<N>:<text>"
+  # entry; echo the override text if present, else the anomaly default.
+  _comment_for() {
+    local issue_n="$1" entry e_n e_text
+    for entry in "${CLOSE_COMMENTS[@]:-}"; do
+      [[ -z "$entry" ]] && continue
+      e_n="${entry%%:*}"
+      if [[ "$e_n" == "$issue_n" ]]; then
+        e_text="${entry#*:}"
+        /usr/bin/printf '%s' "$e_text"
+        return 0
+      fi
+    done
+    /usr/bin/printf '%s' "$anomaly_template"
+  }
 
   if [[ "$MODE" == "dry-run" ]]; then
     local issue_list
     issue_list="$(/usr/bin/printf '%s' "$OPEN_ISSUE_LIST" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//')"
-    mark_phase "manual_close_release_issues" "DRY-RUN" "would close ${OPEN_ISSUE_COUNT} issue(s) [#${issue_list//,/, #}] with comment: $comment_template"
+    local _override_note=""
+    [[ "${#CLOSE_COMMENTS[@]}" -gt 0 ]] && _override_note=" (${#CLOSE_COMMENTS[@]} per-issue --close-comment override(s))"
+    mark_phase "manual_close_release_issues" "DRY-RUN" "would close ${OPEN_ISSUE_COUNT} issue(s) [#${issue_list//,/, #}] — anomaly default comment unless overridden${_override_note}"
     return 0
   fi
 
   local closed_count=0
   while IFS= read -r issue_n; do
     [[ -z "$issue_n" ]] && continue
-    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$comment_template" >/dev/null 2>&1; then
+    local _c; _c="$(_comment_for "$issue_n")"
+    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$_c" >/dev/null 2>&1; then
       closed_count=$((closed_count + 1))
     fi
   done <<< "$OPEN_ISSUE_LIST"
 
-  mark_phase "manual_close_release_issues" "PASS" "closed ${closed_count}/${OPEN_ISSUE_COUNT} release issues per D-1"
+  mark_phase "manual_close_release_issues" "PASS" "closed ${closed_count}/${OPEN_ISSUE_COUNT} release issues per D-1 (per-issue --close-comment overrides honored)"
   return 0
 }
 
@@ -2120,6 +2195,77 @@ EOF
   RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4d: phase_detect_open_issues exclude filter (#38) — offline, hermetic.
+  # Stubs $GH so `gh issue list … --json number,title --jq …` returns a fixed
+  # `<number>\t<title>` fixture (gh applies --jq server-side, so the stub emits the
+  # already-jq'd lines), then drives phase_detect_open_issues and asserts the
+  # filter: explicit --exclude-issue removes a number; the Stage-13 sub-task is
+  # excluded by explicit number; the title-regex `(?i)stage.?13.*close` fallback
+  # excludes an un-numbered Stage-13-close sub-task; the AC-4 mixed fixture leaves
+  # ONLY the anomaly issue in OPEN_ISSUE_LIST.
+  local _ex_saved_gh="$GH" _ex_saved_mode="$MODE" _ex_saved_slug="$STATE_MILESTONE_SLUG"
+  local _ex_saved_list="$OPEN_ISSUE_LIST" _ex_saved_count="$OPEN_ISSUE_COUNT"
+  local _ex_tmp; _ex_tmp="$(/usr/bin/mktemp -d -t excl-selftest.XXXXXX)"
+  local _ex_stub="$_ex_tmp/gh-stub.sh"
+  # Stub: fixture has a normal anomaly issue (#401), an explicit-exclude target
+  # (#999), the Stage-13 orchestration sub-task (#500, title matches the regex),
+  # and a decoy with "stage 13" but NOT "close" (#600, must NOT be excluded).
+  /bin/cat > "$_ex_stub" <<'STUB'
+#!/usr/bin/env bash
+# Minimal gh stub for the #38 detect_open_issues self-test. Emits the jq'd
+# number<TAB>title lines for `issue list`; no-op (exit 0) for anything else.
+case "$1" in
+  issue)
+    if [[ "$2" == "list" ]]; then
+      printf '%s\t%s\n' 401 "Normal auto-close anomaly issue"
+      printf '%s\t%s\n' 999 "Some explicitly-excluded sub-task"
+      printf '%s\t%s\n' 500 "Stage 13 — Close: corpus update orchestration"
+      printf '%s\t%s\n' 600 "Stage 13 plan-review follow-up task"
+      exit 0
+    fi
+    ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_ex_stub"
+  GH="$_ex_stub"; MODE="apply"; STATE_MILESTONE_SLUG="88-some-milestone"
+
+  # (a) AC-4 mixed fixture: exclude #999 explicitly + #500 (Stage-13 sub-task) by
+  #     number → ONLY #401 + #600 survive (the decoy #600 stays — it is NOT a
+  #     close task). Asserts no Stage-13 self-close + no decoy over-exclude.
+  EXCLUDE_ISSUES=(999 500)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  [[ "$(get_phase detect_open_issues)" == PASS\|* ]] || { echo "FAIL: phase_detect_open_issues should PASS, got '$(get_phase detect_open_issues)'"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 (anomaly) must survive the exclude filter"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '600' || { echo "FAIL: #600 (decoy 'stage 13' but not 'close') must NOT be excluded"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '999' && { echo "FAIL: #999 (explicit --exclude-issue) must be filtered out"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 (Stage-13 sub-task by number) must be filtered out — cannot self-close (R5)"; failures=$((failures+1)); }
+
+  # (b) title-regex fallback alone (no explicit number for #500): #500 is still
+  #     excluded by `(?i)stage.?13.*close`; #401 + #600 survive.
+  EXCLUDE_ISSUES=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 must be excluded by the title-regex fallback when not passed by number"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 must survive (title-regex fallback path)"; failures=$((failures+1)); }
+  [[ "$OPEN_ISSUE_COUNT" -eq 3 ]] || { echo "FAIL: title-regex-only path must leave 3 issues (401,600,999), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+
+  # (c) per-issue --close-comment override resolution (Defect 1): the override
+  #     text is returned for the named issue; the anomaly default for others.
+  CLOSE_COMMENTS=("401:Tier-0 disposition — closed per design, not an anomaly")
+  OPEN_ISSUE_COUNT=1; OPEN_ISSUE_LIST="401"; MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1
+  [[ "$(get_phase manual_close_release_issues)" == DRY-RUN\|* ]] || { echo "FAIL: manual_close dry-run should be DRY-RUN, got '$(get_phase manual_close_release_issues)'"; failures=$((failures+1)); }
+  get_phase manual_close_release_issues | /usr/bin/grep -qF 'per-issue --close-comment override' || { echo "FAIL: dry-run detail must note the per-issue --close-comment override"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ex_tmp" 2>/dev/null || true
+  GH="$_ex_saved_gh"; MODE="$_ex_saved_mode"; STATE_MILESTONE_SLUG="$_ex_saved_slug"
+  OPEN_ISSUE_LIST="$_ex_saved_list"; OPEN_ISSUE_COUNT="$_ex_saved_count"
+  EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -2220,7 +2366,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,69p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,73p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -2266,6 +2412,7 @@ STUB
   echo "  extract_row_state + extract_milestone_slug validated (incl. #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
+  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
@@ -2336,6 +2483,8 @@ while [[ $# -gt 0 ]]; do
     --reversion) REVERSION_SPEC="$2"; shift 2 ;;
     --outcome) OUTCOME="$2"; shift 2 ;;
     --outcome-rationale) OUTCOME_RATIONALE="$2"; shift 2 ;;
+    --exclude-issue) EXCLUDE_ISSUES+=("$2"); shift 2 ;;
+    --close-comment) CLOSE_COMMENTS+=("$2"); shift 2 ;;
     --self-test) SELF_TEST=1; shift ;;
     --check-paths) CHECK_PATHS=1; shift ;;
     --help|-h) usage ;;
