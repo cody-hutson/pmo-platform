@@ -163,6 +163,24 @@ Priority lives on **two coexisting surfaces** with one canonical source — stat
 
 **Scope note (avoids the historical stale-reference confusion).** Priority is validated at **G2-01** (and present at **G1-06**), mirrored to the Projects field at **G2-12**. It is **not** validated at **G2-04** — G2-04 is *dependency-reference validity* (`Dependencies reference valid open issues or "None"`), an unrelated criterion. Any text implying "G2-04 = priority validation" is incorrect.
 
+### Priority-Lifecycle (referenced from G1-06 / G2-01)
+
+The single overall P-level field has a **temporal lifecycle** — who sets it, who adjusts it, and who confirms it, across three stages. This is the temporal companion to the spatial surface-model above (that block fixes *where* priority lives; this fixes *when and by whom* it is set or changed). The governing principle: **priority is suggested, not fixed** — no stage treats an upstream P-level as immutable.
+
+| Lifecycle stage | Actor + autonomy | Action on priority |
+|---|---|---|
+| **Intake (Stage 1)** | author (human or intake agent) — **agent-estimated** | Estimate an initial P-level. Optional at intake (the body field is not required at submission) — a starting suggestion, not a binding value. |
+| **Triage (Stage 2 A5)** | triage agent — **agent-re-evaluated** (Tier 1) | **Re-evaluate** (validate-or-adjust) the body P-level against full-backlog context; the body field is canonical, mirrored to the Projects field at G2-12. Re-evaluation may confirm or change the intake estimate. |
+| **Bundle (Stage 3)** | operator — **human-confirmed** (Tier 3) | Operator confirms or overrides the final P-level as part of the milestone-assignment decision; the confirmed P-level seeds the downstream priority-descending sequencing tie-breaker. |
+
+**Suggested-not-fixed rule (stated once).** Priority is agent-estimated at intake, agent-re-evaluated at triage with full-backlog context, and human-confirmed at bundle. Each stage may confirm or adjust the upstream value; no stage treats the prior P-level as fixed. This composes with the directional-not-authoritative handoff principle (Stage 2 §4 Inputs) — that principle states the general intake→triage directionality; this states the priority-specific instance of it.
+
+**Decomposition note — urgency separated from blocking/dependency position.** P1–P4 remains the **single overall priority** field (a combined urgency-and-importance judgment); it is NOT split into two columns. The decomposition the model achieves is to (a) make the P-level a re-evaluated estimate rather than a fixed triple-duty token, and (b) lift the **blocking/dependency-position signal out** of the P-level into a separate named triage output (the `Dependency-position signal` per Stage 2 A6), so "what blocks / is blocked" no longer rides hidden inside the P-level. The interpretation rule: the P-level expresses an urgency-and-importance judgment; dependency position is a distinct surfaced signal, not folded into P.
+
+**Altitude boundary (methodology-neutral).** This pipeline-intake priority model (P1–P4 + the separate dependency-position signal) operates at the **release-pipeline altitude** — it decides which platform improvement the operator triages and bundles next. It is distinct from, and MUST NOT be conflated with, the **project-delivery** prioritization in the delivery-engine domain (Weighted-Shortest-Job-First / Cost-of-Delay sequencing for delivery work items of the PMO product, defined under that skill's backlog-health reference and the framework catalog). The two are different altitudes: intake priority gates entry into the release workflow; the delivery-engine method sequences delivery work items. This spec introduces **no** WSJF/CoD definition — it references the delivery-engine home for that altitude and keeps the public corpus methodology-neutral (no value-scoring framework is hardwired into pipeline intake).
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ---
 
 ## Gate 2: Workflow Readiness
@@ -174,7 +192,7 @@ Priority lives on **two coexisting surfaces** with one canonical source — stat
 
 | ID | Criterion | Type | Check | Automation | improvement | bug | observation |
 |---|---|---|---|---|---|---|---|
-| G2-01 | Body `### Priority` P-level (the canonical priority surface per G1-06; `### Severity` for bug.yml) validated against full backlog context. Validates the **body** field — not a label (none exists) and not the Projects mirror (that is G2-12). Per the Priority-Model block above. | field | judgment | recommend | `req` | `adapt:G2-01-Bug` | `conv` (must convert before bundling — Priority field missing) |
+| G2-01 | Body `### Priority` P-level (the canonical priority surface per G1-06; `### Severity` for bug.yml) re-evaluated (validated-or-adjusted) against full backlog context per the Priority-Lifecycle sub-block. Re-evaluates the **body** field — not a label (none exists) and not the Projects mirror (that is G2-12). Per the Priority-Model block above. | field | judgment | recommend | `req` | `adapt:G2-01-Bug` | `conv` (must convert before bundling — Priority field missing) |
 | G2-02 | Category label matches content | anchor | judgment | recommend | `req` | `req` (auto-applied `bug` label) | `conv` (observation has no category) |
 | G2-03 | No unresolved duplicates or subsumption conflicts | validation | structural | auto | `req` | `req` | `req` |
 | G2-04 | Dependencies reference valid open issues or "None" | field | structural | auto | `req` | `n/a` (no Dependencies field in bug.yml) | `n/a` (no Dependencies field) |
@@ -512,7 +530,14 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 1.16
+**Schema version:** 1.17
+
+**v1.17 changes (non-breaking — minor; additive — Priority-Lifecycle sub-block; no criterion ID change; G1-01..G3-16 stable):**
+
+- Added the **Priority-Lifecycle sub-block** under § Gate 1 (adjacent to the existing Priority-Model block; referenced from G1-06 / G2-01): codifies the temporal lifecycle of the single P-level field — **agent-estimated at intake → agent-re-evaluated at triage with full-backlog context → human-confirmed at bundle** ("suggested, not fixed"). States the decomposition rule (P1–P4 stays the single overall field; the blocking/dependency-position signal is lifted out into the separate Stage 2 A6 `Dependency-position signal`, not folded into P) and the altitude boundary (pipeline-intake priority ⊥ delivery-engine WSJF/CoD; reference-only, no value-scoring framework hardwired into the public corpus). Composes with the directional-not-authoritative handoff principle rather than duplicating it.
+- Reconciled the **G2-01** criterion wording: "validated against full backlog context" → "re-evaluated (validated-or-adjusted) against full backlog context per the Priority-Lifecycle sub-block." Codifies re-evaluation (not mere validation) at triage. Criterion type/check/automation columns unchanged (`field` / `judgment` / `recommend`); not a new criterion, no ID change.
+- Schema bump v1.16 → v1.17 (non-breaking minor; additive — Priority-Lifecycle sub-block; no criterion ID change). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no structural change. Existing G1-01..G1-09 / G2-01..G2-12 / G3-01..G3-16 + G-BR1..G-BR4 + G-PR1..G-PR9 + G-EX1..G-EX8 + G-CL1..G-CL8 IDs unchanged (G1-01..G3-16 stable); no ID renumber, no column/type change.
+- **Cutover discipline (v1.17 additions):** the Priority-Lifecycle sub-block and the G2-01 verb reconcile apply to all issues entering the pipeline going forward.
 
 **v1.16 changes (non-breaking — minor; criterion-shape change, no ID renumber):**
 
