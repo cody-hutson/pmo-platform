@@ -163,12 +163,13 @@ SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
 # source of the published-body-vs-stripped-note equality logic; phase 15.6 below
 # invokes it as the post-emit detective assert (warn-mode — never blocks close).
 DRIFT_CHECK_TOOL="$SCRIPT_DIR/check-release-body-drift.sh"
-# The deterministic INDEX generator lives in core/deploy/tools/, NOT alongside
-# this script. The prior "$SCRIPT_DIR/generate_release_index.py" pointed at a
-# non-existent release/tools/ path, so the "[[ -x "$GENERATE_INDEX" ]]" guard in
-# phase_append_release_index always failed and silently fell through to the
-# hand-append fallback (#459 — silent-fallthrough class). Point at the real tool.
-GENERATE_INDEX="$REPO_ROOT/core/deploy/tools/generate_release_index.py"
+# NOTE (#667 Finding 6): phase_append_release_index no longer invokes the
+# deterministic INDEX generator (core/deploy/tools/generate_release_index.py).
+# The full-regenerate path could re-sort/reorder unrelated rows (the churn root),
+# and the generator's own within-date-sort + find_artifact bugs are separable
+# (they also affect deploy.sh Check 23). The phase is now a pure single-row
+# insert in the live 6-column schema; the generator stays tracked separately and
+# is intentionally NOT called from this tool.
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
@@ -261,6 +262,15 @@ find_log_row() {
 # tail, and the trailing date column (2026-06-20) is digits-hyphen-digits, so both are skipped.
 # Fallback (defensive): if no field matches (a pure-version row with no slug column),
 # return field 1 stripped — preserving the prior behavior.
+#
+# #667 Finding 2 (slug mis-derivation) is RESOLVED on HEAD by this position-
+# independent resolver: regex branch 1 handles version-prefixed slugs (vX.Y-name,
+# older rows) and branch 2 handles bare theme-named slugs (NN-name, current rows,
+# e.g. 69-triage-and-bundling-signals). The downstream `gh pr create --milestone`
+# / `gh issue list --milestone` consume the milestone TITLE, and the milestone
+# title IS the bare slug — so a theme-named row resolves to the exact milestone
+# title. The defect Finding 2 described is no longer live; the self-test below
+# carries a bare-slug-theme-named case asserting title resolution.
 extract_milestone_slug() {
   local row="$1"
   /usr/bin/printf '%s' "$row" | /usr/bin/awk -F ' \\| ' '
@@ -499,51 +509,63 @@ PY
   return 0
 }
 
-# ─── Phase 7: append_release_index ───────────────────────────────────────────
-
+# ─── Phase 7: append_release_index (#667 Finding 6 — 6-col single-row insert) ─
+#
+# Emits ONE row in the LIVE 6-column RELEASE_INDEX schema:
+#   | Version | Milestone | Date | Theme | Release PR | Release Notes |
+# (header at RELEASE_INDEX.md line 5; generate_release_index.py emits the same 6).
+#
+# #667 Finding 6 fixes two live defects:
+#   (a) the prior hand-append fallback emitted an 8-COLUMN row
+#       (| slug | date | class | scope | plan | note | [LOG] | status |) against
+#       the 6-column live schema — a malformed row that deploy.sh Check 32(a)
+#       tolerates (it only asserts the version is the first cell) but that breaks
+#       the table and #1680's structural re-parse;
+#   (b) the generate_release_index.py FULL-regenerate branch could re-sort /
+#       reorder unrelated rows (the churn root). We DROP that branch entirely and
+#       make this phase a pure single-row insert. The generator's own within-date
+#       sort + find_artifact bugs are separable (they also affect deploy.sh Check
+#       23) and stay tracked under #667 Finding 6 as out-of-scope for THIS tool.
+#
+# Column sourcing: Version = bare version (field-1); Milestone = slug; Theme
+# defaults to `—` (the Theme prose is authored at note time, not derivable here —
+# operator fills post-merge); Release PR = `#${PR_NUMBER}`; Release Notes =
+# `[notes/${VERSION}_RELEASE_NOTES.md](notes/${VERSION}_RELEASE_NOTES.md)`. The
+# row inserts immediately after the `|---` separator (top = most-recent),
+# matching the live "Chronological-recent-first" header convention + §220 I1.
 phase_append_release_index() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
 
-  # Idempotent: skip if row already present
-  if /usr/bin/grep -qE "^\| ${slug} \|" "$RELEASE_INDEX" 2>/dev/null; then
-    mark_phase "append_release_index" "SKIPPED" "INDEX row for $slug already present"
+  # Idempotent: skip if a row keyed on this bare version is already present
+  # (version is the first table cell in the 6-col schema — matches Check 32(a)).
+  if /usr/bin/grep -qE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" "$RELEASE_INDEX" 2>/dev/null; then
+    mark_phase "append_release_index" "SKIPPED" "INDEX row for $VERSION already present"
     return 0
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_index" "DRY-RUN" "would append row for $slug to RELEASE_INDEX.md (via $GENERATE_INDEX if executable, else hand-append)"
+    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $VERSION | $slug | $(date_today) | — | #${PR_NUMBER} | notes link |) at the top of RELEASE_INDEX.md"
     return 0
   fi
 
-  # Prefer generator script (deterministic); fall back to hand-append if missing
-  if [[ -x "$GENERATE_INDEX" ]]; then
-    if /usr/bin/python3 "$GENERATE_INDEX" >/dev/null 2>&1; then
-      mark_phase "append_release_index" "PASS" "regenerated via generate_release_index.py"
-      return 0
-    fi
-    # Fall through to hand-append on generator failure
-  fi
-
-  local date_str class_str scope_str plan_link note_link status_str
+  local date_str note_link pr_cell
   date_str="$(date_today)"
-  class_str="Minor"   # default; operator can update post-merge
-  scope_str="—"        # populated by operator if known
-  plan_link="[plan](plans/${VERSION}_RELEASE_PLAN.md)"
-  note_link="[note](notes/${VERSION}_RELEASE_NOTES.md)"
-  status_str="VERIFIED"
+  note_link="[notes/${VERSION}_RELEASE_NOTES.md](notes/${VERSION}_RELEASE_NOTES.md)"
+  pr_cell="#${PR_NUMBER}"
 
-  # Hand-append after the header rule line: find first `| v` row + insert above
-  /usr/bin/python3 - "$RELEASE_INDEX" "$slug" "$date_str" "$class_str" "$scope_str" "$plan_link" "$note_link" "$status_str" <<'PY'
+  # Pure single-row insert in the 6-column schema. Insert immediately after the
+  # first separator line (`|---`), keeping chronological-recent-first order.
+  /usr/bin/python3 - "$RELEASE_INDEX" "$VERSION" "$slug" "$date_str" "$pr_cell" "$note_link" <<'PY'
 import sys
-path, slug, date, cls, scope, plan, note, status = sys.argv[1:9]
+path, version, slug, date, pr_cell, note_link = sys.argv[1:7]
 with open(path, "r", encoding="utf-8") as f:
     lines = f.read().splitlines()
-new_row = f"| {slug} | {date} | {cls} | {scope} | {plan} | {note} | [LOG](RELEASE_LOG.md) | {status} |"
-# Insert immediately after the first "|---|" separator line (chronological-recent-first)
+# 6-column live schema: | Version | Milestone | Date | Theme | Release PR | Release Notes |
+new_row = f"| {version} | {slug} | {date} | — | {pr_cell} | {note_link} |"
 out = []
 inserted = False
-for i, line in enumerate(lines):
+for line in lines:
     out.append(line)
     if (not inserted) and line.startswith("|---"):
         out.append(new_row)
@@ -553,84 +575,90 @@ if not inserted:
 with open(path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
-  mark_phase "append_release_index" "PASS" "hand-appended row for $slug"
+  mark_phase "append_release_index" "PASS" "inserted 6-col row for $VERSION (Version | Milestone | Date | Theme | Release PR | Release Notes)"
   return 0
 }
 
-# ─── Phase 8: append_release_digest ──────────────────────────────────────────
-
+# ─── Phase 8: append_release_digest (#667 Finding 3 — H3 under topmost H2) ────
+#
+# The load-bearing structural fix. The LIVE RELEASE_DIGEST is a flat list of
+#   ### vX.Y (date) — <headline>
+# H3 entries directly under the topmost working H2 (today `## Knowledge Corpus`,
+# RELEASE_DIGEST.md line 6), most-recent-first. deploy.sh Check 32(b) asserts
+# `^### vX\.Y[[:space:](]` (deploy.sh:5115) AND Check 48 close-completeness
+# delegates to the same. The §220 concurrent-conflict doctrine (stage-13-close.md
+# § Concurrent Stage-13 corpus conflict resolution) explicitly mandates the
+# normal append targets "the topmost working H2 … intra-section date/insertion-
+# ordered … not re-homed to a `## vN.*` family section."
+#
+# The prior emit searched for a `## {major}.* —` family H2, found none, and fell
+# into an EOF branch that appended a NEW H2 + a `### Releases` table scaffold + a
+# 3-column `| Version | Date | Headline |` table ROW — a structure that
+# `^### vX\.Y` will NEVER match. (Legacy `## v3.* —` / `## v1.* —` / `## v2.* —`
+# family H2s still exist LOWER in the file as historical arc sections; they are
+# not the append target.) This rewrite emits the H3 form directly. Headline
+# source: the H1 of notes/${VERSION}_RELEASE_NOTES.md minus the `# ` prefix (the
+# same extraction phase_publish_github_release uses), falling back to a
+# placeholder only when the note is not yet authored.
 phase_append_release_digest() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
-  local major
-  major="$(extract_major "$VERSION")"
-  [[ -z "$major" ]] && major="v?"
 
-  # Idempotent: skip if entry already present
-  if /usr/bin/grep -qE "^\| ${slug} \|" "$RELEASE_DIGEST" 2>/dev/null; then
-    mark_phase "append_release_digest" "SKIPPED" "DIGEST entry for $slug already present"
+  # Idempotent: skip if an H3 entry keyed on this version is already present
+  # (matches Check 32(b)'s own key: `### vX.Y` with space or `(` terminator).
+  if /usr/bin/grep -qE "^### ${VERSION//./\\.}[[:space:](]" "$RELEASE_DIGEST" 2>/dev/null; then
+    mark_phase "append_release_digest" "SKIPPED" "DIGEST H3 entry for $VERSION already present"
     return 0
   fi
+
+  # Headline from the note H1 (minus `# `); placeholder only when the note is
+  # absent (e.g. dry-run before scaffold, or scaffold-without-prose).
+  local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  local headline=""
+  if [[ -f "$notes_path" ]]; then
+    headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
+  fi
+  [[ -z "$headline" || "$headline" == "$VERSION" ]] && headline="<headline — populated by operator at chore PR review>"
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_digest" "DRY-RUN" "would append entry for $slug under ${major}.* H2 family (create new H2 if novel major-prefix)"
+    mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($(date_today)) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
     return 0
   fi
 
-  # Insert: locate `## ${major}.*` H2 section, then append a table row at end of
-  # the first table under it. If no H2 exists for this major, append new H2 +
-  # canonical table header + row at end of file.
-  /usr/bin/python3 - "$RELEASE_DIGEST" "$slug" "$VERSION" "$major" "$(date_today)" <<'PY'
-import sys, re
-path, slug, version, major, date = sys.argv[1:6]
+  # Prepend the H3 entry under the topmost `## ` working H2 (the most-recent
+  # entry sits immediately after the H2 + its blank line, above the current top
+  # `### ` entry). Drop the family-H2 search + the `### Releases` table scaffold.
+  /usr/bin/python3 - "$RELEASE_DIGEST" "$VERSION" "$(date_today)" "$headline" <<'PY'
+import sys
+path, version, date, headline = sys.argv[1:5]
 with open(path, "r", encoding="utf-8") as f:
     lines = f.read().splitlines()
 
-major_heading_re = re.compile(rf"^## {re.escape(major)}\.\* —")
-section_start = None
+new_entry = f"### {version} ({date}) — {headline}"
+
+# Locate the topmost working H2 (first `## ` line).
+h2_idx = None
 for i, line in enumerate(lines):
-    if major_heading_re.search(line):
-        section_start = i
+    if line.startswith("## "):
+        h2_idx = i
         break
 
-new_row = f"| {slug} | {date} | <headline — populated by operator at chore PR review> |"
-
-if section_start is None:
-    # Append a new H2 + table + row at EOF
-    block = [
-        "",
-        f"## {major}.* — (arc TBD; rename at major-prefix maturation)",
-        "",
-        "",
-        f"### Releases",
-        "",
-        "| Version | Date | Headline |",
-        "|---------|------|----------|",
-        new_row,
-    ]
-    out = lines + block
+if h2_idx is None:
+    # No H2 at all — append the entry at EOF (degraded; should not happen on a
+    # well-formed corpus, but never silently drops the entry).
+    out = lines + ["", new_entry]
 else:
-    # Find the last `| v...` row under this H2; insert new row immediately after.
-    # Bound search to next H2 or EOF.
-    section_end = len(lines)
-    for j in range(section_start + 1, len(lines)):
-        if lines[j].startswith("## "):
-            section_end = j
-            break
-    # Find last table row line in [section_start, section_end)
-    last_row_idx = None
-    for j in range(section_start, section_end):
-        if lines[j].startswith("| v") or (lines[j].startswith("| ") and lines[j].rstrip().endswith("|")):
-            last_row_idx = j
-    if last_row_idx is None:
-        # No table found; insert at end of section
-        last_row_idx = section_end - 1
-    out = lines[:last_row_idx + 1] + [new_row] + lines[last_row_idx + 1:]
+    # Insert after the H2 and any immediately-following blank line, ABOVE the
+    # current top `### ` entry — making this the most-recent entry.
+    insert_at = h2_idx + 1
+    while insert_at < len(lines) and lines[insert_at].strip() == "":
+        insert_at += 1
+    out = lines[:insert_at] + [new_entry, ""] + lines[insert_at:]
 
 with open(path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
-  mark_phase "append_release_digest" "PASS" "appended entry for $slug under ${major}.* H2"
+  mark_phase "append_release_digest" "PASS" "prepended '### $VERSION (date) — …' H3 under the topmost working H2"
   return 0
 }
 
@@ -1114,7 +1142,7 @@ ${VERSION} Stage 13 close-out chore PR — release-corpus updates per pipeline/s
 |------|--------|-------|
 | release/releases/RELEASE_LOG.md | EDIT | Transition ${slug} row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write) |
 | release/releases/RELEASE_INDEX.md | EDIT | Append ${slug} row per D6 |
-| release/releases/RELEASE_DIGEST.md | EDIT | Append ${slug} entry under v$(extract_major "$VERSION").* family per D6 |
+| release/releases/RELEASE_DIGEST.md | EDIT | Prepend \`### ${VERSION} (date) — …\` H3 under the topmost working H2 per D6 |
 | release/releases/RELEASE_REVERSIONS.md | EDIT | Append re-version row(s) — one per abandoned version — ONLY when this release re-versioned mid-pipeline (N/A on the common no-collision path) |
 | release/releases/notes/${VERSION}_RELEASE_NOTES.md | NEW | Scaffolded per release-notes-standard.md Part 1 Template; operator-filled prose |
 | CHANGELOG.md | EDIT | Prepend ## [${slug}] - YYYY-MM-DD section per Keep-a-Changelog 1.1.0 (Surface 2 of Layer-1 dual-write — SKIPPED if CHANGELOG.md absent) |
@@ -1817,6 +1845,85 @@ EOF
   # version-with-letter-and-qualifier carrying a slug tail (v2.04b-1-…) resolves.
   sample_row="| v2.04b-1 | v2.04b-1-hotfix-rollup | #1 | pr | sha | tag | VERIFIED | 2026-06-03 |"
   [[ "$(extract_milestone_slug "$sample_row")" == "v2.04b-1-hotfix-rollup" ]] || { echo "FAIL: extract_milestone_slug (8-col, vN.Nb-N qualifier) got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  # #667 Finding 2 (VERIFY-then-close): a bare-slug THEME-NAMED row (NN-name, the
+  # current convention) resolves to the slug == milestone title (what
+  # `--milestone` consumes). Confirms the position-independent resolver handles
+  # the case Finding 2 described — the defect is no longer live.
+  sample_row="| v2.36 | 69-triage-and-bundling-signals | #500 | #2284 | sha | v2.36 | VERIFIED | 2026-06-28 |"
+  [[ "$(extract_milestone_slug "$sample_row")" == "69-triage-and-bundling-signals" ]] || { echo "FAIL: extract_milestone_slug (8-col, bare theme-named slug) should return field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  [[ "$(extract_milestone_slug "$sample_row")" != "v2.36" ]] || { echo "FAIL: extract_milestone_slug returned the bare Version, not the theme-named slug"; failures=$((failures+1)); }
+
+  # Test 4b: phase_append_release_digest + phase_append_release_index (#667 F3/F6)
+  # — offline, hermetic. Drives both append phases against sandbox corpus files
+  # and asserts: DIGEST emits a `### vX.Y (date)` H3 under the topmost working H2
+  # (the exact form deploy.sh Check 32(b) `^### vX\.Y[[:space:](]` asserts); INDEX
+  # emits a 6-pipe-field row keyed on the bare version; both re-runs are idempotent.
+  local _ai_saved_root="$REPO_ROOT" _ai_saved_mode="$MODE" _ai_saved_version="$VERSION"
+  local _ai_saved_slug="$STATE_MILESTONE_SLUG" _ai_saved_idx="$RELEASE_INDEX" _ai_saved_dig="$RELEASE_DIGEST"
+  local _ai_saved_pr="$PR_NUMBER" _ai_saved_notesdir="$RELEASE_NOTES_DIR"
+  local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t appendidx-selftest.XXXXXX)"
+  REPO_ROOT="$_ai_tmp"; MODE="apply"; VERSION="v9.97"; STATE_MILESTONE_SLUG="88-some-theme-named-milestone"; PR_NUMBER=9999
+  RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX.md"; RELEASE_DIGEST="$_ai_tmp/RELEASE_DIGEST.md"
+  RELEASE_NOTES_DIR="$_ai_tmp/notes"   # absent dir => headline placeholder path
+  /bin/cat > "$RELEASE_INDEX" <<'EOF'
+# RELEASE_INDEX
+
+| Version | Milestone | Date | Theme | Release PR | Release Notes |
+|---|---|---|---|---|---|
+| v9.96 | 87-prior | 2026-06-27 | prior | #9000 | [notes/v9.96_RELEASE_NOTES.md](notes/v9.96_RELEASE_NOTES.md) |
+EOF
+  /bin/cat > "$RELEASE_DIGEST" <<'EOF'
+# RELEASE_DIGEST
+
+## Knowledge Corpus
+
+### v9.96 (2026-06-27) — Prior release headline
+
+Prior body.
+
+## v1.* — Pipeline Discipline
+
+### v1.00 (2026-01-01) — Legacy
+EOF
+
+  # (a) DIGEST emit → exactly one `### v9.97 (date) — …` H3, under `## Knowledge Corpus`
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_digest >/dev/null 2>&1
+  [[ "$(get_phase append_release_digest)" == PASS\|* ]] || { echo "FAIL: phase_append_release_digest should PASS, got '$(get_phase append_release_digest)'"; failures=$((failures+1)); }
+  local _ai_dig_n; _ai_dig_n="$(/usr/bin/grep -cE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" 2>/dev/null || true)"; _ai_dig_n="${_ai_dig_n:-0}"
+  [[ "$_ai_dig_n" -eq 1 ]] || { echo "FAIL: DIGEST must carry exactly 1 '### v9.97 (' H3 (Check-32(b) form), got $_ai_dig_n"; failures=$((failures+1)); }
+  # the new entry must sit under `## Knowledge Corpus`, above the legacy `## v1.*` family H2
+  local _ai_kc _ai_new _ai_legacy
+  _ai_kc="$(/usr/bin/grep -nF '## Knowledge Corpus' "$RELEASE_DIGEST" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _ai_new="$(/usr/bin/grep -nE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _ai_legacy="$(/usr/bin/grep -nE '^## v1\.\* ' "$RELEASE_DIGEST" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  [[ "$_ai_kc" -lt "$_ai_new" && "$_ai_new" -lt "$_ai_legacy" ]] || { echo "FAIL: new DIGEST H3 (line $_ai_new) must sit under '## Knowledge Corpus' (line $_ai_kc) and above the legacy '## v1.*' family (line $_ai_legacy)"; failures=$((failures+1)); }
+
+  # (b) INDEX emit → exactly one row keyed on bare v9.97, with exactly 6 fields
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_index >/dev/null 2>&1
+  [[ "$(get_phase append_release_index)" == PASS\|* ]] || { echo "FAIL: phase_append_release_index should PASS, got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
+  local _ai_row; _ai_row="$(/usr/bin/grep -E '^\| v9\.97 \|' "$RELEASE_INDEX" | /usr/bin/head -1)"
+  [[ -n "$_ai_row" ]] || { echo "FAIL: INDEX must carry a row keyed on bare v9.97"; failures=$((failures+1)); }
+  # 6-column schema ⇒ a well-formed row has exactly 7 pipes (| a | b | c | d | e | f |).
+  local _ai_pipes; _ai_pipes="$(/usr/bin/printf '%s' "$_ai_row" | /usr/bin/tr -cd '|' | /usr/bin/wc -c | /usr/bin/tr -d ' ')"
+  [[ "$_ai_pipes" -eq 7 ]] || { echo "FAIL: INDEX row must be 6-column (7 pipes), got $_ai_pipes pipes in: $_ai_row"; failures=$((failures+1)); }
+
+  # (c) idempotency — re-run both phases → SKIPPED on the H3 / bare-version guards
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_digest >/dev/null 2>&1
+  [[ "$(get_phase append_release_digest)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_release_digest re-run must SKIP (H3 idempotency), got '$(get_phase append_release_digest)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_index >/dev/null 2>&1
+  [[ "$(get_phase append_release_index)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_release_index re-run must SKIP (bare-version idempotency), got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
+  _ai_dig_n="$(/usr/bin/grep -cE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" 2>/dev/null || true)"; _ai_dig_n="${_ai_dig_n:-0}"
+  [[ "$_ai_dig_n" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the DIGEST H3, got $_ai_dig_n"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
+  REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
+  STATE_MILESTONE_SLUG="$_ai_saved_slug"; RELEASE_INDEX="$_ai_saved_idx"; RELEASE_DIGEST="$_ai_saved_dig"
+  PR_NUMBER="$_ai_saved_pr"; RELEASE_NOTES_DIR="$_ai_saved_notesdir"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
@@ -1961,7 +2068,8 @@ STUB
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
   echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
-  echo "  extract_row_state + extract_milestone_slug validated" >&2
+  echo "  extract_row_state + extract_milestone_slug validated (incl. #667 F2 bare theme-named slug → title)" >&2
+  echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
