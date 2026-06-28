@@ -13,7 +13,7 @@ glossary_anchor: "umbrella body Glossary (canonical knowledge-tier terms — ver
 
 This document is the platform's classification of **knowledge types** and the **placement model** stating where each type lives. It composes with — and does **not** restate — [`architecture-overview.md`](../disciplines/architecture-overview.md)'s Layer-1/Layer-2 model and the [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Governance File Map. Its three contributions are: (1) the 5-tier classification K1–K5 with a deterministic classifier; (2) the net-new **universality axis** drawn orthogonal to the existing authorship axis, proving *custom ≠ contextual*; (3) the **placement model** whose load-bearing concept is the **parameterization seam** — the boundary where CLAUDE.md "Parameterize over hardcode" bites.
 
-Terminology is locked verbatim to the **umbrella Glossary** (the umbrella body IS the canonical glossary per the anti-maintenance-debt rule). [`terminology-glossary.md`](../specs/terminology-glossary.md) is a **disjoint** methodology glossary (Area / Domain / Function / Process / Stage / WBS / Scope) — it carries no knowledge-tier terms; this doc cross-references both and redefines neither (see [§5 Boundaries](#boundaries)).
+Terminology is locked verbatim to the **umbrella Glossary** (the umbrella body IS the canonical glossary per the anti-maintenance-debt rule). [`terminology-glossary.md`](../specs/terminology-glossary.md) is a **disjoint** methodology glossary (Area / Domain / Function / Process / Stage / WBS / Scope) — it carries no knowledge-tier terms; this doc cross-references both and redefines neither (see [§6 Boundaries](#boundaries)).
 
 ---
 
@@ -90,7 +90,7 @@ Two **orthogonal** axes describe any knowledge artifact. Conflating them is the 
 
 ### §2.1 The four-memory-type model and four-axis reconciliation {#four-type-reconciliation}
 
-The four memory **types** — *Work / Knowledge / People / Learning* (the [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) / [§6](#memory-corpus-boundary) set) — are a **functional** partition: each answers *what is the memory FOR?* The table below maps each type to ≥1 memory surface and cross-walks it against the three classification axes already in use: **K1–K5** (universality, [§1](#five-tier-classification)), **Context Tier 1–4** (context-file read-precedence, [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Context File Hierarchy), and **Document-Tier 1–4** (write-approval gate, CLAUDE.md File Management Protocol). The four-type taxonomy is therefore a **composed model** over these axes — not a fourth axis stacked on three others.
+The four memory **types** — *Work / Knowledge / People / Learning* (the [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) / [§7](#memory-corpus-boundary) set) — are a **functional** partition: each answers *what is the memory FOR?* The table below maps each type to ≥1 memory surface and cross-walks it against the three classification axes already in use: **K1–K5** (universality, [§1](#five-tier-classification)), **Context Tier 1–4** (context-file read-precedence, [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Context File Hierarchy), and **Document-Tier 1–4** (write-approval gate, CLAUDE.md File Management Protocol). The four-type taxonomy is therefore a **composed model** over these axes — not a fourth axis stacked on three others.
 
 | Memory type (what it's *for*) | Primary memory surface(s) | K1–K5 (universality) | Context Tier (1–4, where it's read) | Document-Tier (write-approval) | SSOT verdict |
 |---|---|---|---|---|---|
@@ -192,7 +192,37 @@ The L1–L8 register above catalogs **identity/institutional** leaks — context
 
 ---
 
-## §5 Boundaries {#boundaries}
+## §5 Organizational-Altitude / Aggregation Axis {#altitude-axis}
+
+This axis answers a **third, independent question about a *learning*** — *at what scope of work was this learning generated, and how does it roll up?* — distinct from the two questions [§1](#five-tier-classification)/[§2](#two-axes) already answer (*whose context does this knowledge apply to?*, the universality axis) and from the question the work-organization framework answers (*where does a unit of WORK sit in the decomposition?*, [`work-organization-mapping-framework.md` §1.2](work-organization-mapping-framework.md#per-level-purpose)). A learning is **not** a work item, so altitude is **not** a new work-level and adds **no** entity-graph node: it is a **captured attribute** the [`km-protocols.md §3`](km-protocols.md#lessons-learned-pipeline) lessons-learned pipeline stamps when a lesson is observed.
+
+> **Orthogonality declaration (the load-bearing statement).** The altitude axis is **orthogonal** to the K1–K5 universality axis ([§1](#five-tier-classification)/[§2](#universality-axis)): a learning carries **one K-tier value AND one altitude value simultaneously, independently** — fixing one does not determine the other. Both axes coexist on every learning. This is the same orthogonality the [§2 2×2 matrix](#axis-2x2) proves for universality×authorship and [§2.1](#four-axis-collision) proves for the four memory types, extended to the altitude attribute.
+
+**Orthogonality proof (demonstrable, not asserted — same style as [§2.1](#four-axis-collision)).** Fixing a learning's K-tier does **not** fix its altitude: a **K1-universal** lesson ("write-first-speak-second prevents status theater") can be generated at **Project** altitude (observed once on one project) *or* at **Portfolio** altitude (observed as a cross-project pattern) — same K-tier, different altitude. And fixing altitude does not fix K-tier: two learnings both generated at **Project** altitude can split **K1** (a universal discipline) vs **K5** (a project-specific corrective that never generalizes). The two coordinates vary independently → the axes are orthogonal.
+
+### §5.1 Altitude ↔ canonical-hierarchy alias {#altitude-alias}
+
+The altitude ladder's seven rungs are **aliased onto** the canonical work-organization hierarchy — they introduce **no competing level-names**. The four middle rungs are **verbatim aliases** of the canonical levels ([`work-organization-mapping-framework.md` §1.2 per-level-purpose](work-organization-mapping-framework.md#per-level-purpose), whose frozen entity floor is the single `Work Item` node and whose `general_level` enum `{Portfolio, Program, Project, Milestone/Workstream, Work Item}` is frozen at the schema layer — cited by pointer, **not** redefined here). The two outer rungs are **out-of-hierarchy alias values** — finer than the modeled floor and coarser than the modeled ceiling — that the lessons pipeline may stamp on a learning **without** adding any entity level:
+
+| Altitude rung | Canonical level it aliases to (`work-organization-mapping-framework.md` §1.2 / frozen `general_level` enum) | Alias semantics |
+|---|---|---|
+| **Unit** | *sub-Work-Item granularity* (within the `Work Item` entity) | Finer than the finest modeled level. NOT a new entity node — the same collapse the framework applies to Story/Task (methodology levels below Milestone all land on the single `Work Item` entity, distinguished by `work_item_type`, never by adding nodes). "Unit" = a learning generated at the granularity of a single discrete action/change *inside* a Work Item. |
+| **Task** | *sub-Work-Item granularity* → the canonical `Task` term ([`terminology-glossary.md#term-task`](../specs/terminology-glossary.md#term-task): a Work Item whose scope is subsumed by a single Stage) | Aliases to the **existing** canonical `Task` term — a stage-scoped Work Item, already a recognized projection within the Work Item level. Introduces nothing new. |
+| **Workstream** | **Milestone / Workstream** (canonical level 4) | 1:1 — verbatim alias of the existing canonical level name. |
+| **Project** | **Project** (canonical level 3) | 1:1 — verbatim. |
+| **Program** | **Program** (canonical level 2) | 1:1 — verbatim. |
+| **Portfolio** | **Portfolio** (canonical level 1) | 1:1 — verbatim. |
+| **Organization** | *supra-Portfolio roll-up scope* — NOT a modeled entity level | Coarser than the coarsest modeled level. Aliases to the **same disposition the glossary gives `Initiative`** ([`terminology-glossary.md` Appendix B](../specs/terminology-glossary.md): "Portfolio-level concept not modeled at platform layer → cross-Milestone roadmap theme"). "Organization" = a learning that has rolled up across the whole single-operator org (the K2 OOM scope) — a roll-up *scope label*, not an entity the platform tracks. |
+
+> **Boundary note.** This axis adds **no** entity-graph node and changes **no** work-org level or `general_level` enum value. **Unit/Task** (below the floor) and **Organization** (above the ceiling) are altitude-attribute *values* that alias *outside* the modeled 5-level hierarchy — reconciled here by pointer, never authored as new levels. The four middle rungs ARE the canonical work-org vocabulary. The work-org hierarchy, its frozen enum, and the frozen entity roster are untouched (additive-only per [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) surgical-edit discipline).
+
+**Relationship to the design-time altitude lens (distinct, cross-referenced — not merged).** [`architecture-evaluative-lens.md` §1 triple-Venn](architecture-evaluative-lens.md#triple-venn) carries an **altitude circle** asking *at what level is this WORK placed and tracked?* — a **design-time** evaluative lens over the live work-org ladder. This axis asks a **capture-time** question over a *learning* (*at what scope was this learning generated?*). Both cite the **same** canonical ladder (`work-organization-mapping-framework.md` §1.2) by pointer and neither introduces competing level-names; they are **related but distinct** — design-time work-placement lens vs capture-time learning-attribute — and are cross-referenced, never collapsed into one definition.
+
+**Forward pointer.** The capture mechanism (altitude stamped at Step 1 of the lessons-learned pipeline) and the adjacent-altitude rollup relation are owned by [`km-protocols.md`](km-protocols.md) — see [`§3 Lessons-Learned Pipeline`](km-protocols.md#lessons-learned-pipeline) (capture-time attribute) and [`§9 Adjacent-Altitude Rollup`](km-protocols.md#altitude-rollup) (the `ROLLS_UP_TO` relation). This doc owns the *axis + alias*; the pipeline doc owns the *capture + rollup*.
+
+---
+
+## §6 Boundaries {#boundaries}
 
 | Boundary | Relationship | Action |
 |---|---|---|
@@ -204,9 +234,9 @@ The L1–L8 register above catalogs **identity/institutional** leaks — context
 
 ---
 
-## §6 Memory↔corpus boundary {#memory-corpus-boundary}
+## §7 Memory↔corpus boundary {#memory-corpus-boundary}
 
-This section names **which surface is the source of truth (SSOT) when a fact could appear in two places** — the auto-memory store or the codified corpus — and **how knowledge moves from memory into the corpus reliably**. It is a pure consumer of [§1](#five-tier-classification) and [§3](#placement-model): it adds no taxonomy. §3 owns *where each tier lives*; §6 owns *which surface is authoritative when a fact could live in two, and how it migrates*. This respects single-home discipline — the SSOT assignment below is a projection of the §3 "Authoritative home" column onto the auto-memory store specifically, and the routing test is the existing §1 Q1 universality classifier.
+This section names **which surface is the source of truth (SSOT) when a fact could appear in two places** — the auto-memory store or the codified corpus — and **how knowledge moves from memory into the corpus reliably**. It is a pure consumer of [§1](#five-tier-classification) and [§3](#placement-model): it adds no taxonomy. §3 owns *where each tier lives*; §7 owns *which surface is authoritative when a fact could live in two, and how it migrates*. This respects single-home discipline — the SSOT assignment below is a projection of the §3 "Authoritative home" column onto the auto-memory store specifically, and the routing test is the existing §1 Q1 universality classifier.
 
 Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a different org/project ⇒ K1 ⇒ corpus-SSOT; otherwise it is K2–K5 contextual and its SSOT is the placement-model home in §3. The auto-memory store is the §3 home for K5-tacit only.
 
@@ -269,3 +299,13 @@ The drift audit treats issue-number identity as **fragile** (re-versioning renum
 | **untied-encodeable** | a memory the Q1 classifier marks K1-encodeable but carrying no issue tie and no corpus pointer | heuristic surface: memory whose body matches encodeable signatures (discipline/reference/methodology) with no `#N` and no corpus-path pointer ⇒ flag for operator routing (file an encode issue) |
 
 The decision record for this boundary — the rejected memory-as-cache alternative, the Option-C trigger choice, and the encode-then-evict ordering guarantee — is [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md).
+
+---
+
+## §Provenance
+
+The [§5 Organizational-Altitude / Aggregation Axis](#altitude-axis) (and its companion edits in [`km-protocols.md §3`](km-protocols.md#lessons-learned-pipeline) capture-attribute + [`§9`](km-protocols.md#altitude-rollup) rollup) was added to give a *learning* a captured **altitude** attribute — *at what scope of work was this learning generated?* — orthogonal to the K1–K5 universality axis this doc already owned, plus a defined adjacent-altitude rollup relation. It extends, and does not restate, the codification axis: a learning now carries one K-tier value *and* one altitude value, independently.
+
+The one design tension settled before authoring was a **vocabulary collision**: the altitude ladder (Unit → Task → Workstream → Project → Program → Portfolio → Organization) overlaps the live work-organization hierarchy ([`work-organization-mapping-framework.md` §1.2](work-organization-mapping-framework.md#per-level-purpose): Portfolio → Program → Project → Milestone/Workstream → Work Item). It was resolved by **alias, not rename** — the four middle rungs are verbatim aliases of the canonical levels, and the two outer rungs (Unit/Task below the frozen floor, Organization above the ceiling) are out-of-hierarchy *altitude-attribute values* that alias to existing dispositions (sub-Work-Item granularity for Unit/Task; the glossary's non-modeled `Initiative` precedent for Organization). No competing level-names enter the work-org framework; its hierarchy, the frozen `general_level` enum, and the frozen entity roster are untouched. The work-organization framework was therefore **not** edited by this axis (its alias home is this doc, self-contained).
+
+This axis is the **capture-time learning** sibling of the **design-time work-placement** altitude circle in [`architecture-evaluative-lens.md` §1 triple-Venn](architecture-evaluative-lens.md#triple-venn) — distinct questions over the same canonical ladder, cross-referenced and not merged. Multi-person / people-involved elicitation is **out of scope** for this axis (the platform's single-operator operating model per [`km-protocols.md §4`](km-protocols.md#bus-factor) bus-factor = 1 is the operating model, not a defect); the axis is single-operator-coherent on its own and the people dimension is separate downstream work. Reversibility: **CHEAP** — additive section/attribute additions removable by section deletion.
