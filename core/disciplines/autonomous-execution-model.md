@@ -162,18 +162,61 @@ Per `RELEASE_PROTOCOL.md` § Rollback protocol — restore from `Releases/_snaps
 
 Stage 9 NO-GO before merge → branch reset (from a fresh worktree) or PR close with no merge. No production impact; no operator authorization gate (nothing was deployed). This case is named "rollback" colloquially but is not governed by this pattern; treat it as a Planning-stage iteration.
 
+## Pause-to-Learn Pattern
+
+The pre-action sibling to Retry and Escalate. Retry fires **post-failure** (something broke; re-attempt the same action). Escalate fires on **ambiguity → operator** (hand the decision up). Pause-to-Learn fires **pre-action**, when the confidence gate returns a low-confidence-versus-cost disposition — the agent has *not* failed and is *not* yet handing the decision to the operator; it closes its **own** named knowledge gap before committing, by injecting a *new external signal*. It is the **default resolution** for a PAUSE-TO-LEARN disposition; Escalate is the *fallback* on budget-exhaustion, not the first move.
+
+The trigger is `../specs/reversibility-protocol.md` § From Label to Gate returning **PAUSE-TO-LEARN** (the reversibility × confidence-signal matrix, autonomy-modulated). The pattern's full mechanism is specified canonically in `../specs/decision-confidence-protocol.md` § 3 (the bounded loop) + § 5 (the anti-theater guard); this section registers it as the 3rd pre-action sibling in this model's trigger taxonomy and routes its exit to the Escalate Pattern above.
+
+### Trigger conditions
+
+- **Gate disposition = PAUSE-TO-LEARN** per `../specs/reversibility-protocol.md` § From Label to Gate (signal state `DIVERGENT`/`UNGROUNDED` crossed with a MODERATE/EXPENSIVE reversibility cell, within the autonomy ceiling).
+- **The agent can name the specific gap** — a file, a value, a dependency state — not "I'm unsure." An un-nameable gap routes to Escalate, not Pause (the gap is the loop's starting input).
+- **The gap is `Knowable now` or `Knowable later`** per `discovery-discipline.md` § 2.5 knowability triage. `Knowable only by operating` does **not** pause — § 2.5 routes that state to the `reversibility-protocol.md` MODERATE/HIGH-confidence "ship-and-observe" tier, which is *proceed*, not pause.
+- **Does NOT fire on verbalized self-confidence** — the gate reads the consistency signal, never a self-report (the rejected input per `../specs/decision-confidence-protocol.md` § 1.3).
+
+### Mechanism (pre-action, agent-executed, 5 steps — bounded, with exit)
+
+1. **Name** the gap as a `discovery-discipline.md` § 4.1 open-question entry (the question + what would resolve it + its knowability state). The loop never starts from vague unease.
+2. **Triage** knowability per `discovery-discipline.md` § 2.5: `Knowable now` → fetch the canonical source (a `[verify-before-recommend]` read); `Knowable later` → exit the loop to a spike / time-boxed investigation / Stage-5 design decision (route out, do not iterate).
+3. **Inject** the new external signal — the fetch / cross-check / re-derivation from step 2. This must be *new* information, **not** a re-read of what was already in context; a cycle that injects nothing has not learned (anti-theater — § 5 guard).
+4. **Re-evaluate** the gate (`../specs/reversibility-protocol.md` § From Label to Gate) with the new signal. If the disposition is now PROCEED → act. If still PAUSE-TO-LEARN **and** budget remains → one more iteration from step 1. If budget is exhausted → **Escalate** (compose the Decision Briefing per § Escalate Pattern; the named gap + what was tried becomes the Briefing's Context).
+5. **Record** the pause and its resolution so the load-bearing-versus-theater distinction is observable (the three guard signals below).
+
+### Budget and exit
+
+The bound: default **1 learn-iteration**, hard cap **2**, then exit to Escalate. A pause-to-learn is cheaper than Retry (transient cap=3) and must terminate faster — it sits *before* an action, not on a transient failure mid-action; the cap is modeled on the generic-boundary iteration threshold (cap=2). The loop ends on **any** of four exit conditions, conforming to `../specs/decision-confidence-protocol.md` § 3.3:
+
+- **E1 — Resolved.** Signal flips to `CONVERGENT` → re-enter the matrix and PROCEED.
+- **E2 — Not-knowable-now.** § 2.5 routes the gap to `Knowable later` or `Knowable only by operating` → exit to a spike or a ship-and-observe decision, carrying the reversibility tier.
+- **E3 — Budget exhausted.** The cap is reached and the signal is still `DIVERGENT`/`UNGROUNDED` → **Escalate** via § Escalate Pattern.
+- **E4 — Cost-changed.** If learning reveals the action is more irreversible than first classified, re-enter the matrix at the higher tier (discovery-shifts-reversibility per `discovery-discipline.md` § 5.4).
+
+**No unbounded loop.** An unbounded pause is the failure mode this bound exists to prevent — a pause that neither resolves, routes out, nor escalates is a silent stall, not a learn-loop.
+
+### Anti-theater guard hook
+
+A pause is load-bearing **iff** it (a) injects a **new** signal, (b) is **bounded**, and (c) **has an exit** — the three observable signals specified in `../specs/decision-confidence-protocol.md` § 5. Keep these observable in the recorded pause (step 5): a pause that re-states the same inputs and concludes without a fetch, an unbounded re-think with no cycle ceiling, or a stall that never hits E1–E4, each reads as theater and is flagged.
+
+### Reversibility tier
+
+`CHEAP · confidence: HIGH` per `../specs/reversibility-protocol.md` — pausing-then-learning is fully reversible, because the action has not happened; the worst case is bounded latency. This mirrors Retry's CHEAP labeling in the § Relationship to Other Principles table below.
+
 ## Pattern Composition
 
-The three patterns compose as a directed cascade:
+The patterns compose as a directed cascade. The post-failure lane (Retry → Escalate → Rollback) and the pre-action lane (Pause-to-Learn) are distinct entry points on different temporal anchors; both converge on Escalate as the common exit:
 
 ```
-[transient failure]
-       │
-       ▼
-[Retry Pattern] — 1-3 attempts (or 1-2 production-impacting)
-       │
-       ▼ (cap exhausted or non-retryable)
-[Escalate Pattern] — Decision Briefing surfaced to operator
+POST-FAILURE LANE                          PRE-ACTION LANE
+[transient failure]                        [gate: PAUSE-TO-LEARN]
+       │                                          │
+       ▼                                          ▼
+[Retry Pattern] — 1-3 attempts             [Pause-to-Learn Pattern] — 1-2 iterations
+   (or 1-2 production-impacting)            (inject new external signal, re-evaluate gate)
+       │                                          │
+       ▼ (cap exhausted or non-retryable)        ├─▶ (cleared) act
+[Escalate Pattern] ◀───────────────────────────┘ (budget exhausted)
+   — Decision Briefing surfaced to operator
        │
        ▼ (operator authorizes)
 [Rollback Pattern] — operator-only, post-merge undo per RELEASE_PROTOCOL.md
@@ -184,6 +227,7 @@ The three patterns compose as a directed cascade:
 - **Retry MAY chain to Escalate** — automatic on cap-exhaustion. The escalation carries the retry log attached so the operator can diagnose.
 - **Escalate MAY chain to Rollback** — operator-explicit only. The agent never auto-promotes an escalation to a rollback; rollback always requires the operator to render the decision.
 - **Rollback NEVER chains to Retry** — a fresh forward-facing release is the recovery, not a retried rollback. If the rollback itself fails (e.g., `git revert` produces conflicts), the agent escalates again with the failure context; it does not loop the rollback.
+- **Pause-to-Learn MAY chain to Escalate** — automatic on budget-exhaustion (E3), mirroring Retry → Escalate. The escalation carries the named gap + what the loop tried as the Briefing Context. **Pause-to-Learn NEVER chains to Rollback** (it is pre-action — nothing is deployed to roll back) and **NEVER chains from Retry** (Retry is post-failure, Pause-to-Learn is pre-action — different temporal anchors; the gate, not a failure, triggers Pause-to-Learn).
 
 ### Skip-permissions
 
@@ -271,7 +315,9 @@ This model composes with — but does not replace — the platform's other princ
 | Principle | Relationship | Composition |
 |---|---|---|
 | `decision-discipline.md` | Escalate Pattern produces decision-class output; the Decision Briefing inherits the M1/M2/M3 triage from `decision-discipline.md` § 3 | Escalate cites `decision-discipline.md` § 3 triage table for Briefing structure |
-| `reversibility-protocol.md` | Each pattern carries a reversibility tier (Retry: CHEAP; Escalate: MODERATE-EXPENSIVE; Rollback: IRREVERSIBLE) | Pattern outputs label tier per `reversibility-protocol.md` four-tier vocabulary |
+| `reversibility-protocol.md` | Each pattern carries a reversibility tier (Retry: CHEAP; Escalate: MODERATE-EXPENSIVE; Rollback: IRREVERSIBLE; Pause-to-Learn: CHEAP) | Pattern outputs label tier per `reversibility-protocol.md` four-tier vocabulary; its § From Label to Gate returns the PAUSE-TO-LEARN disposition that triggers the Pause-to-Learn Pattern |
+| `discovery-discipline.md` | Pause-to-Learn is the pre-action sibling that closes a named knowledge gap; discovery supplies the gap-closer | Pause-to-Learn imports § 2.5 knowability triage to route the gap (mechanism step 2) and § 4.1 open-question register as the gap's artifact form (step 1); § 5.4 discovery-shifts-reversibility is exit E4 |
+| `../specs/decision-confidence-protocol.md` | The canonical spec of the confidence signal + threshold matrix + bounded loop; this model registers its PAUSE-TO-LEARN trigger as the 3rd pre-action sibling | Pause-to-Learn Pattern conforms to § 3 (bounded loop) + § 5 (anti-theater guard); ESCALATE exit E3 routes to the Escalate Pattern; the § 3.2 budget is modeled on this model's iteration thresholds |
 | `review-discipline-principles.md` | Review-class output disciplines apply to escalation findings (root cause, evidence, no PARTIAL verdicts) | Escalation findings cite `review-discipline-principles.md` when surfaced from review-class skills (build-reviewer, pmo-qa-auditor, pmo-skill-editor Mode D) |
 | `failure-mode-standard.md` | Per-skill failure modes (skill-internal) compose orthogonally — skill failure → skill self-repair → escalate-to-pattern | Skill `SKILL.md` § Failure modes describes precondition checks; this model handles cross-cutting recovery |
 | `pipeline/stage-NN-<name>.md` | Per-stage automation tier informs which patterns apply (Tier 1 stages carry full Retry+Escalate; Tier 3 stages skip Retry — Escalate IS the gate) | Per-stage table in § Per-Stage Application above is the authoritative pattern × stage map |

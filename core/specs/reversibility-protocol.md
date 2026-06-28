@@ -156,6 +156,49 @@ CLAUDE.md § Universal Preferences enumerates **evidence-quality labels** on fac
 
 `[SOURCE: CLAUDE.md § Universal Preferences — Evidence quality labels]`
 
+## From Label to Gate (Confidence-Driven Disposition)
+
+The Confidence Pairing above gives the operator a **label** to read. This section promotes that label into a **gate** the agent evaluates *before* acting on a decision-class item — the active counterpart to the passive pairing. Where the pairing *displays* reversibility × confidence, the gate *acts on* them: it returns a disposition — **PROCEED**, **PAUSE-TO-LEARN**, or **ESCALATE** — by reading the action's reversibility tier (this doc's four tiers) against a confidence **signal**, modulated by the action's autonomy tier (`autonomy-tiers.md` Tier 0–3).
+
+**This section adds a disposition. It changes none of the four tiers, the Process-Weight table, the In-Place Bias, the decision-class scope, or the pairing format above — the gate *reads* them.** The execution-time consumer of the PAUSE-TO-LEARN disposition is `../disciplines/autonomous-execution-model.md` § Pause-to-Learn Pattern (the 3rd pre-action sibling to Retry and Escalate). The full mechanism — the confidence signal sources, the threshold matrix, the bounded learn-loop, and the anti-theater guard — is specified canonically in `decision-confidence-protocol.md`; this section is the reversibility-side promotion that protocol names, not a restatement of it.
+
+### The confidence signal (not a self-report)
+
+The gate does **not** read the agent's verbalized self-confidence ("I'm 90% sure") — that is the least-trustworthy signal and is rejected as an input. It reads a **consistency signal** collapsed to one of three ordinal states, per `decision-confidence-protocol.md` § 1:
+
+- **`CONVERGENT`** — independent cross-checks corroborate the conclusion and the weakest evidence label is ≥ `[INFERRED]`. No load-bearing gap; proceed-eligible.
+- **`DIVERGENT`** — independent paths disagree, or a *named* gap exists that would change the conclusion.
+- **`UNGROUNDED`** — the conclusion rests on an unverified `[ASSUMPTION – CONFIRM]` on a load-bearing claim with no corroborating path.
+
+The pairing's `confidence: [HIGH|MEDIUM|LOW]` label remains the operator-facing display; the gate consumes the `CONVERGENT|DIVERGENT|UNGROUNDED` signal state. A proceed decision must be able to cite *which* observable source produced `CONVERGENT` — a proceed that can only cite a feeling has bypassed the gate.
+
+### The disposition matrix (reversibility × signal, autonomy-modulated)
+
+There is no defensible single global cutoff: the same signal proceeds when being wrong is cheap and escalates when being wrong is irreversible. The cell action is a function of the confidence signal (rows) and this doc's reversibility tier (columns), conforming cell-for-cell to `decision-confidence-protocol.md` § 2.2:
+
+| Signal ↓ / Reversibility → | CHEAP | MODERATE | EXPENSIVE | IRREVERSIBLE |
+|---|---|---|---|---|
+| **CONVERGENT** | PROCEED | PROCEED | PROCEED (state rollback) | PROCEED **only at Autonomy Tier 0/1** (operator sign-off already gates it); else ESCALATE |
+| **DIVERGENT** | PROCEED (cost trivial) | PAUSE-TO-LEARN | PAUSE-TO-LEARN → ESCALATE if unresolved | ESCALATE (never auto-proceed) |
+| **UNGROUNDED** | PAUSE-TO-LEARN | PAUSE-TO-LEARN | ESCALATE | ESCALATE |
+
+Disposition vocabulary (three values — each routes to an existing surface):
+
+- **PROCEED** — act, carrying the reversibility tier label per § How to apply the tier above. The existing process-weight for the tier still applies (a CONVERGENT IRREVERSIBLE at Tier 0/1 still owes its sign-off gate — the gate does not waive the IRREVERSIBLE ceremony, it confirms the signal does not *block* the already-gated action).
+- **PAUSE-TO-LEARN** — do **not** act yet; hand to `../disciplines/autonomous-execution-model.md` § Pause-to-Learn Pattern, which injects a *new external signal* to close the named gap, is **bounded**, and **has an exit** (resolve → re-enter this matrix; budget exhausted → ESCALATE).
+- **ESCALATE** — surface a Decision Briefing per `../disciplines/autonomous-execution-model.md` § Escalate Pattern. For the IRREVERSIBLE column on a non-`CONVERGENT` signal this **is** the existing sign-off gate — the row formalizes that IRREVERSIBLE never auto-proceeds, which the Process-Weight table and the `[IRREVERSIBLE · confidence: LOW]` pairing example above already require. No new behavior; the matrix makes the existing rule queryable.
+
+### Autonomy-tier modulation
+
+The matrix above is read against `autonomy-tiers.md` via two cross-axis invariants — inherited from the axis specs, not invented here (conforming to `decision-confidence-protocol.md` § 2.3):
+
+- **I1 — IRREVERSIBLE never auto-proceeds on a non-`CONVERGENT` signal.** A `DIVERGENT`/`UNGROUNDED` IRREVERSIBLE action routes to ESCALATE; a `CONVERGENT` IRREVERSIBLE still requires the operator sign-off the Tier-0 gate already imposes. This mirrors this doc's own rule (IRREVERSIBLE requires sign-off regardless of confidence — § Confidence Pairing) and `autonomy-tiers.md` § Boundary Tests (IRREVERSIBLE actions cannot be Tier 3).
+- **I2 — the gate lowers ceremony, never raises autonomy.** A cell may force a PAUSE or an ESCALATE, but it can **never** grant an action a higher autonomy tier than `autonomy-tiers.md` already permits. A `CONVERGENT` signal does not promote a Tier-1 draft into a Tier-3 auto-write — confidence is a brake, not an accelerator. This blocks the gate becoming a self-elevation path.
+
+**Anti-theater anchor:** a PAUSE disposition is load-bearing only if the learn-loop injects a *new* signal, is *bounded*, and *has an exit* — defined and guarded in `../disciplines/autonomous-execution-model.md` § Pause-to-Learn Pattern and `decision-confidence-protocol.md` § 5. A pause that merely re-reads what the agent already had is theater, and the guard flags it.
+
+`[SOURCE: decision-confidence-protocol.md §§ 1–2 — the canonical signal + threshold model this promotion conforms to]`
+
 ## Report-Only Opt-Out
 
 Some skills produce outputs that are entirely non-decision-class — for example, a daily status rollup that only summarizes what happened, with no recommendations. Applying the reversibility check to such a skill would produce false-positive FAIL findings (zero decision-class items detected could mean "correctly report-only" or "silently omitted decisions it should have produced"). The opt-out mechanism distinguishes the two cases.
@@ -293,4 +336,4 @@ pmo-qa-auditor G4 detects the opt-out before scanning the output, and the revers
 
 ---
 
-*This protocol is a foundation document. It is consumed by CLAUDE.md § Universal Preferences, `skills/skill-creator/SKILL.md` (Interview mode), `skills/pmo-qa-auditor/SKILL.md` (G4), and the 22 consumer SKILL.md files applying the tier discipline to their own decision-class outputs.*
+*This protocol is a foundation document. It is consumed by CLAUDE.md § Universal Preferences, `skills/skill-creator/SKILL.md` (Interview mode), `skills/pmo-qa-auditor/SKILL.md` (G4), `decision-confidence-protocol.md` (which composes this doc as its cost-of-error axis and promotes the § Confidence Pairing label toward the § From Label to Gate disposition), `../disciplines/autonomous-execution-model.md` § Pause-to-Learn Pattern (the execution-time consumer of the PAUSE-TO-LEARN disposition), and the 22 consumer SKILL.md files applying the tier discipline to their own decision-class outputs.*
