@@ -27,10 +27,13 @@
 #   the version-presence loop runs BEFORE the exemption pass-through, so the
 #   exemption cannot suppress a missing-field FAIL).
 #
-# Single-sourcing of the ROSTER: the per-module skill arrays are extracted from
-# deploy.sh at runtime (the same awk idiom build-skill-packages.sh uses to extract
-# TEMPLATE_SYNC_MAP) — never a hardcoded name list here, so this predicate cannot
-# drift from the deploy.sh roster authority that Check 5 reconciles against disk.
+# Single-sourcing of the ROSTER *and* module RESOLUTION: the per-module skill
+# arrays are extracted from deploy.sh at runtime (the same awk idiom
+# build-skill-packages.sh uses to extract TEMPLATE_SYNC_MAP) — never a hardcoded
+# name list here. Both the scan set AND resolve_skill_module() consume those same
+# extracted arrays (the resolver iterates them rather than a hardcoded case map),
+# so neither the iteration set nor the skill→module map can drift from the
+# deploy.sh roster authority that Check 5 reconciles against disk.
 #
 # Usage:
 #   bash core/deploy/tools/check-canonical-structure.sh            # scan full roster
@@ -67,16 +70,38 @@ C6_FM_FLOOR=3
 # Failure-mode heading pattern (BYTE-ALIGNED with deploy.sh Check 6).
 C6_FM_RE='^### .+ — (TRIG|INPUT|PROC|OUT|HAND)[[:space:]]*$'
 
-# resolve_skill_module — mirrors deploy.sh resolve_skill_module() (and the copy in
-# build-skill-packages.sh). Bash 3.2 portable (default macOS bash). Echoes the
-# module dir; returns non-zero on miss (callers treat a miss as a scan error).
+# Per-module skill arrays — populated at runtime by run_check() from deploy.sh
+# (the same extract_roster_array helper that builds the scan roster). Declared
+# empty here at file scope so resolve_skill_module() can reference them under
+# `set -u` before the first populate (the `${#ARR[@]} -gt 0` guards make an empty
+# array safe). Single-sourcing these means module resolution iterates the exact
+# deploy.sh roster the scan does — the hardcoded case map this replaces silently
+# drifted whenever a release/core skill was added without a matching case arm (it
+# fell through to the operations default, the predicate looked for SKILL.md under
+# operations/skills/, and the Check 6 mirror failed loud as exit 3).
+OPERATIONS_SKILLS=()
+RELEASE_SKILLS=()
+CORE_SKILLS=()
+CANARY_SKILLS=()
+
+# resolve_skill_module — mirrors deploy.sh resolve_skill_module(): iterate the
+# per-module arrays (populated from deploy.sh by run_check via extract_roster_array)
+# and echo the module the skill belongs to. CANARY_SKILLS classifies to release/
+# (the canary is the canary for the release-side pmo-skill-refiner). Bash 3.2
+# portable — explicit per-array iteration with `${#ARR[@]} -gt 0` empty-guards
+# (ADR-008 Rule 2); no `local -n` nameref (bash 4.3+). Echoes the module dir;
+# returns non-zero on miss. Differs from deploy.sh ONLY in the miss path: deploy.sh
+# die()s under `set -e`; this script has no `die` and runs under `set -uo pipefail`
+# (no `set -e`), so a miss is a plain non-zero return — the caller (check_one_skill)
+# surfaces the empty module as a scan-surface error (SKILL.md missing -> exit 3),
+# never a silent misresolve to the wrong module dir.
 resolve_skill_module() {
-  local skill="$1"
-  case "$skill" in
-    eval-writer|pmo-qa-auditor|pmo-skill-router|prompt-builder) echo "core"; return 0 ;;
-    pmo-architect|pmo-devops-sre|pmo-principal-engineer|pmo-qa-lead|pmo-release-manager|pmo-software-engineer|pmo-skill-refiner|pmo-skill-refiner-selftest-canary|pmo-skill-editor|build-reviewer|release-executor|release-planner|implementation-planner) echo "release"; return 0 ;;
-    *) echo "operations"; return 0 ;;
-  esac
+  local skill="$1" s
+  if [[ ${#OPERATIONS_SKILLS[@]} -gt 0 ]]; then for s in "${OPERATIONS_SKILLS[@]}"; do [[ "$s" == "$skill" ]] && { echo "operations"; return 0; }; done; fi
+  if [[ ${#RELEASE_SKILLS[@]}    -gt 0 ]]; then for s in "${RELEASE_SKILLS[@]}";    do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
+  if [[ ${#CORE_SKILLS[@]}       -gt 0 ]]; then for s in "${CORE_SKILLS[@]}";       do [[ "$s" == "$skill" ]] && { echo "core";       return 0; }; done; fi
+  if [[ ${#CANARY_SKILLS[@]}     -gt 0 ]]; then for s in "${CANARY_SKILLS[@]}";     do [[ "$s" == "$skill" ]] && { echo "release";    return 0; }; done; fi
+  return 1
 }
 
 # extract_roster_array — pull a named bash array literal out of deploy.sh at
@@ -183,13 +208,24 @@ run_check() {
     return 3
   fi
 
+  # Populate the per-module global arrays from deploy.sh. Reset first so a
+  # re-entrant call (e.g. the self-test invoking run_check across fixtures) never
+  # sees a prior fixture's roster. resolve_skill_module() iterates these globals,
+  # so its module map IS the deploy.sh roster by construction and cannot drift.
+  OPERATIONS_SKILLS=(); RELEASE_SKILLS=(); CORE_SKILLS=(); CANARY_SKILLS=()
+  local line s
+  while IFS= read -r line; do [[ -n "$line" ]] && OPERATIONS_SKILLS+=("$line"); done < <(extract_roster_array OPERATIONS_SKILLS "$deploy_sh")
+  while IFS= read -r line; do [[ -n "$line" ]] && RELEASE_SKILLS+=("$line");    done < <(extract_roster_array RELEASE_SKILLS    "$deploy_sh")
+  while IFS= read -r line; do [[ -n "$line" ]] && CORE_SKILLS+=("$line");       done < <(extract_roster_array CORE_SKILLS       "$deploy_sh")
+  while IFS= read -r line; do [[ -n "$line" ]] && CANARY_SKILLS+=("$line");     done < <(extract_roster_array CANARY_SKILLS     "$deploy_sh")
+
+  # The SCAN roster is the deployed three (CANARY is source-only per ADR-04 —
+  # resolvable to release/ above, but not itself scanned). Built from the
+  # now-populated globals so the roster and the resolver share one source.
   local -a roster=()
-  local arr line
-  for arr in OPERATIONS_SKILLS RELEASE_SKILLS CORE_SKILLS; do
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && roster+=("$line")
-    done < <(extract_roster_array "$arr" "$deploy_sh")
-  done
+  if [[ ${#OPERATIONS_SKILLS[@]} -gt 0 ]]; then for s in "${OPERATIONS_SKILLS[@]}"; do roster+=("$s"); done; fi
+  if [[ ${#RELEASE_SKILLS[@]}    -gt 0 ]]; then for s in "${RELEASE_SKILLS[@]}";    do roster+=("$s"); done; fi
+  if [[ ${#CORE_SKILLS[@]}       -gt 0 ]]; then for s in "${CORE_SKILLS[@]}";       do roster+=("$s"); done; fi
 
   if [[ ${#roster[@]} -eq 0 ]]; then
     echo "FAIL:  scan-surface error — extracted an EMPTY roster from $deploy_sh (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS). A relocated or restructured deploy.sh must not read green." >&2
@@ -232,8 +268,8 @@ self_test() {
   trap 'rm -rf "$tmp"' RETURN
 
   # Minimal fixture: a stub deploy.sh exposing a one-skill roster, and a fixture
-  # skill tree we mutate per assertion. resolve_skill_module maps any unknown
-  # name to operations/, so a fixture skill name lands under operations/skills/.
+  # skill tree we mutate per assertion. fixtureskill is listed in the stub's
+  # OPERATIONS_SKILLS, so run_check resolves it to operations/skills/.
   mkdir -p "$tmp/operations/skills/fixtureskill"
   cat > "$tmp/deploy.sh" <<'STUB'
 OPERATIONS_SKILLS=(
@@ -347,6 +383,59 @@ STUB
     pass=$((pass + 1))
   else
     echo "self-test FAIL: empty roster did not produce a scan-surface error (expected exit 3)" >&2
+    return 1
+  fi
+
+  # Assertion 7: module resolution is single-sourced from deploy.sh and no longer
+  # drifts. Fixture skill names are deliberately ABSENT from the former hardcoded
+  # case map, so the old default-to-operations resolver would have misrouted the
+  # release/ and core/ skills to operations/skills/ and FAILed (SKILL.md missing)
+  # — the exact roadmap-curator incident this change fixes. A run_check that
+  # resolves every arm to its correct module dir -> exit 0.
+  mkdir -p "$tmp/operations/skills/fixtureops" \
+           "$tmp/release/skills/fixturerel" \
+           "$tmp/core/skills/fixturecore"
+  cat > "$tmp/deploy-multi.sh" <<'STUB'
+OPERATIONS_SKILLS=(
+  fixtureops
+)
+RELEASE_SKILLS=(
+  fixturerel
+)
+CORE_SKILLS=(
+  fixturecore
+)
+CANARY_SKILLS=(
+  fixturecanary
+)
+STUB
+  # Compliant SKILL.md (under thresholds, 3 failure modes, all frontmatter) at $2.
+  _write_compliant_at() {
+    {
+      echo "---"; echo "name: $1"; echo "description: fixture"; echo "version: v1.00"; echo "---"
+      echo "# Fixture"
+      echo "## Domain-Specific Failure Modes"
+      echo "### One — TRIG";   echo "body"
+      echo "### Two — INPUT";  echo "body"
+      echo "### Three — PROC"; echo "body"
+    } > "$2"
+  }
+  _write_compliant_at fixtureops  "$tmp/operations/skills/fixtureops/SKILL.md"
+  _write_compliant_at fixturerel  "$tmp/release/skills/fixturerel/SKILL.md"
+  _write_compliant_at fixturecore "$tmp/core/skills/fixturecore/SKILL.md"
+  if run_check "$tmp" "$tmp/deploy-multi.sh" "" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+  else
+    echo "self-test FAIL: multi-module fixture did not pass — a release/ or core/ skill misresolved to the wrong module dir (expected exit 0)" >&2
+    return 1
+  fi
+
+  # Assertion 8: a CANARY_SKILLS member resolves to release/ (the mapping the task
+  # calls out). The per-module globals are still populated from the run_check above.
+  if [[ "$(resolve_skill_module fixturecanary)" == "release" ]]; then
+    pass=$((pass + 1))
+  else
+    echo "self-test FAIL: CANARY_SKILLS member did not resolve to release/ (expected 'release')" >&2
     return 1
   fi
 
