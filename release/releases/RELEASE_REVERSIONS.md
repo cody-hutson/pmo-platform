@@ -154,6 +154,7 @@ are lost, and it is recorded `unrecoverable` (the reaper reads, never reaps it).
 
 | slug | abandoned_version | final_version | claimed_versions | abandoned_tag_pushed | merge_sha | collided_with | resolved_at_stage | disposition | residual_labels | reaped_ref | date |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| 69-triage-and-bundling-signals | v2.33 | v2.36 | v2.33 → v2.36 | false | 1a1d51af6f96875f782ce40325a5ba9e231e7643 | 40-initiative-roadmap-vocabulary-and-home@v2.33 | S12 | none | branch + commit messages retain as-authored v2.33 (siblings also held v2.34/v2.35 at the claim instant) | — | 2026-06-28 |
 | 12-field-first-intake-enforcement | v2.14 | v2.12 | v2.12 → v2.14 → v2.12 | false | 28860f1c76cc7889a225d1f109b16ed6e185d831 | 71-autonomy-phaseout-foundation@v2.14 | S12 | none | branch + milestone named for provisional v2.12 | — | 2026-06-20 |
 | 05-ROLE-sustain-coverage-router | v2.12 | v2.15 | v2.12 → v2.15 | false | b8ce4f3540035a28f8ebfffbadb05ca453c3e5c7 | 12-field-first-intake-enforcement@v2.12 | S12 | none | branch + milestone named for provisional v2.12 | — | 2026-06-20 |
 | 05-ROLE-sustain-coverage-router | v2.13 | v2.15 | v2.12 → v2.15 | false | b8ce4f3540035a28f8ebfffbadb05ca453c3e5c7 | 63-finding-disposition-discipline@v2.13 | S12 | none | branch + milestone named for provisional v2.12 | — | 2026-06-20 |

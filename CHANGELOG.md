@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.36] - 2026-06-28
+
+Triage and bundling now follow written signals instead of being re-figured each release — several judgment calls the release pipeline made fresh on every run (how an approved ticket's structure is treated downstream, how priority is read, when related issues are grouped, how sub-tasks are tracked) are written down as standing rules, and one repeatedly hand-derived step becomes a tracked tool. Additive throughout — spec/governance/schema edits plus one new tool; no data migration, no stored-content move, no behavior change to any project-facing surface. novel class.
+
+### Added
+
+- **The native-dependency mirror is now a tracked tool.** The Stage-2 step that maps native dependency edges, previously re-derived on every run, is promoted to a tracked tool with a fixture test. *Why it matters:* the dependency mirror runs the same way every release instead of being re-figured by hand each time. ([#662](https://github.com/cody-hutson/pmo-platform/issues/662))
+
+### Changed
+
+- **An approved ticket now counts as direction, not a fixed blueprint.** The pipeline states that approving a ticket signs off on the problem and outcome — not the ticket's proposed structure, which a later design step is free to confirm or rework. *Why it matters:* you can approve a good idea without locking in the first guess at how to build it. ([#500](https://github.com/cody-hutson/pmo-platform/issues/500))
+- **Priority is read as two separate things, not one blurred score.** Triage separates how urgent something is from how valuable it is, with how many other items depend on it as a third signal — without hardwiring any scoring method. *Why it matters:* urgent-but-low-value and valuable-but-can-wait items are no longer flattened into the same "priority." ([#283](https://github.com/cody-hutson/pmo-platform/issues/283))
+- **Related issues get grouped on a written threshold.** There is now a stated rule for when a set of related issues is large or connected enough to be tracked as a group, and which grouping mechanism to use. *Why it matters:* clusters of related work get a tracking home consistently instead of by chance. ([#280](https://github.com/cody-hutson/pmo-platform/issues/280))
+- **New-track placement rationale fires per milestone, behind a gate.** The Stage-3 rationale for placing work on a new track now fires per milestone rather than once per major track, with an enforcing gate. *Why it matters:* each milestone's placement decision is justified on its own terms rather than inheriting one blanket rationale. ([#292](https://github.com/cody-hutson/pmo-platform/issues/292))
+- **Sub-task breakdown follows a stated threshold.** The choice between formal sub-issues and a lighter in-PR checklist for breaking a work item down now has a defined trigger. *Why it matters:* small items stop being over-tracked and large ones stop being under-tracked. ([#225](https://github.com/cody-hutson/pmo-platform/issues/225))
+
+[Full notes](release/releases/notes/v2.36_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.36)
+
 ## [v2.35] - 2026-06-27
 
 Agents that calibrate their own confidence before they act — a written protocol gives an agent a way to decide, at a non-obvious decision point, whether to proceed now, pause to learn, or escalate, based on whether independent cross-checks agree (never on self-reported confidence) and scaled to how costly being wrong would be. The first live consumer is the release pipeline's bundle currency-check. Additive throughout — a new spec, a new ADR, and four edits that wire the gate into existing disciplines and one pipeline stage; no data migration and no stored-content move. routine class.
