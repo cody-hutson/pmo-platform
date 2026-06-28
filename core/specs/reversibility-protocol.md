@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Reversibility Protocol
 
 ## Purpose
@@ -156,6 +157,14 @@ CLAUDE.md § Universal Preferences enumerates **evidence-quality labels** on fac
 
 `[SOURCE: CLAUDE.md § Universal Preferences — Evidence quality labels]`
 
+### Confidence as an active self-gate
+
+The confidence level is not only a passive calibration label the operator reads to set review rigor — it is also an **active self-gate** the agent reads on itself *before* acting. This is an additive second leg, not a change to the label: every semantic above (the `[TIER] · confidence: [HIGH|MEDIUM|LOW]` format, the orthogonality with evidence-quality labels, the pairing examples) stands unchanged for every current consumer. The passive-calibration reading remains the default; the self-gate is the new leg layered on top of it.
+
+The gate fires on one condition: **a low-confidence reading on an action that is not trivially reversible.** When the agent's confidence in a pending decision is `LOW` and the action's tier is **above CHEAP** (MODERATE / EXPENSIVE / IRREVERSIBLE), the agent does **not** silently proceed. Instead it triggers a bounded pause-to-learn loop — it injects new external signal to ground (or revise) the decision before acting, and escalates only if the gap does not close. A low-confidence reading on a CHEAP action still proceeds, because pausing on a trivially-reversible action would be ceremony with no payoff (the cost of being wrong is the cost of a quick undo).
+
+The mechanism the gate routes into — the confidence signal it reads, the reversibility × autonomy threshold that decides proceed-vs-pause-vs-escalate, and the bounded pause-to-learn loop with its exit conditions — is specified by the Decision-Confidence Protocol (`core/specs/decision-confidence-protocol.md`, landing this release). This protocol supplies the **cost-of-error axis** of that mechanism: the reversibility tier is what scales the gate, so that the *same* low-confidence reading proceeds at CHEAP, pauses at MODERATE/EXPENSIVE, and escalates at IRREVERSIBLE. The gate is a **brake, never an accelerator** — a high-confidence reading does not promote an action above the autonomy tier it is otherwise authorized for; confidence lowers ceremony when grounded but never raises authority. `[INFERRED: from the Decision-Confidence Protocol threshold model + invariant that confidence lowers ceremony, never raises autonomy]`
+
 ## Report-Only Opt-Out
 
 Some skills produce outputs that are entirely non-decision-class — for example, a daily status rollup that only summarizes what happened, with no recommendations. Applying the reversibility check to such a skill would produce false-positive FAIL findings (zero decision-class items detected could mean "correctly report-only" or "silently omitted decisions it should have produced"). The opt-out mechanism distinguishes the two cases.
@@ -212,6 +221,12 @@ Review-discipline governs **the output form of review skills** — thoroughness,
 A review skill (e.g., pmo-qa-auditor, build-reviewer) produces an audit report. Review-discipline shapes the report's overall form (the 7-section extraction format, finding location references, no-PARTIAL-verdict rule). Reversibility applies to each remediation recommendation *inside* the report — each "here's what to change" carries its own tier and confidence level.
 
 The two stack vertically: review-discipline is a structural contract for the output; reversibility is an item-level label within that output. See `review-discipline-principles.md` (sibling reference doc) for the review-discipline spec.
+
+### Decision-confidence protocol
+
+The Decision-Confidence Protocol (`core/specs/decision-confidence-protocol.md`, landing this release) consumes this protocol as the **cost-of-error axis** of its proceed-vs-pause-vs-escalate threshold. Where this protocol pairs a reversibility tier with a confidence level (§ Confidence Pairing), the Decision-Confidence Protocol reads that pairing as a pre-action gate: the reversibility tier scales how a low-confidence reading is handled (proceed at CHEAP, pause-to-learn at MODERATE/EXPENSIVE, escalate at IRREVERSIBLE). This is the active-self-gate leg added in § Confidence as an active self-gate above.
+
+The composition is one-directional and non-overlapping: this protocol owns the tier vocabulary and the tier × ceremony scaling; the Decision-Confidence Protocol owns the signal that reads the confidence level and the bounded loop that closes a low-confidence gap. This protocol does not restate that mechanism — it is the axis the mechanism references. `[INFERRED: from the Decision-Confidence Protocol composition table naming reversibility-protocol.md as its cost-of-error axis]`
 
 ### Composition summary
 
