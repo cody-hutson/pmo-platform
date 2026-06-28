@@ -4,8 +4,8 @@
 title: Decision-confidence relationship posture — extend-and-compose across the decision-quality layer, not a standalone discipline
 status: Proposed (flips to Accepted at the Stage 9 review)
 date: 2026-06-27
-release: 97-knowledge-and-decision-confidence
-deciders: "Workspace owner (architecture ratified at the Stage 9 review); design authored at Stage 5 Solutioning, ADR authored at Stage 6 via PR per the core-ADR Stage-6-authoring convention"
+release: 104-agent-decision-confidence
+deciders: "Workspace owner"
 tags: [architecture, decision-confidence, compose, extend, decision-quality-layer, no-shadow-ssot, reversibility, autonomy, discovery, reversibility-cheap]
 ---
 
@@ -15,7 +15,7 @@ tags: [architecture, decision-confidence, compose, extend, decision-quality-laye
 
 **Proposed** — flips to Accepted at the Stage 9 review.
 
-Number **renumbered from a Stage-5 ADR-047 (proposed as ADR-046)** — the contiguous global sequence advanced while this decision was in design: a sibling release claimed **ADR-046** (`roadmap-instance-in-repo-home`) on the mainline during this release's window. `release/tools/check-adr-numbers.py` confirms **047** as the next gap-free number after 046. The provisional number binds atomically at Stage 12; if a further sibling claims 047 before merge, this ADR renumbers up to the next gap-free value and records the renumber here (the ADR-029 / ADR-032 / ADR-033 renumber-provenance precedent).
+Number **047** — next gap-free after 046; binds atomically at Stage 12.
 
 The slug `decision-confidence-compose-posture` is disambiguated deliberately from `ADR-043-staleness-confidence-canonical-representation` — that ADR's "confidence" is *artifact-staleness* confidence (how out-of-date a source is); **this** ADR's "confidence" is *agent self-competence* confidence (how grounded a pending decision is). Distinct referents, distinct slugs.
 
@@ -73,6 +73,7 @@ Each row states the **posture** (EXTEND vs COMPOSE), **what the mechanism takes 
 
 Decision lineage, for audit only — not load-bearing on the posture above (the decision reads version-agnostically).
 
+- **Number lineage** — renumbered from a Stage-5 ADR-047 (proposed as ADR-046): the contiguous global sequence advanced while this decision was in design when a sibling release claimed **ADR-046** (`roadmap-instance-in-repo-home`) on the mainline during this release's window; `release/tools/check-adr-numbers.py` confirms **047** as the next gap-free number after 046. If a further sibling claims 047 before merge, this ADR renumbers up to the next gap-free value and records the renumber here (the ADR-029 / ADR-032 / ADR-033 renumber-provenance precedent).
 - #1612 — the decision-confidence Research spike that produced the COMPOSE posture and the hard design constraints (non-binding input; this ADR is the binding decision).
 - #2283 — the Define task (spec + ADR) under which this decision was authored; carries the COMPOSE recipe and the per-doc relationship posture.
 - #2287 — the Define ST2 sub-task that scoped this ADR (the compose/extend/standalone decision + the five-doc relationship table).
