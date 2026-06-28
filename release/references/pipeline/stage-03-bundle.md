@@ -42,7 +42,7 @@ Contextual: full Approved backlog, existing Milestones, dep graph, file contenti
 
 > **(C-1) Shared-goal signal — ANY of:**
 > - **(a)** ≥3 Approved issues carry the **same `cluster:<name>` label** (the existing triage cluster axis), OR
-> - **(b)** ≥3 Approved issues each share the **same ≥2 non-hot Affected-Files paths** read from the body Affected-Files field — a **single counting predicate** (the cluster must co-occur on at least two non-hot paths, so co-membership on one commonly-edited governance file cannot over-fire). A path is **hot** — and excluded from the count — by a **deterministic frequency rule computed from the candidate set itself** (no maintained list): a path is **hot when it appears in the Affected-Files field of a strict majority (> 50%) of the Approved-backlog candidates**. A surface touched by most open Approved work is a broadly-edited governance/hot file, not a coordination signal; the strict-majority threshold is above the cluster floor (3), so it excludes governance files without swallowing a genuine small cluster on any realistic backlog. Because the share is computed live from the same candidate population the predicate scans, the exclusion is **reproducible without any hardcoded or hand-maintained file list**, OR
+> - **(b)** ≥3 Approved issues each share the **same ≥2 non-hot Affected-Files paths** read from the body Affected-Files field — a **single counting predicate** (the cluster must co-occur on at least two non-hot paths, so co-membership on one commonly-edited governance file cannot over-fire). A path is **hot** — and excluded from the count — by a **deterministic frequency rule computed from the candidate set itself** (no maintained list), **floored above the cluster minimum** so the rule can never dissolve a minimum-size cluster: a path is **hot when it appears in the Affected-Files field of a strict majority (> 50%) of the Approved-backlog candidates AND in strictly more than the cluster floor (3) — i.e., its count is ≥ 4**. The floor conjunct is load-bearing on a small backlog: on a ≤5-candidate set (realistic, since A4 caps a bundle at 5–8 items) a genuine 3-issue cluster sharing 2 paths puts each shared path at 3/5 = 60% of candidates — a bare strict-majority rule would mark those two paths hot and **drop the very cluster it should detect**. The floor (count ≥ 4) means a path shared by exactly the 3-issue cluster floor is **never hot**, so a minimum-size cluster's shared paths always survive; a surface touched by most open Approved work *and* by 4+ issues is a broadly-edited governance/hot file and is still excluded. The floor's actual guarantee is therefore precise: **minimum-size (3-issue) clusters are never self-cancelled, and the rule excludes only paths that are both broadly shared (> 50%) and above the cluster floor (≥ 4 issues)** — it makes no claim of correctness on every conceivable backlog beyond that floor. Because both the share and the count are computed live from the same candidate population the predicate scans, the exclusion is **reproducible without any hardcoded or hand-maintained file list**, OR
 > - **(c)** ≥3 Approved issues share a **Dependencies-field edge to a common issue** (a shared dependency hub — the centre of a dependency star).
 >
 > **AND (C-2) Coordination signal — ANY of:**
@@ -58,8 +58,12 @@ gh issue list --label "status: approved" --json number,labels,body \
   --jq 'group_by(.labels[].name | select(startswith("cluster:"))) | .[] | select(length >= 3)'
 
 # C-1(b): the hot-path set is computed from the candidate set itself (no maintained list).
-# A path in a strict majority (> 50%) of Approved candidates is hot and dropped; the
-# cluster fires when >= 3 issues co-occur on the SAME >= 2 surviving (non-hot) paths.
+# A path is hot (dropped) only when it is in a strict majority (> 50%) of Approved
+# candidates AND in strictly more than the cluster floor of 3 (count >= 4). The floor
+# means a path shared by exactly a 3-issue cluster is NEVER hot, so a minimum-size
+# cluster can never be self-cancelled (on a <=5-candidate set, 3/5 = 60% would be a bare
+# majority but count 3 is at the floor => not hot). The cluster then fires when >= 3
+# issues co-occur on the SAME >= 2 surviving (non-hot) paths.
 gh issue list --label "status: approved" --json number,body | python3 - <<'PY'
 import json, re, sys, itertools
 from collections import Counter, defaultdict
@@ -70,7 +74,7 @@ def paths(body):
 per = {i['number']: paths(i['body']) for i in issues}
 n = len(per) or 1
 freq = Counter(p for s in per.values() for p in s)
-hot = {p for p, c in freq.items() if c > n / 2}    # strict majority => broadly-edited/hot file
+hot = {p for p, c in freq.items() if c > n / 2 and c > 3}    # strict majority AND above cluster floor (count >= 4) => broadly-edited/hot file; <= 3-issue clusters never self-cancel
 non_hot = {num: (s - hot) for num, s in per.items()}
 # group issues by each non-hot path-PAIR; a cluster needs >= 3 issues on the same >= 2 paths
 by_pair = defaultdict(set)
