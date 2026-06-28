@@ -1657,6 +1657,24 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    git show origin/main:release/releases/notes/v<X.Y>_RELEASE_NOTES.md >/dev/null 2>&1 \
      || echo "MISSING release notes — block closure"
 
+   # 1b. §3.2 note-content CONFORMANCE (release-notes-standard.md §3.2 — the §3.2 lint
+   # runs on EVERY Stage-13 close path, not only release-executor Mode E). Presupposes #1
+   # (note present). This is the runbook gate for the pure-hub-direct / Phase-B chore-PR
+   # close that does NOT run automated-closeout.sh (the script path is gated in-script by
+   # its phase_lint_release_notes phase). Inherited exit contract: 0 clean / 1 finding /
+   # 3 path-unresolved — BOTH non-zero outcomes BLOCK. Version-scoped: a finding BLOCKS only
+   # when it names THIS version's note (a pre-existing legacy finding for another version is
+   # out of scope — audit-baseline discipline). It is a conformance assertion on the already-
+   # listed note output, NOT a new output row in the canonical Step 4 table.
+   note_lint_out=$(/usr/bin/python3 core/deploy/tools/lint_release_corpus.py --check note-content 2>&1); note_lint_rc=$?
+   if [ $note_lint_rc -eq 3 ]; then
+     echo "§3.2 lint path-unresolved (exit 3) — corpus unverifiable; BLOCK closure (fail-loud)"
+   elif [ $note_lint_rc -ne 0 ] && echo "$note_lint_out" | grep -qF "release/releases/notes/v<X.Y>_RELEASE_NOTES.md"; then
+     echo "§3.2 note-content finding for v<X.Y> — BLOCK closure (release-notes-standard.md §3.2 'Lint failures block Milestone close')"
+   else
+     echo "§3.2 note-content conformant for v<X.Y> (clean, or only legacy other-version findings — out of scope)"
+   fi
+
    # 2. Version tag exists on origin
    gh api repos/{REPO}/git/refs/tags/v<X.Y> \
      --jq '.ref' || echo "MISSING tag — block closure"
@@ -1702,7 +1720,7 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    ### Verification
    | Output | Verification | Result |
    |---|---|---|
-   | User-facing release note | `git show origin/main:.../v<X.Y>_RELEASE_NOTES.md` | PASS/FAIL |
+   | User-facing release note | `git show origin/main:.../v<X.Y>_RELEASE_NOTES.md` (presence, cmd #1) **+ §3.2 note-content conformance (cmd #1b: `lint_release_corpus.py --check note-content`, version-scoped — a finding for v<X.Y> BLOCKS)** | PASS/FAIL |
    | Version tag | `gh api .../git/refs/tags/v<X.Y>` | PASS/FAIL |
    | Milestone closed | `gh api .../milestones/<N>` | PASS/FAIL |
    | RELEASE_LOG entry | `git log --grep ...` | PASS/FAIL |

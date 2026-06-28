@@ -15,6 +15,7 @@
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
+#   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
@@ -855,6 +856,75 @@ EOF
   return 0
 }
 
+# ─── Phase 9.2: lint_release_notes (§3.2 note-content close gate) ─────────────
+#
+# Binds release-notes-standard.md §3.2 "Lint failures block Milestone close" to
+# the CLOSE EVENT (any authoring path), not just the release-executor self-lint.
+# Runs AFTER scaffold (the note now exists — whether scaffolded this run or
+# authored ahead by the operator) and BEFORE commit / milestone-close, so a
+# finding aborts the close before post_close_milestone.
+#
+# Exit contract is INHERITED from lint_release_corpus.py (mirrors deploy.sh
+# Check 20), NOT invented:
+#   0 → clean (proceed)
+#   1 → content finding(s); BLOCK iff ≥1 finding names ${VERSION}_RELEASE_NOTES.md.
+#       Findings for ONLY other (legacy) versions do NOT block this close
+#       (audit-baseline discipline — a pre-existing non-conformant note for an
+#       unrelated version must not block this version's close).
+#   3 → path-resolution failure (CORPUS-PATH-UNRESOLVED); BLOCK as unverifiable,
+#       never a vacuous pass (#459 fail-loud).
+# Version scoping lives in this CALLER (grep on the note path the lint already
+# prints in every finding line) — no --version flag added to the lint, so the
+# lint's interface stays decoupled from this binding.
+#
+# Idempotent with release-executor Mode E's self-lint: identical read-only
+# command, lint mutates nothing — running it twice in one close is safe. Dry-run
+# RUNS the lint (side-effect-free) so the operator sees findings at the review
+# gate; this is shift-left value, not a DRY-RUN skip.
+phase_lint_release_notes() {
+  local lint_script="${REPO_ROOT}/core/deploy/tools/lint_release_corpus.py"
+  local note_rel="release/releases/notes/${VERSION}_RELEASE_NOTES.md"
+
+  if [[ ! -f "$lint_script" ]]; then
+    mark_phase "lint_release_notes" "FAIL" "lint tooling missing: ${lint_script} — cannot enforce the §3.2 note-content close gate"
+    return 1
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    mark_phase "lint_release_notes" "FAIL" "/usr/bin/python3 not executable; cannot run the §3.2 note-content lint"
+    return 1
+  fi
+
+  local out exit_code=0
+  out="$(/usr/bin/python3 "$lint_script" --check note-content 2>&1)" || exit_code=$?
+
+  if [[ $exit_code -eq 3 ]]; then
+    mark_phase "lint_release_notes" "FAIL" "path-resolution failure (exit 3): $(echo "$out" | /usr/bin/head -1) — corpus unverifiable; close BLOCKED (fail-loud)"
+    echo "$out" | /usr/bin/head -20 >&2
+    return 1
+  fi
+
+  if [[ $exit_code -ne 0 ]]; then
+    # Scope to the version being closed: grep the finding lines for THIS note's
+    # repo-root-relative path (the lint emits it in every finding).
+    local v_findings
+    v_findings="$(echo "$out" | /usr/bin/grep -F "$note_rel" || true)"
+    if [[ -n "$v_findings" ]]; then
+      mark_phase "lint_release_notes" "FAIL" "§3.2 note-content finding(s) for ${VERSION} — close BLOCKED per release-notes-standard.md §3.2 'Lint failures block Milestone close'"
+      echo "$v_findings" >&2
+      return 1
+    fi
+    # Findings exist but none for THIS version → pre-existing legacy debt for
+    # another version; do NOT block this close on it (audit-baseline discipline).
+    local legacy_count
+    legacy_count="$(echo "$out" | /usr/bin/grep -c . || true)"
+    mark_phase "lint_release_notes" "PASS" "no §3.2 finding for ${VERSION} (${legacy_count} pre-existing legacy finding(s) for other versions — out of scope for this close)"
+    return 0
+  fi
+
+  mark_phase "lint_release_notes" "PASS" "§3.2 note-content clean for ${VERSION}"
+  return 0
+}
+
 # ─── Phase 9.5: append_changelog (Layer-1 dual-write Surface 2) ──────────────
 #
 # Prepends a `## [vX.Y] - YYYY-MM-DD` Keep-a-Changelog H2 section to CHANGELOG.md
@@ -1456,7 +1526,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -1686,6 +1756,61 @@ EOF
   ! check_parser_clean "does not close #234" || { echo "FAIL: parser-clean should reject negated form 'close #234' (lexical, not semantic)"; failures=$((failures+1)); }
   check_parser_clean "mark #234 as closed" || { echo "FAIL: parser-clean should ACCEPT safe phrasing 'mark #N as closed'"; failures=$((failures+1)); }
 
+  # Test 5.5: phase_lint_release_notes — §3.2 note-content close gate (#2082).
+  # Hermetic: point REPO_ROOT at a sandbox carrying a STUB lint script whose
+  # exit code + output we control, then assert the phase's version-scoped
+  # block/proceed decision. The stub stands in for lint_release_corpus.py so the
+  # test exercises the CALLER's grep-scoping logic without touching the live
+  # corpus (the lint's own checks are covered by the linter's own tests).
+  local _ln_saved_root="$REPO_ROOT" _ln_saved_version="$VERSION"
+  local _ln_tmp; _ln_tmp="$(/usr/bin/mktemp -d -t lintnotes-selftest.XXXXXX)"
+  /bin/mkdir -p "$_ln_tmp/core/deploy/tools"
+  local _ln_stub="$_ln_tmp/core/deploy/tools/lint_release_corpus.py"
+  # Stub reads desired exit code from env LN_EXIT and prints LN_OUT verbatim.
+  /bin/cat > "$_ln_stub" <<'STUB'
+import os, sys
+sys.stdout.write(os.environ.get("LN_OUT", ""))
+sys.exit(int(os.environ.get("LN_EXIT", "0")))
+STUB
+  REPO_ROOT="$_ln_tmp"; VERSION="v9.99"
+  # Reset phase tallies so get_phase reads only this test's marks.
+  local _ln_saved_names=("${PHASE_NAMES[@]:-}") _ln_saved_results=("${PHASE_RESULTS[@]:-}") _ln_saved_details=("${PHASE_DETAILS[@]:-}")
+
+  # (a) clean corpus (exit 0) → PASS
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=0 LN_OUT="" phase_lint_release_notes >/dev/null 2>&1 || true
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: lint_release_notes clean corpus (exit 0) must PASS"; failures=$((failures+1)); }
+
+  # (b) finding for THIS version (exit 1) → FAIL (close BLOCKED)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/v9.99_RELEASE_NOTES.md lacks section" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: lint_release_notes must return non-zero (BLOCK) on a finding for THIS version"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: lint_release_notes this-version finding must mark FAIL"; failures=$((failures+1)); }
+
+  # (c) finding ONLY for a DIFFERENT version (exit 1) → PASS (out-of-scope legacy debt)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/v2.19_RELEASE_NOTES.md lacks section" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: lint_release_notes must NOT block on another version's pre-existing finding"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: lint_release_notes other-version-only finding must PASS (audit-baseline)"; failures=$((failures+1)); }
+
+  # (d) path-resolution failure (exit 3) → FAIL (unverifiable; fail-loud)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=3 LN_OUT="CORPUS-PATH-UNRESOLVED: notes dir does not resolve" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: lint_release_notes must BLOCK (non-zero) on exit-3 path-unresolved"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: lint_release_notes exit-3 must mark FAIL (fail-loud, not vacuous pass)"; failures=$((failures+1)); }
+
+  # (e) missing lint tooling → FAIL (never a silent skip)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -f "$_ln_stub"
+  if phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: lint_release_notes must FAIL when the lint tooling is missing"; failures=$((failures+1))
+  fi
+
+  /bin/rm -rf "$_ln_tmp" 2>/dev/null || true
+  REPO_ROOT="$_ln_saved_root"; VERSION="$_ln_saved_version"
+  PHASE_NAMES=("${_ln_saved_names[@]:-}"); PHASE_RESULTS=("${_ln_saved_results[@]:-}"); PHASE_DETAILS=("${_ln_saved_details[@]:-}")
+
   # Test 6: corpus-path resolution — HARD assertion (not a soft WARN).
   # The four corpus paths are what every --apply phase mutates; if the script is
   # re-pathed out from under the corpus (the migration-drift failure that surfaced
@@ -1765,6 +1890,7 @@ EOF
   echo "  validate_version + extract_major validated" >&2
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
   echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
+  echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
@@ -1864,6 +1990,7 @@ phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
 phase_scaffold_release_notes || { generate_report; exit 3; }
+phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
 phase_commit_chore_pr || { generate_report; exit 3; }
