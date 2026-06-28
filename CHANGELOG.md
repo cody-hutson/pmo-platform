@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.35] - 2026-06-27
+
+Agents that calibrate their own confidence before they act — a written protocol gives an agent a way to decide, at a non-obvious decision point, whether to proceed now, pause to learn, or escalate, based on whether independent cross-checks agree (never on self-reported confidence) and scaled to how costly being wrong would be. The first live consumer is the release pipeline's bundle currency-check. Additive throughout — a new spec, a new ADR, and four edits that wire the gate into existing disciplines and one pipeline stage; no data migration and no stored-content move. routine class.
+
+### Added
+
+- **A confidence gate that decides proceed, pause-to-learn, or escalate.** A new protocol gives an agent a grounded way to decide whether to act on a non-obvious decision: it reads a signal from whether independent cross-checks agree, whether the missing fact can be named, and how weak the supporting evidence is — never from self-reported confidence — and selects the action from a reversibility-by-autonomy matrix instead of one global cutoff. *Why it matters:* the same uncertainty proceeds on a trivially-reversible action but pauses or escalates on a costly one, so agents stop both over-pausing on cheap calls and barreling ahead on expensive ones. ([#2286](https://github.com/cody-hutson/pmo-platform/issues/2286), [#2288](https://github.com/cody-hutson/pmo-platform/issues/2288))
+- **A bounded pause-to-learn step that has to actually learn something.** When the gate says pause, the agent runs a short, capped loop that fetches one new piece of outside information, re-checks, and then either proceeds, routes the gap to a spike, or escalates — it cannot loop forever or "pause" without fetching anything. *Why it matters:* a pause becomes a real gap-close with a guaranteed exit, not an open-ended stall dressed up as diligence. ([#2288](https://github.com/cody-hutson/pmo-platform/issues/2288), [#2290](https://github.com/cody-hutson/pmo-platform/issues/2290))
+- **The release pipeline's bundle currency-check now runs the gate.** The Stage-4 check that decides whether to leave a bundled release alone, amend it, re-bundle it, or defer it now runs the proceed-vs-pause gate before rendering that call. *Why it matters:* a low-confidence currency call on a costly re-bundle pauses to re-read the canonical state first, rather than committing on weak grounds. ([#2289](https://github.com/cody-hutson/pmo-platform/issues/2289))
+
+[Full notes](release/releases/notes/v2.35_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.35)
+
 ## [v2.34] - 2026-06-28
 
 Knowledge and decision confidence — the corpus gains the design-time and capture-time scaffolding that makes knowledge land in the right place and stay current: a written set of evaluative lenses for sizing and routing new work, a scope dimension that records what altitude a learning came from, two more facilitation-technique domains, and a skill that keeps the living roadmap current as issues arrive; a long-standing knowledge-eviction gap is also closed. Additive throughout — new and edited reference docs, a new skill, and one build-check extension; no data migration and no stored-content move. routine class.
