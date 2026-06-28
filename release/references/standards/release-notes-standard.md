@@ -130,7 +130,7 @@ Report issues at <single channel>.
 
 **<Theme B>** — <narrative paragraph>.
 
-For full implementation detail see the [RELEASE_LOG.md entry](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>#<anchor>) and [the release plan](release/releases/plans/<file>.md).
+For full implementation detail see the [RELEASE_LOG.md entry](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>#<anchor>) and [the release plan](https://github.com/{REPO}/blob/main/release/releases/plans/<file>.md).
 
 ### References
 
@@ -311,7 +311,7 @@ When a release contains any Review-Surface trigger per Voice Rule 3 (or sets `br
 
 ### 3.2 Stage 13 Close lint (mechanical)
 
-Before Milestone close, the agent — operating via [release-executor Mode E](../../skills/release-executor/SKILL.md) — lints the note against the Must-Have Checklist below by invoking the [release-notes eval rubric](../../../core/skills/eval-writer/references/release-notes-eval-rubric.md). Mechanical structural checks 9-12 are enforced by [deploy.sh Check 20](../../../core/deploy/deploy.sh) via [`lint_release_corpus.py --check note-content`](../../../core/deploy/tools/lint_release_corpus.py). Note-presence drift across released versions is enforced by [deploy.sh Check 26](../../../core/deploy/deploy.sh) (per Check 26 AC#3). Lint failures block Milestone close.
+Before Milestone close, the agent — operating via [release-executor Mode E](../../skills/release-executor/SKILL.md) — lints the note against the Must-Have Checklist below by invoking the [release-notes eval rubric](../../../core/skills/eval-writer/references/release-notes-eval-rubric.md). Mechanical structural checks 9-13 are enforced by [deploy.sh Check 20](../../../core/deploy/deploy.sh) via [`lint_release_corpus.py --check note-content`](../../../core/deploy/tools/lint_release_corpus.py). Note-presence drift across released versions is enforced by [deploy.sh Check 26](../../../core/deploy/deploy.sh) (per Check 26 AC#3). Lint failures block Milestone close.
 
 **Existing checks:**
 
@@ -330,12 +330,13 @@ Before Milestone close, the agent — operating via [release-executor Mode E](..
 10. **Banned-jargon scan.** Section 6a content (between the section header and the next `##` header) contains no entries from §2.4 banned-jargon list. Case-insensitive match (14 literal terms + 4 regex patterns for parameterized forms). Failure → lint error citing the matched term and the §2.4 plain-language replacement.
 11. **"Why it matters" beat presence.** Each bullet in Section 6a contains either `*Why it matters:*` text OR the `<!-- impact:foundational -->` HTML comment marker. Failure → lint error citing the offending bullet.
 12. **File-path purity in 6a.** Section 6a bullet bodies contain zero raw `pmo-platform/...` or `.claude/...` paths. Inline anchor text via markdown links (e.g., `[the new index table](path)`) is permitted; bare paths in prose are not.
+13. **Whole-body link purity (Surface-1 link resolvability).** Every markdown-link target in the frontmatter-stripped note body — the exact bytes that publish to the GitHub Release page (Surface 1) — is absolute (`https://`, `http://`, an intra-page `#anchor`, or `mailto:`). A repo-relative target (`](../`, `](./`, `](release/`, `](core/`, `](docs/`, `](.claude/`, `](pmo-platform/`) resolves in the file tree but 404s on the published Release page, so it is a lint failure citing the target and line number. This is the whole-body successor to check 12's 6a-only scope: it catches a repo-relative link anywhere in the body, including the Section 6b operator-detail block. The rule keys on "renders on the Release surface" — it is NOT a blanket ban on relative links in the committed file (the note file legitimately lives in `release/releases/notes/`, so a relative link is correct *in the file*); it requires absolute URLs only for the body that publishes to Surface 1. Use the absolute `https://github.com/{REPO}/blob/main/...` form for in-repo targets that must render on the Release page.
 
-**Forward-only from the cutover release.** Pre-cutover notes are exempt — the lint maintains an explicit `PRE_CUTOVER_EXEMPT_VERSIONS` set inside the script to handle the version-tuple/chronology mismatch (some releases carry higher version-tuples than the cutover release but shipped earlier, because major version signals work-mode rather than chronology). Warn-mode initial per the established Check 14/15/18/19 shakedown precedent; flip-to-enforce after ≥3-day warn-log review with zero false positives.
+**Forward-only from the cutover release.** Pre-cutover notes are exempt — the lint maintains explicit exempt sets inside the script (`PRE_CUTOVER_EXEMPT_VERSIONS` for checks 9-12; `NOTE_LINK_EXEMPT_VERSIONS` for check 13's link rule) to handle the version-tuple/chronology mismatch (some releases carry higher version-tuples than the cutover release but shipped earlier, because major version signals work-mode rather than chronology). Checks 9-12 floor at the lowest live family; check 13 floors at `NOTE_LINK_CUTOVER` (the release that introduces it), so the historical notes carrying the legacy Section-6b template link are not retroactively failed. Warn-mode initial per the established Check 14/15/18/19 shakedown precedent; flip-to-enforce after ≥3-day warn-log review with zero false positives.
 
 ### 3.3 Eval rubric
 
-The note is "verifiably helpful" per the research grounding. A binary pass/fail eval rubric owned by the [eval-writer skill](../../../core/skills/eval-writer/SKILL.md) scores notes against the Must-Have Checklist; the rubric file lives at [release-notes-eval-rubric.md](../../../core/skills/eval-writer/references/release-notes-eval-rubric.md). The rubric covers all 12 lint checks (existing checks 1-8 + new checks 9-12 added at the cutover release). [release-executor Mode E](../../skills/release-executor/SKILL.md) invokes the rubric pre-presentation per Mode E Step 4. Calibration corpus is the set of post-cutover notes under `release/releases/notes/` (per the `PRE_CUTOVER_EXEMPT_VERSIONS` set in `lint_release_corpus.py`).
+The note is "verifiably helpful" per the research grounding. A binary pass/fail eval rubric owned by the [eval-writer skill](../../../core/skills/eval-writer/SKILL.md) scores notes against the Must-Have Checklist; the rubric file lives at [release-notes-eval-rubric.md](../../../core/skills/eval-writer/references/release-notes-eval-rubric.md). The rubric covers all 13 lint checks (existing checks 1-8 + checks 9-12 added at the cutover release + check 13 whole-body link purity). [release-executor Mode E](../../skills/release-executor/SKILL.md) invokes the rubric pre-presentation per Mode E Step 4. Calibration corpus is the set of post-cutover notes under `release/releases/notes/` (per the `PRE_CUTOVER_EXEMPT_VERSIONS` set in `lint_release_corpus.py`).
 
 ---
 
@@ -493,7 +494,7 @@ The dual-write mechanism is **NOT triple-authoring**. The operator (or `release-
 
 | Surface | Transform from `vX.Y_RELEASE_NOTES.md` |
 |---|---|
-| GitHub Releases (1) | Full file body verbatim (excluding YAML frontmatter; GitHub renders frontmatter as raw text). Title from existing `# <Headline>` H1 line. |
+| GitHub Releases (1) | Full file body verbatim (excluding YAML frontmatter; GitHub renders frontmatter as raw text). Title = `vX.Y — <headline>` (the H1 headline text, leading `# ` stripped, prefixed with the version and an em-dash). |
 | CHANGELOG.md (2) | Append a new `## [vX.Y] - YYYY-MM-DD` section at top-of-file under "Unreleased" containing 5-15 lines extracted from `vX.Y_RELEASE_NOTES.md` Section 6a using Keep-a-Changelog labels. Transform is **lossy by design** — operator-grade detail (Section 6b) stays in the canonical note + RELEASE_LOG. |
 | `<OPERATOR_INSTANCE_LOG_PATH>` (3) | Append row + visible-H4 Deployment Log block per [`stage-12-execute.md § Phase B5`](../pipeline/stage-12-execute.md) emit format and Stage 13 chore PR `DEPLOYED → VERIFIED` transition. **Already-codified mechanism;** dual-write does not modify it. |
 
@@ -505,7 +506,7 @@ The dual-write mechanism is **NOT triple-authoring**. The operator (or `release-
 
 | Surface | Length convention | Format constraint | Section-mapping from canonical note |
 |---|---|---|---|
-| **GitHub Releases** | Full — no truncation; mirrors entire `vX.Y_RELEASE_NOTES.md` body (Sections 1-8 + References) | GitHub-flavored Markdown; tag = `v<X.Y>`; title = H1 headline line; body = file contents excluding YAML frontmatter | All sections (1-8 + References) |
+| **GitHub Releases** | Full — no truncation; mirrors entire `vX.Y_RELEASE_NOTES.md` body (Sections 1-8 + References) | GitHub-flavored Markdown; tag = `v<X.Y>`; title = `vX.Y — <headline>` (the H1 headline prefixed with the version and an em-dash); body = file contents excluding YAML frontmatter | All sections (1-8 + References) |
 | **CHANGELOG.md** | **5-15 lines per release** (median target 8 lines). Cap rule: ≤15 lines total across all change-type sections; releases requiring >15 lines apply the length-budget escape-hatch below. | Keep-a-Changelog 1.1.0: `## [vX.Y] - YYYY-MM-DD` H2 per release + `### Added/Changed/Deprecated/Removed/Fixed/Security` H3 per category present | **Section 6a only** (Layer-A user-facing bullets). Each Section 6a bullet → one CHANGELOG line under the applicable Keep-a-Changelog label. Section 6b never replicates to CHANGELOG. |
 | **`<OPERATOR_INSTANCE_LOG_PATH>`** | Full audit — ~50-100 lines per release (existing convention) | Tabular row + visible-H4 Deployment Log block (existing format) | Cross-references the canonical note path; does not duplicate body content |
 
@@ -572,7 +573,7 @@ To compose Surface 1 into an idempotent SEQUENCE, the emit MUST follow a 3-state
 
 | State | Pre-condition | Action | Post-condition |
 |---|---|---|---|
-| **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes-file <canonical-note-path> --title "<H1-headline>" --target <merge-sha>` — on success → State 2; on transient failure (network / 5xx) → retry once → on second failure → HALT and escalate Tier 2 [SCOPE CHANGE] per [`release-process.md § Inter-Stage Feedback Protocol`](../../governance/release-process.md) | release present at desired content; auditable via `gh release view` |
+| **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes-file <canonical-note-path> --title "vX.Y — <headline>" --target <merge-sha>` — on success → State 2; on transient failure (network / 5xx) → retry once → on second failure → HALT and escalate Tier 2 [SCOPE CHANGE] per [`release-process.md § Inter-Stage Feedback Protocol`](../../governance/release-process.md) | release present at desired content; auditable via `gh release view` |
 | **State 1 — release exists; content may differ** | `gh release view v<X.Y> --json body` returns body content (any value) | Compare returned body against canonical note body (excluding frontmatter). If MATCH → State 2 PASS no-op. If DIFFER → `gh release edit v<X.Y> --notes-file <canonical-note-path>` (idempotent) → State 2 | release present at desired content |
 | **State 2 — release present with current content** | view + diff verification passes | No mutation needed; PASS; proceed to Surface 2 emit | sequence complete for Surface 1 |
 
@@ -630,6 +631,7 @@ Every release note must satisfy all of these:
 - [ ] Every Section 6a bullet contains the "Why it matters:" beat (§2.2) OR carries the `<!-- impact:foundational -->` escape-hatch marker
 - [ ] No banned-jargon term (§2.4) appears in Section 6a content
 - [ ] No file paths in Section 6a bullet bodies — use inline anchor text instead
+- [ ] Whole-body link purity — every markdown-link target in the published (frontmatter-stripped) body is absolute (`https://`, `#anchor`, or `mailto:`); no repo-relative `](../` / `](release/` / `](core/` link anywhere in the body (it would 404 on the GitHub Release page)
 - [ ] Section 7 (Known limits) present with both Known-limits and Report-issues sub-bullets
 - [ ] Section 8 (Reversibility) present when state mutates
 - [ ] Section 6b (Operator and engineering detail) present when release has operator-grade additions to surface; omitted when not
