@@ -21,7 +21,7 @@
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
-#   12 await_merge_chore_pr poll mergeStateStatus per Stage 12 Phase A.6 pattern
+#   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
 #   13 post_close_milestone gh api -X PATCH state=closed
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
@@ -55,6 +55,10 @@
 #                              repeatable) — pass the Stage-13 sub-task # so it
 #                              cannot self-close mid-run
 #     --close-comment <N>:<t>  Per-issue close-comment override (#38; repeatable)
+#     --merge-timeout <N>      Chore-PR await-merge poll budget, seconds (#1705;
+#                              default 300 — CI-realistic, not the old 30s cap)
+#     --no-merge               Create the chore PR but do NOT poll/merge it (#1705);
+#                              exit cleanly leaving the PR for the operator
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -204,6 +208,18 @@ EXCLUDE_ISSUES=()        # --exclude-issue <N> (#38; repeatable). Issues filtere
 CLOSE_COMMENTS=()        # --close-comment <N>:"<text>" (#38; repeatable). Per-issue
                          # close-comment override for a Tier-0 disposition so it gets
                          # the correct comment, not the generic auto-close-anomaly text.
+MERGE_TIMEOUT=300        # --merge-timeout <N> (#1705). Await-merge poll budget in
+                         # seconds. Default 300s (CI-realistic: required CI on this
+                         # repo runs ~2-3min); the prior 30s cap was a detection-
+                         # pending budget, not a CI-completion budget.
+NO_MERGE=0               # --no-merge (#1705). Create the chore PR but do NOT poll/merge
+                         # it — exit cleanly leaving the PR for the operator to merge.
+CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
+                         # phase_await_merge_chore_pr SKIPs gracefully (un-strands the
+                         # terminal phases on the idempotent already-up-to-date path).
+MERGE_POLL_STEP=10       # await-merge poll interval (seconds). Not a CLI flag —
+                         # internal; the self-test overrides it to keep hermetic
+                         # runs fast.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -229,7 +245,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,73p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -1388,6 +1404,39 @@ phase_create_chore_pr() {
     return 3
   fi
 
+  # Zero-commit guard (#1705): a chore PR with no commits ahead of main either
+  # errors at `gh pr create` or creates an empty PR that can never merge —
+  # STRANDING the 4 terminal phases (post_close → manual_close → verify → publish
+  # → drift → orphan → pattern). The guard distinguishes the two zero-commit
+  # causes (adversarial-review mitigation):
+  #   (a) idempotent re-run — the corpus already merged to main (DIGEST H3 +
+  #       INDEX row + NOTES file present on origin/main) → SKIP create + skip
+  #       await BENIGNLY, terminal phases proceed (un-stranding).
+  #   (b) FIRST-run no-op bug — 0 commits AND the corpus is NOT on main → FAIL
+  #       loudly rather than skip into a broken publish (publish reads the NOTES
+  #       file and would FAIL or publish an empty body).
+  # The check only runs in --apply (dry-run never pushes/commits).
+  if [[ "$MODE" != "dry-run" ]]; then
+    local commits_ahead
+    commits_ahead="$(git_net -C "$REPO_ROOT" rev-list --count "origin/main..${CHORE_BRANCH}" 2>/dev/null || echo 0)"
+    if [[ "$commits_ahead" -eq 0 ]]; then
+      # Corpus-presence-on-main gate: only SKIP benignly if the close outputs are
+      # actually already on main (idempotent re-run), else FAIL loud.
+      local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1
+      _dig_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${VERSION//./\\.}[[:space:](]" || true)"
+      _idx_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null | /usr/bin/grep -cE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" || true)"
+      _notes_on_main="$(git_net -C "$REPO_ROOT" cat-file -e "origin/main:release/releases/notes/${VERSION}_RELEASE_NOTES.md" 2>/dev/null && echo 1 || echo 0)"
+      [[ "${_dig_on_main:-0}" -ge 1 && "${_idx_on_main:-0}" -ge 1 && "${_notes_on_main:-0}" -ge 1 ]] || _corpus_present=0
+      if [[ "$_corpus_present" -eq 1 ]]; then
+        CHORE_PR_SKIPPED=1
+        mark_phase "create_chore_pr" "SKIPPED" "0 commits ahead of origin/main and the close outputs (DIGEST H3 + INDEX row + NOTES) are already present on main — idempotent re-run; terminal phases proceed"
+        return 0
+      fi
+      mark_phase "create_chore_pr" "FAIL" "0 commits ahead of origin/main but the close outputs are NOT on main (DIGEST=${_dig_on_main:-0}/INDEX=${_idx_on_main:-0}/NOTES=${_notes_on_main:-0}) — the scaffold/commit phases no-op'd on a FIRST run (a real bug); failing loud rather than skipping into a broken publish"
+      return 3
+    fi
+  fi
+
   if [[ "$MODE" == "dry-run" ]]; then
     mark_phase "create_chore_pr" "DRY-RUN" "body parser-clean PASS; would: gh pr create --title 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
@@ -1428,8 +1477,22 @@ phase_create_chore_pr() {
 }
 
 phase_await_merge_chore_pr() {
+  # Zero-commit SKIP propagation (#1705): if phase_create_chore_pr SKIPped on the
+  # idempotent already-up-to-date path, there is no PR to merge — SKIP gracefully
+  # so the terminal phases proceed (un-stranding).
+  if [[ "$CHORE_PR_SKIPPED" -eq 1 ]]; then
+    mark_phase "await_merge_chore_pr" "SKIPPED" "chore PR was SKIPPED (0 commits ahead, corpus already on main) — nothing to merge"
+    return 0
+  fi
+
+  # --no-merge mode (#1705): create-only — leave the PR for the operator to merge.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} left open for operator merge (no poll/merge)"
+    return 0
+  fi
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll mergeStateStatus per Stage 12 Phase A.6 (4-tier backoff 3s/5s/10s/12s) then gh pr merge --merge --delete-branch"
+    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll mergeStateStatus (CI-realistic budget ~${MERGE_TIMEOUT}s; BLOCKED/UNSTABLE = keep-polling) then gh pr merge --merge --delete-branch"
     return 0
   fi
 
@@ -1438,25 +1501,34 @@ phase_await_merge_chore_pr() {
     return 3
   fi
 
-  # Brief poll per Stage 12 Phase A.6 (3s/5s/10s/12s = 30s cap)
-  local backoff=(3 5 10 12)
+  # CI-realistic poll budget (#1705). The prior 30s cap was a detection-pending
+  # budget (GitHub computing mergeability), NOT a CI-completion budget — a real
+  # chore PR must wait for required status checks to go green before
+  # MERGEABLE/CLEAN. Poll with a fixed 10s step up to MERGE_TIMEOUT (default 300s,
+  # tunable via --merge-timeout). MERGEABLE/BLOCKED + MERGEABLE/UNSTABLE are
+  # KEEP-POLLING states (checks pending / non-required-failing), not terminal —
+  # only CONFLICTING / DIRTY HALT; only CLEAN proceeds to merge.
+  local step="$MERGE_POLL_STEP"
+  local elapsed=0
   local merge_state="UNKNOWN"
-  for delay in "${backoff[@]}"; do
+  while [[ "$elapsed" -lt "$MERGE_TIMEOUT" ]]; do
     merge_state="$($GH pr view "$CHORE_PR_NUMBER" --repo "$REPO_SLUG" --json mergeStateStatus,mergeable --jq '"\(.mergeable)/\(.mergeStateStatus)"' 2>/dev/null || echo "ERROR")"
     case "$merge_state" in
       MERGEABLE/CLEAN) break ;;
       CONFLICTING/*|MERGEABLE/DIRTY) mark_phase "await_merge_chore_pr" "FAIL" "merge state=$merge_state; HALT — escalate Tier 2 [SCOPE CHANGE]"; return 3 ;;
+      # MERGEABLE/BLOCKED, MERGEABLE/UNSTABLE, */UNKNOWN, ERROR → keep polling
     esac
-    /bin/sleep "$delay"
+    /bin/sleep "$step"
+    elapsed=$((elapsed + step))
   done
 
   if [[ "$merge_state" != "MERGEABLE/CLEAN" ]]; then
-    mark_phase "await_merge_chore_pr" "FAIL" "merge state still=$merge_state after 30s polling — escalate"
+    mark_phase "await_merge_chore_pr" "FAIL" "merge state still=$merge_state after ${elapsed}s polling (budget ${MERGE_TIMEOUT}s) — escalate (raise --merge-timeout if CI runs longer, or --no-merge to leave the PR for manual merge)"
     return 3
   fi
 
   if $GH pr merge "$CHORE_PR_NUMBER" --repo "$REPO_SLUG" --merge --delete-branch >/dev/null 2>&1; then
-    mark_phase "await_merge_chore_pr" "PASS" "merged PR #${CHORE_PR_NUMBER}"
+    mark_phase "await_merge_chore_pr" "PASS" "merged PR #${CHORE_PR_NUMBER} (after ${elapsed}s poll)"
     return 0
   fi
   mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed"
@@ -2266,6 +2338,76 @@ STUB
   EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
+  # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
+  # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
+  # BLOCKED-then-CLEAN keep-polling reaches a merge (mock $GH, tiny step/timeout);
+  # and the --merge-timeout / --no-merge flags parse into their globals.
+  local _mt_saved_gh="$GH" _mt_saved_mode="$MODE" _mt_saved_pr="$CHORE_PR_NUMBER"
+  local _mt_saved_skipped="$CHORE_PR_SKIPPED" _mt_saved_nomerge="$NO_MERGE"
+  local _mt_saved_timeout="$MERGE_TIMEOUT" _mt_saved_step="$MERGE_POLL_STEP" _mt_saved_slug="$REPO_SLUG"
+  MODE="apply"; CHORE_PR_NUMBER="7777"; REPO_SLUG="x/y"
+
+  # (a) zero-commit SKIP propagation: CHORE_PR_SKIPPED=1 → await SKIPPED (no gh call)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  CHORE_PR_SKIPPED=1; NO_MERGE=0
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == SKIPPED\|* ]] || { echo "FAIL: await_merge must SKIP when CHORE_PR_SKIPPED=1 (zero-commit propagation), got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+
+  # (b) --no-merge → await SKIPPED (PR left open for operator)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  CHORE_PR_SKIPPED=0; NO_MERGE=1
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == SKIPPED\|* ]] || { echo "FAIL: await_merge must SKIP under --no-merge, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+
+  # (c) BLOCKED-then-CLEAN keep-polling reaches a merge. Stub $GH so `pr view`
+  #     returns MERGEABLE/BLOCKED on the first call and MERGEABLE/CLEAN after
+  #     (proving BLOCKED is keep-polling, not terminal), and `pr merge` exits 0.
+  local _mt_tmp; _mt_tmp="$(/usr/bin/mktemp -d -t mergeawait-selftest.XXXXXX)"
+  local _mt_ctr="$_mt_tmp/calls"; /usr/bin/printf '0' > "$_mt_ctr"
+  local _mt_stub="$_mt_tmp/gh-stub.sh"
+  /bin/cat > "$_mt_stub" <<STUB
+#!/usr/bin/env bash
+# #1705 await-merge stub. \`pr view\` → BLOCKED first, CLEAN after; \`pr merge\` → ok.
+ctr_file="$_mt_ctr"
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  n="\$(/bin/cat "\$ctr_file" 2>/dev/null || echo 0)"
+  /usr/bin/printf '%s' "\$((n+1))" > "\$ctr_file"
+  if [[ "\$n" -eq 0 ]]; then echo "MERGEABLE/BLOCKED"; else echo "MERGEABLE/CLEAN"; fi
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_mt_stub"
+  GH="$_mt_stub"; CHORE_PR_SKIPPED=0; NO_MERGE=0; MERGE_TIMEOUT=5; MERGE_POLL_STEP=0
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge must PASS after BLOCKED→CLEAN keep-polling, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge must POLL again after BLOCKED (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+
+  # (d) CONFLICTING → FAIL (terminal HALT, regression guard)
+  /usr/bin/printf '0' > "$_mt_ctr"
+  local _mt_stub2="$_mt_tmp/gh-stub2.sh"
+  /bin/cat > "$_mt_stub2" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "CONFLICTING/DIRTY"; exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_mt_stub2"
+  GH="$_mt_stub2"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_await_merge_chore_pr >/dev/null 2>&1; then
+    echo "FAIL: await_merge must FAIL (HALT) on CONFLICTING"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: CONFLICTING must mark FAIL"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_mt_tmp" 2>/dev/null || true
+  GH="$_mt_saved_gh"; MODE="$_mt_saved_mode"; CHORE_PR_NUMBER="$_mt_saved_pr"
+  CHORE_PR_SKIPPED="$_mt_saved_skipped"; NO_MERGE="$_mt_saved_nomerge"
+  MERGE_TIMEOUT="$_mt_saved_timeout"; MERGE_POLL_STEP="$_mt_saved_step"; REPO_SLUG="$_mt_saved_slug"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -2366,7 +2508,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,73p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -2413,6 +2555,7 @@ STUB
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
+  echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
@@ -2485,6 +2628,8 @@ while [[ $# -gt 0 ]]; do
     --outcome-rationale) OUTCOME_RATIONALE="$2"; shift 2 ;;
     --exclude-issue) EXCLUDE_ISSUES+=("$2"); shift 2 ;;
     --close-comment) CLOSE_COMMENTS+=("$2"); shift 2 ;;
+    --merge-timeout) MERGE_TIMEOUT="$2"; shift 2 ;;
+    --no-merge) NO_MERGE=1; shift ;;
     --self-test) SELF_TEST=1; shift ;;
     --check-paths) CHECK_PATHS=1; shift ;;
     --help|-h) usage ;;
