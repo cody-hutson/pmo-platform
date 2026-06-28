@@ -85,6 +85,7 @@ One row per deployed CI. The CI population is the **deployed roster** resolved f
 | [`pmo-skill-refiner`](../../release/skills/pmo-skill-refiner/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
 | [`release-executor`](../../release/skills/release-executor/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
 | [`release-planner`](../../release/skills/release-planner/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
+| [`roadmap-curator`](../../release/skills/roadmap-curator/SKILL.md) | function-skill | release | active | RELATES_TO release-planner · RELATES_TO intake-desk | platform-maintainer | — | — |
 | [`eval-writer`](eval-writer/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
 | [`pmo-qa-auditor`](pmo-qa-auditor/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
 | [`prompt-builder`](prompt-builder/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
