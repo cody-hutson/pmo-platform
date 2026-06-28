@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.37] - 2026-06-28
+
+Published release notes can no longer silently drift from the note we wrote — the release-notes close-out is hardened so the public release page matches the in-repo note and the close-out checks run no matter how a release is finished. Additive throughout: standard / governance / lint / check edits plus one founding decision record; no data migration, no stored-content move, no change to any project-facing surface. routine class.
+
+### Added
+- **Scaffold-independent close-completeness check.** A finished release is now verified to have produced its full set of close-out records, independent of how the work was tracked, so an abbreviated checklist can no longer quietly skip a step. *Why it matters:* releases are reported "done" only when they are actually complete. ([#1290](https://github.com/cody-hutson/pmo-platform/issues/1290))
+- **More release-note defects caught before publish.** The note check now also catches a release page whose title is missing its version and links that work in the repo but break on the published page. *Why it matters:* you get a correctly-titled page with links that resolve. ([#2120](https://github.com/cody-hutson/pmo-platform/issues/2120))
+
+### Changed
+- **The published release page now stays faithful to the source note.** A release page is rebuilt directly from the source note on publish, with an after-the-fact check that the two match. *Why it matters:* a note correction actually reaches the page people read instead of going stale. ([#2085](https://github.com/cody-hutson/pmo-platform/issues/2085))
+- **Release notes are checked the same way no matter how a release is finished.** The note quality check now runs on every close path, not only the scripted one. *Why it matters:* a release closed by hand can no longer ship a note that skips the checks. ([#2082](https://github.com/cody-hutson/pmo-platform/issues/2082))
+
 ## [v2.36] - 2026-06-28
 
 Triage and bundling now follow written signals instead of being re-figured each release — several judgment calls the release pipeline made fresh on every run (how an approved ticket's structure is treated downstream, how priority is read, when related issues are grouped, how sub-tasks are tracked) are written down as standing rules, and one repeatedly hand-derived step becomes a tracked tool. Additive throughout — spec/governance/schema edits plus one new tool; no data migration, no stored-content move, no behavior change to any project-facing surface. novel class.
