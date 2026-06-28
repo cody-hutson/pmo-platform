@@ -1710,9 +1710,13 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | GitHub Release (Surface 1, Layer-1 dual-write) | `gh release view v<X.Y> --repo {REPO}` exit 0 | PASS/FAIL |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | `git show origin/main:CHANGELOG.md \| grep -qE "^## \[?v<X.Y>\]?[[:space:]]"` exit 0; N/A if CHANGELOG.md absent (pre-CHANGELOG state) | PASS/FAIL/N/A |
    | .version stamped (release-cut-owned) | `git show origin/main:.version \| grep -qx v<X.Y>` exit 0; N/A for version-less release (Phase B5.7 SKIP) | PASS/FAIL/N/A |
+   | Posted Release TITLE versioned (Surface 1, posted-surface) | `gh release view v<X.Y> --repo {REPO} --json name --jq '.name' \| grep -qE '^v[0-9]+\.[0-9]+([a-z]\|-[0-9a-z][-0-9a-z]*)? — .'` exit 0 — the posted title reads `vX.Y — <headline>`, not the bare H1 headline; N/A for a version-less release | PASS/FAIL/N/A |
+   | Posted Release BODY link-resolvable (Surface 1, posted-surface) | `gh release view v<X.Y> --repo {REPO} --json body --jq '.body' \| grep -nE '\]\((\.\.?/\|release/\|core/\|docs/)'` returns NO match — the published body carries no repo-relative link (a repo-relative link 404s on the Release page) | PASS/FAIL |
    | Audit-class synthesis (audit-class only) | `gh issue list --milestone <target-milestone> --search "in:body \"<audit-folder-name>\""` returns N where N = recommendations count per Stage 4 D-decision granularity rule | PASS/FAIL/N/A |
    | Audit retro Milestone tags (audit-class only) | For each filed Issue: `gh issue view <N> --json milestone --jq '.milestone.title'` returns non-null = `<target-milestone>` | PASS/FAIL/N/A |
    ```
+
+   **Posted-surface verify (Surface 1, posted-surface rows):** The two posted-surface rows above read the LIVE GitHub Release via `gh release view` — distinct from the structural Check 20 lint (which lints the committed in-repo note file and cannot see the posted page). They catch the title-composition and link-resolvability defects that are invisible to Check 20: a bare-H1 (un-versioned) posted title, and a repo-relative body link that resolves in the file tree but 404s on `releases/tag/vX.Y`. Both run read-only (no git mutation), compose with the existing read-only Step-4 block, and BLOCK closure on failure under the same severity as the other Surface-1 checks. The body-link check is the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13). Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
 
    **Sequencing note:** The Milestone-closed check (#3) is the only verification that depends on Step 5's PATCH having fired (it asserts `state == closed`). Hub runs verification commands #1, #2, #4, #5 first (which gate the Step 5 hub PATCH), proceeds to Step 5 (PATCH), then re-runs check #3 to confirm `state=closed`. Final "🎉 RELEASE COMPLETE" declaration awaits all 5 universal checks PASSing AND (audit-class only) checks 6-7 PASSing.
 
@@ -1745,6 +1749,8 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | GitHub Release (Surface 1, Layer-1 dual-write) | \`gh release view v<X.Y> --repo {REPO}\` | PASS |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | \`git show origin/main:CHANGELOG.md | grep -qE "^## \[?v<X.Y>\]?[[:space:]]"\` | PASS / N/A (pre-CHANGELOG state) |
    | .version stamped (release-cut-owned) | \`git show origin/main:.version | grep -qx v<X.Y>\` | PASS / N/A (version-less release) |
+   | Posted Release TITLE versioned (Surface 1, posted-surface) | \`gh release view v<X.Y> --repo {REPO} --json name --jq '.name' | grep -qE '^v[0-9]+\.[0-9]+( |-)\` | PASS / N/A (version-less release) |
+   | Posted Release BODY link-resolvable (Surface 1, posted-surface) | \`gh release view v<X.Y> --repo {REPO} --json body --jq '.body' | grep -nE '\]\((\.\.?/|release/|core/|docs/)'\` no match | PASS |
    | Audit-class synthesis (audit-class only) | \`gh issue list --milestone <target> --search "in:body \"<audit-folder>\""\` | N/A (non-audit-class release) |
    | Audit retro Milestone tags (audit-class only) | For each filed Issue: \`gh issue view <N> --json milestone\` | N/A (non-audit-class release) |
 

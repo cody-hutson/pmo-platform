@@ -254,7 +254,7 @@ Classification of the four ledgers (and the two regions *within* `RELEASE_LOG.md
 
 **Reversibility (Surface 2):** CHEAP / HIGH confidence — `git revert <Stage-13-chore-PR-SHA>` reverts the CHANGELOG.md prepend atomically alongside INDEX/DIGEST/NOTES + the RELEASE_LOG VERIFIED transition. The atomic landing matches the existing chore-PR rollback semantics; no special revert path needed.
 
-**Phase B5.6 — Surface 1 verification (cross-stage check):** Phase B5.5 (CHANGELOG append, Surface 2) commits in the chore PR. Before the chore PR merge step, Stage 13 spoke verifies Surface 1 (GitHub Release for v<X.Y>) exists per the Stage 12 Phase B5.5 emit:
+**Phase B5.6 — Surface 1 verification (cross-stage check):** Phase B5.5 (CHANGELOG append, Surface 2) commits in the chore PR. Before the chore PR merge step, Stage 13 spoke verifies Surface 1 (GitHub Release for v<X.Y>) exists per the Stage 12 Phase B5.5 emit, AND that the live posted Release is well-formed on the two surfaces Check 20 cannot see — the posted title composition and the published body's link resolvability:
 
 ```bash
 # Verify Surface 1 (GitHub Release) exists per Stage 12 Phase B5.5
@@ -262,10 +262,24 @@ if ! gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
   echo "WARN — Surface 1 (GitHub Release v<X.Y>) not present; Stage 12 Phase B5.5 may not have completed"
   echo "Routing options: (A) invoke release-executor Mode F to publish Surface 1 standalone; (B) Tier 2 [SCOPE CHANGE] per release-process.md § Inter-Stage Feedback Protocol"
   # Operator decision required before proceeding
+else
+  # Posted-surface verify — reads the LIVE Release page, distinct from the
+  # in-repo Check 20 lint. Catches the defects invisible to a structural lint:
+  # a bare-H1 (un-versioned) posted title, and a repo-relative body link that
+  # resolves in the file tree but 404s on releases/tag/vX.Y.
+  # (1) Posted TITLE is versioned vX.Y — <headline>
+  gh release view "v<X.Y>" --repo {REPO} --json name --jq '.name' \
+    | grep -qE '^v[0-9]+\.[0-9]+([a-z]|-[0-9a-z][-0-9a-z]*)? — .' \
+    || echo "BLOCK — posted Release TITLE is not versioned (expected 'vX.Y — <headline>', not the bare H1)"
+  # (2) Posted BODY has no repo-relative link (would 404 on the Release page)
+  gh release view "v<X.Y>" --repo {REPO} --json body --jq '.body' \
+    | grep -nE '\]\((\.\.?/|release/|core/|docs/)' \
+    && echo "BLOCK — posted Release BODY has the repo-relative link(s) above (404 on the Release page); re-emit from the corrected canonical note" \
+    || true   # no match = pass
 fi
 ```
 
-Surface 1 verification at Stage 13 catches partial-deploy scenarios where Stage 12 Phase B5.5 failed silently or was skipped. The check is non-blocking by default — operator decides routing (publish via Mode F, or accept residual + bundle into next release). When Surface 1 is missing, Stage 13 chore PR still proceeds with Surfaces 2+3; Surface 1 backfill is a separate operator action via Mode F.
+Surface 1 verification at Stage 13 catches partial-deploy scenarios where Stage 12 Phase B5.5 failed silently or was skipped. The existence check is non-blocking by default — operator decides routing (publish via Mode F, or accept residual + bundle into next release); when Surface 1 is missing, Stage 13 chore PR still proceeds with Surfaces 2+3 and Surface 1 backfill is a separate operator action via Mode F. The two posted-surface assertions (title-format + body-link resolvability) are the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13) — they read the LIVE Release page, which the structural Check 20 lint cannot see. A failure blocks closure: the canonical note is corrected first, then all surfaces re-emit from it per §5.6. Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
 
 **Phase B5.7 — `.version` stamp (release-cut-owned version source-of-truth):** The Stage 13 chore PR commit includes a write to the repo-root `.version` file, stamping it to the shipped version (`.version = v<X.Y>`). `.version` is the platform's version source-of-truth: the SessionStart version-skew hook ([`core/hooks/notify-version-skew.sh`](../../../core/hooks/notify-version-skew.sh)) reads it and compares against the latest published GitHub Release; `update.sh` Phase 5b and `setup-workspace.sh` install_hooks propagate it to the deployed `<ws>/.claude/.version` snapshot. The bump has no other owner in the pipeline — Stage 12 Phase B3 owns the git *tag*, not the `.version` *file* — so absent this phase the file freezes at a stale value and the version-skew banner reports a perpetual "update available" no `update.sh` can clear. Owned by `automated-closeout.sh` `phase_bump_version`: it writes atomically (temp + `mv`), is **idempotent** (no-op when `.version` already equals `v<X.Y>`), and **SKIPs with PASS** for a *version-less* / non-`vX.Y` release — there is nothing to stamp, so the file is intentionally left untouched and the SKIP is recorded in the close-out report (auditable, not silent). **Cutover / grandfather:** applies to releases entering Stage 13 strictly AFTER this phase's introducing-release merge SHA; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it is version-less), and `.version` inside historical tags is immutable accepted-residual (only HEAD/`main` is correctable). **Reversibility:** CHEAP / HIGH — the `.version` write reverts atomically with the rest of the Stage 13 chore PR via `git revert <Stage-13-chore-PR-SHA>`. Drift backstop: `deploy.sh --check` Check 39 anchors `.version` against the latest published GitHub Release (warn-mode-initial).
 
