@@ -10,10 +10,16 @@ the promotion decision line in the promoting PR).
 
 Mirror contract (Model A — body→native one-way; the authoritative spec lives in
 release/references/specs/ticket-information-architecture.md § Native Dependencies):
-  - Eligible body deps: `FS+0d #N` ONLY (default / untyped `#N` normalizes to
-    FS+0d). Non-FS-zero-lag types (`SS`, `FF`, `SF`, `FS±Nd`) are body-only by
-    design — native `blocks`/`blocked-by` has only one semantic and cannot
-    express them, so they are NEVER mirrored.
+  - Eligible body deps: `FS+0d #N` on a **Blocked by: / Depends on:** segment ONLY
+    (default / untyped `#N` normalizes to FS+0d). The Dependencies section is a
+    labeled-segment grammar — a `#N` on a **Blocks:** segment is the RECIPROCAL
+    ("current blocks #N", not "current blocked-by #N") and is NOT mirrored as a
+    current-issue blocked-by; a `#N` on a **Relates to: / sibling / pairs** segment
+    is non-blocking and is NOT mirrored at all. Non-FS-zero-lag types (`SS`, `FF`,
+    `SF`, `FS±Nd`) are body-only by design — native `blocks`/`blocked-by` has only
+    one semantic and cannot express them, so they are NEVER mirrored. (Direction-
+    blind parsing of `Blocks:` / `Relates to:` targets was the #662 Blocker —
+    it inverted edges and wrote false native blocked-by dependencies.)
   - to_add  = eligible body deps NOT present in native blocked-by → add via
     GraphQL addIssueDependency (body wins; auto-resolve).
   - drift   = native blocked-by NOT present in eligible body deps → FLAGGED for
@@ -69,6 +75,24 @@ from typing import Dict, List, Optional, Set, Tuple
 # Untyped `#N` normalizes to FS+0d (backward-compat shim). The dep-section
 # heading is matched suffix-tolerantly and against a closed alias set, mirroring
 # bundle-issues-parser.py's DEP_HEADING_ALIASES (the canonical body parser).
+#
+# DIRECTION IS SEGMENT-SCOPED (#662 Blocker fix). The live body format (rendered
+# from improvement.yml's `Dependencies` field) is a labeled-segment grammar, NOT a
+# flat "every `#N` is a blocker" list. A single Dependencies section commonly reads:
+#
+#     Blocked by: — · Blocks: #213 · Relates to: #149, #61
+#
+# Only `#N` on a **Blocked by: / Depends on:** segment means "current issue IS
+# blocked-by #N" (the mirror-eligible direction → native blocked-by(current ← #N)).
+# A `#N` on a **Blocks:** segment is the RECIPROCAL ("current BLOCKS #N") — mirroring
+# it as blocked-by(current ← #N) INVERTS the edge (the #662 defect: #225's
+# `Blocks: #213` was being asserted as "225 blocked-by 213", the opposite of truth).
+# `#N` on a relates/sibling/pairs/parent segment is a NON-blocking relationship and
+# is never mirrored. Per the sibling precedent bundle-issues-parser.py
+# (`derive_artifact_relationships`: "BLOCKS is reachable only from native … in that
+# degraded path no BLOCKS edge is emitted and the dependency defaults to the weakest
+# correct claim"), the reciprocal-`Blocks:` edge is NOT asserted as a current-issue
+# blocked-by; it is left to the target issue's own `Blocked by:` segment to express.
 
 SECTION_HEADING_RE = re.compile(r"^###\s+", re.MULTILINE)
 
@@ -80,27 +104,93 @@ DEP_HEADING_ALIASES = [
     "Relationships",
 ]
 
+# Segment-label grammar inside the Dependencies section. The section body is sliced
+# into labeled segments at these markers; each `#N` is attributed to the label that
+# precedes it. `kind` drives mirror direction:
+#   "blocked_by" — current IS blocked-by #N        → mirror-eligible (the only kind)
+#   "blocks"     — current BLOCKS #N (reciprocal)   → NOT a current-issue blocked-by
+#   "relates"    — non-blocking relationship        → never mirrored
+# A `#N` appearing before any label (an unlabeled leading run, e.g. the legacy
+# bullet-list `### Dependencies\n- #46` form) is treated as "blocked_by" — that bare
+# form has always meant "this issue depends on #N" (backward-compat with the legacy
+# fixtures and the spec's untyped-`#N`→blocked-by default).
+SEGMENT_LABELS: List[Tuple[str, str]] = [
+    # label-kind, regex matching the label token (case-insensitive, colon-tolerant)
+    ("blocked_by", r"Blocked\s*by"),
+    ("blocked_by", r"Depends\s*on"),
+    ("blocked_by", r"Requires"),               # placeholder "Requires #N first"
+    ("blocks",     r"Blocks"),
+    ("relates",    r"Relates\s*to"),
+    ("relates",    r"Relates"),
+    ("relates",    r"Related"),
+    ("relates",    r"Relationship"),
+    ("relates",    r"Pairs\s*with"),
+    ("relates",    r"Coordinates\s*with"),
+    ("relates",    r"Foundational\s*sibling\s*to"),
+    ("relates",    r"Sibling"),
+    ("relates",    r"Parent"),
+    ("relates",    r"Child"),
+    ("relates",    r"Sub-?task\s*of"),
+    ("relates",    r"Scope-?boundary"),
+    ("relates",    r"See\s*also"),
+]
+
+# A single matcher that finds ANY segment label and reports its kind. Longest /
+# most-specific alternations first so "Relates to" wins over bare "Relates", etc.
+# Anchored to a word boundary on the left; followed by an optional colon.
+_SEGMENT_LABEL_RE = re.compile(
+    r"\b(?P<label>"
+    + "|".join(rf"(?P<k{i}>{pat})" for i, (_kind, pat) in enumerate(SEGMENT_LABELS))
+    + r")\s*:?",
+    re.IGNORECASE,
+)
+_LABEL_KIND_BY_GROUP = {f"k{i}": kind for i, (kind, _pat) in enumerate(SEGMENT_LABELS)}
+
 # One dependency token. Type prefix + offset optional; hash-ref required.
 # Examples matched: "#46", "FS #46", "FS+0d #46", "SS #46", "FS+3d #46",
 # "FS-2d #46". Anchored to a token boundary so "##" or "#46abc" do not match.
+#
+# COMMA-SAFE (#662 fix): the target is `\d[\d,]*\d|\d` — it captures a full
+# comma-grouped integer (`#1,234`) instead of truncating at the comma to `#1`. The
+# captured run's commas are stripped before int() (a comma-grouped issue number is
+# not a real GitHub id, but capturing the whole run prevents a SILENT mirror against
+# the wrong issue `#1`; such tokens are then dropped as out-of-range — see
+# parse_body_dependencies). A trailing `\b` still rejects `#46abc`.
 DEP_TOKEN_RE = re.compile(
     r"(?P<type>FS|SS|FF|SF)?\s*"
     r"(?:(?P<sign>[+-])(?P<offset>\d+)d)?\s*"
-    r"#(?P<target>\d+)\b"
+    r"#(?P<target>\d[\d,]*\d|\d)\b"
 )
 
 
 @dataclass
 class BodyDep:
-    """A single parsed body dependency edge."""
+    """A single parsed body dependency edge.
+
+    `direction` records which labeled segment the edge came from:
+      "blocked_by" — current issue IS blocked-by `target` (the mirror-eligible kind)
+      "blocks"     — current issue BLOCKS `target` (reciprocal; never a current-issue
+                     blocked-by edge — see is_mirror_eligible)
+    Non-blocking relationships (relates/sibling/…) are NOT emitted as BodyDep at all.
+    """
     type: str          # "FS" | "SS" | "FF" | "SF"
     offset_days: int   # signed integer; 0 when omitted
     target: int        # the referenced issue number
+    direction: str = "blocked_by"  # "blocked_by" | "blocks"
 
     @property
     def is_mirror_eligible(self) -> bool:
-        """Only FS with zero lag mirrors to native (Model A subset rule)."""
-        return self.type == "FS" and self.offset_days == 0
+        """Mirror-eligible = FS, zero lag, AND blocked-by direction (Model A subset).
+
+        The blocked-by direction gate is the #662 fix: a `blocks` (reciprocal) edge
+        is NEVER mirrored as a current-issue native blocked-by, even when FS+0d —
+        mirroring it would invert the dependency direction.
+        """
+        return (
+            self.type == "FS"
+            and self.offset_days == 0
+            and self.direction == "blocked_by"
+        )
 
 
 def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
@@ -128,32 +218,105 @@ def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
     return None
 
 
-def parse_body_dependencies(body: str) -> List[BodyDep]:
-    """Parse the body Dependencies section into typed edges.
+def _attribute_segments(section: str) -> List[Tuple[str, str]]:
+    """Slice a Dependencies section into (kind, text) segments by labeled marker.
 
-    An ABSENT Dependencies section returns [] (deps are optional at intake). Each
-    matched token is normalized: missing type → "FS"; missing offset → 0. Returns
-    one BodyDep per `#N` reference, de-duplicated by (type, offset_days, target).
+    Walks the section left-to-right, finding each segment label (Blocked by / Blocks
+    / Relates to / …); the text from one label up to the next is attributed to that
+    label's kind. Any leading text BEFORE the first label is attributed "blocked_by"
+    (the legacy bare-`#N` bullet-list form — `### Dependencies\n- #46` — has always
+    meant "this issue depends on #46"). Segment slicing is whitespace/newline-blind,
+    so it handles BOTH the single-line `A · B · C` form and the multi-line form.
+    """
+    segments: List[Tuple[str, str]] = []
+    matches = list(_SEGMENT_LABEL_RE.finditer(section))
+    if not matches:
+        # No labels at all → whole section is the legacy blocked-by list.
+        return [("blocked_by", section)]
+    # Leading run before the first label → legacy blocked-by (bare `#N`).
+    if matches[0].start() > 0:
+        lead = section[: matches[0].start()]
+        if lead.strip():
+            segments.append(("blocked_by", lead))
+    for i, m in enumerate(matches):
+        kind = next(
+            (_LABEL_KIND_BY_GROUP[g] for g in _LABEL_KIND_BY_GROUP if m.group(g)),
+            "relates",
+        )
+        seg_start = m.end()
+        seg_end = matches[i + 1].start() if i + 1 < len(matches) else len(section)
+        segments.append((kind, section[seg_start:seg_end]))
+    return segments
+
+
+def _parse_token(m: "re.Match") -> Optional[Tuple[str, int, int]]:
+    """Normalize one DEP_TOKEN_RE match → (type, offset_days, target).
+
+    Returns None for an out-of-range / ambiguous target (e.g. a comma-grouped
+    `#1,234` — not a real GitHub issue id; captured whole to avoid a SILENT truncated
+    mirror against `#1`, then dropped here so no wrong edge is written).
+    """
+    raw_target = m.group("target").replace(",", "")
+    if "," in m.group("target"):
+        # Comma-grouped run: captured to prevent the `#1,234`→`#1` truncation bug,
+        # but a comma-grouped number is not a valid issue ref — skip it safely.
+        print(
+            f"native-dep-mirror: skipping ambiguous comma-grouped token "
+            f"'#{m.group('target')}' (not a valid issue id)",
+            file=sys.stderr,
+        )
+        return None
+    target = int(raw_target)
+    dep_type = m.group("type") or "FS"
+    if m.group("offset") is not None:
+        offset = int(m.group("offset"))
+        if m.group("sign") == "-":
+            offset = -offset
+    else:
+        offset = 0
+    return dep_type, offset, target
+
+
+def parse_body_dependencies(body: str) -> List[BodyDep]:
+    """Parse the body Dependencies section into DIRECTIONAL typed edges.
+
+    An ABSENT Dependencies section returns [] (deps are optional at intake). The
+    section is sliced into labeled segments (Blocked by / Blocks / Relates to / …);
+    each `#N` carries the direction of its segment:
+      - Blocked by: / Depends on: / Requires → BodyDep(direction="blocked_by")
+      - Blocks:                                → BodyDep(direction="blocks") (reciprocal)
+      - Relates to: / sibling / pairs / …      → NOT emitted (non-blocking prose)
+    Only "blocked_by" FS+0d edges are mirror-eligible (see BodyDep.is_mirror_eligible)
+    — this is the #662 fix that stops `Blocks:` and `Relates to:` targets from being
+    written as inverted / false native blocked-by edges. Each matched token is
+    normalized (missing type → "FS"; missing offset → 0) and de-duplicated by
+    (type, offset_days, target, direction).
     """
     section = extract_section_aliased(body, DEP_HEADING_ALIASES)
     if section is None:
         return []
-    seen: Set[Tuple[str, int, int]] = set()
+    seen: Set[Tuple[str, int, int, str]] = set()
     deps: List[BodyDep] = []
-    for m in DEP_TOKEN_RE.finditer(section):
-        dep_type = m.group("type") or "FS"
-        if m.group("offset") is not None:
-            offset = int(m.group("offset"))
-            if m.group("sign") == "-":
-                offset = -offset
-        else:
-            offset = 0
-        target = int(m.group("target"))
-        key = (dep_type, offset, target)
-        if key in seen:
-            continue
-        seen.add(key)
-        deps.append(BodyDep(type=dep_type, offset_days=offset, target=target))
+    for kind, seg_text in _attribute_segments(section):
+        if kind == "relates":
+            continue  # non-blocking relationship — never mirrored
+        for m in DEP_TOKEN_RE.finditer(seg_text):
+            parsed = _parse_token(m)
+            if parsed is None:
+                continue
+            dep_type, offset, target = parsed
+            key = (dep_type, offset, target, kind)
+            if key in seen:
+                continue
+            seen.add(key)
+            deps.append(
+                BodyDep(
+                    type=dep_type,
+                    offset_days=offset,
+                    target=target,
+                    direction=kind,
+                )
+            )
     return deps
 
 
@@ -359,7 +522,10 @@ def run_self_test() -> int:
 
     Covers: typed-grammar parsing, FS+0d eligibility filtering, untyped→FS+0d
     normalization, non-FS-zero-lag exclusion, the to_add/drift diff, heading
-    aliases/suffix-tolerance, idempotent no-op, and absent-section clean parse.
+    aliases/suffix-tolerance, idempotent no-op, absent-section clean parse, AND the
+    #662 Blocker fixes — segment-directional parsing (Blocked by vs Blocks vs Relates
+    to), the real improvement.yml single-line `Blocked by: — · Blocks: #N` body
+    format, non-blocking-relationship exclusion, and comma-grouped `#1,234` safety.
     """
     failures: List[str] = []
 
@@ -423,6 +589,95 @@ Stuff.
     # 8. No false match on bare '#' or non-issue hashes inside prose.
     noise = "### Dependencies\nSee the C# notes and issue #401 only.\n"
     check("prose noise → #401 only", mirror_eligible_targets(parse_body_dependencies(noise)), {401})
+
+    # ---- #662 Blocker fixtures (segment-directional / real-format / comma-safe) ----
+    # The live improvement.yml `Dependencies` field renders as a labeled-segment line.
+    # Direction-blind parsing of `Blocks:` / `Relates to:` targets was the BLOCKER:
+    # it wrote inverted / false native blocked-by edges (state-mutating GraphQL writes).
+
+    # 9. The #225-shaped case — the canonical Blocker exemplar. Real body line:
+    #    "Blocked by: — (independently shippable). · Blocks: **#213** ... ·
+    #     Relates to: **#149**, **#61**, **#288**"
+    # TRUTH: 225 BLOCKS 213 (reciprocal), is blocked-by NOTHING, relates-to the rest.
+    # The defect asserted "225 blocked-by 213" — the OPPOSITE. Assert that #213 (and
+    # the relates targets) are NOT mirror-eligible and that to_add is empty.
+    body_225 = (
+        "## Dependencies\n\n"
+        "Blocked by: — (independently shippable). · Blocks: **#213** "
+        "(per the roadmap-deps block — verify at Solutioning).\n"
+        "Relates to: **#149** (Stage 6 def), **#61** (decomposition protocol), "
+        "**#288** (sub-task API). Scope-boundary: owns the threshold, not #288's API.\n"
+    )
+    deps_225 = parse_body_dependencies(body_225)
+    check("#225 eligible empty (Blocks:/Relates: not mirrored)",
+          mirror_eligible_targets(deps_225), set())
+    check("#225 #213 NOT blocked-by(225←213)", 213 in mirror_eligible_targets(deps_225), False)
+    # The Blocks: edge IS parsed (as a reciprocal record) but is not mirror-eligible.
+    blocks_dirs = {d.target: d.direction for d in deps_225}
+    check("#225 #213 parsed as blocks-direction", blocks_dirs.get(213), "blocks")
+    check("#225 relates targets not parsed as deps",
+          (149 in blocks_dirs, 61 in blocks_dirs, 288 in blocks_dirs), (False, False, False))
+    to_add_225, _ = compute_mirror_plan(deps_225, native_blocked_by=set())
+    check("#225 to_add empty (no false native write)", to_add_225, [])
+
+    # 10. Real single-line form WITH a genuine blocked-by (the #149-shaped case):
+    #    "Blocked by: #151 ... · Blocks: — · Pairs with (Path B set): #152, #150 ..."
+    # ONLY #151 is a real blocked-by; #152/#150 (Pairs with) must NOT be mirrored.
+    body_149 = (
+        "## Dependencies\n"
+        "Blocked by: #151 (needs its banding contract) · Blocks: — · "
+        "Pairs with (Path B set): #152, #150. Coordinates with the hub primitives.\n"
+    )
+    deps_149 = parse_body_dependencies(body_149)
+    check("#149 eligible = {151} only", mirror_eligible_targets(deps_149), {151})
+    check("#149 pairs-with #152/#150 excluded",
+          (152 in mirror_eligible_targets(deps_149), 150 in mirror_eligible_targets(deps_149)),
+          (False, False))
+
+    # 11. Empty-blocked-by single-line form (the #280/#61/#288-shaped case):
+    #    "Blocked by: — · Blocks: — · Relates to: #33 ..." → nothing mirror-eligible.
+    body_empty = (
+        "## Dependencies\n\n"
+        "Blocked by: — · Blocks: — · Relates to: **#33** (Bundle def), the "
+        "`epic:*` / `cluster:*` taxonomy and native sub-issues.\n"
+    )
+    check("empty-blocked-by + relates → none eligible",
+          mirror_eligible_targets(parse_body_dependencies(body_empty)), set())
+
+    # 12. Multi-line labeled-segment variant — segments on separate lines.
+    body_multiline = (
+        "### Dependencies\n"
+        "Blocked by: #500, #501\n"
+        "Blocks: #999\n"
+        "Relates to: #777\n"
+    )
+    deps_ml = parse_body_dependencies(body_multiline)
+    check("multi-line blocked-by = {500,501}", mirror_eligible_targets(deps_ml), {500, 501})
+    check("multi-line Blocks: #999 not eligible", 999 in mirror_eligible_targets(deps_ml), False)
+    check("multi-line Relates: #777 not parsed",
+          777 in {d.target for d in deps_ml}, False)
+
+    # 13. Pure relates/sibling section — never mirrored even with bare `#N`.
+    body_relates = "### Dependencies\nRelates to: #810. Foundational sibling to #811.\n"
+    check("relates+sibling → none eligible",
+          mirror_eligible_targets(parse_body_dependencies(body_relates)), set())
+    check("relates+sibling → no deps parsed",
+          parse_body_dependencies(body_relates), [])
+
+    # 14. Comma-grouped `#1,234` is handled safely — NOT truncated to `#1`.
+    #    The whole run is captured (so it can't silently mirror against #1) then
+    #    dropped as an invalid id. A real adjacent dep on the same line still parses.
+    body_comma = "### Dependencies\nBlocked by: #1,234 and #5\n"
+    deps_comma = parse_body_dependencies(body_comma)
+    check("comma-grouped #1,234 not mirrored as #1", 1 in mirror_eligible_targets(deps_comma), False)
+    check("comma-grouped #1,234 dropped (only #5 survives)",
+          mirror_eligible_targets(deps_comma), {5})
+
+    # 15. Legacy clean bullet-list form still works (backward-compat guard):
+    #    `### Dependencies\n- #46` with no labels → leading run = blocked-by.
+    legacy = "### Dependencies\n- #46\n- FS #47\n- SS #48\n"
+    check("legacy bullet-list blocked-by",
+          mirror_eligible_targets(parse_body_dependencies(legacy)), {46, 47})
 
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)

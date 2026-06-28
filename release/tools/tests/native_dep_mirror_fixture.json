@@ -64,6 +64,60 @@
       "expect_eligible": [80],
       "expect_to_add": [80],
       "expect_drift": []
+    },
+    {
+      "name": "real-format-225-shaped-blocks-not-mirrored",
+      "_note": "#662 BLOCKER exemplar — the live #225 body shape. 'Blocks: #213' is the RECIPROCAL (current blocks #213, NOT blocked-by #213); the defect mirrored it as blocked-by(225<-213), inverting the edge. 'Relates to:' targets are non-blocking. Nothing is mirror-eligible; to_add MUST be empty so no false native dependency is written.",
+      "body": "## Dependencies\n\nBlocked by: — (independently shippable). · Blocks: **#213** (per the roadmap-deps block — verify at Solutioning).\nRelates to: **#149** (Stage 6 def), **#61** (decomposition protocol), **#288** (sub-task API). Scope-boundary: owns the threshold, not #288's API.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": []
+    },
+    {
+      "name": "real-format-single-line-genuine-blocked-by",
+      "_note": "#149-shaped single-line segmented form. ONLY the 'Blocked by:' segment (#151) yields a mirror-eligible blocked-by edge; 'Pairs with' targets (#152, #150) are non-blocking and must NOT be mirrored.",
+      "body": "## Dependencies\nBlocked by: #151 (needs its banding contract) · Blocks: — · Pairs with (Path B set): #152, #150. Coordinates with the hub primitives.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [151],
+      "expect_to_add": [151],
+      "expect_drift": []
+    },
+    {
+      "name": "real-format-empty-blocked-by-with-relates",
+      "_note": "#280/#61/#288-shaped form: both dependency segments empty (em-dash), only a 'Relates to:' list. Nothing mirror-eligible.",
+      "body": "## Dependencies\n\nBlocked by: — · Blocks: — · Relates to: **#33** (Bundle def), the `epic:*` / `cluster:*` taxonomy and native sub-issues.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": []
+    },
+    {
+      "name": "real-format-multiline-segments",
+      "_note": "Multi-line labeled-segment variant. Blocked by segment → eligible; Blocks/Relates segments → not mirrored.",
+      "body": "### Dependencies\nBlocked by: #500, #501\nBlocks: #999\nRelates to: #777\n",
+      "native_blocked_by": [501],
+      "expect_eligible": [500, 501],
+      "expect_to_add": [500],
+      "expect_drift": []
+    },
+    {
+      "name": "relates-to-and-sibling-not-mirrored",
+      "_note": "#662 fix #2 — a pure non-dependency-prose section: 'Relates to:' + 'Foundational sibling to'. No blocking edge is mirrored even though bare `#N` refs are present.",
+      "body": "### Dependencies\nRelates to: #810. Foundational sibling to #811.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": []
+    },
+    {
+      "name": "comma-grouped-issue-ref-handled-safely",
+      "_note": "#662 fix #3 — `#1,234` is captured whole (not truncated to `#1`) then dropped as an invalid id, so it is never silently mirrored against the wrong issue. A real adjacent dep on the same segment (#5) still parses.",
+      "body": "### Dependencies\nBlocked by: #1,234 and #5\n",
+      "native_blocked_by": [],
+      "expect_eligible": [5],
+      "expect_to_add": [5],
+      "expect_drift": []
     }
   ]
 }
