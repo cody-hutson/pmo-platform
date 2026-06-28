@@ -396,7 +396,7 @@ The note is "verifiably helpful" per the research grounding. A binary pass/fail 
 >
 > **Lint implementation** — Stage 13 Close mechanical checks 9–12 (Section 6a presence, banned-jargon scan, "Why it matters" beat per bullet, file-path purity) implemented in `lint_release_corpus.py` `check_note_content()` and wired into `deploy.sh` Check 20. Warn-mode initial per Check 14/15/18/19 shakedown precedent; flip-to-enforce after ≥3-day review.
 >
-> For full implementation detail see the [RELEASE_LOG.md entry](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>) and [the release plan](release/releases/plans/v1.18_RELEASE_PLAN.md).
+> For full implementation detail see the [RELEASE_LOG.md entry](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>) and [the release plan](https://github.com/{REPO}/blob/main/release/releases/plans/v1.18_RELEASE_PLAN.md).
 >
 > ### References
 >
