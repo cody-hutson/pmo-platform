@@ -69,6 +69,7 @@ RELEASE_SKILLS=(
   pmo-software-engineer
   release-executor
   release-planner
+  roadmap-curator
 )
 
 CORE_SKILLS=(
