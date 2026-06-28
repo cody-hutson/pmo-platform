@@ -138,6 +138,14 @@ jobs:
       - name: Run agent-tools-conformance regression (test_agent_tools_conformance.sh)
         run: bash core/deploy/tests/test_agent_tools_conformance.sh
 
+      - name: Run Check 36 drift-classes fixture self-test (test_check36_drift_classes.sh)
+        # Hermetic: builds a synthetic memory store + a canned `gh` stub in a
+        # tmpdir, exercises the two new Check 36 detectors (Class 4 dangling-
+        # wikilink local-only; Class 5 ledger-pointer-to-closed-issue), and
+        # drift-guards them against the live deploy.sh predicate. Never touches a
+        # real operator memory store (none exists in CI; the test self-contains).
+        run: bash core/deploy/tests/test_check36_drift_classes.sh
+
   hook-tests:
     name: Hook test harness (macOS)
     # The 8 core/hooks/tests/*.test.sh files + their test-runner.sh exercise the
