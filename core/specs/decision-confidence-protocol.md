@@ -3,7 +3,7 @@ title: Decision-Confidence Protocol
 purpose: Canonical mechanism for an agent to decide proceed-vs-pause-vs-escalate on a pending decision — a 3-source consistency signal (never verbalized self-confidence), a reversibility × autonomy threshold matrix (no global numeric cutoff), and a bounded pause-to-learn loop that injects new external signal. Consumed by decision-class pipeline stages and skills as a pre-action gate.
 applies_to: Any agent decision point across the six in-scope decision-domains (Deferrals, Estimations, Slicing & Decomposition, Internal Knowledge Depth, Tool Use, Design & Architecture); decision-class skills and pipeline stages; the Stage-4 currency-check (named consumer).
 parallel_to: reversibility-protocol.md (the cost-of-error axis) + autonomy-tiers.md (the standing-authorization axis) — this protocol composes both as its two threshold axes, never restating their tables. Imports discovery-discipline.md § 2.5 as the pause-to-learn gap-closer; registers a 3rd pre-action sibling alongside autonomous-execution-model.md Retry/Escalate; reuses decision-discipline.md verification + ceremony-guard mechanisms.
-source: "Research spike #1612 (COMPOSE posture, hard design constraints); Stage 5 Solutioning design 2026-06-27; co-developed with the Define ADR sibling."
+source: "The decision-confidence Research spike (COMPOSE posture, hard design constraints); the Stage 5 Solutioning design; co-developed with the Define ADR sibling. See § Provenance."
 ---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
@@ -14,7 +14,7 @@ source: "Research spike #1612 (COMPOSE posture, hard design constraints); Stage 
 
 This protocol operationalizes the question an agent faces *before* it acts on a non-obvious decision: **proceed now, pause to learn, or escalate?** It supplies (1) a confidence **signal** derived from observable consistency cross-checks — never the agent's verbalized self-confidence; (2) a **threshold model** that scales the proceed-vs-pause decision to the action's reversibility tier crossed with its autonomy tier, because no single global numeric cutoff is defensible; and (3) a **bounded pause-to-learn loop** that, when the signal is low, injects new external signal, terminates against a budget and explicit exit conditions, and routes the residue to escalation rather than stalling.
 
-The protocol is a **compose, not a redefine** layer. It does not invent a new tier vocabulary, a new triage, or a new escalation surface — it binds the ones the platform already has into a single pre-action gate. The cost-of-error axis is `reversibility-protocol.md`; the standing-authorization axis is `autonomy-tiers.md`; the gap-closer is `discovery-discipline.md` § 2.5; the escalation surface is `autonomous-execution-model.md`'s Escalate Pattern; the verification primitives and ceremony guards are `decision-discipline.md`. This protocol is the missing connective tissue between those five docs — the **mid node** in the `discovery → [decision-confidence] → RCA` sequence. `[SOURCE: Research spike #1612 COMPOSE posture]`
+The protocol is a **compose, not a redefine** layer. It does not invent a new tier vocabulary, a new triage, or a new escalation surface — it binds the ones the platform already has into a single pre-action gate. The cost-of-error axis is `reversibility-protocol.md`; the standing-authorization axis is `autonomy-tiers.md`; the gap-closer is `discovery-discipline.md` § 2.5; the escalation surface is `autonomous-execution-model.md`'s Escalate Pattern; the verification primitives and ceremony guards are `decision-discipline.md`. This protocol is the missing connective tissue between those five docs — the **mid node** in the `discovery → [decision-confidence] → RCA` sequence. `[SOURCE: decision-confidence Research spike — COMPOSE posture]`
 
 ## Definition
 
@@ -23,7 +23,7 @@ The protocol is a **compose, not a redefine** layer. It does not invent a new ti
 | | Decision-confidence (this protocol) | Verbalized self-confidence (rejected) |
 |---|---|---|
 | **What it is** | An observable composite: do independent derivations agree, is the gap nameable, what is the weakest evidence label? | An introspected self-report ("I'm 90% sure"). |
-| **Why** | Consistency across independent paths is checkable by a reviewer and by a gate. | A self-report is unfalsifiable and is the least-trustworthy signal in the evidence. `[SOURCE: Research spike #1612 hard design constraints]` |
+| **Why** | Consistency across independent paths is checkable by a reviewer and by a gate. | A self-report is unfalsifiable and is the least-trustworthy signal in the evidence. `[SOURCE: Research spike hard design constraints]` |
 | **Status in this protocol** | The **only** admitted signal (§ 1). | **Named and rejected** as an input (§ 1, § 5). A gate that reads a self-report back in is a guard violation. |
 
 Decision-confidence is **paired with but distinct from** reversibility (the *what-if-wrong cost*, per `reversibility-protocol.md` § Definition) and from autonomy (the *who-acts-under-what-authorization*, per `autonomy-tiers.md` § Definition). All three travel together: the signal says *how grounded the conclusion is*; reversibility says *how expensive being wrong is*; autonomy says *how much standing authorization already exists*. The threshold model (§ 2) is exactly the rule that combines them. `[INFERRED: from reversibility-protocol.md § Definition confidence-pairing + autonomy-tiers.md § Definition orthogonality]`
@@ -39,7 +39,7 @@ The signal is a **composite from three observable sources**, each independently 
 | # | Source | What it observes | Why it is trustworthy (not a self-report) |
 |---|---|---|---|
 | **CS-1** | **Cross-check agreement** | Does an independent path corroborate the conclusion? A second tool or query, a re-derivation, or a canonical-source read per `decision-discipline.md` § 2.1 Localization Check + § 2.1.1 verification primitives. | Agreement across independent derivations is observable as agree/disagree; it is the Research-preferred consistency signal, not an introspection. `[SOURCE: decision-discipline.md § 2.1.1]` |
-| **CS-2** | **Gap-namability** | Can the agent name the *specific* missing fact — a file, a value, a dependency state — rather than only "I'm unsure"? | A named gap is checkable and routable; a vague unease is neither. This operationalizes the "name the specific gap" constraint. `[SOURCE: Research spike #1612]` |
+| **CS-2** | **Gap-namability** | Can the agent name the *specific* missing fact — a file, a value, a dependency state — rather than only "I'm unsure"? | A named gap is checkable and routable; a vague unease is neither. This operationalizes the "name the specific gap" constraint. `[SOURCE: Research spike hard design constraints]` |
 | **CS-3** | **Evidence-label floor** | What is the *weakest* evidence label under the conclusion, using the CLAUDE.md vocabulary `[SOURCE]` > `[INFERRED]` > `[ASSUMPTION – CONFIRM]`? | Reuses the existing five-label evidence vocabulary as a grounding floor; an `[ASSUMPTION – CONFIRM]` under a load-bearing claim is an observable low-ground signal, not a feeling. `[SOURCE: CLAUDE.md § Universal Preferences — Evidence quality labels]` |
 
 ### 1.2 The collapse rule — a three-value signal state
@@ -52,11 +52,11 @@ The three sources collapse to one of three ordinal states (mirroring how `stalen
 
 ### 1.3 The rejected signal (hard constraint)
 
-Verbalized self-confidence — "I'm 90% sure," "I feel good about this" — is **NOT an input** to the signal. It is named here as the rejected signal so that a downstream gate or guard can flag any implementation that smuggles a self-report back in. The signal must be reconstructable from CS-1/CS-2/CS-3 observations alone; if a proceed decision cannot cite which source produced `CONVERGENT`, the gate has been bypassed. `[SOURCE: Research spike #1612 — "do NOT gate on verbalized self-confidence (least trustworthy)"]`
+Verbalized self-confidence — "I'm 90% sure," "I feel good about this" — is **NOT an input** to the signal. It is named here as the rejected signal so that a downstream gate or guard can flag any implementation that smuggles a self-report back in. The signal must be reconstructable from CS-1/CS-2/CS-3 observations alone; if a proceed decision cannot cite which source produced `CONVERGENT`, the gate has been bypassed. `[SOURCE: Research spike — "do NOT gate on verbalized self-confidence (least trustworthy)"]`
 
 ## § 2 — The Threshold Model (Reversibility × Autonomy)
 
-There is no defensible single global numeric cutoff. `[SOURCE: #2286 scope; Research spike #1612]` Instead, the signal state from § 1 selects an action from a **two-axis decision matrix** keyed on the two existing tier specs — `reversibility-protocol.md` (CHEAP → IRREVERSIBLE) as the cost-of-error axis, `autonomy-tiers.md` (Tier 0 → Tier 3) as the standing-authorization axis. The matrix encodes the Research rule "scale the pause to cost-of-error × fallback quality": reversibility approximates cost-of-error, autonomy approximates how much fallback (standing authorization) already exists.
+There is no defensible single global numeric cutoff. `[SOURCE: Define scope; Research spike]` Instead, the signal state from § 1 selects an action from a **two-axis decision matrix** keyed on the two existing tier specs — `reversibility-protocol.md` (CHEAP → IRREVERSIBLE) as the cost-of-error axis, `autonomy-tiers.md` (Tier 0 → Tier 3) as the standing-authorization axis. The matrix encodes the Research rule "scale the pause to cost-of-error × fallback quality": reversibility approximates cost-of-error, autonomy approximates how much fallback (standing authorization) already exists.
 
 This protocol **does not restate** the four reversibility tiers or the four autonomy tiers — it references them. For tier definitions and observable indicators, read `reversibility-protocol.md` § The Four Tiers and `autonomy-tiers.md` § Tier 0–3. `[SOURCE: CLAUDE.md § Quality Standards — "Parameterize over hardcode"]`
 
@@ -105,7 +105,7 @@ Default **1 cycle**, hard cap **2**. A pause-to-learn is cheaper than Retry (tra
 
 ### 3.3 Exit conditions
 
-The loop ends when **any** of the four fires — satisfying the hard "must have an exit condition" constraint. `[SOURCE: Research spike #1612 — pause must be bounded + have an exit condition]`
+The loop ends when **any** of the four fires — satisfying the hard "must have an exit condition" constraint. `[SOURCE: Research spike — pause must be bounded + have an exit condition]`
 
 - **E1 — Resolved.** The signal flips to `CONVERGENT` → re-enter the § 2 matrix and PROCEED.
 - **E2 — Not-knowable-now.** § 2.5 routes the gap to Knowable-later or Knowable-only-by-operating → exit to a spike or a ship-and-observe decision, carrying the reversibility tier.
@@ -114,7 +114,7 @@ The loop ends when **any** of the four fires — satisfying the hard "must have 
 
 ## § 4 — Six-Domain Application
 
-The protocol is domain-general, not bespoke per decision type. The table below shows, per in-scope decision-domain, the dominant signal source (§ 1) and the most common pause-routing (§ 3) — so a consumer can see how the same mechanism instantiates across the six domains named in scope. `[SOURCE: #2286 scope]`
+The protocol is domain-general, not bespoke per decision type. The table below shows, per in-scope decision-domain, the dominant signal source (§ 1) and the most common pause-routing (§ 3) — so a consumer can see how the same mechanism instantiates across the six domains named in scope. `[SOURCE: Define scope — six in-scope decision-domains]`
 
 | Decision domain | Dominant signal source | Typical reversibility band | Typical pause routing |
 |---|---|---|---|
@@ -172,7 +172,7 @@ Per `failure-mode-standard.md` 5-field template (Signature / Conditional / Root 
 **FM-1 — Self-confidence smuggling (gating on a self-report)** — Category: INPUT
 
 - *Signature:* A proceed decision cites "I'm confident" / a numeric self-rating instead of CS-1/CS-2/CS-3 observations; the signal state cannot be reconstructed from observable sources.
-- *Conditional:* Do NOT collapse the three-source signal into a verbalized self-confidence judgment when the conclusion is load-bearing, because a self-report is the least-trustworthy signal in the evidence and is unfalsifiable by a reviewer. `[SOURCE: Research spike #1612]`
+- *Conditional:* Do NOT collapse the three-source signal into a verbalized self-confidence judgment when the conclusion is load-bearing, because a self-report is the least-trustworthy signal in the evidence and is unfalsifiable by a reviewer. `[SOURCE: Research spike hard design constraints]`
 - *Root cause:* Agent reaches for the fast introspective answer ("do I feel sure?") instead of running the cross-check; the self-report is cheaper to produce than a CS-1 corroboration.
 - *Mitigation:* § 1.3 names self-confidence as a rejected input; the guard (§ 5) requires the proceed decision to name which source produced `CONVERGENT`. A proceed that cannot cite a source is treated as gate-bypassed.
 - *Principal-vs-junior response:* Junior — writes "confident, proceeding"; Principal — names the corroborating path ("CS-1: re-derived against the canonical roadmap state; CS-3 floor `[SOURCE]`") or runs the loop.
@@ -188,7 +188,7 @@ Per `failure-mode-standard.md` 5-field template (Signature / Conditional / Root 
 **FM-3 — Global-cutoff regression (one threshold for all decisions)** — Category: PROC
 
 - *Signature:* A consumer applies a single proceed/pause threshold regardless of reversibility or autonomy — e.g., "always pause when unsure" or "always proceed when CS-3 ≥ `[INFERRED]`" — ignoring the matrix.
-- *Conditional:* Do NOT apply one global proceed-vs-pause cutoff across decisions of different reversibility, because the cost of being wrong is not constant — a `DIVERGENT` signal should proceed at CHEAP and escalate at IRREVERSIBLE, and a single cutoff destroys that scaling. `[SOURCE: #2286 — no clean global numeric cutoff exists]`
+- *Conditional:* Do NOT apply one global proceed-vs-pause cutoff across decisions of different reversibility, because the cost of being wrong is not constant — a `DIVERGENT` signal should proceed at CHEAP and escalate at IRREVERSIBLE, and a single cutoff destroys that scaling. `[SOURCE: Define scope — no clean global numeric cutoff exists]`
 - *Root cause:* Agent reaches for a simple scalar threshold because it is easier to implement than a 2-axis matrix; over-simplifies the model the AC explicitly forbids.
 - *Mitigation:* § 2 is a matrix, not a number; the column axis is mandatory. Invariant I1 forbids the IRREVERSIBLE column from collapsing to the CHEAP behavior.
 - *Principal-vs-junior response:* Junior — "I'll pause whenever confidence is low"; Principal — reads the reversibility tier first, then selects the matrix cell.
@@ -215,3 +215,12 @@ Per `failure-mode-standard.md` 5-field template (Signature / Conditional / Root 
 ---
 
 *This protocol is a foundation document. It composes `reversibility-protocol.md`, `autonomy-tiers.md`, `discovery-discipline.md`, `autonomous-execution-model.md`, and `decision-discipline.md`; it is consumed by the Stage-4 currency-check (§ 6) and any decision-class skill or pipeline stage that adopts the pre-action gate. The label→gate edit to `reversibility-protocol.md` and the 3rd-sibling registration in `autonomous-execution-model.md` are downstream single-writer changes, not part of this spec.*
+
+## Provenance
+
+This spec's design lineage, for audit only — not load-bearing on the protocol's content (the protocol reads version-agnostically above).
+
+- #1612 — the decision-confidence Research spike that produced the COMPOSE posture and the four hard design constraints this spec operationalizes.
+- #2283 — the Define task (spec + ADR) under which this spec was authored; carries the COMPOSE recipe and the per-doc relationship posture.
+- #2286 — the Define ST1 sub-task that scoped this spec's acceptance criteria (signal, threshold, bounded loop, six-domain application, named consumer).
+- #2285 — the downstream Create task that builds the gate, integrates the named consumer, and wires the anti-theater guard.
