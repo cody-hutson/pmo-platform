@@ -194,9 +194,48 @@ The bound: default **1 learn-iteration**, hard cap **2**, then exit to Escalate.
 
 **No unbounded loop.** An unbounded pause is the failure mode this bound exists to prevent — a pause that neither resolves, routes out, nor escalates is a silent stall, not a learn-loop.
 
-### Anti-theater guard hook
+### Anti-theater guard (entry-precondition — mechanism step 0)
 
-A pause is load-bearing **iff** it (a) injects a **new** signal, (b) is **bounded**, and (c) **has an exit** — the three observable signals specified in `../specs/decision-confidence-protocol.md` § 5. Keep these observable in the recorded pause (step 5): a pause that re-states the same inputs and concludes without a fetch, an unbounded re-think with no cycle ceiling, or a stall that never hits E1–E4, each reads as theater and is flagged.
+A pause is load-bearing **iff** it (O1) injects a **new** external signal, (O2) is **bounded** by a declared budget, and (O3) **has an exit** condition named at entry — the three observable signals specified in `../specs/decision-confidence-protocol.md` § 5. The guard makes those three properties a **hard entry-precondition** of the loop above: it runs as **mechanism step 0**, *before* step 1, and is a deterministic 3-of-3 checklist evaluated against the pause record. A pause that misses **any one** observable is **rejected as ceremony** and never fires; it demotes to its base disposition. This is the *pre-hoc* gate; the § 6 release-close tripwire (`decision-discipline.md` § 6 **M5**, below) is its *post-hoc* complement — M5 catches a pause that *passed* this gate but proved inert in aggregate.
+
+Each observable is **mechanically inspectable from the recorded pause** (no subjective judgment — the same bar `decision-discipline.md` § 5 sets for any process step) and maps to an existing `decision-discipline.md` § 5 guard rather than inventing a parallel vocabulary:
+
+| # | Observable | Load-bearing looks like | Check against the pause record | `decision-discipline.md` § 5 anchor + loop step | Ceremony signature it rejects |
+|---|---|---|---|---|---|
+| **O1** | **new-signal-injected** | The pause performs a concrete external action — a file read, a `gh`/`git`/`grep` over the canonical source, a spike, a fetch, or an operator question — that returns a signal **not already resolvable from the agent's current context**. | Record names **(a)** the external source/action and **(b)** the signal it returns, AND that signal closes a `Knowable later` gap per `discovery-discipline.md` § 2.5. A `Knowable now` gap fails O1 (the answer was already fetchable → `[verify-before-recommend]` read, not a pause); a `Knowable only by operating` gap fails O1 (no signal to inject → ship-and-observe, not a pause). | **G1** (load-bearing test — cite specific evidence; abstractions without cited artifacts = ceremony) + **G3** (resolvable citation), applied to the pause record; loop **step 3**. | "Pausing to reconsider / reflect / be careful" with no named external action — re-reading context already in hand. |
+| **O2** | **bounded** | The pause declares its **budget at entry**: an **iteration cap** (default 1, hard cap 2 per § Budget and exit) **and** a **bound on cost** (wall-clock or operation count). | Record carries both numbers **before** the first learn-action. An open-ended "pause until confident" is rejected. A budget above the cap requires a cited rationale (the Retry production-cap-exception rationale pattern). | Bound is policed by the § 6 tripwire metrics (the post-hoc complement) and honors **G6** (no recursion — a fixed bound, not an open-ended "evaluate whether to evaluate"); loop **§ 3.2**. | "Pause and keep investigating until ready" — no cap, no bound. An unbounded pause is indistinguishable from a stall and cannot be audited. |
+| **O3** | **has-exit** | The pause names its **exit condition** at entry — the observable that flips it to **proceed** (gap closed → resume at the reversibility × autonomy tier) or to **Escalate** (gap proven not-knowable-now but budget exhausted). | Record states the **proceed-predicate AND the escalate-predicate**, AND budget-exhaustion routes to **Escalate** (exit E3), never to silent proceed. A pause whose only exit is "until I feel confident" is rejected. | **G4** (articulated uncertainty over fake certainty — the honest "I don't know" routes to Escalate, never to a subjective "feels right"); loop **§ 3.3** (exits E1–E4). | "Pause until I'm comfortable / it feels right" — subjective, unfalsifiable exit. |
+
+**Why three, AND-composed:** each observable defeats a *distinct* ceremony shape — O1 kills the think-without-fetching pause, O2 kills the unbounded-stall pause, O3 kills the never-ends pause. Any one alone is insufficient (a pause can inject a real signal yet loop forever). **Load-bearing ⟺ O1 ∧ O2 ∧ O3**; failing any one suffices to reject.
+
+**Guard-gated mechanism (step 0 precedes the 5-step loop above):**
+
+```
+0. GUARD — evaluate O1 ∧ O2 ∧ O3 against the pause record.
+     ├─ all three pass → enter the pause (proceed to step 1, Name the gap)
+     └─ any one fails  → REJECT as ceremony → demote to base disposition:
+                           proceed-at-tier if reversibility/autonomy allows,
+                           else Escalate (§ Escalate Pattern). The pause never fires.
+1..5. (the learn-loop above — Name → Triage → Inject → Re-evaluate → Record)
+```
+
+The guard is **deterministic** (a 3-precondition checklist, no "evaluate whether to evaluate" — `decision-discipline.md` § 5 **G6**) and so cannot itself recurse into ceremony; `decision-discipline.md` § 6 **M5** is the release-close backstop that catches a guard passing inert pauses.
+
+#### Worked verification — the pass/reject fixture
+
+Two pause records run through the step-0 guard; the guard's verdict is the asserted output (the platform's REAL-TEST convention for governance-as-text).
+
+- **REJECT case — a ceremony-only pause (must be rejected):**
+  > *Pause record:* "Pausing to reconsider this recommendation and make sure it's right before proceeding. Will resume once I'm confident."
+  > *Guard trace:* **O1 FAIL** — no external action named; no signal injected; the "reconsideration" re-reads context already in hand (`Knowable now` at best). **O2 FAIL** — no cap, no cost bound. **O3 FAIL** — exit is "once I'm confident" (subjective, unfalsifiable).
+  > *Verdict:* **REJECTED as ceremony** (fails 3/3; failing any one suffices). Demote to base disposition → proceed-at-tier or Escalate. The pause never fires.
+
+- **PASS case — a load-bearing pause (must pass):**
+  > *Pause record:* "Pausing to learn: the consumer-integration target is ambiguous (gap = `Knowable later`). **Action:** read the currency-check consumer's tracking item + `grep` the roadmap surface to determine if the consumer is in-window. **Budget:** cap = 2 learn-iterations, bound = the stage's latency envelope. **Exit:** proceed at MODERATE × Tier-2 once the target resolves; Escalate if unresolved after 2 iterations."
+  > *Guard trace:* **O1 PASS** — names an external action (read + `grep`) returning a signal not in context, closing a `Knowable later` gap. **O2 PASS** — cap = 2 + latency bound declared at entry. **O3 PASS** — proceed-predicate AND escalate-predicate both stated; budget-exhaustion routes to Escalate (E3).
+  > *Verdict:* **PASS** (3/3) → the pause fires; on exit it either proceeds at tier or escalates.
+
+The two cases are the load-bearing-versus-theater contrast the recorded pause (step 5) must keep observable: same surface shape ("pausing to…"), opposite verdicts, because only the PASS case names an external signal, a budget, and a falsifiable exit.
 
 ### Reversibility tier
 

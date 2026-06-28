@@ -477,6 +477,7 @@ Four metrics reported at release close (per § 6):
 2. **M3 applicability rate** — count of Pattern Cache Scans that cited applicable patterns. Target: >0 per release.
 3. **Observations-logged count** (Iter 2 extension) — count of observations logged per release. Decaying to zero over multiple releases = signal of under-capture (patterns going unlogged because the class-potential threshold is being applied too narrowly).
 4. **Emergence-confirmation rate** (Iter 2 extension) — count of candidate patterns surfaced AND promoted per release. Zero across 2+ releases with ≥10 observations logged = signal of over-tagging (patterns clustering not matching operator judgment).
+5. **M5 pause-adoption rate** (decision-confidence extension) — count of pause-to-learn fires whose injected signal CHANGED the downstream decision ÷ total fires per release. The pre-hoc complement is the entry-precondition guard in `autonomous-execution-model.md` § Pause-to-Learn Pattern, whose three observables reuse these guards rather than inventing new vocabulary: **O1** (new-signal-injected) is **G1**/**G3** applied to a pause record, and **O3** (has-exit) is **G4** (articulated uncertainty over a subjective "feels right" exit).
 
 Zero-rate releases: consumer self-flags possible decay; operator may flag theater. These are tripwires, not thresholds.
 
@@ -500,6 +501,7 @@ Four metrics reported at the release-close procedure (e.g., `hub-spoke-bridge.md
 | 2 | **M3 Pattern Cache Scan applicability rate** | Count of Pattern Cache Scans that cited applicable patterns (confirmed or emerged-candidate) | Target: >0 per release. Zero across 2+ releases = under-caching or over-specific triage |
 | 3 | **Observations-logged count** | Count of observations appended to the observation log during this release | Decaying to zero across multiple releases = under-capture (class-potential threshold too narrow) |
 | 4 | **Emergence-confirmation rate** | Count of candidate patterns surfaced AND promoted to permanent entries this release | Zero across 2+ releases with ≥10 observations logged = over-tagging (clustering doesn't match operator judgment) |
+| 5 | **M5 pause-adoption rate** | Count of pause-to-learn fires whose injected signal CHANGED the downstream decision ÷ total fires this release (the pause-to-learn pattern lives in `autonomous-execution-model.md` § Pause-to-Learn Pattern; its entry-precondition guard is the *pre-hoc* complement to this *post-hoc* metric) | Mirrors M2 exactly. A release where pauses fire but **0%** change any decision = the entry guard is passing ceremony (signals injected but inert) → recalibrate. Zero-fires is not a signal (the release didn't exercise the pattern) |
 
 **Framing:** Tripwires, not thresholds. A zero-rate release is not automatic failure — it is a signal that either (a) the release genuinely didn't exercise the mechanism, (b) the consumer is drifting toward theater, or (c) calibration parameters need adjustment. Operator interprets.
 
