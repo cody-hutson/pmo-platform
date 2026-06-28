@@ -17,18 +17,14 @@ You are a principal-level **Knowledge Manager Specialist** in a PMO sustaining a
 
 ## Composition
 
-This Specialist **composes** two function-skills by **invoking them through the `core/`-registry skill-chain** (runtime chaining), and **re-implements neither** — per [ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) (a Specialist composes a shared function-skill by *invoking* it, **not** by copying its logic). The composed skills are read-only here; their modes, gates, staging, and output contracts are owned by them. The Knowledge Manager holds **no** standalone generation or routing mechanics — it adds only the capture-structure-route-steward coherence layered on their outputs.
+This Specialist **composes** two function-skills by **invoking them through the `core/`-registry skill-chain**, and **re-implements neither** — per [ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md): a Specialist *invokes* a shared function-skill, never copies its logic. The composed skills are read-only here; their modes, gates, staging, and output contracts are owned by them. The Knowledge Manager holds **no** standalone generation or routing mechanics — it adds only the capture-structure-route-steward coherence layered on their outputs.
 
-| Composed function-skill | Invoked for | Modes / capability invoked (owned by the composed skill — NOT re-implemented here) |
-|---|---|---|
-| [`artifact-generator`](../artifact-generator/SKILL.md) | **Produce/stage** the asset, and **steward** the KB | **Generate Mode** (Steps 1-6 — produce + stage in `08-Generated/`, `lifecycle_state: draft` + `promotion_state: staged`) · **Wrapper Mode** (Step 4-W — ingest an external asset, never mutate the body) · **Artifact Health Check + Documentation-Debt Register** (zombie >30d / no-longer-current-but-live upkeep) |
-| [`file-router`](../file-router/SKILL.md) | **Classify and route** to the **governed home** | **Layer 1 content / Layer 2 project / Layer 3 filename** classification + **Confidence Thresholds & Actions** (>=90 auto / 60-89 propose / <60 queue) + **Routing Targets** map; **Unclassified Queue + Multi-Project Routing** (gap scan) |
+| Composed function-skill | Invoked for |
+|---|---|
+| [`artifact-generator`](../artifact-generator/SKILL.md) | **Produce/stage** the asset, and **steward** the KB (Generate / Wrapper / Artifact Health Check) |
+| [`file-router`](../file-router/SKILL.md) | **Classify and route** to the **governed home** (three-layer classification / confidence thresholds / routing targets) |
 
-**Compose-not-absorb boundary (ADR-019):** the Knowledge Manager does **not** re-derive any artifact-production, staging, content-classification, or routing-target logic. A mode that "composes `file-router` classification" **chains to** `file-router` and **consumes its classification output as the single source of truth for the asset's governed home** — never inventing a folder; a mode that "composes `artifact-generator` Generate Mode" **chains to** `artifact-generator` and consumes the staged `DRAFT` — never writing the body or header. `artifact-generator` remains the single source of knowledge-artifact generation/staging; `file-router` remains the single source of classification/routing. The Knowledge Manager forks neither. (Enforced by the DT-3 compose-not-absorb review gate per [`skill-pipeline-alignment.md`](../../../core/standards/skill-pipeline-alignment.md) §6 and the cross-skill false-positive harness.)
-
-**Pipeline relation (skill-pipeline-alignment §2): R3 — cross-stage composing.** Knowledge capture and stewardship is invoked across delivery, close, and operational rhythm alike — no single home stage. The Knowledge Manager declares **R3**, stays stage-agnostic, and composes via skill-chaining (the posture the composed function-skills hold): a Specialist over two R3 services inherits R3.
-
-**Single-source-of-truth routing seam (the role's defining behavior):** Mode 1 produces a `DRAFT` in `08-Generated/`; Mode 3 then runs `file-router` and **the asset's governed home is whatever `file-router` classifies** — never hard-coded. This fixes "generating artifacts and routing them as two disconnected steps": the route is chained off the capture, and the classification output *is* the home.
+The granular per-mode capability map, the compose-not-absorb boundary (ADR-019), the R3 pipeline-relation, and the single-source-of-truth routing seam live in [`references/composition-and-reversibility.md`](references/composition-and-reversibility.md) §1 — the detailed surface this section's contract derives from.
 
 ## Mode Selection
 
@@ -115,13 +111,7 @@ Every grounded claim carries an evidence-quality label (`[SOURCE]` / `[INFERRED]
 
 This skill produces **decision-class outputs** — placement/routing recommendations, capture-vs-defer calls, stewardship/archive proposals, and gap-audit recommendations the operator acts on. The posture is **low-tier by construction**: the composed `file-router` routes into auto-write folders and `artifact-generator` stages `DRAFT` behind a Promotion gate. Every decision-class item carries a **reversibility tier** + **confidence** per [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md). Decision-class items: Mode 1 — the staged asset and its placement; Mode 2 — the Wrapper ingest and each Documentation-Debt Register Recommended Action; Mode 3 — the routing decision; Mode 4 — each gap recommendation.
 
-**Tier vocabulary (CHEAP-dominant by construction):**
-- **CHEAP** (undo in hours) — the dominant tier: a `DRAFT` asset staged in `08-Generated/` nobody has reviewed; a HIGH-confidence auto-route into an auto-write folder (`05-Transcripts/`, `06-Emails/`, `08-Generated/`); an `_unclassified/` queue park; a recommend-only gap-audit item. State the tier, proceed.
-- **MODERATE** (undo in days, minor data loss) — a placement that commits a knowledge asset into a project folder and notifies downstream consumers; a Wrapper ingest circulated for review. State the tier, surface the key assumption in ≤1 sentence, invite a reviewer pass.
-- **EXPENSIVE** (undo in weeks, stakeholder impact) — a knowledge asset **promoted** into a Tier-1 governed folder (`01-Governance/`, `07-Reference/`) and consumed by reviewers, or a routing-rule change reshaping future classification. Document rationale (≥2 sentences), state the rollback (revert + manual re-classify), name the affected cohort.
-- **IRREVERSIBLE** (cannot undo) — a knowledge asset promoted to an external / audit-of-record surface. Rollback infeasible -> name the counter-commitment + sign-off authority, pair with an explicit downside.
-
-Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence EXPENSIVE promotion still requires the rationale + rollback. Enforcement: pmo-qa-auditor **G4** FAILs any decision-class item missing a tier.
+The skill-specialized tier vocabulary (CHEAP-dominant by construction) and the reversibility-vs-confidence pairing live in [`references/composition-and-reversibility.md`](references/composition-and-reversibility.md) §2. Enforcement: pmo-qa-auditor **G4** FAILs any decision-class item missing a tier.
 
 ## Guardrails
 
