@@ -1,0 +1,69 @@
+{
+  "_about": "Frozen fixtures for native-dep-mirror.py — each case carries a representative issue body, the native blocked-by set to diff against, and the expected (eligible, to_add, drift) mirror plan per the A3.5 / Model A contract. Self-contained (no live issue numbers are a durable contract); the numbers are illustrative edge identifiers, not corpus references.",
+  "cases": [
+    {
+      "name": "untyped-and-explicit-FS-mirror",
+      "body": "### Description\nWork.\n\n### Dependencies\n- #46\n- FS #47\n- FS+0d #48\n\n### Acceptance Criteria\n- [ ] x\n",
+      "native_blocked_by": [],
+      "expect_eligible": [46, 47, 48],
+      "expect_to_add": [46, 47, 48],
+      "expect_drift": []
+    },
+    {
+      "name": "non-FS-zero-lag-stays-body-only",
+      "body": "### Dependencies\n- SS #49\n- FF #50\n- SF #51\n- FS+3d #52\n- FS-2d #53\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": []
+    },
+    {
+      "name": "partial-native-already-present",
+      "body": "### Dependencies\n- #46\n- #47\n- #48\n",
+      "native_blocked_by": [47],
+      "expect_eligible": [46, 47, 48],
+      "expect_to_add": [46, 48],
+      "expect_drift": []
+    },
+    {
+      "name": "native-extra-is-drift-flag-only",
+      "body": "### Dependencies\n- #46\n",
+      "native_blocked_by": [46, 99],
+      "expect_eligible": [46],
+      "expect_to_add": [],
+      "expect_drift": [99]
+    },
+    {
+      "name": "idempotent-no-op",
+      "body": "### Dependencies\n- #46\n- FS #47\n",
+      "native_blocked_by": [46, 47],
+      "expect_eligible": [46, 47],
+      "expect_to_add": [],
+      "expect_drift": []
+    },
+    {
+      "name": "absent-section-clean",
+      "body": "### Description\nNo dependencies on anything.\n\n### Acceptance Criteria\n- [ ] x\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": []
+    },
+    {
+      "name": "mixed-eligible-and-ineligible-with-native-extra",
+      "body": "### Dependencies\n- #60\n- SS #61\n- FS+0d #62\n- FS-1d #63\n",
+      "native_blocked_by": [62, 70],
+      "expect_eligible": [60, 62],
+      "expect_to_add": [60],
+      "expect_drift": [70]
+    },
+    {
+      "name": "heading-alias-depends-on-with-suffix",
+      "body": "### Depends on (confirmed at Planning)\n- #80\n- SS #81\n",
+      "native_blocked_by": [],
+      "expect_eligible": [80],
+      "expect_to_add": [80],
+      "expect_drift": []
+    }
+  ]
+}

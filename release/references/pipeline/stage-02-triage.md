@@ -143,8 +143,9 @@ After A3 dependency state validation passes (G2-04 PASS — no Rejected/invalid 
 | Cap handling | If `addIssueDependency` returns "dependency cap reached" (50/issue), flag to operator; suspend further mirror writes for this issue; body remains authoritative without native projection |
 | Idempotency | Re-running A3.5 with the same body state is a no-op modulo API eventual consistency |
 | Token scope | `repo` typically sufficient. If GraphQL mutation returns 401/403 / scope error: escalate per CER Resolve failure-handling — operator runs `gh auth refresh -s project` (see B2a failure-handling block precedent) |
+| Invocation (tracked tool) | This procedure is promoted to the tracked tool `release/tools/native-dep-mirror.py` (AS2 per the agent-script promotion framework). Invoke it at this step rather than re-deriving the algorithm: `python3 release/tools/native-dep-mirror.py --issue <N>` (or `--milestone <title>` for a batch; `--dry-run` plans without writing; `--self-test` runs the fixture suite). The pseudocode below is the tool's specification of record. |
 
-**Mirror algorithm (pseudocode — invoked once per issue at A3.5):**
+**Mirror algorithm (pseudocode — the tracked tool's specification of record; the tool implements it, invoked once per issue at A3.5):**
 
 ```text
 FUNCTION mirror_body_to_native(issue_number):
