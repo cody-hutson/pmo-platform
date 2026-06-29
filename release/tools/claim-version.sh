@@ -196,37 +196,56 @@ _push_failure_is_collision() {
 # ---------------------------------------------------------------------------
 # Adapter operation: lineage(version) -> MAINLINE | ORPHAN
 #
-# Classifies a version by membership in the published-Release set (the published,
-# forward line of the platform). A version present as a published Release is on
-# the MAINLINE lineage; a version that exists (e.g. as a stray tag) but is NOT a
-# published Release is an ORPHAN.
+# Classifies a version by membership in the MAINLINE TAG FRONTIER — NOT by
+# Release-publication state. The authoritative claim instant is the signed tag
+# push (Stage 12 Phase B3), which PRECEDES the GitHub Release publish (Stage 13);
+# keying on published Releases therefore lags the real frontier. A version is
+# MAINLINE iff one of:
+#   (a) its major == the frontier major M* (= the max major over the published-
+#       Release set — the major line a release currently extends); OR
+#   (b) it is the canonical first release of the NEXT major (vM*+1.00) — the sole
+#       legal major-bump target, so a freshly-pushed next-major claim is mainline
+#       before its Release publishes; OR
+#   (c) its tuple is explicitly present in the published-Release set (historical
+#       or other-major published releases — e.g. v1.x once the frontier is v2.x).
+# An empty frontier major (greenfield: no published releases yet) -> MAINLINE
+# (cannot determine the line; over-include — the safe posture, matching the
+# deploy.sh pre-merge gate, which does not orphan-filter origin tags).
 #
 # This is the lineage-correct predicate the adversarial review (PRF-2/FMF-2)
-# required IN PLACE OF a hardcoded `^v3\.` grep: it stays correct after a
-# legitimate v3.0 ships (a real v3.0 would be a published Release -> MAINLINE),
-# whereas `^v3\.` would wrongly exclude it. The orphan v3.20 lineage is excluded
-# here because it is NOT in the published-Release set's mainline line — by the
-# same predicate `releases/latest` self-excludes it from the anchor.
+# required IN PLACE OF a hardcoded `^v3\.` grep, RE-KEYED off the tag
+# frontier rather than Release publication: it stays correct after a legitimate
+# v3.0 ships (a real v3.0 is mainline via (a)/(b)/(c)), and it keeps the genuine
+# stray v3.20 ORPHAN (major 3, minor 20, unpublished — fails (a), (b), and (c)).
+# The bug it fixes: a freshly-pushed mainline tag (e.g. v2.39) whose Release has
+# not yet published was wrongly ORPHAN under the old published-membership test, so
+# a concurrent claimer re-computed an already-claimed slot and HALTed at local
+# `git tag` ("already exists") — not a CAS collision, so it never retried.
 #
-# Implementation note: GitHub's `releases/latest` self-excludes orphans from the
-# anchor, and the published-Release set IS the mainline-published sequence here
-# (published == reachable on the forward line for this repo). lineage() therefore
-# classifies against the published-Release set, which is the authoritative
-# "is this on the line a release extends" oracle the GitHub adapter exposes.
-# Callers pass the published-set as $2.. to avoid re-fetching per call.
+# Callers pass the frontier major as $2 and the published-set as $3.. (computed
+# once by claimed_set() to avoid re-fetching per call).
 #
-#   lineage <version> <published_tag>...
+#   lineage <version> <frontier_major> <published_tag>...
 # ---------------------------------------------------------------------------
 lineage() {
-  local v="$1"; shift
+  local v="$1" fmaj="$2"; shift 2
   version_canonical "$v" || { echo "ORPHAN"; return 0; }
-  local pv pt
-  pv="$(version_parse "$v")"
-  local t
+  local vM vN vP
+  read -r vM vN vP <<<"$(version_parse "$v")"
+  # Greenfield (no published frontier major) -> cannot classify the line; over-include.
+  if [[ -z "$fmaj" ]]; then echo "MAINLINE"; return 0; fi
+  # (a) same mainline major-line as the published frontier.
+  if [[ "$vM" -eq "$fmaj" ]]; then echo "MAINLINE"; return 0; fi
+  # (b) the canonical first release of the next major (vM*+1.00).
+  if [[ "$vM" -eq $((fmaj + 1)) && "$vN" -eq 0 && "$vP" -eq 0 ]]; then
+    echo "MAINLINE"; return 0
+  fi
+  # (c) explicitly present in the published-Release set (historical/other major).
+  local t pt
   for t in "$@"; do
     version_canonical "$t" || continue
     pt="$(version_parse "$t")"
-    if [[ "$pt" == "$pv" ]]; then echo "MAINLINE"; return 0; fi
+    if [[ "$pt" == "$vM $vN $vP" ]]; then echo "MAINLINE"; return 0; fi
   done
   echo "ORPHAN"
 }
@@ -234,19 +253,32 @@ lineage() {
 # ---------------------------------------------------------------------------
 # Adapter operation: anchor() -> version
 #
-# The highest claimed version in the mainline lineage; orphans excluded. GitHub
-# impl = the latest published release (repos/{REPO}/releases/latest), which
-# returns the top of the mainline-published line and self-excludes an orphan
-# version lineage. This is the locked GitHub anchor mapping — NOT a max-semver
-# scan and NOT a `^v3\.` grep (both rejected by the adversarial review). It is a
-# pure read of authoritative host state at call time (never cached across the
-# held-but-unclaimed gap).
+# The highest claimed version in the mainline lineage = max(claimed_set()).
+# claimed_set() unions published Releases U origin tags U DEPLOYED rows and keeps
+# only MAINLINE members (re-keyed on the mainline TAG FRONTIER, not Release
+# publication), so its maximum IS the true mainline frontier — and it CANNOT sit
+# below a freshly-pushed-but-unpublished mainline tag, because that tag is itself a
+# claimed_set member. This refines the GitHub anchor "how" (an adapter-internal
+# detail per repo-host-adapter-versioning.md §2.1) away from the old `releases/
+# latest` pointer, which lagged the tag frontier across the held-but-unclaimed gap
+# and was the second half of the publication-gap collision. Greenfield (empty claimed_set —
+# no tags/releases yet) falls back to the latest-published-release pointer. Reuses
+# claimed_set() so there is no second mainline definition to drift. Still a pure
+# read of authoritative host state at call time (never cached across the gap).
 # ---------------------------------------------------------------------------
 anchor() {
+  local cs best="" v
+  cs="$(claimed_set)"
+  while IFS= read -r v; do
+    [[ -n "$v" ]] || continue
+    if [[ -z "$best" || "$(version_cmp "$v" "$best")" == "1" ]]; then best="$v"; fi
+  done <<<"$cs"
+  if [[ -n "$best" ]]; then printf '%s\n' "$best"; return 0; fi
+  # Greenfield: no claimed mainline version yet -> the latest published release.
   local tip
   tip="$(_host_latest_release)"
   version_canonical "$tip" || {
-    printf 'claim-version: anchor() — latest release %q is not a canonical version\n' \
+    printf 'claim-version: anchor() — no claimed mainline version and latest release %q is not canonical\n' \
       "$tip" >&2
     return 1
   }
@@ -260,15 +292,19 @@ anchor() {
 #   (1) published Releases,
 #   (2) origin git tags,
 #   (3) RELEASE_LOG rows in DEPLOYED (tag-pushed-but-Release-unpublished) state,
-# with the SAME orphan-lineage exclusion applied SYMMETRICALLY to every member
-# (FMF-2: the v3.x exclusion must filter the freeness union, not just the anchor)
-# and every member gated by version_canonical (grammar SSOT). Echoes one
-# canonical version per line, de-duplicated by tuple.
+# with the orphan-lineage exclusion (lineage()==MAINLINE) applied symmetrically to
+# every member — RE-KEYED on the mainline TAG FRONTIER, not on Release
+# publication — and every member gated by version_canonical (grammar SSOT). Echoes
+# one canonical version per line, de-duplicated by tuple.
 #
-# (3) is empty in steady state (0 DEPLOYED rows at baseline); it is the member
-# that catches a claim inside the tag-pushed-but-Release-unpublished window — not
-# dead code, load-bearing only inside that window. (1)/(2) are the steady-state
-# catchers.
+# The frontier major M* (max major over the published-Release set) is computed once
+# here and passed to lineage() for every member, so a freshly-pushed-but-Release-
+# unpublished mainline tag (member (2), e.g. v2.39) is correctly RETAINED as a claim
+# while the genuine stray (v3.20) stays excluded (FMF-2 symmetry preserved, just no
+# longer keyed on publication). (3) catches the same window from the RELEASE_LOG
+# side; (1)/(2) are the steady-state catchers. Before this fix the exclusion keyed on
+# published-Release membership, which dropped member (2)'s pushed tag and let a
+# concurrent claimer re-compute an already-claimed slot.
 # ---------------------------------------------------------------------------
 claimed_set() {
   local published
@@ -281,9 +317,6 @@ claimed_set() {
       _host_release_log_deployed
     } | sed '/^$/d'
   )"
-  # Filter every member through version_canonical + lineage(=MAINLINE) against the
-  # published set, then de-dup by canonical tuple. Orphans (e.g. v3.20) are
-  # excluded from the freeness union here, symmetrically with the anchor.
   # Split the published newline-list into positional args for lineage(). Disable
   # globbing for the split so a tag never expands as a glob (word-splitting on
   # whitespace is intended; glob expansion is not).
@@ -292,11 +325,23 @@ claimed_set() {
   set -f
   for _p in $published; do [[ -n "$_p" ]] && published_arr+=("$_p"); done
   set +f
+  # Frontier major M* = max major over the published-Release set — the major line a
+  # release currently extends. lineage() keys mainline-membership on M* (NOT on
+  # Release publication), so a pushed-but-unpublished mainline tag is kept.
+  local fmaj="" _pM
+  for _p in "${published_arr[@]+"${published_arr[@]}"}"; do
+    version_canonical "$_p" || continue
+    read -r _pM _ _ <<<"$(version_parse "$_p")"
+    if [[ -z "$fmaj" || "$_pM" -gt "$fmaj" ]]; then fmaj="$_pM"; fi
+  done
+  # Filter every member through version_canonical + lineage(==MAINLINE) against the
+  # frontier major + published set, then de-dup by canonical tuple. The genuine
+  # orphan (e.g. v3.20) is excluded; a pushed mainline tag (e.g. v2.39) is kept.
   local v seen=""
   while IFS= read -r v; do
     [[ -n "$v" ]] || continue
     version_canonical "$v" || continue
-    [[ "$(lineage "$v" "${published_arr[@]+"${published_arr[@]}"}")" == "MAINLINE" ]] || continue
+    [[ "$(lineage "$v" "$fmaj" "${published_arr[@]+"${published_arr[@]}"}")" == "MAINLINE" ]] || continue
     local tup; tup="$(version_parse "$v")"
     case " $seen " in *" $tup "*) continue;; esac
     seen="$seen $tup"
@@ -787,8 +832,34 @@ _claim_self_test() {
   _ct_eq "$(_ct_push_idx)" "0" "U-9 zero push attempts (HALT before push)"
   printf '%s' "$err" | grep -qi 'fetch failed' || _ct_fail "U-9 must name the fetch failure"
 
+  # ---- U-10: pushed-but-unpublished MAINLINE tag is a claim (publication-gap regression) ----
+  # The v2.40-release collision: origin carries v2.39 (signed tag pushed at Stage 12
+  # Phase B3) but releases/latest is still v2.38 (its Stage 13 Release not yet
+  # published). A --bump minor MUST yield v2.40 — it must NOT re-compute the already-
+  # claimed v2.39. Before this fix the orphan filter dropped v2.39 (no Release yet) and the
+  # anchor lagged at v2.38, so the script returned v2.39 and HALTed at local
+  # `git tag` ("already exists") — not a CAS collision, so it never retried.
+  _t_label="U-10 pushed-unpublished mainline tag is a claim"
+  _ct_setup latest="v2.38" published="v2.37 v2.38" origin="v2.37 v2.38 v2.39" plan="ok"
+  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-10 exit 0"
+  _ct_eq "$out" "v2.40" "U-10 returns v2.40 (NOT v2.39 — the pushed tag is a definitive claim)"
+  _ct_eq "$(_ct_push_idx)" "1" "U-10 exactly 1 push attempt (no false-collision HALT, no retry)"
+  # claimed_set() must INCLUDE the pushed-but-unpublished mainline tag v2.39 ...
+  local cs10; cs10="$(claimed_set)"
+  printf '%s' "$cs10" | grep -qx 'v2.39' || _ct_fail "U-10 claimed_set must INCLUDE pushed mainline tag v2.39"
+  # ... and anchor() must report the pushed frontier v2.39, not the lagging
+  # published-latest v2.38 (the contract: highest CLAIMED version in the lineage).
+  _ct_eq "$(anchor)" "v2.39" "U-10 anchor() = pushed frontier v2.39, not published-latest v2.38"
+  # The genuine stray stays excluded even alongside the pushed mainline tag (so the
+  # fix is a RE-KEY of the orphan filter, not its removal — v3.20 must not return):
+  _ct_setup latest="v2.38" published="v2.37 v2.38" origin="v2.37 v2.38 v2.39 v3.20" plan="ok"
+  local cs10b; cs10b="$(claimed_set)"
+  printf '%s' "$cs10b" | grep -qx 'v2.39' || _ct_fail "U-10 claimed_set must INCLUDE v2.39 (stray present)"
+  printf '%s' "$cs10b" | grep -qx 'v3.20' && _ct_fail "U-10 claimed_set must EXCLUDE genuine stray v3.20"
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-1..U-9 incl. net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, fetch-fail->HALT, bounded-HALT-no-force)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-1..U-10 incl. net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force)"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
