@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.38] - 2026-06-28
+
+The automated release close-out now finishes a release reliably and deterministically: every close-out record gets written, the published release page is bound to the right code, and stuck or false-pass closes are fixed.
+
+[Full notes](release/releases/notes/v2.38_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.38)
+
 ## [v2.37] - 2026-06-28
 
 Published release notes can no longer silently drift from the note we wrote — the release-notes close-out is hardened so the public release page matches the in-repo note and the close-out checks run no matter how a release is finished. Additive throughout: standard / governance / lint / check edits plus one founding decision record; no data migration, no stored-content move, no change to any project-facing surface. routine class.
