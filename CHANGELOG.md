@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.39] - 2026-06-29
+
+The platform now audits itself on a defined schedule instead of only when someone remembers, and it starts keeping a record of where the agent's advice differed from your decision. Additive throughout — two new audit-cadence protocols, one new optional record type with a read-only look-back, and a small pipeline-reference edit; no data migration, no stored-content move, no change to any project-facing surface. novel class.
+
+### Added
+
+- **The platform's self-audits now run on a defined schedule.** Two kinds of health check — whether the release process still matches established delivery practices, and whether the documentation structure is still sound — each gain a written rule for when to re-run them: specific triggering events plus a 90-day fallback. *Why it matters:* platform health gets re-checked on a dependable rhythm instead of only after drift becomes a visible problem. ([#167](https://github.com/cody-hutson/pmo-platform/issues/167), [#168](https://github.com/cody-hutson/pmo-platform/issues/168))
+- **The platform now records where its advice and your decision differed.** At decision points, the platform can log the agent's recommendation next to the choice you actually made and why they differed, and a look-back view summarizes those differences across recent releases. *Why it matters:* recurring gaps between the platform's judgment and yours surface unprompted instead of being lost between sessions. ([#46](https://github.com/cody-hutson/pmo-platform/issues/46))
+
+### Changed
+
+- **All three of the platform's audit types are now discoverable from any one of them.** The two new schedules and the existing feature-vs-toolkit audit now cross-reference each other as one connected set. *Why it matters:* finding one audit's schedule leads you to all of them, so no kind of health checking gets overlooked. ([#167](https://github.com/cody-hutson/pmo-platform/issues/167), [#168](https://github.com/cody-hutson/pmo-platform/issues/168))
+
+[Full notes](release/releases/notes/v2.39_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.39)
+
 ## [v2.38] - 2026-06-28
 
 The automated release close-out now finishes a release reliably and deterministically: every close-out record gets written, the published release page is bound to the right code, and stuck or false-pass closes are fixed.
