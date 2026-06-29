@@ -9,7 +9,7 @@ expected_section_membership:
     - "Go-Live date April 2 -> April 9 (Jira + Smartsheet agree, more recent) [confidence: HIGH · S2]"
   tracker_updates_block: required
   Decisions:
-    - "Day-of-week mismatch: 'Thursday April 2' but April 2 is a Wednesday [confidence: HIGH · S2]"
+    - "Day-of-week mismatch: 'Wednesday April 2' but April 2 is a Thursday [confidence: HIGH · S2]"
 day_of_week_validation: required          # the wrong-weekday finding MUST fire
 no_generalized_dates: required            # no "week of ..." in the body
 must_not_flag:

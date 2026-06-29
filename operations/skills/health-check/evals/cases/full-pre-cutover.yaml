@@ -13,7 +13,7 @@ expected_section_membership:
   tracker_updates_block: required   # because there is an Auto-Actionable item
   Decisions:
     - "Cutover owner [OWNER-A] -> [OWNER-B] candidate (Confluence on-call newer) [confidence: MEDIUM · S2]"
-    - "Day-of-week mismatch: 'Thursday April 2' but April 2 is a Wednesday [confidence: HIGH · S2]"
+    - "Day-of-week mismatch: 'Wednesday April 2' but April 2 is a Thursday [confidence: HIGH · S2]"
   Unknowns:
     - "BLK-014 owner empty; searched Jira assignee / tracker owner / on-call; could not link"
   Rollup-Diffs:

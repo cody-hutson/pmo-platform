@@ -1,4 +1,4 @@
-# Case: full mode against the MCP-degraded fixture (ADR-049 degradation under test)
+# Case: full mode against the MCP-degraded fixture (ADR-050 degradation under test)
 case_id: full-mcp-degraded
 mode: full
 fixture: fixtures/uat-window-mcp-degraded.md

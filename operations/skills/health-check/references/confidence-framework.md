@@ -17,7 +17,7 @@ A finding can be HIGH-confidence and shallow (`S1`), or LOW-confidence and deep 
 | Confidence | Earned when | Routes to |
 |---|---|---|
 | **HIGH** | ≥2 sources agree (MCP + local, or two locals) AND evidence is recent | eligible for `## Auto-Actionable` |
-| **MEDIUM** | a single authoritative source; OR MCP/local disagree but one is clearly more recent; OR a finding uncross-validatable because its source was unavailable (the ADR-049 cap) | `## Decisions` |
+| **MEDIUM** | a single authoritative source; OR MCP/local disagree but one is clearly more recent; OR a finding uncross-validatable because its source was unavailable (the ADR-050 cap) | `## Decisions` |
 | **LOW** | inferred via a chain; OR sources conflict with no clear recency winner; OR only stale evidence | `## Decisions` or `## Unknowns` |
 
 A single source — even an authoritative MCP system — is **MEDIUM by definition.** HIGH is reserved for corroboration; this is the guard against one stale system driving an auto-action.
@@ -47,7 +47,7 @@ The projection follows `staleness-confidence-standard.md`. The band measures dep
 | PROJECT.md owner = "TBD"; no canonical source names an owner | n/a | n/a (evidence-gap) | `## Unknowns` | unverifiable owner — surface what was searched |
 | Confluence on-call page names a new owner; local RAID still names the prior owner | MEDIUM | `S2` | `## Decisions` | newer source has a replacement candidate; operator decides |
 | Milestone "Phase 2 UAT" referenced in carry-forward, but the milestone was deleted in Jira | HIGH | `S3` | `## Decisions` | premise gone — a contradiction finding, structural |
-| Date "Thursday April 2" but April 2 is a Wednesday | HIGH | `S2` | `## Decisions` | day-of-week mismatch — currency in question, verify intended date |
+| Date "Wednesday April 2" but April 2 is a Thursday | HIGH | `S2` | `## Decisions` | day-of-week mismatch — currency in question, verify intended date |
 
 ## Boundary
 

@@ -8,7 +8,7 @@ A synthetic single-project state captured the week before a cutover. Stakeholder
 ```
 Project: Synthetic-Cutover
 Phase: Pre-Cutover
-Go-Live: Thursday April 2, 2026          <!-- SEEDED-DRIFT timeline: April 2 2026 is a WEDNESDAY (day-of-week mismatch) AND Jira due date below says April 9 -->
+Go-Live: Wednesday April 2, 2026         <!-- SEEDED-DRIFT timeline: this entry asserts WEDNESDAY but April 2 2026 is actually a THURSDAY (day-of-week mismatch) AND Jira due date below says April 9 -->
 Cutover Owner: [OWNER-A]                  <!-- SEEDED-DRIFT attribution: Confluence on-call page (below) names [OWNER-B] as the new cutover owner -->
 UAT Lead: [OWNER-C]                       <!-- CLEAN: agrees with Jira + tracker; must NOT be flagged -->
 Test Tracker: SharePoint (Cutover Scoreboard)  <!-- SharePoint has no MCP: content unverifiable, link-only -->
@@ -45,7 +45,7 @@ Cutover Owner (on-call): [OWNER-B]       <!-- SEEDED-DRIFT attribution: newer so
 
 - `## Confirmed` — UAT Lead = [OWNER-C] (Jira + PROJECT.md agree, recent); BLK-021 owner.
 - `## Auto-Actionable` — Go-Live/Cutover date: PROJECT.md + carry-forward say April 2, but Jira + Smartsheet (more recent, two sources agree) say April 9 → `[confidence: HIGH · S2]` propose tracker update; emits a `TRACKER_UPDATES:` block.
-- `## Decisions` — Cutover Owner: Confluence on-call (newer) names [OWNER-B], PROJECT.md says [OWNER-A] → `[confidence: MEDIUM · S2]` replacement candidate. Day-of-week mismatch: "Thursday April 2" but April 2 is a Wednesday → `[confidence: HIGH · S2]` verify intended date.
+- `## Decisions` — Cutover Owner: Confluence on-call (newer) names [OWNER-B], PROJECT.md says [OWNER-A] → `[confidence: MEDIUM · S2]` replacement candidate. Day-of-week mismatch: "Wednesday April 2" but April 2 is a Thursday → `[confidence: HIGH · S2]` verify intended date.
 - `## Unknowns` — BLK-014 owner empty; no canonical source names one → searched Jira assignee, tracker owner, on-call page; could not link.
 - `## Rollup-Diffs` — PROJECT.md Go-Live April 2 → April 9 staged in `08-Generated/_health-check/` (diff-only, MODERATE · HIGH), never auto-written.
 - **Must NOT flag:** UAT Lead, BLK-021 (seeded-clean).

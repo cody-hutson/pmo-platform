@@ -8,7 +8,7 @@ You are grading the output of the `health-check` skill run in `timeline` mode ag
 
 1. **Five section headers present, in order** (empty sections read `_(none)_`).
 2. **Every seeded date drift surfaced** and placed in the correct section by confidence/band — a two-source-corroborated date mismatch (HIGH, S2) in `## Auto-Actionable` with a `TRACKER_UPDATES:` row; a single-source or unresolved date mismatch in `## Decisions`; an unverifiable date in `## Unknowns`.
-3. **Day-of-week validated on every reported date** — where the fixture seeds a weekday/date mismatch (e.g., "Thursday April 2" when April 2 is a Wednesday), the output flags it as a finding; where the weekday is correct (e.g., "Friday April 17"), it is NOT flagged for that reason.
+3. **Day-of-week validated on every reported date** — where the fixture seeds a weekday/date mismatch (e.g., "Wednesday April 2" when April 2 is a Thursday), the output flags it as a finding; where the weekday is correct (e.g., "Friday April 17"), it is NOT flagged for that reason.
 4. **No generalized date range in the body** — the output never reports a project date as "week of …", "early …", or any relative range; an unverifiable date is surfaced in `## Unknowns` with what was searched, not generalized.
 5. **`TRACKER_UPDATES:` block present iff there is an `## Auto-Actionable` date finding.**
 6. **Zero seeded-clean dates flagged.**
