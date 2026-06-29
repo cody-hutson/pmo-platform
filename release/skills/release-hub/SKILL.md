@@ -2,7 +2,7 @@
 name: release-hub
 description: >
   Release orchestrator — the whole-release control plane. Takes a milestone and drives it through the pipeline by composing the stage skills; owns sequencing and readiness-gating, never the stage work itself. Mode R (Milestone Readiness) is a pre-flight that confirms a bundled milestone is ready to START before a run is committed — composing triage/dup, staleness/architecture, dependency, and bundle-coherence checks into one GO / NO-GO with per-finding dispositions. Invoke by name with a milestone; never auto-fires on a bare "release" mention. Modes: Milestone Readiness · Orchestrate Release. Triggers: "run the release hub on [milestone]", "is [milestone] ready to start", "check milestone readiness for [milestone]", "orchestrate the release for [milestone]".
-version: v0.1-local
+version: v3.22
 license: BUSL-1.1
 delivery_approach: Scrum
 skill_discipline_migrated_v10_2: true
