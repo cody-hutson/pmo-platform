@@ -58,6 +58,14 @@ custom_methodology_definition:
   cadence: string                          # REQUIRED — free-form cadence description
   notes: string                            # OPTIONAL — rationale + known trade-offs
 
+# Deliverable-domain axis — NEW (#351 keystone) — orthogonal to delivery_approach
+deliverable_type: software | governance | web | data | enterprise-platform | hardware | process | <lowercase-kebab>
+                                           # OPTIONAL on legacy, REQUIRED forward — the kind of work the
+                                           # project delivers (what), orthogonal to delivery_approach (how it is governed).
+                                           # OPEN enum: a recognized class OR a non-empty lowercase-kebab string
+                                           # (mirrors delivery_approach: Custom openness). Authoritative source the
+                                           # Stage-4 `domain:` label reads where present (stage-04-planning.md).
+
 # Other per-project fields (per existing skill conventions — not introduced by )
 # ... e.g., stakeholder roster, go-live date, systems, governance model, Dual-Framing Bridge section trigger ...
 ---
@@ -74,6 +82,7 @@ Field presence rules summary:
 | `dual_framing_enabled` | ⚪ Optional | — |
 | `delivery_approach` | ✅ Always | — (new) |
 | `custom_methodology_definition` | Conditional | ✅ iff `delivery_approach: Custom`; ❌ otherwise |
+| `deliverable_type` | ⚪ Optional (legacy) / ✅ Required (forward) | open enum: recognized class OR non-empty lowercase-kebab; additive on legacy files |
 
 ## 4. Field Reference
 
@@ -162,9 +171,31 @@ Required. Non-empty free-form string describing the cadence (e.g., `"2-week spri
 
 Optional. Free-form string. Rationale, known trade-offs, governance-promotion candidacy notes. Consumed as methodology-context hint by verbose-mode skill outputs.
 
+### `deliverable_type`
+
+Optional on legacy files, **required forward**. Names the **deliverable domain** — *what kind of work the project delivers* (a website build, an ERP customization, a code-review engagement, a governance corpus). **Open enum**, shape-validated (not a closed set): a recognized class — `software` | `governance` | `web` | `data` | `enterprise-platform` | `hardware` | `process` — OR a non-empty lowercase-kebab string for a domain not yet recognized, exactly mirroring `delivery_approach: Custom` openness. An unrecognized-but-well-formed value is itself the demand signal for authoring a domain guide (`core/standards/domain-best-practices/<x>.md`), per the Stage-4 expansion rule.
+
+**Orthogonal to `delivery_approach`.** `deliverable_type` is *what is built*; `delivery_approach` is *how it is governed*. A `deliverable_type: software` project may run `delivery_approach: Scrum`, `Waterfall`, or any archetype — the axes combine freely. They are not redundant and neither implies the other.
+
+**Authoritative source for the Stage-4 `domain:` label.** Where present, this field is the authoritative source the Stage-4 Planning `domain:` class field reads (`release/references/pipeline/stage-04-planning.md` § 5.7 — the field that field's forward-reference anticipated). Consumer skills and gate criteria branch on `deliverable_type` → the matching domain guide via the §5A Domain-Axis Consumption Pattern in [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md). `[SOURCE]` — `stage-04-planning.md` `domain:` forward-reference; #344 (shipped) consumes this enum.
+
+#### Disambiguation — `deliverable_type` vs. the other `domain`-named concepts
+
+The bare word `domain` is overloaded across the platform; `deliverable_type` is the deliberately **non-colliding** name for the deliverable-domain axis. This note fixes the boundaries once (modeled on the §7 `dual_framing_enabled`-vs-`delivery_approach` Collision Check):
+
+| Concept | What it is | Where it lives | Relation to `deliverable_type` |
+|---|---|---|---|
+| **`deliverable_type`** | *What kind of deliverable a project produces* (project-level) | `project-schema.md` §3 frontmatter | — (this field) |
+| `work_item_type` | *Declarative discriminator for a work-item kind* (story/task/bug/spike), the **domain-neutral methodology→hierarchy map** | `work-item-type-schema.md` | **Does NOT extend it.** Orthogonal: a `deliverable_type: software` project still contains `work_item_type: story` items. `deliverable_type` is a PROJECT-level frontmatter field; it is never a type-pack grammar entry (ADR-018 `core/`-independence kernel). |
+| artifact-provenance `domain: A\|B\|C` | Three-domain artifact classification | `frontmatter-schema.md` Category 6 | **Distinct.** A per-artifact provenance tag, not a project-level deliverable class. |
+| content-area `delivery/{domain}` | Obsidian content-area tag (`governance`/`design`/`testing`/…) | `frontmatter-schema.md` Tag Taxonomy | **Distinct.** A content-filing tag, not a deliverable class. |
+| Stage-4 `domain:` class field | Abstract deliverable-domain signal consumed by the impact-analysis selector / guides / guide-index | `stage-04-planning.md` § 5.7 | **Consumes `deliverable_type`.** The Stage-4 field reads `deliverable_type` as its authoritative source where present (the reconciliation seam). |
+
+Renaming the shipped artifact-provenance and content-area `domain` fields is **pre-existing naming-debt, OUT OF SCOPE** for this axis — flagged separately, not addressed here.
+
 ## 5. Validation Rules
 
-Twelve rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
+Thirteen rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
 
 | ID | Rule | Blocks | Level |
 |---|---|---|---|
@@ -180,8 +211,9 @@ Twelve rules governing schema conformance. Enforcement level `structural (auto)`
 | **V10** | `custom_methodology_definition.artifacts` is a non-empty list of strings (min 1 entry) | — | structural (auto) — **AC-R2** |
 | **V11** | `custom_methodology_definition.cadence` is a non-empty string | — | structural (auto) — **AC-R2** |
 | **V12** | `custom_methodology_definition.notes` is either absent OR a string (may be empty `""`) | — | structural (auto) |
+| **V13** | `deliverable_type` is EITHER **absent** (legacy file — additive, the field is optional on pre-existing PROJECT.md), OR a non-empty string matching **one of** the recognized classes `{software, governance, web, data, enterprise-platform, hardware, process}` (lowercase, case-sensitive) **OR** the open-escape shape `^[a-z]+(-[a-z0-9]+)*$` (a non-empty lowercase-kebab string — mirrors `delivery_approach: Custom` openness; an unrecognized-but-well-formed value is valid and is the guide-authoring demand signal). The field is **required on forward (newly-scaffolded) PROJECT.md files** and **optional on legacy files**; absence on a legacy file is conformance, not a defect. | schema parse + skill branch | structural (auto) |
 
-**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule, so the V-series tail remains **V12**. The next V-numbers, **V13 and V14, are reserved** for the PROJECT.md-schema keystone (the first-class domain / deliverable-type axis) and the org-structure / delivery-model / team-roster card respectively, which append to the V12 tail when that later schema-expansion milestone is built (see References). No existing rule is renumbered.
+**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule. The `deliverable_type` deliverable-domain axis is now defined by **V13** (appended to the V12 tail; no existing rule renumbered). The next V-number, **V14, remains reserved** for the org-structure / delivery-model / team-roster card (#262), which appends after V13 when that later schema-expansion milestone is built (see References). No existing rule is renumbered.
 
 ### 5.1 Custom Block Completeness (operationalizes AC-R2)
 
@@ -198,7 +230,7 @@ This block-completeness assertion is the single-test AC-R2 gate. Stage 8 QA runs
 
 ### 5.2 Validation-failure handling
 
-A PROJECT.md that fails any V1-V12 assertion is **malformed**. Consumer skills encountering a malformed PROJECT.md MUST:
+A PROJECT.md that fails any V1-V13 assertion is **malformed** (V13 joins the malformed-file set with the same surface-the-failing-rule-ID + route-to-`project-initiator` Mode C handling; absence of `deliverable_type` on a legacy file is conformance per V13, not a failure). Consumer skills encountering a malformed PROJECT.md MUST:
 
 1. Refuse to produce methodology-parameterized output.
 2. Surface the specific failing rule ID to the operator.
@@ -208,7 +240,7 @@ Skills MUST NOT silently work around validation failures by defaulting to an arc
 
 ### References
 
-- #351 — PROJECT.md-schema keystone: adds a first-class domain / deliverable-type axis to the schema; reserves the next V-rule (V13) off the V12 tail when its milestone is built.
+- #351 — PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-049 for the placement + open-enum decision.
 - #262 — adds org-structure, delivery-model, and team-roster fields to the schema; reserves the V-rule after the keystone (V14).
 
 ## 6. Examples

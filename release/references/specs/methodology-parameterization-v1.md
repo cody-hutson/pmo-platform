@@ -240,6 +240,40 @@ A methodology-aware role-skill author reading ONLY this document + [`schemas/pro
 
 Stage 9 operator verifies pickup-readiness per AC-R3.
 
+## 5A. Domain-Axis Consumption Pattern
+
+This section is the **domain-axis sibling of §5** (the methodology consumption pattern). Where §5 branches consumer behavior on `delivery_approach` (*how the work is governed*), §5A branches it on `deliverable_type` (*what kind of work is delivered*, `project-schema.md` §4). The two axes are orthogonal and compose: a consumer reads **both** fields independently.
+
+**The branch.**
+
+```
+read PROJECT.md → parse deliverable_type field:
+
+  CASE D-1: deliverable_type is a recognized class with a shipped guide
+            (a guide exists at core/standards/domain-best-practices/<deliverable_type>.md):
+    → resolve that guide; confirm its Applicability Profile APPLIES-WHEN matches the deliverable
+      and CONTRAINDICATED-WHEN does not exclude it (per stage-05-solutioning.md §5.7 guide index)
+    → parameterize domain-aware output / review against the guide's concepts + contraindications
+
+  CASE D-2: deliverable_type is a recognized-or-well-formed class with NO shipped guide yet
+            (open-escape value, or a recognized class whose guide is not yet authored):
+    → the absence IS the guide-authoring demand signal (the SHIP-WITH-FLAG expansion path)
+    → emit domain-agnostic output WITH an explicit caveat naming the unguided deliverable_type
+    → DO NOT silently default to the software/governance guide or any other domain
+
+  CASE D-3: deliverable_type absent (legacy methodology-only PROJECT.md):
+    → no domain branch; proceed methodology-only (the field is optional on legacy files per V13)
+    → where a Stage-4 `domain:` class was independently classified from the File-Change-Matrix,
+      that abstract signal still governs the design-aware mechanisms (the field is an ADDITIONAL
+      authoritative source, not the only one — stage-04-planning.md §5.7)
+```
+
+**No silent default (the §5 CASE-3 analog).** CASE D-2 is the exact structural analog of §5 CASE 3 (`base_archetype: null`): when the platform cannot parameterize the deliverable's domain from a shipped guide, it emits a **methodology/domain-agnostic output with an explicit caveat** — never a silent fallback to a default domain. Silent domain-default is the domain-axis counterpart of the PROC base-archetype-blind-fallback failure mode (§6.3).
+
+**Reconciliation with the Stage-4 `domain:` label.** Where PROJECT.md carries `deliverable_type`, it is the **authoritative source** the Stage-4 Planning `domain:` class field reads (`release/references/pipeline/stage-04-planning.md` §5.7). The consumer chain — the A3.1 impact-analysis selector, the domain-best-practice review criterion, and the §5.7 guide index — is **unchanged**: `deliverable_type` feeds the abstract `domain:` class without reworking any consumer, exactly the forward-reference contract that field declared. This branch **references** the §5.7 guide index; it does not re-found guide resolution.
+
+**Composition with §5.** A consumer reads `delivery_approach` (§5) AND `deliverable_type` (§5A) independently and combines them: e.g., a `delivery_approach: Scrum` + `deliverable_type: web` project gets Scrum-native methodology framing (§5 CASE 1) AND web-domain-aware design/review parameterization (§5A CASE D-1). Neither axis implies the other; both are read when present.
+
 ## 6. Failure Modes (domain-specific)
 
 Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) 5-field template + 5-category taxonomy. Five failure modes the methodology parameterization creates. Future skills (e.g., a `methodology-aware` audit) and `pmo-qa-auditor` consumers cite these when reviewing skill outputs.
