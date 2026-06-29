@@ -1693,9 +1693,20 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    gh api repos/{REPO}/milestones/<N> \
      --jq '.state' | grep -q "^closed$" || echo "Milestone NOT closed — block closure"
 
-   # 4. RELEASE_LOG entry committed
-   git log origin/main --grep "RELEASE_LOG.*v<X.Y>" --oneline | head -1 \
-     | grep -q . || echo "RELEASE_LOG entry MISSING from main — block closure"
+   # 4. RELEASE_LOG entry present (assert the CONTENT on main, not a commit-message
+   # grep). The Stage-12/13 chore PRs land the LOG content as a pipe-row in the
+   # `## Releases` table PLUS a visible-H4 `#### Deployment Log v<X.Y>` block; a
+   # `git log --grep` on commit messages is the wrong instrument (it asserts a
+   # commit subject, not that the row + block actually exist on main, and a
+   # squash/edit-titled merge would evade it). Assert BOTH the row and the block.
+   # (a) table row — the live form is bare-version-first `| v<X.Y> | <milestone> | …`
+   git show origin/main:release/releases/RELEASE_LOG.md \
+     | grep -qE "^\| v<X.Y> " \
+     || echo "RELEASE_LOG row for v<X.Y> MISSING from main — block closure"
+   # (b) visible-H4 Deployment Log block
+   git show origin/main:release/releases/RELEASE_LOG.md \
+     | grep -qE "^#### Deployment Log v<X.Y>" \
+     || echo "RELEASE_LOG visible-H4 'Deployment Log v<X.Y>' block MISSING from main — block closure"
 
    # 5. Every release sub-issue closed
    gh issue list --milestone "v<X.Y>-<slug>" --state open --json number \
