@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.41] - 2026-06-29
+
+Internal governance-hygiene release with no user-visible behavior change: the root-cause-analysis method is wired by citation to every process surface that owns a failure, the release hub's rule-computed version-numbering step stops surfacing as an operator click-gate, and two reference-document accuracy issues are corrected. Documentation / governance / skill-text only — no data migration, no stored-content move, no schema or runtime change. routine class.
+
+### Changed
+
+- **Root-cause-analysis method wired to every failure-owning surface.** The root-cause-analysis method is now bound by citation to the surfaces its own trigger table already named — `ppm-agent`, `pmo-devops-sre`, and the failure-owning pipeline stage(s) — so root-cause work is invoked or handed off consistently rather than only where it was first wired. ([#1883](https://github.com/cody-hutson/pmo-platform/issues/1883))
+- **Version-numbering step reframed as a recorded determination.** The release hub's rule-computed version number is now recorded as a determination by default instead of being surfaced as an operator click-gate, escalating to a gate only for a deliberate version-less / forced-collision close-out or a concurrent slot claim. ([#1918](https://github.com/cody-hutson/pmo-platform/issues/1918))
+
+### Fixed
+
+- **Reference-document accuracy.** Corrected an extinct directory path in the practice-efficacy framework, a malformed table cell in the handoff-coordinator spec, and enumerated every PR-time corpus-integrity gate and its override marker in the ADR README. ([#1562](https://github.com/cody-hutson/pmo-platform/issues/1562), [#2218](https://github.com/cody-hutson/pmo-platform/issues/2218))
+
+[Full notes](release/releases/notes/v2.41_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.41)
+
 ## [v2.40] - 2026-06-29
 
 Transcript and meeting processing is formalized: the implicit transcript-handling flow is named as one pipeline with explicit automation boundaries — routine tracker updates flow, stakeholder-facing and risk-bearing changes stop for approval, and action items surface for you to dispose instead of being logged on your behalf — while meetings gain a governed lifecycle state and meeting materials are redesigned for a 5-second scan. Formalizes existing flow and adds one tracker field plus scannable meeting materials; no data migration, no stored-content move, no new project-facing primitive. routine class.
