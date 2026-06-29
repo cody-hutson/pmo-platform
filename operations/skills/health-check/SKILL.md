@@ -1,8 +1,8 @@
 ---
 name: health-check
 description: >
-  Intent-driven project-state drift auditor. Audits a single project for drift between its tracked state and its canonical sources (MCP + local), then emits a categorized 5-section punch list — Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs — that is never auto-applied. v1 ships three foundation modes: full (total drift sweep), timeline (date/milestone drift with day-of-week validation), attribution (owner/assignment drift). Invokable interactively as /health-check and schedulable for file output. Triggers: "health check this project", "is this project's state still accurate", "run a drift check", "check for stale dates", "audit the timeline", "who owns this — is it still right", "check ownership drift", "did anything drift since last cycle", "pre-cutover state check", "is the tracked state current."
-version: v2.42
+  Intent-driven project-state drift auditor. Audits a single project for drift between its tracked state and its canonical sources (MCP + local), then emits a categorized 5-section punch list — Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs — that is never auto-applied. Seven modes: full (total sweep), timeline (date/milestone drift with day-of-week validation), attribution (owner drift), comms (communications-coverage drift), plan (drift of one named plan), raid (RAID-log drift with guardrail enforcement), sources (canonical-source inventory). Invokable interactively as /health-check and schedulable for file output. Triggers: "health check this project", "is this project's state still accurate", "run a drift check", "check for stale dates", "audit the timeline", "check ownership drift", "are comms overdue", "did this plan land", "audit the RAID log", "are our sources current", "did anything drift since last cycle", "is the tracked state current."
+version: v3.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 delivery_approach: advisory
@@ -43,19 +43,19 @@ The skill reads a **canonical source set** — MCP-primary, local-fallback — g
 
 ## Modes
 
-The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. v1 implements modes 1–3; modes 4–7 are declared here so the contract is complete and stable — **they are not implemented in v1** (they ship in the v2 extended-modes slice).
+The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. All seven modes are implemented: modes 1–3 are the foundation drift-core (the v1 slice), and modes 4–7 are the extended value-heavier set (the v2 slice). The contract — 4-intent block + 5-section output + `TRACKER_UPDATES:` + the S0–S3 confidence band — is identical across all seven.
 
 | # | Mode | Slice | What it audits |
 |---|---|---|---|
-| 1 | `full` | **v1** | The union of all per-mode surfaces — the default invocation; runs every other mode's checks. |
-| 2 | `timeline` | **v1** | Every surfaced date — tracked dates vs PROJECT.md / carry-forward / canonical schedule. |
-| 3 | `attribution` | **v1** | Every item's owner — recorded owner vs canonical owner. |
+| 1 | `full` | v1 | The union of all per-mode surfaces — the default invocation; runs every other mode's checks. |
+| 2 | `timeline` | v1 | Every surfaced date — tracked dates vs PROJECT.md / carry-forward / canonical schedule. |
+| 3 | `attribution` | v1 | Every item's owner — recorded owner vs canonical owner. |
 | 4 | `comms` | v2 | Communications Tracker vs sent/draft/ready lifecycle state. |
 | 5 | `plan <name>` | v2 | One named plan — plan-promised vs trackers-reflected delta. |
 | 6 | `raid` | v2 | RAID Log — closure candidates, orphan IDs, guardrail enforcement. |
 | 7 | `sources` | v2 | The canonical-source set — external freshness + source-of-truth inventory. |
 
-The 4-intent declarations per mode live in [`references/mode-intents.md`](references/mode-intents.md) (the queryable form); the v1 modes are summarized below.
+The 4-intent declarations per mode live in [`references/mode-intents.md`](references/mode-intents.md) (the queryable form); each mode is summarized below.
 
 ### Mode 1 — `full` (v1)
 
@@ -67,7 +67,7 @@ mode_full:
   confidence_intent: "Assertive on cross-source agreement; cautious on single-source claims."
 ```
 
-`full` runs the `timeline` and `attribution` checks (and, in the v2 slice, the `comms`/`raid`/`sources` checks) and merges their findings into one 5-section report. It is the default when `/health-check` is invoked with no mode.
+`full` runs every other mode's checks — `timeline`, `attribution`, `comms`, `raid`, and `sources` — and merges their findings into one 5-section report. (`plan <name>` is excluded from the `full` sweep because it requires a named-plan argument; `full` audits the project, not a single named plan.) It is the default when `/health-check` is invoked with no mode.
 
 ### Mode 2 — `timeline` (v1)
 
@@ -92,6 +92,54 @@ mode_attribution:
 ```
 
 `attribution` audits every item's owner. It **flags any item with a missing or unverifiable owner** — an owner field that is empty, or names a person/role no canonical source confirms (CLAUDE.md Guardrails: no fabricated owners). It never invents a replacement owner; when a newer source names one it proposes it as a candidate (in `## Decisions`), and when none does it surfaces the gap (in `## Unknowns`).
+
+### Mode 4 — `comms` (v2)
+
+```yaml
+mode_comms:
+  trigger_intent:    "Pre-cascade, or just after a burst of major communications, and I need to know which comms are stale."
+  decision_intent:   "What is the lifecycle state of all comms — stale-SENT, obsolete-DRAFT, unsent-READY?"
+  output_intent:     "A comms-hygiene action list."
+  confidence_intent: "Assertive on lifecycle transitions; cautious on inferring a response."
+```
+
+`comms` audits the **Communications Tracker** (`tracker-manager/references/tracker-schemas.md` Tracker 2 — Status SENT / PENDING RESPONSE / RESPONSE RECEIVED / NO RESPONSE NEEDED; lifecycle ACTIVE / CORE / ARCHIVE) against sent/draft/ready state and `06-Emails/`. It classifies each communication's lifecycle: a **stale-SENT** (sent, a response was expected, none recorded past its window), an **obsolete-DRAFT** (a DRAFT whose event or decision window has passed), an **unsent-READY** (a READY comm never sent past its intended send window). It **never infers a response** — a lifecycle transition to "response received" requires a source that attests it; absence of a recorded response is surfaced, not assumed resolved. Comms closures route to `/comms-writer` (**status only** — the skill never drafts or sends the communication); the `TRACKER_UPDATES:` block carries status changes, never message content.
+
+### Mode 5 — `plan <name>` (v2)
+
+```yaml
+mode_plan:
+  trigger_intent:    "A plan or playbook finished, or its window closed, and I need to know whether the trackers reflect what it promised."
+  decision_intent:   "What is the plan-promised vs trackers-reflected delta for one named plan?"
+  output_intent:     "A closure-delta matrix for the named plan."
+  confidence_intent: "Cautious — the plan may have been deliberately superseded."
+```
+
+`plan` audits a **single named plan** — the plan's promised items (milestones, deliverables, dates, recurring activities) vs what the trackers and canonical sources reflect. It **requires a plan-name argument.** Invoked with no name (`/health-check plan` with no following token), it returns an actionable **"which plan?"** prompt — naming the candidate plans it can see (e.g., the plans in `08-Generated/` or the project's plan artifacts) or asking the operator to name one — and does **not** silently default to a plan; a drift report against a guessed plan reads as authoritative about a target the operator did not ask about (see the TRIG failure mode). Its bias is **cautious**: a promised-but-unreflected item is not asserted "failed" — the plan may have been deliberately superseded, so the delta routes to `## Decisions` unless a second source corroborates a mechanical fix. A delivered item the tracker confirms lands in `## Confirmed`.
+
+### Mode 6 — `raid` (v2)
+
+```yaml
+mode_raid:
+  trigger_intent:    "Pre-RAID-review, or after a major event, and I need the RAID log's drift state."
+  decision_intent:   "Where is RAID-log drift — closure candidates, orphan IDs, guardrail violations?"
+  output_intent:     "A RAID-hygiene action list."
+  confidence_intent: "Cautious — closing a risk needs evidence."
+```
+
+`raid` audits the **RAID Log** and **enforces the RAID guardrails** (`delivery-engine/references/raid-templates.md` + CLAUDE.md Guardrails: no passive risk voice). It flags: a **risk in passive voice** (a risk stated without a named actor — "performance may be impacted" — is a no-passive-risk-voice violation); a **missing owner** (an empty/`TBD` owner field — every RAID item needs exactly one named owner); a **missing mitigation** (a risk with no response strategy — identification is not sufficient, the "so what?" discipline); and a **stale entry** (a RAID item unreviewed in **>30 days** — the auto-escalate threshold). Its bias is **cautious**: it **never auto-closes a risk** — closing one needs evidence — so closure candidates route to `## Decisions` (operator-rendered), not `## Auto-Actionable`, unless a two-source-corroborated mechanical fix exists. RAID IDs are read as-is; an orphan ID (no source) surfaces in `## Unknowns` with what was searched.
+
+### Mode 7 — `sources` (v2)
+
+```yaml
+mode_sources:
+  trigger_intent:    "A Confluence-driven decision is pending and I need to know whether the external sources are fresh."
+  decision_intent:   "Where is external-source freshness drift vs PROJECT.md sync timestamps?"
+  output_intent:     "A freshness matrix + a sync-direction recommendation + a canonical-source inventory."
+  confidence_intent: "Assertive on staleness; cautious on conflict resolution."
+```
+
+`sources` audits the **canonical-source set** (the MCP-primary + local-fallback set governed by [ADR-051](../../../core/ADRs/ADR-051-health-check-mcp-primary-source-set.md); mapped per `references/evidence-matrix.md`). It **emits a canonical-source inventory that names its source-of-truth set** — the MCP-primary set (Confluence, Jira, Smartsheet, SharePoint) plus the local-fallback set (`04-PMO-Operations/*`, `PROJECT.md`, `PORTFOLIO.md`, `05-Transcripts/`, `06-Emails/`, `08-Generated/`) — with a per-source freshness verdict, and it **flags missing-but-expected and stale sources**: a recorded sync timestamp that lags the live source is external-source freshness drift (with a sync-direction recommendation per the ADR-051 drift-resolution rule — audience-facing MCP drift is the higher-priority direction); a source expected but with **no MCP connector** (SharePoint today) is listed as **missing-but-expected** / link-only / content-unverifiable — never asserted fresh. This is the graceful-degradation surface: `sources` makes the coverage envelope explicit rather than silently skipping an unreachable or connector-less source.
 
 ## Output Structure
 
