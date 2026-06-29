@@ -214,10 +214,13 @@ Decisions affecting multiple modules but rooted in core go to `core/ADRs/` with 
 ### Repo-integrity authoring discipline
 
 ADR files cross-reference issues constantly — `source_observations:` frontmatter,
-`## Status` / `## Context` provenance lines, `## Related ADRs` — and two PR-time
-`repo-integrity.yml` gates (defined in [`core/rules/git-workflow.md` §
-Repository-Integrity Gates](../rules/git-workflow.md)) scan every changed markdown
-file. Author every ADR to satisfy them up front, not by red CI:
+`## Status` / `## Context` provenance lines, `## Related ADRs` — and the PR-time
+durable-corpus gates (the `repo-integrity.yml` gates defined in
+[`core/rules/git-workflow.md` § Repository-Integrity Gates](../rules/git-workflow.md),
+plus the reference-durability detector per
+[`reference-durability-standard.md`](../standards/reference-durability-standard.md))
+scan every changed markdown file. Author every ADR to satisfy them up front, not by
+red CI:
 
 1. **Reference issues as bare `#N`, never a full GitHub URL.** A
    `github.com/<owner>/pmo-platform/issues/N` URL embeds the operator handle and
@@ -239,8 +242,27 @@ file. Author every ADR to satisfy them up front, not by red CI:
    `## Repository-Integrity Gates` section of `git-workflow.md` is the canonical
    worked example — it stacks all three markers at the top of the file.
 
+**Every PR-time durable-corpus gate and its override marker.** The two gate families
+(`repo-integrity` and `reference-durability`) carry the following per-file override
+markers — each an HTML comment declared once near the top of the file. Authoring
+discipline item 2 above generalizes to any of them: when an ADR (or skill file)
+legitimately carries a flagged construct, declare the matching marker up front rather
+than letting CI go red. The one construct with **no** override marker is the bare-`#N`
+positional rule (last row) — its only remedy is to rewrite the reference inline.
+
+| Marker | Family | Suppresses (what the gate would otherwise flag) |
+|---|---|---|
+| `<!-- repo-integrity: allow-issue-ref -->` | repo-integrity | A resolving `#N` placed outside a recognized reference block, or that the issue-ref validity gate would otherwise reject (a separate validity check still rejects 404s / redirects / PR numbers — the marker does not suppress that) |
+| `<!-- repo-integrity: allow-memory-ref -->` | repo-integrity | A reference to an operator-memory name (a `feedback_*` / `reference_*` / `project_*` memory) in durable-corpus prose — used when a memory is deliberately named as provenance / a composes-with sibling |
+| `<!-- repo-integrity: allow-dead-file-ref -->` | repo-integrity | A `[text](path)` link / `![alt](path)` image whose target file or `#anchor` is missing (used for a deliberately-forward or intentionally-absent target) |
+| `<!-- repo-integrity: allow-depersonalization -->` | repo-integrity | Operator/collaborator identifying values in a `core/`/`release/`/`operations/`/`packages/` file (rare; personal data is normally kept out per the secrets policy) |
+| `<!-- reference-durability: allow-link -->` | reference-durability | Markdown link sequences (Class L) — for a file that legitimately carries summarized in-repo links |
+| `<!-- reference-durability: allow-version-ref -->` | reference-durability | Version-cutover apparatus (Class V) — prose that a rule applies to releases after a given version, or that a version is itself exempt |
+| `<!-- reference-durability: allow-url -->` | reference-durability | Raw GitHub issue/PR/milestone URLs (Class U) — distinct from `allow-link` so a links-carrying file does not silently also suppress the raw-URL prohibition |
+| **(no marker — bare-`#N` positional rule)** | reference-durability | NONE — a bare issue reference OUTSIDE a recognized reference block, or content-free INSIDE one, **cannot** be marker-suppressed. The only remedy is to rewrite it inline: move it into a reference block with a summary noun phrase, or de-reference it in prose so the meaning survives the number's renumber. |
+
 The same discipline applies to skill `SKILL.md` and skill `references/*.md` files,
-which are equally durable-corpus and equally scanned by both gates.
+which are equally durable-corpus and equally scanned by all of these gates.
 
 ## Status enum
 

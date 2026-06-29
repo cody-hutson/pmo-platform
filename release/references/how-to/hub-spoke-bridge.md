@@ -877,6 +877,20 @@ locations. The discipline (apply at authoring time, not after red CI):
   fix is to rewrite it inline (move it into a reference block with a summary, or
   de-reference it in prose). The full author-time check set is in
   [`reference-durability-standard.md` § Authoring around the gate](../../../core/standards/reference-durability-standard.md).
+- **Every PR-time gate + its override marker (the complete set).** The two gate
+  families carry these per-file override markers — declare the matching one (an HTML
+  comment, once near the top of the file) when the file legitimately carries a flagged
+  construct: `repo-integrity: allow-issue-ref` (a `#N` outside a reference block),
+  `allow-memory-ref` (an operator-memory name in prose), `allow-dead-file-ref` (a
+  deliberately-forward/absent link target), `allow-depersonalization` (rare — operator
+  identity in a `core/`/`release/`/`operations/`/`packages/` file); and
+  `reference-durability: allow-link` (markdown link sequences), `allow-version-ref`
+  (version-cutover apparatus), `allow-url` (raw GitHub issue/PR/milestone URLs). The
+  **one construct with NO override marker** is the bare-`#N` positional rule above —
+  rewrite it inline. This set is enumerated once, with what each suppresses, in
+  [`core/ADRs/README.md § Repo-integrity authoring discipline`](../../../core/ADRs/README.md)
+  (the SSOT table) and cross-referenced from [`reference-durability-standard.md`](../../../core/standards/reference-durability-standard.md);
+  this bullet is the spoke-facing pointer, not a second copy of the table.
 
 For ADR-authoring and skill-authoring chips specifically, hub adds to
 `{ADDITIONAL_READS}`:
