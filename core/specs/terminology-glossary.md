@@ -1,3 +1,10 @@
+---
+title: Terminology Glossary
+purpose: The shared terminology contract between governance docs, skills, and execution tools across the pmo-platform — defines how six categories of terms (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown units, Scope/Time boxes) plus first-class actor terms are used canonically, each mapped to an authoritative-file owner.
+type: reference
+source: "Pre-triage terminology-collision audit (2026-03-29); actor-term + tier-anchoring + frontmatter refresh for cold-agent comprehension as Autonomy Tier 2/3 expands."
+consumers: "All agents resolving platform vocabulary; execution-framework.md (Role/Function/Persona/Work-Breakdown anchors); hub-spoke-bridge.md (Hub/Spoke/Sub-agent/Task/Role); registry.md (Skill); release-process.md + pipeline/ (Stage/Phase/Step/Deliverable); methodology-parameterization-v1.md (Methodology)."
+---
 <!-- reference-durability: allow-link -->
 # Terminology Glossary
 
@@ -62,8 +69,9 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 - **Definition:** A named set of responsibilities an agent or human assumes during a specific activity (e.g., "Hub Agent," "Spoke Agent," "Operator").
 - **Real-world PMO equivalent:** RACI role (Responsible, Accountable, Consulted, Informed) or organizational role title (e.g., "Sponsor," "Project Manager," "Business Analyst").
-- **Platform equivalent:** Operator (the human user), Hub Agent (orchestrating Claude session), Spoke Agent (spawned Claude session). Future: agent roles in multi-agent orchestration.
+- **Platform equivalent:** Operator (the human user, **Autonomy Tier 0**), Hub Agent (orchestrating Claude session) and Spoke Agent (spawned Claude session) — both **Autonomy Tier 1–3** per the action. Future: agent roles in multi-agent orchestration. The concrete actors are first-class terms below: [Hub](#term-hub), [Spoke](#term-spoke), [Skill](#term-skill), [Sub-agent](#term-sub-agent).
 - **Authoritative file:** `release/references/how-to/hub-spoke-bridge.md` § For the Operator / For the Hub Agent / Spoke Template.
+- **Tier-anchoring convention:** State each role's characteristic **Autonomy Tier** when naming it, citing `core/specs/autonomy-tiers.md` as the tier authority — Operator acts at **Autonomy Tier 0** (irreducible-human gates: Stage 9 GO, Stage 12 Execute), the **Hub Agent** and **Spoke Agent** act across **Autonomy Tier 1–3** depending on the action (Tier 1 drafts awaiting approval → Tier 3 standing-authorization execution per an approved plan). This answers "who acts at this tier?" from any role reference without backtracking; the canonical tier definitions live in `core/specs/autonomy-tiers.md` (this glossary states the convention, it does not redefine the tiers).
 - **Consumers:** All release-process documentation, persona cards in `release-personas.md`.
 
 ### term: Persona {#term-persona}
@@ -75,6 +83,40 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 - **Consumers:** `hub-spoke-bridge.md` Procedure 3, all stage-specific spoke prompts.
 
 **Distinguishing the three:** Function is *what a category of work is* (Planning); Role is *who performs it* (Operator + Hub + Spoke); Persona is *how they perform it with stylistic/behavioral detail* (Principal Engineer card).
+
+### term: Hub {#term-hub}
+
+- **Definition:** The single orchestrating Claude session that holds the full release context, dependency graph, and operator-authorization scope, and drives a release through the pipeline by spawning Spokes. The Hub is the only agent that launches other agents; it never performs a stage's isolated work itself.
+- **Real-world PMO equivalent:** Program Manager / orchestration lead — owns the plan and the cross-workstream picture, delegates execution, and reconciles results into decisions.
+- **Platform equivalent:** The hub session in the hub-and-spoke release bridge. Acts across **Autonomy Tier 1–3** (drafts Decision Briefings at Tier 1; executes routing/scaffolding under standing plan authorization at Tier 3) per `core/specs/autonomy-tiers.md`.
+- **Authoritative file:** `release/references/how-to/hub-spoke-bridge.md` § For the Hub Agent.
+- **Consumers:** All release-orchestration documentation; `release-personas.md`; every Spoke (which reports back to the Hub).
+
+### term: Spoke {#term-spoke}
+
+- **Definition:** A spawned, worktree-isolated Claude session that performs one pipeline stage's work for one issue and reports its result back to the Hub. A Spoke does isolated work only; it never launches a downstream Spoke (no Agent-tool or spawn_task invocation for the next stage).
+- **Real-world PMO equivalent:** A specialist contributor assigned a single work package — does the work, hands back the deliverable, does not re-assign downstream work.
+- **Platform equivalent:** A stage spoke launched by the Hub via the `Agent({subagent_type,…})` Task tool (see [Sub-agent](#term-sub-agent) for the component it is instantiated as). Embodies a stage [Persona](#term-persona). Acts across **Autonomy Tier 1–3** per the stage's authorization (per `core/specs/autonomy-tiers.md`).
+- **Authoritative file:** `release/references/how-to/hub-spoke-bridge.md` § Spoke Template / § Spoke Launch Mechanisms.
+- **Consumers:** All stage sub-task templates; `release-personas.md`; the Hub's Procedure 2 routing.
+
+### term: Skill {#term-skill}
+
+- **Definition:** A packaged, deployable unit of Claude Code behavior — a `SKILL.md` definition plus its `references/` support files, distributed as a `.skill` package — that the platform invokes to perform a capability. Each deployed Skill is one Configuration Item (CI) row in the skill catalog.
+- **Real-world PMO equivalent:** A documented capability / standard operating procedure the organization can deploy repeatably across engagements.
+- **Platform equivalent:** A skill under `{operations,release,core}/skills/<name>/`, deployed by `deploy.sh`, catalogued in the skill registry. Structural model (the three components — SKILL.md / references / package) is described in `core/disciplines/architecture-overview.md` § Skill Architecture.
+- **Authoritative file:** `core/skills/registry.md` (the single skill catalog / CMDB, per ADR-038).
+- **Consumers:** `pmo-skill-router` (routing view of the registry); `deploy.sh`; all skill-authoring + skill-editing documentation.
+
+### term: Sub-agent {#term-sub-agent}
+
+- **Definition:** The Claude Code component a Spoke is instantiated as — an agent definition file under `.claude/agents/<name>.md`, invoked through the `Agent({subagent_type,…})` Task tool. "Sub-agent" is the build-surface / mechanism term; "[Spoke](#term-spoke)" is the orchestration-role the sub-agent fills during a release. They are not synonyms: a Spoke is a role played by a sub-agent invocation; a sub-agent is the component definition that makes the invocation possible.
+- **Real-world PMO equivalent:** A staffing template / role definition — the reusable job spec that an assigned contributor (the Spoke) is hired against for a specific engagement.
+- **Platform equivalent:** An agent definition at `.claude/agents/<subagent_type>.md` (e.g., `pmo-adversarial`), resolved by the Hub's `Agent({…})` launch with an explicit `model:` per the definition's frontmatter.
+- **Authoritative file:** `release/references/how-to/hub-spoke-bridge.md` § Spoke Launch Mechanisms (the `.claude/agents/<subagent_type>.md` definition surface).
+- **Consumers:** The Hub (launch mechanism); `release-personas.md` (persona ↔ subagent_type mapping); Stage 5 adversarial-review pairing.
+
+**Distinguishing the actor terms:** [Hub](#term-hub) and [Spoke](#term-spoke) are orchestration **roles** (who acts in a release — the Hub orchestrates, the Spoke executes one stage); [Sub-agent](#term-sub-agent) is the **component** a Spoke is instantiated as (the `.claude/agents/` definition + Task-tool invocation); [Skill](#term-skill) is a **deployable capability unit** (a packaged SKILL.md the platform invokes). A Spoke is launched as a Sub-agent and may invoke Skills.
 
 ---
 
@@ -231,6 +273,7 @@ Terms the platform historically used for two distinct concepts — this glossary
 | "Framework" | Used loosely to mean both "delivery approach" (e.g., "the Scrum framework") and "tool-agnostic pattern set" | **Framework = tool-agnostic pattern set** (this glossary Category 3). Delivery approaches (Scrum / Kanban / Waterfall / etc.) are **Methodologies**, not Frameworks. |
 | "Process" | Used both for the 13-stage pipeline AND for any governed sequence (e.g., "triage process," "review process") | **Process** refers to the 13-stage pipeline as the canonical delivery Process. Smaller governed sequences are **sub-processes** (lowercase), named by their function (triage protocol, gate evaluation protocol). |
 | "Stage" vs. "Phase" | Occasionally conflated in PMBOK-style references | **Stage = top-level pipeline division** (13 of them, numbered 1-13). **Phase = sub-division within a single Stage**. Nest as Stage > Phase > Step. |
+| "agent" | Used for (i) a [Role](#term-role) in orchestration ("the Hub agent"), (ii) any generic autonomous actor ("an agent reading the corpus"), and (iii) a future-workforce identity ("agents cover BA/PO/Eng roles") | **(i) Role sense → name the specific role:** [Hub](#term-hub) / [Spoke](#term-spoke) / Operator, not bare "agent". **(ii) Generic-actor sense → "autonomous agent" / "reader"** is acceptable as gloss when no specific role is meant (e.g., "an autonomous agent reading the corpus cold"). **(iii) Future workforce-identity sense → out of scope of this glossary** — when the agent-workforce model is canonicalized it gets its own term; until then do NOT overload "agent" to mean a persistent workforce identity. The deployable-capability unit is a [Skill](#term-skill); the component an actor is instantiated as is a [Sub-agent](#term-sub-agent). |
 
 ## Appendix B — Non-Canonical Synonyms
 
@@ -257,7 +300,7 @@ Terms NOT used in the platform (with reason) and the canonical term that replace
 - **Authoritative-file delegation:** Glossary entries name the authoritative file but do NOT duplicate its schema. If the authoritative file changes a definition, the glossary is updated in the same commit (cross-reference integrity check QC3-03).
 - **Adding new terms:** New terms added to this glossary require a Collective Review pass or an ADR Issue — this is a governance file and falls under "No ungoverned changes."
 
-**Total terms:** 6 categories × 3-4 terms = **19 terms** (19 `{#term-<slug>}` anchors).
+**Total terms:** **23 terms** — 19 across the six categories (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown, Scope/Time boxes) plus 4 first-class actor terms (Hub, Spoke, Skill, Sub-agent) in Category 2. Authoritative count = `grep -cE '^### term:.*\{#term-' core/specs/terminology-glossary.md` (heading-scoped — prose mentions of `{#term-…}` in this file are not term entries and are correctly excluded).
 
 ## See Also
 
