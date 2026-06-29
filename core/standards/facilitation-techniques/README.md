@@ -75,8 +75,8 @@ One file per lifecycle domain. The corpus seeds its first domain with a real con
 | Domain | File | Status | Consumer surface |
 |---|---|---|---|
 | **Estimation** | `estimation.md` | SEEDED (this release) | `delivery-engine` Mode D (Sprint Planning) |
-| Retrospective | `retrospective.md` | DEFERRED | `delivery-engine` Mode E (retro context) |
-| Planning (iteration/release) | `planning.md` | DEFERRED | `delivery-engine` Mode D |
+| **Retrospective** | `retrospective.md` | SEEDED (v2.33) | `delivery-engine` Mode E (retro context) |
+| **Planning (iteration/release)** | `planning.md` | SEEDED (v2.33) | `delivery-engine` Mode D |
 | Requirements (facilitated) | `requirements.md` | DEFERRED | `pmo-process-designer` / `pmo-business-analyst` |
 | User-story writing | `story-writing.md` | DEFERRED | `delivery-engine` Mode C (DoR) |
 | Stand-up | `standup.md` | DEFERRED | `delivery-engine` Mode E |

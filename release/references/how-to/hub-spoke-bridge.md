@@ -441,7 +441,9 @@ or "Architectural Decision Gates" section.
   option. When citing an entry whose `last_verified_date` is older than
   90 days, the verdict notes the staleness.
 
-**Recurring D-decisions:** Some D-decisions fire on every release with the same template shape, varying only by per-release evidence. The Release Planning spoke (Procedure 0 Step 7) renders these inline in the release plan's Operator Decisions block per the D-Gate Template above. The current recurring set:
+**Recurring D-decisions:** Some D-decisions fire on every release with the same template shape, varying only by per-release evidence. The Release Planning spoke (Procedure 0 Step 7) renders these inline in the release plan's Operator Decisions block per the D-Gate Template above.
+
+**Rule-determined vs judgment recurring-Ds.** Recurring-Ds split into two kinds, and the hub renders them differently. A **judgment** recurring-D (e.g. **D-ReleaseClass**) presents a genuine operator choice and renders as an operator gate. A **rule-determined** recurring-D (e.g. **D-Version**) has its value computed by a deterministic rule (anchor() + bump-class floor → next-free); it renders as a **recorded determination** — the hub states the value and the re-verification rungs and proceeds, escalating to an operator gate ONLY when a named override condition is present. Rendering a rule-determined value as a co-equal click-gate is false-granularity governance-theater. The current recurring set:
 
 ```
 #### D-ReleaseClass: What Release Class does this release carry?
@@ -464,6 +466,18 @@ Cutover discipline for D-ReleaseClass: applies to all releases going forward.
 
 ```
 #### D-Version: What version does this release claim?
+Rendering: RECORDED DETERMINATION by default, NOT an operator click-
+  gate. D-Version is RULE-DETERMINED (contrast D-ReleaseClass, which
+  is a JUDGMENT gate): the version number is computed by the
+  authoritative-version-selection procedure below — anchor() + the
+  bump-class floor → next-free — so for a routine capability release
+  there is no operator judgment to render and the (B)/(C) valves are
+  inapplicable. Surfacing it as a co-equal click-gate is false-
+  granularity governance-theater. The hub records the determination
+  (the bump-class, the rule-computed provisional number, and the
+  re-verification rungs: Engineering Commit 0 + the Stage 12 atomic
+  claim) and proceeds — it does NOT pause for per-release operator
+  approval of a deterministic value.
 Gate input: Spoke-recommended next-free version, computed at
   recommendation time against AUTHORITATIVE host state (never local
   refs / a stale worktree), per the authoritative-version-selection
@@ -472,11 +486,15 @@ Gate input: Spoke-recommended next-free version, computed at
   determinism ADR recorded on the Version-Claim Determinism
   milestone) binds the number only at the atomic claim moment; the
   durable declaration at plan time is the bump-class.
-Gate decision: Operator renders the version identity — (A) accept
-  the spoke-recommended next-free, (B) version-less milestone
-  (theme-named; no tag claimed at Stage 12), or (C) operator-
-  specified override (e.g. when a concurrent release is known to be
-  claiming the recommended slot).
+Escalation to an operator gate (the ONLY conditions under which
+  D-Version becomes a click-gate; the valves remain reachable):
+  (A) the recorded default — accept the rule-computed next-free (no
+  gate; this is the recorded-determination path above), (B) a
+  deliberate version-less / theme-named / forced-collision close-out
+  (no tag claimed at Stage 12), or (C) an operator-specified override
+  when a concurrent release is KNOWN to be claiming the computed slot.
+  Absent a (B) or (C) condition, render (A) as a recorded
+  determination, not a question.
 Blocks: release branch name (release/<slug>), plan-file path, the
   Stage 12 atomic version claim, and any version: frontmatter the
   release writes.
@@ -577,6 +595,10 @@ Cutover discipline for D-Version: applies to all releases going forward.
 
 **Trigger:** Release plan from Procedure 0 is approved by operator.
 
+**Rigor-Invariance Principle (scaffolding selects tasks; it never attenuates rigor).** A work-item scaffold determines WHICH tasks exist; it MUST NOT determine the rigor with which any task's codified Phase checklist is reviewed or verified. Every codified Phase step (e.g. `pipeline/stage-12-execute.md` Phase B5.5 Surface-1 emit, `pipeline/stage-13-close.md` Phase B5.6 verify + the Procedure 7 Step 4 completion-verification table) runs whether or not the scaffolded sub-task body names it, and whether the stage runs as a spawned spoke or hub-direct. A sub-task body that paraphrases — rather than binds to — the canonical Phase checklist is therefore a scaffold abbreviation only, never a license to drop a codified step. Two mechanisms enforce this invariant so it does not depend on the hub remembering it: (1) **bind-by-reference** — every sub-task body cites its canonical stage-spec Phase checklist and carries a canonical-checklist attestation (Sub-Task Template below); (2) **the scaffold-independent completion gate** — `deploy.sh --check` Check 48 (the `--check-close-completeness` CI probe) asserts the complete Step 4 output-set on main for every `VERIFIED` `RELEASE_LOG` row, firing with no scaffold, no sub-task body, and no hub session in the loop. The gate is the machine backstop; the attestation is the human-readable forcing function — neither alone is the sole control.
+
+**Hub-direct ≡ spoke (execution-path-agnostic rigor).** Whether a stage is executed by a spawned spoke or run hub-direct, it binds to the **identical** canonical Phase checklist (per the bind-by-reference rule above). Hub-direct execution is NOT an abbreviated path: collapsing stages (e.g. a "combined Stage 12+13" run) does not waive any codified Phase step of either stage, and a hub-direct run is held to the same completion gate (Check 48 is execution-path-agnostic — it reads main's state, not the execution path that produced it). This generalizes the merge-ahead clause in Procedure 7 ("operator direct-merge does NOT waive the close outputs") from the merge-ahead case to **all** hub-direct execution.
+
 **Steps:**
 1. Read the approved release plan (Stage 4 spoke output on the release planning sub-task)
 2. For each OPEN issue, use the release plan's stage applicability matrix to determine which stages apply:
@@ -613,6 +635,7 @@ Per pipeline/stage-{NN}-{name}.md:
 - Purpose: {COPY FROM PIPELINE_STAGES}
 - Inputs: {COPY FROM PIPELINE_STAGES}
 - Outputs: {COPY FROM PIPELINE_STAGES}
+**Canonical checklist (bind-by-reference):** This sub-task is bound to the canonical Phase checklist in `pipeline/stage-{NN}-{name}.md` §{Phase range}. Execute every codified Phase step there; this body never narrows it. The Purpose/Inputs/Outputs above are stage metadata, NOT the checklist — the stage spec's Phase steps are authoritative, and a step absent from this body is still in scope (Rigor-Invariance Principle, Procedure 1). [Full transcription of the Phase checklist into this body is the permitted alternative to binding-by-reference; binding is the default — it cannot drift from the spec.]
 
 ### Instructions
 {STAGE_SPECIFIC_INSTRUCTIONS — what the spoke should do for THIS
@@ -625,6 +648,7 @@ Post output as a comment on THIS sub-task using the format:
 ### Detail
 ### Evidence
 ### Output for Stage {NEXT_STAGE}
+**Canonical-checklist attestation:** every codified Phase step in `pipeline/stage-{NN}-{name}.md` §{Phase range} ran, or is explicitly recorded N/A-with-reason. (This attestation is the spoke-side forcing function for the Rigor-Invariance Principle; the scaffold-independent completion gate — Check 48 — is the machine backstop.)
 
 Close this sub-task when output is posted and reviewed by operator.
 ```
@@ -640,6 +664,8 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 ### Procedure 2: Routing (What's Next)
 
 **Trigger:** Operator asks "what's next?" or a spoke completes.
+
+**Hub-direct ≡ spoke (routing mirror).** When routing elects to run a stage hub-direct instead of spawning a spoke (a permitted choice), the hub-direct run binds to the **identical** canonical Phase checklist the spoke would have — see the Hub-Direct ≡ spoke equivalence clause in Procedure 1. Hub-direct is a spawn-vs-inline choice, never a rigor choice; the completion gate (Check 48) is execution-path-agnostic.
 
 **Steps:**
 1. List all sub-tasks across all issues in the Milestone
@@ -851,6 +877,20 @@ locations. The discipline (apply at authoring time, not after red CI):
   fix is to rewrite it inline (move it into a reference block with a summary, or
   de-reference it in prose). The full author-time check set is in
   [`reference-durability-standard.md` § Authoring around the gate](../../../core/standards/reference-durability-standard.md).
+- **Every PR-time gate + its override marker (the complete set).** The two gate
+  families carry these per-file override markers — declare the matching one (an HTML
+  comment, once near the top of the file) when the file legitimately carries a flagged
+  construct: `repo-integrity: allow-issue-ref` (a `#N` outside a reference block),
+  `allow-memory-ref` (an operator-memory name in prose), `allow-dead-file-ref` (a
+  deliberately-forward/absent link target), `allow-depersonalization` (rare — operator
+  identity in a `core/`/`release/`/`operations/`/`packages/` file); and
+  `reference-durability: allow-link` (markdown link sequences), `allow-version-ref`
+  (version-cutover apparatus), `allow-url` (raw GitHub issue/PR/milestone URLs). The
+  **one construct with NO override marker** is the bare-`#N` positional rule above —
+  rewrite it inline. This set is enumerated once, with what each suppresses, in
+  [`core/ADRs/README.md § Repo-integrity authoring discipline`](../../../core/ADRs/README.md)
+  (the SSOT table) and cross-referenced from [`reference-durability-standard.md`](../../../core/standards/reference-durability-standard.md);
+  this bullet is the spoke-facing pointer, not a second copy of the table.
 
 For ADR-authoring and skill-authoring chips specifically, hub adds to
 `{ADDITIONAL_READS}`:
@@ -1615,6 +1655,8 @@ This mandate is consistent with — and bounded by — the **operator-agency car
 
 **Two gates enforce completeness at different moments.** (1) **Close-time, on-main, full set:** the Step 4 completion-verification table runs before milestone-close and asserts every canonical output is present on main — including the RELEASE_LOG row itself. This gate blocks an incomplete close. (2) **CI regression catch:** `deploy.sh --check` Check 32 is LOG-row-driven and asserts, for each already-landed RELEASE_LOG row, that its INDEX / DIGEST / NOTES (plus post-cutover tag / Release) companions exist (warn-mode-initial during shakedown, per the bypass-mode-readiness ladder). Check 32 cannot flag a release whose LOG row was never written (it iterates LOG rows); LOG-row presence is the Step 4 table's responsibility, not Check 32's.
 
+**Scaffold-independent enforcement of this Step 4 table (Check 48).** The Step 4 completion-verification above is hub-narrative-executed — it fires only if the hub remembers to run Procedure 7. `deploy.sh --check` **Check 48** is its scaffold-independent mirror: it iterates every `VERIFIED` `RELEASE_LOG` row at/after its cutover and asserts the complete canonical Stage 13 output-set (this table's machine-checkable rows) is present on main, **delegating** the note-content sub-assertion to `lint_release_corpus.py --check note-content`, the body-drift sub-assertion to `check-release-body-drift.sh`, and companion-presence to the same path resolution Check 32 uses — no logic is re-implemented. Check 48 fires on a plain `git`-checkout + `deploy.sh --check` with no scaffold, no sub-task body, and no hub session in the loop; the `--check-close-completeness` verdict-driven probe maps the result to a CI exit (fail-closed at the gate surface, swallowed non-blocking by a committed `.github/close-completeness.enforce` sentinel during calibration). Check 48 sits in lane (2) with Check 32 and **inherits the same LOG-row blind spot** — a release whose LOG row was never written is invisible to it; LOG-row presence remains the Step 4 table's responsibility. This is the scaffold-independent completeness gate the Rigor-Invariance Principle (Procedure 1) names as the machine backstop.
+
 **Merge-ahead close-out (operator direct-merge does NOT waive the close outputs):** When the operator merges the release PR directly — bypassing the Stage 12 gate (e.g., an early-merge under Procedure 6, or a direct UI merge to main) — the completeness binding is unchanged: a direct merge satisfies only the "merge to main" step (the one genuinely-consequential, hard-to-reverse action under the Stage 9 GO); it does NOT satisfy, and does NOT waive, the downstream close outputs. The hub still produces the complete canonical Stage 13 output set (the Step 4 Verification table) — default path the automated close-out, fallback the Phase B chore-PR mechanism when preflight blocks (per the outcome-bound mandate above). Where the merge-ahead skipped the signed-annotated tag (per Stage 12 Phase B3) or the published GitHub Release (Surface 1), those are backfilled. Empirical motivation: the recent incomplete closes all originated from a release PR merged directly, after which the close was improvised and dropped outputs. The merge-ahead path is therefore an explicit, supported close path — not an exception that licenses hand-assembly. `automated-closeout.sh` is idempotent per phase, so re-entry after a merge-ahead is safe and converges on the complete output set. The Step 4 completion-verification (below) proves all outputs landed regardless of whether the merge went through the Stage 12 gate or ahead of it.
 
 **Cutover discipline:** Applies to all releases going forward.
@@ -1657,6 +1699,24 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    git show origin/main:release/releases/notes/v<X.Y>_RELEASE_NOTES.md >/dev/null 2>&1 \
      || echo "MISSING release notes — block closure"
 
+   # 1b. §3.2 note-content CONFORMANCE (release-notes-standard.md §3.2 — the §3.2 lint
+   # runs on EVERY Stage-13 close path, not only release-executor Mode E). Presupposes #1
+   # (note present). This is the runbook gate for the pure-hub-direct / Phase-B chore-PR
+   # close that does NOT run automated-closeout.sh (the script path is gated in-script by
+   # its phase_lint_release_notes phase). Inherited exit contract: 0 clean / 1 finding /
+   # 3 path-unresolved — BOTH non-zero outcomes BLOCK. Version-scoped: a finding BLOCKS only
+   # when it names THIS version's note (a pre-existing legacy finding for another version is
+   # out of scope — audit-baseline discipline). It is a conformance assertion on the already-
+   # listed note output, NOT a new output row in the canonical Step 4 table.
+   note_lint_out=$(/usr/bin/python3 core/deploy/tools/lint_release_corpus.py --check note-content 2>&1); note_lint_rc=$?
+   if [ $note_lint_rc -eq 3 ]; then
+     echo "§3.2 lint path-unresolved (exit 3) — corpus unverifiable; BLOCK closure (fail-loud)"
+   elif [ $note_lint_rc -ne 0 ] && echo "$note_lint_out" | grep -qF "release/releases/notes/v<X.Y>_RELEASE_NOTES.md"; then
+     echo "§3.2 note-content finding for v<X.Y> — BLOCK closure (release-notes-standard.md §3.2 'Lint failures block Milestone close')"
+   else
+     echo "§3.2 note-content conformant for v<X.Y> (clean, or only legacy other-version findings — out of scope)"
+   fi
+
    # 2. Version tag exists on origin
    gh api repos/{REPO}/git/refs/tags/v<X.Y> \
      --jq '.ref' || echo "MISSING tag — block closure"
@@ -1665,9 +1725,20 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    gh api repos/{REPO}/milestones/<N> \
      --jq '.state' | grep -q "^closed$" || echo "Milestone NOT closed — block closure"
 
-   # 4. RELEASE_LOG entry committed
-   git log origin/main --grep "RELEASE_LOG.*v<X.Y>" --oneline | head -1 \
-     | grep -q . || echo "RELEASE_LOG entry MISSING from main — block closure"
+   # 4. RELEASE_LOG entry present (assert the CONTENT on main, not a commit-message
+   # grep). The Stage-12/13 chore PRs land the LOG content as a pipe-row in the
+   # `## Releases` table PLUS a visible-H4 `#### Deployment Log v<X.Y>` block; a
+   # `git log --grep` on commit messages is the wrong instrument (it asserts a
+   # commit subject, not that the row + block actually exist on main, and a
+   # squash/edit-titled merge would evade it). Assert BOTH the row and the block.
+   # (a) table row — the live form is bare-version-first `| v<X.Y> | <milestone> | …`
+   git show origin/main:release/releases/RELEASE_LOG.md \
+     | grep -qE "^\| v<X.Y> " \
+     || echo "RELEASE_LOG row for v<X.Y> MISSING from main — block closure"
+   # (b) visible-H4 Deployment Log block
+   git show origin/main:release/releases/RELEASE_LOG.md \
+     | grep -qE "^#### Deployment Log v<X.Y>" \
+     || echo "RELEASE_LOG visible-H4 'Deployment Log v<X.Y>' block MISSING from main — block closure"
 
    # 5. Every release sub-issue closed
    gh issue list --milestone "v<X.Y>-<slug>" --state open --json number \
@@ -1677,6 +1748,13 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    # Verifies Stage 12 Phase B5.5 emit landed; if missing, operator may invoke release-executor Mode F standalone
    gh release view v<X.Y> --repo {REPO} >/dev/null 2>&1 \
      || echo "MISSING GitHub Release v<X.Y> — operator decision required (invoke Mode F to publish, OR accept residual)"
+
+   # 6b. (Layer-1 dual-write) Surface 1 body == frontmatter-stripped in-repo note (release-notes-standard.md §5.1)
+   # Asserts the published Release body is the deterministic transform of the source-of-record note — not an ad-hoc
+   # draft and not stale after a note correction. Single source of the equality logic (shared with deploy.sh Check 47);
+   # detective-only (it never re-emits). Exit 0 = match; 1 = DRIFT (re-emit per §5.6 / Mode F); 2 = N/A (gh offline); 3 = Surface 1 / note absent.
+   REPO={REPO} ./release/tools/check-release-body-drift.sh v<X.Y> \
+     || echo "DRIFT — published Release body diverged from the in-repo note (§5.1); re-emit the body via the §5.6 deterministic transform OR release-executor Mode F"
 
    # 7. (Layer-1 dual-write) CHANGELOG.md entry present (Surface 2)
    # SKIP semantics: if CHANGELOG.md does not exist at repo root (pre-CHANGELOG state), the check resolves to N/A
@@ -1702,17 +1780,22 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    ### Verification
    | Output | Verification | Result |
    |---|---|---|
-   | User-facing release note | `git show origin/main:.../v<X.Y>_RELEASE_NOTES.md` | PASS/FAIL |
+   | User-facing release note | `git show origin/main:.../v<X.Y>_RELEASE_NOTES.md` (presence, cmd #1) **+ §3.2 note-content conformance (cmd #1b: `lint_release_corpus.py --check note-content`, version-scoped — a finding for v<X.Y> BLOCKS)** | PASS/FAIL |
    | Version tag | `gh api .../git/refs/tags/v<X.Y>` | PASS/FAIL |
    | Milestone closed | `gh api .../milestones/<N>` | PASS/FAIL |
    | RELEASE_LOG entry | `git log --grep ...` | PASS/FAIL |
    | Sub-issues closed | `gh issue list --state open` | PASS/FAIL |
    | GitHub Release (Surface 1, Layer-1 dual-write) | `gh release view v<X.Y> --repo {REPO}` exit 0 | PASS/FAIL |
+   | Surface 1 body matches in-repo note (§5.1 enforced transform) | `./release/tools/check-release-body-drift.sh v<X.Y>` exit 0 (published body == frontmatter-stripped note); detective-only, shares logic with deploy.sh Check 47; N/A if gh offline | PASS/FAIL/N/A |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | `git show origin/main:CHANGELOG.md \| grep -qE "^## \[?v<X.Y>\]?[[:space:]]"` exit 0; N/A if CHANGELOG.md absent (pre-CHANGELOG state) | PASS/FAIL/N/A |
    | .version stamped (release-cut-owned) | `git show origin/main:.version \| grep -qx v<X.Y>` exit 0; N/A for version-less release (Phase B5.7 SKIP) | PASS/FAIL/N/A |
+   | Posted Release TITLE versioned (Surface 1, posted-surface) | `gh release view v<X.Y> --repo {REPO} --json name --jq '.name' \| grep -qE '^v[0-9]+\.[0-9]+([a-z]\|-[0-9a-z][-0-9a-z]*)? — .'` exit 0 — the posted title reads `vX.Y — <headline>`, not the bare H1 headline; N/A for a version-less release | PASS/FAIL/N/A |
+   | Posted Release BODY link-resolvable (Surface 1, posted-surface) | `gh release view v<X.Y> --repo {REPO} --json body --jq '.body' \| grep -nE '\]\((\.\.?/\|release/\|core/\|docs/)'` returns NO match — the published body carries no repo-relative link (a repo-relative link 404s on the Release page) | PASS/FAIL |
    | Audit-class synthesis (audit-class only) | `gh issue list --milestone <target-milestone> --search "in:body \"<audit-folder-name>\""` returns N where N = recommendations count per Stage 4 D-decision granularity rule | PASS/FAIL/N/A |
    | Audit retro Milestone tags (audit-class only) | For each filed Issue: `gh issue view <N> --json milestone --jq '.milestone.title'` returns non-null = `<target-milestone>` | PASS/FAIL/N/A |
    ```
+
+   **Posted-surface verify (Surface 1, posted-surface rows):** The two posted-surface rows above read the LIVE GitHub Release via `gh release view` — distinct from the structural Check 20 lint (which lints the committed in-repo note file and cannot see the posted page). They catch the title-composition and link-resolvability defects that are invisible to Check 20: a bare-H1 (un-versioned) posted title, and a repo-relative body link that resolves in the file tree but 404s on `releases/tag/vX.Y`. Both run read-only (no git mutation), compose with the existing read-only Step-4 block, and BLOCK closure on failure under the same severity as the other Surface-1 checks. The body-link check is the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13). Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
 
    **Sequencing note:** The Milestone-closed check (#3) is the only verification that depends on Step 5's PATCH having fired (it asserts `state == closed`). Hub runs verification commands #1, #2, #4, #5 first (which gate the Step 5 hub PATCH), proceeds to Step 5 (PATCH), then re-runs check #3 to confirm `state=closed`. Final "🎉 RELEASE COMPLETE" declaration awaits all 5 universal checks PASSing AND (audit-class only) checks 6-7 PASSing.
 
@@ -1745,6 +1828,8 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    | GitHub Release (Surface 1, Layer-1 dual-write) | \`gh release view v<X.Y> --repo {REPO}\` | PASS |
    | CHANGELOG.md entry (Surface 2, Layer-1 dual-write) | \`git show origin/main:CHANGELOG.md | grep -qE "^## \[?v<X.Y>\]?[[:space:]]"\` | PASS / N/A (pre-CHANGELOG state) |
    | .version stamped (release-cut-owned) | \`git show origin/main:.version | grep -qx v<X.Y>\` | PASS / N/A (version-less release) |
+   | Posted Release TITLE versioned (Surface 1, posted-surface) | \`gh release view v<X.Y> --repo {REPO} --json name --jq '.name' | grep -qE '^v[0-9]+\.[0-9]+( |-)\` | PASS / N/A (version-less release) |
+   | Posted Release BODY link-resolvable (Surface 1, posted-surface) | \`gh release view v<X.Y> --repo {REPO} --json body --jq '.body' | grep -nE '\]\((\.\.?/|release/|core/|docs/)'\` no match | PASS |
    | Audit-class synthesis (audit-class only) | \`gh issue list --milestone <target> --search "in:body \"<audit-folder>\""\` | N/A (non-audit-class release) |
    | Audit retro Milestone tags (audit-class only) | For each filed Issue: \`gh issue view <N> --json milestone\` | N/A (non-audit-class release) |
 

@@ -151,7 +151,7 @@ These checks verify that hand-offs between skills maintain contract integrity.
 
 **XC-02:** Follow-up tags route to correct target skill per dependency graph
 - Intent: Routing is consistent with documented skill dependencies
-- Validation: Cross-reference output follow-ups against the PMO Agent Dependency Graph (reference: dependency-graph.md). Confirm no routing to non-existent skills or circular chains.
+- Validation: Cross-reference output follow-ups against the PMO Agent dependency edges (reference: `registry.md`). Confirm no routing to non-existent skills or circular chains.
 - Failure mode: Follow-up routed to "Requirements Designer" when no such skill exists
 
 **XC-03:** RAID entries use correct skill prefix
@@ -440,7 +440,7 @@ Run all EQ checks + PTR-01 through PTR-06 + OS-01, OS-02, OS-04, OS-06, OS-07 + 
 The regression checks above reference several skill definitions and cross-project artifacts. For context:
 
 - **Skill Definitions:** See `/mnt/Claude/_Implementation/Skills/[SkillName]/SKILL.md`
-- **Dependency Graph:** See `/mnt/Claude/_Implementation/Staging/dependency-graph.md` for skill-to-skill routing rules
+- **Dependency edges:** See `core/skills/registry.md` for skill-to-skill dependency edges and routing rules
 - **Output Contracts:** See `/mnt/Claude/_Implementation/Staging/per-skill-output-contracts.md` for detailed output structure requirements per skill and mode
 - **[PROJECT_KEY] Project Context:** See `/mnt/Claude/Projects/[PROJECT_KEY] Implementation/PROJECT.md` for current project state (phase, team, dual_framing_enabled flag, etc.)
 - **CLAUDE.md:** See `/mnt/Claude/CLAUDE.md` for workspace-wide preferences and universal rules

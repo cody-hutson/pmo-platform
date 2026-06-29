@@ -22,11 +22,11 @@ non_overlap:
 
 **Origin:** initiative-roadmap framework + cross-milestone cohesion-check protocol.
 **Tier:** K1 codified-knowledge corpus per [knowledge-architecture.md](../disciplines/knowledge-architecture.md).
-**Class:** standards. Governs initiative-roadmap artifacts at `pmo-platform/governance/roadmaps/*.md` and the Stage 5 Collective Review cohesion-check applied across multi-milestone initiatives.
-**Primary consumers:** authors of new initiative roadmaps under `pmo-platform/governance/roadmaps/`; Stage 5 Solutioning spokes invoking cohesion-check; `release-planner` and `release-executor` consuming `cluster:` / `initiative:` labels at Stage 3 Bundle and Stage 12 Execute.
+**Class:** standards. Governs initiative-roadmap artifacts at `<OPERATOR_INSTANCE_ROADMAPS_PATH>` (default `/roadmaps/`, per ADR-046) and the Stage 5 Collective Review cohesion-check applied across multi-milestone initiatives.
+**Primary consumers:** authors of new initiative roadmaps under `<OPERATOR_INSTANCE_ROADMAPS_PATH>` (default `/roadmaps/`); Stage 5 Solutioning spokes invoking cohesion-check; `release-planner` and `release-executor` consuming `cluster:` / `initiative:` labels at Stage 3 Bundle and Stage 12 Execute.
 **Secondary consumers:** `deploy.sh` Check 24 (90-day roadmap-staleness scan); Stage 13 Close checklist (event-trigger forcing function); `pmo-qa-auditor` Mode D (cohesion-check execution against roadmap §3 Now/Next/Later).
 
-> **⚠ RE-SCOPED per [ADR-012](../ADRs/ADR-012-roadmap-instance-descope.md) (2026-06-02).** Initiative-roadmap *instances* are now authored **operator-local** at `<OPERATOR_INSTANCE_ROADMAPS_PATH>` and are **not tracked** in this repo. This framework is retained as the reusable **convention** — when to author a roadmap, its structure and lifecycle, the F9 4-case diagnostic (§7.4), and the cohesion-check protocol (§7.9). The in-repo **enforcement** it formerly bound to is **retired**: throughout this document, treat every reference to `deploy.sh` Check 24, the Stage 13 Close forcing-function, the Stage 5 Collective Review cohesion-check, and gate `G3-13` as **historical** — those surfaces are removed or tombstoned, and roadmap freshness/cohesion is now an **operator-local discipline**. Read any `pmo-platform/governance/roadmaps/*.md` path as `<OPERATOR_INSTANCE_ROADMAPS_PATH>`.
+> **⚠ RE-SCOPED per [ADR-012](../ADRs/ADR-012-roadmap-instance-descope.md) (2026-06-02).** Initiative-roadmap *instances* are now authored **operator-local** at `<OPERATOR_INSTANCE_ROADMAPS_PATH>` and are **not tracked** in this repo. This framework is retained as the reusable **convention** — when to author a roadmap, its structure and lifecycle, the F9 4-case diagnostic (§7.4), and the cohesion-check protocol (§7.9). The in-repo **enforcement** it formerly bound to is **retired**: throughout this document, treat every reference to `deploy.sh` Check 24, the Stage 13 Close forcing-function, the Stage 5 Collective Review cohesion-check, and gate `G3-13` as **historical** — those surfaces are removed or tombstoned, and roadmap freshness/cohesion is now an **operator-local discipline**. Read any `pmo-platform/governance/roadmaps/*.md` path as `<OPERATOR_INSTANCE_ROADMAPS_PATH>`. **The token's default resolution is the shipped in-repo `/roadmaps/` folder** (folder + `README` tracked, instances git-ignored — the `analysis/` workspace pattern, per [ADR-046](../ADRs/ADR-046-roadmap-instance-in-repo-home.md)); a deployment may repoint the token for plug-and-play storage.
 
 ## 1. Purpose and Scope
 
@@ -69,6 +69,8 @@ Team                       ADR  ←──  Git history
                              (immutable decision record)   (immutable change record)
 ```
 
+> **Canonical scope note (per [term: Roadmap](../specs/terminology-glossary.md#term-roadmap), ADR-049):** the diagram's "scope = one initiative" states the platform **default** (one roadmap per initiative), not a definitional limit. The canonical `Roadmap` term permits a roadmap to span **one or more** initiatives; "Initiative" itself is a cross-milestone grouping theme, not a hierarchy level.
+
 The five-type mapping, with C12 altitude and primary consumer:
 
 | # | Artifact type | C12 altitude | Primary location | Primary consumer |
@@ -79,7 +81,7 @@ The five-type mapping, with C12 altitude and primary consumer:
 | 4 | **ADR** | Team-level decision record | `core/ADRs/ADR-NNN-*.md` (cross-cutting / platform-architecture) or `release/ADRs/ADR-NNN-*.md` (release-scope) per the ADR module-restructure | Decision-class consumers reading "why was X chosen?" |
 | 5 | **Git history** | Team-level change record | `.git/` (commits + PRs on github.com/[OPERATOR_GITHUB]/pmo-platform) | All audit / archeology / "what changed when" lookups |
 
-**Boundary clarification (Vision vs Roadmap):** Vision answers "what is this platform for, period" — it changes only when the platform's strategic purpose shifts. Roadmap answers "for this one initiative, what's the architected path across milestones to that purpose" — it changes per initiative as Now/Next/Later evolves. A new initiative does not produce a new Vision; it may produce a new Roadmap.
+**Boundary clarification (Vision vs Roadmap):** Vision answers "what is this platform for, period" — it changes only when the platform's strategic purpose shifts. Roadmap answers "for this one initiative, what's the architected path across milestones to that purpose" — for one initiative in the default case, or across several where an initiative grouping warrants it (canonical [term: Roadmap](../specs/terminology-glossary.md#term-roadmap)) — it changes per initiative as Now/Next/Later evolves. A new initiative does not produce a new Vision; it may produce a new Roadmap.
 
 **Boundary clarification (Roadmap vs Spec):** Roadmap is sequence-anchored ("Foundation shipped, Skill is Now, Hardening is Next") at the Program altitude. Spec is implementation-anchored ("file X gets line Y added, function Z gets refactored") at the Project altitude. A roadmap cites the milestones (and their constituent specs) that compose its capability; it does not duplicate spec content.
 

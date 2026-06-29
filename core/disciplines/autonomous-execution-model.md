@@ -5,6 +5,7 @@ applies_to: All skills + spokes producing decision-class or execution-class outp
 parallel_to: decision-discipline.md, reversibility-protocol.md, review-discipline-principles.md, failure-mode-standard.md
 source: autonomy-tiers-and-self-repair
 ---
+<!-- reference-durability: allow-link -->
 
 # Autonomous Execution Model
 
@@ -124,6 +125,33 @@ For production-impacting call sites — `core/deploy/deploy.sh --deploy`, `git p
 
 The agent populates the template fields from the failure context. Reversibility tier follows `reversibility-protocol.md`; the agent labels each option's tier so the operator can match review rigor to undo cost.
 
+## Pause-to-Learn Pattern
+
+The third pre-action sibling to Retry and Escalate. Where Retry is **failure-anchored** (a transient failure already happened mid-action) and Escalate is **ambiguity-anchored** (a decision belongs to the operator), Pause-to-Learn is **competence-anchored and self-closing**: it fires *before* the agent acts, when the agent's grounds for the pending decision are weak, and its default resolution is to **learn the gap closed itself** — not to hand the decision to the operator. It is the agent asking "do I actually have grounds to act here?" and, when the answer is no on an action that is not trivially reversible, fetching new signal before proceeding rather than proceeding silently.
+
+This pattern is strictly additive to the Retry / Escalate / Rollback set; it mutates none of them. It routes *into* the Escalate Pattern only as a terminal fallback (the self-closing default having failed to close the gap), exactly as Retry routes into Escalate on cap-exhaustion.
+
+### Trigger conditions
+
+- **A pending decision carries a low decision-confidence reading** — the agent's grounds for the conclusion are weak (independent cross-checks disagree, a specific gap is nameable, or the weakest evidence label is an unverified assumption) — **on an action whose reversibility tier is above CHEAP** (MODERATE / EXPENSIVE / IRREVERSIBLE). A low-confidence reading on a CHEAP action proceeds — pausing on a trivially-reversible action is ceremony with no payoff.
+- The decision is **decision-class** (a recommendation, a proceed/defer choice, a plan, a proposed action) — not an observation, a status summary, or an evidence citation.
+- The gap is **plausibly closable by injecting new external signal** (a canonical-source read, a second tool call, a re-derivation) rather than being a decision the operator must own — an operator-owned ambiguity is the Escalate Pattern's trigger, not this one.
+
+This trigger is **pre-action**, distinct from Retry's mid-action transient-failure trigger: nothing has failed yet; the agent has not yet acted. It is **competence-anchored**, distinct from Escalate's ambiguity-anchored trigger: the question is whether *the agent* has grounds, not whether the decision is *the operator's* to make.
+
+### Mechanism (4 steps)
+
+1. **Read the decision-confidence signal** for the pending decision and select the action from the reversibility × autonomy threshold — both per the Decision-Confidence Protocol (`core/specs/decision-confidence-protocol.md`, landing this release). The reversibility tier scales the action: the same low-confidence reading proceeds at CHEAP, pauses here at MODERATE/EXPENSIVE, and routes straight to the Escalate Pattern at IRREVERSIBLE.
+2. **Run the bounded pause-to-learn loop** per that protocol — name the gap, inject one new external signal, re-evaluate. The loop is bounded (a small cycle cap) and self-closing: a cycle that injects *no* new signal is a stall, not a pause, and is a guard violation.
+3. **Exit on resolution** — when the new signal grounds the decision, proceed at the action's existing authorization tier. This pattern is a **brake, not an accelerator**: closing a confidence gap never promotes an action above the autonomy tier it was already authorized for (it lowers ceremony when grounded, never raises authority).
+4. **Escalate on exhaustion** — if the loop's budget is reached and the gap has not closed, emit the Escalate Pattern with the named gap and what was tried as the Decision Briefing's Context. The escalation is the *fallback*, not the default — the default resolution is the agent closing the gap itself.
+
+### Self-closing default — the load-bearing distinction
+
+The load-bearing distinction from Escalate is **who resolves the trigger by default**. Retry resolves itself (a fresh attempt) and escalates only on cap-exhaustion. Pause-to-Learn likewise resolves itself (the agent fetches the missing signal) and escalates only on budget-exhaustion. Escalate, by contrast, hands the decision to the operator as its *first* move. Defaulting Pause-to-Learn to escalate-to-operator would collapse it into Escalate and erase the competence-anchored nature the pattern exists to capture — the whole point is that a low-confidence reading on a closable gap is the agent's to close, not the operator's to adjudicate.
+
+The mechanism specification — the confidence signal, the reversibility × autonomy threshold, the bounded loop with its exit conditions, and the anti-theater guard that keeps a pause from degenerating into a stall — lives in the Decision-Confidence Protocol and is referenced here, not restated. This file registers the trigger as a control-flow sibling; the protocol owns the mechanism.
+
 ## Rollback Pattern
 
 ### Trigger conditions
@@ -184,11 +212,13 @@ The three patterns compose as a directed cascade:
 - **Retry MAY chain to Escalate** — automatic on cap-exhaustion. The escalation carries the retry log attached so the operator can diagnose.
 - **Escalate MAY chain to Rollback** — operator-explicit only. The agent never auto-promotes an escalation to a rollback; rollback always requires the operator to render the decision.
 - **Rollback NEVER chains to Retry** — a fresh forward-facing release is the recovery, not a retried rollback. If the rollback itself fails (e.g., `git revert` produces conflicts), the agent escalates again with the failure context; it does not loop the rollback.
+- **Pause-to-Learn precedes the action and MAY chain to Escalate** — it is a pre-action trigger, not a node in the failure cascade above: it fires on a low-confidence decision *before* any action runs (so before any transient that would start the Retry → Escalate chain). It resolves itself by default (the agent closes the gap) and chains to Escalate only on budget-exhaustion, the same terminal-fallback relationship Retry has with Escalate. It never chains to Rollback (it is pre-action; nothing has been committed to roll back).
 
 ### Skip-permissions
 
 - **Skip-Retry-to-Escalate IS permitted** for non-retryable failure types: auth, permission, malformed input, governance violation, hook block, 4xx-class HTTP. The agent skips the Retry Pattern and proceeds directly to Escalate when the failure signature is non-transient.
 - **Skip-Escalate-to-Rollback IS prohibited** — rollback always requires explicit operator-authorized Escalate path. Every rollback invocation traces back to an Escalation that the operator rendered with rollback as the chosen option.
+- **Skip-Pause-to-Escalate IS permitted (and required at IRREVERSIBLE)** — a low-confidence reading on an IRREVERSIBLE action skips the pause-to-learn loop and routes directly to Escalate, because no bounded learning loop can buy back an irreversible mistake; the operator owns that call. Likewise a gap that is plainly the operator's to adjudicate (not closable by the agent fetching signal) skips the pause and escalates directly.
 
 ## Per-Stage Application
 
@@ -272,6 +302,7 @@ This model composes with — but does not replace — the platform's other princ
 |---|---|---|
 | `decision-discipline.md` | Escalate Pattern produces decision-class output; the Decision Briefing inherits the M1/M2/M3 triage from `decision-discipline.md` § 3 | Escalate cites `decision-discipline.md` § 3 triage table for Briefing structure |
 | `reversibility-protocol.md` | Each pattern carries a reversibility tier (Retry: CHEAP; Escalate: MODERATE-EXPENSIVE; Rollback: IRREVERSIBLE) | Pattern outputs label tier per `reversibility-protocol.md` four-tier vocabulary |
+| `decision-confidence-protocol.md` (landing this release) | The Pause-to-Learn Pattern is the 3rd pre-action sibling to Retry/Escalate; that protocol owns its mechanism (confidence signal, reversibility × autonomy threshold, bounded loop, anti-theater guard) | Pause-to-Learn cites the Decision-Confidence Protocol for the signal it reads and the bounded loop it runs; this model registers the trigger as a control-flow sibling and does not restate the mechanism |
 | `review-discipline-principles.md` | Review-class output disciplines apply to escalation findings (root cause, evidence, no PARTIAL verdicts) | Escalation findings cite `review-discipline-principles.md` when surfaced from review-class skills (build-reviewer, pmo-qa-auditor, pmo-skill-editor Mode D) |
 | `failure-mode-standard.md` | Per-skill failure modes (skill-internal) compose orthogonally — skill failure → skill self-repair → escalate-to-pattern | Skill `SKILL.md` § Failure modes describes precondition checks; this model handles cross-cutting recovery |
 | `pipeline/stage-NN-<name>.md` | Per-stage automation tier informs which patterns apply (Tier 1 stages carry full Retry+Escalate; Tier 3 stages skip Retry — Escalate IS the gate) | Per-stage table in § Per-Stage Application above is the authoritative pattern × stage map |

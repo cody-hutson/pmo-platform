@@ -8,6 +8,185 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.22] - 2026-06-29
+
+PMBOK artifact coverage plus three additive PROJECT.md frontmatter axes, with no change to any existing project until the new fields are filled in: a project can now declare what kind of deliverable it produces (`deliverable_type`, separate from how it is governed), its team's org structure (`org_structure_type`), and its team roster by reference (`team_roster`, references only — no names stored in the file); and five ready-made PMBOK artifact templates (charter, lessons-learned, change-log, RACI, stakeholder-register) ship with the platform. Additive schema and template additions — no data migration, no stored-content move, no breaking change. cross-cutting class.
+
+### Added
+
+- **Deliverable-type axis on PROJECT.md.** A project can now declare what kind of deliverable it produces (`software`, `governance`, `web`, `data`, `process`, or a custom value), separate from how it is run, so the platform can tailor its readiness checks to the kind of work being delivered instead of applying one generic bar. ([#351](https://github.com/cody-hutson/pmo-platform/issues/351))
+- **Org-structure and team-roster fields on PROJECT.md.** Two new optional fields let a project record its organizational shape and its team membership (by reference) in its own frontmatter, turning org shape and team into structured data the platform can read rather than free text in prose. ([#262](https://github.com/cody-hutson/pmo-platform/issues/262))
+- **Five PMBOK artifact templates.** Ready-made project charter, lessons-learned, change-log, RACI, and stakeholder-register templates ship with the platform, so standard artifacts generate from a consistent governed starting point. ([#206](https://github.com/cody-hutson/pmo-platform/issues/206))
+
+[Full notes](release/releases/notes/v3.22_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.22)
+
+## [v3.21] - 2026-06-29
+
+Terminology and controlled-vocabulary canonicalization with no user-visible behavior change: the platform's terminology glossary is refreshed for AI-agent comprehension (discoverable frontmatter, the Role term anchored to the Autonomy-Tier framework, and first-class actor terms — Hub, Spoke, Skill, Sub-agent), the tier-disambiguation table is extended to cover Hierarchy Tier, and canonical Initiative/Roadmap definitions are added and reconciled with the live `epic:*` label namespace via a new decision record (ADR-049). Documentation / governance only — no data migration, no stored-content move, no schema or runtime change. novel class. Re-versioned v2.42 → v3.21 at the Stage-12 atomic claim (v3.20 mainline-spine frontier).
+
+### Added
+
+- **First-class actor terms in the glossary.** The terminology glossary now defines Hub, Spoke, Skill, and Sub-agent as first-class terms (plus discoverable frontmatter and the Role term anchored to the Autonomy-Tier framework), so an agent reading the corpus cold can resolve who-acts-at-which-tier from the glossary alone. ([#68](https://github.com/cody-hutson/pmo-platform/issues/68))
+- **Canonical Initiative and Roadmap terms.** Initiative (a multi-milestone grouping theme) and Roadmap (an architected path across milestones) are now canonical glossary terms, reconciled with the initiative-roadmap framework and the live `epic:*` label namespace, with a new decision record (ADR-049) capturing the canonical vocabulary and the `initiative:` → `epic:`/`project:` label mapping. ([#432](https://github.com/cody-hutson/pmo-platform/issues/432))
+
+### Changed
+
+- **Tier-disambiguation table extended to cover Hierarchy Tier.** The tier-disambiguation table in the autonomy-tiers spec now covers Hierarchy Tier alongside the other named tier conventions, stating each convention's disposition so the overlapping "tier" terms are resolvable from one table. ([#128](https://github.com/cody-hutson/pmo-platform/issues/128))
+
+[Full notes](release/releases/notes/v3.21_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.21)
+
+## [v2.41] - 2026-06-29
+
+Internal governance-hygiene release with no user-visible behavior change: the root-cause-analysis method is wired by citation to every process surface that owns a failure, the release hub's rule-computed version-numbering step stops surfacing as an operator click-gate, and two reference-document accuracy issues are corrected. Documentation / governance / skill-text only — no data migration, no stored-content move, no schema or runtime change. routine class.
+
+### Changed
+
+- **Root-cause-analysis method wired to every failure-owning surface.** The root-cause-analysis method is now bound by citation to the surfaces its own trigger table already named — `ppm-agent`, `pmo-devops-sre`, and the failure-owning pipeline stage(s) — so root-cause work is invoked or handed off consistently rather than only where it was first wired. ([#1883](https://github.com/cody-hutson/pmo-platform/issues/1883))
+- **Version-numbering step reframed as a recorded determination.** The release hub's rule-computed version number is now recorded as a determination by default instead of being surfaced as an operator click-gate, escalating to a gate only for a deliberate version-less / forced-collision close-out or a concurrent slot claim. ([#1918](https://github.com/cody-hutson/pmo-platform/issues/1918))
+
+### Fixed
+
+- **Reference-document accuracy.** Corrected an extinct directory path in the practice-efficacy framework, a malformed table cell in the handoff-coordinator spec, and enumerated every PR-time corpus-integrity gate and its override marker in the ADR README. ([#1562](https://github.com/cody-hutson/pmo-platform/issues/1562), [#2218](https://github.com/cody-hutson/pmo-platform/issues/2218))
+
+[Full notes](release/releases/notes/v2.41_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.41)
+
+## [v2.40] - 2026-06-29
+
+Transcript and meeting processing is formalized: the implicit transcript-handling flow is named as one pipeline with explicit automation boundaries — routine tracker updates flow, stakeholder-facing and risk-bearing changes stop for approval, and action items surface for you to dispose instead of being logged on your behalf — while meetings gain a governed lifecycle state and meeting materials are redesigned for a 5-second scan. Formalizes existing flow and adds one tracker field plus scannable meeting materials; no data migration, no stored-content move, no new project-facing primitive. routine class.
+
+### Added
+- **Named transcript pipeline with explicit automation tiers.** The transcript flow is named as one pipeline (Entry → Routing → Core-Tracker → PPM → Stakeholder-Review → Action-Triage), and its outputs are sorted into three tiers — auto-write trackers flow without a prompt, stakeholder-facing and RAID changes stop for your approval, and action items are surfaced for you to dispose and never auto-logged. *Why it matters:* routine updates stop nagging you while anything stakeholder-visible or risk-bearing still stops for review, and nothing is committed on your behalf. ([#237](https://github.com/cody-hutson/pmo-platform/issues/237), [#1157](https://github.com/cody-hutson/pmo-platform/issues/1157))
+- **Governed lifecycle state on the Open Meetings Tracker.** Meetings now carry a governed lifecycle state (`scheduled → held | cancelled`) with defined transitions, while the tracker keeps its familiar status labels. *Why it matters:* meetings move through stages with a traceable, consistent state instead of an ad-hoc status. ([#243](https://github.com/cody-hutson/pmo-platform/issues/243))
+
+### Changed
+- **Meeting materials redesigned for a 5-second scan.** Pre-reads, agendas, invites, and context blocks are rebuilt so you can absorb what a meeting needs from you at a glance — no pre-read points at a raw transcript without an inline summary. *Why it matters:* you get what a meeting requires without opening source files to reconstruct context. ([#1158](https://github.com/cody-hutson/pmo-platform/issues/1158))
+
+[Full notes](release/releases/notes/v2.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.40)
+
+## [v2.39] - 2026-06-29
+
+The platform now audits itself on a defined schedule instead of only when someone remembers, and it starts keeping a record of where the agent's advice differed from your decision. Additive throughout — two new audit-cadence protocols, one new optional record type with a read-only look-back, and a small pipeline-reference edit; no data migration, no stored-content move, no change to any project-facing surface. novel class.
+
+### Added
+
+- **The platform's self-audits now run on a defined schedule.** Two kinds of health check — whether the release process still matches established delivery practices, and whether the documentation structure is still sound — each gain a written rule for when to re-run them: specific triggering events plus a 90-day fallback. *Why it matters:* platform health gets re-checked on a dependable rhythm instead of only after drift becomes a visible problem. ([#167](https://github.com/cody-hutson/pmo-platform/issues/167), [#168](https://github.com/cody-hutson/pmo-platform/issues/168))
+- **The platform now records where its advice and your decision differed.** At decision points, the platform can log the agent's recommendation next to the choice you actually made and why they differed, and a look-back view summarizes those differences across recent releases. *Why it matters:* recurring gaps between the platform's judgment and yours surface unprompted instead of being lost between sessions. ([#46](https://github.com/cody-hutson/pmo-platform/issues/46))
+
+### Changed
+
+- **All three of the platform's audit types are now discoverable from any one of them.** The two new schedules and the existing feature-vs-toolkit audit now cross-reference each other as one connected set. *Why it matters:* finding one audit's schedule leads you to all of them, so no kind of health checking gets overlooked. ([#167](https://github.com/cody-hutson/pmo-platform/issues/167), [#168](https://github.com/cody-hutson/pmo-platform/issues/168))
+
+[Full notes](release/releases/notes/v2.39_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.39)
+
+## [v2.38] - 2026-06-28
+
+The automated release close-out now finishes a release reliably and deterministically: every close-out record gets written, the published release page is bound to the right code, and stuck or false-pass closes are fixed.
+
+[Full notes](release/releases/notes/v2.38_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.38)
+
+## [v2.37] - 2026-06-28
+
+Published release notes can no longer silently drift from the note we wrote — the release-notes close-out is hardened so the public release page matches the in-repo note and the close-out checks run no matter how a release is finished. Additive throughout: standard / governance / lint / check edits plus one founding decision record; no data migration, no stored-content move, no change to any project-facing surface. routine class.
+
+### Added
+- **Scaffold-independent close-completeness check.** A finished release is now verified to have produced its full set of close-out records, independent of how the work was tracked, so an abbreviated checklist can no longer quietly skip a step. *Why it matters:* releases are reported "done" only when they are actually complete. ([#1290](https://github.com/cody-hutson/pmo-platform/issues/1290))
+- **More release-note defects caught before publish.** The note check now also catches a release page whose title is missing its version and links that work in the repo but break on the published page. *Why it matters:* you get a correctly-titled page with links that resolve. ([#2120](https://github.com/cody-hutson/pmo-platform/issues/2120))
+
+### Changed
+- **The published release page now stays faithful to the source note.** A release page is rebuilt directly from the source note on publish, with an after-the-fact check that the two match. *Why it matters:* a note correction actually reaches the page people read instead of going stale. ([#2085](https://github.com/cody-hutson/pmo-platform/issues/2085))
+- **Release notes are checked the same way no matter how a release is finished.** The note quality check now runs on every close path, not only the scripted one. *Why it matters:* a release closed by hand can no longer ship a note that skips the checks. ([#2082](https://github.com/cody-hutson/pmo-platform/issues/2082))
+
+## [v2.36] - 2026-06-28
+
+Triage and bundling now follow written signals instead of being re-figured each release — several judgment calls the release pipeline made fresh on every run (how an approved ticket's structure is treated downstream, how priority is read, when related issues are grouped, how sub-tasks are tracked) are written down as standing rules, and one repeatedly hand-derived step becomes a tracked tool. Additive throughout — spec/governance/schema edits plus one new tool; no data migration, no stored-content move, no behavior change to any project-facing surface. novel class.
+
+### Added
+
+- **The native-dependency mirror is now a tracked tool.** The Stage-2 step that maps native dependency edges, previously re-derived on every run, is promoted to a tracked tool with a fixture test. *Why it matters:* the dependency mirror runs the same way every release instead of being re-figured by hand each time. ([#662](https://github.com/cody-hutson/pmo-platform/issues/662))
+
+### Changed
+
+- **An approved ticket now counts as direction, not a fixed blueprint.** The pipeline states that approving a ticket signs off on the problem and outcome — not the ticket's proposed structure, which a later design step is free to confirm or rework. *Why it matters:* you can approve a good idea without locking in the first guess at how to build it. ([#500](https://github.com/cody-hutson/pmo-platform/issues/500))
+- **Priority is read as two separate things, not one blurred score.** Triage separates how urgent something is from how valuable it is, with how many other items depend on it as a third signal — without hardwiring any scoring method. *Why it matters:* urgent-but-low-value and valuable-but-can-wait items are no longer flattened into the same "priority." ([#283](https://github.com/cody-hutson/pmo-platform/issues/283))
+- **Related issues get grouped on a written threshold.** There is now a stated rule for when a set of related issues is large or connected enough to be tracked as a group, and which grouping mechanism to use. *Why it matters:* clusters of related work get a tracking home consistently instead of by chance. ([#280](https://github.com/cody-hutson/pmo-platform/issues/280))
+- **New-track placement rationale fires per milestone, behind a gate.** The Stage-3 rationale for placing work on a new track now fires per milestone rather than once per major track, with an enforcing gate. *Why it matters:* each milestone's placement decision is justified on its own terms rather than inheriting one blanket rationale. ([#292](https://github.com/cody-hutson/pmo-platform/issues/292))
+- **Sub-task breakdown follows a stated threshold.** The choice between formal sub-issues and a lighter in-PR checklist for breaking a work item down now has a defined trigger. *Why it matters:* small items stop being over-tracked and large ones stop being under-tracked. ([#225](https://github.com/cody-hutson/pmo-platform/issues/225))
+
+[Full notes](release/releases/notes/v2.36_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.36)
+
+## [v2.35] - 2026-06-27
+
+Agents that calibrate their own confidence before they act — a written protocol gives an agent a way to decide, at a non-obvious decision point, whether to proceed now, pause to learn, or escalate, based on whether independent cross-checks agree (never on self-reported confidence) and scaled to how costly being wrong would be. The first live consumer is the release pipeline's bundle currency-check. Additive throughout — a new spec, a new ADR, and four edits that wire the gate into existing disciplines and one pipeline stage; no data migration and no stored-content move. routine class.
+
+### Added
+
+- **A confidence gate that decides proceed, pause-to-learn, or escalate.** A new protocol gives an agent a grounded way to decide whether to act on a non-obvious decision: it reads a signal from whether independent cross-checks agree, whether the missing fact can be named, and how weak the supporting evidence is — never from self-reported confidence — and selects the action from a reversibility-by-autonomy matrix instead of one global cutoff. *Why it matters:* the same uncertainty proceeds on a trivially-reversible action but pauses or escalates on a costly one, so agents stop both over-pausing on cheap calls and barreling ahead on expensive ones. ([#2286](https://github.com/cody-hutson/pmo-platform/issues/2286), [#2288](https://github.com/cody-hutson/pmo-platform/issues/2288))
+- **A bounded pause-to-learn step that has to actually learn something.** When the gate says pause, the agent runs a short, capped loop that fetches one new piece of outside information, re-checks, and then either proceeds, routes the gap to a spike, or escalates — it cannot loop forever or "pause" without fetching anything. *Why it matters:* a pause becomes a real gap-close with a guaranteed exit, not an open-ended stall dressed up as diligence. ([#2288](https://github.com/cody-hutson/pmo-platform/issues/2288), [#2290](https://github.com/cody-hutson/pmo-platform/issues/2290))
+- **The release pipeline's bundle currency-check now runs the gate.** The Stage-4 check that decides whether to leave a bundled release alone, amend it, re-bundle it, or defer it now runs the proceed-vs-pause gate before rendering that call. *Why it matters:* a low-confidence currency call on a costly re-bundle pauses to re-read the canonical state first, rather than committing on weak grounds. ([#2289](https://github.com/cody-hutson/pmo-platform/issues/2289))
+
+[Full notes](release/releases/notes/v2.35_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.35)
+
+## [v2.34] - 2026-06-28
+
+Knowledge and decision confidence — the corpus gains the design-time and capture-time scaffolding that makes knowledge land in the right place and stay current: a written set of evaluative lenses for sizing and routing new work, a scope dimension that records what altitude a learning came from, two more facilitation-technique domains, and a skill that keeps the living roadmap current as issues arrive; a long-standing knowledge-eviction gap is also closed. Additive throughout — new and edited reference docs, a new skill, and one build-check extension; no data migration and no stored-content move. routine class.
+
+### Added
+
+- **A written set of design-time lenses for sizing and routing new work.** A new reference doc names the cross-cutting questions to ask when scoping a piece of work — is it the right skill, the right method, and the right altitude, and is it universal or install-specific — and wires them in as a design check. *Why it matters:* new work gets classified the same way every time instead of relying on recall, so it lands in the right place. ([#1102](https://github.com/cody-hutson/pmo-platform/issues/1102))
+- **Learnings now record the scope they came from.** The knowledge model gains an organizational-altitude axis (from a single unit of work up to the whole organization) that sits alongside the existing universality tiers, plus a defined way for lower-scope learnings to roll up to the next scope. *Why it matters:* a captured learning now says at what scope of work it was generated, so related learnings can be aggregated rather than read in isolation. ([#564](https://github.com/cody-hutson/pmo-platform/issues/564))
+- **Two more facilitation-technique domains are catalogued.** The facilitation-techniques corpus adds the retrospective and planning domains on top of the existing estimation foundation, surfaced through the same delivery-engine trigger. *Why it matters:* technique surfacing now covers more of the delivery lifecycle, not just estimation. ([#1945](https://github.com/cody-hutson/pmo-platform/issues/1945))
+- **A skill that keeps the living roadmap current as issues arrive.** A new roadmap-curator skill classifies new and changed issues against the established initiative set, updates the roadmap, and surfaces drift — with a separate operator-triggered mode for a full re-baseline. *Why it matters:* the roadmap stays sequenced and current as work arrives instead of drifting back into an unsequenced pile. ([#453](https://github.com/cody-hutson/pmo-platform/issues/453))
+
+### Fixed
+
+- **Evicting a codified note no longer leaves dead links or stranded notes behind.** The knowledge-eviction lifecycle now re-points or drops links to an evicted note and reconciles notes against their tracking issue at close, and the build validation reports both gaps. *Why it matters:* retiring a note that has been folded into the corpus no longer leaves links that go nowhere or notes that can never be retired. ([#2214](https://github.com/cody-hutson/pmo-platform/issues/2214))
+
+[Full notes](release/releases/notes/v2.34_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.34)
+
+## [v2.33] - 2026-06-27
+
+Roadmaps get a shipped in-repo home, and "initiative" labels are reframed as a grouping rather than a hierarchy tier. Additive — a new git-ignored `/roadmaps/` folder (ships on install, survives updates), a token-default rewire to it across the SSOT surfaces, and a one-line label-taxonomy reframe; existing roadmaps migrate by copy with no history effect. ADR-046 supersedes-in-part ADR-012 + ADR-017. routine class.
+
+### Added
+
+- **Roadmaps now have a shipped in-repo home.** A `/roadmaps/` folder is present on a fresh clone (folder + README tracked, instances git-ignored) and survives updates (absent from the regeneration manifest). The `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token now defaults to it across the registry + config, and is still repointable. *Why it matters:* operators have a known, plug-and-play place for roadmap instances that updates never overwrite. ([#416](https://github.com/cody-hutson/pmo-platform/issues/416))
+
+### Changed
+
+- **"Initiative" labels read as a grouping, not a hierarchy tier.** `label-taxonomy.md §Initiative Labels` is reframed and now cites the single source of the work-item hierarchy. *Why it matters:* the docs no longer imply a container level the platform doesn't have. ([#1038](https://github.com/cody-hutson/pmo-platform/issues/1038))
+
+[Full notes](release/releases/notes/v2.33_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.33)
+
+## [v2.32] - 2026-06-27
+
+Skill-registry identity and currency — the skill catalog (`registry.md`) now checks itself against the skills actually deployed, so a missing, extra, or dangling catalog entry fails the build instead of drifting unnoticed; and several docs that pointed at a catalog file which never shipped are corrected to point at the real registry. Additive build check plus corrected citations — no data migration and no stored-content move. routine class; four drifted skill packages (build-reviewer, pmo-architect, pmo-skill-editor, pmo-skill-refiner) rebuilt at release-cut.
+
+### Added
+
+- **The skill catalog is now checked against the deployed skills.** The build validation compares every catalog entry against the live skill roster in both directions and confirms each entry points at a skill that exists. *Why it matters:* a forgotten catalog entry now stops the build instead of letting the catalog quietly go out of date. ([#1811](https://github.com/cody-hutson/pmo-platform/issues/1811))
+- **A second, gentler check watches each entry's recorded details.** For role-specialist entries, the build also compares the recorded modes and composition against the skill itself and logs any mismatch (reported, not yet blocking). *Why it matters:* the catalog stays trustworthy as a description of each skill, not just a list of names. ([#1658](https://github.com/cody-hutson/pmo-platform/issues/1658))
+
+### Fixed
+
+- **Docs that pointed at a catalog file which never shipped now point at the real registry.** Several reference docs and skills cited a `dependency-graph.md` that was never created; they now cite the live `registry.md`. *Why it matters:* following one of those references used to lead to a dead end. ([#1211](https://github.com/cody-hutson/pmo-platform/issues/1211))
+
+[Full notes](release/releases/notes/v2.32_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.32)
+
+## [v2.31] - 2026-06-27
+
+Knowledge-management discipline — the platform's memory gets one written rulebook saying, for every place it stores a fact, which place is the source of truth and who may change it; and the quality audit starts reporting documentation that has gone stale or is missing. Additive throughout — new and edited documentation plus two reviewed skill edits, no data migration and no stored-content move. novel class; the two edited skills (pmo-qa-auditor, daily-status) have packages rebuilt at release-cut.
+
+### Added
+
+- **The quality audit now reports stale and missing documentation.** The platform health audit gained a knowledge-management scan that produces two new reports — one ranking documentation overdue for review, one listing documentation gaps — alongside its existing findings. *Why it matters:* drifted or absent reference docs surface in the audit for you to triage instead of sitting unnoticed until something breaks. ([#249](https://github.com/cody-hutson/pmo-platform/issues/249))
+- **One written rulebook for where each kind of fact lives.** A new reference doc lists every place the platform stores information and, for each one, which place is the source of truth and who may write to it. *Why it matters:* when the same fact could appear in more than one place, agents read it from the one authoritative place, so a stale copy cannot quietly override the real value. ([#1074](https://github.com/cody-hutson/pmo-platform/issues/1074))
+
+### Changed
+
+- **Behavioral corrections now get a scheduled review instead of piling up forever.** Corrections you give are reviewed on the platform's existing pattern-review rhythm — a recurring one becomes a permanent rule, an obsolete one is retired, and the rest stay active. *Why it matters:* the corrections list stays current rather than growing without bound and silently shadowing the platform's own rules. ([#1076](https://github.com/cody-hutson/pmo-platform/issues/1076))
+
+[Full notes](release/releases/notes/v2.31_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.31)
+
 ## [v2.30] - 2026-06-26
 
 Stale internal links across the platform's docs and skill files are corrected to their current locations.

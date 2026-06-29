@@ -103,6 +103,35 @@ docx, pdf, pptx, xlsx, schedule — managed by Anthropic, not version-controlled
 2. Verify deployment: open Cowork, invoke the changed skill, confirm expected behavior. In Claude Code, type `/` and confirm the skill appears as a plain entry (e.g., `/daily-status`).
 3. **Rebuild .skill package — MANDATORY for every modified skill** via `python3 -m scripts.package_skill <skill-dir> packages/` from `release/skills/pmo-skill-refiner/`. Every skill in `{core,operations,release}/skills/` has a corresponding `.skill` package in `packages/` — no exceptions. Source-vs-package staleness is a release-blocking compliance gap, structurally enforced by `deploy.sh --check` Check 7 (package-freshness). Check 7 asserts freshness **by content, not by mtime** (per the gate-efficacy standard): each build emits a committed content-baseline sidecar `packages/<skill>.skill.sha256` (the rebuild-stable content-manifest hash), and Check 7 stages a rebuild of source and compares its content hash against that baseline — so a stale package fails even on a fresh checkout where every file mtime is equal, while a mere `touch` of a current package does not. Use `bash core/deploy/tools/build-skill-packages.sh <skill>` (which injects `TEMPLATE_SYNC_MAP` canonicals and writes the sidecar) rather than calling the packager directly when a skill consumes injected templates, so the committed package and its sidecar both reflect current canonical content.
 
+## References-only change propagation
+A release that touches any `skills/<skill>/references/**` file (a reference doc,
+not the `SKILL.md` body) still changes the skill's deployed surface: `deploy.sh`
+mirrors `references/` to the Cowork install path (Deployment Step 1, S-2
+mechanism) and the `.skill` package carries it. A references-only change is
+therefore NOT a no-op — it MUST resolve to one of two dispositions, and the
+default is to propagate:
+
+- **(a) Propagate (DEFAULT, primary).** Run `deploy.sh --deploy <skill>` (which
+  re-mirrors `references/` per Deployment Step 1) AND rebuild the skill's `.skill`
+  package per Deployment Step 3 (`bash core/deploy/tools/build-skill-packages.sh
+  <skill>`), at Stage 12, so the mirror and the package stay current with source.
+  This is the default because the platform value is no-silent-drift: a
+  references-only edit that does not propagate leaves the installed mirror and the
+  distributed package stale against source.
+- **(b) Record-deferred (explicit fallback).** When propagation cannot run at
+  close time (e.g. a doc-only references patch the operator chooses to batch into
+  a later deploy), record the deferral with a REQUIRED tracked follow-up — a
+  manifest deferral entry (the release plan's Operational Deployment Manifest) OR
+  a follow-up issue reference. A deferral without a tracked follow-up pointer is
+  not a valid disposition.
+
+`deploy.sh --check` **Check 1** (Skill sync — source-vs-installed `references/`
+drift) is the DETECTION backstop, not a substitute for the disposition: it
+catches a references-only change that was neither propagated nor deferred. Do NOT
+re-implement drift detection — route through Check 1. The worked Stage-12 example
+lives in [`pipeline/stage-12-execute.md`](../../release/references/pipeline/stage-12-execute.md)
+§ References-only change propagation.
+
 ## Auto-detect window semantics
 `./deploy.sh --deploy` (no args) uses `detect_changed_skills()` to determine
 which skills changed since the last deployment reference. Mechanism:

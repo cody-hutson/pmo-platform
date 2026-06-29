@@ -104,8 +104,9 @@ The flow that governs corrective and adaptive change to scope, sequence, or desi
 | Stage 5 Solutioning | Re-solutioning in response to Tier 3 [PLAN REJECTION] | Primary |
 | Stage 9 Plan Review | NO-GO authorizes scope or sequence change | Primary |
 | Stage 12 Execute | Rollback (operator-authorized) is the change-control terminal action | Primary |
+| Stages 7-8 / 12-13 (failure-owning) | RCA root-causes a gate failure or post-deploy regression before the corrective change (upstream re-run / rollback) is authorized | Primary |
 
-**Canonical source.** [`release/governance/release-process.md § Inter-Stage Feedback Protocol`](../../release/governance/release-process.md) (Tier 0/1/2/3); Collective Review scope-lock override per [`pipeline/stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md).
+**Canonical source.** [`release/governance/release-process.md § Inter-Stage Feedback Protocol`](../../release/governance/release-process.md) (Tier 0/1/2/3); Collective Review scope-lock override per [`pipeline/stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md); RCA touchpoint per [root-cause-analysis.md](../disciplines/root-cause-analysis.md) §2 (the pipeline stage that owns the failure invokes RCA) — inverse temporal anchor to the Tier-0 discovery binding on this same flow.
 
 ### 3. Quality Assurance Flow
 

@@ -34,7 +34,71 @@ Set at Bundle: Milestone assignment, version number, bundle sequence, Release Cl
 Contextual: full Approved backlog, existing Milestones, dep graph, file contention map, RELEASE_LOG.md velocity data.
 
 ## 5. Process
-**Phase A (Agent, Tier 1/2):** A1 Release Readiness gate check (per procedure below; invokes Template-Conversion Rule for `observation`-labeled candidates BEFORE evaluating G3 criteria — see Template-Conversion Rule block below), A2 dependency graph construction (chains, cycles, depth, critical-path — per § A8 below), A3 Release Scope Coverage Analysis (Y/Partial/N per issue), A4 capacity heuristics (5-8 issues max, 60/20/20 allocation target — the governing capacity ceiling is the risk-weighted point-band at [`bundle-composition-doctrine.md § 3 Step 5`](../standards/bundle-composition-doctrine.md); the 5-8 item-count is a secondary readability heuristic, not an independent cap), A5 bundle recommendation (ordered list, allocation, coverage matrix, contention, version rec, exclusions with gate results).
+**Phase A (Agent, Tier 1/2):** A1 Release Readiness gate check (per procedure below; invokes Template-Conversion Rule for `observation`-labeled candidates BEFORE evaluating G3 criteria — see Template-Conversion Rule block below), A2 dependency graph construction (chains, cycles, depth, critical-path — per § A8 below), A3 Release Scope Coverage Analysis (Y/Partial/N per issue), A4 capacity heuristics (5-8 issues max, 60/20/20 allocation target — the governing capacity ceiling is the risk-weighted point-band at [`bundle-composition-doctrine.md § 3 Step 5`](../standards/bundle-composition-doctrine.md); the 5-8 item-count is a secondary readability heuristic, not an independent cap), A5 bundle recommendation (ordered list, allocation, coverage matrix, contention, version rec, exclusions with gate results). A5 additionally surfaces any related-issue cluster detected per **A5.1** (≥3 coordinated Approved issues), with a recommended tracking primitive from the A5.1 selection table for operator confirmation at Phase B1.
+
+**A5.1 — Related-Issue-Cluster Detection & Tracking-Mechanism Selection (per the cluster-tracking design):** A pre-bundle backlog-scan signal that recognizes when scattered Approved issues — not yet milestoned — form a coordinated cluster that warrants a single tracking container. A5.1 **owns the detection threshold + the selection rule**; it **routes a detected cluster onto already-existing primitives and invents no new mechanism** (the `cluster:` / `epic:` / `project:` label axes and GitHub native sub-issues / Projects all ship today). A5.1 cites [`label-taxonomy.md`](../../../core/specs/label-taxonomy.md) for the primitive definitions (owns neither) and [`work-item-type-schema.md § 1.2.1`](../../../core/schemas/work-item-type-schema.md) for the GitHub adapter mappings.
+
+*Part 1 — Detection predicate (reproducible).* A candidate **related-issue cluster** is detected when **BOTH** hold over the Approved backlog (`status: approved`, not yet milestoned):
+
+> **(C-1) Shared-goal signal — ANY of:**
+> - **(a)** ≥3 Approved issues carry the **same `cluster:<name>` label** (the existing triage cluster axis), OR
+> - **(b)** ≥3 Approved issues each share the **same ≥2 non-hot Affected-Files paths** read from the body Affected-Files field — a **single counting predicate** (the cluster must co-occur on at least two non-hot paths, so co-membership on one commonly-edited governance file cannot over-fire). A path is **hot** — and excluded from the count — by a **deterministic frequency rule computed from the candidate set itself** (no maintained list), **floored above the cluster minimum** so the rule can never dissolve a minimum-size cluster: a path is **hot when it appears in the Affected-Files field of a strict majority (> 50%) of the Approved-backlog candidates AND in strictly more than the cluster floor (3) — i.e., its count is ≥ 4**. The floor conjunct is load-bearing on a small backlog: on a ≤5-candidate set (realistic, since A4 caps a bundle at 5–8 items) a genuine 3-issue cluster sharing 2 paths puts each shared path at 3/5 = 60% of candidates — a bare strict-majority rule would mark those two paths hot and **drop the very cluster it should detect**. The floor (count ≥ 4) means a path shared by exactly the 3-issue cluster floor is **never hot**, so a minimum-size cluster's shared paths always survive; a surface touched by most open Approved work *and* by 4+ issues is a broadly-edited governance/hot file and is still excluded. The floor's actual guarantee is therefore precise: **minimum-size (3-issue) clusters are never self-cancelled, and the rule excludes only paths that are both broadly shared (> 50%) and above the cluster floor (≥ 4 issues)** — it makes no claim of correctness on every conceivable backlog beyond that floor. Because both the share and the count are computed live from the same candidate population the predicate scans, the exclusion is **reproducible without any hardcoded or hand-maintained file list**, OR
+> - **(c)** ≥3 Approved issues share a **Dependencies-field edge to a common issue** (a shared dependency hub — the centre of a dependency star).
+>
+> **AND (C-2) Coordination signal — ANY of:**
+> - the issues declare **inter-issue `Blocked by:` / `Depends on:` edges among themselves** (a dependency chain, not independent items), OR
+> - the issues must **land in a specific order** to deliver a coherent capability, stated as a sequencing note in ≥1 body, OR
+> - the issues share **epic co-membership** — the same `epic:<thrust>` label OR a common `type:epic` parent. Epic co-membership is a coordination signal that exists **before** any inter-issue edge or ordering note is written (the common pre-triage state), and it is reproducible from labels/parent links alone — so a genuinely coordinated cluster whose members do not yet cite each other is still detected.
+
+**Threshold = ≥3.** The `≥3 ∧ coordination` conjunction is the false-positive bound: three issues sharing a `cluster:` label *without* any C-2 coordination signal is ordinary triage-clustering, not a tracking-worthy cluster — the C-2 conjunct (inter-issue edges, an ordering note, OR epic co-membership) is what distinguishes a pile of thematically-similar tickets from a coordinated initiative needing a container. Detection is **Tier 1 advisory** — surfaced at Phase A5, never auto-acts (consistent with A5's recommend posture). Reproducible detection (C-1(a) cluster-label co-membership; C-1(b) frequency-ranked non-hot Affected-Files co-occurrence; C-1(c) shared Dependencies hub; C-2 epic co-membership via `epic:<thrust>` label or `type:epic` parent — all read from labels, parent links, and the body Affected-Files / Dependencies fields):
+
+```bash
+# C-1(a): cluster-label co-membership among Approved issues
+gh issue list --label "status: approved" --json number,labels,body \
+  --jq 'group_by(.labels[].name | select(startswith("cluster:"))) | .[] | select(length >= 3)'
+
+# C-1(b): the hot-path set is computed from the candidate set itself (no maintained list).
+# A path is hot (dropped) only when it is in a strict majority (> 50%) of Approved
+# candidates AND in strictly more than the cluster floor of 3 (count >= 4). The floor
+# means a path shared by exactly a 3-issue cluster is NEVER hot, so a minimum-size
+# cluster can never be self-cancelled (on a <=5-candidate set, 3/5 = 60% would be a bare
+# majority but count 3 is at the floor => not hot). The cluster then fires when >= 3
+# issues co-occur on the SAME >= 2 surviving (non-hot) paths.
+gh issue list --label "status: approved" --json number,body | python3 - <<'PY'
+import json, re, sys, itertools
+from collections import Counter, defaultdict
+issues = json.load(sys.stdin)
+def paths(body):
+    m = re.search(r'(?is)affected[ -]files.*?(?:\n\n|\Z)', body or '')
+    return set(re.findall(r'`([^`]+)`', m.group(0))) if m else set()
+per = {i['number']: paths(i['body']) for i in issues}
+n = len(per) or 1
+freq = Counter(p for s in per.values() for p in s)
+hot = {p for p, c in freq.items() if c > n / 2 and c > 3}    # strict majority AND above cluster floor (count >= 4) => broadly-edited/hot file; <= 3-issue clusters never self-cancel
+non_hot = {num: (s - hot) for num, s in per.items()}
+# group issues by each non-hot path-PAIR; a cluster needs >= 3 issues on the same >= 2 paths
+by_pair = defaultdict(set)
+for num, s in non_hot.items():
+    for pair in itertools.combinations(sorted(s), 2):
+        by_pair[pair].add(num)
+clusters = {pair: sorted(members) for pair, members in by_pair.items() if len(members) >= 3}
+print(json.dumps({" + ".join(p): m for p, m in clusters.items()}, indent=2))
+PY
+
+# C-2: epic co-membership is reproducible BEFORE any inter-issue edge exists
+gh issue list --label "epic:<thrust>" --json number --jq 'length >= 3'
+```
+
+*Part 2 — Selection rule (which existing primitive for a detected cluster).* When C-1 ∧ C-2 fires, the spoke recommends ONE tracking primitive via this decision table — **first matching row wins** (most-specific container first). All four targets already exist; the rule is the net-new artifact. The choice is **operator-confirmed at Phase B1**: the spoke recommends the row + rationale in the A5 bundle-recommendation comment; the operator accepts or modifies.
+
+| If the detected cluster is… | Track it as… (existing primitive) | Why |
+|---|---|---|
+| **Bounded, single-milestone-sized** (fits one release's point-band per the bundle-composition doctrine) with **inter-issue deps** | **GitHub native parent/sub-issue** links (one parent issue, children via native sub-issue) | Native deps + rollup; smallest container that survives one milestone. The `BELONGS_TO` realization per the GitHub adapter mapping. |
+| **Multi-milestone capability** (the cluster will span ≥2 releases / be sliced into several milestones) | **`type:epic` umbrella issue + `epic:<thrust>` label** on all members | `type:epic` = the Agile umbrella kind; `epic:<thrust>` groups children for landscape queries. |
+| **Long-running multi-epic initiative** (the cluster is itself one thrust within a larger program) | **`project:<name>` label** on all members (+ a GitHub **Project board** if active WIP-tracking is wanted) | `project:<name>` = the top-tier initiative grouping; the GitHub Project board = the `scope: board` set-aggregate realization per the GitHub adapter mapping. |
+| **Capability-cluster recognition only** (thematic grouping, no coordinated container needed yet) | **`cluster:<name>` label** only (no umbrella) | The lightest primitive — the existing triage cluster axis; the detected-but-not-yet-container-worthy floor. |
+
+A5.1 composes with — does not re-run — the G3-08 in-bundle similarity-routing gate: G3-08 detects duplicate/similar pairs *within one candidate bundle*, whereas A5.1 recognizes a coordinated cluster *across the Approved backlog*. Both are relatedness signals; the selection rule cites G3-08 as the sibling within-bundle dup-signal and leaves its evaluation to the gate. A5.1 is also distinct from the cross-milestone A9.6 Parallelization Map / A9.7 Cascading-Rebundle blocks (those handle relationships *between milestones*; A5.1 handles *pre-milestone* cluster recognition). **Cutover discipline:** Applies to all releases entering Stage 3 going forward.
 
 **Template-Conversion Rule invocation (per gate-criteria-spec.md):** Phase A1 reads candidate-issue labels BEFORE evaluating G3 criteria. Any candidate carrying the `observation` intake-tier label halts with the failure signal `BUNDLE-BLOCKED: observation-template requires conversion` per [`gate-criteria-spec.md § Template-Conversion Rule`](../../../core/schemas/gate-criteria-spec.md#template-conversion-rule). Conversion path: route candidate back to Stage 2 Triage as a "promote observation" sub-step (re-run G1-02 observation-branch promotability; draft improvement.yml body; operator approves; body rewritten + label transitions `observation` → `improvement` + title rewritten to the informativeness floor (drop any `[Observation]:` prefix; no `[Category]:` prefix added — type is on the label); issue re-enters G1 evaluation under improvement-template applicability). Out-of-conversion paths (operator decision): (A) drop bundle binding (issue stays `observation`, milestone removed); (B) operator override + force-bundle with `[ASSUMPTION – CONFIRM]` markers + deviation log entry. **Cutover discipline:** Applies to all releases going forward.
 

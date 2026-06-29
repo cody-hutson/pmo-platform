@@ -13,7 +13,7 @@ glossary_anchor: "umbrella body Glossary (canonical knowledge-tier terms — ver
 
 This document is the platform's classification of **knowledge types** and the **placement model** stating where each type lives. It composes with — and does **not** restate — [`architecture-overview.md`](../disciplines/architecture-overview.md)'s Layer-1/Layer-2 model and the [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Governance File Map. Its three contributions are: (1) the 5-tier classification K1–K5 with a deterministic classifier; (2) the net-new **universality axis** drawn orthogonal to the existing authorship axis, proving *custom ≠ contextual*; (3) the **placement model** whose load-bearing concept is the **parameterization seam** — the boundary where CLAUDE.md "Parameterize over hardcode" bites.
 
-Terminology is locked verbatim to the **umbrella Glossary** (the umbrella body IS the canonical glossary per the anti-maintenance-debt rule). [`terminology-glossary.md`](../specs/terminology-glossary.md) is a **disjoint** methodology glossary (Area / Domain / Function / Process / Stage / WBS / Scope) — it carries no knowledge-tier terms; this doc cross-references both and redefines neither (see [§5 Boundaries](#boundaries)).
+Terminology is locked verbatim to the **umbrella Glossary** (the umbrella body IS the canonical glossary per the anti-maintenance-debt rule). [`terminology-glossary.md`](../specs/terminology-glossary.md) is a **disjoint** methodology glossary (Area / Domain / Function / Process / Stage / WBS / Scope) — it carries no knowledge-tier terms; this doc cross-references both and redefines neither (see [§6 Boundaries](#boundaries)).
 
 ---
 
@@ -90,7 +90,7 @@ Two **orthogonal** axes describe any knowledge artifact. Conflating them is the 
 
 ### §2.1 The four-memory-type model and four-axis reconciliation {#four-type-reconciliation}
 
-The four memory **types** — *Work / Knowledge / People / Learning* (the [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) / [§6](#memory-corpus-boundary) set) — are a **functional** partition: each answers *what is the memory FOR?* The table below maps each type to ≥1 memory surface and cross-walks it against the three classification axes already in use: **K1–K5** (universality, [§1](#five-tier-classification)), **Context Tier 1–4** (context-file read-precedence, [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Context File Hierarchy), and **Document-Tier 1–4** (write-approval gate, CLAUDE.md File Management Protocol). The four-type taxonomy is therefore a **composed model** over these axes — not a fourth axis stacked on three others.
+The four memory **types** — *Work / Knowledge / People / Learning* (the [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) / [§7](#memory-corpus-boundary) set) — are a **functional** partition: each answers *what is the memory FOR?* The table below maps each type to ≥1 memory surface and cross-walks it against the three classification axes already in use: **K1–K5** (universality, [§1](#five-tier-classification)), **Context Tier 1–4** (context-file read-precedence, [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Context File Hierarchy), and **Document-Tier 1–4** (write-approval gate, CLAUDE.md File Management Protocol). The four-type taxonomy is therefore a **composed model** over these axes — not a fourth axis stacked on three others.
 
 | Memory type (what it's *for*) | Primary memory surface(s) | K1–K5 (universality) | Context Tier (1–4, where it's read) | Document-Tier (write-approval) | SSOT verdict |
 |---|---|---|---|---|---|
@@ -139,6 +139,8 @@ The model's load-bearing concept, consumed by . The **K1↔K2/K3 boundary** is e
 ## §4 Local-Context Leakage Register {#local-context-leakage-register}
 
 **Scope discipline (BOUNDED — per AC + Stage 4 plan "Discoveries outside scope"):** this register is a deliverable that **ENUMERATES and SIZES**; it does **not** remediate. Remediation is owned by **initiative-umbrella child issues**, milestone-agnostic and future. The Stage-4 plan's note tying the register to in-scope child issues is **stale post-D-NEW1(a)** — corrected here: register consumers are remediation children, **not** in-scope consumers (which consume the *taxonomy*, not the *register*).
+
+This register is **retrospective** — it catalogs leaks after they land. Its proposal-time twin is the [`architecture-evaluative-lens.md` §2 plug-and-play lens](architecture-evaluative-lens.md#plug-and-play), which applies this register's universality test *proactively* at design time to route a build's scope before the leak is authored.
 
 **Classification rubric** (the register is not a flat file list):
 
@@ -190,7 +192,37 @@ The L1–L8 register above catalogs **identity/institutional** leaks — context
 
 ---
 
-## §5 Boundaries {#boundaries}
+## §5 Organizational-Altitude / Aggregation Axis {#altitude-axis}
+
+This axis answers a **third, independent question about a *learning*** — *at what scope of work was this learning generated, and how does it roll up?* — distinct from the two questions [§1](#five-tier-classification)/[§2](#two-axes) already answer (*whose context does this knowledge apply to?*, the universality axis) and from the question the work-organization framework answers (*where does a unit of WORK sit in the decomposition?*, [`work-organization-mapping-framework.md` §1.2](work-organization-mapping-framework.md#per-level-purpose)). A learning is **not** a work item, so altitude is **not** a new work-level and adds **no** entity-graph node: it is a **captured attribute** the [`km-protocols.md §3`](km-protocols.md#lessons-learned-pipeline) lessons-learned pipeline stamps when a lesson is observed.
+
+> **Orthogonality declaration (the load-bearing statement).** The altitude axis is **orthogonal** to the K1–K5 universality axis ([§1](#five-tier-classification)/[§2](#universality-axis)): a learning carries **one K-tier value AND one altitude value simultaneously, independently** — fixing one does not determine the other. Both axes coexist on every learning. This is the same orthogonality the [§2 2×2 matrix](#axis-2x2) proves for universality×authorship and [§2.1](#four-axis-collision) proves for the four memory types, extended to the altitude attribute.
+
+**Orthogonality proof (demonstrable, not asserted — same style as [§2.1](#four-axis-collision)).** Fixing a learning's K-tier does **not** fix its altitude: a **K1-universal** lesson ("write-first-speak-second prevents status theater") can be generated at **Project** altitude (observed once on one project) *or* at **Portfolio** altitude (observed as a cross-project pattern) — same K-tier, different altitude. And fixing altitude does not fix K-tier: two learnings both generated at **Project** altitude can split **K1** (a universal discipline) vs **K5** (a project-specific corrective that never generalizes). The two coordinates vary independently → the axes are orthogonal.
+
+### §5.1 Altitude ↔ canonical-hierarchy alias {#altitude-alias}
+
+The altitude ladder's seven rungs are **aliased onto** the canonical work-organization hierarchy — they introduce **no competing level-names**. The four middle rungs are **verbatim aliases** of the canonical levels ([`work-organization-mapping-framework.md` §1.2 per-level-purpose](work-organization-mapping-framework.md#per-level-purpose), whose frozen entity floor is the single `Work Item` node and whose `general_level` enum `{Portfolio, Program, Project, Milestone/Workstream, Work Item}` is frozen at the schema layer — cited by pointer, **not** redefined here). The two outer rungs are **out-of-hierarchy alias values** — finer than the modeled floor and coarser than the modeled ceiling — that the lessons pipeline may stamp on a learning **without** adding any entity level:
+
+| Altitude rung | Canonical level it aliases to (`work-organization-mapping-framework.md` §1.2 / frozen `general_level` enum) | Alias semantics |
+|---|---|---|
+| **Unit** | *sub-Work-Item granularity* (within the `Work Item` entity) | Finer than the finest modeled level. NOT a new entity node — the same collapse the framework applies to Story/Task (methodology levels below Milestone all land on the single `Work Item` entity, distinguished by `work_item_type`, never by adding nodes). "Unit" = a learning generated at the granularity of a single discrete action/change *inside* a Work Item. |
+| **Task** | *sub-Work-Item granularity* → the canonical `Task` term ([`terminology-glossary.md#term-task`](../specs/terminology-glossary.md#term-task): a Work Item whose scope is subsumed by a single Stage) | Aliases to the **existing** canonical `Task` term — a stage-scoped Work Item, already a recognized projection within the Work Item level. Introduces nothing new. |
+| **Workstream** | **Milestone / Workstream** (canonical level 4) | 1:1 — verbatim alias of the existing canonical level name. |
+| **Project** | **Project** (canonical level 3) | 1:1 — verbatim. |
+| **Program** | **Program** (canonical level 2) | 1:1 — verbatim. |
+| **Portfolio** | **Portfolio** (canonical level 1) | 1:1 — verbatim. |
+| **Organization** | *supra-Portfolio roll-up scope* — NOT a modeled entity level | Coarser than the coarsest modeled level. Aliases to the **same disposition the glossary gives `Initiative`** ([`terminology-glossary.md` Appendix B](../specs/terminology-glossary.md): "Portfolio-level concept not modeled at platform layer → cross-Milestone roadmap theme"). "Organization" = a learning that has rolled up across the whole single-operator org (the K2 OOM scope) — a roll-up *scope label*, not an entity the platform tracks. |
+
+> **Boundary note.** This axis adds **no** entity-graph node and changes **no** work-org level or `general_level` enum value. **Unit/Task** (below the floor) and **Organization** (above the ceiling) are altitude-attribute *values* that alias *outside* the modeled 5-level hierarchy — reconciled here by pointer, never authored as new levels. The four middle rungs ARE the canonical work-org vocabulary. The work-org hierarchy, its frozen enum, and the frozen entity roster are untouched (additive-only per [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) surgical-edit discipline).
+
+**Relationship to the design-time altitude lens (distinct, cross-referenced — not merged).** [`architecture-evaluative-lens.md` §1 triple-Venn](architecture-evaluative-lens.md#triple-venn) carries an **altitude circle** asking *at what level is this WORK placed and tracked?* — a **design-time** evaluative lens over the live work-org ladder. This axis asks a **capture-time** question over a *learning* (*at what scope was this learning generated?*). Both cite the **same** canonical ladder (`work-organization-mapping-framework.md` §1.2) by pointer and neither introduces competing level-names; they are **related but distinct** — design-time work-placement lens vs capture-time learning-attribute — and are cross-referenced, never collapsed into one definition.
+
+**Forward pointer.** The capture mechanism (altitude stamped at Step 1 of the lessons-learned pipeline) and the adjacent-altitude rollup relation are owned by [`km-protocols.md`](km-protocols.md) — see [`§3 Lessons-Learned Pipeline`](km-protocols.md#lessons-learned-pipeline) (capture-time attribute) and [`§9 Adjacent-Altitude Rollup`](km-protocols.md#altitude-rollup) (the `ROLLS_UP_TO` relation). This doc owns the *axis + alias*; the pipeline doc owns the *capture + rollup*.
+
+---
+
+## §6 Boundaries {#boundaries}
 
 | Boundary | Relationship | Action |
 |---|---|---|
@@ -198,12 +230,13 @@ The L1–L8 register above catalogs **identity/institutional** leaks — context
 | Universal-Protocol vs Localized-Context separation (audit + standard) | The audit + enforcement standard **consumes** this doc's universality axis. This doc = the *model*; the standard = the *audit + enforcement standard* on it. **Out of scope here.** | **Do NOT action.** Boundary stated to prevent future duplication. |
 | ** / [`operating-model.md`](../disciplines/operating-model.md)** — K2 model home | This doc's placement model assigns the K2 *model* to `operating-model.md`; K2 *values* are CLAUDE.md parameters. | Compose, do not restate. |
 | **[`terminology-glossary.md`](../specs/terminology-glossary.md)** — disjoint methodology glossary | Carries Area/Domain/Function/Process/Stage/WBS/Scope — **no** knowledge-tier terms. No collision, no redefinition risk. | Cross-reference; redefine nothing. |
+| **[`architecture-evaluative-lens.md`](architecture-evaluative-lens.md)** — design-time plug-and-play lens | The lens **consumes** this doc's [§1 Q1 universality classifier](#tier-classifier) + [§3 placement model](#placement-model) as the *proactive proposal-time* application; the [§4 leakage register](#local-context-leakage-register) is its *retrospective* twin. This doc = the taxonomy; the lens = its design-time application. | Cross-reference; redefine nothing. |
 
 ---
 
-## §6 Memory↔corpus boundary {#memory-corpus-boundary}
+## §7 Memory↔corpus boundary {#memory-corpus-boundary}
 
-This section names **which surface is the source of truth (SSOT) when a fact could appear in two places** — the auto-memory store or the codified corpus — and **how knowledge moves from memory into the corpus reliably**. It is a pure consumer of [§1](#five-tier-classification) and [§3](#placement-model): it adds no taxonomy. §3 owns *where each tier lives*; §6 owns *which surface is authoritative when a fact could live in two, and how it migrates*. This respects single-home discipline — the SSOT assignment below is a projection of the §3 "Authoritative home" column onto the auto-memory store specifically, and the routing test is the existing §1 Q1 universality classifier.
+This section names **which surface is the source of truth (SSOT) when a fact could appear in two places** — the auto-memory store or the codified corpus — and **how knowledge moves from memory into the corpus reliably**. It is a pure consumer of [§1](#five-tier-classification) and [§3](#placement-model): it adds no taxonomy. §3 owns *where each tier lives*; §7 owns *which surface is authoritative when a fact could live in two, and how it migrates*. This respects single-home discipline — the SSOT assignment below is a projection of the §3 "Authoritative home" column onto the auto-memory store specifically, and the routing test is the existing §1 Q1 universality classifier.
 
 Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a different org/project ⇒ K1 ⇒ corpus-SSOT; otherwise it is K2–K5 contextual and its SSOT is the placement-model home in §3. The auto-memory store is the §3 home for K5-tacit only.
 
@@ -224,7 +257,7 @@ Apply the [§1 Q1 universality test](#tier-classifier): TRUE-AND-USEFUL for a di
 
 ### Encode-and-evict lifecycle {#encode-and-evict}
 
-Knowledge moves from the auto-memory store into the corpus through four phases. Ordering is **structurally enforced** — the VERIFY-CORPUS gate makes corpus-presence a *precondition of eviction*, so encode-then-evict cannot invert:
+Knowledge moves from the auto-memory store into the corpus through five phases (the fifth, RE-POINT, reconciles surviving references after the file leaves). Ordering is **structurally enforced** — the VERIFY-CORPUS gate makes corpus-presence a *precondition of eviction*, so encode-then-evict cannot invert:
 
 ```
 ENCODE        the codification issue's PR writes the rule text into its corpus home
@@ -242,27 +275,54 @@ VERIFY-CORPUS confirm the corpus home actually contains the rule (grep the encod
 EVICT         move the memory file(s) to Trash (CHEAP-recoverable, not rm), remove the
               MEMORY.md index line(s), retire the eviction-pointer/ledger row.
               Post-state verification: file-absence + index-absence + pointer-absence.
+   │
+RE-POINT      reconcile every SURVIVING memory that [[wikilink]]s the just-evicted
+              file. Precedence (deterministic): (1) RE-POINT the link to the corpus
+              location now owning the knowledge — already in hand from the VERIFY-CORPUS
+              grep, which IS the corpus-home discovery; the link becomes a corpus-path
+              cross-reference (the no-shadow-permitted "durable cross-reference" form).
+              (2) DROP the link (leaving surrounding prose intact) only when the evicted
+              knowledge was split/absorbed with no single citable corpus home. Re-point
+              precedes drop — drop is the documented fallback, not the default.
 ```
 
 **Why encode-then-evict is mandatory.** A naive "issue CLOSED → delete memory" loses content when the close preceded the corpus write — a close-keyword can fire on a PR that did not actually carry the encoding. The VERIFY-CORPUS gate makes the corpus-presence check a precondition of eviction, so the ordering cannot invert; the ARCHIVE-first step makes even an erroneous eviction CHEAP-reversible.
+
+**Why RE-POINT closes the downstream gap.** Before this step, EVICT stopped at the file/index/ledger row, leaving surviving memories that `[[wikilink]]`ed the deleted file dangling — the convention permits dangling links (not an error) and the content lives in the corpus, so nothing breaks, but the links no longer navigate. RE-POINT is a zero-extra-discovery operation (the corpus home is already known from VERIFY-CORPUS) that restores navigability. It is an **operator-authorized Phase B-OPS executor action** (it edits the Layer-2 memory store under the same authorization envelope as EVICT; ARCHIVE already captured the pre-state) — never performed by a deploy check. The standing `deploy.sh --check` Check 36 only *detects* an un-re-pointed dangling link (the `dangling-wikilink-to-evicted-memory` class below); it never re-points. **Reversibility: CHEAP.**
 
 ### Trigger + audit {#trigger-and-audit}
 
 Two surfaces with distinct roles (a deploy check validates — it must never mutate the operator memory store; the operational-deploy step executes under operator authorization):
 
 - **PRIMARY executor = Stage-13 `Phase B-OPS` operational-deploy step.** The encode issue's release plan carries an operational-deployment manifest with the memory-eviction entries; Phase B-OPS executes ARCHIVE → VERIFY-CORPUS → EVICT under operator authorization. See [`stage-13-close.md` §5 Phase B-OPS](../../release/references/pipeline/stage-13-close.md) (gated by `G-CL5`, the operational-deployment-manifest-executed gate).
-- **STANDING BACKSTOP = `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`, warn-mode-initial).** The non-skippable standing audit that catches what a forgotten manifest entry misses. It runs every `./deploy.sh --check`, **deletes nothing**, and emits the three drift classes as warnings regardless of whether anyone remembered the Phase B-OPS entry. The full human-runnable procedure is [`memory-corpus-drift-audit.md`](../../release/references/how-to/memory-corpus-drift-audit.md).
+- **STANDING BACKSTOP = `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`, warn-mode-initial).** The non-skippable standing audit that catches what a forgotten manifest entry misses. It runs every `./deploy.sh --check`, **deletes nothing**, and emits the five drift classes as warnings regardless of whether anyone remembered the Phase B-OPS entry. The full human-runnable procedure is [`memory-corpus-drift-audit.md`](../../release/references/how-to/memory-corpus-drift-audit.md); the fixture self-test is `core/deploy/tests/test_check36_drift_classes.sh`.
+
+**Close-time absorption reconciliation (the upstream gate).** The lifecycle above assumes a tracking issue absorbs ALL memories pointing at it before it closes. It has no guard for *partial* absorption: when a codification issue closes COMPLETED having absorbed a SUBSET of the memories that name it in the ledger, the unmatched memories point at a closed-but-unfulfilling issue — tracked in appearance, untracked in fact, and unable to ever evict (their ship-signal already fired). The guard is a **close-time reconciliation** executed at **Stage-13 `Phase B-OPS5` (Absorption reconciliation)**, before the Milestone/issue close: diff the issue's authoritative absorbed-memory-list (its ARCHIVE manifest — already enumerated for EVICT) against every memory naming that issue in the ledger; the set-difference is the stranded set. If non-empty, **flag and block the close** until each unmatched memory is re-homed to a live issue (re-tie the pointer to a still-open codification issue, or file a new encode issue) — preserving the evict-on-ship invariant (a memory's ship-signal may fire only once its issue actually absorbs it). The diff is computable from artifacts that already exist at Phase B-OPS (the ARCHIVE manifest + the ledger); homing the gate there (not at a generic close hook) is correct because codification issues close through the release pipeline — Stage 13 IS their close path. See [`stage-13-close.md` §5 Phase B-OPS5](../../release/references/pipeline/stage-13-close.md). This gate is a *governance precondition on a close*, not a memory mutation — invariant-safe; its continuous detection backstop is the `ledger-pointer-to-closed-issue` class below. **Reversibility: CHEAP.**
 
 This is the same shape as the skill↔reference single-source contract (a single-source executor + an enforced-rebuild deploy check) — applied here to the memory↔corpus surface.
 
-### The three drift classes {#drift-classes}
+### The five drift classes {#drift-classes}
 
-The drift audit treats issue-number identity as **fragile** (re-versioning renumbers issues): a dead reference is detected by **reference-resolution-failure**, **never** by digit-match (e.g. never "is this issue number below the current max"). Only a resolution probe (`gh issue view N`) is load-bearing.
+The drift audit treats issue-number identity as **fragile** (re-versioning renumbers issues): a dead reference is detected by **reference-resolution-failure**, **never** by digit-match (e.g. never "is this issue number below the current max"). Only a resolution probe (`gh issue view N`) is load-bearing. The five classes split by what they probe: three require issue-resolution (`gh`); two — `untied-encodeable` and `dangling-wikilink-to-evicted-memory` — are local-only and run even when `gh` is unavailable. Check 36, the how-to (`memory-corpus-drift-audit.md`), and the fixture self-test enumerate the *same* five classes by construction.
 
 | Class | Definition | Detection (reproducible) |
 |---|---|---|
 | **deployed-but-not-evicted** | a memory's tied issue is CLOSED, corpus encoding present on main, but the memory file still exists | for each memory with a `#N` tie → `gh issue view N --json state` == CLOSED **AND** corpus grep of the encoded phrase succeeds **AND** memory file still present ⇒ flag |
 | **dead-ref tie** | a memory's eviction-pointer cites an issue # that no longer resolves (re-versioning renumbered it away) | for each `#N` tie → `gh issue view N` returns **NOT_FOUND / resolution-failure** ⇒ flag. NEVER digit-match — only a resolution probe is load-bearing, per the issue-body-renumber-rot lesson |
 | **untied-encodeable** | a memory the Q1 classifier marks K1-encodeable but carrying no issue tie and no corpus pointer | heuristic surface: memory whose body matches encodeable signatures (discipline/reference/methodology) with no `#N` and no corpus-path pointer ⇒ flag for operator routing (file an encode issue) |
+| **dangling-wikilink-to-evicted-memory** | a surviving memory body links a `[[target]]` whose memory file no longer exists — left dangling by an EVICT that did not RE-POINT (the downstream gap) | for each `[[target]]` wikilink in any memory → the target resolves to `<target>.md` under the store; if that file is **absent** ⇒ flag (re-point to its corpus home or drop, per RE-POINT). **Local-only** (pure filesystem resolution, no `gh`); a warn-mode routing signal, never a FAIL — dangling links are permitted by convention |
+| **ledger-pointer-to-closed-issue** | a `MEMORY.md` ledger ("Temporary enhancement pointers") row ties a `#N` that is CLOSED yet the memory was not absorbed/evicted — the partial-absorption residue (the upstream gap) | scan the ledger section; for each row's `#N` tie that **resolves** → `gh issue view N --json state` == CLOSED ⇒ flag (re-home to a live issue per Phase B-OPS5). **Disambiguated** from `deployed-but-not-evicted` by file-section: a `MEMORY.md` ledger row ⇒ this class; a standalone topic memory file ⇒ `deployed-but-not-evicted` |
 
-The decision record for this boundary — the rejected memory-as-cache alternative, the Option-C trigger choice, and the encode-then-evict ordering guarantee — is [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md).
+The decision record for this boundary — the rejected memory-as-cache alternative, the Option-C trigger choice, and the encode-then-evict ordering guarantee — is [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md), generalized across all four memory types by [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md); the RE-POINT step and close-time reconciliation added here extend the lifecycle both ADRs cite as its canonical home, leaving each ADR's decision record byte-unchanged.
+
+---
+
+## §Provenance
+
+The [§5 Organizational-Altitude / Aggregation Axis](#altitude-axis) (and its companion edits in [`km-protocols.md §3`](km-protocols.md#lessons-learned-pipeline) capture-attribute + [`§9`](km-protocols.md#altitude-rollup) rollup) was added to give a *learning* a captured **altitude** attribute — *at what scope of work was this learning generated?* — orthogonal to the K1–K5 universality axis this doc already owned, plus a defined adjacent-altitude rollup relation. It extends, and does not restate, the codification axis: a learning now carries one K-tier value *and* one altitude value, independently.
+
+The one design tension settled before authoring was a **vocabulary collision**: the altitude ladder (Unit → Task → Workstream → Project → Program → Portfolio → Organization) overlaps the live work-organization hierarchy ([`work-organization-mapping-framework.md` §1.2](work-organization-mapping-framework.md#per-level-purpose): Portfolio → Program → Project → Milestone/Workstream → Work Item). It was resolved by **alias, not rename** — the four middle rungs are verbatim aliases of the canonical levels, and the two outer rungs (Unit/Task below the frozen floor, Organization above the ceiling) are out-of-hierarchy *altitude-attribute values* that alias to existing dispositions (sub-Work-Item granularity for Unit/Task; the glossary's non-modeled `Initiative` precedent for Organization). No competing level-names enter the work-org framework; its hierarchy, the frozen `general_level` enum, and the frozen entity roster are untouched. The work-organization framework was therefore **not** edited by this axis (its alias home is this doc, self-contained).
+
+This axis is the **capture-time learning** sibling of the **design-time work-placement** altitude circle in [`architecture-evaluative-lens.md` §1 triple-Venn](architecture-evaluative-lens.md#triple-venn) — distinct questions over the same canonical ladder, cross-referenced and not merged. Multi-person / people-involved elicitation is **out of scope** for this axis (the platform's single-operator operating model per [`km-protocols.md §4`](km-protocols.md#bus-factor) bus-factor = 1 is the operating model, not a defect); the axis is single-operator-coherent on its own and the people dimension is separate downstream work. Reversibility: **CHEAP** — additive section/attribute additions removable by section deletion.
+
+The [§7 encode-and-evict lifecycle](#encode-and-evict) gained two symmetrical reference-integrity closures, addressing the mirror-image gaps each surfaced live during a real eviction. **Downstream:** a fifth lifecycle phase **RE-POINT** (after EVICT) reconciles surviving memories whose `[[wikilink]]`s pointed at the evicted file — re-pointing to the corpus home now owning the knowledge (re-point precedes drop). **Upstream:** a **close-time absorption reconciliation** (Stage-13 Phase B-OPS5) blocks a codification issue's close until every memory naming it in the ledger has been absorbed, closing the partial-absorption strand. Both are operator-authorized Phase B-OPS executor actions on the auto-memory store; the standing `deploy.sh` Check 36 backstop gained two warn-mode detector classes (`dangling-wikilink-to-evicted-memory`, `ledger-pointer-to-closed-issue`) that *detect* the omissions but never enact the fix — preserving the check's READ-ONLY-on-the-store invariant — covered by the fixture self-test `core/deploy/tests/test_check36_drift_classes.sh`. **ADR disposition:** the lifecycle change lands only in this canonical §7 (which both [ADR-029](../ADRs/ADR-029-memory-corpus-ssot-boundary.md) and [ADR-045](../ADRs/ADR-045-cross-surface-memory-contract.md) cite as the lifecycle's home) plus `deploy.sh`; both ADR decision records are left **byte-unchanged** — ADR-029 is superseded-and-immutable, and ADR-045 shipped as the operative cross-surface contract, so neither is rewritten in place (the extension reaches them by reference). Reversibility: **CHEAP** — additive doc + warn-mode bash + a new test; `git revert -m 1` restores the prior lifecycle.

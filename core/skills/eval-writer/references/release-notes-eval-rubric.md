@@ -1,6 +1,6 @@
 ---
 name: release-notes-eval-rubric
-description: Binary pass/fail rubric for user-facing release notes, covering the 12 lint checks from release-notes-standard.md § 3.2. Used by eval-writer as a worked playbook and consumed by Stage 13 Close lint, release-executor Mode E, and pmo-qa-auditor.
+description: Binary pass/fail rubric for user-facing release notes, covering the 13 lint checks from release-notes-standard.md § 3.2. Used by eval-writer as a worked playbook and consumed by Stage 13 Close lint, release-executor Mode E, and pmo-qa-auditor.
 type: rubric
 source_standard: release/references/standards/release-notes-standard.md § 3.2
 ---
@@ -22,7 +22,7 @@ The rubric is **structural** — content judgment stays with operator review per
 
 Applies to user-facing release notes for releases entering Stage 13. Pre-cutover notes authored before the `release-notes-standard.md` runbook + template restructure are exempted per the `PRE_CUTOVER_EXEMPT_VERSIONS` set inside `lint_release_corpus.py`.
 
-## The 12 Lint Checks (Binary)
+## The 13 Lint Checks (Binary)
 
 Each check produces a single token `PASS` or `FAIL` with a one-sentence rationale citing the file:line or the §-anchor that failed.
 
@@ -39,7 +39,7 @@ Each check produces a single token `PASS` or `FAIL` with a one-sentence rational
 | L7 | No standalone vague-filler bullets | Section 6a body grep for `^\s*-\s*(Various improvements\|Bug fixes\|Minor enhancements)\s*\.?\s*$` (case-insensitive) | zero matches |
 | L8 | No strikethrough in note body | grep for `~~.+?~~` across entire file | zero matches |
 
-### New checks 9-12 (mechanically implemented in `lint_release_corpus.py --check note-content` invoked by `deploy.sh` Check 20)
+### New checks 9-13 (mechanically implemented in `lint_release_corpus.py --check note-content` invoked by `deploy.sh` Check 20)
 
 | ID | Check | Method | PASS criterion |
 |---|---|---|---|
@@ -47,6 +47,7 @@ Each check produces a single token `PASS` or `FAIL` with a one-sentence rational
 | L10 | Banned-jargon scan in Section 6a | Section 6a content (between section header and next `##` header) grep for §2.4 banned-jargon list (14 literal terms + 4 regex patterns) | zero matches |
 | L11 | "Why it matters" beat per bullet | each Section 6a bullet contains `\*Why it matters:\*` literal OR `<!-- impact:foundational -->` HTML-comment marker | every bullet matches one branch |
 | L12 | File-path purity in 6a | Section 6a bullet bodies grep for `pmo-platform/` or `.claude/` outside markdown-link parentheses | zero matches |
+| L13 | Whole-body link purity (published Surface 1) | every markdown-link target in the published (frontmatter-stripped) body is absolute — `https://`, `#`, or `mailto:`; repo-relative targets (`../`, `release/`, `core/`, `docs/`, `.claude/`, `pmo-platform/`) render broken on the GitHub Release page (release-notes-standard.md §5.1/§5.3 Surface-1 link rule) | zero repo-relative targets |
 
 ## How To Invoke
 
@@ -66,7 +67,7 @@ Each check produces a single token `PASS` or `FAIL` with a one-sentence rational
 
 ### Worked PASS — `vX.Y_RELEASE_NOTES.md`
 
-All 12 checks PASS:
+All 13 checks PASS:
 
 - **L1 ✓** — file at canonical path `pmo-platform/releases/notes/vX.Y_RELEASE_NOTES.md`; frontmatter version `vX.Y` matches Milestone `vX.Y-<milestone-slug>`
 - **L2 ✓** — date `2026-05-23` on line 21
@@ -80,6 +81,7 @@ All 12 checks PASS:
 - **L10 ✓** — zero §2.4 banned-jargon matches in 6a
 - **L11 ✓** — every 6a bullet ends with `*Why it matters:*` beat
 - **L12 ✓** — no raw paths in 6a bullets (all paths inside markdown-link parentheses)
+- **L13 ✓** — every markdown-link target in the published (frontmatter-stripped) body is absolute (`https://…` / `#anchor` / `mailto:`); zero repo-relative targets that would render broken on the GitHub Release page
 
 ### Worked FAIL — synthetic counter-example
 
@@ -102,11 +104,12 @@ L9: PASS — Section 6a non-empty (7 bullets)
 L10: PASS — Zero §2.4 banned-jargon matches in Section 6a
 L11: PASS — Every Section 6a bullet carries "*Why it matters:*" beat
 L12: PASS — Zero raw paths in Section 6a bullet bodies
+L13: PASS — Every published-body link target absolute; zero repo-relative targets
 
-VERDICT: PASS (12/12)
+VERDICT: PASS (13/13)
 ```
 
-On any FAIL, the per-check rationale cites the file:line and the §-anchor that failed; the overall VERDICT is `FAIL` with count `(N/12)`. Example FAIL output:
+On any FAIL, the per-check rationale cites the file:line and the §-anchor that failed; the overall VERDICT is `FAIL` with count `(N/13)`. Example FAIL output:
 
 ```text
 L4: FAIL — Summary at lines 23-25 is 3 sentences (release-notes-standard.md § 3.2 check 4 requires ≤2)
@@ -115,5 +118,5 @@ L10: FAIL — Banned-jargon "reflexive-pipeline self-exemption" at line 35 match
 L11: FAIL — Bullet at line 38 missing *Why it matters:* beat (no `<!-- impact:foundational -->` escape)
 L12: FAIL — Raw path "pmo-platform/skills/foo/SKILL.md" at line 41 outside markdown-link parens
 
-VERDICT: FAIL (7/12)
+VERDICT: FAIL (8/13)
 ```

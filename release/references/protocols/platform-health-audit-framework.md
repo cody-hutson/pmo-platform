@@ -26,6 +26,10 @@ The framework ships alongside the
 The framework is integrated into pmo-qa-auditor as **Mode E — Platform Health Audit** (§4) —
 operationalized at this release.
 
+### Sibling cadence axes (3-axis audit-cadence set)
+
+This framework's §2 cadence is the **Anthropic Base-vs-Build axis** — one of three sibling audit-cadence axes. The other two cover the **process-fitness** axis (PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD frame conformance — [process-fitness-cadence.md](process-fitness-cadence.md)) and the **structural** axis (Diátaxis / NARA / ISO 15489 / orphan files / cross-reference integrity — [structural-audit-cadence.md](structural-audit-cadence.md)). Each axis carries a distinct benchmark roster and distinct triggers; the three mutually cross-reference so the full audit-cadence surface is discoverable from any one of them.
+
 ---
 
 ## §1 Anthropic Base-vs-Build Registry

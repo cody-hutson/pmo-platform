@@ -14,6 +14,7 @@
 #   ./query-pipeline-event.sh --subject "<id>"                                  # all events for a given subject
 #   ./query-pipeline-event.sh --event-type self-repair                         # all retries/escalates/rollbacks
 #   ./query-pipeline-event.sh --event-type release-synthesis --event-subtype learnings-triple  # subtype filter
+#   ./query-pipeline-event.sh --event-subtype recommendation-choice-delta --window 5  # look-back: trailing 5 versions of rec↔choice deltas
 #   ./query-pipeline-event.sh --r-class                                        # EXPENSIVE + IRREVERSIBLE decisions
 #   ./query-pipeline-event.sh --count                                          # row count summary
 #
@@ -100,6 +101,7 @@ EVENT_TYPE=""
 EVENT_SUBTYPE=""
 R_CLASS=false
 COUNT=false
+WINDOW=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,10 +112,16 @@ while [[ $# -gt 0 ]]; do
     --event-subtype) EVENT_SUBTYPE="$2"; shift 2 ;;
     --r-class) R_CLASS=true; shift ;;
     --count) COUNT=true; shift ;;
+    --window) WINDOW="$2"; shift 2 ;;
     --help|-h) usage ;;
     *) die "Unknown flag: $1" ;;
   esac
 done
+
+# --window N validation: positive integer when supplied (per-window look-back read-model)
+if [[ -n "$WINDOW" ]]; then
+  [[ "$WINDOW" =~ ^[0-9]+$ && "$WINDOW" -ge 1 ]] || die "--window must be a positive integer: got '$WINDOW'"
+fi
 
 [[ -f "$LOG_FILE" ]] || die "Log file missing: $LOG_FILE"
 
@@ -150,6 +158,29 @@ FILTERED=$(echo "$DATA_ROWS" | /usr/bin/awk \
   -v subject="$SUBJECT" \
   -v r_class="$R_CLASS" \
   "$filter_awk")
+
+# --window N: restrict the already-filtered rows to the trailing N DISTINCT version
+# tags (matches synthesize-release-learnings.sh --window semantics: N versions, not N
+# rows). Rows are in chronological write order, so the trailing N distinct versions are
+# the last N version tokens to appear. A no-op when --window is unset.
+if [[ -n "$WINDOW" && -n "$FILTERED" ]]; then
+  FILTERED=$(echo "$FILTERED" | /usr/bin/awk -v win="$WINDOW" '
+    BEGIN { FS = " \\| " }
+    { rows[NR] = $0; ver[NR] = $2; n = NR }
+    END {
+      # Walk rows newest-first, collecting the trailing N distinct versions.
+      keepcount = 0
+      for (i = n; i >= 1; i--) {
+        if (!(ver[i] in seen)) {
+          if (keepcount >= win) continue
+          seen[ver[i]] = 1
+          keepcount++
+        }
+      }
+      # Emit in original (chronological) order, keeping only rows in the kept set.
+      for (i = 1; i <= n; i++) if (ver[i] in seen) print rows[i]
+    }')
+fi
 
 if [[ "$COUNT" == "true" ]]; then
   if [[ -z "$FILTERED" ]]; then

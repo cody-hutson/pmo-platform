@@ -47,6 +47,29 @@ selection is part of the recap, not an afterthought.
 The order is fixed: **Decisions → Action Items → Notes → Key Roadblocks**. A recap leads with decisions
 and actions (the load-bearing content), then context, then blockers.
 
+## 5-Second-Scan Design (human-behavior-aware)
+
+A recap is read by a busy recipient who needs to know **what was decided and what they now own** in a
+5-second scan. The fixed body order above already embodies the first scan principle (decisions and
+actions lead, before context); these scan principles govern the rest:
+
+1. **Decision/ask-first.** Decisions and the reader's action items surface **above the fold** — the
+   fixed Decisions → Action Items order is exactly this principle. Context (Notes) and blockers follow;
+   they never precede the decisions and actions.
+2. **Inline-summary hard rule.** No recap references a raw transcript or long source as a **bare link** —
+   every referenced source carries an **inline 1–3 sentence summary**. The reader must never open the
+   source to learn what the recap is telling them. *(The single most load-bearing scan principle.)*
+3. **Owner-tagged, dated actions.** Every Action Item carries an `@Owner` and a deadline in the
+   `MM/DD/YY — @Owner: …` form (already required); an action with neither fails the scan test.
+4. **Above-the-fold ask.** Any action the reader personally owns is identifiable in the first screen,
+   not buried in Notes.
+
+**Scan test (acceptance check).** Before a recap is send-ready it must pass: *the decisions and the
+reader's owned actions are identifiable in ≤5 seconds; they sit above the fold; every source reference
+carries an inline summary (no bare links); every action item is owner-tagged and dated.* The scan bar
+is calibrated per audience (exec / team / technical) in the consumer's
+[`references/audience-profiles.md`](../../operations/skills/comms-writer/references/audience-profiles.md).
+
 ## Timeliness and Distribution
 
 - **Timeliness.** Sent within **4 business hours** of meeting end. **Same-day is the standard.**
@@ -64,6 +87,10 @@ and actions (the load-bearing content), then context, then blockers.
   `MM/DD/YY — @Owner: …` form.
 - **Status-theater recap** — a long recap with no decisions and no action items is information-sharing
   without a purpose; every recap surfaces decisions and/or actions.
+- **Bare-link source reference** — a recap that points at a transcript or long doc as a bare link with no
+  inline 1–3 sentence summary forces the reader to open the source; inline the summary, then the link.
+- **Backstory-before-decisions** — opening with narrative/context while the decisions sit below the fold;
+  the fixed Decisions → Action Items → Notes order exists to prevent this. Decisions and actions lead.
 
 ## Consumers
 

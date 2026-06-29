@@ -187,7 +187,7 @@ The platform's skills emit structured outputs consumed by other skills and by hu
 #### PMO-D10 — Output Contract Registration
 
 **What to check:**
-- Every `SKILL.md` listed in `dependency-graph.md` has a corresponding section in `per-skill-output-contracts.md`.
+- Every `SKILL.md` listed in `registry.md` has a corresponding section in `per-skill-output-contracts.md`.
 - Each contract section has all required subsections per the document's own format: mode table (if multi-mode), output contract sections (field list or section list), required elements, validation checklist, RAID prefix (if applicable).
 - No contract is orphan (skill deleted but contract remains).
 - No skill is missing a contract (skill exists but no section).

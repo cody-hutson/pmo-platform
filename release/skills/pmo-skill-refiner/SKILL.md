@@ -80,13 +80,13 @@ Executed after Interview produces a complete packet and user intent is "new skil
 5. **Run quantitative eval** — invoke `scripts/run_eval.py` against the Q3 output format. Apply variance analysis and gaming detection. Save to `<skill>-workspace/iteration-1/benchmark.json`.
 6. **Run description-trigger optimization** — invoke `scripts/run_loop.py` with Q2 trigger phrasings as seed. Apply `best_description` to the frontmatter if delta exceeds the configured threshold.
 7. **Extend regression-checks.md** — append new skill's entry per `references/regression-protocol.md`. Create the file if it does not yet exist.
-8. **Register contracts** — append Skill N entry to `core/schemas/per-skill-output-contracts.md` (Q7 is the schema source); append `### <skill-name>` node to `core/knowledge-base/dependency-graph.md` (Q6 is the edge source).
+8. **Register contracts** — append Skill N entry to `core/schemas/per-skill-output-contracts.md` (Q7 is the schema source); append a CI row for `<skill-name>` to [`core/skills/registry.md`](../../../core/skills/registry.md) (Q6 is the edge source).
 9. **Self-compliance pre-handoff checks** (see §Pre-Handoff Gate below):
    - G7 Phase 1 structural regex on `## Domain-Specific Failure Modes` (≥ 3 matches, tag per category).
    - Principal Standard CONDITIONAL PASS or better per `core/standards/principal-standard-checklist.md` Scoring Guide.
    - Reversibility section present with tier vocabulary pinned to `reversibility-protocol.md` (or explicit report-only opt-out).
    - Zero `[INSERT]` / `[TBD]` placeholders (CLAUDE.md guardrail).
-   - Cross-references resolve (every `references/*.md` path, every link to per-skill-output-contracts.md, dependency-graph.md, failure-mode-standard.md, reversibility-protocol.md).
+   - Cross-references resolve (every `references/*.md` path, every link to per-skill-output-contracts.md, registry.md, failure-mode-standard.md, reversibility-protocol.md).
 10. **Hand off** — produce a handoff message with: (a) path to new SKILL.md, (b) path to workspace with eval evidence, (c) pre-handoff gate evidence summary, (d) deploy instruction with pre-deploy canonical-session check per `references/pmo-platform-context.md`.
 
 ## Workflow — Refine Existing Skill
@@ -172,7 +172,7 @@ Seven fields injected into the Anthropic scaffold per `references/pmo-platform-t
 |---|---|---|---|---|
 | 1 | `delivery_approach` frontmatter | YAML | Interview Q4 | None (frontmatter only) |
 | 2 | `## Output Contract` stub | Body | Interview Q7 | Append Skill N to `per-skill-output-contracts.md` |
-| 3 | `## Dependency Graph Node` stub | Body | Interview Q6 | Append `### <skill-name>` to `dependency-graph.md` |
+| 3 | `## Dependency Graph Node` stub | Body | Interview Q6 | Append a CI row for `<skill-name>` to `registry.md` |
 | 4 | `## Evidence Quality Protocol` clause | Body | CLAUDE.md § Universal Preferences | None |
 | 5 | `## Domain-Specific Failure Modes` section (≥ 3 conditional clauses) | Body | Interview Q5 + Q9 | None; G7 gate validates |
 | 6 | `## Reversibility Discipline` section (or report-only opt-out) | Body | Interview Q3 + `reversibility-protocol.md` | None; G4 gate validates |
@@ -193,7 +193,7 @@ Nine questions, asked conversationally rather than as a checklist:
 | Q3 | Output format? Decision-class (recs/plans/escalations) or report-only? | Reversibility injection branch |
 | Q4 | `delivery_approach` (waterfall/agile/kanban/hybrid/n/a)? Methodology-sensitive? | Frontmatter field |
 | Q5 | Enumerate ≥ 3 domain-specific failure modes, "do NOT X when Y, because Z" format. | Failure-mode injection; refiner LOOPS Q5 if < 3 real answers |
-| Q6 | Upstream and downstream PMO skills? | dependency-graph.md node |
+| Q6 | Upstream and downstream PMO skills? | registry.md CI row (dependencies field) |
 | Q7 | Shared contracts honored? (RAID prefix, evidence labels, follow-up tags, output contract.) | per-skill-output-contracts.md Skill N |
 | Q8 | Principal Standard target — which competencies (per `principal-standard-checklist.md`) does this skill strengthen vs. risk, and what Scoring Guide tier is targeted? | Principal-standard section; pre-handoff self-check |
 | Q9 | Principal-vs-junior gradient for each Q5 failure mode? | 5th field of each failure-mode entry |
@@ -252,7 +252,7 @@ Typical tier mix for the refiner's outputs:
 | Refined SKILL.md (Refine-Existing) | MODERATE · MEDIUM | Overwrites existing skill; if worse than baseline, blind A/B catches it — if gate missed, regressed skill deploys until next pmo-qa-auditor pass |
 | `best_description` selection from `run_loop.py` | CHEAP · HIGH | One-line frontmatter edit; reverts cleanly |
 | Handoff decision (route to pmo-skill-editor vs. proceed) | CHEAP · HIGH | Changing mid-flight is trivial; mis-routes cost one cycle of work |
-| Registration of Skill N in per-skill-output-contracts.md / dependency-graph.md | CHEAP · HIGH | Additive section; revert removes cleanly |
+| Registration of Skill N in per-skill-output-contracts.md / registry.md | CHEAP · HIGH | Additive section; revert removes cleanly |
 
 ## Principal Standard Target
 
@@ -380,7 +380,7 @@ Competencies the refiner is at risk for:
 
 ## Relationship to other PMO skills
 
-- **Upstream:** External — `anthropic-skills:skill-creator` (default wrap target per ADR-01/D16) or `cowork-plugin-management:create-cowork-plugin` (alternative). Platform-internal: `failure-mode-standard.md`, `reversibility-protocol.md`, `principal-standard-checklist.md`, and the schemas in `per-skill-output-contracts.md` + `dependency-graph.md`.
+- **Upstream:** External — `anthropic-skills:skill-creator` (default wrap target per ADR-01/D16) or `cowork-plugin-management:create-cowork-plugin` (alternative). Platform-internal: `failure-mode-standard.md`, `reversibility-protocol.md`, `principal-standard-checklist.md`, and the schemas in `per-skill-output-contracts.md` + `registry.md`.
 - **Downstream:** All newly-created or refined PMO skills. Any skill added to `release/skills/` flows through this refiner.
 - **Coordinates with:** `pmo-skill-editor` (refine-existing handoff for structural edits), `pmo-qa-auditor` (G4 reversibility gate and G7 failure-mode gate validate refiner output post-deploy).
 - **RAID prefix:** `R-PSR-###` (refiner rarely produces RAID, but cross-skill risk discovered during refinement uses this prefix).

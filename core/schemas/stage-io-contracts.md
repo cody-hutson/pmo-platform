@@ -32,6 +32,23 @@ Each boundary contract uses a 7-field table:
 
 ---
 
+## Boundary: Stage 1 → Stage 2 (Intake → Triage)
+
+Stage 1 (Intake) produces the demand artifact (the GitHub Issue) for Stage 2 (Triage) to classify, validate, and prioritize. The artifact carries a structural premise — its Proposed Change and Affected Files — which crosses this boundary as a **directional** proposal, not a binding structure. The boundary contract encodes that directionality as an informational handoff property; it introduces no gate at the 1 → 2 boundary (enforcement lives downstream at the Stage 5 → 6 design-handoff gate).
+
+| Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
+|----------|--------|----------|----------------|----------------|----------|------------|
+| Proposal artifact | GitHub Issue (`improvement.yml`) | YES | NO | Detail | GitHub Issue in Proposed status with all template fields | All required template fields present (enforced by template validation); evidence section carries ≥1 evidence-labeled claim |
+| Structural-premise directionality | Handoff property (stated in stage-01-intake §6 Outputs + stage-02-triage §4 Inputs prose) | NO (informational) | NO | Summary | Issue body Proposed Change + Affected Files fields | Downstream design treats the ticket's structure as a proposal to confirm or overturn at Solutioning — not a binding structure. Not enforced by this contract; enforced at the Stage 5 → 6 design-handoff gate. |
+
+### Validation Rules
+
+1. **Structural premise is directional:** Triage, Planning, and Solutioning may overturn the ticket's structure (its Proposed Change and Affected Files) with justification; perpetuating the existing structure is a choice to justify, not a default. Enforcement lives at the Stage 5 → 6 design-handoff gate (the structure-reviewed → retained/changed determination), not at this boundary — this boundary states the property, it does not gate on it.
+2. **No 1 → 2 gate added:** The directionality row is `Required = NO / Human Decision = NO` by design — it encodes the handoff property without creating a blocking gate at the intake/triage boundary, keeping all enforcement teeth at Stage 5.
+3. **Section scope:** This section authors the directionality contract plus the Proposal artifact it qualifies; remaining Stage 1 → Stage 2 artifacts are added when the boundary is next exercised per the schema convention.
+
+---
+
 ## Boundary: Stage 5 → Stage 6 (Solutioning → Engineering)
 
 Stage 5 (Solutioning) produces design specifications for Stage 6 (Engineering). This boundary has two paths depending on whether Solutioning was activated for the release.
@@ -135,7 +152,6 @@ Stage 4 (Planning) produces a release plan for Stage 5 (Solutioning) when activa
 
 Remaining stage boundaries will be added as stages are exercised per-release. Each new boundary follows the schema definition above and is appended as an H2 section. Priority order based on pipeline flow:
 
-- Stage 1 → Stage 2 (Intake → Triage)
 - Stage 2 → Stage 3 (Triage → Bundle)
 - Stage 6 → Stage 7 (Engineering → Dev Testing)
 - Stage 7 → Stage 8 (Dev Testing → QA Testing)

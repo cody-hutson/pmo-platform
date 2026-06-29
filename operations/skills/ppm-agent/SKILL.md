@@ -207,6 +207,25 @@ fallback, agnostic output if unparseable.
 Every PPM response follows this structure. Read `references/output-format.md` for the full
 specification with field definitions.
 
+### Three-tier automation split (transcript-derived output)
+
+PPM output is split into three **automation tiers** that map onto the platform Document Tiers
+and the transcript Three-Tier Output Model in
+[`core/governance/OPERATIONS.md` §Transcript Processing Protocol](../../../core/governance/OPERATIONS.md).
+Tag each output block with its tier so the downstream write path knows whether it flows, stops for
+approval, or surfaces for triage:
+
+| Tier | Output sections (below) | Document Tier | Behavior |
+|---|---|---|---|
+| **auto-write** | Section 3 *operational-tracker updates* + Section 8 `TRACKER_UPDATE` blocks targeting Document Tier 2 trackers (Daily Status Log, Communications Tracker, Open Meetings Tracker, carry-forward), Section 8.6 Impact Matrix | Document Tier 2 | flows without a per-output approval prompt; confirmed in-response (Write-first-speak-second) |
+| **approval** | Section 3 *RAID / stakeholder-facing* updates + any Section 8 `TRACKER_UPDATE` targeting the **RAID Log** (`R-PPM-###`) or a stakeholder artifact + Section 5 decisions that mutate a Tier-1 record | Document Tier 1 | **stops for operator approval** before write (the Stakeholder-Review stage) |
+| **user-triage** | Section 4 (Items Requiring Your Action) + the `[…]` follow-up tags PPM emits (the action-item class) | n/a — surfaced only | **surfaced for operator disposition, NEVER auto-logged** (the Action-Triage stage) |
+
+The boundary: **operational tracker updates auto-write; RAID-Log and stakeholder-facing changes
+require approval; action items surface for triage and are never auto-logged on the operator's
+behalf.** This is the same tiering the OPERATIONS.md transcript protocol defines — PPM tags its
+output to it; it does not invent a parallel classification.
+
 ### 1. Executive narrative (6–10 lines)
 Decision-grade summary. What happened, what it means, what needs to happen next. A busy
 executive reads only this section and knows the situation.
@@ -284,6 +303,8 @@ Changed risks are labeled `[UPDATED]`. For completed/resolved items, include res
 date if available — omitting resolution dates on closed P1s creates ambiguity. Use the RAID
 ID prefix `R-PPM-###` for all RAID entries originated by this skill. This prevents ID
 collision with entries from other skills in the suite.
+
+**Root-cause before origination (defect/blocker risks).** When a processed artifact surfaces a **defect or failure-class blocker** whose cause is not already established, root-cause it before logging the risk: when ppm-agent holds the processing context, **invoke the RCA method** ([`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md)) — walk symptom → proximal cause → systemic pattern and classify it (one of the 5 categories in `review-discipline-principles.md` §3) so the `R-PPM-###` entry carries a cause, not a symptom. When the cause needs context ppm-agent does not have (logs, history, the codebase), emit the hand-off `[ASSUMPTION – CONFIRM] <unknown cause> — owner: root-cause — to close: RCA per core/disciplines/root-cause-analysis.md` as a Section-5 "Decisions needed" line and stop — do NOT guess the cause. This mirrors intake-desk's hand-off token; the difference is that ppm-agent, as a **processing** surface (per [ADR-016 §3](../../../core/ADRs/ADR-016-intake-front-door-architectural-boundary.md)), MAY root-cause inline when it owns the context, whereas intake never does. A failure-class risk logged without its root cause produces a remediation that treats the symptom and lets the pattern recur.
 
 **Stale-RAID auto-escalation (run on every open RAID item).** For each open RAID item in the
 loaded RAID Log, compute its **age** and route it through the age-based auto-escalation logic
@@ -493,7 +514,12 @@ PPM Agent surfaces it as a Section-8.6 SECONDARY row.
 
 **Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact / Follow-Up Record → child records at
 entry state (§5.1 chains 6 / 7 / 8, all `GENERATES`).** PPM Agent processes a meeting
-transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. On `held`, PPM
+transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. **Meeting entry state:** a
+meeting first extracted from a transcript or surfaced as a scheduled item enters at
+`lifecycle_state: scheduled` (the Axis-1 entry state — `{scheduled, held, cancelled}`, the canonical
+`lifecycle_state` column in the Open Meetings Tracker per `core/schemas/tracker-schemas.md` Tracker 3);
+PPM Agent emits that entry state on extraction so the `scheduled → held` / `scheduled → cancelled`
+transition has a defined origin. On `held`, PPM
 Agent (creates Decision + RAID) emits new child records — each Decision at
 `Decision-proposed`, each RAID Item at `RAIDItem-open` — with the `GENERATES` provenance
 edge back to the Meeting. tracker-manager writes the new rows at their entry
@@ -1090,3 +1116,4 @@ Read these on first use, then as needed when handling specific artifact types:
 | `references/proactive-follow-up-tracking.md` | When constructing Section 9 | Proactive detection logic, committed vs. recommended dates, follow-up chain tracking |
 | `references/ppm-intake-governance.md` | When processing a new intake request (business-case tiering + WSJF + demand tag + capacity-aware routing) | Intake-governance application layer: WSJF/CoD/tiers/taxonomy by reference; capacity-route + trade-off contract |
 | `references/escalation-thresholds.md` | When surfacing risks (Section 6) or stale follow-ups (Section 9.4), and when routing a decision/RAID item to an escalation tier | Risk-scoring → tier routing (5-step ladder) + age-based stale-RAID auto-escalation thresholds (doc-of-record); references the delivery-engine 5×5 scale, does not re-derive it |
+| [`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md) | When a processed defect/blocker (Section 6 / Section 7) has an unknown cause | The RCA method (symptom → cause → systemic pattern); invoke inline when ppm-agent owns the context, else hand off `owner: root-cause` |

@@ -22,9 +22,14 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 | Template | Performance Domain | Canon source |
 |---|---|---|
+| `project-charter-template.md` | Initiating | PMBOK 7 |
 | `communications-tracker-template.md` | Stakeholder | PMBOK 7 |
 | `open-meetings-tracker-template.md` | Stakeholder | PMBOK 7 |
+| `stakeholder-register-template.csv` | Stakeholder | PMBOK 7 |
+| `raci-template.md` | Stakeholder | PMBOK 7 (RAEW / RAS variants referenced) |
 | `key-terms-glossary-template.csv` | Stakeholder | PMBOK 7 |
+| `change-log-template.md` | Project Work | PMBOK 7 (Waterfall change-control log) |
+| `lessons-learned-template.md` | Project Work | PMBOK 7 (PRINCE2 lessons log) |
 | `daily-status-log-template.md` | Measurement | PMBOK 7 |
 | `daily-status-update-framework-template.md` | Measurement | PMBOK 7 |
 | `executive-status-report-prompt-template.md` | Measurement | PMBOK 7 |

@@ -30,7 +30,7 @@ The platform runs releases through a 13-stage pipeline (`release/references/pipe
 | Stage 12–13 (Execute/Close) | `release-executor`, `weekly-status-rollup` |
 | Meta (cross-stage) | `pmo-skill-editor`, `pmo-skill-refiner`, `skill-creator` (deprecated) |
 
-New skills typically land in one of these slots. The refiner's Interview Q6 asks which upstream/downstream skills the new skill depends on; the answers drive the dependency-graph.md node.
+New skills typically land in one of these slots. The refiner's Interview Q6 asks which upstream/downstream skills the new skill depends on; the answers drive the skill's CI row in `registry.md` (the `dependencies` field).
 
 ## Governance File Hierarchy
 
@@ -55,7 +55,7 @@ The `delivery_approach` frontmatter field parameterizes the skill to the active 
 
 ## Skill-Suite Dependency Graph (condensed)
 
-Inline summary of the current graph in `core/knowledge-base/dependency-graph.md`. Used by Interview Q6 to prompt for upstream/downstream edges.
+Inline summary of the current dependency edges held in `core/skills/registry.md`. Used by Interview Q6 to prompt for upstream/downstream edges.
 
 | Skill | Upstream | Downstream |
 |---|---|---|
@@ -68,7 +68,7 @@ Inline summary of the current graph in `core/knowledge-base/dependency-graph.md`
 | pmo-qa-auditor | All skills (audits outputs) | Operator (findings) |
 | pmo-skill-editor | All skills (edits) | Operator (reviews), pmo-qa-auditor (post-edit validation) |
 | implementation-planner | pmo-qa-auditor (consumes findings), build-reviewer | Engineering execution (via implementation-execution-pattern.md) |
-| pmo-skill-refiner | External Anthropic skills, failure-mode-standard.md, reversibility-protocol.md, principal-standard-checklist.md, per-skill-output-contracts.md, dependency-graph.md | All newly-created or refined PMO skills |
+| pmo-skill-refiner | External Anthropic skills, failure-mode-standard.md, reversibility-protocol.md, principal-standard-checklist.md, per-skill-output-contracts.md, registry.md | All newly-created or refined PMO skills |
 
 Interview Q6 asks: "Which upstream skill feeds input into this new skill? Which downstream skill consumes its output?" The refiner uses this table to offer specific candidates rather than open-ended prompts.
 
@@ -101,7 +101,7 @@ Skills emit follow-up tags to route work to specialist skills. Max depth 2 (PPM 
 | `[PROCESS]` | pmo-process-designer |
 | `[CHANGE]` | change-management |
 
-New skills declare their emitted and consumed tags in Interview Q7; the refiner registers these in the dependency-graph.md node.
+New skills declare their emitted and consumed tags in Interview Q7; the refiner registers these in the skill's `registry.md` CI row.
 
 ### RAID prefixes
 
@@ -142,7 +142,7 @@ Core reference docs the refiner cites during Interview and injection:
 | `core/specs/reversibility-protocol.md` | Tier vocabulary (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) |
 | `core/standards/principal-standard-checklist.md` | Principal Standard checklist and Scoring Guide; skills target CONDITIONAL PASS or better |
 | `core/schemas/per-skill-output-contracts.md` | Output schema registration (Skill N entry) |
-| `core/knowledge-base/dependency-graph.md` | Upstream/downstream edge registration |
+| `core/skills/registry.md` | Upstream/downstream dependency-edge registration (CI row `dependencies` field) |
 | `core/disciplines/three-gulfs-methodology.md` | Intention / Execution / Evaluation framing for skill design |
 | `core/disciplines/review-discipline-principles.md` | Review-class skill methodology (only for review/audit/QA skills; refiner is not one) |
 | `CLAUDE.md` | Universal Preferences, Quality Standards, File Management Protocol |

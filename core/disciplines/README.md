@@ -31,6 +31,7 @@
 | [applicability-framework.md](applicability-framework.md) | When a codified practice applies, when it is contraindicated, and how to resolve conflicts between competing practices. |
 | [project-entity-model.md](project-entity-model.md) | The 18-entity canonical data model — per-entity fields, lifecycle, storage tier, owning-agent triplet. Consumed by every operational skill. |
 | [work-organization-mapping-framework.md](work-organization-mapping-framework.md) | The domain-neutral standardization of work organization — universal hierarchy concept + the hierarchy-by-methodology map (keyed by archetype name) + shipped best-practice default work-item schemas + the user plug-and-play override model. Projects any methodology's work levels onto the canonical Work Item entity via `work_item_type`. |
+| [architecture-evaluative-lens.md](architecture-evaluative-lens.md) | The two cross-cutting design-time evaluative lenses — the triple-Venn (skill ∩ methodology ∩ altitude) and the plug-and-play K1-universal vs K2–K5-install scope classifier. Names + routes each constituent to its canonical home; cites, never restates. Consulted as an advisory design check at Stage 2 Triage / Stage 4 Planning. |
 
 ## Discipline meta-protocols
 
@@ -58,6 +59,7 @@ Authoring sub-mechanism (not a peer activity-class — the default posture when 
 |---|---|
 | [context-lifecycle-model.md](context-lifecycle-model.md) | 5-state lifecycle for inbound content (Captured → Structured → Reviewed → Decided → Closed) + per-state stall detection. |
 | [concurrency-safeguards.md](concurrency-safeguards.md) | Detection, prevention, and recovery conventions for concurrent writes across Layer 1 / 2 / 3 file surfaces. |
+| [lifecycle-tailoring.md](lifecycle-tailoring.md) | The platform's PMBOK-7 lifecycle tailoring: why the 3 agent states (ACTIVE/CLOSING/CLOSED) for cadence + granular PROJECT.md phase timelines for reporting are a deliberate, documented tailoring of the canonical 5-process-group model — citing five-function-spine for the group definitions, not redefining them. Includes a research-PMO alternative. |
 
 ## Document ecosystem
 

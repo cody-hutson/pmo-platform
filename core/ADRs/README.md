@@ -75,10 +75,17 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ### ADR-012 — Roadmap-instance de-scope (amends ADR-006 + ADR-007)
 
-**Status:** Accepted (operator directive 2026-06-02).
+**Status:** Accepted (operator directive 2026-06-02). **Location clause superseded-in-part by ADR-046 (2026-06-27, below)** — the "not tracked" decision stands; the per-instance *location* is now the shipped `/roadmaps/` folder.
 **Decision:** Initiative-roadmap *instances* de-scoped from the tracked tree to operator-local authoring (`<OPERATOR_INSTANCE_ROADMAPS_PATH>`); the roadmap *framework* is retained as the reusable convention; the 4 in-repo enforcement surfaces (deploy.sh Check 24, gate-criteria-spec G3-13, Stage 13 forcing-function, Stage 5 cohesion-check) are dropped. Amends the roadmap-placement clauses of ADR-006/007 — all non-roadmap decisions stand.
 **Reversibility:** MODERATE.
 **File:** [ADR-012-roadmap-instance-descope.md](ADR-012-roadmap-instance-descope.md)
+
+### ADR-046 — Roadmap-instance in-repo home — shipped /roadmaps/ folder + token-as-override
+
+**Status:** Proposed (supersedes-in-part ADR-012's location clause + ADR-017's roadmaps placement in the operator-instance path family; flips to Accepted at the Stage 9 review).
+**Decision:** Roadmap instances get a single canonical in-repo home at repo-root `/roadmaps/` (folder + `README` tracked, instances git-ignored — the `analysis/` workspace pattern); the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token default moves to `${CLAUDE_WORKSPACE_ROOT}/pmo-platform/roadmaps` across the SSOT surfaces (depersonalization-spec registry + operator.toml.template) and remains the per-deployment override. Roadmaps leave the `personal/pmo-instance/` family by design (authored content ships in-repo like `analysis/`; runtime state stays operator-local). Preserves ADR-012's "instances not tracked" decision; includes a copy-migration for existing instances.
+**Reversibility:** MODERATE.
+**File:** [ADR-046-roadmap-instance-in-repo-home.md](ADR-046-roadmap-instance-in-repo-home.md)
 
 ### ADR-013 — detect_install_path session-resolution policy + COWORK_AVAILABLE seam
 
@@ -176,6 +183,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP at ship (additive — revert the release PR; every addition ships a default and no existing field/row/enum is mutated), trending MODERATE once a downstream size-bound enforcement gate + `release-planner` wire into `effective_pts` and the weights are recalibrated.
 **File:** [ADR-027-release-bundle-risk-weight-keys-on-release-class.md](ADR-027-release-bundle-risk-weight-keys-on-release-class.md)
 
+## Terminology / vocabulary ADRs
+
+### ADR-049 — Canonical initiative / roadmap / milestone vocabulary + initiative→epic/project label mapping
+
+**Status:** Proposed (flips to Accepted at the Stage 9 review).
+**Decision:** Canonicalize `Initiative` (cross-milestone grouping theme, NOT a hierarchy level) and `Roadmap` (architected path across one-or-more initiatives; one-per-initiative is the default) as glossary terms; correct Appendix B's "Initiative not modeled"; reconcile the framework's "one initiative" scope to the canonical default-not-limit meaning; map the retired `initiative:*` label namespace to the live `epic:*` / `project:*` grouping labels. The glossary is SSOT for the wording; the framework + label-taxonomy cite, never re-define.
+**Reversibility:** MODERATE (governance-vocabulary ripple into framework + label-taxonomy; runtime = none — no code consumes the terms).
+**File:** [ADR-049-canonical-initiative-roadmap-vocabulary.md](ADR-049-canonical-initiative-roadmap-vocabulary.md)
+
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
 ### ADR-003 — Operating Model Composition
@@ -207,10 +223,13 @@ Decisions affecting multiple modules but rooted in core go to `core/ADRs/` with 
 ### Repo-integrity authoring discipline
 
 ADR files cross-reference issues constantly — `source_observations:` frontmatter,
-`## Status` / `## Context` provenance lines, `## Related ADRs` — and two PR-time
-`repo-integrity.yml` gates (defined in [`core/rules/git-workflow.md` §
-Repository-Integrity Gates](../rules/git-workflow.md)) scan every changed markdown
-file. Author every ADR to satisfy them up front, not by red CI:
+`## Status` / `## Context` provenance lines, `## Related ADRs` — and the PR-time
+durable-corpus gates (the `repo-integrity.yml` gates defined in
+[`core/rules/git-workflow.md` § Repository-Integrity Gates](../rules/git-workflow.md),
+plus the reference-durability detector per
+[`reference-durability-standard.md`](../standards/reference-durability-standard.md))
+scan every changed markdown file. Author every ADR to satisfy them up front, not by
+red CI:
 
 1. **Reference issues as bare `#N`, never a full GitHub URL.** A
    `github.com/<owner>/pmo-platform/issues/N` URL embeds the operator handle and
@@ -232,8 +251,27 @@ file. Author every ADR to satisfy them up front, not by red CI:
    `## Repository-Integrity Gates` section of `git-workflow.md` is the canonical
    worked example — it stacks all three markers at the top of the file.
 
+**Every PR-time durable-corpus gate and its override marker.** The two gate families
+(`repo-integrity` and `reference-durability`) carry the following per-file override
+markers — each an HTML comment declared once near the top of the file. Authoring
+discipline item 2 above generalizes to any of them: when an ADR (or skill file)
+legitimately carries a flagged construct, declare the matching marker up front rather
+than letting CI go red. The one construct with **no** override marker is the bare-`#N`
+positional rule (last row) — its only remedy is to rewrite the reference inline.
+
+| Marker | Family | Suppresses (what the gate would otherwise flag) |
+|---|---|---|
+| `<!-- repo-integrity: allow-issue-ref -->` | repo-integrity | A resolving `#N` placed outside a recognized reference block, or that the issue-ref validity gate would otherwise reject (a separate validity check still rejects 404s / redirects / PR numbers — the marker does not suppress that) |
+| `<!-- repo-integrity: allow-memory-ref -->` | repo-integrity | A reference to an operator-memory name (a `feedback_*` / `reference_*` / `project_*` memory) in durable-corpus prose — used when a memory is deliberately named as provenance / a composes-with sibling |
+| `<!-- repo-integrity: allow-dead-file-ref -->` | repo-integrity | A `[text](path)` link / `![alt](path)` image whose target file or `#anchor` is missing (used for a deliberately-forward or intentionally-absent target) |
+| `<!-- repo-integrity: allow-depersonalization -->` | repo-integrity | Operator/collaborator identifying values in a `core/`/`release/`/`operations/`/`packages/` file (rare; personal data is normally kept out per the secrets policy) |
+| `<!-- reference-durability: allow-link -->` | reference-durability | Markdown link sequences (Class L) — for a file that legitimately carries summarized in-repo links |
+| `<!-- reference-durability: allow-version-ref -->` | reference-durability | Version-cutover apparatus (Class V) — prose that a rule applies to releases after a given version, or that a version is itself exempt |
+| `<!-- reference-durability: allow-url -->` | reference-durability | Raw GitHub issue/PR/milestone URLs (Class U) — distinct from `allow-link` so a links-carrying file does not silently also suppress the raw-URL prohibition |
+| **(no marker — bare-`#N` positional rule)** | reference-durability | NONE — a bare issue reference OUTSIDE a recognized reference block, or content-free INSIDE one, **cannot** be marker-suppressed. The only remedy is to rewrite it inline: move it into a reference block with a summary noun phrase, or de-reference it in prose so the meaning survives the number's renumber. |
+
 The same discipline applies to skill `SKILL.md` and skill `references/*.md` files,
-which are equally durable-corpus and equally scanned by both gates.
+which are equally durable-corpus and equally scanned by all of these gates.
 
 ## Status enum
 

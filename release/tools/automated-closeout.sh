@@ -8,18 +8,20 @@
 # Phases (sequenced; each idempotent — re-running is safe):
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row, tag exists
-#   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state
-#   4  detect_open_issues auto-close anomaly enumeration
+#   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
+#   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask title-regex auto-exclude)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
+#   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
+#   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
-#   12 await_merge_chore_pr poll mergeStateStatus per Stage 12 Phase A.6 pattern
+#   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
 #   13 post_close_milestone gh api -X PATCH state=closed
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
@@ -46,6 +48,17 @@
 #     --json                   Machine-readable
 #   OPTIONAL:
 #     --with-pattern-scan      Invoke synthesize-release-learnings.sh --mode pattern-detect post-close
+#     --outcome <ENUM>         **Outcome:** value on the Deployment Log block (#37):
+#                              SUCCESS (default) / PARTIAL / ROLLBACK / DEFERRED
+#     --outcome-rationale <t>  One-line rationale; REQUIRED when --outcome != SUCCESS
+#     --exclude-issue <N>      Filter issue #N out of the auto-close loop (#38;
+#                              repeatable) — pass the Stage-13 sub-task # so it
+#                              cannot self-close mid-run
+#     --close-comment <N>:<t>  Per-issue close-comment override (#38; repeatable)
+#     --merge-timeout <N>      Chore-PR await-merge poll budget, seconds (#1705;
+#                              default 300 — CI-realistic, not the old 30s cap)
+#     --no-merge               Create the chore PR but do NOT poll/merge it (#1705);
+#                              exit cleanly leaving the PR for the operator
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -158,12 +171,17 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
-# The deterministic INDEX generator lives in core/deploy/tools/, NOT alongside
-# this script. The prior "$SCRIPT_DIR/generate_release_index.py" pointed at a
-# non-existent release/tools/ path, so the "[[ -x "$GENERATE_INDEX" ]]" guard in
-# phase_append_release_index always failed and silently fell through to the
-# hand-append fallback (#459 — silent-fallthrough class). Point at the real tool.
-GENERATE_INDEX="$REPO_ROOT/core/deploy/tools/generate_release_index.py"
+# Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
+# source of the published-body-vs-stripped-note equality logic; phase 15.6 below
+# invokes it as the post-emit detective assert (warn-mode — never blocks close).
+DRIFT_CHECK_TOOL="$SCRIPT_DIR/check-release-body-drift.sh"
+# NOTE (#667 Finding 6): phase_append_release_index no longer invokes the
+# deterministic INDEX generator (core/deploy/tools/generate_release_index.py).
+# The full-regenerate path could re-sort/reorder unrelated rows (the churn root),
+# and the generator's own within-date-sort + find_artifact bugs are separable
+# (they also affect deploy.sh Check 23). The phase is now a pure single-row
+# insert in the live 6-column schema; the generator stays tracked separately and
+# is intentionally NOT called from this tool.
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
@@ -178,6 +196,30 @@ CHECK_PATHS=0            # offline corpus-path resolution probe (CI smoke gate)
 REVERSION_SPEC=""        # --reversion "<final>|<claimed-seq>|<merge_sha>|<collided>|<stage>|<residual>"
                          # set ONLY when this release re-versioned mid-pipeline;
                          # empty => phase_append_reversions records N/A (common path)
+OUTCOME=""               # --outcome <ENUM> (#37); empty => default SUCCESS at inject time
+                         # (per decision-outcome-tracking.md §4 autonomous path).
+                         # Closed enum: SUCCESS / PARTIAL / ROLLBACK / DEFERRED.
+OUTCOME_RATIONALE=""     # --outcome-rationale "<text>"; REQUIRED when OUTCOME != SUCCESS
+                         # (§5 conditional-required), OPTIONAL for SUCCESS.
+EXCLUDE_ISSUES=()        # --exclude-issue <N> (#38; repeatable). Issues filtered out
+                         # of the auto-close-anomaly close loop — primarily the
+                         # Stage-13 orchestration sub-task (passed by number so it
+                         # cannot self-close mid-run, erasing its own Tier-0 evidence).
+CLOSE_COMMENTS=()        # --close-comment <N>:"<text>" (#38; repeatable). Per-issue
+                         # close-comment override for a Tier-0 disposition so it gets
+                         # the correct comment, not the generic auto-close-anomaly text.
+MERGE_TIMEOUT=300        # --merge-timeout <N> (#1705). Await-merge poll budget in
+                         # seconds. Default 300s (CI-realistic: required CI on this
+                         # repo runs ~2-3min); the prior 30s cap was a detection-
+                         # pending budget, not a CI-completion budget.
+NO_MERGE=0               # --no-merge (#1705). Create the chore PR but do NOT poll/merge
+                         # it — exit cleanly leaving the PR for the operator to merge.
+CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
+                         # phase_await_merge_chore_pr SKIPs gracefully (un-strands the
+                         # terminal phases on the idempotent already-up-to-date path).
+MERGE_POLL_STEP=10       # await-merge poll interval (seconds). Not a CLI flag —
+                         # internal; the self-test overrides it to keep hermetic
+                         # runs fast.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -192,6 +234,12 @@ OPEN_ISSUE_COUNT=0
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
+MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
+                         # read-state from the RELEASE PR (not the chore PR — the
+                         # release content merged via the release PR, and the
+                         # signed tag is cut at that SHA per stage-12 Phase B3).
+                         # phase_publish_github_release binds the Release --target
+                         # to it and asserts the tag points at it.
 
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
@@ -203,7 +251,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,67p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -256,6 +304,15 @@ find_log_row() {
 # tail, and the trailing date column (2026-06-20) is digits-hyphen-digits, so both are skipped.
 # Fallback (defensive): if no field matches (a pure-version row with no slug column),
 # return field 1 stripped — preserving the prior behavior.
+#
+# #667 Finding 2 (slug mis-derivation) is RESOLVED on HEAD by this position-
+# independent resolver: regex branch 1 handles version-prefixed slugs (vX.Y-name,
+# older rows) and branch 2 handles bare theme-named slugs (NN-name, current rows,
+# e.g. 69-triage-and-bundling-signals). The downstream `gh pr create --milestone`
+# / `gh issue list --milestone` consume the milestone TITLE, and the milestone
+# title IS the bare slug — so a theme-named row resolves to the exact milestone
+# title. The defect Finding 2 described is no longer live; the self-test below
+# carries a bare-slug-theme-named case asserting title resolution.
 extract_milestone_slug() {
   local row="$1"
   /usr/bin/printf '%s' "$row" | /usr/bin/awk -F ' \\| ' '
@@ -382,6 +439,14 @@ phase_preflight() {
 phase_read_state() {
   STATE_MILESTONE_STATE="$($GH api "repos/${REPO_SLUG}/milestones/${MILESTONE}" --jq '.state' 2>/dev/null || echo "unknown")"
 
+  # MERGE_SHA capture (#1682) — ONCE, here, from the RELEASE PR. The release
+  # identity is the release PR's merge commit to main (what the RELEASE_LOG row's
+  # Merge SHA column records and where stage-12 Phase B3 cuts the signed tag) —
+  # NOT the chore PR (corpus-only). The release PR has already merged before
+  # close-out runs (a precondition), so its mergeCommit is available. Both #1705
+  # and #1682's publish consumer read this single global (no double-population).
+  MERGE_SHA="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json mergeCommit --jq '.mergeCommit.oid // ""' 2>/dev/null || echo "")"
+
   # Cycle time (read-only; may be N/A pre-instrumentation)
   if [[ -x "$COMPUTE_CYCLE_TIME" ]]; then
     STATE_CYCLE_TIME="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" 2>/dev/null || echo "N/A")"
@@ -389,7 +454,7 @@ phase_read_state() {
     STATE_CYCLE_TIME="N/A (compute-cycle-time.sh not executable)"
   fi
 
-  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=$STATE_CYCLE_TIME"
+  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=$STATE_CYCLE_TIME; release-PR merge SHA=${MERGE_SHA:-<unresolved>}"
   return 0
 }
 
@@ -399,7 +464,46 @@ phase_detect_open_issues() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
 
-  OPEN_ISSUE_LIST="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number --jq '.[].number' 2>/dev/null || true)"
+  # Fetch number+title so the Stage-13-subtask auto-exclude (title-regex fallback)
+  # can run. Format: "<number>\t<title>" per line (tab-separated).
+  local raw
+  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null || true)"
+
+  # Build the explicit-exclude set (#38 primary path). The Stage-13 orchestration
+  # sub-task is passed by NUMBER (--exclude-issue <N>) so it is deterministically
+  # filtered and cannot self-close mid-run (Risk R5).
+  local _excluded_detail=""
+  _is_excluded() {
+    local n="$1" e
+    for e in "${EXCLUDE_ISSUES[@]:-}"; do
+      [[ -n "$e" && "$n" == "$e" ]] && return 0
+    done
+    return 1
+  }
+
+  OPEN_ISSUE_LIST=""
+  local _n _title _line
+  while IFS= read -r _line; do
+    [[ -z "$_line" ]] && continue
+    _n="${_line%%$'\t'*}"
+    _title="${_line#*$'\t'}"
+    # (1) explicit --exclude-issue (deterministic, primary)
+    if _is_excluded "$_n"; then
+      _excluded_detail="${_excluded_detail}#${_n} (explicit --exclude-issue) "
+      continue
+    fi
+    # (2) title-regex fallback: a Stage-13 close orchestration sub-task that the
+    # hub did NOT pass by number is still excluded so it cannot self-close.
+    # Pattern: title matches `stage.?13` AND `close` (case-insensitive).
+    if /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
+      _excluded_detail="${_excluded_detail}#${_n} (title-regex stage-13-close) "
+      continue
+    fi
+    OPEN_ISSUE_LIST="${OPEN_ISSUE_LIST}${_n}"$'\n'
+  done <<< "$raw"
+  # Trim a trailing newline so grep -c counts correctly.
+  OPEN_ISSUE_LIST="$(/usr/bin/printf '%s' "$OPEN_ISSUE_LIST" | /usr/bin/sed '/^$/d')"
+
   if [[ -z "$OPEN_ISSUE_LIST" ]]; then
     OPEN_ISSUE_COUNT=0
   else
@@ -411,7 +515,9 @@ phase_detect_open_issues() {
     return 2
   fi
 
-  mark_phase "detect_open_issues" "PASS" "$OPEN_ISSUE_COUNT open release issues (auto-close anomaly candidates)"
+  local _exdetail=""
+  [[ -n "$_excluded_detail" ]] && _exdetail=" (excluded: ${_excluded_detail% })"
+  mark_phase "detect_open_issues" "PASS" "$OPEN_ISSUE_COUNT open release issues (auto-close anomaly candidates)${_exdetail}"
   return 0
 }
 
@@ -447,10 +553,29 @@ phase_transition_release_log() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
 
-  # Idempotent: skip if row already VERIFIED
+  # VERIFIED re-derivation guard (#1681) — runs FIRST, BEFORE the idempotent
+  # SKIP-on-VERIFIED early-return. A row flipped to VERIFIED by a partial or
+  # concurrent run would otherwise SKIP-as-PASS with no independent check that
+  # the release actually landed. Re-derive from deploy reality: a VERIFIED row is
+  # only legitimate if THIS release's PR ($PR_NUMBER) actually merged to main.
+  #   - confirmed MERGED to main → legitimate idempotent re-run → SKIP-as-PASS
+  #   - NOT merged (open / closed-unmerged) yet row reads VERIFIED → the
+  #     concurrency-induced false-VERIFIED #1681 targets → FAIL (do not trust the
+  #     in-memory string blind). Check 48 detects this post-hoc; this prevents it
+  #     at source.
+  # gh-offline degradation: if `gh pr view` cannot resolve (no network / bad PR),
+  # the merge fact is UNVERIFIABLE — FAIL fail-loud rather than vacuously SKIP.
   if [[ "$STATE_LOG_ROW_STATE" == "VERIFIED" ]]; then
-    mark_phase "transition_release_log" "SKIPPED" "row already VERIFIED"
-    return 0
+    local pr_json pr_state pr_base
+    pr_json="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json state,baseRefName --jq '"\(.state)/\(.baseRefName)"' 2>/dev/null || echo "")"
+    pr_state="${pr_json%%/*}"
+    pr_base="${pr_json#*/}"
+    if [[ "$pr_json" == "MERGED/main" || ( "$pr_state" == "MERGED" && "$pr_base" == "main" ) ]]; then
+      mark_phase "transition_release_log" "SKIPPED" "row already VERIFIED and release PR #${PR_NUMBER} is MERGED to main — legitimate idempotent re-run"
+      return 0
+    fi
+    mark_phase "transition_release_log" "FAIL" "row reads VERIFIED but release PR #${PR_NUMBER} is not confirmed MERGED to main (got '${pr_json:-<unresolved>}') — false-VERIFIED (partial/concurrent run, or gh unresolvable); re-derive, do not SKIP-as-PASS (#1681)"
+    return 3
   fi
 
   local row
@@ -494,51 +619,168 @@ PY
   return 0
 }
 
-# ─── Phase 7: append_release_index ───────────────────────────────────────────
+# ─── Phase 6.5: inject_outcome_field (#37 — Outcome field on Deployment Log) ──
+#
+# Injects the structurally-elevated `**Outcome:**` field into the visible-H4
+# `#### Deployment Log v<X.Y>` block per decision-outcome-tracking.md §2-§5. A
+# SEPARATE phase (not folded into phase_transition_release_log) so the Deployment-
+# Log-block edit does not contend with #1681's VERIFIED-re-derivation guard and
+# #1680's concurrency wrapper on the table-row write (the 3-writer collision the
+# plan flagged — extraction reduces that function to 2 writers).
+#
+# Enum (closed, §2): SUCCESS / PARTIAL / ROLLBACK / DEFERRED.
+#   Default = SUCCESS (the §4 autonomous Stage-13-spoke path: QC4-clean close).
+#   --outcome <ENUM> overrides; an unknown value is rejected with `die`.
+# Rationale (§5): OPTIONAL for SUCCESS; REQUIRED for non-SUCCESS — a non-SUCCESS
+#   --outcome with no --outcome-rationale FAILs the phase (the §5 forcing fn).
+# Placement (§3): the `**Outcome:**` line lands immediately AFTER the `**Result:**`
+#   line in the v<X.Y> Deployment-Log block. Idempotent: skip if a `**Outcome:**`
+#   line is already present in that block.
+phase_inject_outcome_field() {
+  # Resolve + validate the outcome value (default SUCCESS per §4).
+  local outcome="${OUTCOME:-SUCCESS}"
+  case "$outcome" in
+    SUCCESS|PARTIAL|ROLLBACK|DEFERRED) : ;;
+    *) die "Invalid --outcome '$outcome' (closed enum: SUCCESS / PARTIAL / ROLLBACK / DEFERRED)" ;;
+  esac
 
-phase_append_release_index() {
-  local slug="$STATE_MILESTONE_SLUG"
-  [[ -z "$slug" ]] && slug="$VERSION"
+  # §5 conditional-required: non-SUCCESS demands a rationale.
+  if [[ "$outcome" != "SUCCESS" && -z "$OUTCOME_RATIONALE" ]]; then
+    mark_phase "inject_outcome_field" "FAIL" "--outcome $outcome requires --outcome-rationale (decision-outcome-tracking.md §5 REQUIRED for non-SUCCESS)"
+    return 3
+  fi
 
-  # Idempotent: skip if row already present
-  if /usr/bin/grep -qE "^\| ${slug} \|" "$RELEASE_INDEX" 2>/dev/null; then
-    mark_phase "append_release_index" "SKIPPED" "INDEX row for $slug already present"
+  # Idempotent: skip if the v<X.Y> Deployment-Log block already carries Outcome.
+  # (Scope the grep to the block via awk so a sibling release's Outcome line does
+  # not false-positive.)
+  if /usr/bin/awk -v ver="$VERSION" '
+      $0 == "#### Deployment Log " ver { inblk=1; next }
+      /^#### / && inblk { inblk=0 }
+      inblk && /^\*\*Outcome:\*\*/ { found=1 }
+      END { exit(found ? 0 : 1) }
+    ' "$RELEASE_LOG" 2>/dev/null; then
+    mark_phase "inject_outcome_field" "SKIPPED" "**Outcome:** already present in the $VERSION Deployment Log block"
     return 0
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_index" "DRY-RUN" "would append row for $slug to RELEASE_INDEX.md (via $GENERATE_INDEX if executable, else hand-append)"
+    local _r=""
+    [[ -n "$OUTCOME_RATIONALE" ]] && _r=" + **Outcome rationale:** $OUTCOME_RATIONALE"
+    mark_phase "inject_outcome_field" "DRY-RUN" "would inject '**Outcome:** $outcome'${_r} after **Result:** in the $VERSION Deployment Log block"
     return 0
   fi
 
-  # Prefer generator script (deterministic); fall back to hand-append if missing
-  if [[ -x "$GENERATE_INDEX" ]]; then
-    if /usr/bin/python3 "$GENERATE_INDEX" >/dev/null 2>&1; then
-      mark_phase "append_release_index" "PASS" "regenerated via generate_release_index.py"
-      return 0
-    fi
-    # Fall through to hand-append on generator failure
+  # In-place edit: within the v<X.Y> Deployment-Log block, insert the Outcome
+  # line(s) immediately after the first `**Result:**` line. Bounded to the block
+  # (next `#### ` heading or EOF) so a later release's `**Result:**` is untouched.
+  /usr/bin/python3 - "$RELEASE_LOG" "$VERSION" "$outcome" "$OUTCOME_RATIONALE" <<'PY'
+import sys
+log_path, version, outcome, rationale = sys.argv[1:5]
+with open(log_path, "r", encoding="utf-8") as f:
+    lines = f.read().splitlines()
+
+block_hdr = f"#### Deployment Log {version}"
+start = None
+for i, line in enumerate(lines):
+    if line.strip() == block_hdr:
+        start = i
+        break
+if start is None:
+    print(f"ERROR: Deployment Log block for {version} not found", file=sys.stderr)
+    sys.exit(3)
+
+# Block end = next `#### ` heading after start, or EOF.
+end = len(lines)
+for j in range(start + 1, len(lines)):
+    if lines[j].startswith("#### "):
+        end = j
+        break
+
+# Find the `**Result:**` line within the block; insert after it.
+result_idx = None
+for j in range(start, end):
+    if lines[j].startswith("**Result:**"):
+        result_idx = j
+        break
+if result_idx is None:
+    print(f"ERROR: **Result:** line not found in the {version} Deployment Log block", file=sys.stderr)
+    sys.exit(3)
+
+inject = [f"**Outcome:** {outcome}"]
+if rationale:
+    inject.append(f"**Outcome rationale:** {rationale}")
+out = lines[:result_idx + 1] + inject + lines[result_idx + 1:]
+with open(log_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+PY
+  if [[ $? -ne 0 ]]; then
+    mark_phase "inject_outcome_field" "FAIL" "could not inject **Outcome:** into the $VERSION Deployment Log block (block or **Result:** line not found)"
+    return 3
   fi
 
-  local date_str class_str scope_str plan_link note_link status_str
-  date_str="$(date_today)"
-  class_str="Minor"   # default; operator can update post-merge
-  scope_str="—"        # populated by operator if known
-  plan_link="[plan](plans/${VERSION}_RELEASE_PLAN.md)"
-  note_link="[note](notes/${VERSION}_RELEASE_NOTES.md)"
-  status_str="VERIFIED"
+  local _detail="injected **Outcome:** $outcome after **Result:** in the $VERSION Deployment Log block"
+  [[ -n "$OUTCOME_RATIONALE" ]] && _detail="$_detail (+ **Outcome rationale:**)"
+  mark_phase "inject_outcome_field" "PASS" "$_detail"
+  return 0
+}
 
-  # Hand-append after the header rule line: find first `| v` row + insert above
-  /usr/bin/python3 - "$RELEASE_INDEX" "$slug" "$date_str" "$class_str" "$scope_str" "$plan_link" "$note_link" "$status_str" <<'PY'
+# ─── Phase 7: append_release_index (#667 Finding 6 — 6-col single-row insert) ─
+#
+# Emits ONE row in the LIVE 6-column RELEASE_INDEX schema:
+#   | Version | Milestone | Date | Theme | Release PR | Release Notes |
+# (header at RELEASE_INDEX.md line 5; generate_release_index.py emits the same 6).
+#
+# #667 Finding 6 fixes two live defects:
+#   (a) the prior hand-append fallback emitted an 8-COLUMN row
+#       (| slug | date | class | scope | plan | note | [LOG] | status |) against
+#       the 6-column live schema — a malformed row that deploy.sh Check 32(a)
+#       tolerates (it only asserts the version is the first cell) but that breaks
+#       the table and #1680's structural re-parse;
+#   (b) the generate_release_index.py FULL-regenerate branch could re-sort /
+#       reorder unrelated rows (the churn root). We DROP that branch entirely and
+#       make this phase a pure single-row insert. The generator's own within-date
+#       sort + find_artifact bugs are separable (they also affect deploy.sh Check
+#       23) and stay tracked under #667 Finding 6 as out-of-scope for THIS tool.
+#
+# Column sourcing: Version = bare version (field-1); Milestone = slug; Theme
+# defaults to `—` (the Theme prose is authored at note time, not derivable here —
+# operator fills post-merge); Release PR = `#${PR_NUMBER}`; Release Notes =
+# `[notes/${VERSION}_RELEASE_NOTES.md](notes/${VERSION}_RELEASE_NOTES.md)`. The
+# row inserts immediately after the `|---` separator (top = most-recent),
+# matching the live "Chronological-recent-first" header convention + §220 I1.
+phase_append_release_index() {
+  local slug="$STATE_MILESTONE_SLUG"
+  [[ -z "$slug" ]] && slug="$VERSION"
+
+  # Idempotent: skip if a row keyed on this bare version is already present
+  # (version is the first table cell in the 6-col schema — matches Check 32(a)).
+  if /usr/bin/grep -qE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" "$RELEASE_INDEX" 2>/dev/null; then
+    mark_phase "append_release_index" "SKIPPED" "INDEX row for $VERSION already present"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $VERSION | $slug | $(date_today) | — | #${PR_NUMBER} | notes link |) at the top of RELEASE_INDEX.md"
+    return 0
+  fi
+
+  local date_str note_link pr_cell
+  date_str="$(date_today)"
+  note_link="[notes/${VERSION}_RELEASE_NOTES.md](notes/${VERSION}_RELEASE_NOTES.md)"
+  pr_cell="#${PR_NUMBER}"
+
+  # Pure single-row insert in the 6-column schema. Insert immediately after the
+  # first separator line (`|---`), keeping chronological-recent-first order.
+  /usr/bin/python3 - "$RELEASE_INDEX" "$VERSION" "$slug" "$date_str" "$pr_cell" "$note_link" <<'PY'
 import sys
-path, slug, date, cls, scope, plan, note, status = sys.argv[1:9]
+path, version, slug, date, pr_cell, note_link = sys.argv[1:7]
 with open(path, "r", encoding="utf-8") as f:
     lines = f.read().splitlines()
-new_row = f"| {slug} | {date} | {cls} | {scope} | {plan} | {note} | [LOG](RELEASE_LOG.md) | {status} |"
-# Insert immediately after the first "|---|" separator line (chronological-recent-first)
+# 6-column live schema: | Version | Milestone | Date | Theme | Release PR | Release Notes |
+new_row = f"| {version} | {slug} | {date} | — | {pr_cell} | {note_link} |"
 out = []
 inserted = False
-for i, line in enumerate(lines):
+for line in lines:
     out.append(line)
     if (not inserted) and line.startswith("|---"):
         out.append(new_row)
@@ -548,84 +790,90 @@ if not inserted:
 with open(path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
-  mark_phase "append_release_index" "PASS" "hand-appended row for $slug"
+  mark_phase "append_release_index" "PASS" "inserted 6-col row for $VERSION (Version | Milestone | Date | Theme | Release PR | Release Notes)"
   return 0
 }
 
-# ─── Phase 8: append_release_digest ──────────────────────────────────────────
-
+# ─── Phase 8: append_release_digest (#667 Finding 3 — H3 under topmost H2) ────
+#
+# The load-bearing structural fix. The LIVE RELEASE_DIGEST is a flat list of
+#   ### vX.Y (date) — <headline>
+# H3 entries directly under the topmost working H2 (today `## Knowledge Corpus`,
+# RELEASE_DIGEST.md line 6), most-recent-first. deploy.sh Check 32(b) asserts
+# `^### vX\.Y[[:space:](]` (deploy.sh:5115) AND Check 48 close-completeness
+# delegates to the same. The §220 concurrent-conflict doctrine (stage-13-close.md
+# § Concurrent Stage-13 corpus conflict resolution) explicitly mandates the
+# normal append targets "the topmost working H2 … intra-section date/insertion-
+# ordered … not re-homed to a `## vN.*` family section."
+#
+# The prior emit searched for a `## {major}.* —` family H2, found none, and fell
+# into an EOF branch that appended a NEW H2 + a `### Releases` table scaffold + a
+# 3-column `| Version | Date | Headline |` table ROW — a structure that
+# `^### vX\.Y` will NEVER match. (Legacy `## v3.* —` / `## v1.* —` / `## v2.* —`
+# family H2s still exist LOWER in the file as historical arc sections; they are
+# not the append target.) This rewrite emits the H3 form directly. Headline
+# source: the H1 of notes/${VERSION}_RELEASE_NOTES.md minus the `# ` prefix (the
+# same extraction phase_publish_github_release uses), falling back to a
+# placeholder only when the note is not yet authored.
 phase_append_release_digest() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
-  local major
-  major="$(extract_major "$VERSION")"
-  [[ -z "$major" ]] && major="v?"
 
-  # Idempotent: skip if entry already present
-  if /usr/bin/grep -qE "^\| ${slug} \|" "$RELEASE_DIGEST" 2>/dev/null; then
-    mark_phase "append_release_digest" "SKIPPED" "DIGEST entry for $slug already present"
+  # Idempotent: skip if an H3 entry keyed on this version is already present
+  # (matches Check 32(b)'s own key: `### vX.Y` with space or `(` terminator).
+  if /usr/bin/grep -qE "^### ${VERSION//./\\.}[[:space:](]" "$RELEASE_DIGEST" 2>/dev/null; then
+    mark_phase "append_release_digest" "SKIPPED" "DIGEST H3 entry for $VERSION already present"
     return 0
   fi
+
+  # Headline from the note H1 (minus `# `); placeholder only when the note is
+  # absent (e.g. dry-run before scaffold, or scaffold-without-prose).
+  local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  local headline=""
+  if [[ -f "$notes_path" ]]; then
+    headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
+  fi
+  [[ -z "$headline" || "$headline" == "$VERSION" ]] && headline="<headline — populated by operator at chore PR review>"
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_digest" "DRY-RUN" "would append entry for $slug under ${major}.* H2 family (create new H2 if novel major-prefix)"
+    mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($(date_today)) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
     return 0
   fi
 
-  # Insert: locate `## ${major}.*` H2 section, then append a table row at end of
-  # the first table under it. If no H2 exists for this major, append new H2 +
-  # canonical table header + row at end of file.
-  /usr/bin/python3 - "$RELEASE_DIGEST" "$slug" "$VERSION" "$major" "$(date_today)" <<'PY'
-import sys, re
-path, slug, version, major, date = sys.argv[1:6]
+  # Prepend the H3 entry under the topmost `## ` working H2 (the most-recent
+  # entry sits immediately after the H2 + its blank line, above the current top
+  # `### ` entry). Drop the family-H2 search + the `### Releases` table scaffold.
+  /usr/bin/python3 - "$RELEASE_DIGEST" "$VERSION" "$(date_today)" "$headline" <<'PY'
+import sys
+path, version, date, headline = sys.argv[1:5]
 with open(path, "r", encoding="utf-8") as f:
     lines = f.read().splitlines()
 
-major_heading_re = re.compile(rf"^## {re.escape(major)}\.\* —")
-section_start = None
+new_entry = f"### {version} ({date}) — {headline}"
+
+# Locate the topmost working H2 (first `## ` line).
+h2_idx = None
 for i, line in enumerate(lines):
-    if major_heading_re.search(line):
-        section_start = i
+    if line.startswith("## "):
+        h2_idx = i
         break
 
-new_row = f"| {slug} | {date} | <headline — populated by operator at chore PR review> |"
-
-if section_start is None:
-    # Append a new H2 + table + row at EOF
-    block = [
-        "",
-        f"## {major}.* — (arc TBD; rename at major-prefix maturation)",
-        "",
-        "",
-        f"### Releases",
-        "",
-        "| Version | Date | Headline |",
-        "|---------|------|----------|",
-        new_row,
-    ]
-    out = lines + block
+if h2_idx is None:
+    # No H2 at all — append the entry at EOF (degraded; should not happen on a
+    # well-formed corpus, but never silently drops the entry).
+    out = lines + ["", new_entry]
 else:
-    # Find the last `| v...` row under this H2; insert new row immediately after.
-    # Bound search to next H2 or EOF.
-    section_end = len(lines)
-    for j in range(section_start + 1, len(lines)):
-        if lines[j].startswith("## "):
-            section_end = j
-            break
-    # Find last table row line in [section_start, section_end)
-    last_row_idx = None
-    for j in range(section_start, section_end):
-        if lines[j].startswith("| v") or (lines[j].startswith("| ") and lines[j].rstrip().endswith("|")):
-            last_row_idx = j
-    if last_row_idx is None:
-        # No table found; insert at end of section
-        last_row_idx = section_end - 1
-    out = lines[:last_row_idx + 1] + [new_row] + lines[last_row_idx + 1:]
+    # Insert after the H2 and any immediately-following blank line, ABOVE the
+    # current top `### ` entry — making this the most-recent entry.
+    insert_at = h2_idx + 1
+    while insert_at < len(lines) and lines[insert_at].strip() == "":
+        insert_at += 1
+    out = lines[:insert_at] + [new_entry, ""] + lines[insert_at:]
 
 with open(path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
-  mark_phase "append_release_digest" "PASS" "appended entry for $slug under ${major}.* H2"
+  mark_phase "append_release_digest" "PASS" "prepended '### $VERSION (date) — …' H3 under the topmost working H2"
   return 0
 }
 
@@ -855,6 +1103,75 @@ EOF
   return 0
 }
 
+# ─── Phase 9.2: lint_release_notes (§3.2 note-content close gate) ─────────────
+#
+# Binds release-notes-standard.md §3.2 "Lint failures block Milestone close" to
+# the CLOSE EVENT (any authoring path), not just the release-executor self-lint.
+# Runs AFTER scaffold (the note now exists — whether scaffolded this run or
+# authored ahead by the operator) and BEFORE commit / milestone-close, so a
+# finding aborts the close before post_close_milestone.
+#
+# Exit contract is INHERITED from lint_release_corpus.py (mirrors deploy.sh
+# Check 20), NOT invented:
+#   0 → clean (proceed)
+#   1 → content finding(s); BLOCK iff ≥1 finding names ${VERSION}_RELEASE_NOTES.md.
+#       Findings for ONLY other (legacy) versions do NOT block this close
+#       (audit-baseline discipline — a pre-existing non-conformant note for an
+#       unrelated version must not block this version's close).
+#   3 → path-resolution failure (CORPUS-PATH-UNRESOLVED); BLOCK as unverifiable,
+#       never a vacuous pass (#459 fail-loud).
+# Version scoping lives in this CALLER (grep on the note path the lint already
+# prints in every finding line) — no --version flag added to the lint, so the
+# lint's interface stays decoupled from this binding.
+#
+# Idempotent with release-executor Mode E's self-lint: identical read-only
+# command, lint mutates nothing — running it twice in one close is safe. Dry-run
+# RUNS the lint (side-effect-free) so the operator sees findings at the review
+# gate; this is shift-left value, not a DRY-RUN skip.
+phase_lint_release_notes() {
+  local lint_script="${REPO_ROOT}/core/deploy/tools/lint_release_corpus.py"
+  local note_rel="release/releases/notes/${VERSION}_RELEASE_NOTES.md"
+
+  if [[ ! -f "$lint_script" ]]; then
+    mark_phase "lint_release_notes" "FAIL" "lint tooling missing: ${lint_script} — cannot enforce the §3.2 note-content close gate"
+    return 1
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    mark_phase "lint_release_notes" "FAIL" "/usr/bin/python3 not executable; cannot run the §3.2 note-content lint"
+    return 1
+  fi
+
+  local out exit_code=0
+  out="$(/usr/bin/python3 "$lint_script" --check note-content 2>&1)" || exit_code=$?
+
+  if [[ $exit_code -eq 3 ]]; then
+    mark_phase "lint_release_notes" "FAIL" "path-resolution failure (exit 3): $(echo "$out" | /usr/bin/head -1) — corpus unverifiable; close BLOCKED (fail-loud)"
+    echo "$out" | /usr/bin/head -20 >&2
+    return 1
+  fi
+
+  if [[ $exit_code -ne 0 ]]; then
+    # Scope to the version being closed: grep the finding lines for THIS note's
+    # repo-root-relative path (the lint emits it in every finding).
+    local v_findings
+    v_findings="$(echo "$out" | /usr/bin/grep -F "$note_rel" || true)"
+    if [[ -n "$v_findings" ]]; then
+      mark_phase "lint_release_notes" "FAIL" "§3.2 note-content finding(s) for ${VERSION} — close BLOCKED per release-notes-standard.md §3.2 'Lint failures block Milestone close'"
+      echo "$v_findings" >&2
+      return 1
+    fi
+    # Findings exist but none for THIS version → pre-existing legacy debt for
+    # another version; do NOT block this close on it (audit-baseline discipline).
+    local legacy_count
+    legacy_count="$(echo "$out" | /usr/bin/grep -c . || true)"
+    mark_phase "lint_release_notes" "PASS" "no §3.2 finding for ${VERSION} (${legacy_count} pre-existing legacy finding(s) for other versions — out of scope for this close)"
+    return 0
+  fi
+
+  mark_phase "lint_release_notes" "PASS" "§3.2 note-content clean for ${VERSION}"
+  return 0
+}
+
 # ─── Phase 9.5: append_changelog (Layer-1 dual-write Surface 2) ──────────────
 #
 # Prepends a `## [vX.Y] - YYYY-MM-DD` Keep-a-Changelog H2 section to CHANGELOG.md
@@ -1038,9 +1355,9 @@ ${VERSION} Stage 13 close-out chore PR — release-corpus updates per pipeline/s
 
 | File | Change | Notes |
 |------|--------|-------|
-| release/releases/RELEASE_LOG.md | EDIT | Transition ${slug} row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write) |
+| release/releases/RELEASE_LOG.md | EDIT | Transition ${slug} row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write) + inject \`**Outcome:**\` on the visible-H4 Deployment Log block |
 | release/releases/RELEASE_INDEX.md | EDIT | Append ${slug} row per D6 |
-| release/releases/RELEASE_DIGEST.md | EDIT | Append ${slug} entry under v$(extract_major "$VERSION").* family per D6 |
+| release/releases/RELEASE_DIGEST.md | EDIT | Prepend \`### ${VERSION} (date) — …\` H3 under the topmost working H2 per D6 |
 | release/releases/RELEASE_REVERSIONS.md | EDIT | Append re-version row(s) — one per abandoned version — ONLY when this release re-versioned mid-pipeline (N/A on the common no-collision path) |
 | release/releases/notes/${VERSION}_RELEASE_NOTES.md | NEW | Scaffolded per release-notes-standard.md Part 1 Template; operator-filled prose |
 | CHANGELOG.md | EDIT | Prepend ## [${slug}] - YYYY-MM-DD section per Keep-a-Changelog 1.1.0 (Surface 2 of Layer-1 dual-write — SKIPPED if CHANGELOG.md absent) |
@@ -1069,6 +1386,79 @@ ${STATE_CYCLE_TIME}
 
 This chore PR ships release-corpus updates only. Release-issue auto-close was handled by the Stage 12 release PR (#${PR_NUMBER}). This chore PR has no Issue References block by design.
 EOF
+}
+
+# ─── Phase 9.9: ledger_guard (#1680 — pre-commit read-modify-write guard) ─────
+#
+# Before phase_commit_chore_pr stages the 4 append-only ledgers, validate the
+# working-tree diff vs origin/main against the §220 I1/I2 invariants (the
+# concurrent-conflict doctrine #1092 codified). The platform has no lock
+# primitive — git IS the concurrency substrate; this guard makes the tool REFUSE
+# to commit a contaminated working copy.
+#
+# Adversarial-review mitigation: the guard does NOT assert "ONLY my row changed
+# vs origin/main" — after a correct §220 concurrent merge, main legitimately
+# carries a SIBLING release's additive row, so an exclusive-single-change
+# assertion would FALSE-FAIL a correctly-merged concurrent close. Instead it
+# encodes the actual invariants the doctrine defines:
+#   I1 (additive ledgers — INDEX/DIGEST/CHANGELOG): MY entry is PRESENT in the
+#      working tree, and every line REMOVED vs origin/main is one of MINE (a
+#      sibling's additive row is an ADD, never a removal — removing a foreign row
+#      is contamination).
+#   I2 (state-bearing — RELEASE_LOG status): no PRIOR row regressed VERIFIED →
+#      DEPLOYED (the dangerous state-lattice case — a blanket side-pick that
+#      overwrites a sibling's VERIFIED with my stale DEPLOYED).
+# §237 boundary: the `**Outcome:**` / Deployment-Log prose block is I1 (take-both
+# / presence), NEVER I2 — this guard does not apply the status-lattice rule to it.
+phase_ledger_guard() {
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "ledger_guard" "DRY-RUN" "would validate the 4-ledger working-tree diff vs origin/main against §220 I1 (additive: no foreign-row removal) + I2 (no VERIFIED→DEPLOYED regression)"
+    return 0
+  fi
+
+  local guard_findings=""
+
+  # I1 — additive ledgers: assert no line containing a FOREIGN `| vX.Y |` row (or
+  # `### vX.Y` DIGEST entry) was REMOVED vs origin/main. A removed line that names
+  # a version OTHER than mine is contamination (a 3-way merge that clobbered a
+  # sibling's additive entry).
+  local ledger
+  for ledger in "release/releases/RELEASE_INDEX.md" "release/releases/RELEASE_DIGEST.md" "CHANGELOG.md"; do
+    [[ -f "$REPO_ROOT/$ledger" ]] || continue
+    # Removed lines = diff lines starting with '-' (not the '---' header).
+    local removed_foreign
+    removed_foreign="$(git_net -C "$REPO_ROOT" diff "origin/main" -- "$ledger" 2>/dev/null \
+      | /usr/bin/grep -E '^-' | /usr/bin/grep -vE '^---' \
+      | /usr/bin/grep -E '(\| v[0-9]+\.[0-9]|^-### v[0-9]+\.[0-9])' \
+      | /usr/bin/grep -vF "$VERSION" || true)"
+    if [[ -n "$removed_foreign" ]]; then
+      guard_findings="${guard_findings}I1 contention in ${ledger}: a foreign version row/entry was removed vs origin/main (re-sync main + re-apply per §220 I1 additive — take-both, never re-sort). "
+    fi
+  done
+
+  # I2 — RELEASE_LOG status lattice: assert no PRIOR row regressed VERIFIED →
+  # DEPLOYED. Detect a removed `| ... | VERIFIED | ... |` line for a version OTHER
+  # than mine whose paired added line shows DEPLOYED (a blanket side-pick that
+  # overwrote a sibling's VERIFIED). A simpler robust check: any removed line that
+  # carries `| VERIFIED |` for a NON-$VERSION row is an I2 regression candidate.
+  if [[ -f "$REPO_ROOT/release/releases/RELEASE_LOG.md" ]]; then
+    local regressed
+    regressed="$(git_net -C "$REPO_ROOT" diff "origin/main" -- "release/releases/RELEASE_LOG.md" 2>/dev/null \
+      | /usr/bin/grep -E '^-' | /usr/bin/grep -vE '^---' \
+      | /usr/bin/grep -E '\| VERIFIED \|' \
+      | /usr/bin/grep -E '^\-\| v[0-9]+\.[0-9]' \
+      | /usr/bin/grep -vF "| $VERSION " || true)"
+    if [[ -n "$regressed" ]]; then
+      guard_findings="${guard_findings}I2 regression in RELEASE_LOG.md: a prior VERIFIED row for another version was removed/regressed (per-row max over DEPLOYED<VERIFIED — never a blanket side-pick that writes a false audit record). "
+    fi
+  fi
+
+  if [[ -n "$guard_findings" ]]; then
+    mark_phase "ledger_guard" "FAIL" "ledger contention vs origin/main — ${guard_findings}"
+    return 3
+  fi
+  mark_phase "ledger_guard" "PASS" "4-ledger working-tree diff is §220-clean (I1 no-foreign-removal; I2 no VERIFIED→DEPLOYED regression)"
+  return 0
 }
 
 phase_commit_chore_pr() {
@@ -1120,6 +1510,39 @@ phase_create_chore_pr() {
     return 3
   fi
 
+  # Zero-commit guard (#1705): a chore PR with no commits ahead of main either
+  # errors at `gh pr create` or creates an empty PR that can never merge —
+  # STRANDING the 4 terminal phases (post_close → manual_close → verify → publish
+  # → drift → orphan → pattern). The guard distinguishes the two zero-commit
+  # causes (adversarial-review mitigation):
+  #   (a) idempotent re-run — the corpus already merged to main (DIGEST H3 +
+  #       INDEX row + NOTES file present on origin/main) → SKIP create + skip
+  #       await BENIGNLY, terminal phases proceed (un-stranding).
+  #   (b) FIRST-run no-op bug — 0 commits AND the corpus is NOT on main → FAIL
+  #       loudly rather than skip into a broken publish (publish reads the NOTES
+  #       file and would FAIL or publish an empty body).
+  # The check only runs in --apply (dry-run never pushes/commits).
+  if [[ "$MODE" != "dry-run" ]]; then
+    local commits_ahead
+    commits_ahead="$(git_net -C "$REPO_ROOT" rev-list --count "origin/main..${CHORE_BRANCH}" 2>/dev/null || echo 0)"
+    if [[ "$commits_ahead" -eq 0 ]]; then
+      # Corpus-presence-on-main gate: only SKIP benignly if the close outputs are
+      # actually already on main (idempotent re-run), else FAIL loud.
+      local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1
+      _dig_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${VERSION//./\\.}[[:space:](]" || true)"
+      _idx_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null | /usr/bin/grep -cE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" || true)"
+      _notes_on_main="$(git_net -C "$REPO_ROOT" cat-file -e "origin/main:release/releases/notes/${VERSION}_RELEASE_NOTES.md" 2>/dev/null && echo 1 || echo 0)"
+      [[ "${_dig_on_main:-0}" -ge 1 && "${_idx_on_main:-0}" -ge 1 && "${_notes_on_main:-0}" -ge 1 ]] || _corpus_present=0
+      if [[ "$_corpus_present" -eq 1 ]]; then
+        CHORE_PR_SKIPPED=1
+        mark_phase "create_chore_pr" "SKIPPED" "0 commits ahead of origin/main and the close outputs (DIGEST H3 + INDEX row + NOTES) are already present on main — idempotent re-run; terminal phases proceed"
+        return 0
+      fi
+      mark_phase "create_chore_pr" "FAIL" "0 commits ahead of origin/main but the close outputs are NOT on main (DIGEST=${_dig_on_main:-0}/INDEX=${_idx_on_main:-0}/NOTES=${_notes_on_main:-0}) — the scaffold/commit phases no-op'd on a FIRST run (a real bug); failing loud rather than skipping into a broken publish"
+      return 3
+    fi
+  fi
+
   if [[ "$MODE" == "dry-run" ]]; then
     mark_phase "create_chore_pr" "DRY-RUN" "body parser-clean PASS; would: gh pr create --title 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
@@ -1160,8 +1583,22 @@ phase_create_chore_pr() {
 }
 
 phase_await_merge_chore_pr() {
+  # Zero-commit SKIP propagation (#1705): if phase_create_chore_pr SKIPped on the
+  # idempotent already-up-to-date path, there is no PR to merge — SKIP gracefully
+  # so the terminal phases proceed (un-stranding).
+  if [[ "$CHORE_PR_SKIPPED" -eq 1 ]]; then
+    mark_phase "await_merge_chore_pr" "SKIPPED" "chore PR was SKIPPED (0 commits ahead, corpus already on main) — nothing to merge"
+    return 0
+  fi
+
+  # --no-merge mode (#1705): create-only — leave the PR for the operator to merge.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} left open for operator merge (no poll/merge)"
+    return 0
+  fi
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll mergeStateStatus per Stage 12 Phase A.6 (4-tier backoff 3s/5s/10s/12s) then gh pr merge --merge --delete-branch"
+    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll mergeStateStatus (CI-realistic budget ~${MERGE_TIMEOUT}s; BLOCKED/UNSTABLE = keep-polling) then gh pr merge --merge --delete-branch"
     return 0
   fi
 
@@ -1170,29 +1607,119 @@ phase_await_merge_chore_pr() {
     return 3
   fi
 
-  # Brief poll per Stage 12 Phase A.6 (3s/5s/10s/12s = 30s cap)
-  local backoff=(3 5 10 12)
+  # CI-realistic poll budget (#1705). The prior 30s cap was a detection-pending
+  # budget (GitHub computing mergeability), NOT a CI-completion budget — a real
+  # chore PR must wait for required status checks to go green before
+  # MERGEABLE/CLEAN. Poll with a fixed 10s step up to MERGE_TIMEOUT (default 300s,
+  # tunable via --merge-timeout). MERGEABLE/BLOCKED + MERGEABLE/UNSTABLE are
+  # KEEP-POLLING states (checks pending / non-required-failing), not terminal —
+  # only CONFLICTING / DIRTY HALT; only CLEAN proceeds to merge.
+  local step="$MERGE_POLL_STEP"
+  local elapsed=0
   local merge_state="UNKNOWN"
-  for delay in "${backoff[@]}"; do
+  while [[ "$elapsed" -lt "$MERGE_TIMEOUT" ]]; do
     merge_state="$($GH pr view "$CHORE_PR_NUMBER" --repo "$REPO_SLUG" --json mergeStateStatus,mergeable --jq '"\(.mergeable)/\(.mergeStateStatus)"' 2>/dev/null || echo "ERROR")"
     case "$merge_state" in
       MERGEABLE/CLEAN) break ;;
       CONFLICTING/*|MERGEABLE/DIRTY) mark_phase "await_merge_chore_pr" "FAIL" "merge state=$merge_state; HALT — escalate Tier 2 [SCOPE CHANGE]"; return 3 ;;
+      # MERGEABLE/BLOCKED, MERGEABLE/UNSTABLE, */UNKNOWN, ERROR → keep polling
     esac
-    /bin/sleep "$delay"
+    /bin/sleep "$step"
+    elapsed=$((elapsed + step))
   done
 
   if [[ "$merge_state" != "MERGEABLE/CLEAN" ]]; then
-    mark_phase "await_merge_chore_pr" "FAIL" "merge state still=$merge_state after 30s polling — escalate"
+    mark_phase "await_merge_chore_pr" "FAIL" "merge state still=$merge_state after ${elapsed}s polling (budget ${MERGE_TIMEOUT}s) — escalate (raise --merge-timeout if CI runs longer, or --no-merge to leave the PR for manual merge)"
     return 3
   fi
 
   if $GH pr merge "$CHORE_PR_NUMBER" --repo "$REPO_SLUG" --merge --delete-branch >/dev/null 2>&1; then
-    mark_phase "await_merge_chore_pr" "PASS" "merged PR #${CHORE_PR_NUMBER}"
+    mark_phase "await_merge_chore_pr" "PASS" "merged PR #${CHORE_PR_NUMBER} (after ${elapsed}s poll)"
     return 0
   fi
   mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed"
   return 3
+}
+
+# ─── Phase 12.5: reparse_ledgers (#1680 — post-merge structural re-parse) ─────
+#
+# DETECTIVE-ONLY post-merge validation that the 3-way auto-merge landed a
+# well-formed corpus on main. After phase_await_merge_chore_pr succeeds, fetch
+# origin/main and structurally validate each of the 4 ledgers against #667's
+# CORRECTED schema (this is why #1680 builds AFTER #667 — the assertions must
+# encode the 6-col INDEX / H3 DIGEST shape, not the broken one):
+#   (a) RELEASE_INDEX — MY version row present, 6-column (no row with ≠6 fields);
+#   (b) RELEASE_DIGEST — exactly one `### vX.Y (` H3 for my version under the
+#       topmost working H2 (NOT duplicated — the §220 dedup);
+#   (c) RELEASE_LOG — exactly one row for my version; no DEPLOYED-regression on a
+#       previously-VERIFIED row;
+#   (d) CHANGELOG — `## [vX.Y]` block present once (SKIP if pre-CHANGELOG).
+# §237 boundary: the `**Outcome:**`/Deployment-Log prose block is I1 (presence/
+# dedup), NEVER I2 — this re-parse does not state-lattice it. On a structural
+# break → FAIL "manual reconcile required"; it NEVER auto-fixes (re-emitting a
+# merged ledger is out of scope). SKIPs cleanly when the chore PR was SKIPPED
+# (#1705 zero-commit) or under --no-merge (nothing newly merged to re-parse).
+phase_reparse_ledgers() {
+  if [[ "$CHORE_PR_SKIPPED" -eq 1 ]]; then
+    mark_phase "reparse_ledgers" "SKIPPED" "chore PR SKIPPED (zero-commit) — corpus already on main; nothing newly merged to re-parse"
+    return 0
+  fi
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "reparse_ledgers" "SKIPPED" "--no-merge: chore PR not merged; post-merge re-parse N/A"
+    return 0
+  fi
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "reparse_ledgers" "DRY-RUN" "would fetch origin/main and structurally validate the 4 ledgers (6-col INDEX / single H3 DIGEST / single LOG row + no VERIFIED→DEPLOYED regression / single CHANGELOG block)"
+    return 0
+  fi
+
+  git_net -C "$REPO_ROOT" fetch origin main >/dev/null 2>&1 || true
+  local reparse_findings=""
+  local vkey="${VERSION//./\\.}"
+
+  # (a) RELEASE_INDEX — my row present + 6-column.
+  local idx_content; idx_content="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null || echo "")"
+  local idx_row; idx_row="$(/usr/bin/printf '%s\n' "$idx_content" | /usr/bin/grep -E "^\|[[:space:]]*${vkey}[[:space:]]*\|" | /usr/bin/head -1)"
+  if [[ -z "$idx_row" ]]; then
+    reparse_findings="${reparse_findings}INDEX: no row for ${VERSION} on main. "
+  else
+    local idx_pipes; idx_pipes="$(/usr/bin/printf '%s' "$idx_row" | /usr/bin/tr -cd '|' | /usr/bin/wc -c | /usr/bin/tr -d ' ')"
+    [[ "$idx_pipes" -eq 7 ]] || reparse_findings="${reparse_findings}INDEX: ${VERSION} row is not 6-column (${idx_pipes} pipes; expected 7). "
+  fi
+
+  # (b) RELEASE_DIGEST — exactly one `### vX.Y (` H3.
+  local dig_n; dig_n="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${vkey}[[:space:](]" || true)"; dig_n="${dig_n:-0}"
+  if [[ "$dig_n" -eq 0 ]]; then
+    reparse_findings="${reparse_findings}DIGEST: no '### ${VERSION} (' H3 on main. "
+  elif [[ "$dig_n" -gt 1 ]]; then
+    reparse_findings="${reparse_findings}DIGEST: ${dig_n} duplicate '### ${VERSION}' H3 entries (concurrent merge dup — §220 dedup violated). "
+  fi
+
+  # (c) RELEASE_LOG — exactly one row for my version (the status-lattice regression
+  # is caught pre-commit by phase_ledger_guard; here we assert single-row presence).
+  local log_n; log_n="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_LOG.md" 2>/dev/null | /usr/bin/grep -cE "^\| ${vkey} \|" || true)"; log_n="${log_n:-0}"
+  if [[ "$log_n" -eq 0 ]]; then
+    reparse_findings="${reparse_findings}RELEASE_LOG: no row for ${VERSION} on main. "
+  elif [[ "$log_n" -gt 1 ]]; then
+    reparse_findings="${reparse_findings}RELEASE_LOG: ${log_n} rows for ${VERSION} (duplicate — concurrent merge dup). "
+  fi
+
+  # (d) CHANGELOG — `## [vX.Y]` block once (SKIP if pre-CHANGELOG).
+  if git_net -C "$REPO_ROOT" cat-file -e "origin/main:CHANGELOG.md" 2>/dev/null; then
+    local cl_n; cl_n="$(git_net -C "$REPO_ROOT" show "origin/main:CHANGELOG.md" 2>/dev/null | /usr/bin/grep -cE "^## \[?${vkey}\]?[[:space:]]" || true)"; cl_n="${cl_n:-0}"
+    if [[ "$cl_n" -eq 0 ]]; then
+      reparse_findings="${reparse_findings}CHANGELOG: no '## [${VERSION}]' block on main. "
+    elif [[ "$cl_n" -gt 1 ]]; then
+      reparse_findings="${reparse_findings}CHANGELOG: ${cl_n} duplicate '## [${VERSION}]' blocks. "
+    fi
+  fi
+
+  if [[ -n "$reparse_findings" ]]; then
+    mark_phase "reparse_ledgers" "FAIL" "post-merge ledger malformed — ${reparse_findings}— concurrent 3-way auto-merge landed badly per §220; manual reconcile required (this phase never auto-fixes)"
+    return 3
+  fi
+  mark_phase "reparse_ledgers" "PASS" "post-merge corpus structurally well-formed on main (6-col INDEX row / single DIGEST H3 / single LOG row / single CHANGELOG block)"
+  return 0
 }
 
 # ─── Phase 13: post_close_milestone (Hub Tier-1 mechanical) ──────────────────
@@ -1226,24 +1753,47 @@ phase_manual_close_release_issues() {
   fi
 
   local plan_ref="release/releases/plans/${VERSION}_RELEASE_PLAN.md"
-  local comment_template="Manually closed at Stage 13 per D-1 — auto-close anomaly (constituent PRs merged to release branch, not default-branch). Per release plan ${plan_ref}."
+  # Default comment for the genuine auto-close-anomaly case. #38 Defect 1: this
+  # generic anomaly text must NOT be the single hardcoded template applied to
+  # every issue — a Tier-0 disposition needs the correct comment. Per-issue
+  # `--close-comment <N>:"<text>"` overrides the default for issue N.
+  local anomaly_template="Manually closed at Stage 13 per D-1 — auto-close anomaly (constituent PRs merged to release branch, not default-branch). Per release plan ${plan_ref}."
+
+  # Resolve the per-issue comment override: scan CLOSE_COMMENTS for an "<N>:<text>"
+  # entry; echo the override text if present, else the anomaly default.
+  _comment_for() {
+    local issue_n="$1" entry e_n e_text
+    for entry in "${CLOSE_COMMENTS[@]:-}"; do
+      [[ -z "$entry" ]] && continue
+      e_n="${entry%%:*}"
+      if [[ "$e_n" == "$issue_n" ]]; then
+        e_text="${entry#*:}"
+        /usr/bin/printf '%s' "$e_text"
+        return 0
+      fi
+    done
+    /usr/bin/printf '%s' "$anomaly_template"
+  }
 
   if [[ "$MODE" == "dry-run" ]]; then
     local issue_list
     issue_list="$(/usr/bin/printf '%s' "$OPEN_ISSUE_LIST" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//')"
-    mark_phase "manual_close_release_issues" "DRY-RUN" "would close ${OPEN_ISSUE_COUNT} issue(s) [#${issue_list//,/, #}] with comment: $comment_template"
+    local _override_note=""
+    [[ "${#CLOSE_COMMENTS[@]}" -gt 0 ]] && _override_note=" (${#CLOSE_COMMENTS[@]} per-issue --close-comment override(s))"
+    mark_phase "manual_close_release_issues" "DRY-RUN" "would close ${OPEN_ISSUE_COUNT} issue(s) [#${issue_list//,/, #}] — anomaly default comment unless overridden${_override_note}"
     return 0
   fi
 
   local closed_count=0
   while IFS= read -r issue_n; do
     [[ -z "$issue_n" ]] && continue
-    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$comment_template" >/dev/null 2>&1; then
+    local _c; _c="$(_comment_for "$issue_n")"
+    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$_c" >/dev/null 2>&1; then
       closed_count=$((closed_count + 1))
     fi
   done <<< "$OPEN_ISSUE_LIST"
 
-  mark_phase "manual_close_release_issues" "PASS" "closed ${closed_count}/${OPEN_ISSUE_COUNT} release issues per D-1"
+  mark_phase "manual_close_release_issues" "PASS" "closed ${closed_count}/${OPEN_ISSUE_COUNT} release issues per D-1 (per-issue --close-comment overrides honored)"
   return 0
 }
 
@@ -1258,7 +1808,21 @@ phase_run_verification() {
   v_notes="$([[ -f "${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md" ]] && echo PASS || echo FAIL)"
   v_tag="$([[ "$STATE_TAG_EXISTS" -eq 1 ]] && echo PASS || echo FAIL)"
   v_milestone="$([[ "$STATE_MILESTONE_STATE" == "closed" ]] && echo PASS || echo PENDING)"
-  v_log="$([[ "$STATE_LOG_ROW_STATE" == "VERIFIED" ]] && echo PASS || echo PENDING)"
+  # Check 4 (#1681): the row-state string is NOT trusted blind — a VERIFIED PASS
+  # is corroborated by the merge fact (release PR $PR_NUMBER MERGED to main). In
+  # --apply, query `gh pr view`; a VERIFIED string with an unmerged/unresolvable
+  # PR reads FALSE-VERIFIED rather than PASS. (Dry-run keeps the string-only read
+  # — it is a preview, and the transition guard already fail-loud'd the apply.)
+  if [[ "$STATE_LOG_ROW_STATE" == "VERIFIED" ]]; then
+    if [[ "$MODE" == "dry-run" ]]; then
+      v_log="PASS"
+    else
+      local _v_pr; _v_pr="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json state,baseRefName --jq '"\(.state)/\(.baseRefName)"' 2>/dev/null || echo "")"
+      if [[ "$_v_pr" == "MERGED/main" ]]; then v_log="PASS"; else v_log="FALSE-VERIFIED (PR #${PR_NUMBER}=${_v_pr:-<unresolved>})"; fi
+    fi
+  else
+    v_log="PENDING"
+  fi
   v_subs="$([[ "$OPEN_ISSUE_COUNT" -eq 0 ]] && echo PASS || echo "PARTIAL (${OPEN_ISSUE_COUNT} open)")"
 
   VERIFICATION_RESULTS=$(/bin/cat <<EOF
@@ -1267,7 +1831,7 @@ phase_run_verification() {
 | 1 | RELEASE_NOTES.md present | test -f releases/notes/${VERSION}_RELEASE_NOTES.md | ${v_notes} |
 | 2 | Annotated tag present | git tag -l ${VERSION} | ${v_tag} |
 | 3 | Milestone closed | gh api milestones/${MILESTONE} | ${v_milestone} |
-| 4 | RELEASE_LOG row VERIFIED | grep '\| ${slug} \|' RELEASE_LOG.md | ${v_log} |
+| 4 | RELEASE_LOG row VERIFIED (corroborated by release-PR merge to main) | grep + gh pr view ${PR_NUMBER} | ${v_log} |
 | 5 | All release issues closed | gh issue list --milestone | ${v_subs} |
 EOF
 )
@@ -1310,6 +1874,21 @@ phase_publish_github_release() {
   if ! git_net -C "$REPO_ROOT" ls-remote --tags origin "$VERSION" 2>/dev/null | /usr/bin/grep -q "$VERSION"; then
     mark_phase "publish_github_release" "FAIL" "tag $VERSION not present on origin (Stage 12 Phase B3 may not have run; canonical recovery: git push origin $VERSION OR re-invoke Stage 12 spoke)"
     return 3
+  fi
+
+  # Preflight 1.5: tag ↔ MERGE_SHA identity assertion (#1682). The tag must point
+  # at THIS release's merge commit (captured at read-state from the release PR).
+  # If the tag resolves to a different SHA, a Release bound to it would tie to the
+  # wrong commit — do NOT publish. Skipped only when MERGE_SHA is unresolved (e.g.
+  # gh offline at read-state) — degrade to a warning rather than block on a
+  # capture miss, but never publish a KNOWN mismatch.
+  if [[ -n "$MERGE_SHA" ]]; then
+    local tag_sha
+    tag_sha="$(git_net -C "$REPO_ROOT" rev-list -n1 "$VERSION" 2>/dev/null || echo "")"
+    if [[ -n "$tag_sha" && "$tag_sha" != "$MERGE_SHA" ]]; then
+      mark_phase "publish_github_release" "FAIL" "tag $VERSION points at $tag_sha, not the release-PR merge commit $MERGE_SHA — identity mismatch (#1682); do NOT publish a Release bound to the wrong commit (re-cut the tag at the merge SHA, or re-verify the release PR)"
+      return 3
+    fi
   fi
 
   # Preflight 2: notes file should be resolvable (warning, not blocker)
@@ -1358,23 +1937,91 @@ phase_publish_github_release() {
   local notes_body
   notes_body="$(/usr/bin/sed '1,/^---$/d; 1,/^---$/d' "$notes_path" 2>/dev/null)"
 
-  # MERGE_SHA: if available from prior phase capture, use it; otherwise omit --target
-  local target_args=""
-  if [[ -n "${MERGE_SHA:-}" ]]; then
-    target_args="--target $MERGE_SHA"
+  # MERGE_SHA --target is NON-OPTIONAL on create (#1682): the Release is explicitly
+  # bound to the release-PR merge commit (the identity assertion above proved the
+  # tag agrees with it). If MERGE_SHA is unresolved (gh offline at read-state),
+  # FAIL rather than create an unbound Release — binding is the point of #1682.
+  if [[ -z "$MERGE_SHA" ]]; then
+    mark_phase "publish_github_release" "FAIL" "MERGE_SHA unresolved (release-PR merge commit not captured at read-state) — cannot bind the GitHub Release --target (#1682); re-run with gh online so the release-PR merge SHA resolves"
+    return 3
   fi
 
-  # shellcheck disable=SC2086
   if $GH release create "$VERSION" \
     --repo "$REPO_SLUG" \
     --title "$VERSION — $headline" \
     --notes "$notes_body" \
-    $target_args >/dev/null 2>&1; then
-    mark_phase "publish_github_release" "PASS" "created GitHub Release $VERSION (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
+    --target "$MERGE_SHA" >/dev/null 2>&1; then
+    mark_phase "publish_github_release" "PASS" "created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
     return 0
   fi
   mark_phase "publish_github_release" "FAIL" "gh release create failed for new release $VERSION (canonical recovery: re-run Phase 15.5 OR invoke release-executor Mode F standalone)"
   return 3
+}
+
+# ─── Phase 15.6: check_release_body_drift (post-emit §5.1 drift assert) ──────────
+#
+# DETECTIVE-ONLY post-emit verification that the just-published Release body
+# equals the frontmatter-stripped in-repo note (release-notes-standard.md §5.1).
+# Runs AFTER phase_publish_github_release converges Surface 1 — a standing assert
+# that the emit landed the canonical body, catching the v2.26-class defect
+# (ad-hoc body / un-stripped frontmatter) on the mandated close path.
+#
+# This phase COEXISTS with phase_lint_release_notes (§3.2 note-content close
+# gate): that phase lints the in-repo note file (network-free, BLOCKS close on a
+# this-version finding); THIS phase compares the published Release body against
+# the note (network-dependent, NEVER blocks). Distinct concerns, distinct phases.
+#
+# WARN-MODE / non-blocking by design (reflexive-pipeline-loop discipline): the
+# drift check is the detective backstop, NOT a close gate — a drift finding or a
+# tool-edge-case (CRLF / GitHub body normalization) must not hard-block a close,
+# least of all v2.37's own close (which rides the path it hardens). So this phase
+# ALWAYS returns 0; exit codes from the tool map to PASS / WARN / N/A only.
+# Detective-only: it never re-emits the Release (auto-remediation is out of scope).
+phase_check_release_body_drift() {
+  if [[ ! -x "$DRIFT_CHECK_TOOL" ]]; then
+    mark_phase "check_release_body_drift" "SKIPPED" "check-release-body-drift.sh not executable at $DRIFT_CHECK_TOOL"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "check_release_body_drift" "DRY-RUN" "would assert published Release body == frontmatter-stripped in-repo note for $VERSION (detective-only; warn-mode; per release-notes-standard.md §5.1)"
+    return 0
+  fi
+
+  # If Surface 1 was not published this run (publish phase FAILed / SKIPPED via a
+  # missing tag/notes), there is nothing to compare — record N/A, never WARN.
+  local pub_result
+  pub_result="$(get_phase "publish_github_release")"
+  pub_result="${pub_result%%|*}"
+
+  local drift_out drift_exit=0
+  drift_out="$(REPO="$REPO_SLUG" "$DRIFT_CHECK_TOOL" "$VERSION" --quiet 2>&1)" || drift_exit=$?
+
+  case "$drift_exit" in
+    0)
+      mark_phase "check_release_body_drift" "PASS" "published Release body matches the frontmatter-stripped in-repo note for $VERSION (§5.1 invariant holds)"
+      ;;
+    1)
+      # DRIFT — warn-mode: surface it, do NOT block the close (return 0 below).
+      mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. Detective-only (warn-mode); close NOT blocked. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      ;;
+    2)
+      mark_phase "check_release_body_drift" "N/A" "gh offline/unauthenticated — body-drift check skipped for $VERSION (never FAIL; mirrors Check 32/39 gh-guard)"
+      ;;
+    3)
+      # MISSING note or Release. If publish phase did not land Surface 1 this run,
+      # this is expected (N/A); otherwise it is a genuine gap (still warn-mode).
+      if [[ "$pub_result" != "PASS" ]]; then
+        mark_phase "check_release_body_drift" "N/A" "no published Release / note to compare for $VERSION (Surface 1 not emitted this run: publish phase=$pub_result)"
+      else
+        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (warn-mode; close NOT blocked). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      fi
+      ;;
+    *)
+      mark_phase "check_release_body_drift" "WARN" "body-drift check returned unexpected exit $drift_exit for $VERSION (warn-mode; close NOT blocked)"
+      ;;
+  esac
+  return 0
 }
 
 # ─── Phase 16: invoke_orphan_cleanup ─────────────────────────────────────────
@@ -1456,7 +2103,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log append_release_index append_release_digest append_reversions scaffold_release_notes append_changelog bump_version commit_chore_pr create_chore_pr await_merge_chore_pr post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -1677,6 +2324,547 @@ EOF
   # version-with-letter-and-qualifier carrying a slug tail (v2.04b-1-…) resolves.
   sample_row="| v2.04b-1 | v2.04b-1-hotfix-rollup | #1 | pr | sha | tag | VERIFIED | 2026-06-03 |"
   [[ "$(extract_milestone_slug "$sample_row")" == "v2.04b-1-hotfix-rollup" ]] || { echo "FAIL: extract_milestone_slug (8-col, vN.Nb-N qualifier) got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  # #667 Finding 2 (VERIFY-then-close): a bare-slug THEME-NAMED row (NN-name, the
+  # current convention) resolves to the slug == milestone title (what
+  # `--milestone` consumes). Confirms the position-independent resolver handles
+  # the case Finding 2 described — the defect is no longer live.
+  sample_row="| v2.36 | 69-triage-and-bundling-signals | #500 | #2284 | sha | v2.36 | VERIFIED | 2026-06-28 |"
+  [[ "$(extract_milestone_slug "$sample_row")" == "69-triage-and-bundling-signals" ]] || { echo "FAIL: extract_milestone_slug (8-col, bare theme-named slug) should return field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  [[ "$(extract_milestone_slug "$sample_row")" != "v2.36" ]] || { echo "FAIL: extract_milestone_slug returned the bare Version, not the theme-named slug"; failures=$((failures+1)); }
+
+  # Test 4b: phase_append_release_digest + phase_append_release_index (#667 F3/F6)
+  # — offline, hermetic. Drives both append phases against sandbox corpus files
+  # and asserts: DIGEST emits a `### vX.Y (date)` H3 under the topmost working H2
+  # (the exact form deploy.sh Check 32(b) `^### vX\.Y[[:space:](]` asserts); INDEX
+  # emits a 6-pipe-field row keyed on the bare version; both re-runs are idempotent.
+  local _ai_saved_root="$REPO_ROOT" _ai_saved_mode="$MODE" _ai_saved_version="$VERSION"
+  local _ai_saved_slug="$STATE_MILESTONE_SLUG" _ai_saved_idx="$RELEASE_INDEX" _ai_saved_dig="$RELEASE_DIGEST"
+  local _ai_saved_pr="$PR_NUMBER" _ai_saved_notesdir="$RELEASE_NOTES_DIR"
+  local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t appendidx-selftest.XXXXXX)"
+  REPO_ROOT="$_ai_tmp"; MODE="apply"; VERSION="v9.97"; STATE_MILESTONE_SLUG="88-some-theme-named-milestone"; PR_NUMBER=9999
+  RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX.md"; RELEASE_DIGEST="$_ai_tmp/RELEASE_DIGEST.md"
+  RELEASE_NOTES_DIR="$_ai_tmp/notes"   # absent dir => headline placeholder path
+  /bin/cat > "$RELEASE_INDEX" <<'EOF'
+# RELEASE_INDEX
+
+| Version | Milestone | Date | Theme | Release PR | Release Notes |
+|---|---|---|---|---|---|
+| v9.96 | 87-prior | 2026-06-27 | prior | #9000 | [notes/v9.96_RELEASE_NOTES.md](notes/v9.96_RELEASE_NOTES.md) |
+EOF
+  /bin/cat > "$RELEASE_DIGEST" <<'EOF'
+# RELEASE_DIGEST
+
+## Knowledge Corpus
+
+### v9.96 (2026-06-27) — Prior release headline
+
+Prior body.
+
+## v1.* — Pipeline Discipline
+
+### v1.00 (2026-01-01) — Legacy
+EOF
+
+  # (a) DIGEST emit → exactly one `### v9.97 (date) — …` H3, under `## Knowledge Corpus`
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_digest >/dev/null 2>&1
+  [[ "$(get_phase append_release_digest)" == PASS\|* ]] || { echo "FAIL: phase_append_release_digest should PASS, got '$(get_phase append_release_digest)'"; failures=$((failures+1)); }
+  local _ai_dig_n; _ai_dig_n="$(/usr/bin/grep -cE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" 2>/dev/null || true)"; _ai_dig_n="${_ai_dig_n:-0}"
+  [[ "$_ai_dig_n" -eq 1 ]] || { echo "FAIL: DIGEST must carry exactly 1 '### v9.97 (' H3 (Check-32(b) form), got $_ai_dig_n"; failures=$((failures+1)); }
+  # the new entry must sit under `## Knowledge Corpus`, above the legacy `## v1.*` family H2
+  local _ai_kc _ai_new _ai_legacy
+  _ai_kc="$(/usr/bin/grep -nF '## Knowledge Corpus' "$RELEASE_DIGEST" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _ai_new="$(/usr/bin/grep -nE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  _ai_legacy="$(/usr/bin/grep -nE '^## v1\.\* ' "$RELEASE_DIGEST" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  [[ "$_ai_kc" -lt "$_ai_new" && "$_ai_new" -lt "$_ai_legacy" ]] || { echo "FAIL: new DIGEST H3 (line $_ai_new) must sit under '## Knowledge Corpus' (line $_ai_kc) and above the legacy '## v1.*' family (line $_ai_legacy)"; failures=$((failures+1)); }
+
+  # (b) INDEX emit → exactly one row keyed on bare v9.97, with exactly 6 fields
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_index >/dev/null 2>&1
+  [[ "$(get_phase append_release_index)" == PASS\|* ]] || { echo "FAIL: phase_append_release_index should PASS, got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
+  local _ai_row; _ai_row="$(/usr/bin/grep -E '^\| v9\.97 \|' "$RELEASE_INDEX" | /usr/bin/head -1)"
+  [[ -n "$_ai_row" ]] || { echo "FAIL: INDEX must carry a row keyed on bare v9.97"; failures=$((failures+1)); }
+  # 6-column schema ⇒ a well-formed row has exactly 7 pipes (| a | b | c | d | e | f |).
+  local _ai_pipes; _ai_pipes="$(/usr/bin/printf '%s' "$_ai_row" | /usr/bin/tr -cd '|' | /usr/bin/wc -c | /usr/bin/tr -d ' ')"
+  [[ "$_ai_pipes" -eq 7 ]] || { echo "FAIL: INDEX row must be 6-column (7 pipes), got $_ai_pipes pipes in: $_ai_row"; failures=$((failures+1)); }
+
+  # (c) idempotency — re-run both phases → SKIPPED on the H3 / bare-version guards
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_digest >/dev/null 2>&1
+  [[ "$(get_phase append_release_digest)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_release_digest re-run must SKIP (H3 idempotency), got '$(get_phase append_release_digest)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_index >/dev/null 2>&1
+  [[ "$(get_phase append_release_index)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_release_index re-run must SKIP (bare-version idempotency), got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
+  _ai_dig_n="$(/usr/bin/grep -cE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" 2>/dev/null || true)"; _ai_dig_n="${_ai_dig_n:-0}"
+  [[ "$_ai_dig_n" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the DIGEST H3, got $_ai_dig_n"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
+  REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
+  STATE_MILESTONE_SLUG="$_ai_saved_slug"; RELEASE_INDEX="$_ai_saved_idx"; RELEASE_DIGEST="$_ai_saved_dig"
+  PR_NUMBER="$_ai_saved_pr"; RELEASE_NOTES_DIR="$_ai_saved_notesdir"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4c: phase_inject_outcome_field (#37) — offline, hermetic. Drives the
+  # phase against a sandbox RELEASE_LOG carrying a v9.95 Deployment-Log block and
+  # asserts: default-SUCCESS injects `**Outcome:** SUCCESS` immediately after
+  # `**Result:**`; a non-SUCCESS --outcome without a rationale FAILs; a non-SUCCESS
+  # --outcome WITH a rationale emits both lines; an unknown enum value is rejected;
+  # the inject is idempotent (skip when **Outcome:** already present in the block).
+  local _oc_saved_root="$REPO_ROOT" _oc_saved_mode="$MODE" _oc_saved_version="$VERSION"
+  local _oc_saved_log="$RELEASE_LOG" _oc_saved_outcome="$OUTCOME" _oc_saved_rat="$OUTCOME_RATIONALE"
+  local _oc_tmp; _oc_tmp="$(/usr/bin/mktemp -d -t outcome-selftest.XXXXXX)"
+  RELEASE_LOG="$_oc_tmp/RELEASE_LOG.md"; MODE="apply"; VERSION="v9.95"
+  # Fixture: two Deployment-Log blocks (v9.95 target + a sibling v9.94) so the
+  # block-bounded edit + idempotency grep are proven scoped to v9.95 only.
+  local _oc_write_log
+  _oc_write_log() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.95
+**Mechanism:** git merge.
+**Timestamp:** 2026-06-28.
+**Result:** SUCCESS — green CI.
+**Velocity:** 3 issues.
+
+#### Deployment Log v9.94
+**Result:** SUCCESS — prior release.
+EOF
+  }
+
+  # (a) default-SUCCESS → `**Outcome:** SUCCESS` immediately after `**Result:**`.
+  # NOTE: assertion greps use -F/-Fx (fixed-string) because the leading `**` is a
+  # repetition-operator to BSD grep under a regex pattern.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_log; OUTCOME=""; OUTCOME_RATIONALE=""
+  phase_inject_outcome_field >/dev/null 2>&1
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: phase_inject_outcome_field default should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  # the Outcome line must directly follow the v9.95 Result line (grep -A1)
+  /usr/bin/grep -A1 -F '**Result:** SUCCESS — green CI.' "$RELEASE_LOG" | /usr/bin/grep -qFx '**Outcome:** SUCCESS' || { echo "FAIL: '**Outcome:** SUCCESS' must directly follow the v9.95 **Result:** line"; failures=$((failures+1)); }
+  # the sibling v9.94 block must be untouched (no Outcome injected there)
+  /usr/bin/awk '/^#### Deployment Log v9\.94/{b=1} /^#### Deployment Log v9\.95/{b=0} b && /^\*\*Outcome:/{print "LEAK"}' "$RELEASE_LOG" | /usr/bin/grep -q LEAK && { echo "FAIL: Outcome leaked into the sibling v9.94 block"; failures=$((failures+1)); }
+
+  # (b) non-SUCCESS without rationale → FAIL (§5 conditional-required)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_log; OUTCOME="PARTIAL"; OUTCOME_RATIONALE=""
+  if phase_inject_outcome_field >/dev/null 2>&1; then
+    echo "FAIL: phase_inject_outcome_field --outcome PARTIAL without rationale must FAIL"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase inject_outcome_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: non-SUCCESS-no-rationale must mark FAIL"; failures=$((failures+1)); }
+
+  # (c) non-SUCCESS WITH rationale → PASS; both lines emitted
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _oc_write_log; OUTCOME="PARTIAL"; OUTCOME_RATIONALE="constituent 3 of 5 failed Phase H deploy"
+  phase_inject_outcome_field >/dev/null 2>&1
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: --outcome PARTIAL with rationale should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qFx '**Outcome:** PARTIAL' "$RELEASE_LOG" || { echo "FAIL: '**Outcome:** PARTIAL' line missing"; failures=$((failures+1)); }
+  /usr/bin/grep -qF '**Outcome rationale:** constituent 3 of 5 failed Phase H deploy' "$RELEASE_LOG" || { echo "FAIL: '**Outcome rationale:**' line missing"; failures=$((failures+1)); }
+
+  # (d) unknown enum value → rejected. phase_inject_outcome_field calls `die`
+  # (which exits) on a bad enum, so run it in a SUBSHELL and assert non-zero exit.
+  _oc_write_log
+  if ( OUTCOME="BOGUS"; OUTCOME_RATIONALE=""; phase_inject_outcome_field ) >/dev/null 2>&1; then
+    echo "FAIL: phase_inject_outcome_field must reject an unknown --outcome value"; failures=$((failures+1))
+  fi
+
+  # (e) idempotency — inject once (PASS) on a FRESH block, then re-run → SKIPPED.
+  # (Case (d) rewrote the fixture; write a clean block first so this is a true
+  # inject-then-reinject sequence, not a re-run over a wiped block.)
+  _oc_write_log; OUTCOME=""; OUTCOME_RATIONALE=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_outcome_field >/dev/null 2>&1   # first inject → PASS
+  [[ "$(get_phase inject_outcome_field)" == PASS\|* ]] || { echo "FAIL: phase_inject_outcome_field first inject should PASS, got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_inject_outcome_field >/dev/null 2>&1   # second run → SKIPPED
+  [[ "$(get_phase inject_outcome_field)" == SKIPPED\|* ]] || { echo "FAIL: phase_inject_outcome_field re-run must SKIP (idempotency), got '$(get_phase inject_outcome_field)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/grep -c '^\*\*Outcome:\*\*' "$RELEASE_LOG")" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the **Outcome:** line"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_oc_tmp" 2>/dev/null || true
+  unset -f _oc_write_log
+  REPO_ROOT="$_oc_saved_root"; MODE="$_oc_saved_mode"; VERSION="$_oc_saved_version"
+  RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4d: phase_detect_open_issues exclude filter (#38) — offline, hermetic.
+  # Stubs $GH so `gh issue list … --json number,title --jq …` returns a fixed
+  # `<number>\t<title>` fixture (gh applies --jq server-side, so the stub emits the
+  # already-jq'd lines), then drives phase_detect_open_issues and asserts the
+  # filter: explicit --exclude-issue removes a number; the Stage-13 sub-task is
+  # excluded by explicit number; the title-regex `(?i)stage.?13.*close` fallback
+  # excludes an un-numbered Stage-13-close sub-task; the AC-4 mixed fixture leaves
+  # ONLY the anomaly issue in OPEN_ISSUE_LIST.
+  local _ex_saved_gh="$GH" _ex_saved_mode="$MODE" _ex_saved_slug="$STATE_MILESTONE_SLUG"
+  local _ex_saved_list="$OPEN_ISSUE_LIST" _ex_saved_count="$OPEN_ISSUE_COUNT"
+  local _ex_tmp; _ex_tmp="$(/usr/bin/mktemp -d -t excl-selftest.XXXXXX)"
+  local _ex_stub="$_ex_tmp/gh-stub.sh"
+  # Stub: fixture has a normal anomaly issue (#401), an explicit-exclude target
+  # (#999), the Stage-13 orchestration sub-task (#500, title matches the regex),
+  # and a decoy with "stage 13" but NOT "close" (#600, must NOT be excluded).
+  /bin/cat > "$_ex_stub" <<'STUB'
+#!/usr/bin/env bash
+# Minimal gh stub for the #38 detect_open_issues self-test. Emits the jq'd
+# number<TAB>title lines for `issue list`; no-op (exit 0) for anything else.
+case "$1" in
+  issue)
+    if [[ "$2" == "list" ]]; then
+      printf '%s\t%s\n' 401 "Normal auto-close anomaly issue"
+      printf '%s\t%s\n' 999 "Some explicitly-excluded sub-task"
+      printf '%s\t%s\n' 500 "Stage 13 — Close: corpus update orchestration"
+      printf '%s\t%s\n' 600 "Stage 13 plan-review follow-up task"
+      exit 0
+    fi
+    ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_ex_stub"
+  GH="$_ex_stub"; MODE="apply"; STATE_MILESTONE_SLUG="88-some-milestone"
+
+  # (a) AC-4 mixed fixture: exclude #999 explicitly + #500 (Stage-13 sub-task) by
+  #     number → ONLY #401 + #600 survive (the decoy #600 stays — it is NOT a
+  #     close task). Asserts no Stage-13 self-close + no decoy over-exclude.
+  EXCLUDE_ISSUES=(999 500)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  [[ "$(get_phase detect_open_issues)" == PASS\|* ]] || { echo "FAIL: phase_detect_open_issues should PASS, got '$(get_phase detect_open_issues)'"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 (anomaly) must survive the exclude filter"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '600' || { echo "FAIL: #600 (decoy 'stage 13' but not 'close') must NOT be excluded"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '999' && { echo "FAIL: #999 (explicit --exclude-issue) must be filtered out"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 (Stage-13 sub-task by number) must be filtered out — cannot self-close (R5)"; failures=$((failures+1)); }
+
+  # (b) title-regex fallback alone (no explicit number for #500): #500 is still
+  #     excluded by `(?i)stage.?13.*close`; #401 + #600 survive.
+  EXCLUDE_ISSUES=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 must be excluded by the title-regex fallback when not passed by number"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 must survive (title-regex fallback path)"; failures=$((failures+1)); }
+  [[ "$OPEN_ISSUE_COUNT" -eq 3 ]] || { echo "FAIL: title-regex-only path must leave 3 issues (401,600,999), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+
+  # (c) per-issue --close-comment override resolution (Defect 1): the override
+  #     text is returned for the named issue; the anomaly default for others.
+  CLOSE_COMMENTS=("401:Tier-0 disposition — closed per design, not an anomaly")
+  OPEN_ISSUE_COUNT=1; OPEN_ISSUE_LIST="401"; MODE="dry-run"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1
+  [[ "$(get_phase manual_close_release_issues)" == DRY-RUN\|* ]] || { echo "FAIL: manual_close dry-run should be DRY-RUN, got '$(get_phase manual_close_release_issues)'"; failures=$((failures+1)); }
+  get_phase manual_close_release_issues | /usr/bin/grep -qF 'per-issue --close-comment override' || { echo "FAIL: dry-run detail must note the per-issue --close-comment override"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ex_tmp" 2>/dev/null || true
+  GH="$_ex_saved_gh"; MODE="$_ex_saved_mode"; STATE_MILESTONE_SLUG="$_ex_saved_slug"
+  OPEN_ISSUE_LIST="$_ex_saved_list"; OPEN_ISSUE_COUNT="$_ex_saved_count"
+  EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
+  # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
+  # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
+  # BLOCKED-then-CLEAN keep-polling reaches a merge (mock $GH, tiny step/timeout);
+  # and the --merge-timeout / --no-merge flags parse into their globals.
+  local _mt_saved_gh="$GH" _mt_saved_mode="$MODE" _mt_saved_pr="$CHORE_PR_NUMBER"
+  local _mt_saved_skipped="$CHORE_PR_SKIPPED" _mt_saved_nomerge="$NO_MERGE"
+  local _mt_saved_timeout="$MERGE_TIMEOUT" _mt_saved_step="$MERGE_POLL_STEP" _mt_saved_slug="$REPO_SLUG"
+  MODE="apply"; CHORE_PR_NUMBER="7777"; REPO_SLUG="x/y"
+
+  # (a) zero-commit SKIP propagation: CHORE_PR_SKIPPED=1 → await SKIPPED (no gh call)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  CHORE_PR_SKIPPED=1; NO_MERGE=0
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == SKIPPED\|* ]] || { echo "FAIL: await_merge must SKIP when CHORE_PR_SKIPPED=1 (zero-commit propagation), got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+
+  # (b) --no-merge → await SKIPPED (PR left open for operator)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  CHORE_PR_SKIPPED=0; NO_MERGE=1
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == SKIPPED\|* ]] || { echo "FAIL: await_merge must SKIP under --no-merge, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+
+  # (c) BLOCKED-then-CLEAN keep-polling reaches a merge. Stub $GH so `pr view`
+  #     returns MERGEABLE/BLOCKED on the first call and MERGEABLE/CLEAN after
+  #     (proving BLOCKED is keep-polling, not terminal), and `pr merge` exits 0.
+  local _mt_tmp; _mt_tmp="$(/usr/bin/mktemp -d -t mergeawait-selftest.XXXXXX)"
+  local _mt_ctr="$_mt_tmp/calls"; /usr/bin/printf '0' > "$_mt_ctr"
+  local _mt_stub="$_mt_tmp/gh-stub.sh"
+  /bin/cat > "$_mt_stub" <<STUB
+#!/usr/bin/env bash
+# #1705 await-merge stub. \`pr view\` → BLOCKED first, CLEAN after; \`pr merge\` → ok.
+ctr_file="$_mt_ctr"
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  n="\$(/bin/cat "\$ctr_file" 2>/dev/null || echo 0)"
+  /usr/bin/printf '%s' "\$((n+1))" > "\$ctr_file"
+  if [[ "\$n" -eq 0 ]]; then echo "MERGEABLE/BLOCKED"; else echo "MERGEABLE/CLEAN"; fi
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_mt_stub"
+  GH="$_mt_stub"; CHORE_PR_SKIPPED=0; NO_MERGE=0; MERGE_TIMEOUT=5; MERGE_POLL_STEP=0
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge must PASS after BLOCKED→CLEAN keep-polling, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge must POLL again after BLOCKED (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+
+  # (d) CONFLICTING → FAIL (terminal HALT, regression guard)
+  /usr/bin/printf '0' > "$_mt_ctr"
+  local _mt_stub2="$_mt_tmp/gh-stub2.sh"
+  /bin/cat > "$_mt_stub2" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "CONFLICTING/DIRTY"; exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_mt_stub2"
+  GH="$_mt_stub2"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_await_merge_chore_pr >/dev/null 2>&1; then
+    echo "FAIL: await_merge must FAIL (HALT) on CONFLICTING"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: CONFLICTING must mark FAIL"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_mt_tmp" 2>/dev/null || true
+  GH="$_mt_saved_gh"; MODE="$_mt_saved_mode"; CHORE_PR_NUMBER="$_mt_saved_pr"
+  CHORE_PR_SKIPPED="$_mt_saved_skipped"; NO_MERGE="$_mt_saved_nomerge"
+  MERGE_TIMEOUT="$_mt_saved_timeout"; MERGE_POLL_STEP="$_mt_saved_step"; REPO_SLUG="$_mt_saved_slug"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4f: phase_transition_release_log VERIFIED re-derivation guard (#1681) —
+  # offline, hermetic. Stubs $GH so `pr view` reports the release-PR merge state,
+  # then asserts: a VERIFIED row + MERGED-to-main PR → SKIPPED-as-PASS (legitimate
+  # idempotent re-run); a VERIFIED row + UNMERGED PR → FAIL (false-VERIFIED, do not
+  # trust the string blind); a DEPLOYED row → normal transition (regression guard).
+  local _td_saved_gh="$GH" _td_saved_mode="$MODE" _td_saved_state="$STATE_LOG_ROW_STATE"
+  local _td_saved_pr="$PR_NUMBER" _td_saved_slug="$REPO_SLUG" _td_saved_log="$RELEASE_LOG"
+  local _td_saved_msslug="$STATE_MILESTONE_SLUG" _td_saved_version="$VERSION"
+  local _td_tmp; _td_tmp="$(/usr/bin/mktemp -d -t transition-selftest.XXXXXX)"
+  PR_NUMBER="4242"; REPO_SLUG="x/y"; STATE_MILESTONE_SLUG="88-some-milestone"; VERSION="v9.93"
+  RELEASE_LOG="$_td_tmp/RELEASE_LOG.md"
+  local _td_stub_merged="$_td_tmp/gh-merged.sh" _td_stub_open="$_td_tmp/gh-open.sh"
+  /bin/cat > "$_td_stub_merged" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "MERGED/main"; exit 0; fi
+exit 0
+STUB
+  /bin/cat > "$_td_stub_open" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "OPEN/main"; exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_td_stub_merged" "$_td_stub_open"
+
+  # (a) VERIFIED row + MERGED-to-main PR → SKIPPED-as-PASS
+  GH="$_td_stub_merged"; MODE="apply"; STATE_LOG_ROW_STATE="VERIFIED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_release_log >/dev/null 2>&1
+  [[ "$(get_phase transition_release_log)" == SKIPPED\|* ]] || { echo "FAIL: transition VERIFIED+merged-PR must SKIP-as-PASS, got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+
+  # (b) VERIFIED row + UNMERGED PR → FAIL (false-VERIFIED)
+  GH="$_td_stub_open"; STATE_LOG_ROW_STATE="VERIFIED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_transition_release_log >/dev/null 2>&1; then
+    echo "FAIL: transition VERIFIED+unmerged-PR must FAIL (false-VERIFIED)"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase transition_release_log | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: VERIFIED+unmerged must mark FAIL (#1681)"; failures=$((failures+1)); }
+
+  # (c) DEPLOYED row → normal transition to VERIFIED (regression guard). Needs a
+  #     sandbox RELEASE_LOG with a DEPLOYED row for slug=88-some-milestone.
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.93 | 88-some-milestone | #1 | #4242 | sha | v9.93 | DEPLOYED | 2026-06-28 |
+EOF
+  GH="$_td_stub_merged"; STATE_LOG_ROW_STATE="DEPLOYED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_release_log >/dev/null 2>&1
+  [[ "$(get_phase transition_release_log)" == PASS\|* ]] || { echo "FAIL: transition DEPLOYED row must PASS (normal transition), got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| v9\.93 \| 88-some-milestone \|.*\| VERIFIED \|' "$RELEASE_LOG" || { echo "FAIL: DEPLOYED→VERIFIED transition must flip the v9.93 row state"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_td_tmp" 2>/dev/null || true
+  GH="$_td_saved_gh"; MODE="$_td_saved_mode"; STATE_LOG_ROW_STATE="$_td_saved_state"
+  PR_NUMBER="$_td_saved_pr"; REPO_SLUG="$_td_saved_slug"; RELEASE_LOG="$_td_saved_log"
+  STATE_MILESTONE_SLUG="$_td_saved_msslug"; VERSION="$_td_saved_version"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4g: phase_ledger_guard + phase_reparse_ledgers (#1680) — offline,
+  # hermetic via a REAL local git sandbox (a working repo + a `origin` bare remote
+  # so `git_net diff origin/main` / `git_net show origin/main:...` resolve without
+  # a network). Asserts: a clean additive working-tree diff → guard PASS; a diff
+  # that REMOVES a foreign version row (I1 contention) → guard FAIL; a diff that
+  # regresses a prior VERIFIED row (I2) → guard FAIL; a well-formed merged corpus →
+  # reparse PASS; a malformed corpus (8-col INDEX row OR duplicate DIGEST H3) →
+  # reparse FAIL. git is REQUIRED for this test — if absent, the block self-skips.
+  if [[ -x "$GIT" ]]; then
+    local _lg_saved_root="$REPO_ROOT" _lg_saved_mode="$MODE" _lg_saved_version="$VERSION"
+    local _lg_saved_skipped="$CHORE_PR_SKIPPED" _lg_saved_nomerge="$NO_MERGE"
+    local _lg_tmp; _lg_tmp="$(/usr/bin/mktemp -d -t ledgerguard-selftest.XXXXXX)"
+    local _lg_origin="$_lg_tmp/origin.git" _lg_work="$_lg_tmp/work"
+    # Build a bare origin + a working clone seeded with a baseline corpus carrying
+    # MY version (v9.91) AND a sibling (v9.90), all committed on main.
+    $GIT init --bare -q "$_lg_origin" 2>/dev/null
+    $GIT init -q -b main "$_lg_work" 2>/dev/null || { $GIT init -q "$_lg_work"; ( cd "$_lg_work" && $GIT checkout -q -b main 2>/dev/null ); }
+    /bin/mkdir -p "$_lg_work/release/releases/notes"
+    /bin/cat > "$_lg_work/release/releases/RELEASE_INDEX.md" <<'EOF'
+# RELEASE_INDEX
+
+| Version | Milestone | Date | Theme | Release PR | Release Notes |
+|---|---|---|---|---|---|
+| v9.91 | 91-mine | 2026-06-28 | — | #9100 | [notes/v9.91_RELEASE_NOTES.md](notes/v9.91_RELEASE_NOTES.md) |
+| v9.90 | 90-sibling | 2026-06-27 | sibling | #9000 | [notes/v9.90_RELEASE_NOTES.md](notes/v9.90_RELEASE_NOTES.md) |
+EOF
+    /bin/cat > "$_lg_work/release/releases/RELEASE_DIGEST.md" <<'EOF'
+# RELEASE_DIGEST
+
+## Knowledge Corpus
+
+### v9.91 (2026-06-28) — Mine
+### v9.90 (2026-06-27) — Sibling
+EOF
+    /bin/cat > "$_lg_work/release/releases/RELEASE_LOG.md" <<'EOF'
+# RELEASE_LOG
+| v9.91 | 91-mine | #1 | #9100 | sha | v9.91 | VERIFIED | 2026-06-28 |
+| v9.90 | 90-sibling | #2 | #9000 | sha | v9.90 | VERIFIED | 2026-06-27 |
+EOF
+    /usr/bin/printf '# Changelog\n\n## [v9.91] - 2026-06-28\nmine\n\n## [v9.90] - 2026-06-27\nsibling\n' > "$_lg_work/CHANGELOG.md"
+    ( cd "$_lg_work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm baseline >/dev/null 2>&1 \
+      && $GIT remote add origin "$_lg_origin" >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 \
+      && $GIT branch -q --set-upstream-to=origin/main main >/dev/null 2>&1 ) || true
+
+    REPO_ROOT="$_lg_work"; MODE="apply"; VERSION="v9.91"; CHORE_PR_SKIPPED=0; NO_MERGE=0
+
+    # (a) clean additive diff (touch only MY rows): re-write MY DIGEST headline +
+    #     MY INDEX theme — additive-style edit to my own entries → guard PASS.
+    /usr/bin/sed -i.bak 's/### v9.91 (2026-06-28) — Mine/### v9.91 (2026-06-28) — Mine updated/' "$_lg_work/release/releases/RELEASE_DIGEST.md" 2>/dev/null; /bin/rm -f "$_lg_work/release/releases/RELEASE_DIGEST.md.bak"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_ledger_guard >/dev/null 2>&1
+    [[ "$(get_phase ledger_guard)" == PASS\|* ]] || { echo "FAIL: ledger_guard must PASS on a clean my-own-rows diff, got '$(get_phase ledger_guard)'"; failures=$((failures+1)); }
+
+    # (b) I1 contention: REMOVE the sibling v9.90 INDEX row → guard FAIL.
+    ( cd "$_lg_work" && $GIT checkout -q -- . 2>/dev/null )   # reset working tree to baseline
+    /usr/bin/sed -i.bak '/^| v9.90 | 90-sibling |/d' "$_lg_work/release/releases/RELEASE_INDEX.md" 2>/dev/null; /bin/rm -f "$_lg_work/release/releases/RELEASE_INDEX.md.bak"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_ledger_guard >/dev/null 2>&1; then
+      echo "FAIL: ledger_guard must FAIL when a foreign (v9.90) INDEX row is removed (I1 contention)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase ledger_guard | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: I1 foreign-row removal must mark ledger_guard FAIL"; failures=$((failures+1)); }
+
+    # (c) I2 regression: regress the sibling v9.90 LOG row VERIFIED→DEPLOYED → FAIL.
+    ( cd "$_lg_work" && $GIT checkout -q -- . 2>/dev/null )
+    /usr/bin/sed -i.bak 's/| v9.90 | 90-sibling | #2 | #9000 | sha | v9.90 | VERIFIED |/| v9.90 | 90-sibling | #2 | #9000 | sha | v9.90 | DEPLOYED |/' "$_lg_work/release/releases/RELEASE_LOG.md" 2>/dev/null; /bin/rm -f "$_lg_work/release/releases/RELEASE_LOG.md.bak"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_ledger_guard >/dev/null 2>&1; then
+      echo "FAIL: ledger_guard must FAIL when a prior VERIFIED row (v9.90) regresses to DEPLOYED (I2)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase ledger_guard | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: I2 VERIFIED→DEPLOYED regression must mark ledger_guard FAIL"; failures=$((failures+1)); }
+    ( cd "$_lg_work" && $GIT checkout -q -- . 2>/dev/null )
+
+    # (d) reparse: well-formed merged corpus (origin/main as-seeded) → PASS.
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_reparse_ledgers >/dev/null 2>&1
+    [[ "$(get_phase reparse_ledgers)" == PASS\|* ]] || { echo "FAIL: reparse_ledgers must PASS on a well-formed merged corpus, got '$(get_phase reparse_ledgers)'"; failures=$((failures+1)); }
+
+    # (e) reparse FAIL: push a MALFORMED corpus to origin/main (duplicate DIGEST H3
+    #     for my version) → reparse FAIL.
+    /usr/bin/printf '### v9.91 (2026-06-28) — Mine DUP\n' >> "$_lg_work/release/releases/RELEASE_DIGEST.md"
+    ( cd "$_lg_work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm dup >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 ) || true
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_reparse_ledgers >/dev/null 2>&1; then
+      echo "FAIL: reparse_ledgers must FAIL on a duplicate DIGEST H3 (concurrent-merge dup)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase reparse_ledgers | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: duplicate DIGEST H3 must mark reparse_ledgers FAIL"; failures=$((failures+1)); }
+
+    /bin/rm -rf "$_lg_tmp" 2>/dev/null || true
+    REPO_ROOT="$_lg_saved_root"; MODE="$_lg_saved_mode"; VERSION="$_lg_saved_version"
+    CHORE_PR_SKIPPED="$_lg_saved_skipped"; NO_MERGE="$_lg_saved_nomerge"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  else
+    echo "  (skipped #1680 ledger-guard/reparse self-test — git not executable at $GIT)" >&2
+  fi
+
+  # Test 4h: MERGE_SHA capture + tag↔SHA identity assertion (#1682) — offline,
+  # hermetic. Part 1 (capture) stubs $GH so `pr view --json mergeCommit` returns a
+  # fixed oid and asserts phase_read_state populates MERGE_SHA. Part 2 (identity)
+  # uses a real local git sandbox with a tag at a known commit pushed to origin,
+  # and a $GH stub (release view fails → create path; release create records its
+  # args) to assert: tag-at-MERGE_SHA → publish PASS + `--target <sha>` on the
+  # create command; tag-at-different-SHA → publish FAIL (identity mismatch).
+  local _ms_saved_gh="$GH" _ms_saved_pr="$PR_NUMBER" _ms_saved_slug="$REPO_SLUG" _ms_saved_mergesha="$MERGE_SHA"
+
+  # Part 1 — capture
+  local _ms_tmp; _ms_tmp="$(/usr/bin/mktemp -d -t mergesha-selftest.XXXXXX)"
+  local _ms_cap_stub="$_ms_tmp/gh-cap.sh"
+  /bin/cat > "$_ms_cap_stub" <<'STUB'
+#!/usr/bin/env bash
+# pr view --json mergeCommit → fixed oid; api milestones → state; else empty.
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "feedfacecafebeadfeedfacecafebeadfeedface"; exit 0; fi
+if [[ "$1" == "api" ]]; then echo "closed"; exit 0; fi
+exit 0
+STUB
+  /bin/chmod +x "$_ms_cap_stub"
+  GH="$_ms_cap_stub"; PR_NUMBER="5151"; REPO_SLUG="x/y"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_read_state >/dev/null 2>&1
+  [[ "$MERGE_SHA" == "feedfacecafebeadfeedfacecafebeadfeedface" ]] || { echo "FAIL: phase_read_state must capture MERGE_SHA from the release PR, got '$MERGE_SHA'"; failures=$((failures+1)); }
+
+  # Part 2 — identity assertion (needs git)
+  if [[ -x "$GIT" ]]; then
+    local _ms_saved_root="$REPO_ROOT" _ms_saved_mode="$MODE" _ms_saved_version="$VERSION" _ms_saved_notesdir="$RELEASE_NOTES_DIR"
+    local _ms_origin="$_ms_tmp/origin.git" _ms_work="$_ms_tmp/work"
+    $GIT init --bare -q "$_ms_origin" 2>/dev/null
+    $GIT init -q -b main "$_ms_work" 2>/dev/null || { $GIT init -q "$_ms_work"; ( cd "$_ms_work" && $GIT checkout -q -b main 2>/dev/null ); }
+    /bin/mkdir -p "$_ms_work/release/releases/notes"
+    /usr/bin/printf -- '---\nversion: v9.89\n---\n\n# Real headline\n\nbody\n' > "$_ms_work/release/releases/notes/v9.89_RELEASE_NOTES.md"
+    local _ms_commit
+    ( cd "$_ms_work" \
+      && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t commit -qm seed >/dev/null 2>&1 \
+      && $GIT -c user.email=t@t -c user.name=t tag -a -m v9.89 v9.89 >/dev/null 2>&1 \
+      && $GIT remote add origin "$_ms_origin" >/dev/null 2>&1 \
+      && $GIT push -q origin main >/dev/null 2>&1 \
+      && $GIT push -q origin v9.89 >/dev/null 2>&1 ) || true
+    _ms_commit="$( cd "$_ms_work" && $GIT rev-list -n1 v9.89 2>/dev/null )"
+
+    # $GH stub: release view → fail (State 0 / create path); release create → ok +
+    # record its argv so we can assert --target was passed; ls-remote is git_net.
+    local _ms_argfile="$_ms_tmp/create-args"
+    local _ms_pub_stub="$_ms_tmp/gh-pub.sh"
+    /bin/cat > "$_ms_pub_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then exit 1; fi
+if [[ "\$1" == "release" && "\$2" == "create" ]]; then printf '%s\n' "\$*" > "$_ms_argfile"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_ms_pub_stub"
+    GH="$_ms_pub_stub"; REPO_ROOT="$_ms_work"; MODE="apply"; VERSION="v9.89"
+    RELEASE_NOTES_DIR="$_ms_work/release/releases/notes"
+
+    # (a) tag-at-MERGE_SHA → PASS + --target on the create command
+    MERGE_SHA="$_ms_commit"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    [[ "$(get_phase publish_github_release)" == PASS\|* ]] || { echo "FAIL: publish must PASS when the tag == MERGE_SHA, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF -- "--target $_ms_commit" "$_ms_argfile" 2>/dev/null || { echo "FAIL: gh release create must include '--target <MERGE_SHA>' (#1682 non-optional bind)"; failures=$((failures+1)); }
+
+    # (b) tag-at-different-SHA → FAIL (identity mismatch)
+    MERGE_SHA="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    if phase_publish_github_release >/dev/null 2>&1; then
+      echo "FAIL: publish must FAIL when the tag points at a different SHA than MERGE_SHA (#1682 identity mismatch)"; failures=$((failures+1))
+    fi
+    [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: tag↔MERGE_SHA mismatch must mark publish FAIL"; failures=$((failures+1)); }
+
+    REPO_ROOT="$_ms_saved_root"; MODE="$_ms_saved_mode"; VERSION="$_ms_saved_version"; RELEASE_NOTES_DIR="$_ms_saved_notesdir"
+  else
+    echo "  (skipped #1682 identity-assertion self-test — git not executable at $GIT)" >&2
+  fi
+
+  /bin/rm -rf "$_ms_tmp" 2>/dev/null || true
+  GH="$_ms_saved_gh"; PR_NUMBER="$_ms_saved_pr"; REPO_SLUG="$_ms_saved_slug"; MERGE_SHA="$_ms_saved_mergesha"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
@@ -1685,6 +2873,61 @@ EOF
   ! check_parser_clean "resolves #999" || { echo "FAIL: parser-clean should reject 'resolves #999'"; failures=$((failures+1)); }
   ! check_parser_clean "does not close #234" || { echo "FAIL: parser-clean should reject negated form 'close #234' (lexical, not semantic)"; failures=$((failures+1)); }
   check_parser_clean "mark #234 as closed" || { echo "FAIL: parser-clean should ACCEPT safe phrasing 'mark #N as closed'"; failures=$((failures+1)); }
+
+  # Test 5.5: phase_lint_release_notes — §3.2 note-content close gate (#2082).
+  # Hermetic: point REPO_ROOT at a sandbox carrying a STUB lint script whose
+  # exit code + output we control, then assert the phase's version-scoped
+  # block/proceed decision. The stub stands in for lint_release_corpus.py so the
+  # test exercises the CALLER's grep-scoping logic without touching the live
+  # corpus (the lint's own checks are covered by the linter's own tests).
+  local _ln_saved_root="$REPO_ROOT" _ln_saved_version="$VERSION"
+  local _ln_tmp; _ln_tmp="$(/usr/bin/mktemp -d -t lintnotes-selftest.XXXXXX)"
+  /bin/mkdir -p "$_ln_tmp/core/deploy/tools"
+  local _ln_stub="$_ln_tmp/core/deploy/tools/lint_release_corpus.py"
+  # Stub reads desired exit code from env LN_EXIT and prints LN_OUT verbatim.
+  /bin/cat > "$_ln_stub" <<'STUB'
+import os, sys
+sys.stdout.write(os.environ.get("LN_OUT", ""))
+sys.exit(int(os.environ.get("LN_EXIT", "0")))
+STUB
+  REPO_ROOT="$_ln_tmp"; VERSION="v9.99"
+  # Reset phase tallies so get_phase reads only this test's marks.
+  local _ln_saved_names=("${PHASE_NAMES[@]:-}") _ln_saved_results=("${PHASE_RESULTS[@]:-}") _ln_saved_details=("${PHASE_DETAILS[@]:-}")
+
+  # (a) clean corpus (exit 0) → PASS
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=0 LN_OUT="" phase_lint_release_notes >/dev/null 2>&1 || true
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: lint_release_notes clean corpus (exit 0) must PASS"; failures=$((failures+1)); }
+
+  # (b) finding for THIS version (exit 1) → FAIL (close BLOCKED)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/v9.99_RELEASE_NOTES.md lacks section" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: lint_release_notes must return non-zero (BLOCK) on a finding for THIS version"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: lint_release_notes this-version finding must mark FAIL"; failures=$((failures+1)); }
+
+  # (c) finding ONLY for a DIFFERENT version (exit 1) → PASS (out-of-scope legacy debt)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  LN_EXIT=1 LN_OUT="NOTE-6A-MISSING: release/releases/notes/v2.19_RELEASE_NOTES.md lacks section" phase_lint_release_notes >/dev/null 2>&1 || { echo "FAIL: lint_release_notes must NOT block on another version's pre-existing finding"; failures=$((failures+1)); }
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: lint_release_notes other-version-only finding must PASS (audit-baseline)"; failures=$((failures+1)); }
+
+  # (d) path-resolution failure (exit 3) → FAIL (unverifiable; fail-loud)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if LN_EXIT=3 LN_OUT="CORPUS-PATH-UNRESOLVED: notes dir does not resolve" phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: lint_release_notes must BLOCK (non-zero) on exit-3 path-unresolved"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase lint_release_notes | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: lint_release_notes exit-3 must mark FAIL (fail-loud, not vacuous pass)"; failures=$((failures+1)); }
+
+  # (e) missing lint tooling → FAIL (never a silent skip)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -f "$_ln_stub"
+  if phase_lint_release_notes >/dev/null 2>&1; then
+    echo "FAIL: lint_release_notes must FAIL when the lint tooling is missing"; failures=$((failures+1))
+  fi
+
+  /bin/rm -rf "$_ln_tmp" 2>/dev/null || true
+  REPO_ROOT="$_ln_saved_root"; VERSION="$_ln_saved_version"
+  PHASE_NAMES=("${_ln_saved_names[@]:-}"); PHASE_RESULTS=("${_ln_saved_results[@]:-}"); PHASE_DETAILS=("${_ln_saved_details[@]:-}")
 
   # Test 6: corpus-path resolution — HARD assertion (not a soft WARN).
   # The four corpus paths are what every --apply phase mutates; if the script is
@@ -1723,7 +2966,7 @@ EOF
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,67p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -1765,7 +3008,15 @@ EOF
   echo "  validate_version + extract_major validated" >&2
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
   echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
-  echo "  extract_row_state + extract_milestone_slug validated" >&2
+  echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
+  echo "  extract_row_state + extract_milestone_slug validated (incl. #667 F2 bare theme-named slug → title)" >&2
+  echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
+  echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
+  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
+  echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
+  echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition)" >&2
+  echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
+  echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
@@ -1834,6 +3085,12 @@ while [[ $# -gt 0 ]]; do
     --json) OUTPUT="json"; shift ;;
     --with-pattern-scan) WITH_PATTERN_SCAN=1; shift ;;
     --reversion) REVERSION_SPEC="$2"; shift 2 ;;
+    --outcome) OUTCOME="$2"; shift 2 ;;
+    --outcome-rationale) OUTCOME_RATIONALE="$2"; shift 2 ;;
+    --exclude-issue) EXCLUDE_ISSUES+=("$2"); shift 2 ;;
+    --close-comment) CLOSE_COMMENTS+=("$2"); shift 2 ;;
+    --merge-timeout) MERGE_TIMEOUT="$2"; shift 2 ;;
+    --no-merge) NO_MERGE=1; shift ;;
     --self-test) SELF_TEST=1; shift ;;
     --check-paths) CHECK_PATHS=1; shift ;;
     --help|-h) usage ;;
@@ -1860,19 +3117,24 @@ phase_read_state || { generate_report; exit 3; }
 phase_detect_open_issues || { generate_report; exit 2; }
 phase_create_chore_branch || { generate_report; exit 3; }
 phase_transition_release_log || { generate_report; exit 3; }
+phase_inject_outcome_field || { generate_report; exit 3; }            # Phase 6.5 — **Outcome:** field on the visible-H4 Deployment Log block (#37)
 phase_append_release_index || { generate_report; exit 3; }
 phase_append_release_digest || { generate_report; exit 3; }
 phase_append_reversions || { generate_report; exit 3; }                # Phase 8.5 — re-version ledger (#1679; N/A on the common no-collision path)
 phase_scaffold_release_notes || { generate_report; exit 3; }
+phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
+phase_ledger_guard || { generate_report; exit 3; }                    # Phase 9.9 — pre-commit §220 I1/I2 read-modify-write guard (#1680)
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
+phase_reparse_ledgers || { generate_report; exit 3; }                 # Phase 12.5 — post-merge structural re-parse (#1680; detective-only)
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
+phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (detective-only; warn-mode never blocks)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
 
