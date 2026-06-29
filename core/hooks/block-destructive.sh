@@ -209,6 +209,9 @@ case "$TOOL_NAME" in
     fi
 
     # BLOCK-DESTRUCTIVE-007 — rm -rf Projects/ (legacy uppercase)
+    # repo-integrity: allow-projects-casing — this guard is an INTENTIONAL legacy-
+    # uppercase matcher; its Projects/ literals are by-design and file-exempt from
+    # the net-new Projects/ casing gate (repo-integrity.yml § projects-casing).
     if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?Projects/'; then
       block "BLOCK-DESTRUCTIVE-007" \
         "rm on Projects/ denied (legacy uppercase project directory; data loss risk)." \

@@ -899,3 +899,151 @@ jobs:
             exit 0
           fi
           exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 8 — Projects/ casing canonicalization (#135). Net-new capital-`P`
+  #          `Projects/` path references are stale-drift: the canonical homes are
+  #          `projects/_config/` (governance) and `projects/` (Layer-2). This gate
+  #          FAILs on a net-new capital-`P` `Projects/` path in agent-readable
+  #          corpus. Appended AFTER the #133 governance-file-map job (this is the
+  #          same-file contention resolution — #133 writes first, this job second).
+  #
+  #          Precision (no false-positives on the historical "Projects" concept):
+  #            - NET-NEW DELTA only — pre-existing corpus `Projects/` references
+  #              (prose, the legacy guard, dated changelog entries) are never
+  #              re-scanned, so the gate fires only on NEW drift.
+  #            - The match requires a trailing `/` (a PATH, not the prose word
+  #              "Projects") and a non-identifier char before the `P` (so
+  #              `myProjects/` / `subProjects/` do not match).
+  #            - The `Projects/[Project]/` operator-instance schema literal is
+  #              content-exempt (a stable placeholder token, never genuine drift).
+  #            - The `release/releases/*` ledger surface is path-exempt (release
+  #              plans/notes legitimately quote the historical path when describing
+  #              the canonicalization work), mirroring the other gates' ledger
+  #              exemption.
+  #            - WHOLE-FILE override: a file carrying `repo-integrity:
+  #              allow-projects-casing` anywhere is skipped — the named legitimate-
+  #              uppercase files (core/hooks/block-destructive.sh + its test) carry
+  #              this marker, per the #135 prework allowlist.
+  #          Scope: changed `*.md` PLUS the two named legitimate `.sh` hook files
+  #          (so the allowlisted guard is in-scope and demonstrably file-exempted).
+  #          Warn-mode-initial per core/rules/bypass-mode-readiness.md.
+  #
+  #          Injection-safety: BASE_SHA/HEAD_SHA bound via env: and used as "$VAR".
+  # ---------------------------------------------------------------------------
+  projects-casing:
+    name: Projects/ casing canonicalization gate
+    runs-on: ubuntu-latest
+    env:
+      WARN_MODE: 'true'   # warn-mode initial; flip to 'false' to enforce after shakedown
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+
+      - name: Scan added lines for net-new capital-P Projects/ path references
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Whole-file override marker (any comment form — HTML or bare).
+          OVERRIDE='repo-integrity:[[:space:]]*allow-projects-casing'
+          # Capital-P Projects/ as a PATH: not preceded by an identifier char or a
+          # dot or a slash (so subProjects/, ../Projects not matched as a fresh
+          # token), followed immediately by the canonical-drift `/`.
+          CASING_RE='(^|[^A-Za-z0-9._/])Projects/'
+          # The operator-instance schema literal is content-exempt.
+          SCHEMA_EXEMPT='Projects/\[Project\]'
+
+          # Scope: changed *.md PLUS the two named legitimate-uppercase hook files
+          # (in-scope so the allowlist marker is demonstrably honored).
+          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          FILES=()
+          for f in "${ALL_CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            case "$f" in
+              release/releases/*) continue ;;  # ledger surface — exempt (mirrors the other gates)
+              *.md) FILES+=("$f") ;;
+              core/hooks/block-destructive.sh|core/hooks/tests/block-destructive.test.sh) FILES+=("$f") ;;
+              *) : ;;  # out of scope
+            esac
+          done
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo ":white_check_mark: Projects/ casing — no in-scope changed files" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          FOUND=0
+          REPORT=""
+          for f in "${FILES[@]}"; do
+            # whole-file override
+            if grep -qE "$OVERRIDE" "$f"; then
+              echo "::notice::repo-integrity projects-casing: $f carries allow-projects-casing — file-exempt." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            # NET-NEW DELTA: only lines ADDED since the base, keyed by head-file line.
+            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+              | awk '
+                /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+                /^\+\+\+/ { next }
+                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+                /^-/ { next }
+              ' || true)"
+            [ -z "$ADDED_LINES" ] && continue
+
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              [ -z "$entry" ] && continue
+              LN="${entry%%:*}"
+              line="${entry#*:}"
+              # capital-P Projects/ present?
+              printf '%s' "$line" | grep -qE "$CASING_RE" || continue
+              # content-exempt: the operator-instance schema literal
+              if printf '%s' "$line" | grep -qE "$SCHEMA_EXEMPT"; then
+                # exempt ONLY if every Projects/ occurrence on the line is the schema literal;
+                # strip the schema literal and re-test for any remaining bare Projects/.
+                residual="$(printf '%s' "$line" | sed -E 's#Projects/\[Project\][^[:space:]]*##g')"
+                printf '%s' "$residual" | grep -qE "$CASING_RE" || continue
+              fi
+              FOUND=1
+              REPORT="${REPORT}${f}:${LN}: ${line}"$'\n'
+            done <<< "$ADDED_LINES"
+          done
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: Projects/ casing — no net-new capital-P Projects/ path references on added lines" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: Projects/ casing canonicalization gate FAILED"
+            echo ""
+            echo "A changed file introduces a net-new capital-\`P\` \`Projects/\` path reference."
+            echo "The canonical homes are \`projects/_config/\` (governance) and \`projects/\` (Layer-2)."
+            echo ""
+            echo "### Net-new findings (file:line):"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+            echo ""
+            echo "### Fix"
+            echo ""
+            echo "Use the lowercase canonical path: \`projects/_config/\` for governance files,"
+            echo "\`projects/\` for Layer-2 operational content. See CLAUDE.md § Platform vs. Working Content Boundary."
+            echo ""
+            echo "### Exemptions (already handled)"
+            echo ""
+            echo "- The \`Projects/[Project]/\` operator-instance schema literal is content-exempt."
+            echo "- \`release/releases/*\` ledger files are path-exempt."
+            echo "- An intentional legacy-uppercase line: add \`<!-- repo-integrity: allow-projects-casing -->\` anywhere in the file."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "::warning::Projects/ casing gate (warn-mode initial): findings reported, not blocking. Flip WARN_MODE to 'false' to enforce after shakedown."
+            exit 0
+          fi
+          exit 1
