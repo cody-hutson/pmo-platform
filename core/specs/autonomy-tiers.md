@@ -3,7 +3,7 @@ title: Autonomy Tier Classification
 purpose: Canonical classification of agent action autonomy from full-human-control through autonomous execution; consumed by SKILL.md frontmatter, governance approval gates, and downstream PreToolUse hooks.
 applies_to: All PMO skills, future SKILL.md `autonomy_tier:` frontmatter, CLAUDE.md autonomy section, `engagement-charter.md`, `autonomous-execution-model.md`, future PreToolUse hooks.
 parallel_to: reversibility-protocol.md (orthogonal — autonomy = WHO acts; reversibility = HOW MUCH ceremony per act); composes per `decision-discipline.md` § 2 cross-framework pattern.
-disambiguates_from: Document Tier (CLAUDE.md File Management Protocol), Skill Tier (OPERATIONS.md skill classification), Automation Tier (`pipeline/` + 10 schemas) — see § Tier Disambiguation Table.
+disambiguates_from: Document Tier (CLAUDE.md File Management Protocol), Skill Tier (OPERATIONS.md skill classification), Automation Tier (`pipeline/` + 10 schemas), Hierarchy Tier (CLAUDE.md Context File Hierarchy) — see § Tier Disambiguation Table.
 source: "autonomy-tiers-and-self-repair; operator D-3 decision 2026-05-04 (explicit prefixed terminology, Tier 0-3 numbering manual→autonomous)."
 ---
 <!-- reference-durability: allow-link -->
@@ -13,7 +13,7 @@ source: "autonomy-tiers-and-self-repair; operator D-3 decision 2026-05-04 (expli
 
 ## Purpose
 
-This document establishes the canonical Autonomy Tier classification — a 4-tier framework (Tier 0 Manual through Tier 3 Autonomous) classifying agent action autonomy by per-instance authorization signature. Consumed by SKILL.md frontmatter (future outbound), governance approval gates, PreToolUse hooks (TBD outbound), and audit gates (`pmo-qa-auditor` successor). Pairs orthogonally with `reversibility-protocol.md` (autonomy = WHO acts under what authorization; reversibility = HOW MUCH ceremony per act). Disambiguated from three other tier conventions (Document Tier, Skill Tier, Automation Tier) per § Tier Disambiguation Table.
+This document establishes the canonical Autonomy Tier classification — a 4-tier framework (Tier 0 Manual through Tier 3 Autonomous) classifying agent action autonomy by per-instance authorization signature. Consumed by SKILL.md frontmatter (future outbound), governance approval gates, PreToolUse hooks (TBD outbound), and audit gates (`pmo-qa-auditor` successor). Pairs orthogonally with `reversibility-protocol.md` (autonomy = WHO acts under what authorization; reversibility = HOW MUCH ceremony per act). Disambiguated from four other tier conventions (Document Tier, Skill Tier, Automation Tier, Hierarchy Tier) per § Tier Disambiguation Table.
 
 ## Definition
 
@@ -111,7 +111,7 @@ When two tiers are plausible, apply these tests in order:
 
 ## Tier Disambiguation Table
 
-Per operator D-3 decision 2026-05-04: explicit prefixed terminology throughout. The platform has FOUR distinct tier conventions; never use bare "Tier N" without the disambiguating prefix.
+Per operator D-3 decision 2026-05-04: explicit prefixed terminology throughout. The platform has FIVE distinct tier conventions; never use bare "Tier N" without the disambiguating prefix.
 
 | Tier name | Range | Surface | Concept | Example |
 |---|---|---|---|---|
@@ -119,10 +119,15 @@ Per operator D-3 decision 2026-05-04: explicit prefixed terminology throughout. 
 | **Skill Tier** | 1-2 | `OPERATIONS.md` § Skill Tiers | skill role classification (PPM/Comms/Delivery = Tier 1; Technical/Process/Change = Tier 2) | Tier 1 = ppm-agent, comms-writer, delivery-engine; Tier 2 = pmo-technical-analyst, pmo-process-designer |
 | **Automation Tier** | 1-3 | `pipeline/` + 10 schema docs (gate-evaluation-spec.md, gate-criteria-spec.md, stage-io-contracts.md, etc.) | per-stage execution model (Tier 1 Auto, Tier 2 Recommend, Tier 3 Human-only) | Stage 1 Intake = Tier 1; Stage 4 Planning = Tier 2; Stage 9 Plan Review = Tier 3 |
 | **Autonomy Tier** | 0-3 | `core/specs/autonomy-tiers.md` (this file) | agent action autonomy (Tier 0 Manual → Tier 3 Autonomous) | Tier 0 = Stage 9 GO; Tier 1 = comms-writer draft; Tier 2 = tracker-manager scoped write; Tier 3 = Stage 6 Engineering per plan |
+| **Hierarchy Tier** | 1 / 1.5 / 1.7 / 1.8 / 2 / 3 / 4 (sub-decimal) | `CLAUDE.md` § Context File Hierarchy | context-file read-precedence (more-specific overrides less-specific) | Tier 1 = CLAUDE.md (Director); Tier 1.5 = RELEASE_PROTOCOL.md; Tier 2 = OPERATIONS.md; Tier 3 = PROJECT.md; Tier 4 = PORTFOLIO.md |
 
 > **⚠ Critical inversion warning:** Automation Tier and Autonomy Tier use *inverted* numerical orderings. Automation Tier 1 = highest automation (Auto); Autonomy Tier 3 = highest automation (Autonomous). When citing tiers across files, always use the prefixed terminology (e.g., "Automation Tier 1" or "Autonomy Tier 3") — never bare "Tier 1" / "Tier 3" — because the numeric value alone is ambiguous between the two conventions.
 
-**Implementation note:** every existing or new file referencing any of the four conventions MUST use the prefixed terminology. Cross-file consistency is enforced at PR review (Stage 9) and downstream by grep-based audit gates (deferred to a future audit milestone — out of scope for this release).
+> **⚠ Collision note (Hierarchy Tier ↔ Document Tier):** Hierarchy Tier and Document Tier both use bare integers in the 1–4 range over governance/context documents, so a bare "Tier 2" is ambiguous between Document Tier 2 (Daily Status Log) and Hierarchy Tier 2 (OPERATIONS.md). This is a *namespace overlap* (same digits, different concept) — distinct from the Automation↔Autonomy *inversion* above (which inverts the ordering, not the digit space). Disambiguate by always prefixing ("Hierarchy Tier 2" vs "Document Tier 2"); note also that the sub-decimal values (1.5 / 1.7 / 1.8) are a Hierarchy-Tier-only signature Document Tier never uses, so any decimal tier is unambiguously Hierarchy Tier.
+
+**Implementation note:** every existing or new file referencing any of the five conventions MUST use the prefixed terminology. Cross-file consistency is enforced at PR review (Stage 9) and downstream by grep-based audit gates (deferred to a future audit milestone — out of scope for this release).
+
+**Conventions intentionally NOT in this table (named/categorical — no numeric collision):** four further platform conventions carry the word "tier" but use named or categorical values with no integer form, so they cannot collide numerically and are out of scope for this numeric-disambiguation table: **Reversibility Tier** (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE — `reversibility-protocol.md`), the **auto-invocation / confidence tier** (HIGH / MEDIUM / LOW — file-router routing), the **intake-template tier** (Proposal / Observation — `improvement.yml` vs `observation.yml`), and the **Placement Tier** (categorical: Workspace-global / Program-scoped / Project-scoped — CLAUDE.md § Governance File Map). Each is named-not-numbered; prefix the word "tier" with its convention name in prose, but no row is needed here because there is no bare-integer ambiguity to resolve.
 
 ## Irreducible Human Tasks
 
