@@ -219,7 +219,7 @@ When a protocol shipping in version `vX.Y` lands inside a stage shard (typically
 
 ```markdown
 **Cutover:** <protocol name> applies to releases entering Stage N strictly AFTER the v<X.Y> merge SHA
-recorded in [`release/releases/RELEASE_LOG.md`](../../release/releases/RELEASE_LOG.md).
+recorded in [`RELEASE_LOG.md`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>).
 **The v<X.Y> release itself is exempt** (the rule shipping in v<X.Y> cannot fire on its own
 Stage N without creating a reflexive-pipeline loop).
 ```
