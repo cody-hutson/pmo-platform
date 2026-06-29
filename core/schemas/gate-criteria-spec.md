@@ -1,5 +1,6 @@
 <!-- repo-integrity: allow-issue-ref -->
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Gate Criteria Specification
 
 Defines three named gates across the triage lifecycle — Triage Readiness, Workflow Readiness, Release Readiness — with structured criteria for validation, automation routing, and self-repair.

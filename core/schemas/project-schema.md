@@ -58,7 +58,7 @@ custom_methodology_definition:
   cadence: string                          # REQUIRED — free-form cadence description
   notes: string                            # OPTIONAL — rationale + known trade-offs
 
-# Deliverable-domain axis — NEW (#351 keystone) — orthogonal to delivery_approach
+# Deliverable-domain axis — NEW (keystone) — orthogonal to delivery_approach
 deliverable_type: software | governance | web | data | enterprise-platform | hardware | process | <lowercase-kebab>
                                            # OPTIONAL on legacy, REQUIRED forward — the kind of work the
                                            # project delivers (what), orthogonal to delivery_approach (how it is governed).
@@ -190,7 +190,7 @@ Optional on legacy files, **required forward**. Names the **deliverable domain**
 
 **Orthogonal to `delivery_approach`.** `deliverable_type` is *what is built*; `delivery_approach` is *how it is governed*. A `deliverable_type: software` project may run `delivery_approach: Scrum`, `Waterfall`, or any archetype — the axes combine freely. They are not redundant and neither implies the other.
 
-**Authoritative source for the Stage-4 `domain:` label.** Where present, this field is the authoritative source the Stage-4 Planning `domain:` class field reads (`release/references/pipeline/stage-04-planning.md` § 5.7 — the field that field's forward-reference anticipated). Consumer skills and gate criteria branch on `deliverable_type` → the matching domain guide via the §5A Domain-Axis Consumption Pattern in [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md). `[SOURCE]` — `stage-04-planning.md` `domain:` forward-reference; #344 (shipped) consumes this enum.
+**Authoritative source for the Stage-4 `domain:` label.** Where present, this field is the authoritative source the Stage-4 Planning `domain:` class field reads (`release/references/pipeline/stage-04-planning.md` § 5.7 — the field that field's forward-reference anticipated). Consumer skills and gate criteria branch on `deliverable_type` → the matching domain guide via the §5A Domain-Axis Consumption Pattern in [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md). `[SOURCE]` — `stage-04-planning.md` `domain:` forward-reference; the shipped intake-side domain representation consumes this enum.
 
 #### Disambiguation — `deliverable_type` vs. the other `domain`-named concepts
 
@@ -291,7 +291,7 @@ Skills MUST NOT silently work around validation failures by defaulting to an arc
 
 ### References
 
-- #351 — PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-049 for the placement + open-enum decision.
+- PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-049 for the placement + open-enum decision.
 - Org-structure + team-roster expansion — adds the `org_structure_type` and `team_roster` fields to the schema (the org-structure shape + the project-altitude people-graph index), defined by the two V-rules after the keystone (**V14 + V15**). `delivery_model` is NOT added — it resolves to the existing required `delivery_approach`.
 
 ## 6. Examples
