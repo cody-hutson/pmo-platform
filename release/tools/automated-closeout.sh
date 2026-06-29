@@ -61,9 +61,13 @@
 #                              exit cleanly leaving the PR for the operator
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
-#     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
-#                              resolve, 1 otherwise. CI smoke-gate primitive — no
-#                              git remote / gh / network call.
+#     --check-paths            Resolve the four corpus paths (offline). Exit 0 if all
+#                              resolve; 1 if a path is missing while the corpus root
+#                              IS present (a real re-pathing defect); 0 (N/A) when the
+#                              corpus root itself is absent (operator-instance not
+#                              present — fresh clone / CI), per the instance-absence
+#                              convention (Check 26 / pmo_instance_path). CI smoke-gate
+#                              primitive — no git remote / gh / network call.
 #     --help, -h               Print this help
 #
 # Hook compatibility (per bypass-mode-readiness.md):
@@ -3028,10 +3032,14 @@ STUB
 # ─── Corpus path-resolution probe (offline; CI smoke gate) ───────────────────
 #
 # OFFLINE by construction: stats the four corpus paths and exits 0 (all resolve)
-# or 1 (any missing/wrong-type). Touches NO git remote and NO gh/network call, so
-# the CI smoke job is deterministic and credential-free. This is the hard-fail
-# path-resolution check the smoke gate runs to catch re-pathing drift (the
-# migration-drift failure mode) BEFORE the next release does.
+# or 1 (a path is missing/wrong-type WHILE the corpus root is present — a real
+# re-pathing defect). When the corpus root itself is absent (operator-instance not
+# present — fresh clone / CI), it records N/A and exits 0, mirroring the
+# instance-absence convention (Check 26 / pmo_instance_path) — absence is not a
+# defect. Touches NO git remote and NO gh/network call, so the CI smoke job is
+# deterministic and credential-free. This is the path-resolution check the smoke
+# gate runs to catch re-pathing drift (the migration-drift failure mode) BEFORE
+# the next release does.
 check_paths() {
   local rc=0
   local label path kind
@@ -3042,7 +3050,23 @@ check_paths() {
     "RELEASE_DIGEST|$RELEASE_DIGEST|file"
     "RELEASE_NOTES_DIR|$RELEASE_NOTES_DIR|dir"
   )
-  echo "check-paths: resolving corpus paths under $REPO_ROOT" >&2
+  # Instance-absent tolerance: the corpus is operator-instance content, absent in
+  # a fresh clone / CI. When the corpus ROOT directory itself does not resolve,
+  # there is no instance to probe — record N/A and exit 0, rather than HARD-FAIL.
+  # This mirrors the instance-absence handling in deploy.sh Check 26 /
+  # lib-instance-path.sh::pmo_instance_path(): absence is N/A, not a defect. The
+  # corpus root is the shared parent of the corpus paths (RELEASE_LOG's directory
+  # == RELEASE_NOTES_DIR's parent). When the root IS present, a missing path is a
+  # genuine re-pathing defect and still HARD-FAILS below.
+  local corpus_root
+  # `|| true` keeps the assignment from tripping `set -e` when the corpus root is
+  # absent (the `cd` fails on purpose → empty corpus_root → the N/A branch below).
+  corpus_root="$( cd "$( dirname "$RELEASE_LOG" )" 2>/dev/null && pwd )" || true
+  if [[ -z "$corpus_root" || ! -d "$corpus_root" ]]; then
+    echo "check-paths: N/A — corpus root absent (operator-instance not present; fresh clone / CI). Nothing to probe; exiting 0 per the instance-absence convention (Check 26 / pmo_instance_path)." >&2
+    exit 0
+  fi
+  echo "check-paths: resolving corpus paths under $corpus_root" >&2
   local entry
   for entry in "${checks[@]}"; do
     label="${entry%%|*}"
