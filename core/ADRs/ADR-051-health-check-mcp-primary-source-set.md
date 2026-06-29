@@ -6,7 +6,7 @@ tags: [health-check, mcp-source-set, graceful-degradation, drift-resolution, int
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-050 — health-check MCP-primary / local-fallback canonical source set + graceful-degradation contract
+# ADR-051 — health-check MCP-primary / local-fallback canonical source set + graceful-degradation contract
 
 ## Status
 

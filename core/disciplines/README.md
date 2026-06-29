@@ -59,6 +59,7 @@ Authoring sub-mechanism (not a peer activity-class — the default posture when 
 |---|---|
 | [context-lifecycle-model.md](context-lifecycle-model.md) | 5-state lifecycle for inbound content (Captured → Structured → Reviewed → Decided → Closed) + per-state stall detection. |
 | [concurrency-safeguards.md](concurrency-safeguards.md) | Detection, prevention, and recovery conventions for concurrent writes across Layer 1 / 2 / 3 file surfaces. |
+| [lifecycle-tailoring.md](lifecycle-tailoring.md) | The platform's PMBOK-7 lifecycle tailoring: why the 3 agent states (ACTIVE/CLOSING/CLOSED) for cadence + granular PROJECT.md phase timelines for reporting are a deliberate, documented tailoring of the canonical 5-process-group model — citing five-function-spine for the group definitions, not redefining them. Includes a research-PMO alternative. |
 
 ## Document ecosystem
 

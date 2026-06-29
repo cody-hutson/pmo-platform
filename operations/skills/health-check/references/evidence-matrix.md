@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 # Health-Check Evidence Matrix
 
-The source map per mode and the drift-resolution rule the modes apply. The canonical source set, the drift-resolution direction, and the graceful-degradation envelope are owned by [ADR-050](../../../../core/ADRs/ADR-050-health-check-mcp-primary-source-set.md) — this doc maps which sources each mode reads and summarizes the rule for the author; it does not re-decide it.
+The source map per mode and the drift-resolution rule the modes apply. The canonical source set, the drift-resolution direction, and the graceful-degradation envelope are owned by [ADR-051](../../../../core/ADRs/ADR-051-health-check-mcp-primary-source-set.md) — this doc maps which sources each mode reads and summarizes the rule for the author; it does not re-decide it.
 
 ## Canonical source set
 
@@ -22,7 +22,7 @@ The source map per mode and the drift-resolution rule the modes apply. The canon
 | `raid` (v2) | Jira (risk/issue tickets) | RAID Log | Closure candidates · orphan IDs |
 | `sources` (v2) | All connectors (freshness probe) | `PROJECT.md` sync timestamps | External freshness vs recorded sync |
 
-## Drift-resolution rule (MCP-primary, local-fallback — per ADR-050)
+## Drift-resolution rule (MCP-primary, local-fallback — per ADR-051)
 
 When an MCP source and a local source disagree:
 
@@ -32,7 +32,7 @@ When an MCP source and a local source disagree:
 | MCP & local disagree, **local more recent** | Flag **MCP** for update — **higher priority** (audience-facing drift is worse) | `S2` / `S3` |
 | **Both stale** | Flag the conflict to the operator in `## Decisions`; **do not auto-resolve** | per finding |
 
-## Graceful degradation (the missing-source behavior — per ADR-050)
+## Graceful degradation (the missing-source behavior — per ADR-051)
 
 1. At run start, **probe each expected MCP connector.** An unreachable connector → the run continues **local-only** for that source's checks; it does not crash or silently skip.
 2. The output header carries `[MCP UNAVAILABLE: <connector>] — findings limited to local sources` so every consumer knows the coverage envelope.

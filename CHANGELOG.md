@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.21] - 2026-06-29
+
+Terminology and controlled-vocabulary canonicalization with no user-visible behavior change: the platform's terminology glossary is refreshed for AI-agent comprehension (discoverable frontmatter, the Role term anchored to the Autonomy-Tier framework, and first-class actor terms — Hub, Spoke, Skill, Sub-agent), the tier-disambiguation table is extended to cover Hierarchy Tier, and canonical Initiative/Roadmap definitions are added and reconciled with the live `epic:*` label namespace via a new decision record (ADR-049). Documentation / governance only — no data migration, no stored-content move, no schema or runtime change. novel class. Re-versioned v2.42 → v3.21 at the Stage-12 atomic claim (v3.20 mainline-spine frontier).
+
+### Added
+
+- **First-class actor terms in the glossary.** The terminology glossary now defines Hub, Spoke, Skill, and Sub-agent as first-class terms (plus discoverable frontmatter and the Role term anchored to the Autonomy-Tier framework), so an agent reading the corpus cold can resolve who-acts-at-which-tier from the glossary alone. ([#68](https://github.com/cody-hutson/pmo-platform/issues/68))
+- **Canonical Initiative and Roadmap terms.** Initiative (a multi-milestone grouping theme) and Roadmap (an architected path across milestones) are now canonical glossary terms, reconciled with the initiative-roadmap framework and the live `epic:*` label namespace, with a new decision record (ADR-049) capturing the canonical vocabulary and the `initiative:` → `epic:`/`project:` label mapping. ([#432](https://github.com/cody-hutson/pmo-platform/issues/432))
+
+### Changed
+
+- **Tier-disambiguation table extended to cover Hierarchy Tier.** The tier-disambiguation table in the autonomy-tiers spec now covers Hierarchy Tier alongside the other named tier conventions, stating each convention's disposition so the overlapping "tier" terms are resolvable from one table. ([#128](https://github.com/cody-hutson/pmo-platform/issues/128))
+
+[Full notes](release/releases/notes/v3.21_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.21)
+
 ## [v2.41] - 2026-06-29
 
 Internal governance-hygiene release with no user-visible behavior change: the root-cause-analysis method is wired by citation to every process surface that owns a failure, the release hub's rule-computed version-numbering step stops surfacing as an operator click-gate, and two reference-document accuracy issues are corrected. Documentation / governance / skill-text only — no data migration, no stored-content move, no schema or runtime change. routine class.

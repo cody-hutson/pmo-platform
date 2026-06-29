@@ -32,12 +32,12 @@ This skill consumes the **band scale** (`S0-NONE..S3-STRUCTURAL`) that `stalenes
 
 ## Inputs
 
-The skill reads a **canonical source set** — MCP-primary, local-fallback — governed by [ADR-050](../../../core/ADRs/ADR-050-health-check-mcp-primary-source-set.md). It does **not** restate the drift-resolution rule or the degradation envelope here; ADR-050 owns them and `references/evidence-matrix.md` maps source→mode.
+The skill reads a **canonical source set** — MCP-primary, local-fallback — governed by [ADR-051](../../../core/ADRs/ADR-051-health-check-mcp-primary-source-set.md). It does **not** restate the drift-resolution rule or the degradation envelope here; ADR-051 owns them and `references/evidence-matrix.md` maps source→mode.
 
 - **MCP-primary (audience-facing → authoritative):** Confluence (plans, on-call, hypercare), Jira (ticket state, due dates, assignees), Smartsheet (live operational trackers), SharePoint (test trackers, scoreboards — **when an MCP exists**; today it does not).
 - **Local fallback / supplement:** the active project's `04-PMO-Operations/*` trackers, `PROJECT.md`, `PORTFOLIO.md`, `05-Transcripts/`, `06-Emails/`, `08-Generated/`.
 
-**At run start the skill probes each expected MCP connector.** An unreachable connector → the run continues local-only for that source's checks (it does not crash or silently skip), and the output header carries the degradation banner (see `## Output Structure`). A finding that could not be cross-validated because its source was unavailable is capped at MEDIUM confidence and routed to `## Decisions`/`## Unknowns`, never `## Auto-Actionable` (ADR-050 §4).
+**At run start the skill probes each expected MCP connector.** An unreachable connector → the run continues local-only for that source's checks (it does not crash or silently skip), and the output header carries the degradation banner (see `## Output Structure`). A finding that could not be cross-validated because its source was unavailable is capped at MEDIUM confidence and routed to `## Decisions`/`## Unknowns`, never `## Auto-Actionable` (ADR-051 §4).
 
 **Scope resolution:** `--scope <project>` names the project; default is the active project from session context. The skill audits exactly one project per run.
 
@@ -115,7 +115,7 @@ Every run opens with a header line carrying: timestamp · mode · scope (project
 [MCP UNAVAILABLE: <connector>] — findings limited to local sources
 ```
 
-so every consumer knows the coverage envelope (ADR-050 §4). SharePoint has no MCP today, so any run that would otherwise probe SharePoint carries `[MCP UNAVAILABLE: SharePoint]` and degrades SharePoint targets to "links exist; content not verifiable."
+so every consumer knows the coverage envelope (ADR-051 §4). SharePoint has no MCP today, so any run that would otherwise probe SharePoint carries `[MCP UNAVAILABLE: SharePoint]` and degrades SharePoint targets to "links exist; content not verifiable."
 
 ### `## Auto-Actionable` emits `TRACKER_UPDATES:`
 
@@ -190,10 +190,10 @@ This skill consumes governed reference docs by role-name (duplicate-source-disci
 | Reference | Owner | What this skill reads from it |
 |---|---|---|
 | [`references/mode-intents.md`](references/mode-intents.md) | this skill | The queryable 4-intent declarations per mode (all 7; v1 modes implemented, v2 declared). |
-| [`references/evidence-matrix.md`](references/evidence-matrix.md) | this skill | The MCP + local source map per mode + the drift-resolution rule (citing ADR-050). |
+| [`references/evidence-matrix.md`](references/evidence-matrix.md) | this skill | The MCP + local source map per mode + the drift-resolution rule (citing ADR-051). |
 | [`references/confidence-framework.md`](references/confidence-framework.md) | this skill | The finding → confidence + S0–S3 band mapping (citing `staleness-confidence-standard.md`). |
 | [`core/specs/staleness-confidence-standard.md`](../../../core/specs/staleness-confidence-standard.md) | core (ADR-043) | The canonical 4-band depth scale this skill projects onto. Consumed, never forked. |
-| [`core/ADRs/ADR-050-health-check-mcp-primary-source-set.md`](../../../core/ADRs/ADR-050-health-check-mcp-primary-source-set.md) | core | The canonical source set + drift-resolution direction + graceful-degradation contract. |
+| [`core/ADRs/ADR-051-health-check-mcp-primary-source-set.md`](../../../core/ADRs/ADR-051-health-check-mcp-primary-source-set.md) | core | The canonical source set + drift-resolution direction + graceful-degradation contract. |
 | [`../tracker-manager/references/tracker-schemas.md`](../tracker-manager/references/tracker-schemas.md) | tracker-manager | The `TRACKER_UPDATES:` schema this skill emits (and tracker-manager consumes). |
 
 **Downstream consumers (existing — this skill is a producer to them):** `/tracker-manager` (consumes `TRACKER_UPDATES:`), `/comms-writer` (closes stale comms — status only), `/artifact-generator` (closes gaps), `/schedule` (scheduled path).
@@ -207,7 +207,7 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 - **Signature (observable signal):** A run hits an unreachable MCP connector, the header carries `[MCP UNAVAILABLE: <connector>]`, yet a finding that depended on that connector for cross-validation still lands in `## Auto-Actionable` with a `TRACKER_UPDATES:` row and a HIGH confidence label.
 - **Conditional:** do NOT place a finding in `## Auto-Actionable` when its only corroborating source was an unavailable MCP connector, because graceful degradation must reduce coverage, not silently downgrade rigor into an auto-action the operator never sees as single-sourced — an auto-actionable item is approved at a glance, so a degraded one launches a tracker write on uncorroborated evidence.
 - **Root cause:** The degradation path continues the run local-only and the local source alone looks authoritative; the missing-connector context is in the header, not on the finding, so at section-routing time the finding reads like any other single-local-source finding and the auto-actionable gate (HIGH-confidence, single-owner) passes mechanically.
-- **Mitigation:** Per ADR-050 §4, cap any finding uncross-validatable due to a missing source at MEDIUM confidence and route it to `## Decisions`/`## Unknowns` — never `## Auto-Actionable`. Tag the finding inline with the unavailable connector so the cap is traceable, not just implied by the header.
+- **Mitigation:** Per ADR-051 §4, cap any finding uncross-validatable due to a missing source at MEDIUM confidence and route it to `## Decisions`/`## Unknowns` — never `## Auto-Actionable`. Tag the finding inline with the unavailable connector so the cap is traceable, not just implied by the header.
 - **Principal response vs. junior response:** Principal writes "[confidence: MEDIUM · S2] owner-of-record disagrees with the local tracker; Jira unreachable this run so single-source — routing to Decisions [MCP UNAVAILABLE: Jira]" and the operator decides. Junior sees the local tracker, marks it HIGH, emits the `TRACKER_UPDATE`, and a tracker write fires on a value no second source confirmed.
 
 ### Single-source claim emitted as HIGH-confidence — INPUT

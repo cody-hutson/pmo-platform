@@ -17,7 +17,7 @@ A finding can be HIGH-confidence and shallow (`S1`), or LOW-confidence and deep 
 | Confidence | Earned when | Routes to |
 |---|---|---|
 | **HIGH** | ≥2 sources agree (MCP + local, or two locals) AND evidence is recent | eligible for `## Auto-Actionable` |
-| **MEDIUM** | a single authoritative source; OR MCP/local disagree but one is clearly more recent; OR a finding uncross-validatable because its source was unavailable (the ADR-050 cap) | `## Decisions` |
+| **MEDIUM** | a single authoritative source; OR MCP/local disagree but one is clearly more recent; OR a finding uncross-validatable because its source was unavailable (the ADR-051 cap) | `## Decisions` |
 | **LOW** | inferred via a chain; OR sources conflict with no clear recency winner; OR only stale evidence | `## Decisions` or `## Unknowns` |
 
 A single source — even an authoritative MCP system — is **MEDIUM by definition.** HIGH is reserved for corroboration; this is the guard against one stale system driving an auto-action.

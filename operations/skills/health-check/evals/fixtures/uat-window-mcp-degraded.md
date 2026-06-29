@@ -1,7 +1,7 @@
 <!-- Eval fixture — sanitized synthetic project state, MCP-degradation case. No real stakeholder names. -->
-# Fixture: UAT-window state with an unavailable MCP (ADR-050 degradation case)
+# Fixture: UAT-window state with an unavailable MCP (ADR-051 degradation case)
 
-A synthetic single-project state captured mid-UAT, with **Jira unreachable at run time**. Stakeholder names are sanitized placeholders. This fixture exercises the ADR-050 graceful-degradation contract: an uncross-validatable finding must cap at MEDIUM and never enter `## Auto-Actionable`, and the header banner must fire.
+A synthetic single-project state captured mid-UAT, with **Jira unreachable at run time**. Stakeholder names are sanitized placeholders. This fixture exercises the ADR-051 graceful-degradation contract: an uncross-validatable finding must cap at MEDIUM and never enter `## Auto-Actionable`, and the header banner must fire.
 
 ## Run condition
 

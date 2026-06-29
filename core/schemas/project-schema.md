@@ -23,7 +23,7 @@ The schema is **methodology-aware**. Prior to this release, a co-management bool
 
 ## 2. Scope
 
-**In scope.** All fields in the `PROJECT.md` frontmatter YAML block. Values, types, presence rules, and the reconciliation rules between legacy and new fields. The additions — `delivery_approach` and `custom_methodology_definition` — with full validation rules (V1-V12) and worked examples.
+**In scope.** All fields in the `PROJECT.md` frontmatter YAML block. Values, types, presence rules, and the reconciliation rules between legacy and new fields. The additions — `delivery_approach` and `custom_methodology_definition` — with full validation rules (V1-V15) and worked examples.
 
 **Out of scope.** Per-skill consumption rules (those live in each skill's own output-contract and in `methodology-parameterization-v1.md § Skill Consumption Pattern`). The matrix of per-archetype variation columns (lifecycle / ceremonies / artifacts / cadence) lives in `methodology-archetype-matrix.md`. Canonical term definitions for Process / Methodology / Framework live in `terminology-glossary.md`.
 
@@ -58,6 +58,25 @@ custom_methodology_definition:
   cadence: string                          # REQUIRED — free-form cadence description
   notes: string                            # OPTIONAL — rationale + known trade-offs
 
+# Deliverable-domain axis — NEW (keystone) — orthogonal to delivery_approach
+deliverable_type: software | governance | web | data | enterprise-platform | hardware | process | <lowercase-kebab>
+                                           # OPTIONAL on legacy, REQUIRED forward — the kind of work the
+                                           # project delivers (what), orthogonal to delivery_approach (how it is governed).
+                                           # OPEN enum: a recognized class OR a non-empty lowercase-kebab string
+                                           # (mirrors delivery_approach: Custom openness). Authoritative source the
+                                           # Stage-4 `domain:` label reads where present (stage-04-planning.md).
+
+# Organizational structure — NEW
+org_structure_type: functional | matrix_weak | matrix_balanced | matrix_strong | projectized | virtual | hybrid | Custom
+                                           # OPTIONAL — PMBOK org-structure shape; default `functional` when absent.
+                                           # Closed enum + `Custom` escape (mirrors delivery_approach). Drives portfolio org-shape rollups.
+
+# Project team roster — NEW; the project-altitude INDEX into the people-graph (ADR-040 owner-ref pattern)
+team_roster:                               # OPTIONAL — list of {person_ref, role_on_project}; REFS ONLY, no inline PII
+  - person_ref: ref→Person.person_id       # REQUIRED per entry — resolves to a roster Person (compose, never copy)
+    role_on_project: string                # REQUIRED per entry — the person's role ON THIS project
+  # ... one entry per team member ...
+
 # Other per-project fields (per existing skill conventions — not introduced by )
 # ... e.g., stakeholder roster, go-live date, systems, governance model, Dual-Framing Bridge section trigger ...
 ---
@@ -74,6 +93,9 @@ Field presence rules summary:
 | `dual_framing_enabled` | ⚪ Optional | — |
 | `delivery_approach` | ✅ Always | — (new) |
 | `custom_methodology_definition` | Conditional | ✅ iff `delivery_approach: Custom`; ❌ otherwise |
+| `deliverable_type` | ⚪ Optional (legacy) / ✅ Required (forward) | open enum: recognized class OR non-empty lowercase-kebab; additive on legacy files |
+| `org_structure_type` | ⚪ Optional | default `functional` when absent (new) |
+| `team_roster` | ⚪ Optional | when present, every entry is `{person_ref → Person.person_id, role_on_project}`; refs only (new) |
 
 ## 4. Field Reference
 
@@ -162,9 +184,67 @@ Required. Non-empty free-form string describing the cadence (e.g., `"2-week spri
 
 Optional. Free-form string. Rationale, known trade-offs, governance-promotion candidacy notes. Consumed as methodology-context hint by verbose-mode skill outputs.
 
+### `deliverable_type`
+
+Optional on legacy files, **required forward**. Names the **deliverable domain** — *what kind of work the project delivers* (a website build, an ERP customization, a code-review engagement, a governance corpus). **Open enum**, shape-validated (not a closed set): a recognized class — `software` | `governance` | `web` | `data` | `enterprise-platform` | `hardware` | `process` — OR a non-empty lowercase-kebab string for a domain not yet recognized, exactly mirroring `delivery_approach: Custom` openness. An unrecognized-but-well-formed value is itself the demand signal for authoring a domain guide (`core/standards/domain-best-practices/<x>.md`), per the Stage-4 expansion rule.
+
+**Orthogonal to `delivery_approach`.** `deliverable_type` is *what is built*; `delivery_approach` is *how it is governed*. A `deliverable_type: software` project may run `delivery_approach: Scrum`, `Waterfall`, or any archetype — the axes combine freely. They are not redundant and neither implies the other.
+
+**Authoritative source for the Stage-4 `domain:` label.** Where present, this field is the authoritative source the Stage-4 Planning `domain:` class field reads (`release/references/pipeline/stage-04-planning.md` § 5.7 — the field that field's forward-reference anticipated). Consumer skills and gate criteria branch on `deliverable_type` → the matching domain guide via the §5A Domain-Axis Consumption Pattern in [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md). `[SOURCE]` — `stage-04-planning.md` `domain:` forward-reference; the shipped intake-side domain representation consumes this enum.
+
+#### Disambiguation — `deliverable_type` vs. the other `domain`-named concepts
+
+The bare word `domain` is overloaded across the platform; `deliverable_type` is the deliberately **non-colliding** name for the deliverable-domain axis. This note fixes the boundaries once (modeled on the §7 `dual_framing_enabled`-vs-`delivery_approach` Collision Check):
+
+| Concept | What it is | Where it lives | Relation to `deliverable_type` |
+|---|---|---|---|
+| **`deliverable_type`** | *What kind of deliverable a project produces* (project-level) | `project-schema.md` §3 frontmatter | — (this field) |
+| `work_item_type` | *Declarative discriminator for a work-item kind* (story/task/bug/spike), the **domain-neutral methodology→hierarchy map** | `work-item-type-schema.md` | **Does NOT extend it.** Orthogonal: a `deliverable_type: software` project still contains `work_item_type: story` items. `deliverable_type` is a PROJECT-level frontmatter field; it is never a type-pack grammar entry (ADR-018 `core/`-independence kernel). |
+| artifact-provenance `domain: A\|B\|C` | Three-domain artifact classification | `frontmatter-schema.md` Category 6 | **Distinct.** A per-artifact provenance tag, not a project-level deliverable class. |
+| content-area `delivery/{domain}` | Obsidian content-area tag (`governance`/`design`/`testing`/…) | `frontmatter-schema.md` Tag Taxonomy | **Distinct.** A content-filing tag, not a deliverable class. |
+| Stage-4 `domain:` class field | Abstract deliverable-domain signal consumed by the impact-analysis selector / guides / guide-index | `stage-04-planning.md` § 5.7 | **Consumes `deliverable_type`.** The Stage-4 field reads `deliverable_type` as its authoritative source where present (the reconciliation seam). |
+
+Renaming the shipped artifact-provenance and content-area `domain` fields is **pre-existing naming-debt, OUT OF SCOPE** for this axis — flagged separately, not addressed here.
+
+### `org_structure_type`
+
+Optional. Enum — one of 7 PMBOK organizational-structure archetypes + a `Custom` escape (lowercase-kebab values, case-sensitive; `Custom` title-case to match `delivery_approach: Custom`):
+
+| Value | PMBOK org-structure meaning |
+|---|---|
+| `functional` | Functional org; PM has little/no authority, resources report to functional managers |
+| `matrix_weak` | Weak matrix; PM role is coordinator/expediter, functional managers hold authority |
+| `matrix_balanced` | Balanced matrix; authority shared between PM and functional managers |
+| `matrix_strong` | Strong matrix; PM has significant authority, dedicated PM staff |
+| `projectized` | Projectized org; PM has high authority, team dedicated to the project |
+| `virtual` | Virtual/network org; coordination across distributed/contracted nodes |
+| `hybrid` | Mixed structure combining ≥2 of the above across the org |
+| `Custom` | Escape hatch — an org shape not captured by the closed enum; free-form value documented in the project's own context |
+
+**Default.** When absent, consumers treat the project as `functional` (the PMBOK baseline — lowest PM authority, the conservative assumption for portfolio rollups). The default is documented, not silent: a consumer rendering an org-shape rollup states `[ASSUMPTION] org_structure_type absent — defaulting to functional`.
+
+**Consumer use.** Portfolio rollups (`weekly-status-rollup`, `pmo-portfolio-manager`) compare org shape across projects; alignment/escalation consumers read PM-authority level from the value. `[SOURCE]` — PMBOK 6th ed. organizational-structure-influence table (functional → projectized authority spectrum); enum shape mirrors `delivery_approach`.
+
+### `team_roster`
+
+Optional. A list of project-team membership entries — the **project-record-level projection** of "who is on this project's team" into the people-graph. Each entry is a 2-field object:
+
+| Sub-field | Required | Type | Semantics |
+|---|---|---|---|
+| `person_ref` | ✅ | `ref → Person.person_id` | Resolves to a roster Person (the `person_id` deduplication anchor, ADR-040). Refs **only**. |
+| `role_on_project` | ✅ | string | The person's role on THIS project (e.g., `Tech Lead`, `BA`, `QA`). |
+
+**Compose-not-duplicate (load-bearing).** `team_roster` is an **index into** the people-graph, not a copy of it. An entry resolves to a `person_id`; capability, coverage, allocation %, and identity (`full_name`, `primary_role`) are **read through** the ref against Person / Resource / the operator-instance roster (`people-coverage-graph.md` three-query view) — **never copied inline**. An entry MUST NOT carry an inline `name`, `full_name`, `allocation_pct`, capability tags, or any Person/Resource attribute. The discriminating test: *entry resolves to a `person_id` (compose ✅) vs. carries its own person attributes (duplicate 🟥)*. Inlining a name forks the never-committed roster — a **PII-commit hazard** (the roster is operator-instance and never committed; an inline name in a tracked schema file leaks it) — and duplicates the frozen Resource entity (`{person_id, project_id, allocation_pct, role_on_project}`, `project-entity-model.md` §4 Resource entity).
+
+**Relationship to Resource.** `role_on_project` intentionally mirrors the Resource field of the same name. `team_roster` is the **lightweight project-record membership list** (who is on the team, by ref); Resource is the **frozen allocation entity** (the same membership PLUS `allocation_pct` / period). They are two projections of the one `person_id` identity — `team_roster` is the PROJECT.md-frontmatter-level index; Resource is the entity-model-level allocation record. `team_roster` does NOT re-model Resource; it references the same people. (Re-modeling team membership as a new entity would touch the frozen 18-entity model → Tier-2 SCOPE CHANGE — explicitly out of scope.)
+
+**Seed path (replaces `## Key People` prose).** `team_roster` replaces the free-text `## Key People` markdown table (`operations/templates/project-md-template.md`, columns `Person | Role | Comm Style / Notes`). Migration seeds each prose row into a `team_roster` entry by **resolving the `Person` cell by name against the people-roster** to a `person_id` (the same resolve-by-name migration ADR-040 defines for `project_owner`): a unique match becomes the `person_ref`; the prose `Role` cell becomes `role_on_project`; zero or ambiguous (≥2) matches route to the operator clarification queue (`people-coverage-graph.md` §3.2), never silently dropped. Comm-style notes are functional-roster attributes (read through the ref), not copied into `team_roster`.
+
+**Reconciliation with the Stakeholder Register.** `team_roster`, the Stakeholder Register, and the frozen Resource entity are **three distinct projections of one `person_id` identity** — they join on the same anchor and MUST NOT be conflated. `team_roster` = **team membership** (who is on the delivery team). Stakeholder Register = **engagement** (interest/influence/desired-engagement + decision authority, for stakeholders who may NOT be team members). Resource = **allocation** (membership + allocation %). A person can be in all three, one, or any combination; each answers a different question. Keep the schemas consistent by keying all three on `person_id`; do not merge them. `[SOURCE]` — Stakeholder Register schema (joins on `person_id`); ADR-040 (`person_id` anchor).
+
 ## 5. Validation Rules
 
-Twelve rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
+Fifteen rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
 
 | ID | Rule | Blocks | Level |
 |---|---|---|---|
@@ -180,8 +260,11 @@ Twelve rules governing schema conformance. Enforcement level `structural (auto)`
 | **V10** | `custom_methodology_definition.artifacts` is a non-empty list of strings (min 1 entry) | — | structural (auto) — **AC-R2** |
 | **V11** | `custom_methodology_definition.cadence` is a non-empty string | — | structural (auto) — **AC-R2** |
 | **V12** | `custom_methodology_definition.notes` is either absent OR a string (may be empty `""`) | — | structural (auto) |
+| **V13** | `deliverable_type` is EITHER **absent** (legacy file — additive, the field is optional on pre-existing PROJECT.md), OR a non-empty string matching **one of** the recognized classes `{software, governance, web, data, enterprise-platform, hardware, process}` (lowercase, case-sensitive) **OR** the open-escape shape `^[a-z]+(-[a-z0-9]+)*$` (a non-empty lowercase-kebab string — mirrors `delivery_approach: Custom` openness; an unrecognized-but-well-formed value is valid and is the guide-authoring demand signal). The field is **required on forward (newly-scaffolded) PROJECT.md files** and **optional on legacy files**; absence on a legacy file is conformance, not a defect. | schema parse + skill branch | structural (auto) |
+| **V14** | `org_structure_type`, when present, is one of `{functional, matrix_weak, matrix_balanced, matrix_strong, projectized, virtual, hybrid}` (lowercase-kebab, case-sensitive) OR the literal `Custom`. Absent is valid (consumers default to `functional`). | skill branch | structural (auto) |
+| **V15** | `team_roster`, when present, is a list where **every** entry is an object with EXACTLY the keys `{person_ref, role_on_project}` and no others — `person_ref` is a `ref → Person.person_id` and `role_on_project` is a non-empty string. **(V15-a)** no entry carries any key outside `{person_ref, role_on_project}` (no inline `name`/`allocation_pct`/Person-or-Resource attribute — the no-inline-PII invariant). **(V15-b)** each `person_ref` resolves against the people-roster `person_id` anchor: an unresolved ref → **BLOCK-WRITE**; a ref flagged external (not in roster) → **WARN-HEALTH** (per ADR-040 L2 disposition). | schema parse + skill branch | structural (auto) for V15-a (closed key-set, frontmatter-only); ref-resolution (V15-b) is a write-time check |
 
-**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule, so the V-series tail remains **V12**. The next V-numbers, **V13 and V14, are reserved** for the PROJECT.md-schema keystone (the first-class domain / deliverable-type axis) and the org-structure / delivery-model / team-roster card respectively, which append to the V12 tail when that later schema-expansion milestone is built (see References). No existing rule is renumbered.
+**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule. The `deliverable_type` deliverable-domain axis is defined by **V13** (appended to the V12 tail; no existing rule renumbered). The org-structure shape and the project-altitude people-graph index are defined by **V14 + V15** — `org_structure_type` (V14) and `team_roster` (V15) — appended to the post-V13 tail (see References). `delivery_model` is **not** a field — it resolves to the existing required `delivery_approach`, so no rule is added for it. No existing rule is renumbered.
 
 ### 5.1 Custom Block Completeness (operationalizes AC-R2)
 
@@ -198,7 +281,7 @@ This block-completeness assertion is the single-test AC-R2 gate. Stage 8 QA runs
 
 ### 5.2 Validation-failure handling
 
-A PROJECT.md that fails any V1-V12 assertion is **malformed**. Consumer skills encountering a malformed PROJECT.md MUST:
+A PROJECT.md that fails any V1-V15 assertion is **malformed** (V13/V14/V15 join the malformed-file set with the same surface-the-failing-rule-ID + route-to-`project-initiator` Mode C handling; absence of an optional field — `deliverable_type` on a legacy file, `org_structure_type`, or `team_roster` — is conformance per its rule, not a failure). Consumer skills encountering a malformed PROJECT.md MUST:
 
 1. Refuse to produce methodology-parameterized output.
 2. Surface the specific failing rule ID to the operator.
@@ -208,12 +291,12 @@ Skills MUST NOT silently work around validation failures by defaulting to an arc
 
 ### References
 
-- #351 — PROJECT.md-schema keystone: adds a first-class domain / deliverable-type axis to the schema; reserves the next V-rule (V13) off the V12 tail when its milestone is built.
-- #262 — adds org-structure, delivery-model, and team-roster fields to the schema; reserves the V-rule after the keystone (V14).
+- PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-050 for the placement + open-enum decision.
+- Org-structure + team-roster expansion — adds the `org_structure_type` and `team_roster` fields to the schema (the org-structure shape + the project-altitude people-graph index), defined by the two V-rules after the keystone (**V14 + V15**). `delivery_model` is NOT added — it resolves to the existing required `delivery_approach`.
 
 ## 6. Examples
 
-Four worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V12 assertions applicable to its `delivery_approach` value.
+Five worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V15 assertions applicable to its `delivery_approach` value.
 
 ### 6.1 Scrum (minimal — enum-matched, no Custom block)
 
@@ -321,6 +404,32 @@ delivery_approach: [Scrum, Kanban]
 **Validation trace:** V1 ✓ (field present), V2 ✓ — **array branch**: 2 elements (V2-a length == 2 ✓), `Scrum ≠ Kanban` (V2-b distinct ✓), both members ∈ the 6-set `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe}` (V2-c ✓; neither is `Hybrid`/`Custom`). V3 N/A (not `Custom`), V4 ✓ (no `custom_methodology_definition` block), V5-V12 N/A.
 
 **Array vs. Custom (which form to use).** This is the **array** family, NOT a second Custom example. Use the array `[A, B]` when two named archetypes run **as-is** (union of both, each native) — contrast §6.3, where Scrumban is a *fused* variant (Scrum ceremonies retained but estimation replaced with WIP-pull) and is therefore `Custom`. The two representations partition cleanly and are not redundant: **array** = two archetypes coexisting unmodified; **Custom** = a named modification/fusion. (The array-consumption logic — how a consumer renders dual-framed output from `[A, B]` — is specified in the [`methodology-parameterization-v1.md § Skill Consumption Pattern` CASE 1-ARRAY sub-branch](../../release/references/specs/methodology-parameterization-v1.md#case-1-array): one native section per constituent, union of primitives per work-org-mapping §2.5, phased-governs-gates / timeboxed-governs-iterations on contested surfaces.)
+
+### 6.6 `org_structure_type` + `team_roster` (the additive org-shape + people-graph-index fields)
+
+A balanced-matrix project declaring its org shape and a 3-member team by `person_id` ref. Both fields are additive — the example also passes all V1-V15 rules applicable to its `delivery_approach`.
+
+```yaml
+---
+project_name: Vendor Portal Modernization
+project_owner: p_okafor_m          # ref→Person.person_id (ADR-040)
+status: ACTIVE
+delivery_approach: Scrum
+deliverable_type: web              # from the keystone deliverable-domain axis
+org_structure_type: matrix_balanced
+team_roster:
+  - person_ref: p_okafor_m
+    role_on_project: Program Manager
+  - person_ref: p_singh_a
+    role_on_project: Tech Lead
+  - person_ref: p_torres_l
+    role_on_project: Business Analyst
+---
+```
+
+**Validation trace:** V1 ✓ (`delivery_approach` present), V2 ✓ (`Scrum` in enum), V3 N/A (not Custom), V4 ✓ (no Custom block), V5-V12 N/A, **V13 ✓** (`deliverable_type: web` — recognized class), **V14 ✓** (`org_structure_type: matrix_balanced` in enum), **V15 ✓** — `team_roster` is a list of 3 objects, each with EXACTLY `{person_ref, role_on_project}` (V15-a closed key-set ✓ — no inline names/allocation), each `person_ref` resolves against the roster (V15-b ✓), each `role_on_project` non-empty ✓.
+
+**Compose-not-duplicate note.** The roster carries only refs + project-roles. `p_singh_a`'s full name, capability tags, allocation %, and coverage edges are **read through** the ref against Person / Resource / the people-roster (`people-coverage-graph.md` who-does-what query) — never copied into PROJECT.md. This is the no-inline-PII invariant V15-a enforces: the schema cannot hold a roster name, so an accidental commit cannot leak one.
 
 ## 7. Migration Notes — Field Rename
 

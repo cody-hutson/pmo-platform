@@ -24,7 +24,7 @@ For each seeded drift in a fixture, the per-mode judge returns PASS only if the 
 
 **PASS = all seeded drifts correctly categorized AND zero seeded-clean items false-flagged.** A mode that finds the drift but mis-routes it (e.g., a single-source finding shipped as `## Auto-Actionable`) FAILS.
 
-## The MCP-degradation case (exercises ADR-050)
+## The MCP-degradation case (exercises ADR-051)
 
 One fixture (`fixtures/uat-window-mcp-degraded.md`) marks an MCP source unavailable. Its judge asserts (a) the header banner `[MCP UNAVAILABLE: <connector>]` fired, and (b) the finding that could not be cross-validated because that source was unavailable did **not** land in `## Auto-Actionable` (it is capped at MEDIUM and routed to `## Decisions`/`## Unknowns`). This is the drift-resolution + degradation rule under test.
 

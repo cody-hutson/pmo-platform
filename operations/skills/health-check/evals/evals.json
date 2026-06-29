@@ -1,6 +1,6 @@
 {
   "skill_name": "health-check",
-  "notes": "Per-mode binary-judge evals for the 3 v1 modes (full / timeline / attribution) plus the ADR-050 MCP-degradation case. Fixtures, per-mode judge prompts, and case section-membership specs live under fixtures/, judges/, and cases/. Stakeholder names in fixtures are sanitized. #1126 extends this set to the 4 v2 modes.",
+  "notes": "Per-mode binary-judge evals for the 3 v1 modes (full / timeline / attribution) plus the ADR-051 MCP-degradation case. Fixtures, per-mode judge prompts, and case section-membership specs live under fixtures/, judges/, and cases/. Stakeholder names in fixtures are sanitized. #1126 extends this set to the 4 v2 modes.",
   "evals": [
     {
       "id": 1,
@@ -27,7 +27,7 @@
       "id": 4,
       "name": "mcp-degradation-cap-and-banner",
       "prompt": "/health-check full --scope Synthetic-UAT  (against fixtures/uat-window-mcp-degraded.md; Jira UNREACHABLE at run start)",
-      "expected_output": "The run probes connectors at start, finds Jira unreachable, and emits the header banner '[MCP UNAVAILABLE: Jira] — findings limited to local sources'. The UAT exit date (PROJECT.md + tracker + Smartsheet agree; April 17 2026 is correctly a Friday) lands in ## Confirmed [confidence: HIGH · S0]. The defect-owner disagreement ([OWNER-D] vs [OWNER-E]) whose only tiebreaker (Jira assignee) is unreachable is CAPPED at MEDIUM and routed to ## Decisions with an inline [MCP UNAVAILABLE: Jira] tag — it does NOT appear in ## Auto-Actionable, and no TRACKER_UPDATES: block is emitted for it. HEADLINE ASSERTION: degradation reduced coverage (the finding moved to Decisions, MEDIUM) but did NOT silently downgrade rigor into auto-action (ADR-050 §4). PASS iff the banner fired, the degraded finding is MEDIUM in ## Decisions, and ## Auto-Actionable is empty of it. Judge: judges/full.md; case: cases/full-mcp-degraded.yaml.",
+      "expected_output": "The run probes connectors at start, finds Jira unreachable, and emits the header banner '[MCP UNAVAILABLE: Jira] — findings limited to local sources'. The UAT exit date (PROJECT.md + tracker + Smartsheet agree; April 17 2026 is correctly a Friday) lands in ## Confirmed [confidence: HIGH · S0]. The defect-owner disagreement ([OWNER-D] vs [OWNER-E]) whose only tiebreaker (Jira assignee) is unreachable is CAPPED at MEDIUM and routed to ## Decisions with an inline [MCP UNAVAILABLE: Jira] tag — it does NOT appear in ## Auto-Actionable, and no TRACKER_UPDATES: block is emitted for it. HEADLINE ASSERTION: degradation reduced coverage (the finding moved to Decisions, MEDIUM) but did NOT silently downgrade rigor into auto-action (ADR-051 §4). PASS iff the banner fired, the degraded finding is MEDIUM in ## Decisions, and ## Auto-Actionable is empty of it. Judge: judges/full.md; case: cases/full-mcp-degraded.yaml.",
       "files": ["fixtures/uat-window-mcp-degraded.md"]
     }
   ]

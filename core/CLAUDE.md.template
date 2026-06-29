@@ -307,7 +307,7 @@ All Claude-generated artifacts land here first. Promoted to target folder only o
 
 ## Autonomy Tier Classification
 
-The platform classifies agent actions by **Autonomy Tier** — the level of operator engagement required for a given action. Autonomy Tier is distinct from the **Document Tier** classification in the preceding File Management Protocol section: Document Tier classifies WHAT to write (RAID Log = Document Tier 1, Daily Status Log = Document Tier 2, etc.); Autonomy Tier classifies WHO acts under what authorization (full human control through autonomous execution). The canonical reference is [`pmo-platform/core/specs/autonomy-tiers.md`](core/specs/autonomy-tiers.md), which defines four tiers, observable indicators, examples, irreducible-human tasks, failure modes, and a cross-tier disambiguation table covering all four numerical tier conventions in the platform (Document Tier 1-4 / Skill Tier 1-2 / Automation Tier 1-3 / Autonomy Tier 0-3).
+The platform classifies agent actions by **Autonomy Tier** — the level of operator engagement required for a given action. Autonomy Tier is distinct from the **Document Tier** classification in the preceding File Management Protocol section: Document Tier classifies WHAT to write (RAID Log = Document Tier 1, Daily Status Log = Document Tier 2, etc.); Autonomy Tier classifies WHO acts under what authorization (full human control through autonomous execution). The canonical reference is [`pmo-platform/core/specs/autonomy-tiers.md`](core/specs/autonomy-tiers.md), which defines four tiers, observable indicators, examples, irreducible-human tasks, failure modes, and a cross-tier disambiguation table covering all five numerical-and-context tier conventions in the platform (Document Tier 1-4 / Skill Tier 1-2 / Automation Tier 1-3 / Autonomy Tier 0-3 / Hierarchy Tier 1–4 sub-decimal).
 
 | Autonomy Tier | Approval-gate behavior |
 |---|---|
@@ -325,6 +325,8 @@ Authoritative tier definitions, observable indicators, examples, irreducible-hum
 | `ACTIVE` | Live project | Full processing. Daily status, RAID updates, transcript processing. |
 | `CLOSING` | In hypercare/transition | Reduced cadence. Hypercare metrics, issue tracking, knowledge transfer. |
 | `CLOSED` | Complete, archived | Read-only reference. No operational processing. |
+
+The 3-state model governs agent cadence; granular per-project phase timelines (PROJECT.md "Phase Timeline") govern operational reporting. The rationale for this PMBOK-7 tailoring — and a worked research-PMO alternative — is documented in [`pmo-platform/core/disciplines/lifecycle-tailoring.md`](core/disciplines/lifecycle-tailoring.md).
 
 ## Session Management
 
