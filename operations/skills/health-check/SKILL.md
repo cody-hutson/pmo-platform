@@ -9,7 +9,6 @@ delivery_approach: advisory
 principal_standard_pass: PASS
 ---
 <!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-issue-ref -->
 
 # Health Check — Project-State Drift Auditor
 
@@ -44,17 +43,17 @@ The skill reads a **canonical source set** — MCP-primary, local-fallback — g
 
 ## Modes
 
-The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. v1 implements modes 1–3; modes 4–7 are declared here so the contract is complete and stable — **they are not implemented in v1** (they ship in #1126).
+The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. v1 implements modes 1–3; modes 4–7 are declared here so the contract is complete and stable — **they are not implemented in v1** (they ship in the v2 extended-modes slice).
 
 | # | Mode | Slice | What it audits |
 |---|---|---|---|
 | 1 | `full` | **v1** | The union of all per-mode surfaces — the default invocation; runs every other mode's checks. |
 | 2 | `timeline` | **v1** | Every surfaced date — tracked dates vs PROJECT.md / carry-forward / canonical schedule. |
 | 3 | `attribution` | **v1** | Every item's owner — recorded owner vs canonical owner. |
-| 4 | `comms` | v2 (#1126) | Communications Tracker vs sent/draft/ready lifecycle state. |
-| 5 | `plan <name>` | v2 (#1126) | One named plan — plan-promised vs trackers-reflected delta. |
-| 6 | `raid` | v2 (#1126) | RAID Log — closure candidates, orphan IDs, guardrail enforcement. |
-| 7 | `sources` | v2 (#1126) | The canonical-source set — external freshness + source-of-truth inventory. |
+| 4 | `comms` | v2 | Communications Tracker vs sent/draft/ready lifecycle state. |
+| 5 | `plan <name>` | v2 | One named plan — plan-promised vs trackers-reflected delta. |
+| 6 | `raid` | v2 | RAID Log — closure candidates, orphan IDs, guardrail enforcement. |
+| 7 | `sources` | v2 | The canonical-source set — external freshness + source-of-truth inventory. |
 
 The 4-intent declarations per mode live in [`references/mode-intents.md`](references/mode-intents.md) (the queryable form); the v1 modes are summarized below.
 
@@ -68,7 +67,7 @@ mode_full:
   confidence_intent: "Assertive on cross-source agreement; cautious on single-source claims."
 ```
 
-`full` runs the `timeline` and `attribution` checks (and, in #1126, the `comms`/`raid`/`sources` checks) and merges their findings into one 5-section report. It is the default when `/health-check` is invoked with no mode.
+`full` runs the `timeline` and `attribution` checks (and, in the v2 slice, the `comms`/`raid`/`sources` checks) and merges their findings into one 5-section report. It is the default when `/health-check` is invoked with no mode.
 
 ### Mode 2 — `timeline` (v1)
 

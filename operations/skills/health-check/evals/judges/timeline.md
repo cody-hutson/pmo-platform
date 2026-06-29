@@ -1,4 +1,5 @@
 <!-- Binary LLM judge — health-check `timeline` mode -->
+<!-- repo-integrity: allow-issue-ref -->
 # Judge: `timeline` mode (binary)
 
 You are grading the output of the `health-check` skill run in `timeline` mode against a seeded-drift fixture. Return **PASS** or **FAIL** with a one-line reason. Binary judge — no partial credit. `timeline`'s load-bearing behaviors are day-of-week validation and the refusal of generalized dates (#1125 AC-4).

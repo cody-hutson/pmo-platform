@@ -1,4 +1,5 @@
 <!-- Binary LLM judge — health-check `attribution` mode -->
+<!-- repo-integrity: allow-issue-ref -->
 # Judge: `attribution` mode (binary)
 
 You are grading the output of the `health-check` skill run in `attribution` mode against a seeded-drift fixture. Return **PASS** or **FAIL** with a one-line reason. Binary judge — no partial credit. `attribution`'s load-bearing behavior is flagging missing/unverifiable owners and never fabricating a replacement (#1125 AC-4 + the no-fabricated-owners guardrail).
