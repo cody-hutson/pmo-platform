@@ -183,6 +183,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP at ship (additive — revert the release PR; every addition ships a default and no existing field/row/enum is mutated), trending MODERATE once a downstream size-bound enforcement gate + `release-planner` wire into `effective_pts` and the weights are recalibrated.
 **File:** [ADR-027-release-bundle-risk-weight-keys-on-release-class.md](ADR-027-release-bundle-risk-weight-keys-on-release-class.md)
 
+## Terminology / vocabulary ADRs
+
+### ADR-049 — Canonical initiative / roadmap / milestone vocabulary + initiative→epic/project label mapping
+
+**Status:** Proposed (flips to Accepted at the Stage 9 review).
+**Decision:** Canonicalize `Initiative` (cross-milestone grouping theme, NOT a hierarchy level) and `Roadmap` (architected path across one-or-more initiatives; one-per-initiative is the default) as glossary terms; correct Appendix B's "Initiative not modeled"; reconcile the framework's "one initiative" scope to the canonical default-not-limit meaning; map the retired `initiative:*` label namespace to the live `epic:*` / `project:*` grouping labels. The glossary is SSOT for the wording; the framework + label-taxonomy cite, never re-define.
+**Reversibility:** MODERATE (governance-vocabulary ripple into framework + label-taxonomy; runtime = none — no code consumes the terms).
+**File:** [ADR-049-canonical-initiative-roadmap-vocabulary.md](ADR-049-canonical-initiative-roadmap-vocabulary.md)
+
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
 ### ADR-003 — Operating Model Composition
