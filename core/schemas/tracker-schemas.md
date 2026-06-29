@@ -329,6 +329,61 @@ Marking a milestone `Complete` REQUIRES a named **Evidence Artifact** cited on t
 
 ---
 
+## Tracker 8: Stakeholder Register
+**File pattern:** `[Project]_Stakeholder_Register.csv`
+**Update tier:** Tier 1 (stakeholder-facing — requires user approval for changes)
+**Update sources:** PPM Agent processing, Change Management (stakeholder analysis), user input
+
+The per-project **stakeholder engagement register** for the PMBOK 7 Stakeholder Performance Domain — one row per stakeholder, capturing identification, interest/influence classification, current vs. desired engagement, communication preferences, and the **typed decision authority** that graduates the SIOR escalation owner-resolution from free-text heuristic to structured lookup. The `Name` column is the project-altitude **engagement projection** of the people-graph: it resolves to the same `person_id` anchor as `team_roster` (membership projection) and the Resource entity (allocation projection) — three projections of one identity, never re-modeled inline.
+
+### Structure
+**Format:** CSV — one row per stakeholder.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Name | String | Yes | Free text (resolves to `Person.person_id`) | Stakeholder name. The engagement-projection join key into the people-graph (same anchor as `team_roster` + Resource). Names live in the operator-instance roster; the committed template carries `{{TOKEN}}` placeholders only. |
+| Role | String | Yes | Free text | The stakeholder's role / title on the project. |
+| Organization | String | Yes | Free text | Their org or department (internal team, vendor, customer). |
+| Interest | Integer | Yes | 1–5 | Level of interest in the project outcome (1 = minimal, 5 = high). |
+| Influence | Integer | Yes | 1–5 | Power to affect the project (1 = minimal, 5 = high). Interest × Influence drives the engagement-strategy quadrant. |
+| Engagement | Enum | Yes | `Unaware` \| `Resistant` \| `Neutral` \| `Supportive` \| `Leading` | Current engagement posture (PMBOK stakeholder engagement-assessment scale). |
+| Desired Engagement | Enum | Yes | `Unaware` \| `Resistant` \| `Neutral` \| `Supportive` \| `Leading` | Target posture; a gap between current and desired drives the engagement action. |
+| Comm Preference | String | Yes | Free text (e.g., Email, Teams, 1:1, SteerCo) | Preferred communication channel. |
+| Frequency | String | Yes | Free text (e.g., Weekly, Per-milestone, Ad hoc) | Communication cadence. |
+| Decision Owner | Enum | No | `yes` \| `no` (default `no`) | Marks this stakeholder as the typed decision owner for its `Authority` domain. Read by `sior-escalation-protocol.md` § Decision-Owner Mapping for structured owner-resolution (replaces the free-text `## Key People` heuristic + warn-route). |
+| Authority | Enum | No (**required when Decision Owner = `yes`**) | `schedule` \| `scope` \| `resource` \| `technical` \| `vendor` | The decision domain this stakeholder owns. The 5-domain set is identical to `sior-escalation-protocol.md` § Decision-Owner Mapping step 1, so the register is a drop-in structured source for that lookup. A `Decision Owner = yes` row with blank `Authority` is rejected (unresolvable domain). |
+| Notes | String | No | Free text | Additional context (constraints, sensitivities, history). |
+
+### Decision-Owner Resolution (SIOR upgrade)
+When `sior-escalation-protocol.md` § Decision-Owner Mapping needs a named owner for a decision domain, it looks up the row where `Decision Owner = yes` AND `Authority = <domain>` and names that stakeholder — a **structured** resolution. This supersedes the free-text `## Key People` heuristic + warn-route-to-PgM fallback for projects that maintain a Stakeholder Register; the free-text path remains the graceful degradation when no register exists.
+
+### person_id Consistency (with team_roster + Resource)
+`Name` (and any `Decision Owner` row) resolves to the **same `person_id`** that `team_roster` and the Resource entity join on. The three are distinct **projections** of one identity — Stakeholder Register = engagement + decision authority, `team_roster` = team membership, Resource = per-project allocation — and MUST NOT carry inline person attributes that fork the never-committed roster (the ADR-040 compose-not-duplicate invariant; a row that re-models person attributes is a duplicate, a row that resolves to a `person_id` is the compose).
+
+---
+
+## Tracker 9: RACI
+**File pattern:** `[Project]_RACI.md`
+**Update tier:** Tier 1 (stakeholder-facing — responsibility assignment; requires user approval for changes)
+**Update sources:** PPM Agent processing, Process Designer (role definition), user input
+
+The per-project **responsibility-assignment matrix** for the PMBOK 7 Stakeholder Performance Domain — a workstream/deliverable (rows) × role/person (columns) grid whose cells assign Responsible / Accountable / Consulted / Informed. RAEW (Responsible/Accountable/Expert/Work) and RAS variants are referenced alternatives, not the default. Column-header roles resolve to the same `person_id` anchor as Tracker 8 + `team_roster`.
+
+### Structure
+**Format:** Markdown table — rows = workstreams/deliverables, columns = roles; the body cells hold the RACI code.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Workstream / Deliverable | String | Yes | Free text | The row axis — a workstream, phase, or named deliverable the assignment covers. |
+| Role columns | Enum (per cell) | Yes | `R` \| `A` \| `C` \| `I` \| (blank) | One column per role/person; each cell is the RACI code. `R` = Responsible (does the work), `A` = Accountable (owns the outcome), `C` = Consulted (two-way input), `I` = Informed (one-way notification). |
+| (row constraint) | Rule | Yes | exactly one `A` per row | Each workstream row has **exactly one Accountable**. A row with zero or ≥2 `A` cells is malformed (prose-enforced convention — no machine linter). |
+| person_id mapping | Ref | Yes | each role column → `Person.person_id` | A companion "Person ↔ Role" block maps each column-header role to a `person_id` (same anchor as Tracker 8 + `team_roster`). Names live in the operator-instance roster; the committed template carries `{{TOKEN}}` placeholders. |
+
+### Accountability Rule (exactly one A)
+PMBOK/RACI discipline requires exactly one Accountable per workstream row. This is a documented convention checked at review (the platform has no RACI-specific machine validator — identical posture to the milestone-tracker gate rules, which are prose-enforced). A row violating it is flagged in review, not auto-rejected.
+
+---
+
 ## Extensibility
 To add a new tracker:
 1. Define schema in this file (columns, types, valid values)

@@ -34,8 +34,8 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 |---|---|---|---|
 | Communications Tracker | Log of stakeholder communications + cadence | `operations/templates/communications-tracker-template.md` | No |
 | Open Meetings Tracker | Log of stakeholder meetings + outstanding agenda items | `operations/templates/open-meetings-tracker-template.md` | No |
-| Stakeholder Register | Identification + classification + engagement strategy per stakeholder | (none) | YES — closure path: future release |
-| RACI / RAEW / RAS | Responsibility-assignment matrix | (none) | YES — closure path: future release |
+| Stakeholder Register | Identification + classification + engagement strategy per stakeholder | `operations/templates/stakeholder-register-template.csv` | No (shipped; schema in tracker-schemas.md § Tracker 8) |
+| RACI / RAEW / RAS | Responsibility-assignment matrix | `operations/templates/raci-template.md` | No (shipped; schema in tracker-schemas.md § Tracker 9) |
 | Glossary / Key Terms | Shared-vocabulary index | `operations/templates/key-terms-glossary-template.csv` | No |
 
 ### §3.2 Team
@@ -153,7 +153,7 @@ Single authoritative table — 8 rows binding each artifact family to its native
 | 5 | PRD / Feature spec | software | Anthropic `product-management:write-spec` plugin convention | `product-management:write-spec` plugin (direct hit per Stage 4 D4) | (none — gap) | Per Stage 4 D4 +  offload-routing: PMO PRD canon IS the Anthropic plugin convention; secondary reference Aha! / Lenny Rachitsky template fills any field-shape gap |
 | 6 | Postmortem | software | Google SRE Workbook §Postmortem Culture | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | (none — gap) | Anthropic plugin implements Google SRE postmortem convention; PRINCE2 lessons-learned cross-reference for project-domain instances |
 | 7 | Status report | project | PMBOK 7 §Measurement Performance Domain | (no direct plugin; weekly-status-rollup PMO skill consumes) | `executive-status-report-prompt-template.md`, `daily-status-log-template.md`, `daily-status-update-framework-template.md` | Existing canonical templates already PMBOK-aligned operationally; row documents existing convention |
-| 8 | Stakeholder Register / RACI | project | PMBOK 7 §Stakeholder Performance Domain +  composition | (no direct plugin; PMO operations role-skills indirectly consume) | (none — gap; ships in a future release) | RAEW / RAS variants noted as references for  authoring |
+| 8 | Stakeholder Register / RACI | project | PMBOK 7 §Stakeholder Performance Domain +  composition | (no direct plugin; PMO operations role-skills indirectly consume) | `stakeholder-register-template.csv`, `raci-template.md` (schemas in tracker-schemas.md §§ Tracker 8-9) | RAEW / RAS variants noted as references for  authoring |
 
 ## §7 Localization Notes (Mechanism 1 audit trail)
 

@@ -266,6 +266,16 @@ TEMPLATE_SYNC_MAP=(
   "comms-writer:people-roster-template.yaml:references/people-roster-template.yaml"
   "ppm-agent:people-roster-template.yaml:references/people-roster-template.yaml"
   "ppm-agent:people-graph-clarification-queue-template.md:references/people-graph-clarification-queue-template.md"
+  # ── Templates: PMBOK coverage (#206 — 5 entries) ──
+  # Charter / lessons-learned / change-log / RACI / stakeholder-register, all
+  # consumed by project-initiator (scaffolds project artifacts at initiation).
+  # All 5 match the *-template.{md,csv} pattern → default resolver routes them
+  # to operations/templates/ (no explicit-basename resolver entry needed).
+  "project-initiator:project-charter-template.md:references/templates/project-charter-template.md"
+  "project-initiator:lessons-learned-template.md:references/templates/lessons-learned-template.md"
+  "project-initiator:change-log-template.md:references/templates/change-log-template.md"
+  "project-initiator:raci-template.md:references/templates/raci-template.md"
+  "project-initiator:stakeholder-register-template.csv:references/templates/stakeholder-register-template.csv"
 )
 
 # ─── Shared Functions ────────────────────────────────────────────────────────
