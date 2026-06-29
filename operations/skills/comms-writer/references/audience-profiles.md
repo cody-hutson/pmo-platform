@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Audience Profiles — PMO Communications
 
 ## Purpose
@@ -209,6 +210,25 @@ stakeholder register.
 | Scope change | Re-assess all profiles — scope changes shift interest and power unpredictably |
 | Reorg / leadership change | Full profile rebuild for affected stakeholders and their influence networks |
 | Go-live | Shift profiles to hypercare context — end user profiles become highest priority |
+
+### 5-Second-Scan Bar (per-audience calibration)
+
+Meeting materials (agenda / recap / invite / context block) are built for a 5-second scan per the
+canonical specs ([`meeting-agenda-format.md`](../../../../core/standards/meeting-agenda-format.md) /
+[`meeting-recap-format.md`](../../../../core/standards/meeting-recap-format.md) § 5-Second-Scan Design).
+The scan principles are constant — decision/ask-first, inline 1–3 sentence summaries (no bare links),
+owner-tagged + time-boxed items, ask above the fold — but the **bar** calibrates to the audience class.
+Apply the matching row when running the meeting-type scan test:
+
+| Audience class | Scan bar | What surfaces above the fold | Detail tolerance |
+|---|---|---|---|
+| **Exec** | Tightest. Decision/ask in the **first line**; ≤3 agenda items visible; **no backstory above the fold**. | The decision + the ask + the deadline. | Context compressed to one line each; detail moves to an appendix/link *with* an inline summary. |
+| **Team** | Ask-first, but more operational detail tolerated **below the fold**. | The ask + the owned actions. | Operational specifics (owners, sequencing, sub-items) acceptable below the fold. |
+| **Technical** | Ask-first; inline summaries may carry **one technical specific**; links permitted **with** the inline summary (never bare). | The decision/ask + the technical crux. | Technical detail welcome, but each source link still carries its 1–3 sentence inline summary. |
+
+The inline-summary hard rule (no bare links) holds for **every** audience class — the calibration scales
+how much detail sits below the fold and how tight the above-the-fold lead is, never whether a summary is
+required.
 
 ---
 
