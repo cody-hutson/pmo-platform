@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.22] - 2026-06-29
+
+PMBOK artifact coverage plus three additive PROJECT.md frontmatter axes, with no change to any existing project until the new fields are filled in: a project can now declare what kind of deliverable it produces (`deliverable_type`, separate from how it is governed), its team's org structure (`org_structure_type`), and its team roster by reference (`team_roster`, references only — no names stored in the file); and five ready-made PMBOK artifact templates (charter, lessons-learned, change-log, RACI, stakeholder-register) ship with the platform. Additive schema and template additions — no data migration, no stored-content move, no breaking change. cross-cutting class.
+
+### Added
+
+- **Deliverable-type axis on PROJECT.md.** A project can now declare what kind of deliverable it produces (`software`, `governance`, `web`, `data`, `process`, or a custom value), separate from how it is run, so the platform can tailor its readiness checks to the kind of work being delivered instead of applying one generic bar. ([#351](https://github.com/cody-hutson/pmo-platform/issues/351))
+- **Org-structure and team-roster fields on PROJECT.md.** Two new optional fields let a project record its organizational shape and its team membership (by reference) in its own frontmatter, turning org shape and team into structured data the platform can read rather than free text in prose. ([#262](https://github.com/cody-hutson/pmo-platform/issues/262))
+- **Five PMBOK artifact templates.** Ready-made project charter, lessons-learned, change-log, RACI, and stakeholder-register templates ship with the platform, so standard artifacts generate from a consistent governed starting point. ([#206](https://github.com/cody-hutson/pmo-platform/issues/206))
+
+[Full notes](release/releases/notes/v3.22_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.22)
+
 ## [v3.21] - 2026-06-29
 
 Terminology and controlled-vocabulary canonicalization with no user-visible behavior change: the platform's terminology glossary is refreshed for AI-agent comprehension (discoverable frontmatter, the Role term anchored to the Autonomy-Tier framework, and first-class actor terms — Hub, Spoke, Skill, Sub-agent), the tier-disambiguation table is extended to cover Hierarchy Tier, and canonical Initiative/Roadmap definitions are added and reconciled with the live `epic:*` label namespace via a new decision record (ADR-049). Documentation / governance only — no data migration, no stored-content move, no schema or runtime change. novel class. Re-versioned v2.42 → v3.21 at the Stage-12 atomic claim (v3.20 mainline-spine frontier).
