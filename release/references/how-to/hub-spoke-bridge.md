@@ -441,7 +441,9 @@ or "Architectural Decision Gates" section.
   option. When citing an entry whose `last_verified_date` is older than
   90 days, the verdict notes the staleness.
 
-**Recurring D-decisions:** Some D-decisions fire on every release with the same template shape, varying only by per-release evidence. The Release Planning spoke (Procedure 0 Step 7) renders these inline in the release plan's Operator Decisions block per the D-Gate Template above. The current recurring set:
+**Recurring D-decisions:** Some D-decisions fire on every release with the same template shape, varying only by per-release evidence. The Release Planning spoke (Procedure 0 Step 7) renders these inline in the release plan's Operator Decisions block per the D-Gate Template above.
+
+**Rule-determined vs judgment recurring-Ds.** Recurring-Ds split into two kinds, and the hub renders them differently. A **judgment** recurring-D (e.g. **D-ReleaseClass**) presents a genuine operator choice and renders as an operator gate. A **rule-determined** recurring-D (e.g. **D-Version**) has its value computed by a deterministic rule (anchor() + bump-class floor → next-free); it renders as a **recorded determination** — the hub states the value and the re-verification rungs and proceeds, escalating to an operator gate ONLY when a named override condition is present. Rendering a rule-determined value as a co-equal click-gate is false-granularity governance-theater. The current recurring set:
 
 ```
 #### D-ReleaseClass: What Release Class does this release carry?
@@ -464,6 +466,18 @@ Cutover discipline for D-ReleaseClass: applies to all releases going forward.
 
 ```
 #### D-Version: What version does this release claim?
+Rendering: RECORDED DETERMINATION by default, NOT an operator click-
+  gate. D-Version is RULE-DETERMINED (contrast D-ReleaseClass, which
+  is a JUDGMENT gate): the version number is computed by the
+  authoritative-version-selection procedure below — anchor() + the
+  bump-class floor → next-free — so for a routine capability release
+  there is no operator judgment to render and the (B)/(C) valves are
+  inapplicable. Surfacing it as a co-equal click-gate is false-
+  granularity governance-theater. The hub records the determination
+  (the bump-class, the rule-computed provisional number, and the
+  re-verification rungs: Engineering Commit 0 + the Stage 12 atomic
+  claim) and proceeds — it does NOT pause for per-release operator
+  approval of a deterministic value.
 Gate input: Spoke-recommended next-free version, computed at
   recommendation time against AUTHORITATIVE host state (never local
   refs / a stale worktree), per the authoritative-version-selection
@@ -472,11 +486,15 @@ Gate input: Spoke-recommended next-free version, computed at
   determinism ADR recorded on the Version-Claim Determinism
   milestone) binds the number only at the atomic claim moment; the
   durable declaration at plan time is the bump-class.
-Gate decision: Operator renders the version identity — (A) accept
-  the spoke-recommended next-free, (B) version-less milestone
-  (theme-named; no tag claimed at Stage 12), or (C) operator-
-  specified override (e.g. when a concurrent release is known to be
-  claiming the recommended slot).
+Escalation to an operator gate (the ONLY conditions under which
+  D-Version becomes a click-gate; the valves remain reachable):
+  (A) the recorded default — accept the rule-computed next-free (no
+  gate; this is the recorded-determination path above), (B) a
+  deliberate version-less / theme-named / forced-collision close-out
+  (no tag claimed at Stage 12), or (C) an operator-specified override
+  when a concurrent release is KNOWN to be claiming the computed slot.
+  Absent a (B) or (C) condition, render (A) as a recorded
+  determination, not a question.
 Blocks: release branch name (release/<slug>), plan-file path, the
   Stage 12 atomic version claim, and any version: frontmatter the
   release writes.
@@ -859,6 +877,20 @@ locations. The discipline (apply at authoring time, not after red CI):
   fix is to rewrite it inline (move it into a reference block with a summary, or
   de-reference it in prose). The full author-time check set is in
   [`reference-durability-standard.md` § Authoring around the gate](../../../core/standards/reference-durability-standard.md).
+- **Every PR-time gate + its override marker (the complete set).** The two gate
+  families carry these per-file override markers — declare the matching one (an HTML
+  comment, once near the top of the file) when the file legitimately carries a flagged
+  construct: `repo-integrity: allow-issue-ref` (a `#N` outside a reference block),
+  `allow-memory-ref` (an operator-memory name in prose), `allow-dead-file-ref` (a
+  deliberately-forward/absent link target), `allow-depersonalization` (rare — operator
+  identity in a `core/`/`release/`/`operations/`/`packages/` file); and
+  `reference-durability: allow-link` (markdown link sequences), `allow-version-ref`
+  (version-cutover apparatus), `allow-url` (raw GitHub issue/PR/milestone URLs). The
+  **one construct with NO override marker** is the bare-`#N` positional rule above —
+  rewrite it inline. This set is enumerated once, with what each suppresses, in
+  [`core/ADRs/README.md § Repo-integrity authoring discipline`](../../../core/ADRs/README.md)
+  (the SSOT table) and cross-referenced from [`reference-durability-standard.md`](../../../core/standards/reference-durability-standard.md);
+  this bullet is the spoke-facing pointer, not a second copy of the table.
 
 For ADR-authoring and skill-authoring chips specifically, hub adds to
 `{ADDITIONAL_READS}`:

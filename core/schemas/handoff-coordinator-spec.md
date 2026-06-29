@@ -188,7 +188,7 @@ Append-only event log. Exactly one row per re-entry event across all boundaries 
 | Boundary | Cap | Rationale |
 |---|---|---|
 | **(default)** | 2 | Two re-entries signal a systemic upstream issue; escalating forces a plan revisit. |
-| **Stage 7 → Stage 6 (DT↔Engineering, )** | 3 | DT iteration loop  established a >3-iteration escalation threshold for `fix(dt):` commits. Aligns coordinator cap to protocol-defined threshold. |
+| **Stage 7 → Stage 6 (DT↔Engineering)** | 3 | DT iteration loop established a >3-iteration escalation threshold for `fix(dt):` commits. Aligns coordinator cap to protocol-defined threshold. |
 
 Boundaries not listed use the default cap. New boundary-specific caps are added by updating this table.
 
