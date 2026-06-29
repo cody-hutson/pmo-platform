@@ -8,6 +8,19 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v2.40] - 2026-06-29
+
+Transcript and meeting processing is formalized: the implicit transcript-handling flow is named as one pipeline with explicit automation boundaries — routine tracker updates flow, stakeholder-facing and risk-bearing changes stop for approval, and action items surface for you to dispose instead of being logged on your behalf — while meetings gain a governed lifecycle state and meeting materials are redesigned for a 5-second scan. Formalizes existing flow and adds one tracker field plus scannable meeting materials; no data migration, no stored-content move, no new project-facing primitive. routine class.
+
+### Added
+- **Named transcript pipeline with explicit automation tiers.** The transcript flow is named as one pipeline (Entry → Routing → Core-Tracker → PPM → Stakeholder-Review → Action-Triage), and its outputs are sorted into three tiers — auto-write trackers flow without a prompt, stakeholder-facing and RAID changes stop for your approval, and action items are surfaced for you to dispose and never auto-logged. *Why it matters:* routine updates stop nagging you while anything stakeholder-visible or risk-bearing still stops for review, and nothing is committed on your behalf. ([#237](https://github.com/cody-hutson/pmo-platform/issues/237), [#1157](https://github.com/cody-hutson/pmo-platform/issues/1157))
+- **Governed lifecycle state on the Open Meetings Tracker.** Meetings now carry a governed lifecycle state (`scheduled → held | cancelled`) with defined transitions, while the tracker keeps its familiar status labels. *Why it matters:* meetings move through stages with a traceable, consistent state instead of an ad-hoc status. ([#243](https://github.com/cody-hutson/pmo-platform/issues/243))
+
+### Changed
+- **Meeting materials redesigned for a 5-second scan.** Pre-reads, agendas, invites, and context blocks are rebuilt so you can absorb what a meeting needs from you at a glance — no pre-read points at a raw transcript without an inline summary. *Why it matters:* you get what a meeting requires without opening source files to reconstruct context. ([#1158](https://github.com/cody-hutson/pmo-platform/issues/1158))
+
+[Full notes](release/releases/notes/v2.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.40)
+
 ## [v2.39] - 2026-06-29
 
 The platform now audits itself on a defined schedule instead of only when someone remembers, and it starts keeping a record of where the agent's advice differed from your decision. Additive throughout — two new audit-cadence protocols, one new optional record type with a read-only look-back, and a small pipeline-reference edit; no data migration, no stored-content move, no change to any project-facing surface. novel class.
