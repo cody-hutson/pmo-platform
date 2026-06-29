@@ -1,10 +1,9 @@
 <!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-issue-ref -->
 # Health-Check Mode Intents
 
 The queryable 4-intent declarations for every health-check mode. Each mode declares exactly four intent dimensions: `trigger_intent` (the operator situation that should fire it), `decision_intent` (the question it answers), `output_intent` (what the operator does with the result), and `confidence_intent` (where it is assertive vs. cautious). The SKILL.md `## Modes` section is the authority for which modes are implemented; this doc carries the full declarations once.
 
-**v1 (#1125) implements modes 1–3.** Modes 4–7 are declared here so the contract is complete and #1126 fills their bodies into the already-locked shape; **they are not implemented in v1.**
+**v1 implements modes 1–3.** Modes 4–7 are declared here so the contract is complete and the v2 slice fills their bodies into the already-locked shape; **they are not implemented in v1.**
 
 ## Mode 1 — `full` (v1)
 
@@ -39,7 +38,7 @@ mode_attribution:
 audits: "Every item's owner. Flags any missing or unverifiable owner (no-fabricated-owners guardrail). Never invents a replacement; proposes one only when a newer canonical source names it, else surfaces the gap."
 ```
 
-## Mode 4 — `comms` (v2 — #1126)
+## Mode 4 — `comms` (v2)
 
 ```yaml
 mode_comms:
@@ -48,10 +47,10 @@ mode_comms:
   output_intent:     "A comms-hygiene action list."
   confidence_intent: "Assertive on lifecycle transitions; cautious on inferring a response."
 audits: "The Communications Tracker vs sent/draft/ready state; closes stale items via /comms-writer (status only)."
-status: "Declared — implemented in #1126."
+status: "Declared — implemented in the v2 slice."
 ```
 
-## Mode 5 — `plan <name>` (v2 — #1126)
+## Mode 5 — `plan <name>` (v2)
 
 ```yaml
 mode_plan:
@@ -60,10 +59,10 @@ mode_plan:
   output_intent:     "A closure-delta matrix for the named plan."
   confidence_intent: "Cautious — the plan may have been deliberately superseded."
 audits: "A single named plan. Takes a plan-name arg; prompts 'which plan?' when none is given — no silent default."
-status: "Declared — implemented in #1126."
+status: "Declared — implemented in the v2 slice."
 ```
 
-## Mode 6 — `raid` (v2 — #1126)
+## Mode 6 — `raid` (v2)
 
 ```yaml
 mode_raid:
@@ -72,10 +71,10 @@ mode_raid:
   output_intent:     "A RAID-hygiene action list."
   confidence_intent: "Cautious — closing a risk needs evidence."
 audits: "The RAID Log. Enforces RAID guardrails: no passive risk voice; name owner + mitigation; flag stale entries."
-status: "Declared — implemented in #1126."
+status: "Declared — implemented in the v2 slice."
 ```
 
-## Mode 7 — `sources` (v2 — #1126)
+## Mode 7 — `sources` (v2)
 
 ```yaml
 mode_sources:
@@ -84,5 +83,5 @@ mode_sources:
   output_intent:     "A freshness matrix + a sync-direction recommendation + a canonical-source inventory."
   confidence_intent: "Assertive on staleness; cautious on conflict resolution."
 audits: "The canonical-source set. Emits the source-of-truth inventory and explicitly flags missing-but-expected sources (the graceful-degradation surface, e.g. SharePoint has no MCP)."
-status: "Declared — implemented in #1126."
+status: "Declared — implemented in the v2 slice."
 ```

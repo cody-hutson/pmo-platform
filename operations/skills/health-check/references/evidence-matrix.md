@@ -1,5 +1,4 @@
 <!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-issue-ref -->
 # Health-Check Evidence Matrix
 
 The source map per mode and the drift-resolution rule the modes apply. The canonical source set, the drift-resolution direction, and the graceful-degradation envelope are owned by [ADR-049](../../../../core/ADRs/ADR-049-health-check-mcp-primary-source-set.md) — this doc maps which sources each mode reads and summarizes the rule for the author; it does not re-decide it.
@@ -18,10 +17,10 @@ The source map per mode and the drift-resolution rule the modes apply. The canon
 | `full` (v1) | All available connectors | All local | Union of the per-mode checks below |
 | `timeline` (v1) | Jira (due dates) · Confluence (plan dates) · Smartsheet (tracker dates) | `PROJECT.md` dates · carry-forward tracker · canonical schedule | MCP date vs local date; most-recent-source-wins |
 | `attribution` (v1) | Jira (assignees) · Confluence (on-call / RACI) | RAID owner column · tracker owner fields · `PROJECT.md` team | Recorded owner vs canonical owner |
-| `comms` (v2 #1126) | Confluence (published comms) | Communications Tracker · `06-Emails/` | Tracker lifecycle vs sent/draft state |
-| `plan <name>` (v2 #1126) | Confluence (the named plan) | The plan artifact · trackers it touched | Plan-promised vs trackers-reflected |
-| `raid` (v2 #1126) | Jira (risk/issue tickets) | RAID Log | Closure candidates · orphan IDs |
-| `sources` (v2 #1126) | All connectors (freshness probe) | `PROJECT.md` sync timestamps | External freshness vs recorded sync |
+| `comms` (v2) | Confluence (published comms) | Communications Tracker · `06-Emails/` | Tracker lifecycle vs sent/draft state |
+| `plan <name>` (v2) | Confluence (the named plan) | The plan artifact · trackers it touched | Plan-promised vs trackers-reflected |
+| `raid` (v2) | Jira (risk/issue tickets) | RAID Log | Closure candidates · orphan IDs |
+| `sources` (v2) | All connectors (freshness probe) | `PROJECT.md` sync timestamps | External freshness vs recorded sync |
 
 ## Drift-resolution rule (MCP-primary, local-fallback — per ADR-049)
 
