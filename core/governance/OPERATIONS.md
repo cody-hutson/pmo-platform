@@ -1005,6 +1005,8 @@ Items leave carry-forward (Daily Status Log) **only** with evidence. No evidence
 
 Messages and meetings move through lifecycle states. Apply these rules consistently:
 
+> **Note — distinct lifecycle machines.** The ACTIVE/CORE/ARCHIVE states below govern *communications and meetings*. The *project* lifecycle (ACTIVE/CLOSING/CLOSED agent states + per-project phase timelines) and the rationale for its PMBOK-7 tailoring are documented separately in [`../disciplines/lifecycle-tailoring.md`](../disciplines/lifecycle-tailoring.md).
+
 | State | Meaning | Entry Condition | Exit Condition | Hold Duration |
 |-------|---------|-----------------|-----------------|---------------|
 | `ACTIVE` | Awaiting response or action | Created / sent | Response received | Until response |

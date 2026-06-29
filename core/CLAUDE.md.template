@@ -326,6 +326,8 @@ Authoritative tier definitions, observable indicators, examples, irreducible-hum
 | `CLOSING` | In hypercare/transition | Reduced cadence. Hypercare metrics, issue tracking, knowledge transfer. |
 | `CLOSED` | Complete, archived | Read-only reference. No operational processing. |
 
+The 3-state model governs agent cadence; granular per-project phase timelines (PROJECT.md "Phase Timeline") govern operational reporting. The rationale for this PMBOK-7 tailoring — and a worked research-PMO alternative — is documented in [`pmo-platform/core/disciplines/lifecycle-tailoring.md`](core/disciplines/lifecycle-tailoring.md).
+
 ## Session Management
 
 Sessions are ephemeral. `projects/_config/SESSION_STATE.md` bridges context between sessions. `projects/_config/CORRECTIONS.md` carries active behavioral corrections. `projects/_config/SWAP_HANDOFF.md` (auto-written at account-switcher swap boundary) carries cross-account work context.
