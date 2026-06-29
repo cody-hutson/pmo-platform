@@ -856,7 +856,7 @@ Execute this cycle once per day, triggered by user or automation:
    - **(c) Session freshness:** SESSION_STATE.md `last_updated` freshness (per staleness rule in CLAUDE.md).
    - **(d) Portfolio accuracy:** PORTFOLIO.md project list matches actual `Projects/` subdirectories (excluding `_governance/`, `Reference/`, `_Skill-Packages/`, `Archive/`).
    - **(e) Release sync:** RELEASE_LOG.md latest version matches RELEASE_PROTOCOL.md status line.
-   - **(f) Governance file presence:** All expected files exist in `Projects/_governance/`: OPERATIONS.md, PORTFOLIO.md, SESSION_STATE.md, RELEASE_PROTOCOL.md, CORRECTIONS.md, Releases/RELEASE_LOG.md. Missing or relocated governance files = **critical drift** — block processing until resolved.
+   - **(f) Governance file presence:** All expected files exist in `projects/_config/`: OPERATIONS.md, PORTFOLIO.md, SESSION_STATE.md, RELEASE_PROTOCOL.md, CORRECTIONS.md, Releases/RELEASE_LOG.md. Missing or relocated governance files = **critical drift** — block processing until resolved.
    Flag discrepancies as `⚠️ DRIFT DETECTED:` with proposed correction. Critical drift blocks processing; moderate/low drift is flagged and processing continues.
 1. **File Intake** — Check for new files from Google Drive (MCP), user uploads, Jira exports. The scheduled **Path-A intake sweep** (`core/standards/c2-intake-sweep-path-a.md`) is the automation half of this cycle — it drives intake steps 1-6 + 15 over the ambient inbox on a cadence, reading the dedup cursor to skip already-ingested files, clamped to `[automation].automation_level` (no Tier-1 mutation at `recommend`).
 2. **Transcript Surfacing** — Resurface `UNASSIGNED` / `PENDING` transcripts from Transcript Register (>3 business days escalates).
