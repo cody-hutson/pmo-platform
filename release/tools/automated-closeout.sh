@@ -2943,13 +2943,21 @@ STUB
   REPO_ROOT="$_ln_saved_root"; VERSION="$_ln_saved_version"
   PHASE_NAMES=("${_ln_saved_names[@]:-}"); PHASE_RESULTS=("${_ln_saved_results[@]:-}"); PHASE_DETAILS=("${_ln_saved_details[@]:-}")
 
-  # Test 6: corpus-path resolution — HARD assertion (not a soft WARN).
-  # The four corpus paths are what every --apply phase mutates; if the script is
-  # re-pathed out from under the corpus (the migration-drift failure that surfaced
-  # when the close-out was first run post-rename), the close-out silently writes
-  # nowhere. A soft WARN here let the self-test pass green while every path was
-  # wrong — so this is now a hard FAIL that increments `failures`, making the CI
-  # smoke gate a real backstop against path rot.
+  # Test 6: corpus-path resolution — HARD assertion (not a soft WARN), WITH
+  # instance-absent tolerance (ADR-032). The four corpus paths are what every
+  # --apply phase mutates; if the script is re-pathed out from under the corpus
+  # (the migration-drift failure that surfaced when the close-out was first run
+  # post-rename), the close-out silently writes nowhere — so a present-but-wrong
+  # path is a hard FAIL. BUT post-ADR-032 the corpus is operator-instance CONTENT,
+  # absent in a fresh clone / CI: when the corpus ROOT directory itself is absent
+  # there is nothing to assert, so Test 6 records N/A and is skipped (mirroring
+  # check_paths() and the Check 26 / pmo_instance_path instance-absence convention).
+  # When the root IS present, the existence + file-vs-dir-type assertions run.
+  local _st_corpus_root
+  _st_corpus_root="$( cd "$( dirname "$RELEASE_LOG" )" 2>/dev/null && pwd )" || true
+  if [[ -z "$_st_corpus_root" || ! -d "$_st_corpus_root" ]]; then
+    echo "  corpus paths N/A — operator-instance corpus root absent (fresh clone / CI); Test 6 skipped per the instance-absence convention" >&2
+  else
   local corpus_path
   for corpus_path in "$RELEASE_LOG" "$RELEASE_INDEX" "$RELEASE_DIGEST" "$RELEASE_NOTES_DIR"; do
     if [[ ! -e "$corpus_path" ]]; then
@@ -2968,6 +2976,7 @@ STUB
     echo "FAIL: RELEASE_NOTES_DIR resolves but is not a directory: $RELEASE_NOTES_DIR"
     failures=$((failures+1))
   fi
+  fi  # end instance-present Test 6 assertions (instance-absent → N/A skip above)
   # find_log_row sanity: the live RELEASE_LOG must contain at least one parseable
   # version row (proves the row-matching regex still matches the current schema).
   if [[ -f "$RELEASE_LOG" ]]; then
