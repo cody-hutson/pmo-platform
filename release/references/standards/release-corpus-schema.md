@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Defines the canonical YAML frontmatter schema applied to every artifact in the **release corpus** — the trio of `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`, `release/releases/plans/*.md`, and `release/releases/notes/*.md`. The schema is the structured-data substrate that powers `release/releases/RELEASE_INDEX.md` (navigation surface) and `release/releases/RELEASE_DIGEST.md` (zoom surface) without hand-curated cross-references.
+Defines the canonical YAML frontmatter schema applied to every artifact in the **release corpus** — the trio of `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`, the instance-side `releases/plans/*.md`, and `releases/notes/*.md`. The release corpus is operator-instance CONTENT (per [ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md)), rooted at `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/`; only the empty `RELEASE_INDEX.md` seed + `CHANGELOG.md` are tracked public surfaces. The schema is the structured-data substrate that powers the instance-side `RELEASE_INDEX.md` (navigation surface) and `RELEASE_DIGEST.md` (zoom surface) without hand-curated cross-references.
 
 Authored per the Stage 5 spec + Collective Review. Composes with [release-notes-standard.md](release-notes-standard.md) — that standard owns the user-facing note's BODY content rules; this schema owns the FRONTMATTER contract that lets the platform navigate and digest the corpus.
 
@@ -194,5 +194,5 @@ This schema applies forward-only (the release that authors it is the first compl
 - [version-field-semantics.md](../../../core/standards/version-field-semantics.md) — `version:` field discipline (SKILL.md context; conceptually adjacent)
 - [duplicate-source-discipline.md](../../../core/standards/duplicate-source-discipline.md) — register-or-remove rule (the schema is the source of truth; INDEX/DIGEST are derivatives)
 - `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` — the LOG anchor target for `links.log_anchor`
-- `release/releases/RELEASE_INDEX.md` — derivative navigation surface
-- `release/releases/RELEASE_DIGEST.md` — derivative zoom surface
+- `<instance>/releases/RELEASE_INDEX.md` — derivative navigation surface (instance-side per ADR-032; the in-repo `release/releases/RELEASE_INDEX.md` is the empty public seed)
+- `<instance>/releases/RELEASE_DIGEST.md` — derivative zoom surface (instance-side per ADR-032)

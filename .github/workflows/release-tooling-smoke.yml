@@ -19,14 +19,18 @@ name: Release tooling smoke
 #   1. --self-test  — the script's in-process unit checks (version / row-state /
 #      milestone-slug / parser-clean parsing, JSON render, and a HARD assertion
 #      that all four corpus paths resolve). Gates on exit code.
-#   2. --check-paths — an offline corpus-path resolution probe that HARD-FAILS
-#      (exit 1) if any of RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / notes-dir
-#      does not resolve in THIS repo. Catches re-pathing drift before a release.
+#   2. --check-paths — an offline corpus-path resolution probe. Post-ADR-032 the
+#      release corpus is operator-instance CONTENT, absent in a fresh clone / CI, so
+#      on the CI checkout this probe records N/A (exit 0) — instance-absence is not a
+#      defect (mirrors deploy.sh Check 26 / pmo_instance_path). It still HARD-FAILS
+#      (exit 1) on a genuine path-resolution defect when the instance corpus IS
+#      present. Catches re-pathing drift before a release.
 #
 # A third step is a precision probe: it proves the path gate actually FAILS on a
-# deliberately-broken corpus path (in a throwaway temp tree, never the checkout).
-# A warn-only gate is blind to false negatives — this keeps the gate honest, the
-# same discipline reference-durability.yml applies to its fragile-ref detector.
+# deliberately-broken corpus path WHEN A CORPUS IS PRESENT (it seeds a throwaway
+# instance corpus via PMO_INSTANCE_PATH, omits one path, and asserts non-zero). A
+# warn-only gate is blind to false negatives — this keeps the gate honest, the same
+# discipline reference-durability.yml applies to its fragile-ref detector.
 #
 # Platform: macos-latest. automated-closeout.sh pins PATH to /usr/bin:/bin and
 # resolves `gh` at the Homebrew (/opt/homebrew/bin) or Intel (/usr/local/bin)
@@ -71,33 +75,56 @@ jobs:
         # Pure helpers only — must NOT reach gh auth / network. Gate on exit code.
         run: bash release/tools/automated-closeout.sh --self-test
 
-      - name: Corpus path-resolution check (offline; hard-fail)
-        # HARD-FAILS (exit 1) if any of the four corpus paths do not resolve in
-        # THIS repo. Runs the offline --check-paths probe, before any gh/network
-        # call, so the job is deterministic.
+      - name: Corpus path-resolution check (offline; instance-absent N/A on CI)
+        # Post-ADR-032 the corpus is operator-instance content, absent on a fresh CI
+        # checkout, so this records N/A (exit 0) — instance-absence is not a defect.
+        # Runs the offline --check-paths probe before any gh/network call, so the job
+        # is deterministic. It still HARD-FAILS on a real defect when a corpus IS
+        # present (proven by the precision probe below).
         run: bash release/tools/automated-closeout.sh --check-paths
 
-      - name: Precision probe — broken path MUST fail the gate
-        # Defends against a silently-rotting gate: copy the script into a throwaway
-        # tree that is MISSING one corpus path and assert --check-paths exits
+      - name: Precision probe — broken path MUST fail the gate (corpus present)
+        # Defends against a silently-rotting gate. Post-ADR-032 the corpus root is the
+        # operator-instance path; seed a throwaway instance via PMO_INSTANCE_PATH that
+        # is PRESENT but MISSING one corpus path, and assert --check-paths exits
         # non-zero. The real checkout is never mutated. If a broken corpus stops
-        # failing the gate, this step fails the PR.
+        # failing the gate, this step fails the PR. (Separately, the step above proves
+        # an ABSENT instance records N/A rather than a false FAIL.)
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          mkdir -p "$tmp/release/tools" "$tmp/release/releases/notes"
-          cp release/tools/automated-closeout.sh "$tmp/release/tools/"
-          # Provide three of four corpus paths; deliberately OMIT RELEASE_LOG.md.
-          : > "$tmp/release/releases/RELEASE_INDEX.md"
-          : > "$tmp/release/releases/RELEASE_DIGEST.md"
-          # RELEASE_LOG.md intentionally absent -> --check-paths must exit non-zero.
+          # Seed a PRESENT instance corpus root, but omit RELEASE_LOG.md.
+          export PMO_INSTANCE_PATH="$tmp/pmo-instance"
+          mkdir -p "$PMO_INSTANCE_PATH/releases/notes"
+          : > "$PMO_INSTANCE_PATH/releases/RELEASE_INDEX.md"
+          : > "$PMO_INSTANCE_PATH/releases/RELEASE_DIGEST.md"
+          # RELEASE_LOG.md intentionally absent, root present -> must exit non-zero.
           set +e
-          ( cd "$tmp/release/tools" && bash "$tmp/release/tools/automated-closeout.sh" --check-paths )
+          bash release/tools/automated-closeout.sh --check-paths
           rc=$?
           set -e
           if [ "$rc" -eq 0 ]; then
-            echo "::error::--check-paths returned 0 with a missing corpus path; the smoke gate is not detecting re-pathing drift."
+            echo "::error::--check-paths returned 0 with a present corpus root and a missing path; the smoke gate is not detecting re-pathing drift."
             exit 1
           fi
           echo "Precision probe OK — broken corpus path correctly failed --check-paths (exit $rc)."
+
+      - name: Instance-absent tolerance probe — absent corpus MUST be N/A (exit 0)
+        # Proves the caveat-7 tolerance: when the instance corpus ROOT is absent
+        # (fresh clone / CI), --check-paths records N/A and exits 0 rather than a
+        # false HARD-FAIL. Point PMO_INSTANCE_PATH at an empty dir (no releases/).
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          export PMO_INSTANCE_PATH="$tmp/absent-instance"   # no releases/ under it
+          set +e
+          bash release/tools/automated-closeout.sh --check-paths
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::--check-paths returned $rc on an absent instance corpus; it must record N/A (exit 0) per the instance-absence convention."
+            exit 1
+          fi
+          echo "Instance-absent tolerance OK — absent corpus correctly recorded N/A (exit 0)."

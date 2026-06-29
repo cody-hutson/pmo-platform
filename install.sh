@@ -179,6 +179,38 @@ scaffold_roster() {
   info "Scaffolded people-roster → ${roster_file}"
 }
 
+# --- release-corpus scaffold (ADR-032 bootstrap) ---
+# Create-once: lay down the empty operator-instance release-corpus skeleton —
+# releases/{plans,notes}/ + empty RELEASE_LOG/INDEX/DIGEST seeds — ONLY where
+# absent. The release corpus is operator-instance CONTENT (ADR-032); the first
+# local release's Stage 13 close-out populates it, and generate_release_index.py
+# self-heals a missing INDEX. NEVER clobbers a filled corpus (idempotent;
+# per-file create-once). Mirrors scaffold_needles / scaffold_roster: resolves the
+# instance base through lib-instance-path.sh; <ws_root> empty → resolver default.
+scaffold_release_corpus() {
+  local ws_root="$1"
+  local lib="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
+  [ -f "${lib}" ] || { info "Resolver lib absent; release-corpus scaffold skipped."; return 0; }
+  # shellcheck disable=SC1090
+  source "${lib}"
+  local base
+  if [ -n "${ws_root}" ]; then
+    base="$(pmo_instance_path_for "${ws_root}")"
+  else
+    base="$(pmo_instance_path)"
+  fi
+  local corpus="${base}/releases"
+  mkdir -p "${corpus}/plans" "${corpus}/notes"
+  # Empty seeds, create-once (never clobber a filled corpus).
+  local seed
+  for seed in RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md; do
+    if [ ! -f "${corpus}/${seed}" ]; then
+      : > "${corpus}/${seed}"
+      info "Seeded empty ${seed} → ${corpus}/${seed}"
+    fi
+  done
+}
+
 # --- Main ---
 main() {
   # Short-circuit on --help so we don't run skill deployment after a usage print.
@@ -224,6 +256,9 @@ main() {
 
   # Idempotent roster scaffold (no-op if Phase 1 already created it; never clobbers).
   scaffold_roster "${ws_root}"
+
+  # Idempotent release-corpus scaffold (ADR-032 bootstrap; never clobbers a filled corpus).
+  scaffold_release_corpus "${ws_root}"
 
   phase_skill_deploy
 

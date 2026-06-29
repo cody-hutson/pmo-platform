@@ -4251,6 +4251,19 @@ cmd_check() {
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
   # 8/9/10/14/15/18/19/20/21/22 precedent); flip-to-enforce after ≥3-day
   # warn-log review with zero false positives.
+  #
+  # MAINTAINER-LOCAL boundary (ADR-032, the corpus-migration caveat 8): generate_release_index.py
+  # now resolves the operator-instance corpus (LOG/INDEX under
+  # $(pmo_instance_path)/releases/...). On a fresh clone / CI the instance LOG is
+  # absent, so --verify returns exit 3 (path-resolution failure) — which this check
+  # correctly maps to FAIL. That exit-3-on-absent-LOG is the RIGHT behavior FOR THE
+  # MAINTAINER (a maintainer with no instance corpus should see "not found"), but it
+  # means Check 23 must stay MAINTAINER-LOCAL — it must NOT be mirrored into a CI
+  # workflow that runs without the instance corpus, or it would FAIL spuriously.
+  # Only single sub-checks are CI-mirrored today (no wholesale `deploy.sh --check` in
+  # CI); keep it so. This is the inverse of Check 32's instance-absence N/A handling:
+  # Check 32(a) tolerates absence (N/A), Check 23 surfaces it (FAIL) by design for the
+  # maintainer — both are correct because both are maintainer-local.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 23: RELEASE_LOG ↔ RELEASE_INDEX consistency"
     local c23_script="core/deploy/tools/generate_release_index.py"
@@ -5011,14 +5024,26 @@ cmd_check() {
   # mechanical backstop that converts the documented-but-skippable "Appended at
   # Stage 13" convention into a guard.
   #
-  # Direction (LOG is authoritative): the check is LOG-row-driven. For every release
-  # row in the IN-REPO ledger (release/releases/RELEASE_LOG.md) at/after the cutover,
-  # it asserts the matching INDEX row + DIGEST entry + NOTES file exist. Rows present
-  # in INDEX/DIGEST but absent from the LOG are NOT flagged (the LOG is the closed
-  # set of releases; Check 23 separately reconciles LOG<->INDEX drift on the instance
-  # corpus). This in-repo target differs deliberately from Check 23/26 (which read the
-  # operator-instance ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance corpus) — the tracked release/releases/
-  # ledger is the surface where the incident occurred and the one shipped in this repo.
+  # SPLIT BY SURFACE (ADR-032). The release corpus is now operator-instance
+  # CONTENT, not tracked in this repo, so this check splits into two halves:
+  #   (a) MAINTAINER-LOCAL corpus-completeness — the LOG-row-driven assertion below,
+  #       reading the operator-instance corpus at $(pmo_instance_path)/releases/...
+  #       (RELEASE_LOG/INDEX/DIGEST + notes/). This is NOT a CI gate: the corpus is
+  #       absent in a fresh clone / CI, so it resolves N/A there (never FAIL),
+  #       consistent with Checks 23/26 which are already maintainer-local and already
+  #       read the instance corpus.
+  #   (b) CI-REACHABLE public sub-check — asserts the tracked PUBLIC scaffolding on a
+  #       fresh clone: root CHANGELOG.md present + the empty RELEASE_INDEX.md seed
+  #       present and well-formed (header + column row). This half reads only tracked
+  #       files, so it is reachable in CI.
+  # Direction (LOG is authoritative): half (a) is LOG-row-driven. For every release
+  # row in the instance ledger at/after the cutover, it asserts the matching INDEX row
+  # + DIGEST entry + NOTES file exist. Rows present in INDEX/DIGEST but absent from the
+  # LOG are NOT flagged (the LOG is the closed set of releases; Check 23 separately
+  # reconciles LOG<->INDEX drift on the instance corpus). Check 32 now reads the SAME
+  # operator-instance corpus as Checks 23/26 — the prior in-repo target was the
+  # pre-migration surface and is reconciled here (ADR-032 closes the Check-4-says-
+  # instance / Check-32-says-in-repo divergence).
   #
   # NOTES filename resolution (historical-tolerant): the notes file is accepted under
   # EITHER notes/<version>_RELEASE_NOTES.md OR notes/<milestone-slug>_RELEASE_NOTES.md.
@@ -5050,10 +5075,35 @@ cmd_check() {
   # when either is unavailable.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 32: Release-corpus completeness (RELEASE_LOG row -> INDEX + DIGEST + NOTES [+ tag + Release post-cutover])"
-    local c32_log="release/releases/RELEASE_LOG.md"
-    local c32_index="release/releases/RELEASE_INDEX.md"
-    local c32_digest="release/releases/RELEASE_DIGEST.md"
-    local c32_notes_dir="release/releases/notes"
+
+    # ── (b) CI-reachable public sub-check (tracked scaffolding; reachable on a
+    #        fresh clone / CI). Asserts the public surface ADR-032 keeps tracked:
+    #        root CHANGELOG.md present + the empty RELEASE_INDEX seed present and
+    #        well-formed (header line + column-header row). Reads only tracked
+    #        files, so this half is the one a required CI workflow can mirror.
+    local c32b_changelog="CHANGELOG.md"
+    local c32b_index_seed="release/releases/RELEASE_INDEX.md"
+    if [[ ! -f "$c32b_changelog" ]]; then
+      flag_warn_or_issue "release-corpus-public-surface" \
+        "public release surface missing: $c32b_changelog not found at repo root (ADR-032 — the concise public release surface)"
+    elif [[ ! -f "$c32b_index_seed" ]]; then
+      flag_warn_or_issue "release-corpus-public-surface" \
+        "public release surface missing: $c32b_index_seed seed not found (ADR-032 — the tracked empty public INDEX seed)"
+    elif ! /usr/bin/grep -qE '^# RELEASE_INDEX' "$c32b_index_seed" 2>/dev/null \
+       || ! /usr/bin/grep -qE '^\| Version \| Milestone \|' "$c32b_index_seed" 2>/dev/null; then
+      flag_warn_or_issue "release-corpus-public-surface" \
+        "public RELEASE_INDEX seed malformed: $c32b_index_seed missing the '# RELEASE_INDEX' header or the column-header row"
+    else
+      log "  OK:    public release surface present (CHANGELOG.md + well-formed RELEASE_INDEX seed)"
+    fi
+
+    # ── (a) Maintainer-local corpus-completeness. Reads the operator-instance
+    #        corpus (same root as Checks 23/26). N/A on instance-absence (fresh
+    #        clone / CI) — never FAIL. NOT a CI gate.
+    local c32_log="$(pmo_instance_path)/releases/RELEASE_LOG.md"
+    local c32_index="$(pmo_instance_path)/releases/RELEASE_INDEX.md"
+    local c32_digest="$(pmo_instance_path)/releases/RELEASE_DIGEST.md"
+    local c32_notes_dir="$(pmo_instance_path)/releases/notes"
     local c32_allowlist=".claude/skip-release-corpus-check.txt"
     local c32_cutoff="${RELEASE_CORPUS_CHECK_CUTOFF:-v1.01}"
     # Separate, later cutover for the network/tag stricter assertions. Sentinel
@@ -5061,8 +5111,9 @@ cmd_check() {
     local c32_release_cutoff="${RELEASE_CORPUS_RELEASE_CUTOFF:-__none__}"
 
     if [[ ! -f "$c32_log" ]]; then
-      flag_warn_or_issue "release-corpus-completeness" \
-        "$c32_log not found; cannot enumerate logged releases"
+      # Instance-absent (fresh clone / CI): N/A, never FAIL — matches the Check 26
+      # instance-absence semantics and the ADR-032 maintainer-local boundary.
+      log "  N/A:   maintainer-local corpus-completeness skipped — instance LOG absent at $c32_log (operator-instance corpus not present; fresh clone / CI)"
     else
       # Allowlist filter (exact version match; trailing # comment supported)
       c32_is_allowlisted() {

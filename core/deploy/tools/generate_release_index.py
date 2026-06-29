@@ -48,19 +48,39 @@ than raw LOG-append order.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-# Live modular-monolith layout (post-restructure). The pre-restructure
-# pmo-platform/... prefix is DEAD. RELEASE_LOG.md is under release/releases/
-# (NOT governance/).
-LOG_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_LOG.md"
-PLANS_DIR = WORKSPACE_ROOT / "release" / "releases" / "plans"
-NOTES_DIR = WORKSPACE_ROOT / "release" / "releases" / "notes"
-ARCHIVE_PLANS_DIR = WORKSPACE_ROOT / "release" / "releases" / "archive" / "plans"
-INDEX_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_INDEX.md"
+
+def resolve_instance_root() -> Path:
+    """Operator-instance corpus base (ADR-032).
+
+    The release corpus is operator-instance CONTENT, resolved through the same
+    precedence as core/deploy/lib-instance-path.sh::pmo_instance_path():
+    PMO_INSTANCE_PATH (direct back-compat override) → ${CLAUDE_WORKSPACE_ROOT}
+    → ${HOME}/Claude, with the canonical `personal/pmo-instance` leaf. NOT the
+    in-repo tree (a fresh clone ships zero maintainer corpus). Mirrors
+    check-doc-links.py::resolve_workspace_root() env→default precedence.
+    """
+    direct = os.environ.get("PMO_INSTANCE_PATH")
+    if direct:
+        return Path(direct).expanduser().resolve()
+    ws = os.environ.get("CLAUDE_WORKSPACE_ROOT") or str(Path.home() / "Claude")
+    return (Path(ws).expanduser() / "personal" / "pmo-instance").resolve()
+
+
+# Corpus base is the operator-instance root (ADR-032 — content instances; the
+# capability ships). ALL corpus constants AND _rel()'s base re-root onto this
+# atomically: a partial re-point would throw ValueError in _rel() on the error
+# paths (the corpus-migration caveat 3). The pre-restructure pmo-platform/... prefix is DEAD.
+INSTANCE_ROOT = resolve_instance_root()
+LOG_PATH = INSTANCE_ROOT / "releases" / "RELEASE_LOG.md"
+PLANS_DIR = INSTANCE_ROOT / "releases" / "plans"
+NOTES_DIR = INSTANCE_ROOT / "releases" / "notes"
+ARCHIVE_PLANS_DIR = INSTANCE_ROOT / "releases" / "archive" / "plans"
+INDEX_PATH = INSTANCE_ROOT / "releases" / "RELEASE_INDEX.md"
 
 # Live LOG schema: | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
 # Version cell may be a bare version key (v1.06) OR a version-less slug with a
@@ -491,8 +511,12 @@ def _existing_theme_map() -> dict[str, str]:
 
 
 def _rel(path: Path) -> str:
+    # Base is INSTANCE_ROOT (the corpus base) — re-pointed atomically with the
+    # corpus constants (caveat 3). A mismatched base would throw ValueError on
+    # every error-path call; the except still softens it, but the design intent
+    # is a single consistent base.
     try:
-        return str(path.relative_to(WORKSPACE_ROOT))
+        return str(path.relative_to(INSTANCE_ROOT))
     except ValueError:
         return str(path)
 

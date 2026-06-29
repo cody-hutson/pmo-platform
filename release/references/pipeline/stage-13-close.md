@@ -110,7 +110,7 @@ Memory-eviction manifest entries are VERIFY-CORPUS-gated per [`knowledge-archite
 
 Concurrency: Cowork opens for B-OPS2/B-OPS3, closes before C1. Per operations-bridge.md.
 
-**Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations to main-tracked release-corpus governance files (`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `release/releases/RELEASE_INDEX.md` new row; `release/releases/RELEASE_DIGEST.md` new entry; `release/releases/notes/vX.Y_RELEASE_NOTES.md` new file; `CHANGELOG.md` at repo root — Surface 2 of Layer-1 dual-write; `.version` at repo root — the version source-of-truth read by the SessionStart version-skew hook, stamped to the shipped `vX.Y` for *versioned* releases and SKIP-with-PASS for version-less releases; `release/releases/RELEASE_REVERSIONS.md` — the machine-readable re-version ledger, append one row per abandoned version ONLY when the release re-versioned mid-pipeline via `automated-closeout.sh` phase `append_reversions`, N/A on the common no-collision path) ship via a single Stage 13 chore PR — never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the Stage 13 release-corpus updates into one atomic main-landing.
+**Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations split across two homes per [ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md). The **operator-instance corpus** — under the instance root `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/` (git-ignored CONTENT): `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `RELEASE_INDEX.md` new row; `RELEASE_DIGEST.md` new entry; `notes/vX.Y_RELEASE_NOTES.md` new file; `RELEASE_REVERSIONS.md` — the machine-readable re-version ledger, append one row per abandoned version ONLY when the release re-versioned mid-pipeline via `automated-closeout.sh` phase `append_reversions`, N/A on the common no-collision path — is written directly to the instance, NOT added to the chore PR. The **tracked public surfaces** — `CHANGELOG.md` at repo root (Surface 2 of Layer-1 dual-write) + `.version` at repo root (the version source-of-truth read by the SessionStart version-skew hook, stamped to the shipped `vX.Y` for *versioned* releases and SKIP-with-PASS for version-less releases) — ship via a single Stage 13 chore PR, never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the tracked Stage 13 updates into one atomic main-landing; the instance-corpus writes happen alongside on the operator instance.
 
 Canonical chore-PR shape (Stage 13 spoke executes after Phase A verification clears + Phase B-OPS verification clears, BEFORE Phase C C1 Milestone close):
 
@@ -118,19 +118,25 @@ Canonical chore-PR shape (Stage 13 spoke executes after Phase A verification cle
 # Phase B chore-PR pattern — runs in session worktree (no main checkout)
 git checkout -b chore/v<X.Y>-stage-13-corpus-update
 
+# --- Operator-instance corpus writes (ADR-032: git-ignored CONTENT; NOT in the chore PR) ---
+# All five live under ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/
 # Edit <OPERATOR_INSTANCE_RELEASE_LOG_PATH>:
 #   - Transition v<X.Y> row state DEPLOYED → VERIFIED (Surface 3 of Layer-1 dual-write)
 #   - Append the **Velocity:** field to the v<X.Y> visible-H4 Deployment Log block
 #     (sibling immediately AFTER **Cycle-Time:**) per Phase B-velocity below
-# Edit release/releases/RELEASE_INDEX.md:
+# Edit <instance>/releases/RELEASE_INDEX.md:
 #   - Append v<X.Y> row at chronological-recent-first position
-# Edit release/releases/RELEASE_DIGEST.md:
+# Edit <instance>/releases/RELEASE_DIGEST.md:
 #   - Append v<X.Y> entry under version-family H2 section (or create new H2 if major-prefix is novel)
-# Author release/releases/notes/v<X.Y>_RELEASE_NOTES.md
+# Author <instance>/releases/notes/v<X.Y>_RELEASE_NOTES.md
 #   - Per release/references/standards/release-notes-standard.md 9-section format
+# (These five corpus surfaces live under the instance root and are git-ignored —
+#  written directly to the operator instance, never staged into the chore PR.)
+#
+# --- Tracked public surfaces (the ONLY corpus-related files in the chore PR) ---
 # Edit CHANGELOG.md at repo root (Surface 2 of Layer-1 dual-write):
 #   - Prepend ## [v<X.Y>] - YYYY-MM-DD H2 section under "Unreleased" per Keep-a-Changelog 1.1.0
-#   - Content extracted from RELEASE_NOTES.md Section 6a per release-notes-standard.md § 5.3 transform
+#   - Content extracted from the instance RELEASE_NOTES Section 6a per release-notes-standard.md § 5.3 transform
 #   - Conditional: only fires if CHANGELOG.md exists at repo root;
 #     under pre-CHANGELOG state, Phase B5.5 below SKIPs CHANGELOG emit with PASS
 # Edit .version at repo root (release-cut-owned version source-of-truth):
@@ -138,13 +144,11 @@ git checkout -b chore/v<X.Y>-stage-13-corpus-update
 #   - Read by the SessionStart version-skew hook (core/hooks/notify-version-skew.sh)
 #   - Conditional: only fires for *versioned* releases; SKIP-with-PASS for version-less
 
-git add <OPERATOR_INSTANCE_RELEASE_LOG_PATH> \
-        release/releases/RELEASE_INDEX.md \
-        release/releases/RELEASE_DIGEST.md \
-        release/releases/notes/v<X.Y>_RELEASE_NOTES.md \
-        CHANGELOG.md \
+# The chore PR stages ONLY the tracked public surfaces; the instance-corpus edits
+# above are written out-of-tree (git-ignored) and are not added here.
+git add CHANGELOG.md \
         .version
-git commit -m "chore(v<X.Y>): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG"
+git commit -m "chore(v<X.Y>): Stage 13 — CHANGELOG + .version (instance corpus written out-of-tree)"
 git push -u origin chore/v<X.Y>-stage-13-corpus-update
 
 gh pr create \
@@ -163,7 +167,7 @@ gh pr view <PR> --json state,mergeCommit
 
 **Phase B-velocity — `**Velocity:**` field append (visible-H4 Deployment Log):** In the SAME Stage 13 chore PR commit that transitions the RELEASE_LOG row `DEPLOYED → VERIFIED` (Phase B1) and adds `**Outcome:**`, the Stage 13 spoke appends the `**Velocity:**` field to the v<X.Y> visible-H4 `#### Deployment Log v<X.Y>` block — sibling immediately AFTER `**Cycle-Time:**`. The field is computed by [`release/tools/compute-release-velocity.sh <version> --milestone <N> --merge-sha <MERGE_SHA>`](../../tools/compute-release-velocity.sh) (the `MERGE_SHA` captured at Stage 12 Phase B1; the milestone number is the release's bundle milestone) and embeds the returned value; if the tool cannot run in the close worktree (e.g. `gh` unavailable), the spoke manually computes the three signals from the membership and embeds them. The field schema, the label→work-class map, the N/A semantics (a release with no `size:*`-labelled membership records `Velocity: N/A`), and the N=3 recalibration linkage are codified at [`release/references/standards/release-velocity-tracking.md`](../standards/release-velocity-tracking.md). **Why Stage 13, not Stage 12:** the *delivered* points and *allocation actuals* are authoritative only once Stage 13 marks the membership closed (the same "not knowable until close" property as the outcome field). Direct-to-main is prohibited — this lands via the Stage 13 chore PR. **Cutover / grandfather:** applies to releases entering Stage 13 strictly AFTER this field's introducing-release merge SHA; **the introducing release itself is exempt** (reflexive-pipeline-loop discipline), and pre-cutover rows carry no `**Velocity:**` field (no backfill).
 
-**Phase B5.5 — CHANGELOG.md append (Surface 2 of Layer-1 dual-write):** The Stage 13 chore PR commit includes a CHANGELOG.md append at repo root — Surface 2 of the Layer-1 dual-write mechanism per [`release-notes-standard.md § Part 5`](../standards/release-notes-standard.md). The content is extracted from `release/releases/notes/v<X.Y>_RELEASE_NOTES.md` Section 6a per the §5.3 transform rule (5–15 lines, Keep-a-Changelog 1.1.0 format with `## [v<X.Y>] - YYYY-MM-DD` H2 + `### Added/Changed/...` H3 categories present). Surface 1 (GitHub Releases) was already emitted at Stage 12 Phase B5.5 per [`stage-12-execute.md § Phase B5.5`](stage-12-execute.md); Surface 3 (RELEASE_LOG VERIFIED transition) is in the same Stage 13 chore PR diff per Phase B1.
+**Phase B5.5 — CHANGELOG.md append (Surface 2 of Layer-1 dual-write):** The Stage 13 chore PR commit includes a CHANGELOG.md append at repo root — Surface 2 of the Layer-1 dual-write mechanism per [`release-notes-standard.md § Part 5`](../standards/release-notes-standard.md). The content is extracted from the instance-side release note (`${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes/v<X.Y>_RELEASE_NOTES.md`, per [ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md)) Section 6a per the §5.3 transform rule (5–15 lines, Keep-a-Changelog 1.1.0 format with `## [v<X.Y>] - YYYY-MM-DD` H2 + `### Added/Changed/...` H3 categories present). Surface 1 (GitHub Releases) was already emitted at Stage 12 Phase B5.5 per [`stage-12-execute.md § Phase B5.5`](stage-12-execute.md); Surface 3 (RELEASE_LOG VERIFIED transition) is in the same Stage 13 chore PR diff per Phase B1.
 
 **Tier-A design artifact — Layer-1 dual-write emit sequence (ASCII flow-block per [`design-artifact-standard.md § 6`](../../../core/standards/design-artifact-standard.md)):**
 
@@ -221,7 +225,7 @@ The flow-block stays embedded here (NOT centralized at `core/standards/_examples
 
 **Pre-CHANGELOG SKIP semantics:** If CHANGELOG.md does NOT exist at repo root (pre-CHANGELOG state — the file-initialization ticket establishes the file with the initial Keep-a-Changelog header), Phase B5.5 SKIPs the CHANGELOG portion of the commit with PASS and logs the SKIP to the chore-PR body. The Stage 13 chore PR commits and merges normally with the other 4 release-corpus surfaces (RELEASE_LOG / INDEX / DIGEST / NOTES); CHANGELOG join fires automatically on the FIRST release post-init. No operator intervention required.
 
-**Concurrent Stage-13 corpus conflict resolution.** When two releases' Stage-13 chore PRs are open at the same time, the **second-to-merge** hits a git merge conflict on all four append-only release-corpus ledgers — `CHANGELOG.md`, `release/releases/RELEASE_INDEX.md`, `release/releases/RELEASE_DIGEST.md`, and `release/releases/RELEASE_LOG.md` — because both PRs write into the same prepend/transition region. Resolve deterministically by classifying every conflicting region into one of **two invariants**; **never** resolve the whole merge with a blanket `-X ours` / `-X theirs`, which silently drops or regresses one release's record. (Framed for two concurrent PRs; ≥3 concurrent closes conflict pairwise and both invariants below compose — each is associative/commutative — so "the second-to-merge" generalizes to "each later-merging PR".)
+**Concurrent Stage-13 corpus conflict resolution.** Post-[ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md), `CHANGELOG.md` is the only append-only ledger that lands via the chore **PR** (the others are instance-side CONTENT, written out-of-tree); the same invariants below apply to the instance-corpus ledgers when two close-outs write the same operator instance, and to `CHANGELOG.md` on the git merge. When two releases' Stage-13 close-outs run at the same time, the **second-to-land** hits a conflict on the append-only release-corpus ledgers — `CHANGELOG.md` (tracked, on the PR merge) and the instance-side `RELEASE_INDEX.md`, `RELEASE_DIGEST.md`, and `RELEASE_LOG.md` — because both write into the same prepend/transition region. Resolve deterministically by classifying every conflicting region into one of **two invariants**; **never** resolve the whole merge with a blanket `-X ours` / `-X theirs`, which silently drops or regresses one release's record. (Framed for two concurrent PRs; ≥3 concurrent closes conflict pairwise and both invariants below compose — each is associative/commutative — so "the second-to-merge" generalizes to "each later-merging PR".)
 
 The two invariants the resolution must preserve:
 
@@ -324,7 +328,7 @@ C1 Close Milestone — gates on Phase A + B + B-OPS all verified. C2 Post close-
 **Framework dimensions touched:** State Persistence (RELEASE_LOG.md, Milestone close); Tracking (auto-close via `closes #N`). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
 
 ## 6. Outputs
-All issues CLOSED (or documented-deferred), Milestone CLOSED, RELEASE_LOG.md status VERIFIED, user-facing release note at `release/releases/notes/vX.Y_RELEASE_NOTES.md` per [release-notes-standard.md](../standards/release-notes-standard.md), per-release close-out learnings register produced from [`release/references/templates/release-learnings-register-template.md`](../templates/release-learnings-register-template.md) and written to the operator-instance register path (full Kerth retrospective + full PMBOK 7 lessons-learned), verification evidence persisted, release branch deleted, pipeline-stages.md updated (when applicable), operational deployment manifest executed and verified, close-out evidence posted, carry-forward items tracked, G-CL6 design-artifact refresh verification (when Tier-A activation fired during this release, per [design-artifact-standard.md](../../../core/standards/design-artifact-standard.md) § 8).
+All issues CLOSED (or documented-deferred), Milestone CLOSED, RELEASE_LOG.md status VERIFIED, user-facing release note at the operator-instance corpus path `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/notes/vX.Y_RELEASE_NOTES.md` (instance-side per [ADR-032](../../../core/ADRs/ADR-032-release-corpus-public-vs-instance-split.md)) per [release-notes-standard.md](../standards/release-notes-standard.md), per-release close-out learnings register produced from [`release/references/templates/release-learnings-register-template.md`](../templates/release-learnings-register-template.md) and written to the operator-instance register path (full Kerth retrospective + full PMBOK 7 lessons-learned), verification evidence persisted, release branch deleted, pipeline-stages.md updated (when applicable), operational deployment manifest executed and verified, close-out evidence posted, carry-forward items tracked, G-CL6 design-artifact refresh verification (when Tier-A activation fired during this release, per [design-artifact-standard.md](../../../core/standards/design-artifact-standard.md) § 8).
 
 *The release-note-at-Stage-13 output requirement applies to all releases going forward.*
 

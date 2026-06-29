@@ -136,3 +136,23 @@ _validation/
 core/hooks/*.jsonl
 core/hooks/*.log
 core/hooks/.mode
+
+# Release corpus — per-release CONTENT is operator-instance (ADR-032): the maintainer's
+# filled LOG/DIGEST/REVERSIONS + notes/ + plans/ + logs/ ship to
+# ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/, never the tracked
+# tree. A fresh clone gets the corpus SHAPE (the public scaffolding below) without the
+# narrative. Ignore the in-repo content paths; the `!`-negations RETAIN the public
+# scaffolding (README, hub-state/*.template, and the empty RELEASE_INDEX seed). The root
+# CHANGELOG.md is the concise public release surface (tracked, not under this path).
+release/releases/RELEASE_LOG.md
+release/releases/RELEASE_DIGEST.md
+release/releases/RELEASE_REVERSIONS.md
+release/releases/notes/
+release/releases/plans/
+release/releases/logs/
+release/releases/archive/
+# RELEASE_INDEX is SPLIT (ADR-032 Decision 1): the empty public seed is tracked; the
+# filled content is instance-side. The seed stays tracked because it is not ignored above.
+!release/releases/README.md
+!release/releases/hub-state/
+!release/releases/hub-state/*.template

@@ -166,12 +166,22 @@ if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
 [[ -z "$REPO_SLUG" ]] && REPO_SLUG="pmo-platform"
-RELEASE_LOG="$REPO_ROOT/release/releases/RELEASE_LOG.md"
-RELEASE_INDEX="$REPO_ROOT/release/releases/RELEASE_INDEX.md"
-RELEASE_DIGEST="$REPO_ROOT/release/releases/RELEASE_DIGEST.md"
-RELEASE_REVERSIONS="$REPO_ROOT/release/releases/RELEASE_REVERSIONS.md"
-RELEASE_NOTES_DIR="$REPO_ROOT/release/releases/notes"
-RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
+# Corpus base re-points to the operator-instance root (ADR-032): the
+# per-release LOG/INDEX/DIGEST/REVERSIONS + notes/ + plans/ are operator-instance
+# CONTENT, not tracked in the repo. Source the single resolver (lib-instance-path.sh)
+# so the `personal/pmo-instance` leaf lives in exactly one place (ADR-017), and key
+# the corpus paths off $(pmo_instance_path) — the same precedence WORKSPACE_ROOT
+# resolves with (env → operator.toml → $HOME/Claude). The --check-paths probe
+# records N/A (exit 0) when this instance root is absent (fresh clone / CI).
+# shellcheck source=../../core/deploy/lib-instance-path.sh disable=SC1091
+source "$REPO_ROOT/core/deploy/lib-instance-path.sh"
+RELEASE_CORPUS_ROOT="$(pmo_instance_path)/releases"
+RELEASE_LOG="$RELEASE_CORPUS_ROOT/RELEASE_LOG.md"
+RELEASE_INDEX="$RELEASE_CORPUS_ROOT/RELEASE_INDEX.md"
+RELEASE_DIGEST="$RELEASE_CORPUS_ROOT/RELEASE_DIGEST.md"
+RELEASE_REVERSIONS="$RELEASE_CORPUS_ROOT/RELEASE_REVERSIONS.md"
+RELEASE_NOTES_DIR="$RELEASE_CORPUS_ROOT/notes"
+RELEASE_PLANS_DIR="$RELEASE_CORPUS_ROOT/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
