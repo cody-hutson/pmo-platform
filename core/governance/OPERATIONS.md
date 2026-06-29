@@ -1020,6 +1020,40 @@ Meetings follow the same lifecycle: ACTIVE (scheduled) → CORE (completed, outc
 
 Transcripts are the primary evidence source. Apply this protocol to all transcripts (daily connects, testing sessions, topic dives, status calls).
 
+The protocol that follows runs *inside* the [Daily Processing Cycle](#daily-processing-cycle) — it is not a parallel pipeline. The two subsections below name the implicit flow (the six **Named Pipeline Stages**) and the automation boundary for each output class (the **Three-Tier Output Model**); both compose with the existing cycle steps and the [Context Lifecycle Model](../disciplines/context-lifecycle-model.md) rather than duplicating them.
+
+### Named Pipeline Stages
+
+The transcript flow already runs across the Daily Processing Cycle but is named here as one pipeline: **Entry → Routing → Core-Tracker → PPM → Stakeholder-Review → Action-Triage** (with a terminal *resolution* gate). Each stage cross-references its existing Daily-Processing-Cycle step number(s) and its Context-Lifecycle state — using the five object-typed state names verbatim from [`context-lifecycle-model.md §2`](../disciplines/context-lifecycle-model.md) (`Context-Captured` / `Context-Structured` / `Context-Reviewed` / `Context-Decided` / `Context-Closed`), no aliases. The **Output Document Tier** column carries the Three-Tier Output Model (below) so the two subsections are single-source.
+
+| Stage | Daily-Cycle step(s) | Context-Lifecycle state | Output Document Tier |
+|---|---|---|---|
+| **Entry** | step 1 (File Intake) | `Context-Captured` | — |
+| **Routing** | step 3 (File Classification) | `Context-Structured` | auto-write (Document Tier 2) |
+| **Core-Tracker** | steps 5 / 10 / 12 (Register Update + Consolidated Update + Execution) | `Context-Reviewed` | auto-write (Document Tier 2) |
+| **PPM** | step 4 (PPM Triage) + step 6 (Follow-up Tags) | `Context-Reviewed` | (feeds triage) |
+| **Stakeholder-Review** | step 11 (User Approval) | `Context-Decided` | **approval (Document Tier 1)** |
+| **Action-Triage** | step 6 tags + step 16 (Proactive Next Steps) | `Context-Decided` | **user-triage (surfaced, NOT auto-logged)** |
+| *resolution* | [Evidence Gate](#evidence-gate-for-closing-items) | `Context-Closed` | — |
+
+**Stakeholder-Review** and **Action-Triage** are first-class named stages, not prose buried in step 11 / step 16:
+- **Stakeholder-Review** — *entry condition:* a transcript-derived change touches a Document Tier 1 / stakeholder-facing artifact (RAID Log, project plan, stakeholder communication). *Output Tier:* **Tier 1 approval gate** — the change is presented and stops for operator approval before write.
+- **Action-Triage** — *entry condition:* PPM emits `[…]` follow-up tags (step 6) carrying action items. *Output Tier:* **user-triage** — items are surfaced for the operator to dispose; they are **never auto-logged** on the operator's behalf.
+
+**Uniform application across projects.** This pipeline applies **uniformly across all projects** with no per-project variants: every project shares the 01-08 layout defined in [`§ Standard Project Folder Structure`](#standard-project-folder-structure), so the same Entry→…→Action-Triage stages, the same step cross-references, and the same Context-Lifecycle states hold for every project (sub-part D pattern-scaling).
+
+### Three-Tier Output Model
+
+Transcript-derived outputs are sorted into three **automation tiers** that map onto the existing Document Tiers — so routine tracker updates flow without per-output friction while anything stakeholder-visible or risk-bearing stops for approval, and no action item is silently committed. Each tier maps to its Daily-Processing-Cycle step(s) and Context-Lifecycle state (carried in the Named-Pipeline-Stages table above; this subsection is the per-output-class view):
+
+| Tier | Maps to | Output classes | Behavior |
+|---|---|---|---|
+| **auto-write** | Document Tier 2 (operational trackers) | tracker updates (Daily Status Log, Communications Tracker, Open Meetings Tracker, carry-forward), Transcript Register entries, file routing | flows without a per-output approval prompt (confirmed in-response per the Write-first-speak-second guardrail) |
+| **approval** | Document Tier 1 (RAID Log, stakeholder-facing artifacts) | **RAID-Log changes**, stakeholder-facing edits, project-plan changes | **stops for operator approval** before write (the Stakeholder-Review stage) |
+| **user-triage** | the `[…]` follow-up tags (step 6) | action items | **surfaced for operator disposition, NEVER auto-logged** (the Action-Triage stage) |
+
+The boundary in one line: **operational tracker updates auto-write; RAID-Log and stakeholder-facing changes require approval; action items surface for triage and are never auto-logged.** The model **composes with** the pipeline (it is the Output-Tier column of the stage table) rather than introducing a parallel classification.
+
 ### Transcript Intake
 - **File route** — Classified by filename pattern (see "New File Routing Rules" below).
 - **Path validation** — Verified against project folder structure on register write.
@@ -1037,6 +1071,10 @@ Transcripts are the primary evidence source. Apply this protocol to all transcri
 - Check that file physically exists at registered path.
 - If broken: flag as `[PATH:BROKEN]` and surface for file recovery/re-routing.
 - Do NOT process a transcript with broken path; mark as `UNASSIGNED` pending path resolution.
+
+## Framework Reference
+
+The Transcript Processing Protocol is a registered consumer of the [Context Lifecycle Model](../disciplines/context-lifecycle-model.md) — the platform-level state machine for inbound content. The Named Pipeline Stages above drive the framework's `Context-Captured → Context-Structured → Context-Reviewed → Context-Decided → Context-Closed` progression (§5 mechanisms 1 / 6 / 15 in the framework's mechanism map). This protocol registers in that doc's [§8 Consumers](../disciplines/context-lifecycle-model.md) per its §6 consumer-registration contract (a `## Framework Reference` cross-reference citing the file path). Per-state stall detection (orphan files unrouted, `UNASSIGNED` transcripts aging) is specified in [`context-lifecycle-model.md §4`](../disciplines/context-lifecycle-model.md); this protocol's Unassigned Transcript Escalation (above) is the mechanism the framework allocates to the `Context-Structured` stall.
 
 ---
 

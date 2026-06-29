@@ -207,6 +207,25 @@ fallback, agnostic output if unparseable.
 Every PPM response follows this structure. Read `references/output-format.md` for the full
 specification with field definitions.
 
+### Three-tier automation split (transcript-derived output)
+
+PPM output is split into three **automation tiers** that map onto the platform Document Tiers
+and the transcript Three-Tier Output Model in
+[`core/governance/OPERATIONS.md` §Transcript Processing Protocol](../../../core/governance/OPERATIONS.md).
+Tag each output block with its tier so the downstream write path knows whether it flows, stops for
+approval, or surfaces for triage:
+
+| Tier | Output sections (below) | Document Tier | Behavior |
+|---|---|---|---|
+| **auto-write** | Section 3 *operational-tracker updates* + Section 8 `TRACKER_UPDATE` blocks targeting Document Tier 2 trackers (Daily Status Log, Communications Tracker, Open Meetings Tracker, carry-forward), Section 8.6 Impact Matrix | Document Tier 2 | flows without a per-output approval prompt; confirmed in-response (Write-first-speak-second) |
+| **approval** | Section 3 *RAID / stakeholder-facing* updates + any Section 8 `TRACKER_UPDATE` targeting the **RAID Log** (`R-PPM-###`) or a stakeholder artifact + Section 5 decisions that mutate a Tier-1 record | Document Tier 1 | **stops for operator approval** before write (the Stakeholder-Review stage) |
+| **user-triage** | Section 4 (Items Requiring Your Action) + the `[…]` follow-up tags PPM emits (the action-item class) | n/a — surfaced only | **surfaced for operator disposition, NEVER auto-logged** (the Action-Triage stage) |
+
+The boundary: **operational tracker updates auto-write; RAID-Log and stakeholder-facing changes
+require approval; action items surface for triage and are never auto-logged on the operator's
+behalf.** This is the same tiering the OPERATIONS.md transcript protocol defines — PPM tags its
+output to it; it does not invent a parallel classification.
+
 ### 1. Executive narrative (6–10 lines)
 Decision-grade summary. What happened, what it means, what needs to happen next. A busy
 executive reads only this section and knows the situation.
@@ -493,7 +512,12 @@ PPM Agent surfaces it as a Section-8.6 SECONDARY row.
 
 **Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact / Follow-Up Record → child records at
 entry state (§5.1 chains 6 / 7 / 8, all `GENERATES`).** PPM Agent processes a meeting
-transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. On `held`, PPM
+transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. **Meeting entry state:** a
+meeting first extracted from a transcript or surfaced as a scheduled item enters at
+`lifecycle_state: scheduled` (the Axis-1 entry state — `{scheduled, held, cancelled}`, the canonical
+`lifecycle_state` column in the Open Meetings Tracker per `core/schemas/tracker-schemas.md` Tracker 3);
+PPM Agent emits that entry state on extraction so the `scheduled → held` / `scheduled → cancelled`
+transition has a defined origin. On `held`, PPM
 Agent (creates Decision + RAID) emits new child records — each Decision at
 `Decision-proposed`, each RAID Item at `RAIDItem-open` — with the `GENERATES` provenance
 edge back to the Meeting. tracker-manager writes the new rows at their entry

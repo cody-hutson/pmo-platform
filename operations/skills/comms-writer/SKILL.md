@@ -157,6 +157,15 @@ Logistics) and the formality-calibration rule (cross-functional technical sessio
 quick internal sync vs. refinement loop). The agenda is a finished communication, not
 a blank template — every gap is a specific named need, never a fill-in placeholder.
 
+**5-second-scan design (human-behavior-aware).** The agenda is built for a 5-second inbox
+scan per the spec's [§ 5-Second-Scan Design](../../../core/standards/meeting-agenda-format.md):
+lead with the **decision/ask**, not the backstory; surface "what we need from you" **above the
+fold**; **inline a 1–3 sentence summary** anywhere a transcript or long source is referenced — a
+**bare link is the hard-rule violation**; every agenda item is **owner-tagged AND time-boxed**.
+The agenda must pass the **scan test** (below, and in the spec) before it is declared READY.
+Calibrate the scan bar to the audience per [`references/audience-profiles.md`](references/audience-profiles.md)
+§5 (exec / team / technical).
+
 ### Meeting recap
 
 **Trigger**: "Write the recap for [meeting]", any [COMMS] tag for recap,
@@ -169,6 +178,15 @@ stakeholders needing visibility), the fixed body order **Decisions (attributed) 
 Action Items → Notes → Key Roadblocks (if applicable)**, and the timeliness (within 4
 business hours / same-day standard) and distribution rules. The recap is a finished
 communication, not a blank template.
+
+**5-second-scan design (human-behavior-aware).** The recap is built for a 5-second scan per the
+spec's [§ 5-Second-Scan Design](../../../core/standards/meeting-recap-format.md): the fixed
+Decisions → Action Items order already leads with the load-bearing content; **inline a 1–3 sentence
+summary** anywhere a transcript or long source is referenced (a **bare link is the hard-rule
+violation**); every action item is **owner-tagged AND dated**; the reader's owned actions sit
+**above the fold**. The recap must pass the **scan test** (below) before it is declared READY.
+Calibrate the scan bar to the audience per [`references/audience-profiles.md`](references/audience-profiles.md)
+§5 (exec / team / technical).
 
 The **Action Items** section is a **reference view** of the follow-up records emitted from
 meeting processing (ppm-agent §8.7) — it does not own or duplicate their state. Each line cites
@@ -370,6 +388,14 @@ A draft is READY FOR SEND when:
 - Action items have owners and dates
 - Tone matches the audience profile
 - No compliance issues (see `references/compliance-rules.md`)
+- **Meeting-type scan test (meeting agenda / recap only):** the draft passes the **scan test** — the
+  decision/ask (agenda) or the decisions + reader's owned actions (recap) are identifiable in
+  **≤5 seconds**; the ask sits **above the fold**; **every source reference carries an inline 1–3
+  sentence summary (no bare links)**; every agenda item / action item is owner-tagged and time-boxed
+  or dated. A meeting agenda or recap that fails any clause is **NOT READY**, calibrated to the
+  audience per [`references/audience-profiles.md`](references/audience-profiles.md) §5
+  (exec / team / technical). See the canonical specs'
+  [§ 5-Second-Scan Design](../../../core/standards/meeting-agenda-format.md).
 
 A draft is NOT READY when any material claim depends on unconfirmed information.
 List each gap: "NEEDS: [specific information] from [specific source]."
@@ -565,6 +591,59 @@ guardrails) and `## Reversibility Discipline` (decision-class output discipline)
 entry uses the 5-field conditional template per
 `core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
+
+### Bare-transcript-link pre-read — OUT
+
+- **Signature (observable signal):** A meeting pre-read / agenda / recap references a transcript or
+  long document as a **bare link** with no inline summary — "see the transcript [link]", "details in the
+  FDD [link]" — and the recipient is expected to absorb the content before or from the meeting material.
+- **Conditional:** do NOT ship a meeting material that references a source without a **1–3 sentence
+  inline summary** when the recipient is expected to absorb it (pre-read or recap context), because a
+  bare link forces the reader to open the source to reconstruct context — defeating the 5-second scan
+  the material exists to enable.
+- **Root cause:** inlining a summary is extra synthesis work; the link "feels complete" because it is
+  technically a pointer to the truth. The cost of the missing summary lands on every recipient, not the
+  author, so it is invisible at authoring time.
+- **Mitigation:** the inline-summary **hard rule** (no bare links) in the canonical specs'
+  [§ 5-Second-Scan Design](../../../core/standards/meeting-agenda-format.md) + the meeting-type **scan
+  test** in the Section-2 readiness gate. Every source reference carries its inline summary; the link
+  follows it.
+- **Principal response vs. junior response:** Principal writes "FDD approval is blocked on the WMS
+  mapping — Section 4 is unresolved (1-line summary), full doc: [link]"; junior writes "review the FDD
+  before the meeting: [link]" and moves on, leaving every attendee to reconstruct the point.
+
+### Backstory-before-ask in a meeting material — PROC
+
+- **Signature (observable signal):** A meeting agenda or recap opens with context, history, or narration
+  ("In our last session we discussed…", "Background: the integration has been…"); the decision, ask, or
+  the reader's owned action is buried below the fold.
+- **Conditional:** do NOT lead a meeting material with backstory when a decision or ask exists, because
+  the recipient scans top-down in ~5 seconds and abandons before reaching the ask — the material fails
+  to communicate what the meeting needs from them.
+- **Root cause:** chronological narration is the default authoring order (it is how the author
+  experienced the events), and it reads as thorough; the decision/ask-first inversion is a deliberate
+  re-ordering the author must impose against that default.
+- **Mitigation:** the **decision/ask-first** + **above-the-fold ask** principles in the canonical specs'
+  § 5-Second-Scan Design; the scan test asserts the ask is identifiable in ≤5 seconds and above the
+  fold. For recaps, the fixed Decisions → Action Items → Notes order enforces this structurally.
+- **Principal response vs. junior response:** Principal leads with "Decision needed: approve the cutover
+  date (Fri) — context below"; junior leads with "In our last session…" and the ask never gets read.
+
+### Un-owned or un-timed agenda item — OUT
+
+- **Signature (observable signal):** An agenda item has no `@Owner`, or no time allocation, or both —
+  "Discuss vendor options", "Integration update" — with no one named to drive it and no time-box.
+- **Conditional:** do NOT emit an agenda item without an owner **and** a time allocation when the item
+  requires discussion, because an un-owned item has no one accountable to lead it (it stalls or is
+  skipped) and an un-timed agenda overruns its slot.
+- **Root cause:** owner and time-box feel like formatting polish rather than substance, so under time
+  pressure the author drops them and lists bare topics; the cost (a meeting that overruns or an item with
+  no driver) surfaces only in the room, after the agenda shipped.
+- **Mitigation:** the **time-boxed, owner-tagged items** principle made a mandatory format element in
+  [`meeting-agenda-format.md`](../../../core/standards/meeting-agenda-format.md) § 5-Second-Scan Design;
+  the scan test fails any agenda with an un-owned or un-timed item.
+- **Principal response vs. junior response:** Principal writes "`@Maria` — 10 min — decide vendor
+  shortlist"; junior writes "discuss vendor" and the item arrives with no driver and no clock.
 
 ### Escalation output emitted without a SIOR Recommendation + confidence level — OUT
 

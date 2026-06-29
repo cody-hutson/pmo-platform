@@ -49,6 +49,31 @@ The calibration scales the *form*; it never drops a required element. A quick sy
 a one-sentence goal, attendees with rationale, the discussion points (the agenda-items element in light
 form), any pre-read, and a join path.
 
+## 5-Second-Scan Design (human-behavior-aware)
+
+A meeting agenda is read by a busy recipient skimming an inbox. It must communicate **what the meeting
+needs from them** in a 5-second scan. The six required elements above are present; these four scan
+principles govern *how they are ordered and rendered* so the agenda is absorbable at a glance:
+
+1. **Decision/ask-first.** Lead with the decision to be made or "what we need from you," not the
+   backstory. The goal statement and any decision/ask surface **above the fold** (in the first screen of
+   the invite), before context or history.
+2. **Inline-summary hard rule.** No agenda or pre-read references a raw transcript or long source as a
+   **bare link** — every referenced source carries an **inline 1–3 sentence summary** of what it says
+   and why it matters. The recipient must never have to open the source to reconstruct context before
+   the meeting. *(This is the single most load-bearing scan principle.)*
+3. **Time-boxed, owner-tagged items.** Each agenda item carries an `@Owner` **and** a time allocation
+   (element 4 made mandatory by the scan bar — owner + time-box are not optional polish; an un-owned or
+   un-timed item fails the scan test).
+4. **Above-the-fold ask.** "What we need from you" — the decision, approval, or input the meeting
+   requires — surfaces above the fold, never buried after the agenda list.
+
+**Scan test (acceptance check).** Before an agenda is send-ready it must pass: *the decision/ask is
+identifiable in ≤5 seconds; the ask is above the fold; every source reference carries an inline
+summary (no bare links); every agenda item is owner-tagged and time-boxed.* The scan bar is calibrated
+per audience (exec / team / technical) in the consumer's
+[`references/audience-profiles.md`](../../operations/skills/comms-writer/references/audience-profiles.md).
+
 ## Anti-Patterns
 
 - **Fill-in placeholder tokens** (INSERT / TBD / ADD-DETAILS-style brackets) — an agenda is a finished
@@ -58,6 +83,13 @@ form), any pre-read, and a join path.
   accountable to lead it.
 - **Goal stated as a topic, not an outcome** — "Discuss the integration" is a topic; "Agree the
   integration cutover sequence and owner" is an outcome. The goal statement names the outcome.
+- **Bare-link pre-read** — a pre-read that references a transcript or long doc as a bare link with no
+  inline 1–3 sentence summary forces the reader to open the source to reconstruct context, defeating the
+  5-second scan. Inline the summary; the link follows it.
+- **Backstory-before-ask** — opening with context/history while the decision or ask is buried below the
+  fold. The reader scans top-down and abandons before reaching the ask. Lead with the decision/ask.
+- **Un-timed agenda item** — an item with no time allocation; an un-timed agenda overruns. Each item is
+  time-boxed.
 
 ## Consumers
 

@@ -151,10 +151,26 @@ An item can only leave carry-forward if there is evidence:
 - Objective: What the meeting should accomplish (1-2 sentences)
 - Agenda: Numbered items with time allocations
 - Pre-reads: Documents attendees should review before
-- Status: NEEDS SCHEDULING / SCHEDULED / COMPLETED / CANCELLED
+- `lifecycle_state`: The **canonical governed** Meeting Axis-1 state — enum `{scheduled, held, cancelled}` (per `entity-field-schemas.md §3.7` V-MTG-05). This is the state the entity model and lifecycle automation key off.
+- Status: NEEDS SCHEDULING / SCHEDULED / COMPLETED / CANCELLED — the human-readable tracker **display** label (retained for the existing tracker UX; `NEEDS SCHEDULING` is a pre-`scheduled` display sub-step). Display↔governed map: `NEEDS SCHEDULING` / `SCHEDULED` → `lifecycle_state: scheduled`; `COMPLETED` → `held`; `CANCELLED` → `cancelled`.
 - Outcome: Post-meeting summary (populated after completion)
 - Follow-up actions: Actions identified during meeting
 - Transcript path: Link to transcript file (if recorded)
+
+### Meeting `lifecycle_state` — frozen 3-state machine
+
+The Meeting entity's Axis-1 lifecycle is the **frozen 3-state** machine `scheduled → held | cancelled` (`core/disciplines/project-entity-model.md` §7 Meeting; `core/schemas/entity-field-schemas.md §3.7` V-MTG-05). The tracker MAY display richer sub-steps in the `Status` field (e.g., `NEEDS SCHEDULING`), but `lifecycle_state` is constrained to the three governed values only.
+
+**Stage-transition rules:**
+
+| Transition | Trigger | Triggering agent | Evidence |
+|---|---|---|---|
+| `scheduled → held` | meeting occurred (transcript captured or outcome populated) | ppm-agent (meeting processing — Cascade B) | transcript path or `Outcome` populated |
+| `scheduled → cancelled` | meeting cancelled before it occurred | ppm-agent / operator | cancellation note |
+
+No other transitions exist — there is **no** `held → *` and **no** re-open (terminal on `held` / `cancelled`), consistent with the frozen Axis-1 machine. The `held` and `cancelled` transitions are terminal states and carry the same evidence bar as a tracker CLOSE action.
+
+> **Reconcile note (6-stage → 3-state).** Legacy framing proposed a "6-stage" meeting pipeline (Identified … Held / Closed). The canonical Meeting machine is the **3-state** `{scheduled, held, cancelled}` — there are **no** `Identified` or `Closed` Meeting states. A body-only reader of a legacy proposal must not build a competing 6-state machine: `lifecycle_state` is the V-MTG-05 3-value enum, period. Richer display sub-steps live in the `Status` display field, never in `lifecycle_state`.
 
 ---
 
