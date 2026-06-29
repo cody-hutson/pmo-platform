@@ -260,6 +260,22 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 **Distinguishing the three:** Sprint is **TIME-BOXED** (methodology-specific); Milestone is **SCOPE-BOXED** (platform-universal); Release is **DEPLOYMENT-BOXED** (the ship event). In the platform's current convention, 1 Milestone = 1 Release; sprints apply only when Methodology declares them.
 
+### term: Initiative {#term-initiative}
+
+- **Definition:** A multi-milestone grouping theme; not a hierarchy level — a cross-milestone grouping label (`epic:*` / `project:*`), never a container tier or `parent_ref` target. It ties related Work Items, their umbrella Issue, and an optional roadmap together.
+- **Real-world PMO equivalent:** Program-level initiative / strategic theme — a body of related projects pursued toward one capability outcome (loosely a PMI "program" theme), but expressed in this platform as a grouping label, not an org tier.
+- **Platform equivalent:** A grouping label in the `epic:*` or `project:*` namespace (`label-taxonomy.md` § Initiative Labels) binding an umbrella Issue + child Issues + an optional operator-local roadmap. The work-item hierarchy itself is methodology-invariant (Portfolio → Program → Project → Milestone/Workstream → Work Item) and Initiative is NOT one of its levels.
+- **Authoritative file:** `core/disciplines/work-organization-mapping-framework.md` (hierarchy SSOT) + `core/specs/label-taxonomy.md` § Initiative Labels (grouping-label mechanism). Decision record: ADR-049.
+- **Consumers:** `core/standards/initiative-roadmap-framework.md`, `core/specs/label-taxonomy.md`, `release-planner` / Stage 3 Bundle (grouping-label scoping).
+
+### term: Roadmap {#term-roadmap}
+
+- **Definition:** An architected path across milestones; may span one or more initiatives — one-per-initiative is the default, not a definitional limit. Program-altitude, Living.
+- **Real-world PMO equivalent:** Program roadmap / strategic roadmap — the sequence-anchored "what we are delivering across these milestones" view, distinct from a Gantt schedule (which is implementation-anchored).
+- **Platform equivalent:** A Living artifact at the operator-local roadmaps path (default `/roadmaps/`, per ADR-046; instances git-ignored). Its § 3 Now/Next/Later sequences the contributing Issues (scoped by the initiative's grouping label) into the architected path-to-done.
+- **Authoritative file:** `core/standards/initiative-roadmap-framework.md` (roadmap convention). Decision record: ADR-049.
+- **Consumers:** `initiative-roadmap-framework.md`, `release-planner`, Stage 3 Bundle / Stage 5 Collective Review cohesion-check (convention only — in-repo enforcement retired per ADR-012).
+
 ---
 
 ## Appendix A — Conflicting-Usage Register
@@ -289,7 +305,7 @@ Terms NOT used in the platform (with reason) and the canonical term that replace
 | Work Package | PMBOK convention; Work Item + Task cover the same scope | Work Item (issue level) + Task (stage-scoped sub-task) |
 | Iteration | Methodology-specific (Agile); not universal | Sprint (when methodology uses time-boxes) |
 | Delivery | Overloaded — sometimes means Release, sometimes means artifact | Release (deployment event) or Deliverable (artifact) — per context |
-| Initiative | Portfolio-level concept not modeled at platform layer | Milestone (ships together) or cross-Milestone roadmap theme |
+| Initiative | Previously treated as a non-canonical / unmodeled concept; now a canonical term (cross-milestone grouping theme, not a hierarchy level) per ADR-049. | Canonical — see [term: Initiative](#term-initiative). |
 
 ---
 
@@ -300,7 +316,7 @@ Terms NOT used in the platform (with reason) and the canonical term that replace
 - **Authoritative-file delegation:** Glossary entries name the authoritative file but do NOT duplicate its schema. If the authoritative file changes a definition, the glossary is updated in the same commit (cross-reference integrity check QC3-03).
 - **Adding new terms:** New terms added to this glossary require a Collective Review pass or an ADR Issue — this is a governance file and falls under "No ungoverned changes."
 
-**Total terms:** **23 terms** — 19 across the six categories (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown, Scope/Time boxes) plus 4 first-class actor terms (Hub, Spoke, Skill, Sub-agent) in Category 2. Authoritative count = `grep -cE '^### term:.*\{#term-' core/specs/terminology-glossary.md` (heading-scoped — prose mentions of `{#term-…}` in this file are not term entries and are correctly excluded).
+**Total terms:** **25 terms** across the six categories (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown, Scope/Time boxes) — the per-category counts vary (some categories carry more than four terms: Category 2 also holds the four first-class actor terms Hub/Spoke/Skill/Sub-agent, and Category 6 also holds the grouping terms Initiative/Roadmap). Authoritative count = `grep -cE '^### term:.*\{#term-' core/specs/terminology-glossary.md` (heading-scoped — prose mentions of `{#term-…}` in this file are not term entries and are correctly excluded).
 
 ## See Also
 

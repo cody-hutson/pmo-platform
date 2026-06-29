@@ -69,6 +69,8 @@ Team                       ADR  ←──  Git history
                              (immutable decision record)   (immutable change record)
 ```
 
+> **Canonical scope note (per [term: Roadmap](../specs/terminology-glossary.md#term-roadmap), ADR-049):** the diagram's "scope = one initiative" states the platform **default** (one roadmap per initiative), not a definitional limit. The canonical `Roadmap` term permits a roadmap to span **one or more** initiatives; "Initiative" itself is a cross-milestone grouping theme, not a hierarchy level.
+
 The five-type mapping, with C12 altitude and primary consumer:
 
 | # | Artifact type | C12 altitude | Primary location | Primary consumer |
@@ -79,7 +81,7 @@ The five-type mapping, with C12 altitude and primary consumer:
 | 4 | **ADR** | Team-level decision record | `core/ADRs/ADR-NNN-*.md` (cross-cutting / platform-architecture) or `release/ADRs/ADR-NNN-*.md` (release-scope) per the ADR module-restructure | Decision-class consumers reading "why was X chosen?" |
 | 5 | **Git history** | Team-level change record | `.git/` (commits + PRs on github.com/[OPERATOR_GITHUB]/pmo-platform) | All audit / archeology / "what changed when" lookups |
 
-**Boundary clarification (Vision vs Roadmap):** Vision answers "what is this platform for, period" — it changes only when the platform's strategic purpose shifts. Roadmap answers "for this one initiative, what's the architected path across milestones to that purpose" — it changes per initiative as Now/Next/Later evolves. A new initiative does not produce a new Vision; it may produce a new Roadmap.
+**Boundary clarification (Vision vs Roadmap):** Vision answers "what is this platform for, period" — it changes only when the platform's strategic purpose shifts. Roadmap answers "for this one initiative, what's the architected path across milestones to that purpose" — for one initiative in the default case, or across several where an initiative grouping warrants it (canonical [term: Roadmap](../specs/terminology-glossary.md#term-roadmap)) — it changes per initiative as Now/Next/Later evolves. A new initiative does not produce a new Vision; it may produce a new Roadmap.
 
 **Boundary clarification (Roadmap vs Spec):** Roadmap is sequence-anchored ("Foundation shipped, Skill is Now, Hardening is Next") at the Program altitude. Spec is implementation-anchored ("file X gets line Y added, function Z gets refactored") at the Project altitude. A roadmap cites the milestones (and their constituent specs) that compose its capability; it does not duplicate spec content.
 
