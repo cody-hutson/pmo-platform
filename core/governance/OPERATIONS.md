@@ -922,6 +922,11 @@ These are living documents. Update cadence and ownership are defined below.
 | `[Project]_RAID_Log.csv` | Risks, Assumptions, Issues, Dependencies. RAID_ID namespaced per skill. Active/Archive split — closed items archived, never purged. Schema in tracker-schemas.md. | Document Tier 1 | PPM Agent | Weekly review. Closure moves to ARCHIVE section. |
 | `[Project]_Artifact_Register.md` | Configuration-management catalog of project artifacts (name, type, version, baseline status, owner, retention) — the per-project CI catalog for the Artifact entity. Append-only superseded history. Schema in tracker-schemas.md § Tracker 6. | Document Tier 2 | Tracker Manager | On artifact-generate + phase-gate baselining |
 | `Key Terms Glossary.csv` | Terminology, acronyms, team-specific language. | Document Tier 1 | Process Designer | As-needed |
+| `[Project]_Project_Charter.md` | Project charter: purpose, measurable objectives, high-level scope, milestone + budget summary, key stakeholders, sponsor authorization (PMBOK Initiating). | Document Tier 1 | PPM Agent | At initiation; baselined at charter approval. |
+| `[Project]_Stakeholder_Register.csv` | Stakeholder engagement register: identification, interest/influence (1-5), current vs. desired engagement, comm preference/frequency, and typed `Decision Owner`/`Authority` (structured SIOR owner-resolution). Schema in tracker-schemas.md § Tracker 8. | Document Tier 1 | PPM Agent | At initiation; reviewed per-milestone or on stakeholder change. |
+| `[Project]_RACI.md` | Responsibility-assignment matrix (workstream × role → R/A/C/I; exactly one A per row) for the Stakeholder domain. Schema in tracker-schemas.md § Tracker 9. | Document Tier 1 | Process Designer | At planning; reviewed on org/scope change. |
+| `[Project]_Change_Log.md` | Change-control log: one row per change request with type, scope/schedule/cost impact, status, decision owner. Baseline change history. | Document Tier 2 | Delivery Engine | On change-request raise + decision. |
+| `[Project]_Lessons_Learned.md` | Lessons register: one row per lesson (category, what happened, root cause, recommendation, adoption owner) + went-well / improve / future-recommendations (PRINCE2 lessons log). | Document Tier 2 | PPM Agent | At retro/phase-gate + closure. |
 
 #### People Capability/Coverage Graph (operator-instance, cross-cutting)
 

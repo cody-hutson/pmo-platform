@@ -154,7 +154,7 @@ When a new template enters the canonical registry, OR a new skill consumes a can
 
 The authoritative list is the `TEMPLATE_SYNC_MAP` array in [`deploy.sh`](../deploy/deploy.sh). The table below mirrors that array as of Stage 6 (2026-05-10) for at-a-glance reference; future drift between this table and the deploy.sh array is detected by `./deploy.sh --check` Check 13's source-side enumeration only — this table is informational, not authoritative.
 
-### §7.1 Template mirrors (16 entries)
+### §7.1 Template mirrors (21 entries)
 
 | Skill | Canonical filename | Target path (under skill root) |
 |---|---|---|
@@ -174,6 +174,11 @@ The authoritative list is the `TEMPLATE_SYNC_MAP` array in [`deploy.sh`](../depl
 | comms-writer | `people-roster-template.yaml` (people-roster data surface; leg-D consumer) | `references/people-roster-template.yaml` |
 | ppm-agent | `people-roster-template.yaml` (people-roster data surface; leg-D consumer) | `references/people-roster-template.yaml` |
 | ppm-agent | `people-graph-clarification-queue-template.md` (leg-C clarification queue; leg-D consumer) | `references/people-graph-clarification-queue-template.md` |
+| project-initiator | `project-charter-template.md` | `references/templates/project-charter-template.md` |
+| project-initiator | `stakeholder-register-template.csv` | `references/templates/stakeholder-register-template.csv` |
+| project-initiator | `raci-template.md` | `references/templates/raci-template.md` |
+| project-initiator | `change-log-template.md` | `references/templates/change-log-template.md` |
+| project-initiator | `lessons-learned-template.md` | `references/templates/lessons-learned-template.md` |
 
 ### §7.2 Template-architecture standards-doc mirrors (18 entries — 6 consumer skills × 3 standards docs, Option A)
 
@@ -187,7 +192,7 @@ Per R-NEW1 Option A (approved at Collective Review 2026-05-10). 6 consumer skill
 
 ### §7.3 Shared standards-doc mirrors (8 entries — single-sourced shared references)
 
-Two shared standards docs — formerly carried as per-skill `references/` duplicate copies held identical by discipline alone — consolidated to single canonicals at `core/standards/` and registered in `TEMPLATE_SYNC_MAP` (the single-source-shared-references + enforced-rebuild work; provenance in §9). Consumer counts differ per doc (not a clean N×M product), so the entries are listed explicitly rather than as an arithmetic product. Total standards-doc mirror entries across §7.2 + §7.3 = 18 + 8 = 26; total map entries (template mirrors + standards-doc mirrors) = 16 + 26 = 42.
+Two shared standards docs — formerly carried as per-skill `references/` duplicate copies held identical by discipline alone — consolidated to single canonicals at `core/standards/` and registered in `TEMPLATE_SYNC_MAP` (the single-source-shared-references + enforced-rebuild work; provenance in §9). Consumer counts differ per doc (not a clean N×M product), so the entries are listed explicitly rather than as an arithmetic product. Total standards-doc mirror entries across §7.2 + §7.3 = 18 + 8 = 26; total map entries (template mirrors + standards-doc mirrors) = 21 + 26 = 47.
 
 | Standards doc | Consumer skills | Target path (under each skill root) | Status |
 |---|---|---|---|
