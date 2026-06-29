@@ -5,7 +5,7 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
-### v2.38 (2026-06-29) — Finishing a release is now reliable and produces the same complete record every time
+### v2.38 (2026-06-28) — Finishing a release is now reliable and produces the same complete record every time
 
 ### v2.36 (2026-06-28) — Triage-and-bundling signals: six Stage 1–6 triage/bundling judgment calls the release pipeline used to re-derive each run — how an approved ticket's structure is treated downstream, how priority is read, when related issues are grouped, and how sub-tasks are tracked — are converted into codified pipeline outputs, and one repeatedly hand-derived step (the native-dependency mirror) is promoted to a tracked tool. `novel`-class; additive throughout (spec/governance/schema edits plus one new tool and one enforcing gate) — no data migration, no stored-content move, no behavior change to any project-facing surface.
 
