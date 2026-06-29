@@ -68,6 +68,16 @@ jobs:
           # The CI was the surface that drifted (position-blind existence check); routing
           # the decision through this lib is what fixes it and keeps it from re-drifting.
           POSITIONAL_LIB='core/hooks/lib/positional-issueref.awk'
+          # Self-describing-words threshold — SOURCED from the canonical hook
+          # (core/hooks/block-fragile-refs.sh `readonly MIN_SELFDESCRIBE_WORDS=N`),
+          # NOT a hand-copied literal (#757). This removes the last hand-copied scalar
+          # so the threshold cannot drift across the hook / fixture-runner / CI surfaces.
+          # Fail loud if the canonical declaration cannot be read.
+          MIN_SELFDESCRIBE_WORDS="$(grep -oE 'MIN_SELFDESCRIBE_WORDS=[0-9]+' core/hooks/block-fragile-refs.sh | head -1 | cut -d= -f2)"
+          if ! printf '%s' "$MIN_SELFDESCRIBE_WORDS" | grep -qE '^[0-9]+$'; then
+            echo "::error::reference-durability: could not source MIN_SELFDESCRIBE_WORDS from core/hooks/block-fragile-refs.sh"
+            exit 1
+          fi
 
           # map_added_lines — diff-hunk -> file-line mapper. Reads a `git diff` on stdin and
           # emits "<TRUE_FILE_LINE>\t<CONTENT>" for each ADDED ('+') line, computing the line
@@ -215,7 +225,7 @@ jobs:
             # missed — and routing through the lib guarantees hook⇄CI agreement going forward.
             IM="$(printf '%s\n' "$ADDED_MAPPED" \
               | awk -f "$POSITIONAL_LIB" \
-                  -v issuere="$ISSUEREF_RE" -v refline="$REFBLOCK_LINE" -v minwords=3 \
+                  -v issuere="$ISSUEREF_RE" -v refline="$REFBLOCK_LINE" -v minwords="$MIN_SELFDESCRIBE_WORDS" \
               || true)"
             if [ -n "$IM" ]; then
               FOUND=1
