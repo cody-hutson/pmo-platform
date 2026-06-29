@@ -100,9 +100,9 @@ If the trigger is ambiguous — especially between Mode 2 (deploy-exec) and Mode
 **Composition:** composes [`release-executor`](../release-executor/SKILL.md) **Mode C (Rollback)** for the rollback *mechanism* (only after operator authorization) and **Mode B (Verify)** for post-incident re-verification. Re-implements neither.
 
 **Process:**
-1. Detect and classify the regression signal (verification FAIL, post-deploy drift, reliability threshold breach).
+1. Detect and classify the regression signal (verification FAIL, post-deploy drift, reliability threshold breach). **Originate an RCA record** for the regression by invoking the RCA method ([`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md)) — establish the causal chain (symptom → proximal cause → systemic pattern) and classify the pattern, so the Decision Briefing in step 3 carries the *cause*, not just the signal. The RCA record is evidence the briefing consumes; it does not change the rollback authority (operator-only, step 4) or mechanism (`release-executor` Mode C). A regression rolled back without a root-cause record lets the same regression recur after the next deploy.
 2. Run the **Retry → Escalate** ladder per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md) (Retry the recoverable; Escalate the rest). Escalate → Rollback is operator-explicit only.
-3. Surface a **Decision Briefing**: the signal, the blast radius, the rollback posture, the reversibility tier + confidence — and await operator authorization. **Do NOT auto-promote a detection to a rollback.**
+3. Surface a **Decision Briefing**: the signal, the root cause (per step 1's RCA record), the blast radius, the rollback posture, the reversibility tier + confidence — and await operator authorization. **Do NOT auto-promote a detection to a rollback.**
 4. **Only after the operator authorizes**, compose `release-executor` Mode C to execute the rollback; then chain Mode B for post-rollback re-verification.
 5. Report outcome, sourcing the rollback mechanism to `release-executor` Mode C.
 
@@ -120,6 +120,7 @@ Five output requirements hold on every emission: (1) the audience is named and t
 ## Dependency Graph Node
 
 - **Composes (invokes, never absorbs):** `release-executor` (Modes A Execute / B Verify / C Rollback — **NOT** Mode D Close, which is release-tail reserved for the future Release Manager).
+- **Cites (discipline, not a composed skill):** [`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md) — Mode 3 originates an RCA record on a regression signal (the cause is briefing evidence). A discipline citation, not a third-skill chain, so depth ≤ 2 (C1) is preserved.
 - **Coordinates with:** `pmo-qa-auditor` (quality review of this Specialist's outputs); upstream `pmo-software-engineer` / `pmo-principal-engineer` (Stage-6 build / Stage-5 design that feed the deploy).
 - **Future deconfliction sibling:** `pmo-release-manager` (not built in this release) — the **decision-vs-execution** line (this skill = deploy mechanics + reliability/rollback triggers; the Release Manager = go/no-go decision + release-tail/close-out). To be trigger-deconflicted as a pair at Stage 7 when the Release Manager ships.
 - **Upstream invokers:** the operator directly; a release-orchestration context (hub) that needs a deploy run, a pipeline configured, or a reliability signal triaged.
