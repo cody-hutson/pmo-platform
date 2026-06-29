@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Context Lifecycle Model
 
 > **Status:** Stage 6 Engineering
@@ -189,6 +190,7 @@ Skills and governance documents that consume this framework's state vocabulary r
 | Ambient inbox + dedup cursor (C1, v2.07) | `Context-Captured` on inbox arrival → `Context-Structured` once file-router routes+registers; the cursor (path + SHA-256 identity) skips already-`Context-Structured` files on re-scan. Consumed by the Path A scheduled intake sweep (C2). | `../standards/c1-ambient-inbox-cursor.md` §3 (state mapping) |
 | Path-B external-sync sweep (C3, v2.07) | `Context-Decided → Context-Closed` for Evidence-Gate-qualifying external-Done evidence — the close write is Document-Tier-gated (Tier-1/RAID held as proposal; Tier-2 in-`cascade_scope` auto-close at `bounded_auto`), clamped to `[automation].automation_level`. Detection automated; closure write proposed per §2. | `../standards/c3-external-sync-path-b.md` §7 (transition + Document-Tier gating) + `## Framework Reference` |
 | Path-A scheduled intake sweep (C2, v2.07) | Drives `Context-Captured → Context-Structured` (file-router classify + register, mechanism 1) over the C1 inbox + cursor (skips already-`Context-Structured` files); advances toward `Context-Reviewed`/`Context-Decided` via PPM Triage (mechanism 6) + Tracker Manager (mechanism 15); emits §4-threshold / §5-mechanism-numbered stall escalations (mechanism 5 step-2, mechanism 12 step-15, mechanism 15 tagged-not-written). Clamped to `[automation].automation_level`. | `../standards/c2-intake-sweep-path-a.md` §4 (state vocabulary + thresholds + mechanism numbers) + `## Framework Reference` |
+| [`../governance/OPERATIONS.md`](../governance/OPERATIONS.md) §Transcript Processing Protocol | The Named Pipeline Stages (Entry → Routing → Core-Tracker → PPM → Stakeholder-Review → Action-Triage) map across the full progression `Context-Captured → Context-Structured → Context-Reviewed → Context-Decided → Context-Closed` (§5 mechanisms 1 / 6 / 15). Stall detection on `Context-Structured` (`UNASSIGNED` transcripts) is the Unassigned Transcript Escalation. | OPERATIONS.md §Transcript Processing Protocol `## Framework Reference` subsection |
 
 ### Forward-citation consumers (future releases)
 
