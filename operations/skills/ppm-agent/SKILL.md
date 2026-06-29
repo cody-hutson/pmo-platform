@@ -512,7 +512,12 @@ PPM Agent surfaces it as a Section-8.6 SECONDARY row.
 
 **Cascade B — Meeting `GENERATES` Decision / RAID Item / Artifact / Follow-Up Record → child records at
 entry state (§5.1 chains 6 / 7 / 8, all `GENERATES`).** PPM Agent processes a meeting
-transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. On `held`, PPM
+transcript; the Meeting transitions `Meeting-scheduled → Meeting-held`. **Meeting entry state:** a
+meeting first extracted from a transcript or surfaced as a scheduled item enters at
+`lifecycle_state: scheduled` (the Axis-1 entry state — `{scheduled, held, cancelled}`, the canonical
+`lifecycle_state` column in the Open Meetings Tracker per `core/schemas/tracker-schemas.md` Tracker 3);
+PPM Agent emits that entry state on extraction so the `scheduled → held` / `scheduled → cancelled`
+transition has a defined origin. On `held`, PPM
 Agent (creates Decision + RAID) emits new child records — each Decision at
 `Decision-proposed`, each RAID Item at `RAIDItem-open` — with the `GENERATES` provenance
 edge back to the Meeting. tracker-manager writes the new rows at their entry
