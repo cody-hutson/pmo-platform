@@ -291,7 +291,7 @@ Skills MUST NOT silently work around validation failures by defaulting to an arc
 
 ### References
 
-- PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-049 for the placement + open-enum decision.
+- PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-050 for the placement + open-enum decision.
 - Org-structure + team-roster expansion — adds the `org_structure_type` and `team_roster` fields to the schema (the org-structure shape + the project-altitude people-graph index), defined by the two V-rules after the keystone (**V14 + V15**). `delivery_model` is NOT added — it resolves to the existing required `delivery_approach`.
 
 ## 6. Examples

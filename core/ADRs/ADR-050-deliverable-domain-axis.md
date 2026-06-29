@@ -9,13 +9,13 @@ deciders: "Workspace owner"
 tags: [project-schema, deliverable-type, domain-axis, methodology-orthogonal, type-pack-boundary, reversibility-expensive]
 ---
 
-# ADR-049 — The deliverable-domain axis lands on PROJECT.md frontmatter, not the type-pack
+# ADR-050 — The deliverable-domain axis lands on PROJECT.md frontmatter, not the type-pack
 
 ## Status
 
 **Proposed** — flips to Accepted at the Stage 9 review.
 
-Number **049** — next gap-free after 048; binds atomically at Stage 12.
+Number **050** — next gap-free after 049; binds atomically at Stage 12.
 
 ## Context
 
