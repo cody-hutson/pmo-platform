@@ -5,7 +5,7 @@ tags: [domain-best-practice, change-management, framework-catalog, duplicate-sou
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-054 — Change-domain best-practice stays self-bundled in change-management; framework-catalog is its registry (no shared domain-best-practices/change.md)
+# ADR-057 — Change-domain best-practice stays self-bundled in change-management; framework-catalog is its registry (no shared domain-best-practices/change.md)
 
 ## Status
 
