@@ -96,17 +96,17 @@ This single rule settles the ship-vs-stub line for every posture: P1 ships (vali
 
 ## Posture crosswalk (narrative enumeration → posture IDs)
 
-Earlier narrative descriptions of this contention class enumerated the postures as a 1-indexed list (`#1`–`#5`). This taxonomy re-anchors them to **P0-indexed** IDs so the default serial posture is the zero/identity posture (matching "default when undeclared"). The crosswalk below maps the narrative numbers onto the canonical IDs so a reader holding the older enumeration can locate each posture here:
+Earlier narrative descriptions of this contention class enumerated the postures as a 1-indexed list (positions 1 through 5). This taxonomy re-anchors them to **P0-indexed** IDs so the default serial posture is the zero/identity posture (matching "default when undeclared"). The crosswalk below maps the narrative list positions onto the canonical IDs so a reader holding the older enumeration can locate each posture here:
 
-| Narrative number | Canonical ID | Posture name |
+| Narrative list position | Canonical ID | Posture name |
 |---|---|---|
-| #1 (fully serial) | **P0** | Fully Serial (DEFAULT) |
-| #2 (serialized commit lane) | **P1** | Serialized Commit Lane |
-| #3 (parallel push + rebase) | **P3** | Parallel-Push Rebase-Retry |
-| #4 (per-sub-task branches + merge queue) | **P2** | Per-Sub-Task-Branch Merge-Queue |
-| #5 (commit broker) | **P4** | Commit Broker (stub) |
+| no. 1 (fully serial) | **P0** | Fully Serial (DEFAULT) |
+| no. 2 (serialized commit lane) | **P1** | Serialized Commit Lane |
+| no. 3 (parallel push + rebase) | **P3** | Parallel-Push Rebase-Retry |
+| no. 4 (per-sub-task branches + merge queue) | **P2** | Per-Sub-Task-Branch Merge-Queue |
+| no. 5 (commit broker) | **P4** | Commit Broker (stub) |
 
-Note the deliberate re-ordering: the empirically-validated **per-sub-task-branch merge-queue** (narrative #4) becomes **P2** and ships first, ahead of the parallel-push-rebase posture (narrative #3 → **P3**), because the merge-queue is the validated convergent safe path and the rebase posture is the more constrained option.
+Note the deliberate re-ordering: the empirically-validated **per-sub-task-branch merge-queue** (narrative no. 4) becomes **P2** and ships first, ahead of the parallel-push-rebase posture (narrative no. 3 becomes **P3**), because the merge-queue is the validated convergent safe path and the rebase posture is the more constrained option.
 
 ## Posture Selection (Stage-4 D-Concurrency Posture)
 
