@@ -475,14 +475,15 @@ When the consumer cannot resolve Localization or Opposing View cleanly, the hone
 
 **G5 — Operator feedback loop / theater signal (metrics at release close)**
 
-Four metrics reported at release close (per § 6):
+Five metrics reported at release close (per § 6):
 
 1. **M2 adoption rate** — count of Opposing Views that CHANGED the recommendation. Target: >0 per release with ≥3 Decision Briefings.
 2. **M3 applicability rate** — count of Pattern Cache Scans that cited applicable patterns. Target: >0 per release.
 3. **Observations-logged count** (Iter 2 extension) — count of observations logged per release. Decaying to zero over multiple releases = signal of under-capture (patterns going unlogged because the class-potential threshold is being applied too narrowly).
 4. **Emergence-confirmation rate** (Iter 2 extension) — count of candidate patterns surfaced AND promoted per release. Zero across 2+ releases with ≥10 observations logged = signal of over-tagging (patterns clustering not matching operator judgment).
+5. **Unauthorized-gate count** — count of operator gates rendered this release for a NON-gate-eligible action (an Autonomy-Tier-2/3 auto-launch or Standing-GO Tier-1 action per the Gate-0 precondition). Target: 0 per release; a non-zero count is a governance-theater regression (`FM-2`).
 
-Zero-rate releases: consumer self-flags possible decay; operator may flag theater. These are tripwires, not thresholds.
+Zero-rate releases: consumer self-flags possible decay; operator may flag theater. These are tripwires, not thresholds. (Metric 5 inverts the polarity — its target is 0, so a *non-zero* reading is the theater signal.)
 
 **G6 — No recursion (mechanisms don't apply to themselves)**
 
@@ -518,7 +519,7 @@ The pair is co-located here, adjacent to the guard it falsifies, because the ant
 
 ## Section 6 — Metrics (Theater Detection)
 
-Four metrics reported at the release-close procedure (e.g., `hub-spoke-bridge.md` Procedure 7 step 3a). Operator reviews for theater signals.
+Five metrics reported at the release-close procedure (e.g., `hub-spoke-bridge.md` Procedure 7 step 3a). Operator reviews for theater signals.
 
 | # | Metric | Compute | Interpretation |
 |---|---|---|---|
@@ -526,6 +527,7 @@ Four metrics reported at the release-close procedure (e.g., `hub-spoke-bridge.md
 | 2 | **M3 Pattern Cache Scan applicability rate** | Count of Pattern Cache Scans that cited applicable patterns (confirmed or emerged-candidate) | Target: >0 per release. Zero across 2+ releases = under-caching or over-specific triage |
 | 3 | **Observations-logged count** | Count of observations appended to the observation log during this release | Decaying to zero across multiple releases = under-capture (class-potential threshold too narrow) |
 | 4 | **Emergence-confirmation rate** | Count of candidate patterns surfaced AND promoted to permanent entries this release | Zero across 2+ releases with ≥10 observations logged = over-tagging (clustering doesn't match operator judgment) |
+| 5 | **Unauthorized-gate count** | Count of operator gates (`AskUserQuestion` / Decision Briefing) **rendered this release for a NON-gate-eligible action** — an Autonomy-Tier-2/3 auto-launch or a Standing-GO Tier-1 action per the Gate-0 gate-eligibility precondition (`hub-spoke-bridge.md` § Decision Briefing Information Sufficiency). Equivalently: the count of Gate-0 `enforce`-phase HALTs + `warn`-phase suppressed-gate notices | **Target 0 per release.** A non-zero count is a governance-theater regression (`FM-2`, `autonomy-tiers.md`); operator reviews each occurrence at close. Conforms to the `touchpoint-phaseout-schema.md` phase-out telemetry signal and rides the `progressive-rollout-convention.md` `shadow→warn→enforce` ladder (shadow: logged-only; warn: surfaced at Procedure 7 Step 3a; enforce: Gate 0 caught + converted N gates). Advancement `shadow→warn→enforce` is the operator's call on the hit-log, never auto-promoted by the count |
 
 **Framing:** Tripwires, not thresholds. A zero-rate release is not automatic failure — it is a signal that either (a) the release genuinely didn't exercise the mechanism, (b) the consumer is drifting toward theater, or (c) calibration parameters need adjustment. Operator interprets.
 
@@ -541,7 +543,7 @@ The hub cites this framework at every Decision Briefing produced under its Opera
 - **Procedure 0a (Audit-Aware Orientation):** cross-references § 2.1.1 sub-mechanism at the chip-launch / recommendation-rendering surface.
 - **Procedure 4 Step 6 (Spoke Completion Handling):** Decision Briefing production applies mechanisms per § 3 triage table.
 - **Procedure 5 Step 3 (Gate Handling):** Gate-decision presentation applies mechanisms per § 3 triage table.
-- **Procedure 7 (Release Close), new Step 3a:** reports the 4 metrics in § 6 for the release.
+- **Procedure 7 (Release Close), new Step 3a:** reports the 5 metrics in § 6 for the release.
 
 ### 7.2 Secondary consumer: `release-personas.md` Stage 4 Release Manager
 
