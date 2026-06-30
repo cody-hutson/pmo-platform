@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.30] - 2026-06-30
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.30_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.30)
+
 ## [v3.27] - 2026-06-30
 
 Platform-reference docs now have a single, written frontmatter standard. It says what YAML metadata each kind of doc (standard, schema, spec, discipline, rule, …) must carry — title, purpose, type, status, reversibility, plus a couple of fields that depend on the doc's class. About 140 framework reference docs that had no frontmatter were backfilled to match, and a new CI check enforces the standard on the governance-class docs (Tier A) and warns everywhere else, so the corpus stays consistent going forward.
