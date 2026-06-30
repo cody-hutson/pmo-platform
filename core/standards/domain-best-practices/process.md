@@ -2,9 +2,9 @@
 title: Domain Best-Practice Guide — Process
 purpose: A K1 universal reference that carries an Applicability Profile and indexes the authoritative best-practice sources for the process domain — staged execution, discovery/decision/review discipline — for Stage-5 design and Stage-7 review consumption. One of the domain-best-practice guide class; it indexes the platform's own codified process disciplines as the enforcing artifacts rather than restating them.
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: process
-framework_version_anchor: "domain-aware-stage5-design"
 consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is process); the domain-best-practice review criterion (a Stage-5/7 reviewer checks a process deliverable against this guide's concepts and the contraindications its Applicability Profile names); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==process)"
 frameworks_cited: "PMI PMBOK 7th (2021); PRINCE2 2017; Scrum Guide 2020; Kanban (Anderson 2010) — all registered in core/specs/framework-catalog.md"
 ---

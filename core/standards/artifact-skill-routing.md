@@ -2,6 +2,7 @@
 title: Artifact-Skill Routing Standard
 purpose: The user-facing "which artifact skill to call" decision tree — routes an artifact need to the correct skill (artifact-generator and its specialist routes, delivery-engine, comms-writer) or out to a purpose-built Anthropic skill (then wrap). Composes with (does NOT restate) ADR-023 skill-sourcing-coupling-posture and the artifact-generator catalog.
 type: reference
+status: ACTIVE
 composes_with: [ADR-023-skill-sourcing-coupling-posture.md, upstream-reference-catalog.md, duplicate-source-discipline.md]
 source: initial release
 reversibility: CHEAP / Confidence HIGH

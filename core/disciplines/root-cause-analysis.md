@@ -1,6 +1,9 @@
 ---
 title: Root-Cause Analysis (RCA) Method
 purpose: The invokable method for root-causing a defect or failure — a thin entry point that consumes the root-cause FORMAT, the systemic-pattern categories, and the failure-mode template where they already live, rather than relocating them
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 applies_to: delivery-engine (Mode A/C/E/G), intake-desk (hand-off), define/triage stages, failure-mode authoring
 parallel_to:
   - ../disciplines/review-discipline-principles.md

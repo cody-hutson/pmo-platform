@@ -4,6 +4,9 @@ purpose: The default discipline for an agent touching an artifact that carries s
   contradictory state — reconcile it to current state, do not post a correction comment /
   [VERIFY] flag / banner and defer. Governs the reconcile-vs-annotate decision ON AN EDIT
   (the edit-time twin of verify-before-recommend's recommendation-time discipline).
+type: discipline
+status: ACTIVE
+reversibility: MODERATE / Confidence HIGH
 applies_to: any agent editing an artifact (issue body, tracker, governance/corpus file,
   release plan); Stage 5/6 spokes; intake-desk; delivery-engine
 parallel_to:

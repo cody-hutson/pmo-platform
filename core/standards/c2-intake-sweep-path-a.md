@@ -1,7 +1,9 @@
 ---
 title: C2 — Path-A Scheduled Intake Sweep
 purpose: Declares the scheduled Path-A intake sweep — a mcp__scheduled-tasks registration that drives the existing OPERATIONS.md Daily Processing Cycle intake steps (1 Intake / 2 Surfacing / 3 Classification / 4 PPM Triage / 5 Register / 6 Follow-up + 15 Orphan) over the C1 ambient inbox, reading the C1 cursor to skip already-Context-Structured files — clamped so every emitted action resolves effective = min(automation_level, per-action max). Wiring spec only — adds the scheduler + cursor-aware skip; it drives the existing intake steps, it does not fork a parallel intake engine. The sweep emits one run-record per run (field-aligned to the C3 sweep run-record) so a silent no-op is impossible.
-type: standards
+type: standard
+status: ACTIVE
+consumers: "mcp__scheduled-tasks (the registration target that runs the sweep); OPERATIONS.md Daily Processing Cycle (the intake steps this sweep drives over the C1 inbox); c1-ambient-inbox-cursor.md (the cursor this sweep reads + advances)"
 composes_with: [depersonalization-spec.md, c1-ambient-inbox-cursor.md, ../disciplines/context-lifecycle-model.md, ../specs/autonomy-tiers.md, ../governance/OPERATIONS.md]
 reversibility: MODERATE (spec + 1 path field + 1 token row + a scheduled-task registration + a consumer registration) / Confidence HIGH — git revert restores the tracked surface; the scheduled-task registration rolls back by deregistration (non-git install-root state); the runtime cursor + run-log are gitignored, so their post-revert absence is harmless (a re-scan re-seeds). The one MODERATE commitment is binding to the C1 cursor identity scheme (changing it post-ship orphans cursor entries).
 ---

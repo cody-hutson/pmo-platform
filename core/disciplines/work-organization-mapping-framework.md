@@ -5,6 +5,7 @@ type: reference
 kind: disciplines
 status: Canonical
 reversibility: CHEAP / Confidence HIGH
+framework_version_anchor: "declarative-workitem-type-model"
 version: v1.07
 composes_with:
   - project-entity-model.md

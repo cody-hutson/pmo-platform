@@ -2,6 +2,7 @@
 title: Domain Best-Practice Guide — Governance
 purpose: A K1 universal reference that carries an Applicability Profile and indexes the authoritative best-practice sources for the governance domain (project/program governance, knowledge codification, documentation), for Stage-5 design and Stage-7 review consumption. One of the two seed guides establishing the domain-best-practice guide class; it is also the encoding of the platform's own internal-deliverable practice.
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: governance
 framework_version_anchor: "domain-aware-stage5-design"

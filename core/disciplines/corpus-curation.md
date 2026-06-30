@@ -2,6 +2,7 @@
 title: Corpus Curation & Epistemology
 purpose: 5-tier evidence rubric (ET1–ET5) + the orthogonality axiom (evidence strength ⊥ universality) + the 6-step curation protocol + a 6-domain authoritative-source taxonomy + the methodological-claim evidence-label extension for the PMO platform K1 corpus
 type: reference
+status: ACTIVE
 source: ""
 reversibility: CHEAP / Confidence HIGH
 adr: ""

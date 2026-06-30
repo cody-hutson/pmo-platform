@@ -1,7 +1,10 @@
 ---
 title: Initiative Roadmap Framework
 purpose: Governs when an initiative warrants a roadmap artifact, what lifecycle it follows, how it differs from an ADR or Initiative Issue, and how cross-milestone cohesion is checked
+type: standard
 status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+framework_version_anchor: "v11.13"
 owner: Workspace owner ([OPERATOR_NAME])
 schema_version: 1
 adr: ""

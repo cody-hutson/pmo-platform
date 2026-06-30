@@ -1,6 +1,9 @@
 ---
 title: Autonomous Execution Model
 purpose: Platform-level patterns for self-repair-and-retry, escalation, and rollback during pipeline execution
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 applies_to: All skills + spokes producing decision-class or execution-class output during the 13-stage pipeline
 parallel_to: decision-discipline.md, reversibility-protocol.md, review-discipline-principles.md, failure-mode-standard.md
 source: autonomy-tiers-and-self-repair

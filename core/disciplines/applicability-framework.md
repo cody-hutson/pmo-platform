@@ -2,6 +2,7 @@
 title: Applicability Framework — context fit, contraindications, conflict resolution
 purpose: The platform's reference model for WHEN a codified practice applies, WHEN it is contraindicated, and HOW to resolve conflicts between competing practices — grounded in realist evaluation and the universality axis. Reference content M1 (decision-discipline.md) consults; introduces zero new runtime machinery.
 type: reference
+status: ACTIVE
 source: ""
 applies_to: "M1 consumers — hub-spoke-bridge.md (Decision Briefing Localization Check), release-personas.md (Stage 4), future release-planner / principal-engineer skills (forward-only)"
 reversibility: CHEAP / Confidence HIGH

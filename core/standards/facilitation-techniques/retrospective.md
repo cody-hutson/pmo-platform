@@ -2,10 +2,10 @@
 title: Facilitation Techniques — Retrospective Domain
 purpose: The retrospective lifecycle-domain file of the facilitation-techniques corpus. Carries the facilitation techniques an operator runs when a team reflects on a completed iteration — surfaced by delivery-engine Mode E (Execution Control) when a retrospective is in scope. Cards conform to the 9-field schema defined in the corpus index (README.md).
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: facilitation
 lifecycle_phase: retrospective
-framework_version_anchor: "v2.22"
 consumers: "operations/skills/delivery-engine/SKILL.md Mode E (Execution Control — retro context hook) — the surfacing trigger consults this file's cards for the retrospective domain; also reached via pmo-scrum-master Mode 3 (Ceremony Support), which composes delivery-engine Mode E"
 owner: "Workspace owner ([OPERATOR_NAME])"
 ---

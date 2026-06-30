@@ -7,6 +7,7 @@ parallel_to:
   - context-lifecycle-model.md                 # the inbound-content state machine (a different lifecycle); sibling in the disciplines "Lifecycle, concurrency, & safety" group
 source: tree-audit (2026-04-18) AUDIT_OPERATIONS.md §O7 — the tailoring rationale was undocumented, so auditors and new team members could not tell whether the 3-state + granular-phase split was intentional or accidental; grounded in PMBOK 7 §1.5 (tailoring is expected and should be documented for transparency and reuse)
 type: discipline
+status: ACTIVE
 reversibility: CHEAP
 ---
 <!-- reference-durability: allow-link -->

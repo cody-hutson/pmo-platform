@@ -1,7 +1,9 @@
 ---
 title: C1 — Ambient Inbox Drop-Zone + Dedup Cursor
 purpose: Declares the ambient-intake watched inbox drop-zone and the dedup cursor schema (path + SHA-256 content-hash identity) that the Path A scheduled intake sweep consumes to skip already-ingested files. Wiring spec only — no autonomous processing ships from the inbox itself.
-type: standards
+type: standard
+status: ACTIVE
+consumers: "c2-intake-sweep-path-a.md (the Path-A scheduled sweep reads this cursor to skip already-ingested files); the OPERATIONS.md Daily Processing Cycle intake steps (consume the inbox drop-zone as an intake source)"
 composes_with: [depersonalization-spec.md, ../disciplines/context-lifecycle-model.md, ../specs/autonomy-tiers.md]
 reversibility: CHEAP (spec/token/field) — except the cursor identity scheme (MODERATE) / Confidence HIGH
 ---

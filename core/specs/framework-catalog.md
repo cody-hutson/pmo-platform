@@ -1,7 +1,9 @@
 ---
 title: Framework Catalog
 purpose: Authoritative registry of every named framework/methodology/standard the platform references — version anchors, applicability, review tier
+type: reference
 status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 owner: Workspace owner ([OPERATOR_NAME])
 introduced: v11.12
 schema_version: 1

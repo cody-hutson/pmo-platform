@@ -2,6 +2,7 @@
 title: Hub Session Continuity
 purpose: K1 codified-knowledge standard defining how a new hub session reconstructs release-scoped state from durable artifacts — persistence format, 3-surface state schema, 9-step Resume Procedure, composite session-ID, dual-surface Decision Log Mechanism, and the durable-state contract that the queued-approval mechanism rides on
 type: standard
+status: ACTIVE
 source: ""
 parallel_to: "agent-handoff-framework.md (sibling K1 standard defining cross-agent handoff contracts; this standard scopes cross-session continuity within a single hub role), hub-action-tracking.md (sibling K1 standard defining action-item schema; rides on this standard's release-scoped substrate convention), pipeline-event-log-schema.md (REUSED by Surface B without schema extension; closed-enum discipline preserved), hub-spoke-bridge.md § Procedure 0b (thin procedural cross-reference pointing to this standard for full schema + behavior)"
 reversibility: MODERATE / HIGH confidence (file creation + cross-reference reversible via git revert until downstream consumers — queued-approval mechanism, action-item tracking — build against the schema at their Stage 6)

@@ -2,6 +2,7 @@
 title: Knowledge-Management Protocols
 purpose: KM-artifact lifecycle state machine + two-key staleness-by-criticality model + the K5→K1 lessons-learned pipeline + bus-factor identification & mitigation + a computable doc-debt scoring model + in-flight capture rules for the PMO platform K1 corpus
 type: reference
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 consumers: "corpus-curation.md (hard D-Struct bidirectional cross-ref: curation step 6 binds to #km-artifact-lifecycle; this doc cites #evidence-tier-vocabulary, never redefines it); QA Auditor KM scanning (cross-milestone forward-dep: consumes the §5 doc-debt model + §2 staleness thresholds); KM Governance (cross-reference at §11 Related References of km-governance-framework.md — this doc's §1 KM-Active/Deprecated/Superseded states are cited verbatim by km-governance-framework.md §4.3 retirement-artifact format; §2 staleness model is one of the 4 retirement-trigger sources composed in km-governance-framework.md §4.1)"
 ---

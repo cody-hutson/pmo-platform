@@ -2,6 +2,7 @@
 title: Hub Action Tracking
 purpose: K1 codified-knowledge standard defining the schema, persistence mechanism, and review cadence for hub-tracked action items (AI-NNN) — durable commitments the hub or operator must execute at a future routing point. Rides on the hub-session-continuity substrate (file-based markdown — template at release/releases/hub-state/action-items.md.template; runtime instance at <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md); composes with the agent-handoff framework when action items are handed off to spoke owners; surfaces via the main-thread Decision Briefing mechanism governed by the hub-orchestration layer.
 type: standard
+status: ACTIVE
 source: ""
 parallel_to: "hub-session-continuity.md (sibling K1 standard defining the durable substrate this standard rides on; PA-NNN/AI-NNN namespaces partitioned by record-type), agent-handoff-framework.md (sibling K1 standard defining cross-agent handoff manifests; composes with action items handed off to spoke owners), pipeline-event-log-schema.md (REUSED — 5 new action-item-* subtypes additive on existing decision event_type, closed-enum discipline preserved), hub-spoke-bridge.md § Procedure 4a + § Procedure 7a (thin procedural cross-references pointing to this standard for full schema + behavior)"
 reversibility: MODERATE / HIGH confidence (file creation + cross-reference removal + event-subtype revert reversible via git revert until downstream consumers — Stage 13 automated-closeout, future hub-replacement skills — build against the schema + hard gate)

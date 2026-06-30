@@ -1,6 +1,9 @@
 ---
 title: Discovery Discipline Framework
 purpose: Shared discipline methodology for discovery-class work (premise-interrogation, gap-surfacing, assumption-auditing as a first-class activity-class)
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 applies_to: hub-spoke-bridge.md Stage 4/5 phases, release-personas.md Stage 5, release-planner / pmo-skill-editor / pmo-qa-auditor (discovery-audit modes), intake authoring, roadmap revision, post-failure / post-surprise contexts
 parallel_to:
   - ../disciplines/decision-discipline.md

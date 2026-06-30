@@ -2,6 +2,7 @@
 title: Universal-Protocol vs. Localized-Context Standard
 purpose: The authoring-and-audit enforcement layer on the universality axis — the operational decision test, the committed audit-dimension list, the embedded-vs-teaching test, and the authoring-guardrail spec. Composes with (does NOT restate) knowledge-architecture.md.
 type: reference
+status: ACTIVE
 composes_with: [knowledge-architecture.md, decision-discipline.md, duplicate-source-discipline.md, applicability-framework.md]
 source: initial release
 framework_version_anchor: ""

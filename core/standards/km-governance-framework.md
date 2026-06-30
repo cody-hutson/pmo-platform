@@ -1,7 +1,10 @@
 ---
 title: KM Corpus Governance Framework
 purpose: Ownership model + approval protocol + retirement protocol + meta-governance for K1 codified-knowledge artifacts in the PMO platform corpus
+type: standard
 status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+framework_version_anchor: "v11.13"
 owner: operator-class:Workspace owner ([OPERATOR_NAME])
 schema_version: 1
 adr: ""
