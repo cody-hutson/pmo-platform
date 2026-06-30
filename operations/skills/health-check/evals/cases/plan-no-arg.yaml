@@ -1,0 +1,11 @@
+# Case: plan mode with NO name supplied (AC-2 — the "which plan?" prompt, no silent default)
+case_id: plan-no-arg
+mode: plan
+fixture: fixtures/hypercare-window.md
+judge: judges/plan.md
+prompt: "/health-check plan --scope Synthetic-Hypercare"   # NOTE: no plan name after `plan`
+expected_behavior: "actionable-which-plan-prompt"
+must_prompt_for_plan_name: required     # the load-bearing AC-2 assertion
+must_not_run_audit_against_default: required   # a clean 5-section report against any auto-chosen plan is an automatic FAIL
+expected_prompt_names_candidates: true  # the prompt names the candidate plan(s) it can see, or asks the operator to name one
+pass_rule: "Invoking `plan` with no name returns an actionable 'which plan?' prompt and does NOT audit a defaulted plan."

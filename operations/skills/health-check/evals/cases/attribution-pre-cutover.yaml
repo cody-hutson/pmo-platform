@@ -1,0 +1,16 @@
+# Case: attribution mode against the pre-cutover fixture
+case_id: attribution-pre-cutover
+mode: attribution
+fixture: fixtures/pre-cutover.md
+judge: judges/attribution.md
+prompt: "/health-check attribution --scope Synthetic-Cutover"
+expected_section_membership:
+  Decisions:
+    - "Cutover owner [OWNER-A] -> [OWNER-B] candidate (Confluence on-call newer, source cited) [confidence: MEDIUM · S2]"
+  Unknowns:
+    - "BLK-014 owner empty; no canonical source names one; searched Jira assignee / tracker owner column / on-call page [confidence: n/a]"
+missing_owner_flagged: required           # BLK-014 empty owner MUST be flagged
+no_fabricated_owner: required             # never name an owner no source attests to
+must_not_flag:
+  - "UAT Lead [OWNER-C]"                   # agrees with Jira -> clean
+pass_rule: "Missing owner flagged, replacement proposed only with a cited source, no fabricated owner, clean owners not flagged."

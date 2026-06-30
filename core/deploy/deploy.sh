@@ -34,6 +34,7 @@ OPERATIONS_SKILLS=(
   daily-status
   delivery-engine
   file-router
+  health-check
   intake-desk
   pmo-business-analyst
   pmo-knowledge-manager

@@ -1,0 +1,21 @@
+# Case: sources mode against the hypercare-window fixture
+case_id: sources-hypercare
+mode: sources
+fixture: fixtures/hypercare-window.md
+judge: judges/sources.md
+prompt: "/health-check sources --scope Synthetic-Hypercare"
+canonical_source_inventory: required   # the headline deliverable — names the source-of-truth set with per-source freshness
+expected_inventory_names:
+  mcp_primary: ["Confluence", "Jira", "Smartsheet", "SharePoint"]
+  local_fallback: ["04-PMO-Operations/*", "PROJECT.md", "PORTFOLIO.md", "05-Transcripts/", "06-Emails/", "08-Generated/"]
+expected_section_membership:
+  Confirmed:
+    - "Jira sync (April 22) current; Smartsheet exit date agrees [confidence: HIGH · S0]"
+  Auto-Actionable:
+    - "Confluence sync timestamp (PROJECT.md April 2) stale vs live page (edited April 20) — propose updating recorded sync [confidence: HIGH · S2]"
+  tracker_updates_block: required
+missing_but_expected_flagged: required   # SharePoint (no MCP) listed missing-but-expected / link-only, NOT asserted fresh
+must_not_flag:
+  - "Jira sync (current)"
+  - "Smartsheet exit date (agrees)"
+pass_rule: "Canonical-source inventory emitted naming the source-of-truth set, stale Confluence sync flagged with direction, SharePoint flagged missing-but-expected, fresh sources confirmed."

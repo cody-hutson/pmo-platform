@@ -1,0 +1,69 @@
+{
+  "skill_name": "health-check",
+  "notes": "Per-mode binary-judge evals for all 7 modes. v1 (#1125): full / timeline / attribution plus the ADR-051 MCP-degradation case (ids 1-4). v2 (#1126): comms / plan <name> / raid / sources plus the plan no-arg 'which plan?' prompt case (ids 5-9). Fixtures, per-mode judge prompts, and case section-membership specs live under fixtures/, judges/, and cases/. Stakeholder names in fixtures are sanitized.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "full-pre-cutover-categorization",
+      "prompt": "/health-check full --scope Synthetic-Cutover  (against fixtures/pre-cutover.md)",
+      "expected_output": "full mode runs the timeline + attribution checks and merges them into the 5-section output (## Confirmed / ## Auto-Actionable / ## Decisions / ## Unknowns / ## Rollup-Diffs, in order). The two-source-corroborated, more-recent date drift (PROJECT.md+carry-forward April 2 vs Jira+Smartsheet April 9) lands in ## Auto-Actionable [confidence: HIGH · S2] with a TRACKER_UPDATES: block. The newer-source owner replacement ([OWNER-A]->[OWNER-B] from Confluence on-call) lands in ## Decisions [confidence: MEDIUM · S2]. The 'Wednesday April 2' weekday mismatch (April 2 2026 is a Thursday) is flagged in ## Decisions [confidence: HIGH · S2]. The empty-owner BLK-014 lands in ## Unknowns with what was searched. A PROJECT.md date diff is staged in ## Rollup-Diffs (diff-only, never written). Seeded-clean items (UAT Lead [OWNER-C], BLK-021) are NOT flagged. Every finding carries a [confidence: … · S…] label. PASS iff all seeded drifts are in their expected section and zero clean items are flagged. Judge: judges/full.md; case: cases/full-pre-cutover.yaml.",
+      "files": ["fixtures/pre-cutover.md"]
+    },
+    {
+      "id": 2,
+      "name": "timeline-day-of-week-and-no-generalized-dates",
+      "prompt": "/health-check timeline --scope Synthetic-Cutover  (against fixtures/pre-cutover.md)",
+      "expected_output": "timeline mode audits every surfaced date. It validates day-of-week: the 'Wednesday April 2' entry is flagged because April 2 2026 is a Thursday (S2). It refuses generalized ranges: no date is reported as 'week of …' or any relative range; an unverifiable date would route to ## Unknowns with what was searched. The two-source-corroborated, more-recent date drift (April 2 -> April 9) lands in ## Auto-Actionable [confidence: HIGH · S2] with a TRACKER_UPDATES: block. A currency mismatch is S2 (never S3 on elapsed time alone). Correctly-dated items are NOT flagged. PASS iff date drifts categorized correctly, the weekday mismatch is flagged, and no generalized range appears. Judge: judges/timeline.md; case: cases/timeline-pre-cutover.yaml.",
+      "files": ["fixtures/pre-cutover.md"]
+    },
+    {
+      "id": 3,
+      "name": "attribution-missing-owner-no-fabrication",
+      "prompt": "/health-check attribution --scope Synthetic-Cutover  (against fixtures/pre-cutover.md)",
+      "expected_output": "attribution mode audits every item's owner. The empty BLK-014 owner is flagged and routed to ## Unknowns with what was searched (Jira assignee / tracker owner column / on-call page) — never silently passed. The newer-source replacement ([OWNER-B] from the Confluence on-call page) is proposed in ## Decisions [confidence: MEDIUM · S2] WITH its source cited — and only because a canonical source names it. No owner is fabricated from role, adjacency, or transcript mention. The seeded-clean UAT Lead [OWNER-C] is NOT flagged. PASS iff the missing owner is flagged, any replacement is source-cited, no owner is fabricated, and clean owners are not flagged. Judge: judges/attribution.md; case: cases/attribution-pre-cutover.yaml.",
+      "files": ["fixtures/pre-cutover.md"]
+    },
+    {
+      "id": 4,
+      "name": "mcp-degradation-cap-and-banner",
+      "prompt": "/health-check full --scope Synthetic-UAT  (against fixtures/uat-window-mcp-degraded.md; Jira UNREACHABLE at run start)",
+      "expected_output": "The run probes connectors at start, finds Jira unreachable, and emits the header banner '[MCP UNAVAILABLE: Jira] — findings limited to local sources'. The UAT exit date (PROJECT.md + tracker + Smartsheet agree; April 17 2026 is correctly a Friday) lands in ## Confirmed [confidence: HIGH · S0]. The defect-owner disagreement ([OWNER-D] vs [OWNER-E]) whose only tiebreaker (Jira assignee) is unreachable is CAPPED at MEDIUM and routed to ## Decisions with an inline [MCP UNAVAILABLE: Jira] tag — it does NOT appear in ## Auto-Actionable, and no TRACKER_UPDATES: block is emitted for it. HEADLINE ASSERTION: degradation reduced coverage (the finding moved to Decisions, MEDIUM) but did NOT silently downgrade rigor into auto-action (ADR-051 §4). PASS iff the banner fired, the degraded finding is MEDIUM in ## Decisions, and ## Auto-Actionable is empty of it. Judge: judges/full.md; case: cases/full-mcp-degraded.yaml.",
+      "files": ["fixtures/uat-window-mcp-degraded.md"]
+    },
+    {
+      "id": 5,
+      "name": "comms-lifecycle-classification-status-only",
+      "prompt": "/health-check comms --scope Synthetic-Hypercare  (against fixtures/hypercare-window.md)",
+      "expected_output": "comms mode classifies each communication's lifecycle state. COM-031 (SENT April 13, response expected, none in 11 days) is a stale-SENT -> ## Auto-Actionable [confidence: HIGH · S2] with a status-only TRACKER_UPDATES: block routed to /comms-writer. COM-034 (READY, never sent, past its window) is an unsent-READY -> ## Auto-Actionable [confidence: HIGH · S1]. COM-033 (DRAFT for the passed April 13 window) is an obsolete-DRAFT -> ## Decisions [confidence: MEDIUM · S2] (reschedule-or-obsolete is an operator call). The TRACKER_UPDATES: block proposes status changes only — the skill never drafts or sends a comm. No response is asserted where no source attests it. Seeded-clean COM-032 (recent, no response needed) is NOT flagged. Five sections in order; every finding labeled. PASS iff lifecycle states classified correctly, status-only updates, no inferred response, clean comm not flagged. Judge: judges/comms.md; case: cases/comms-hypercare.yaml.",
+      "files": ["fixtures/hypercare-window.md"]
+    },
+    {
+      "id": 6,
+      "name": "plan-named-promised-vs-reflected",
+      "prompt": "/health-check plan Hypercare --scope Synthetic-Hypercare  (against fixtures/hypercare-window.md)",
+      "expected_output": "plan mode audits ONLY the named Hypercare Plan (not a sweep of all plans) for promised-vs-trackers-reflected delta. The war-room staffing rota promised by April 15 is absent from the tracker AND has no Confluence rota page (two sources agree absent) -> ## Auto-Actionable [confidence: HIGH · S2] with a TRACKER_UPDATES: block. The hypercare exit report promised by April 22 (not drafted) may have been deliberately deferred -> ## Decisions [confidence: MEDIUM · S2] (cautious bias — not asserted 'failed'). The daily defect triage stand-up (HC-002 active in the tracker) lands in ## Confirmed [confidence: HIGH · S0]. Five sections in order; every finding labeled. PASS iff the named plan is scoped correctly, deltas categorized with cautious bias, and the delivered item is not flagged. Judge: judges/plan.md; case: cases/plan-hypercare.yaml.",
+      "files": ["fixtures/hypercare-window.md"]
+    },
+    {
+      "id": 7,
+      "name": "plan-no-arg-which-plan-prompt",
+      "prompt": "/health-check plan --scope Synthetic-Hypercare  (NO plan name supplied; against fixtures/hypercare-window.md)",
+      "expected_output": "plan invoked with no name returns an actionable 'which plan?' prompt — it names the candidate plan(s) it can see (or asks the operator to name one) and does NOT run an audit against a guessed/defaulted plan. This is the AC-2 load-bearing assertion. A clean 5-section report produced against any auto-chosen plan is an automatic FAIL. PASS iff the no-name invocation prompts rather than defaulting. Judge: judges/plan.md (Invocation B); case: cases/plan-no-arg.yaml.",
+      "files": ["fixtures/hypercare-window.md"]
+    },
+    {
+      "id": 8,
+      "name": "raid-guardrail-enforcement",
+      "prompt": "/health-check raid --scope Synthetic-Hypercare  (against fixtures/hypercare-window.md)",
+      "expected_output": "raid mode enforces the RAID guardrails. R-PROJ-040 ('Performance may be impacted under peak load') is flagged for THREE violations — passive voice (no actor), missing owner (empty), and missing mitigation (none) -> ## Decisions [confidence: HIGH · S2]. R-PROJ-038 (last reviewed March 5, >30 days before the hypercare window) is flagged stale — a closure-or-refresh candidate per the >30d auto-escalate rule -> ## Decisions [confidence: HIGH · S2]. No risk is auto-closed (cautious bias — closing a risk needs evidence); closures route to ## Decisions, not ## Auto-Actionable. The seeded-clean R-PROJ-041 (active-voice, named owner [OWNER-F], named mitigation, reviewed April 22) is NOT flagged. Five sections in order; every finding labeled. PASS iff all guardrail violations flagged (passive voice / missing owner / missing mitigation / stale), no risk auto-closed, clean entry not flagged. Judge: judges/raid.md; case: cases/raid-hypercare.yaml.",
+      "files": ["fixtures/hypercare-window.md"]
+    },
+    {
+      "id": 9,
+      "name": "sources-inventory-and-freshness",
+      "prompt": "/health-check sources --scope Synthetic-Hypercare  (against fixtures/hypercare-window.md)",
+      "expected_output": "sources mode emits a canonical-source inventory naming its source-of-truth set — the MCP-primary set (Confluence / Jira / Smartsheet / SharePoint) plus the local fallback set — with a per-source freshness verdict (the headline deliverable). The Confluence sync timestamp recorded in PROJECT.md (April 2) is stale vs the live page (edited April 20) -> ## Auto-Actionable [confidence: HIGH · S2] with a sync-direction recommendation + TRACKER_UPDATES: block. SharePoint (no MCP connector) is listed as missing-but-expected / link-only / content-unverifiable — NOT asserted fresh. Jira sync (April 22, current) and the agreeing Smartsheet exit date land in ## Confirmed [confidence: HIGH · S0]. Five sections in order; every finding labeled. PASS iff the inventory is emitted naming the source-of-truth set, the stale Confluence sync is flagged with a direction, SharePoint is flagged missing-but-expected, and fresh sources are confirmed. Judge: judges/sources.md; case: cases/sources-hypercare.yaml.",
+      "files": ["fixtures/hypercare-window.md"]
+    }
+  ]
+}

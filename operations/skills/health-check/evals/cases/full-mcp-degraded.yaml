@@ -1,0 +1,18 @@
+# Case: full mode against the MCP-degraded fixture (ADR-051 degradation under test)
+case_id: full-mcp-degraded
+mode: full
+fixture: fixtures/uat-window-mcp-degraded.md
+judge: judges/full.md
+prompt: "/health-check full --scope Synthetic-UAT"
+run_condition: "Jira UNREACHABLE at run start; Confluence + Smartsheet OK; SharePoint no connector"
+expected_header_banner: "[MCP UNAVAILABLE: Jira] — findings limited to local sources"   # MUST fire
+expected_section_membership:
+  Confirmed:
+    - "UAT exit date April 17 (PROJECT.md + tracker + Smartsheet agree; April 17 2026 is a Friday) [confidence: HIGH · S0]"
+  Decisions:
+    - "Defect owner [OWNER-D] vs tracker [OWNER-E]; Jira tiebreaker unreachable [confidence: MEDIUM · S2] [MCP UNAVAILABLE: Jira]"
+  Auto-Actionable:
+    - "_(none)_ — the single-source-because-degraded defect-owner finding MUST NOT appear here"
+  tracker_updates_block: forbidden        # no Auto-Actionable item -> no block
+headline_assertion: "The uncross-validatable finding is capped at MEDIUM and routed to Decisions; the banner fired; nothing degraded into Auto-Actionable."
+pass_rule: "Banner present AND degraded finding capped at MEDIUM in Decisions AND Auto-Actionable empty of it."
