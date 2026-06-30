@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.27 (2026-06-30) — Platform docs now carry consistent metadata — and a check keeps it that way
+
 ### v3.26 (2026-06-30) — The platform now catches its own governance drift at PR time
 
 ### v3.24 (2026-06-30) — Release-hub orchestrator skill: a net-new whole-release control plane (`release/skills/release-hub/`) that takes a milestone and drives it through the release pipeline by composing the per-stage skills — owning sequencing and readiness-gating, never the stage work itself. Two modes: Mode R (Milestone Readiness) is the pre-flight GO/NO-GO that confirms a bundled milestone is ready to START, and Mode O (Orchestrate Release) runs the full hub-and-spoke orchestration with operator gating only at the named pipeline checkpoints. `novel`-class; additive net-new skill — composes existing stage skills, adds no new autonomous mutation surface, runtime blast radius none.
