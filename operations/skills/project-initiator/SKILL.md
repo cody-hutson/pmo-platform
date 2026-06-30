@@ -204,12 +204,17 @@ The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for share
 
 ### Step 3: Populate PROJECT.md
 
-Use the PROJECT.md template from `references/project-md-template.md`. Fill in all fields from
-user inputs. Apply conditional logic:
+Use the **composed-index** PROJECT.md template from `references/project-md-composed-index-template.md`
+(ADR-052 — the thin ≤50-line wiki-link index, replacing the narrative-table shape). Keep
+**Methodology + Status inline** (consumer back-compat per `project-schema.md` §4 / §8 consumer
+table); scaffold People / Systems / Milestones / Plans / Workstreams as `[[wiki-link]]` lists
+into the `_pmo/` entity pages (Step 2b) and the #159 typed plans — not inline tables. Fill in
+all fields from user inputs. Apply conditional logic (the inline Methodology block carries the
+toggles):
 
-- **Agile projects:** Include Sprint Tracking section. Omit Phase-Gate Timeline.
-- **Waterfall projects:** Include Phase-Gate Timeline. Omit Sprint Tracking.
-- **Hybrid projects:** Include both Sprint Tracking and Phase-Gate Timeline.
+- **Agile projects:** inline cadence = Scrum; link the Sprint Tracker. Omit the phase-gate line.
+- **Waterfall projects:** inline cadence = phase-gate; link the Milestone Tracker. Omit the sprint line.
+- **Hybrid projects:** include both cadence lines (Sprint Tracker + Milestone Tracker links).
 - **Dual-Framing Co-Managed = Yes:** Include Dual-Framing Bridge section with Waterfall milestone framing. Set frontmatter `dual_framing_enabled: true`.
 - **Dual-Framing Co-Managed = No:** Omit Dual-Framing Bridge section entirely.
 - **`delivery_approach` is a 2-element array `[A, B]` (Hybrid-Two, per project-schema §6.5):** scaffold the array form verbatim in the frontmatter (e.g. `delivery_approach: [Scrum, Kanban]`) and include one native track structure per constituent (union per `work-organization-mapping-framework.md` §2.5). This is orthogonal to the Dual-Framing Bridge — a Hybrid-Two project may have `dual_framing_enabled: false`.
