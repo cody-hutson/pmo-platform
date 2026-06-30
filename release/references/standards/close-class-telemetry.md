@@ -8,6 +8,7 @@ consumers: "release/references/pipeline/stage-13-close.md Phase B (capture surfa
 version: v1.00
 ---
 
+<!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->
 # Close-Class Telemetry
 
