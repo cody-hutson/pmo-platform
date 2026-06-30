@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.30] - 2026-06-30
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+The five software-domain specialist skills (architect, principal engineer, software engineer, DevOps/SRE, technical program manager) now cite one shared software best-practice guide as their design-time anchor instead of asserting practices ad-hoc — via compose-by-reference pointers, with no content copied into the skills. The build-philosophy coverage map was corrected so it no longer claims skill-grounding that didn't exist (the software row is marked wired; governance and process remain pending their sibling releases). Additive reference wiring; no behavior, command, or workflow changes.
 
 [Full notes](release/releases/notes/v3.30_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.30)
 
