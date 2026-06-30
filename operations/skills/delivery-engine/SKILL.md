@@ -138,7 +138,7 @@ any [DELIVERY] tag referencing backlog health.
 
 **Output**: Read `references/output-format.md` for the full structure. Key sections:
 mode identification, health scorecard, findings with remediations, RAID entries,
-paste-ready artifacts.
+paste-ready artifacts. Any artifact persisted to `08-Generated/` (RAID Log, cutover plan, go/no-go checklist, sprint review summary) is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
 
 ### Mode B: Ticket Insight & Similarity
 

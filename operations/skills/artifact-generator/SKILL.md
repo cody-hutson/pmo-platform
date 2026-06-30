@@ -288,9 +288,9 @@ this skill generates carries the two Category-3 provenance markers defined at
   — the policy never back-fills historical artifacts in place, but any artifact this skill touches
   on a fresh write gets the markers.
 
-**File naming convention**: `[ProjectAbbrev]_[ArtifactType]_[Identifier]_[Date].md`
-- Example: `ABC_FDD_Review_FDD002_2026-03-18.md`
-- Example: `XYZ_Cutover_Plan_v1_2026-03-18.md`
+**File naming convention**: generated-artifact filenames conform to [`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md) — the single canonical home for charset, the `_` segment separator, the `-`-joined one-segment type slug drawn from the controlled type vocabulary, the optional trailing ISO-8601 date, and the lowercase extension. The shape is `[ProjectCode]_[Type]_[…]_[YYYY-MM-DD].ext`.
+- Example: `ABC_FDD-Review_FDD002_2026-03-18.md`
+- **Versioning/status/lineage are NOT filename segments** — they live in frontmatter per the standard's filename↔frontmatter boundary (so `XYZ_Cutover-Plan_2026-03-18.md` with `version:` in frontmatter, never `XYZ_Cutover_Plan_v1_...`).
 
 #### Entry Lifecycle State on Create
 

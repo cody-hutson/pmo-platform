@@ -842,6 +842,8 @@ All PMO operational skills operate within Layer 2 (Operations domain — `Projec
     └── _unclassified/                      ← Staging area for auto-generated artifacts
 ```
 
+**Naming:** Folder and file names follow [`../standards/artifact-naming-standard.md`](../standards/artifact-naming-standard.md) — the single canonical naming home (POSIX-safe charset, `_` segment separator, `-`-joined one-segment type slug, optional trailing ISO-8601 date, lowercase extension; the `_`-prefix is RESERVED for sanctioned infrastructure folders such as `_config/` / `_pmo/` and staging `_`-subfolders). `project-initiator` enforces folder names against that standard at scaffold time.
+
 ## Folder Routing Guidelines
 
 Route files by **content function**, not by format or keyword match. When a file could fit multiple folders, ask: What is this document's primary purpose? → Which folder serves that purpose?
@@ -857,7 +859,7 @@ Route files by **content function**, not by format or keyword match. When a file
 | **05-Transcripts/** | Meeting recordings and transcriptions, organized by meeting type subfolder. Raw evidence — never modified after filing |
 | **06-Emails/** | Communication evidence archive: forwarded emails, Teams message exports, comms digests. Raw evidence — decision records extracted from emails belong in Governance |
 | **07-Reference/** | External reference material not authored by this project: vendor documentation, SOPs, standards, glossaries |
-| **08-Generated/** | Claude-generated artifacts staged for promotion. Temporary — promoted to target folder on user approval, auto-archived after 10 business days |
+| **08-Generated/** | Claude-generated artifacts staged for promotion. Temporary — promoted to target folder on user approval, auto-archived after 10 business days. Staged artifact filenames conform to [`../standards/artifact-naming-standard.md`](../standards/artifact-naming-standard.md) (charset, `_` separator, `-`-joined one-segment type slug, ISO-8601 date, lowercase extension) |
 
 **Records management:** Retention period, classification class (vital / important / reference / transient), disposition rule, and authenticity markers for every folder above are governed by the records-management policy — [`RECORDS_POLICY.md`](RECORDS_POLICY.md) (disposition moves are logged to [`RECORDS_ARCHIVE_LOG.md`](RECORDS_ARCHIVE_LOG.md)). The `08-Generated/` 10-business-day auto-archive named here is that policy's Transient-class disposition trigger.
 

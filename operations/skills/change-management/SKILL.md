@@ -379,6 +379,8 @@ D (Dependency). Counter is auto-incremented per skill.
 
 Every change-management response follows this structure:
 
+> Any artifact persisted to `08-Generated/` (impact assessment, training plan, readiness checklist, hypercare plan, change matrix) is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
+
 ### 1. Mode & Inputs
 Mode detected, inputs received, [SOURCE] labels on all input references.
 

@@ -203,6 +203,26 @@ change-management, technical-analyst, process-designer).
      parallel to G7/G8). The criterion, the R+A rationale, and the data source live in
      `references/failure-mode-detectors.md`; the platform-trend roll-up of G9's per-output
      findings is detector D2 (Faceless PMO) in Mode E.
+   - **G10: Artifact filename-conformance gate** — When the output under audit **stages or
+     names a generated artifact** (a `08-Generated/` write, a proposed filename, or a filename
+     in an emitter's output contract), verify the filename conforms to the artifact naming
+     standard ([`../../standards/artifact-naming-standard.md`](../../standards/artifact-naming-standard.md)),
+     which is the single canonical home for the regexes and the type vocabulary (cited, not
+     restated here). The gate binds to the standard's three-tier model — the charset regex is a
+     T1 gate; grammar/order and date validity are T2 checks distinct from it.
+     **Phase 1 (structural, deterministic):** filename matches the standard's **canonical charset
+     regex** (G10-01, T1); no space / `&` / `(` / `)` / `/` (G10-02, subsumed by T1, kept as an
+     explicit cite); the date segment, if present, is a **valid** ISO-8601 date — `2026-3-18`
+     single-digit-month rejected (G10-03, T2); filename matches the **grammar/order regex** — ≥ 2
+     segments, alpha-led first segment, closing the `123.md` / `Plan.md` arity/lead holes (G10-05,
+     T2). G10-04 (T3): the `[Type]` segment (segment 2, `-`→space/`/` normalized) resolves to a
+     type in the controlled catalog (**WARN, not FAIL** — the vocabulary legitimately extends).
+     **PASS = G10-01 + G10-02 + G10-03 + G10-05 pass.** FAIL = any structural violation, citing
+     the exact filename + the failing rule + the corrected name in the Remediation field. Binary —
+     no CONDITIONAL. The gate **does not fire** on outputs that name no artifact (correct
+     conditional omission, parallel to G7/G8/G9). This is the audit-time enforcement complement to
+     the write-time conformance the artifact-emitting skills and `project-initiator` (folder names)
+     bind to — all consume the one standard, no second regex authored here.
 4. Produce the QA audit report (see Output Format below).
 
 ### Mode B: Cross-Skill Coherence Review
@@ -404,8 +424,9 @@ Mode D uses the dual-output checklist.
 | G7 | Domain-specific failure-mode discipline | PASS / FAIL / CONDITIONAL PASS | [Phase 1 structural regex + Phase 2 LLM content check; see `../../standards/failure-mode-standard.md`. Fires only when output under audit is a SKILL.md file.] |
 | G8 | Cascade-completeness verification | PASS / FAIL / CONDITIONAL PASS | [Phase 1 deterministic re-run (G8-02/03/04) + Phase 2 LLM judgment (G8-01/05/06); see `references/cascade-completeness-detection.md`. Fires only when output under audit is a Stage 5 spec carrying a `### Cascade-Sweep` block. Un-swept occurrence cited as `file:line` with Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] routing.] |
 | G9 | RACI validation (ownership clarity) | PASS / FAIL | [Fires only when the output asserts ownership of an action / decision / deliverable / risk. One or more owned items with no single clear Responsible+Accountable cited as the finding with the suggested owner-line; see `references/failure-mode-detectors.md`. Consulted/Informed gaps are OBSERVATIONs, not findings.] |
+| G10 | Artifact filename-conformance | PASS / FAIL | [Fires only when the output stages or names a generated artifact. Phase 1 deterministic structural checks against the canonical charset regex (G10-01), no shell-meta (G10-02), ISO-date validity (G10-03), grammar/order ≥2-segments alpha-led (G10-05); G10-04 catalog-type resolution is WARN not FAIL. See [`../../standards/artifact-naming-standard.md`](../../standards/artifact-naming-standard.md). Non-conforming filename cited with the failing rule + the corrected name.] |
 
-**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings). G9 is per-output binary — PASS / FAIL only, no CONDITIONAL — and fires only when the output asserts ownership.
+**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings). G9 and G10 are per-output binary — PASS / FAIL only, no CONDITIONAL — and fire only when the output asserts ownership (G9) or stages/names a generated artifact (G10).
 
 ### 3. Findings
 

@@ -95,7 +95,7 @@ AM Testing transcript.
 2. Read yesterday's PM Update from the Daily Status Log (for carry-forward actions)
 3. Read the Daily Status Update Framework → AM template
 4. Generate using the Framework's section-by-section sourcing rules
-5. Output to `08-Generated/[Project]_AM_Update_[DATE].md`
+5. Output to `08-Generated/[Project]_AM_Update_[DATE].md` — the `[Project]_AM_Update_[DATE]` / `[Project]_PM_Update_[DATE]` output filenames conform to the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug, trailing ISO-8601 date, lowercase extension).
 
 ### PM Status Update
 
