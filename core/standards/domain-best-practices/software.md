@@ -6,7 +6,7 @@ status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: software
 framework_version_anchor: "domain-aware-stage5-design"
-consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is software); the domain-best-practice review criterion (a Stage-5/7 reviewer checks the design against this guide's concepts and the contraindications its Applicability Profile names); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==software)"
+consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is software); the domain-best-practice review criterion (a Stage-5/7 reviewer checks the design against this guide's concepts and the contraindications its Applicability Profile names); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==software); and the software-domain specialist skills release/skills/pmo-architect, release/skills/pmo-principal-engineer, release/skills/pmo-software-engineer, release/skills/pmo-devops-sre, and operations/skills/pmo-technical-program-manager (each cites this guide as its design-time best-practice anchor)"
 frameworks_cited: "Gang of Four (1994); ADR — Nygard (2011); Fowler design heuristics (YAGNI) — all registered in core/specs/framework-catalog.md"
 ---
 <!-- reference-durability: allow-version-ref -->

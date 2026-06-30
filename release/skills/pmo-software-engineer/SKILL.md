@@ -146,3 +146,7 @@ These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide)
 - **Root cause:** "Implement this" arrives naturally and the executor can always start editing; insisting on a plan first feels like ceremony when the change "looks simple."
 - **Mitigation:** At input validation, when no plan/register is present: route to produce one first — chain build-reviewer→`implementation-planner` for a pack, or route to the release pipeline (Stage 5 design → planning) for a release-scoped change — and label the input. Never silently promote a bare ticket into executed change.
 - **Principal vs. junior response:** Principal routes to planning, then executes the resulting register. Junior edits straight from the ticket text; the change ships with no plan, no RT classification, and no verifiable batch the DT gate can check.
+
+## Reference docs
+
+- **Design-time best-practice anchor:** [`core/standards/domain-best-practices/software.md`](../../../core/standards/domain-best-practices/software.md) — the authoritative software-engineering practice guide (design patterns, ADR discipline, YAGNI) this Specialist consults as design-consumption input. Pointer only — no content absorption ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) compose-by-reference); mirrors the Stage-5 design spoke's domain-guide consultation in [`release/references/pipeline/stage-05-solutioning.md`](../../references/pipeline/stage-05-solutioning.md) §5.7.
