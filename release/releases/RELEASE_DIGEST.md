@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.28 (2026-06-30) — Label-taxonomy canonicalization + a GitHub label-set parity check: the cluster axis gains an orthogonality protocol (one domain cluster per issue vs the `cluster: cross-cutting` span-marker that composes alongside it), the stale cluster color column is reconciled to live and the undocumented `cluster: security` is registered (12 clusters, was 11); observation promotion strips the `[Observation]:` title prefix under a deterministic title↔category parity invariant cross-referenced from the Stage-3 Template-Conversion Rule; and `deploy.sh` Check 51 + `check-label-parity.py` assert label-taxonomy ↔ GitHub label-set parity (enforce-capable MISSING / warn-only ORPHAN, warn-mode-initial, source-agnostic), surfacing pre-existing drift (missing `status:` labels → #1828, unregistered `type:*` → #1777) on its first run. `cross-cutting`-class; additive governance + a warn-mode check — runtime blast radius none.
+
 ### v3.27 (2026-06-30) — Platform docs now carry consistent metadata — and a check keeps it that way
 
 ### v3.26 (2026-06-30) — The platform now catches its own governance drift at PR time
