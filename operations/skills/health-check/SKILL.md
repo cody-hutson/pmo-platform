@@ -205,7 +205,7 @@ Confidence (how-likely-wrong) and band (how-deep) travel together; both are requ
 
 ## Interactive & Scheduled Invocation
 
-- **Interactive:** `/health-check [mode] [--scope <project>]`. Output to chat for live review. Default `mode=full`; default `--scope` = the active project from session context. The slash command ships as a harness `commands/health-check.md` file deployed to `~/.claude/commands/health-check.md` (`$ARGUMENTS` quoted per the deploy lint).
+- **Interactive:** `/health-check [mode] [--scope <project>]` invokes this skill directly. Output to chat for live review. Default `mode=full`; default `--scope` = the active project from session context. The mode token and `--scope` are parsed per the invocation grammar defined in this SKILL.md — the skill receives the trailing arguments on invocation; there is no separate slash-command file.
 - **Scheduled:** via the existing `schedule` skill, e.g. `/schedule "Daily timeline check" "/health-check timeline --scope '<project>'" daily 0800`. Output is written to **`08-Generated/_health-check/YYYY-MM-DD-<mode>.md`** (project-scoped, auto-write folder). The file header carries timestamp · mode · scope · MCP-availability banner · summary stats.
 - **Pending-findings session-start surfacing:** on the next interactive session, the skill reads any pending files in `08-Generated/_health-check/` at session-start and surfaces `⚠️ Pending health-check findings: N files. Review with /health-check pending`. This **reuses the existing session-start read pattern** (the `SWAP_HANDOFF.md` / orphan-scan precedent); it does **not** introduce a new hook. Scheduled runs apply the same approval gates — they never auto-apply.
 
