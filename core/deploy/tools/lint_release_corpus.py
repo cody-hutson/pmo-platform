@@ -91,7 +91,11 @@ FILENAME_ALLOWLIST = {
     # than renamed (renaming would invent a version the plan never claimed and break
     # every reference to the theme slug).
     "15-generated-vs-source-provenance_RELEASE_PLAN.md",
+    "16-knowledge-management-discipline_RELEASE_PLAN.md",
     "22-ticket-information-architecture_RELEASE_PLAN.md",
+    "38-governance-cross-reference-currency_RELEASE_PLAN.md",
+    "60-audit-cadence-and-learning_RELEASE_PLAN.md",
+    "72-closeout-output-determinism_RELEASE_PLAN.md",
     "adapter-config-foundation_RELEASE_PLAN.md",
     "architecture-altitude-discipline_RELEASE_PLAN.md",
     "ci-gate-trustworthiness-and-parallel-pr-safety_RELEASE_PLAN.md",
