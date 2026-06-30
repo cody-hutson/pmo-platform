@@ -210,6 +210,21 @@ The Mode B output file contains 11 H2 sections in fixed order. Each H2 with its 
 
 Sub-section anchors `### File Contention Map` (when used inline within Mode A bundle suggestions per Step 5) nest as H3 under each bundle's H3 frame; within Mode B release plan output, the same content lands at H2 level as a top-level section.
 
+**D-Concurrency Posture D-row (a recurring entry in the row-9 `## Operator Decisions (D-Gate Block)`).** Mode B emits a `### D-Concurrency Posture` H3 in the D-Gate block declaring the per-release Stage-6 Engineering parallelism posture (per [`parallelism-posture-taxonomy.md`](../../references/standards/parallelism-posture-taxonomy.md)), carrying the same structurally-required subsections every D-row carries. Default **P0 fully-serial** when undeclared. Scaffold:
+
+```markdown
+### D-Concurrency Posture: Stage-6 Engineering parallelism posture
+- **Gate input:** contention map + ADR-005 `overlap_class` distribution + D-C topology (SINGLE / OPTION-A) + wave count
+- **Pre-decided:** default **P0 fully-serial** when undeclared (safe-by-construction floor; posture parallelism is opt-IN)
+- **Gate decision:** <P0 | P1 | P2 | P3>  (P4 commit-broker is a taxonomy-extension stub, not yet selectable)
+- **Blocks:** Stage-6 chip routing (hub Procedure 2 posture dispatch)
+- **Upstream compatibility:** posture NAMES the existing D-C SINGLE / OPTION-A behavior (SINGLE = P0, OPTION-A = P2) and adds dispatch; no routing-primitive re-type (ADR-052). No `anthropic-skills:skill-creator` convention conflict.
+- **Reversibility-Confidence:** MODERATE / HIGH
+- **Spoke recommendation:** P0 unless the contention map + topology + wave count justify a non-serial posture; P2 (per-sub-task-branch merge-queue) is the empirically-validated non-serial default
+```
+
+Mode B narrative: declare the per-release posture in the D-Gate block; when the bundle is single-card / serial, record P0 explicitly rather than leaving the row absent. Every non-serial posture prohibits force-push (incl. `--force-with-lease`) on the shared release branch under multi-chip activity.
+
 ### Mode C — Dry Run
 
 **Trigger:** "dry run", "show me the diffs", "preview changes for v[X.Y]"

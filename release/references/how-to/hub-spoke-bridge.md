@@ -738,6 +738,8 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 
    **Hub instruction (operative form):** For Stage 6 Engineering sub-tasks, the hub surfaces one chip at a time, in the order specified by the release plan's Implementation Sequence. The hub does NOT present multiple Engineering chips in parallel under D-C SINGLE topology, regardless of whether the chips touch disjoint files. Under D-C OPTION-A topology, parallel Engineering chips are permitted (one per branch); the hub surfaces PR-merge sequencing decisions at Stage 12 per Procedure 6.
 
+   **Stage-6 posture dispatch (per [`parallelism-posture-taxonomy.md`](../standards/parallelism-posture-taxonomy.md)).** The D-C SINGLE serial behavior and the D-C OPTION-A per-branch-parallel behavior described above ARE the named **parallelism postures** P0 (fully-serial) and P2 (per-sub-task-branch merge-queue) respectively; this section names them and adds dispatch. The hub reads the release plan's `D-Concurrency Posture` decision and routes Stage-6 chips per the selected posture's mechanism. **When `D-Concurrency Posture` is undeclared, the posture is P0 fully-serial (default: serial)** — the safe-by-construction guarantee, identical to the unconditional behavior above. Non-serial postures (P1 commit-lane / P2 merge-queue / P3 rebase-retry) are opt-IN; each prohibits force-push (incl. `--force-with-lease`) on the shared release branch under multi-chip activity per the taxonomy's named-and-excluded force-push class. This is **name + dispatch on top of the existing topology conditionality** — it does not introduce conditionality from a frozen unconditional baseline.
+
    **Cutover discipline:** Applies to all releases going forward.
 
 ### Procedure 3: Spoke Prompt Generation

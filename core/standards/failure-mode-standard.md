@@ -865,6 +865,40 @@ The entries below address the `snapshot-as-current-state` root failure mode at h
 - **Principal response vs. junior response:** a principal reads every cited spec, enumerates the options the operator would plausibly choose (not only the recommended one), renders the whole briefing in chat, and only then asks — treating the prompt as a selection over information the operator already has; a junior surfaces the recommendation with a thin option set, asks first, and back-fills context only if the operator pushes back.
 ```
 
+```markdown
+### Lease-races-multi-chip — force-push validates a stale lease — PROC
+
+- **Signature (observable signal):** an Engineering chip runs `git
+  push --force-with-lease` to rewind the shared release branch tip;
+  the push succeeds because the lease validated against the chip's
+  stale local ref, momentarily rewinding sibling commits that landed
+  on the shared release branch during the chip's compute window.
+- **Conditional:** do NOT use `--force-with-lease` (or any
+  history-rewriting push) to rewind the shared release branch tip
+  when concurrent Engineering chips are active, because the lease
+  validates against the operator's last fetch — not the true remote
+  tip — and an N-writer window can close the lease undetected.
+- **Root cause:** `--force-with-lease` provides single-writer safety
+  only; multi-chip activity violates the single-writer premise the
+  lease semantics rely on.
+- **Mitigation:** prohibit history-rewriting push under all
+  non-serial parallelism postures; route the operation through a
+  sub-task branch + merge-queue (posture P2) instead — the
+  empirically convergent safe path. Canonical contract home:
+  [`parallelism-posture-taxonomy.md` § The multi-chip-safety-class
+  attribute](../../release/references/standards/parallelism-posture-taxonomy.md),
+  which names the force-push / history-rewriting class as excluded
+  from every posture. Originating evidence: a prior release's
+  Engineering spoke force-pushed with a stale lease and momentarily
+  rewound sibling commits landed during its compute window; the
+  convergent safe path was a stacked side-branch alongside the
+  release branch.
+- **Principal response vs. junior response:** the junior reaches for
+  `--force-with-lease` believing the lease makes the rewind safe; the
+  principal recognizes that lease semantics require a single writer
+  and routes the work to a side branch when N > 1.
+```
+
 ## Relationship to Platform Guardrails
 
 Every SKILL.md now has two distinct sections:
