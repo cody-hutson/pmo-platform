@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.33] - 2026-06-30
+
+The six governance-domain specialist skills (project manager, program manager, program coordinator, portfolio manager, knowledge manager, release planner) now cite one shared governance best-practice guide (PMBOK 7th, PRINCE2, SECI, Diátaxis) as their design-time anchor instead of asserting practices ad-hoc — via compose-by-reference pointers, with no content copied into the skills. This is the governance-domain sequel to v3.30's software-domain anchoring; two of the three domain guides are now skill-wired, with only the process guide pending. Additive reference wiring; no behavior, command, or workflow changes.
+
+[Full notes](release/releases/notes/v3.33_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.33)
+
 ## [v3.32] - 2026-06-30
 
 The release hub now conforms to the platform autonomy model: it stops re-asking the operator to approve actions it is already authorized to take, and it reads the full-phase-scope rule from the stage specs so a directed phase runs to its boundary.
