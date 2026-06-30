@@ -8,6 +8,16 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.24] - 2026-06-30
+
+A new `release-hub` skill: the whole-release control plane. Point it at a milestone and it drives that milestone through the release pipeline by composing the per-stage skills — it owns the sequencing and the readiness-gating between stages, but never does the stage work itself. Two modes: a Milestone Readiness pre-flight that gives one GO / NO-GO on whether a bundled milestone is ready to start (with a per-finding disposition list), and an Orchestrate Release mode that runs the full hub-and-spoke release end to end, stopping for you only at the named pipeline checkpoints. Additive net-new skill that composes existing stage skills and adds no new autonomous mutation surface; no change to any existing skill, schema, or stored artifact. novel class.
+
+### Added
+
+- **`release-hub` skill — whole-release orchestrator.** A new skill takes a milestone and drives it through the release pipeline by composing the per-stage skills, owning the sequencing and the readiness-gating while delegating the stage work to the stage skills. *Why it matters:* a release run is coordinated end to end from one place, so the stages run in the right order and the operator is gated only at the real decision points instead of having to hand-drive every stage. ([#2212](https://github.com/cody-hutson/pmo-platform/issues/2212))
+- **Milestone Readiness pre-flight (Mode R).** Before a release run is committed, the skill composes triage/duplicate, staleness/architecture, dependency, and bundle-coherence checks into a single GO / NO-GO verdict with a per-finding disposition. *Why it matters:* a milestone that is not actually ready — stale tickets, unresolved dependencies, an incoherent bundle — is caught up front rather than failing partway through the pipeline. ([#2115](https://github.com/cody-hutson/pmo-platform/issues/2115))
+- **Orchestrate Release end-to-end (Mode O).** The skill runs the full hub-and-spoke release: it spawns the per-stage spokes in order and gates the operator only at the named checkpoints (plan-review GO/NO-GO and execute). *Why it matters:* the operator approves the plan once and the run proceeds through the stages on that authorization, instead of opening a fresh approval gate at every phase. ([#2212](https://github.com/cody-hutson/pmo-platform/issues/2212))
+
 ## [v3.23] - 2026-06-30
 
 A new `health-check` skill: run it on a project to get an evidence-backed answer to "is this project's tracked state still accurate?" It audits one project for drift between the state you track and its canonical sources (Confluence, Jira, Smartsheet, SharePoint, plus your local trackers and PROJECT.md) and returns a categorized punch list — confirmed-current, safe-to-fix, needs-a-decision, could-not-verify, and proposed portfolio-file edits — that is never applied automatically. Seven modes scope the question (whole project, timeline, ownership, comms, a named plan, RAID, or your source inventory). Additive net-new skill plus one decision record (ADR-051); no change to any existing skill, schema, or stored artifact — and because the skill only reads and recommends, running it cannot change project state. novel class.
