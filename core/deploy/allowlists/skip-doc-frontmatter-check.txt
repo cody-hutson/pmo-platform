@@ -1,0 +1,33 @@
+# skip-doc-frontmatter-check.txt — files exempt from the platform-doc frontmatter
+# gate (deploy.sh Check 49, core/deploy/tools/check-doc-frontmatter.py).
+#
+# One repo-relative path per line; '#' comments and blank lines are ignored.
+# A listed file is skipped ENTIRELY by the gate (no frontmatter findings emitted).
+#
+# Membership rule: a file belongs here only when the platform-doc-frontmatter
+# standard (#295) does NOT govern it — i.e. it is not an authored K1 platform-
+# reference doc, but generated content or an assembly fragment that happens to
+# live under the scanned core/ surface. This is the standard's §5 carve-out
+# ("generated content") made operational.
+#
+# ── bypass-mode-readiness (#109 deliberately left un-backfilled) ──────────────
+# The hook-layer readiness reference is a GENERATED index assembled at build time
+# from per-rule ADR-030 fragments; the fragments are assembly inputs, not stand-
+# alone authored docs. Neither carries (or should carry) doc-class frontmatter —
+# the index is generated, the fragments are concatenated into it. The #109 Tier-A
+# backfill skipped all 11 by design (generated content, §5 carve-out), so the gate
+# skips them too (else they would each read as a false missing-frontmatter finding).
+#
+# 1 generated index:
+core/rules/bypass-mode-readiness.md
+# 10 ADR-030 assembly fragments:
+core/rules/bypass-mode-readiness/_header.md
+core/rules/bypass-mode-readiness/_cross-cutting.md
+core/rules/bypass-mode-readiness/block-autonomy-ceiling.md
+core/rules/bypass-mode-readiness/block-credential-reads.md
+core/rules/bypass-mode-readiness/block-destructive.md
+core/rules/bypass-mode-readiness/block-egress.md
+core/rules/bypass-mode-readiness/block-fs-boundary.md
+core/rules/bypass-mode-readiness/block-mcp-writes.md
+core/rules/bypass-mode-readiness/block-rm-prefer-trash.md
+core/rules/bypass-mode-readiness/block-shell-injection.md

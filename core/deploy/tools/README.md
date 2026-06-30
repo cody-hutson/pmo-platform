@@ -12,6 +12,8 @@ to a Python helper.
 |---|---|---|---|
 | `check-doc-links.py` | `deploy.sh` Check 14 + operator workflows + audit wrapper | broken-refs, rewrite-map | Doc-link drift detection + per-edit reference rewriting |
 | `check-version-anchors.py` | `deploy.sh` Check 18 | structural | Verify version-anchor citations against current state |
+| `check-doc-frontmatter.py` | `deploy.sh` Check 49 | structural (warn-mode across `core/`; enforce-flip deferred to #2221) | Validate platform-doc frontmatter per the #295 standard: Tier-1 required fields + `type` singular enum + `framework_version_anchor`-IFF-cataloged + `consumers` for standard/schema/spec + `reversibility` tier-prefix |
+| `_frontmatter.py` | `check-version-anchors.py` + `check-doc-frontmatter.py` (shared library) | library (not a check) | The single shared YAML-frontmatter block reader — the F1 consistency seam so Check 18b and Check 49 parse frontmatter byte-identically |
 | `generate_release_index.py` | `release-executor` Mode E (Stage 13 close) | generative | Generate `RELEASE_INDEX.md` from `RELEASE_LOG.md` |
 | `lint_release_corpus.py` | Operator workflows (release-corpus moved to operator-instance) | structural | Validate release-corpus filename regex + frontmatter schema + INDEX row count + type-coherence |
 | `cross-module-audit.sh` | Module-restructure audit + operator | audit (read-only) | Cross-module extraction-readiness audit; bash entrypoint |
@@ -96,6 +98,81 @@ additional path segments beyond `--from-path`, the substitution preserves
 the trailing segments verbatim. Decompose multi-segment restructuring
 renames into multiple invocations (one per `from→to` pair). Per failure-mode
 FM-2 in adversarial-design-review at Stage 5.
+
+## check-doc-frontmatter.py — Platform-Doc Frontmatter Gate (Check 49)
+
+Validates the YAML frontmatter of authored K1 platform-reference docs under
+`core/**` against [`core/standards/platform-doc-frontmatter-standard.md`](../../standards/platform-doc-frontmatter-standard.md)
+(#295). It is the **presence-and-shape** complement to `check-version-anchors.py`
+Check 18b: 18b checks the `framework_version_anchor` **value** and skips
+no-frontmatter docs; Check 49 checks frontmatter **presence + required-field
+shape** and treats a no-frontmatter doc as the headline finding.
+
+```bash
+# deploy.sh Check 49 invocation pattern
+python3 core/deploy/tools/check-doc-frontmatter.py \
+  --target-paths "core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/skills/**/references/*.md" \
+  --allowlist core/deploy/allowlists/skip-doc-frontmatter-check.txt \
+  --output-format tsv
+```
+
+**Six-step per-doc validation** (run for every resolved, non-allowlisted target):
+
+1. **Missing-frontmatter** — first line is not a `---` fence → one finding.
+2. **Tier-1 required-field presence** (all classes) — `title` / `purpose` /
+   `type` / `status` / `reversibility` each present and non-empty.
+3. **`type` ∈ singular enum** — the standard's §5 table (`standard` / `schema` /
+   `spec` / `discipline` / `rule` / `protocol` / `how-to` / `template` /
+   `reference`); a plural like `standards` flags with a did-you-mean hint.
+4. **`framework_version_anchor` present IFF cataloged** — both directions are
+   violations (cataloged-but-absent; present-but-not-cataloged). The anchor
+   *value* is NOT checked here — that is 18b's job.
+5. **`consumers` present for `standard`/`schema`/`spec`** — the blast-radius seam.
+6. **`reversibility` tier-PREFIX match** — the value's first token must be one of
+   `{CHEAP, MODERATE, EXPENSIVE, IRREVERSIBLE}`; a prose tail is allowed.
+
+**Output (TSV):** header `frontmatter-check <N>`, then columns
+`file<TAB>tier<TAB>field<TAB>violation<TAB>severity`. The **`tier` column**
+(`A` | `other`) is the routing key `deploy.sh` consumes — `A` for a doc under
+one of the six Tier-A governance-class dirs (`core/standards|schemas|specs|
+disciplines|rules|governance/`), `other` for the rest of the scanned surface
+(`core/skills/**/references/*.md`).
+
+**Exit codes:**
+- `0` — no violations
+- `1` — violations found (count in the header line)
+- `3` — path-resolution failure: a `--target-paths` glob OR `--catalog-path`
+  resolved to zero/missing files (unverifiable, not clean — the #459 fail-loud
+  contract that 18b and Check 42 also honor).
+
+**Split-mode + warn-mode posture (v3.25 / #2220).** Per the D-4 scope-lock the
+gate **ships warn-mode across all of `core/`, Tier A included** — every finding
+routes through the warn dispatcher; the gate reports non-compliance but does not
+fail the build red, so an incomplete Tier-A backfill on the branch cannot break
+CI. The **enforce-flip mechanism** is built: `deploy.sh` resolves a per-check
+mode via `resolve_check_mode "doc-frontmatter"` (a dedicated, un-committed
+`doc-frontmatter.mode` file). When that flips to `enforce`, the Tier-A leg
+graduates to a hard `FAIL` (the dormant enforce branch) while the rest of `core/`
+keeps warning; the global flip (route `tier == other` to `FAIL` as well) is the
+final graduation. **Both flips are deferred to #2221.**
+
+**F1 consistency (shared with Check 18b).** Check 49 reads each doc's frontmatter
+via the shared `_frontmatter.read_frontmatter` and builds the cataloged-doc set
+via `check-version-anchors.py`'s own `parse_catalog_table` (imported directly).
+So Check 49 and Check 18b cannot disagree about *what a frontmatter block is* or
+*which docs are cataloged in `framework-catalog.md`* — they agree by construction.
+
+**Allowlist** (`core/deploy/allowlists/skip-doc-frontmatter-check.txt`):
+repo-relative paths, one per line (`#` comments + blanks ignored); a listed file
+is skipped entirely. Seeded with the 11 `bypass-mode-readiness` files (1 generated
+index + 10 ADR-030 assembly fragments) — generated content the #295 standard's §5
+carve-out exempts and the #109 Tier-A backfill deliberately left un-backfilled.
+
+**Self-test:** `python3 core/deploy/tools/check-doc-frontmatter.py --self-test`
+runs fixtures (a)–(j): a clean doc, the two falsification fixtures (each Tier-1
+field removed; whole frontmatter stripped), the plural-enum case, both IFF
+directions plus the satisfied case, missing-consumers, the reversibility
+prefix-passes-with-tail proof, tier tagging, and allowlist loading.
 
 ## Module-Aware Prefix Table
 

@@ -6506,6 +6506,87 @@ cmd_check() {
   fi
 
 
+  # Check 49 — Platform-doc frontmatter standard (warn-mode across core/) [#2220]
+  #
+  # Enforces core/standards/platform-doc-frontmatter-standard.md (#295) over the
+  # authored K1 core/ corpus: Tier-1 required fields (title/purpose/type/status/
+  # reversibility); type in the singular platform-doc enum; framework_version_anchor
+  # IFF the doc is cataloged in framework-catalog.md (the PRESENCE complement to
+  # Check 18b's anchor VALUE-consistency); consumers for standard/schema/spec;
+  # reversibility tier-PREFIX match. The tool reads frontmatter via the shared
+  # _frontmatter helper and the cataloged-doc set via check-version-anchors.py's
+  # own parse_catalog_table, so Check 49 and Check 18b agree by construction (F1).
+  #
+  # SHIP POSTURE — WARN-MODE ACROSS ALL OF core/, TIER A INCLUDED (D-4 scope-lock,
+  # 2026-06-29 Collective Review on #2220): every finding routes through the warn
+  # dispatcher at ship; the gate reports non-compliance but does NOT fail the build
+  # red. This de-risks the merge — the gate cannot break CI if #109's Tier-A
+  # backfill is incomplete on the branch.
+  #
+  # ENFORCE-FLIP MECHANISM (built now, graduation DEFERRED to #2221): the tool tags
+  # each finding with tier (A|other), and this block resolves a per-check mode via
+  # resolve_check_mode "doc-frontmatter" (a dedicated doc-frontmatter.mode file,
+  # operator-instance runtime state, NOT committed — absent → falls back to the
+  # shared warn). When that mode flips to "enforce", the Tier-A leg graduates to a
+  # hard FAIL (the dormant enforce branch below) while the rest of core/ keeps
+  # warning. The global flip (route Tier-other to FAIL as well) is the second,
+  # final graduation, also #2221's — at which point the tier partition collapses.
+  # The two-branch structure here IS the one-edit-graduation the design specified.
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown (the 14/18/42/43
+  # precedent); the introducing release is itself exempt (reflexive-pipeline loop).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 49: Platform-doc frontmatter standard (warn-mode across core/; enforce-flip deferred to #2221)"
+    local c49_script="core/deploy/tools/check-doc-frontmatter.py"
+    local c49_allowlist="core/deploy/allowlists/skip-doc-frontmatter-check.txt"
+    if [[ ! -f "$c49_script" ]]; then
+      flag_warn_or_issue "doc-frontmatter" "primitive script missing: $c49_script"
+    else
+      local c49_mode
+      c49_mode=$(resolve_check_mode "doc-frontmatter")
+      # The six Tier-A governance-class dirs (enforce target post-flip) + the
+      # warn-only remainder (core/skills/**/references). The tool tags the split;
+      # this glob list is just the scan surface.
+      local c49_targets="core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/skills/**/references/*.md"
+      local c49_out c49_exit=0
+      c49_out=$(/usr/bin/python3 "$c49_script" --target-paths "$c49_targets" --allowlist "$c49_allowlist" --output-format tsv 2>&1) || c49_exit=$?
+      if [[ $c49_exit -eq 3 ]]; then
+        flag_warn_or_issue "doc-frontmatter" "path-resolution failure (exit 3): $(echo "$c49_out" | head -1) — a --target-paths glob or --catalog-path resolved to zero files; fix the glob list in this check"
+      elif [[ $c49_exit -eq 0 || $c49_exit -eq 1 ]]; then
+        # Partition findings on the tier column (TSV row 2 is the header;
+        # data rows: file<TAB>tier<TAB>field<TAB>violation<TAB>severity).
+        local c49_a c49_o
+        c49_a=$(echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="A"'     | grep -c . || true)
+        c49_o=$(echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="other"' | grep -c . || true)
+        c49_a=${c49_a:-0}; c49_o=${c49_o:-0}
+        if [[ "$c49_a" -eq 0 && "$c49_o" -eq 0 ]]; then
+          log "  OK:    all scanned core/ docs carry conformant frontmatter"
+        else
+          if [[ "$c49_a" -gt 0 ]]; then
+            if [[ "$c49_mode" == "enforce" ]]; then
+              # DORMANT until doc-frontmatter.mode flips to enforce (#2221). The
+              # graduated Tier-A leg: a missing/invalid required field on a Tier-A
+              # doc fails the build.
+              log "  FAIL:  doc-frontmatter — $c49_a Tier-A frontmatter violation(s) (enforce). Fix per core/standards/platform-doc-frontmatter-standard.md."
+              echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
+              ISSUES=$((ISSUES + 1))
+            else
+              # SHIP DEFAULT (D-4): Tier A warns, same as the rest of core/.
+              flag_warn_or_issue "doc-frontmatter" "$c49_a Tier-A frontmatter violation(s) (warn-mode across core/ per D-4; flips to enforce with #2221). Fix per core/standards/platform-doc-frontmatter-standard.md."
+              echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
+            fi
+          fi
+          if [[ "$c49_o" -gt 0 ]]; then
+            flag_warn_or_issue "doc-frontmatter" "$c49_o non-Tier-A frontmatter violation(s) (warn-mode; flips to enforce with #2221 Tier B/C backfill)"
+            echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="other"' | head -10 | sed 's/^/         /'
+          fi
+        fi
+      else
+        flag_warn_or_issue "doc-frontmatter" "check errored (exit $c49_exit): $(echo "$c49_out" | head -1)"
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
