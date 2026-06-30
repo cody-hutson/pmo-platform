@@ -63,9 +63,9 @@ the value does not apply to that surface.
 | Value \ Surface | Skills | Agents | Hub / Spokes | Hooks | Slash-commands |
 |---|---|---|---|---|---|
 | **Scalability** | `knowledge-architecture` · `universal-vs-localized-context` · ADR-006/007 | **GAP** | `methodology-parameterization-v1` | `composition-surface` boundary | **GAP** |
-| **BP — coding** | `domain-best-practices/software` | thin | (Stage-5/7 review) | n/a | n/a |
-| **BP — governance** | `domain-best-practices/governance` · `decision-discipline` | thin | `release-process` | n/a | n/a |
-| **BP — process** | `domain-best-practices/process` · (`discovery`/`decision`/`review` disciplines) | thin | pipeline `stage-*` · `release-process` | n/a | n/a |
+| **BP — coding** | `domain-best-practices/software` *(skill-wired)* | thin | (Stage-5/7 review) | n/a | n/a |
+| **BP — governance** | `domain-best-practices/governance` *(skill-wiring pending)* · `decision-discipline` | thin | `release-process` | n/a | n/a |
+| **BP — process** | `domain-best-practices/process` *(skill-wiring pending)* · (`discovery`/`decision`/`review` disciplines) | thin | pipeline `stage-*` · `release-process` | n/a | n/a |
 | **Maintainability** | `duplicate-source-discipline` · `reference-durability-standard` · `framework-corpus-discipline` | **GAP** | cite-not-duplicate (ADR-003) | Check 9/11/13 · `doc-link-maintenance-protocol` | rules-mirror (Check 9) |
 | **Simplicity** | `software.md` §YAGNI · `principal-standard-checklist` | thin (ADR-020) | `release-process` Tier-1 `[ADJUST]` | minimal by design | **GAP** |
 | **Stability** | `reversibility-protocol` · `version-field-semantics` · `failure-mode-standard` · `canonical-skill-structure` | **GAP** | reversibility in stage outputs | ADR-014 tamper · `bypass-mode-readiness` · version-skew | Check 30 quoting (partial) |
@@ -90,6 +90,12 @@ in flight under the Knowledge-Architecture initiative (epic `knowledge-corpus`):
 completing the three best-practice domain guides. The Agents-column gaps
 are logged for sequencing, not silently dropped (per the auto-logging rule in
 [`OPERATIONS.md`](../governance/OPERATIONS.md)).
+
+The three **BP-domain-guide × Skills** cells are a distinct case from the empty cells
+above: they named an enforcer (`domain-best-practices/{software,governance,process}.md`)
+that no skill consumed. The **software** guide is now skill-wired — the five
+software-domain specialists cite it as their design-time anchor; the **governance** and
+**process** guides remain authored with skill-wiring pending (so marked in the matrix).
 
 ## §Enforcer citations
 
