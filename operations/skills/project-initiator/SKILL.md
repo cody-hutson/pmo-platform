@@ -2,7 +2,7 @@
 name: project-initiator
 description: >
   Manages the full project lifecycle — scaffolding new projects and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]."
-version: v2.20
+version: v3.33
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -99,6 +99,31 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 4. If Agile or Hybrid, confirm Jira Project Key is provided
 5. If Dual-Framing Co-Managed = Yes, note that Dual-Framing Bridge sections will be activated
 6. Flag any missing inputs as `ASSUMPTION – CONFIRM` with proposed values
+7. **Validate the project-root folder name (pre-scaffold gate).** Before any folder is created in Step 2, validate the Project Name against the folder-naming rule. This gate fires here — before the first `mkdir` — precisely so a malformed name is caught before any irreversible scaffold write lands on disk; validating after Step 2 begins risks a partial scaffold under a bad folder name. The authoritative folder-naming rule lives in [`core/standards/artifact-naming-standard.md` § Folder & Directory Naming](../../../core/standards/artifact-naming-standard.md#folder--directory-naming) — that standard **owns** the rule; this skill **enforces** it at scaffold time and **cites the single home**, it does not restate the rule as authoritative here.
+
+   The standard's folder-name regex (reproduced below as a reader-convenience citation aid — the standard is authoritative):
+
+   <!-- CITATION AID ONLY — core/standards/artifact-naming-standard.md § Folder & Directory Naming
+        OWNS this rule. Do NOT edit this pattern here; it is reproduced for reader convenience.
+        If the standard's folder regex changes, this copy is updated to match it (it never leads). -->
+   ```
+   ^[A-Za-z0-9]+([ -][A-Za-z0-9]+)*$
+   ```
+
+   Reject the proposed Project Name and **halt** (do not auto-rename, do not scaffold) when it falls into any of these classes:
+
+   - **R-a — leading `_` (infrastructure-reserved):** the name begins with `_`. The `_`-prefix is RESERVED by the standard for sanctioned infrastructure folders (`_pmo/`, `_config/`, and staging `_`-subfolders such as `08-Generated/_unclassified/`) — never for a *project* folder. The regex enforces this by construction (the leading `[A-Za-z0-9]+` anchor disallows a leading `_`).
+   - **R-b — special / shell-meta / non-portable character:** the name contains any character outside the alphanumeric + single-space-or-hyphen word-break charset — e.g. `& ( ) / : * ? " < > | $ ;`, a leading/trailing/double space, or a leading `-`. These are POSIX-hostile: they break globs, link validators, search indexes, and shell paths.
+   - **R-c — empty or whitespace-only:** the name is empty or contains only whitespace (it fails the regex's `[A-Za-z0-9]+` requirement). A blank name produces `Projects//` and is unscannable. *(Human-readability beyond this — e.g. an opaque code a teammate cannot interpret, like a bare UUID — is NOT regex-enforced; the charset regex structurally cannot encode a "human-readable" predicate. That semantic concern is caught by the operator-confirmation step in Step 8, which surfaces the proposed name for the operator to accept or correct. This is the Tier-3 semantic boundary: the charset regex owns the syntax layer; the operator owns the semantic layer.)*
+
+   **Infrastructure carve-out (do NOT "fix" the rule into rejecting infra).** R-a rejects a `_`-prefixed *project* folder; it must never be hardened into a check that rejects the sanctioned infrastructure folders `_pmo/` / `_config/` / the staging `_`-subfolders. Mode A only ever creates `Projects/[Project Name]/` — it never creates `_pmo/` or `_config/` (those are workspace-level infrastructure, not project roots) — so this validator is never *asked* to validate an infra folder; the carve-out is a documentation guard, not a live exception branch.
+
+   **On rejection — failure-message UX (halt, never silent-rename):** present the user with a clear, actionable message and re-prompt for a corrected name:
+   - **What's wrong:** name the failing class (`_`-prefix reserved for infrastructure / special-or-shell-meta character / empty-or-whitespace).
+   - **Echoed input:** quote the offending Project Name back verbatim (e.g. ``You entered: `_Warehouse Opt&Cleanup` ``).
+   - **Expected format** (attributed to the standard, not asserted as this skill's own rule): "Project folder names use letters, digits, and a single space-or-hyphen word break — no `_` prefix (reserved for infrastructure), no special/shell-meta characters — per `core/standards/artifact-naming-standard.md` § Folder & Directory Naming."
+   - **Corrected suggestion:** offer a conforming candidate derived from the input (e.g. ``Suggested: `Warehouse Opt Cleanup` `` — strip the leading `_`, drop shell-meta characters, collapse to a single space-or-hyphen break). The suggestion is a `[RECOMMENDED]` proposal the operator confirms — do **not** apply it silently.
+   - **Re-prompt:** ask the operator to confirm the suggested name or supply a different conforming name. Push to resolve; do not proceed to Step 2 until a name that passes the rule is confirmed.
 
 ### Step 2: Create Folder Structure
 
@@ -701,6 +726,40 @@ structural conformance and content quality.
   real entries. Junior ships trackers pre-seeded with "example" rows; the first AM update
   reports a phantom blocker, tracker-manager counts a phantom risk, and the operator's
   first experience of the new project is cleaning fabricated state out of the trackers.
+
+### Project-root folder name scaffolded without validating against the folder-naming standard — INPUT
+
+- **Signature (observable signal):** Mode A creates `Projects/_Warehouse/` (leading `_`)
+  or `Projects/Q4 Plan & Review/` (shell-meta character) — or scaffolds under an empty /
+  whitespace-only name producing `Projects//` — because Step 1 item 7 was skipped or its
+  rejection was bypassed. The malformed folder name then surfaces in PROJECT.md's project
+  field, the PORTFOLIO.md health-summary row, and every `04-PMO-Operations/` tracker
+  filename.
+- **Conditional:** do NOT proceed to Step 2 (Create Folder Structure) when the proposed
+  project-root folder name begins with `_` (reserved for infrastructure folders
+  `_pmo/`/`_config/`) or contains a shell-meta / non-portable character, because a
+  `_`-prefixed project name collides with the infrastructure-folder reservation and a
+  special-char name is POSIX-hostile (breaks globs, link validators, search indexes) — and
+  the bad folder name then propagates into PROJECT.md, PORTFOLIO.md, and every tracker
+  filename.
+- **Root cause:** Scaffold-momentum bias — the Required Inputs collection feels complete
+  once all 8 fields are present, so the flow rushes to the satisfying `mkdir` of Step 2
+  without running the item-7 charset gate; the cost of a bad name is invisible at scaffold
+  time and only surfaces later when a glob, link validator, or search index trips over it.
+- **Mitigation:** Run Step 1 item 7 before any folder is created: validate the Project
+  Name against the folder-name regex owned by `core/standards/artifact-naming-standard.md`
+  § Folder & Directory Naming; on a leading-`_` or shell-meta or empty/whitespace name,
+  halt (never silently auto-rename), echo the offending input, state the expected format
+  attributed to that standard, offer a `[RECOMMENDED]` conforming suggestion, and re-prompt
+  until a passing name is confirmed. The `_`-infra carve-out means the gate rejects a
+  `_`-prefixed *project* folder only — it never rejects sanctioned `_pmo/` / `_config/`
+  infrastructure.
+- **Principal response vs. junior response:** Principal gates the name before the first
+  `mkdir`, surfaces a clear rejection with a corrected suggestion, and scaffolds only a
+  conforming folder. Junior scaffolds whatever string the user typed, the `_`-prefixed or
+  shell-meta folder lands on disk and in PORTFOLIO.md, and the malformed name becomes a
+  post-deploy operator rename that has to cascade through PROJECT.md and every tracker
+  filename.
 
 ## Cross-Skill Integration
 
