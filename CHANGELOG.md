@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.32] - 2026-06-30
+
+The release hub now conforms to the platform autonomy model: it stops re-asking the operator to approve actions it is already authorized to take, and it reads the full-phase-scope rule from the stage specs so a directed phase runs to its boundary.
+
+[Full notes](release/releases/notes/v3.32_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.32)
+
 ## [v3.30] - 2026-06-30
 
 The five software-domain specialist skills (architect, principal engineer, software engineer, DevOps/SRE, technical program manager) now cite one shared software best-practice guide as their design-time anchor instead of asserting practices ad-hoc — via compose-by-reference pointers, with no content copied into the skills. The build-philosophy coverage map was corrected so it no longer claims skill-grounding that didn't exist (the software row is marked wired; governance and process remain pending their sibling releases). Additive reference wiring; no behavior, command, or workflow changes.
