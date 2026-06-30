@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.34 (2026-06-30) — The release pipeline now measures its own delivery and close-out health
+
 ### v3.33 (2026-06-30) — Governance-domain specialist skills anchored to one best-practice guide: the six governance-domain specialists (pmo-project-manager, pmo-program-manager, pmo-program-coordinator, pmo-portfolio-manager, pmo-knowledge-manager, release-planner) each gain a compose-by-reference `## Reference docs` pointer to `domain-best-practices/governance.md` (ADR-019; no content absorption) and the guide's `consumers:` field lists them (#2172, #2173, #2174, #2175, #2176, #2181). The governance-domain sequel to v3.30's software-domain anchoring; with governance now wired, two of the three domain guides (software + governance) are skill-anchored and only the process guide remains pending. `routine`-class; milestone 89-skill-anchoring-governance, all six issues on one branch / one merge. Re-versioned forward from a provisional v3.32 at the Stage-12 atomic claim after a concurrent release published v3.32 first — the branch name is retained. Additive reference wiring — runtime blast radius none.
 
 ### v3.32 (2026-06-30) — The release hub now follows the autonomy rules it operates under

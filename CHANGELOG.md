@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.34] - 2026-06-30
+
+The release pipeline now measures itself — DORA-4 delivery metrics and Close-class observability, computed per release from tracked schemas.
+
+[Full notes](release/releases/notes/v3.34_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.34)
+
 ## [v3.33] - 2026-06-30
 
 The six governance-domain specialist skills (project manager, program manager, program coordinator, portfolio manager, knowledge manager, release planner) now cite one shared governance best-practice guide (PMBOK 7th, PRINCE2, SECI, Diátaxis) as their design-time anchor instead of asserting practices ad-hoc — via compose-by-reference pointers, with no content copied into the skills. This is the governance-domain sequel to v3.30's software-domain anchoring; two of the three domain guides are now skill-wired, with only the process guide pending. Additive reference wiring; no behavior, command, or workflow changes.
