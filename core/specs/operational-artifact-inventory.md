@@ -154,7 +154,7 @@ All map to `source_entity = #9 Artifact` (OOS-3 Artifact-seam); `reconciliation_
 
 ### 5.5 typed-plan (6) — `source_entity == #4 Plan`
 
-All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent` ( §6); `reconciliation_flag = clean` (Plan entity directly persists these). `plan_type` discriminator value domain is **resolved at #159 (v3.34), ADR-055** — an OPEN discriminator whose registry is `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot). The `release` / `implementation` / `project` / `test` values below are the documented §3.4a OPEN-tail anchors (no longer G5-deferred).
+All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent` ( §6); `reconciliation_flag = clean` (Plan entity directly persists these). `plan_type` discriminator value domain is **resolved at #159 (v3.34), ADR-059** — an OPEN discriminator whose registry is `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot). The `release` / `implementation` / `project` / `test` values below are the documented §3.4a OPEN-tail anchors (no longer G5-deferred).
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|

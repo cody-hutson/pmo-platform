@@ -139,7 +139,7 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 
 #### 4. Plan
 
-**Rationale & first-class justification.** A baselined planning artifact (cutover plan, test plan, comms plan, etc.). First-class because it is the canonical Domain-A **Baselined** content pattern — versioned, approved, and superseded as a unit; the `SUPERSEDES` self-edge is itself a first-class relationship. `plan_type` is a required **OPEN discriminator** whose **value domain is resolved at #159 (v3.34), ADR-055** — registry in `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot); correct WHAT/HOW split — the field exists and is required now; its membership is registry-governed.
+**Rationale & first-class justification.** A baselined planning artifact (cutover plan, test plan, comms plan, etc.). First-class because it is the canonical Domain-A **Baselined** content pattern — versioned, approved, and superseded as a unit; the `SUPERSEDES` self-edge is itself a first-class relationship. `plan_type` is a required **OPEN discriminator** whose **value domain is resolved at #159 (v3.34), ADR-059** — registry in `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot); correct WHAT/HOW split — the field exists and is required now; its membership is registry-governed.
 
 - **Fields:** `plan_title`✅ str·1 · `plan_type`✅ string-discriminator·1 *(OPEN; registry resolved at #159 — `entity-field-schemas.md` §3.4a)* · `project_id`✅ ref·1 · `version`⚪ str·1 · `supersedes_plan_id`⚪ ref·1
 - **Axis-1:** `draft → approved → active → superseded → archived` (= Domain-A Baselined machine)

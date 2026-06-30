@@ -1,6 +1,6 @@
 ---
 # Workstream entity (WS) — entity-field-schemas.md §3.3. Lives in projects/_pmo/workstreams/.
-# Stored in the _pmo/ shared-entity tree (ADR-054) so a workstream spanning projects is one record;
+# Stored in the _pmo/ shared-entity tree (ADR-058) so a workstream spanning projects is one record;
 # project_id is its BELONGS_TO anchor, lead_person_id resolves AGAINST _pmo/people/.
 id: {{WORKSTREAM_ID}}                     # slug, unique within storage_tier
 entity_type: Workstream

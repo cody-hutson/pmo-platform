@@ -9,13 +9,13 @@ deciders: "[operator]"
 tags: [pmo-entity-store, person-id-ssot, compose-not-fork, shared-entity-layout, alias-convention, reversibility-moderate]
 ---
 
-# ADR-054 — The `_pmo/` entity page is the SSOT on `person_id`
+# ADR-058 — The `_pmo/` entity page is the SSOT on `person_id`
 
 ## Status
 
 **Proposed** — flips to Accepted at the Stage 9 review.
 
-Number **054** — next gap-free after 053 (the Stage-5 spoke first proposed 041, which was taken, and reassigned to 054). Binds atomically at Stage 12.
+Number **058** — the Stage-5 decision record (#2631) named **054** (the spoke first proposed 041, taken, reassigned to 054), but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it) and 054 was already claimed in `release/ADRs/`. Reassigned to the next gap-free slot **058** at Engineering time. Binds atomically at Stage 12.
 
 ## Context
 
@@ -59,5 +59,5 @@ The forks: **(1)** does the `_pmo/` page become the SSOT, or is the roster the r
 ## Related ADRs
 
 - **ADR-040** (leadership-owner Person ref) — supplies the leadership-owner refs that resolve against this SSOT; the resolve-by-name + clarification-queue migration pattern Step 2b mirrors.
-- **ADR-052** (PROJECT.md composed index) — same milestone; the composed index wiki-links INTO these entity pages.
-- **ADR-055** (`plan_type` open discriminator) — same milestone; a typed Plan's relationships resolve against these pages.
+- **ADR-057** (PROJECT.md composed index) — same milestone; the composed index wiki-links INTO these entity pages.
+- **ADR-059** (`plan_type` open discriminator) — same milestone; a typed Plan's relationships resolve against these pages.

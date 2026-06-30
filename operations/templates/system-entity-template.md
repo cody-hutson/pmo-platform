@@ -1,6 +1,6 @@
 ---
 # System entity (SYS) — entity-field-schemas.md §3.11. Lives in projects/_pmo/systems/.
-# Cross-project shared entity (SSOT, ADR-054); the system_owner_person_id resolves AGAINST _pmo/people/.
+# Cross-project shared entity (SSOT, ADR-058); the system_owner_person_id resolves AGAINST _pmo/people/.
 id: {{SYSTEM_ID}}                        # = system_id (slug); unique within _pmo/ (V-SYS-02)
 entity_type: System
 lifecycle_state: active                  # Axis-1: active → deprecated → retired (V-SYS-04)

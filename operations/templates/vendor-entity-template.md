@@ -1,6 +1,6 @@
 ---
 # Vendor entity (VEN) — entity-field-schemas.md §3.12. Lives in projects/_pmo/vendors/.
-# Cross-project shared entity (SSOT, ADR-054); primary_contact_person_id resolves AGAINST _pmo/people/.
+# Cross-project shared entity (SSOT, ADR-058); primary_contact_person_id resolves AGAINST _pmo/people/.
 id: {{VENDOR_ID}}                        # = vendor_id (slug); unique within _pmo/ (V-VEN-02)
 entity_type: Vendor
 lifecycle_state: active                  # Axis-1: active → inactive (V-VEN-04)

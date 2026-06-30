@@ -9,13 +9,13 @@ deciders: "[operator]"
 tags: [entity-field-schemas, plan-type, open-discriminator, lifecycle-extension, work-item-type-layer, reversibility-cheap]
 ---
 
-# ADR-055 — `plan_type` is an OPEN discriminator that fills the deferred enum
+# ADR-059 — `plan_type` is an OPEN discriminator that fills the deferred enum
 
 ## Status
 
 **Proposed** — flips to Accepted at the Stage 9 review.
 
-Number **055** — the originating release plan and the Stage-5 decision record (#2627) named **053**, but `ADR-053` was taken by a later release (`ADR-053-pre-gate-eligibility-forcing-function.md`, v3.31, after this milestone was planned). Reassigned to the next gap-free slot **055** at Engineering time (the same collision-reassignment the milestone's #362 ADR used: "spoke said 041 — taken, reassigned"). Binds atomically at Stage 12.
+Number **059** — the originating release plan and the Stage-5 decision record (#2627) named **053**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it): `ADR-053` was taken in `core/ADRs/` (`ADR-053-pre-gate-eligibility-forcing-function.md`, v3.31), and 054/055/056 were already claimed in `release/ADRs/`. Reassigned to the next gap-free slot **059** at Engineering time (the same collision-reassignment the #362 ADR used). Binds atomically at Stage 12.
 
 ## Context
 
@@ -57,4 +57,4 @@ Three forks had to settle. **(1) One field or two:** fill `plan_type`'s deferred
 
 - **ADR-018** (work-item type layer) — supplies the OPEN-discriminator convention `plan_type` joins; `Work Item.work_item_type` is the sibling deferred-membership discriminator.
 - **ADR-040** (leadership-owner Person ref) — sibling additive entity-field type-lift in the same schema; precedent for resolving a deferred field without breaking readers.
-- **ADR-054** (`_pmo/` entity-page SSOT) — same milestone; the entity pages a typed Plan's relationships resolve against.
+- **ADR-058** (`_pmo/` entity-page SSOT) — same milestone; the entity pages a typed Plan's relationships resolve against.

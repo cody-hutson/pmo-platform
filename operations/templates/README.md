@@ -48,6 +48,26 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 |---|---|
 | `PMO_Platform_Template.md` | Knowledge-transfer reference for the PMO platform itself |
 
+### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.34)
+
+The entity-page and typed-plan templates from the project-data-architecture initiative. Entity pages carry the frozen `entity-field-schemas.md` field schemas (§3.x); the `_pmo/` entity pages are the cross-project SSOT (ADR-058); plans carry the OPEN `plan_type` discriminator (ADR-059); PROJECT.md is the composed wiki-link index (ADR-057).
+
+| Template | Kind | Schema / ADR |
+|---|---|---|
+| `project-md-composed-index-template.md` | Composed-index PROJECT.md (≤50 lines; Methodology/Status inline, entities as `[[wiki-links]]`) | ADR-057 / project-schema.md §7 |
+| `person-entity-template.md` | `_pmo/people/` Person entity (SSOT on `person_id`) | §3.10 / §6.2 / ADR-058 |
+| `system-entity-template.md` | `_pmo/systems/` System entity | §3.11 / ADR-058 |
+| `vendor-entity-template.md` | `_pmo/vendors/` Vendor entity | §3.12 / ADR-058 |
+| `workstream-entity-template.md` | `_pmo/workstreams/` Workstream entity | §3.3 / ADR-058 |
+| `decision-entity-template.md` | `_pmo/decisions/` Decision entity | §3.5 / ADR-058 |
+| `dependency-entity-template.md` | `_pmo/dependencies/` Cross-Project Dependency (`storage_tier: portfolio-level` view) | §3.15 / §6.3 / ADR-058 |
+| `plan-templates/comms.md` | Plan — `plan_type: comms` | §3.4a / ADR-059 |
+| `plan-templates/training.md` | Plan — `plan_type: training` (terminal `delivered`) | §3.4a / ADR-059 |
+| `plan-templates/hypercare.md` | Plan — `plan_type: hypercare` (terminal `closed`) | §3.4a / ADR-059 |
+| `plan-templates/cutover.md` | Plan — `plan_type: cutover` (terminal `executed`) | §3.4a / ADR-059 |
+| `plan-templates/change-management.md` | Plan — `plan_type: change-management` (the OCM umbrella) | §3.4a / ADR-059 |
+| `plan-templates/raid.md` | Plan — `plan_type: raid` (the RAID **Log**; ≠ RAID-Item §3.6) | §3.4a / ADR-059 |
+
 ## Related Canonical Output-Format Specs (cited, not mirrored)
 
 These are **output-format specifications** for finished communications — not fill-in

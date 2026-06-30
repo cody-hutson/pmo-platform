@@ -193,9 +193,9 @@ Adapt to the project's likely meeting cadence based on governance model:
 
 If the user provides specific meeting cadence info, override these defaults.
 
-#### Step 2b: Bootstrap the `_pmo/` shared-entity store + link existing entities (ADR-054)
+#### Step 2b: Bootstrap the `_pmo/` shared-entity store + link existing entities (ADR-058)
 
-The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for shared entities (Person / System / Vendor / Workstream / Decision / Cross-Project Dependency) — the `_pmo/` entity page is the record, the roster and the ADR-040 leadership-owner refs are read-time consumers (`entity-field-schemas.md` §3.10–§3.16; ADR-054). On project initiation:
+The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for shared entities (Person / System / Vendor / Workstream / Decision / Cross-Project Dependency) — the `_pmo/` entity page is the record, the roster and the ADR-040 leadership-owner refs are read-time consumers (`entity-field-schemas.md` §3.10–§3.16; ADR-058). On project initiation:
 
 1. **Bootstrap if missing.** If `projects/_pmo/` (or any of its six subfolders `people/` · `systems/` · `vendors/` · `workstreams/` · `decisions/` · `dependencies/`) does not exist, create it. This is workspace-level infrastructure (the `_`-prefix carve-out in Step 1 R-a) — it is created **once** and reused by every project; a second project does not re-scaffold it, it links into it. (Q1: `dependencies/` carries `storage_tier: portfolio-level` frontmatter — a view over the §3.15 `_config/` home, not a relocation.)
 2. **Link, do not duplicate.** When the new project references a shared entity that already has a `_pmo/` page (a Person already in `people/`, a System already in `systems/`), **link to the existing page by its id** (`person_id` / `system_id` / …) — never create a second page for the same entity. The id is the dedup anchor (`person_id` is globally unique, V-PER-02).
@@ -205,7 +205,7 @@ The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for share
 ### Step 3: Populate PROJECT.md
 
 Use the **composed-index** PROJECT.md template from `references/project-md-composed-index-template.md`
-(ADR-052 — the thin ≤50-line wiki-link index, replacing the narrative-table shape). Keep
+(ADR-057 — the thin ≤50-line wiki-link index, replacing the narrative-table shape). Keep
 **Methodology + Status inline** (consumer back-compat per `project-schema.md` §4 / §8 consumer
 table); scaffold People / Systems / Milestones / Plans / Workstreams as `[[wiki-link]]` lists
 into the `_pmo/` entity pages (Step 2b) and the #159 typed plans — not inline tables. Fill in

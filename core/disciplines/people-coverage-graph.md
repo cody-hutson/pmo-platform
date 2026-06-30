@@ -52,7 +52,7 @@ Every edge and every join in the view resolves through `person_id` — the dedup
 
 ### 2.3 Alias tracking & rename-safety
 
-A person's display name changes (a legal-name change, a corrected spelling, a preferred-name update), but their **identity must not**. The `_pmo/people/` entity page (the SSOT per ADR-054) carries an **optional `aliases:` frontmatter convention** that makes a rename non-destructive without ever touching the identity anchor.
+A person's display name changes (a legal-name change, a corrected spelling, a preferred-name update), but their **identity must not**. The `_pmo/people/` entity page (the SSOT per ADR-058) carries an **optional `aliases:` frontmatter convention** that makes a rename non-destructive without ever touching the identity anchor.
 
 **This is a template convention, not a frozen-schema field (Q2).** `aliases:` is an optional list on the entity page authored by the Person entity-page template (`operations/templates/person-entity-template.md`); it adds **no field** to the frozen Person entity (`entity-field-schemas.md` §3.10 / `project-entity-model.md` §4) and **no field** to the roster — the frozen-schema boundary above is preserved. It is a rename-safety affordance homed here, in the view/convention layer, exactly as the no-parallel-store rule requires.
 

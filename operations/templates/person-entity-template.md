@@ -1,6 +1,6 @@
 ---
 # Person entity (PER) — entity-field-schemas.md §3.10 / §6.2 worked example. Lives in projects/_pmo/people/.
-# This _pmo/ page is the SSOT on person_id (ADR-054); the people-roster + ADR-040 leadership-owner
+# This _pmo/ page is the SSOT on person_id (ADR-058); the people-roster + ADR-040 leadership-owner
 # refs are read-time consumers that resolve AGAINST this page — never a second Person home.
 id: {{PERSON_ID}}                        # = person_id (slug); globally unique across _pmo/ (V-PER-02)
 entity_type: Person

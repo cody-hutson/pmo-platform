@@ -9,17 +9,17 @@ deciders: "[operator]"
 tags: [project-schema, composed-index, wiki-link, shared-entity-layout, gated-migration, reversibility-expensive]
 ---
 
-# ADR-052 — PROJECT.md is a composed wiki-link index, not the entity container
+# ADR-057 — PROJECT.md is a composed wiki-link index, not the entity container
 
 ## Status
 
 **Proposed** — flips to Accepted at the Stage 9 review.
 
-Number **052** — next gap-free after 051; binds atomically at Stage 12.
+Number **057** — the originating release plan and the Stage-5 decision record (#2635) named **052**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it), and 052/053/054/055/056 were all already claimed (the 052/054/055 slots in `release/ADRs/`; 053 in `core/ADRs/`; 056 in `release/ADRs/`) by the time this milestone reached Engineering. Reassigned to the next gap-free slot **057** at Engineering time. Binds atomically at Stage 12.
 
 ## Context
 
-PROJECT.md is the project's context file, but it had grown into the project's **container**: People, Systems, Milestones, Plans, and Workstreams lived as inline markdown tables, re-typed per project. The same shared entity (a Person, a System) appeared duplicated across every project that touched it, and an edit meant hunting the right table cell in the right file. Two adjacent capabilities now make a better shape possible: the `_pmo/` shared-entity SSOT (#362 / ADR-054) gives those entities a single home, and the typed-plan discriminator (#159 / ADR-055) gives plans stable ids. With both, PROJECT.md can become a thin **index** rather than the container.
+PROJECT.md is the project's context file, but it had grown into the project's **container**: People, Systems, Milestones, Plans, and Workstreams lived as inline markdown tables, re-typed per project. The same shared entity (a Person, a System) appeared duplicated across every project that touched it, and an edit meant hunting the right table cell in the right file. Two adjacent capabilities now make a better shape possible: the `_pmo/` shared-entity SSOT (#362 / ADR-058) gives those entities a single home, and the typed-plan discriminator (#159 / ADR-059) gives plans stable ids. With both, PROJECT.md can become a thin **index** rather than the container.
 
 The constraint: `project-schema.md` §8 enumerates the PROJECT.md-reading consumers (delivery-engine, ppm-agent, daily-status, …) that parse `delivery_approach` and `status` in place. Any redesign must not break them. And the live PROJECT.md files sit in the git-ignored `projects/` ops tree — migrating them has no git rollback.
 
@@ -56,6 +56,6 @@ The forks: **(1)** what stays inline vs. becomes a link? **(2)** how does migrat
 
 ## Related ADRs
 
-- **ADR-054** (`_pmo/` entity-page SSOT) — supplies the entity pages the composed index wiki-links INTO; hard prerequisite (#362 → #363).
-- **ADR-055** (`plan_type` open discriminator) — supplies the typed plans the `## Plans` wiki-link section points at (#159 pairs-with #363).
+- **ADR-058** (`_pmo/` entity-page SSOT) — supplies the entity pages the composed index wiki-links INTO; hard prerequisite (#362 → #363).
+- **ADR-059** (`plan_type` open discriminator) — supplies the typed plans the `## Plans` wiki-link section points at (#159 pairs-with #363).
 - **ADR-040** (leadership-owner Person ref) — the resolve-by-name + clarification-queue pattern the migration's M2 alias-tracking step mirrors.

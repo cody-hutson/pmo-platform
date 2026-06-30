@@ -1,7 +1,7 @@
 ---
 # Cross-Project Dependency entity (XPD) — entity-field-schemas.md §3.15 / §6.3 worked example.
 # Lives in projects/_pmo/dependencies/. Q1: this _pmo/ view carries storage_tier: portfolio-level —
-# a view over the §3.15 portfolio-level home (projects/_config/), NOT a relocation of it (ADR-054).
+# a view over the §3.15 portfolio-level home (projects/_config/), NOT a relocation of it (ADR-058).
 id: {{DEPENDENCY_ID}}                      # = dependency_id (slug); unique within portfolio-level tier (V-XPD-01)
 entity_type: Cross-Project Dependency
 lifecycle_state: open                      # Axis-1: open → satisfied | broken | waived (V-XPD-06)
