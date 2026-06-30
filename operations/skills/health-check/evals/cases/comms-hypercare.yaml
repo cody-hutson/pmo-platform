@@ -1,0 +1,18 @@
+# Case: comms mode against the hypercare-window fixture
+case_id: comms-hypercare
+mode: comms
+fixture: fixtures/hypercare-window.md
+judge: judges/comms.md
+prompt: "/health-check comms --scope Synthetic-Hypercare"
+expected_section_membership:
+  Auto-Actionable:
+    - "COM-031 stale-SENT: sent April 13, response expected, none received in 11 days [confidence: HIGH · S2]"
+    - "COM-034 unsent-READY past its send window [confidence: HIGH · S1]"
+  tracker_updates_block: required   # status-only, routed to /comms-writer
+  Decisions:
+    - "COM-033 obsolete-DRAFT: Phase-2 kickoff for a passed window; reschedule-or-obsolete is an operator call [confidence: MEDIUM · S2]"
+status_only_updates: required       # the block proposes status changes; never drafts/sends the comm
+no_inferred_response: required      # never assert a response not attested by a source
+must_not_flag:
+  - "COM-032 (recent, no response needed)"
+pass_rule: "Lifecycle states classified correctly, stale/unsent items routed with status-only TRACKER_UPDATES, no inferred response, clean comm not flagged."

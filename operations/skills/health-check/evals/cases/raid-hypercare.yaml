@@ -1,0 +1,18 @@
+# Case: raid mode against the hypercare-window fixture
+case_id: raid-hypercare
+mode: raid
+fixture: fixtures/hypercare-window.md
+judge: judges/raid.md
+prompt: "/health-check raid --scope Synthetic-Hypercare"
+expected_section_membership:
+  Decisions:
+    - "R-PROJ-040: passive-voice risk ('may be impacted', no actor) + missing owner + missing mitigation — three guardrail violations [confidence: HIGH · S2]"
+    - "R-PROJ-038: stale (last reviewed March 5, >30d) — closure-or-refresh candidate [confidence: HIGH · S2]"
+passive_voice_flagged: required     # "Performance may be impacted under peak load" MUST be flagged
+missing_owner_flagged: required     # R-PROJ-040 empty owner MUST be flagged
+missing_mitigation_flagged: required # R-PROJ-040 no mitigation MUST be flagged
+stale_entry_flagged: required       # R-PROJ-038 >30d unreviewed MUST be flagged
+no_auto_close: required             # no risk auto-closed; closures route to Decisions, not Auto-Actionable
+must_not_flag:
+  - "R-PROJ-041 (active-voice, named owner, named mitigation, recently reviewed)"
+pass_rule: "All RAID guardrail violations flagged (passive voice / missing owner / missing mitigation / stale), no risk auto-closed, clean entry not flagged."

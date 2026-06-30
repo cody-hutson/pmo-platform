@@ -8,6 +8,40 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.24] - 2026-06-30
+
+A new `release-hub` skill: the whole-release control plane. Point it at a milestone and it drives that milestone through the release pipeline by composing the per-stage skills — it owns the sequencing and the readiness-gating between stages, but never does the stage work itself. Two modes: a Milestone Readiness pre-flight that gives one GO / NO-GO on whether a bundled milestone is ready to start (with a per-finding disposition list), and an Orchestrate Release mode that runs the full hub-and-spoke release end to end, stopping for you only at the named pipeline checkpoints. Additive net-new skill that composes existing stage skills and adds no new autonomous mutation surface; no change to any existing skill, schema, or stored artifact. novel class.
+
+### Added
+
+- **`release-hub` skill — whole-release orchestrator.** A new skill takes a milestone and drives it through the release pipeline by composing the per-stage skills, owning the sequencing and the readiness-gating while delegating the stage work to the stage skills. *Why it matters:* a release run is coordinated end to end from one place, so the stages run in the right order and the operator is gated only at the real decision points instead of having to hand-drive every stage. ([#2212](https://github.com/cody-hutson/pmo-platform/issues/2212))
+- **Milestone Readiness pre-flight (Mode R).** Before a release run is committed, the skill composes triage/duplicate, staleness/architecture, dependency, and bundle-coherence checks into a single GO / NO-GO verdict with a per-finding disposition. *Why it matters:* a milestone that is not actually ready — stale tickets, unresolved dependencies, an incoherent bundle — is caught up front rather than failing partway through the pipeline. ([#2115](https://github.com/cody-hutson/pmo-platform/issues/2115))
+- **Orchestrate Release end-to-end (Mode O).** The skill runs the full hub-and-spoke release: it spawns the per-stage spokes in order and gates the operator only at the named checkpoints (plan-review GO/NO-GO and execute). *Why it matters:* the operator approves the plan once and the run proceeds through the stages on that authorization, instead of opening a fresh approval gate at every phase. ([#2212](https://github.com/cody-hutson/pmo-platform/issues/2212))
+
+## [v3.23] - 2026-06-30
+
+A new `health-check` skill: run it on a project to get an evidence-backed answer to "is this project's tracked state still accurate?" It audits one project for drift between the state you track and its canonical sources (Confluence, Jira, Smartsheet, SharePoint, plus your local trackers and PROJECT.md) and returns a categorized punch list — confirmed-current, safe-to-fix, needs-a-decision, could-not-verify, and proposed portfolio-file edits — that is never applied automatically. Seven modes scope the question (whole project, timeline, ownership, comms, a named plan, RAID, or your source inventory). Additive net-new skill plus one decision record (ADR-051); no change to any existing skill, schema, or stored artifact — and because the skill only reads and recommends, running it cannot change project state. novel class.
+
+### Added
+
+- **`health-check` skill — on-demand project drift audit.** A new intent-driven skill audits one project for drift between its tracked state and its canonical sources and emits a fixed five-section punch list (Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs); nothing is auto-applied — auto-actionable items stage a tracker-update block for your approval, and portfolio-file edits are diff-only. ([#1125](https://github.com/cody-hutson/pmo-platform/issues/1125))
+- **Seven health-check modes.** `full` (whole project), `timeline` (dates/milestones with day-of-week validation), `attribution` (owners), `comms` (communications coverage), `plan <name>` (one named plan), `raid` (RAID-log guardrails), and `sources` (canonical-source inventory with per-source freshness). ([#1126](https://github.com/cody-hutson/pmo-platform/issues/1126))
+- **ADR-051 — canonical source set + graceful degradation.** Records the MCP-primary / local-fallback source set and the graceful-degradation contract: an unreachable connector continues the run local-only with a banner, and a finding that could not be cross-validated is never promoted to auto-actionable. ([#1125](https://github.com/cody-hutson/pmo-platform/issues/1125))
+
+[Full notes](release/releases/notes/v3.23_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.23)
+
+## [v3.22] - 2026-06-29
+
+PMBOK artifact coverage plus three additive PROJECT.md frontmatter axes, with no change to any existing project until the new fields are filled in: a project can now declare what kind of deliverable it produces (`deliverable_type`, separate from how it is governed), its team's org structure (`org_structure_type`), and its team roster by reference (`team_roster`, references only — no names stored in the file); and five ready-made PMBOK artifact templates (charter, lessons-learned, change-log, RACI, stakeholder-register) ship with the platform. Additive schema and template additions — no data migration, no stored-content move, no breaking change. cross-cutting class.
+
+### Added
+
+- **Deliverable-type axis on PROJECT.md.** A project can now declare what kind of deliverable it produces (`software`, `governance`, `web`, `data`, `process`, or a custom value), separate from how it is run, so the platform can tailor its readiness checks to the kind of work being delivered instead of applying one generic bar. ([#351](https://github.com/cody-hutson/pmo-platform/issues/351))
+- **Org-structure and team-roster fields on PROJECT.md.** Two new optional fields let a project record its organizational shape and its team membership (by reference) in its own frontmatter, turning org shape and team into structured data the platform can read rather than free text in prose. ([#262](https://github.com/cody-hutson/pmo-platform/issues/262))
+- **Five PMBOK artifact templates.** Ready-made project charter, lessons-learned, change-log, RACI, and stakeholder-register templates ship with the platform, so standard artifacts generate from a consistent governed starting point. ([#206](https://github.com/cody-hutson/pmo-platform/issues/206))
+
+[Full notes](release/releases/notes/v3.22_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.22)
+
 ## [v3.21] - 2026-06-29
 
 Terminology and controlled-vocabulary canonicalization with no user-visible behavior change: the platform's terminology glossary is refreshed for AI-agent comprehension (discoverable frontmatter, the Role term anchored to the Autonomy-Tier framework, and first-class actor terms — Hub, Spoke, Skill, Sub-agent), the tier-disambiguation table is extended to cover Hierarchy Tier, and canonical Initiative/Roadmap definitions are added and reconciled with the live `epic:*` label namespace via a new decision record (ADR-049). Documentation / governance only — no data migration, no stored-content move, no schema or runtime change. novel class. Re-versioned v2.42 → v3.21 at the Stage-12 atomic claim (v3.20 mainline-spine frontier).

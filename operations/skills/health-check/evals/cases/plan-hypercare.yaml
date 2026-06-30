@@ -1,0 +1,19 @@
+# Case: plan <name> mode against the hypercare-window fixture (name SUPPLIED)
+case_id: plan-hypercare
+mode: plan Hypercare
+fixture: fixtures/hypercare-window.md
+judge: judges/plan.md
+prompt: "/health-check plan Hypercare --scope Synthetic-Hypercare"
+scoped_to_named_plan: required      # audits ONLY the Hypercare Plan, not a sweep of all plans
+expected_section_membership:
+  Confirmed:
+    - "Daily defect triage stand-up (HC-002 active in the tracker) [confidence: HIGH · S0]"
+  Auto-Actionable:
+    - "War-room staffing rota promised by April 15; absent from tracker + no Confluence rota page (two sources agree) [confidence: HIGH · S2]"
+  tracker_updates_block: required
+  Decisions:
+    - "Hypercare exit report promised by April 22, not drafted; may be deliberately deferred [confidence: MEDIUM · S2]"
+cautious_supersession_bias: required   # a missing item is not asserted "failed" — deliberate supersession preserved
+must_not_flag:
+  - "Daily defect triage stand-up (delivered/active)"
+pass_rule: "Named plan scoped correctly, promised-vs-reflected deltas categorized with cautious bias, delivered item not flagged."

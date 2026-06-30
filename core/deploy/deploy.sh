@@ -34,6 +34,7 @@ OPERATIONS_SKILLS=(
   daily-status
   delivery-engine
   file-router
+  health-check
   intake-desk
   pmo-business-analyst
   pmo-knowledge-manager
@@ -68,6 +69,7 @@ RELEASE_SKILLS=(
   pmo-skill-refiner
   pmo-software-engineer
   release-executor
+  release-hub
   release-planner
   roadmap-curator
 )
