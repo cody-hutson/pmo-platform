@@ -2,7 +2,7 @@
 name: project-initiator
 description: >
   Manages the full project lifecycle — scaffolding new projects and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]."
-version: v3.34
+version: v3.35
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
