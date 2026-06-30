@@ -1,3 +1,11 @@
+---
+title: Entity Field Schemas
+purpose: The canonical field schemas for the project-entity model's entities — the field definitions, types, and constraints each project-data entity record conforms to.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: agents reading/writing project-data entity records; the entity-lifecycle protocols; operational-artifact-template-standard.md; project-entity-model.md (derivation source)
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-memory-ref -->
 # Entity Field Schemas

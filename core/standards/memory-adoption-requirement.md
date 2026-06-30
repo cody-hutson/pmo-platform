@@ -1,16 +1,17 @@
-<!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-memory-ref -->
-<!-- repo-integrity: allow-issue-ref -->
 ---
 title: Memory-Adoption Requirement — the skill-corpus adoption audit + the future-skill rule
 purpose: The record of which skills adopt the unified cross-surface memory contract today (the per-skill adoption audit), and the forward-only requirement that future skills cite the contract and name a surface's read/write class + SSOT before touching it. Distinct from the contract itself — this standard measures skills against the contract; it does not restate the per-surface table.
 type: reference
+status: ACTIVE
 tier: K1
 reversibility: CHEAP / Confidence HIGH
 consumers: "core/disciplines/memory-architecture.md (the contract this standard audits adoption of); operations/skills/daily-status/SKILL.md (the pilot exemplar — first skill to route a read AND a write through the contract); pmo-skill-editor / pmo-skill-refiner (the editors that apply the §3 requirement on a materially-edited or new skill)"
 owner: "operator-class: Workspace owner ([OPERATOR_NAME]) — per km-governance-framework §2.4 (forward-only)"
 glossary_anchor: "core/disciplines/memory-architecture.md (the cross-surface contract); knowledge-architecture.md §2.1 (the four-memory-type axis the surface column draws on)"
 ---
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
+<!-- repo-integrity: allow-issue-ref -->
 
 # Memory-Adoption Requirement — the skill-corpus adoption audit + the future-skill rule
 

@@ -1,7 +1,9 @@
 ---
 title: Composition-Surface Spec
 purpose: Defines the per-category update-time contract and the managed-section / operator-extension marker convention through which package-shipped seed defaults and operator additions coexist durably across version updates. Composes with (does NOT restate) universal-vs-localized-context.md and depersonalization-spec.md.
-type: standards
+type: standard
+status: ACTIVE
+consumers: "deploy.sh / the update mechanism (honors the managed-section + operator-extension markers when applying package-shipped seed defaults across version updates); authors of composable seed-default surfaces (apply the per-category update-time contract); universal-vs-localized-context.md + depersonalization-spec.md (sibling standards this composes with)"
 composes_with: [universal-vs-localized-context.md, depersonalization-spec.md, knowledge-architecture.md]
 reversibility: CHEAP / Confidence HIGH
 ---

@@ -2,6 +2,7 @@
 title: Agent Handoff Framework
 purpose: K1 codified-knowledge standard defining the platform-level contracts for agent-to-agent handoffs — sync vs async processing, the 9-field handoff manifest schema, the 3-layer confirmation loop, the 5-state disposition state machine, the tier-cascade ordering rule, and the 4-class QA integration taxonomy
 type: standard
+status: ACTIVE
 source: ""
 parallel_to: "OPERATIONS.md § Skill Chaining Protocol (C1–C7 + 4-skill allowlist — auto-invocation policy this framework composes with), handoff-coordinator-spec.md (5-phase stage-level orchestration this composes with), stage-io-contracts.md (per-stage-boundary contracts this cites without redefining), ppm-agent SKILL.md § Section 10 (existing 5-field manifest this extends additively to 9 fields), Mode Selection Protocol at OPERATIONS.md (chained=true arg this composes with), gate-criteria-spec.md (gate criteria this cites at L2 confirmation), template-protocol.md + template-taxonomy.md (template lifecycle this cites at disposition state machine T2)"
 reversibility: MODERATE / HIGH confidence (framework doc is per-commit `git revert`able; downstream skills do not yet bind against it per PULL-IN model; reversion impact bounded to citation-graph repair)

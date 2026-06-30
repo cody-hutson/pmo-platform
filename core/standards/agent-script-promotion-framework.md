@@ -2,6 +2,7 @@
 title: Agent-to-Script Promotion Framework
 purpose: Governs promotion of repeated agent-executed mechanical work into governed scripts — the AS0–AS4 promotion ladder, promotion triggers, authoring/review path, testing standards, drift monitoring, agent-script interface (discovery + invoke-vs-re-derive), and versioning/deprecation — across the platform script estate (core hooks/deploy, release tools, skill-bundled scripts).
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: governance
 framework_version_anchor: "v1.09"

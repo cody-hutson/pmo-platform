@@ -1,3 +1,11 @@
+---
+title: Date-Variable Convention — Stage 5 Solutioning
+purpose: The Stage-5 convention for parameterizing dates as variables rather than hardcoding them across load-bearing locations, so a UTC day-boundary crossing at Stage 6 cannot create internal contradictions.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: Stage 5 Solutioning spokes; Stage 6 Engineering (date-variable resolution at execution); AC-verifier and ADR source-observation authoring
+---
 <!-- reference-durability: allow-link -->
 # Date-Variable Convention — Stage 5 Solutioning
 

@@ -1,3 +1,10 @@
+---
+title: Context Lifecycle Model
+purpose: The platform-level model unifying the many independent anti-loss mechanisms into one concept of inbound content moving through lifecycle phases — at state X, expecting transition to state Y.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Context Lifecycle Model
 

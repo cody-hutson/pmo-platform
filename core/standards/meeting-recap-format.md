@@ -1,3 +1,11 @@
+---
+title: Meeting Recap Output-Format Spec
+purpose: The output-format spec defining the structure and field semantics of every PMO-produced meeting recap — decisions, next actions with owners and dates, context, and roadblocks.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: comms-writer (recap mode); ppm-agent (transcript-to-recap); any skill producing a post-meeting recap artifact
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Meeting Recap Output-Format Spec

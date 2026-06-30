@@ -1,3 +1,10 @@
+---
+title: Diátaxis Documentation Framework
+purpose: The Diátaxis documentation framework as the platform adopts it — classifying each doc by the single user need it serves (tutorial, how-to, reference, explanation) and how those four sit in relation.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Diátaxis Documentation Framework
 
 The [Diátaxis](https://diataxis.fr) framework, authored by Daniele Procida, classifies technical documentation by the user need it serves. Its thesis: docs work better when each one serves *one* of four user needs cleanly, and those four needs sit in a deliberate structural relationship to each other.

@@ -1,3 +1,11 @@
+---
+title: platform-config.toml Schema
+purpose: The canonical schema for platform-config.toml — the fields, types, and defaults of the Layer-1 tunable-behavior configuration surface.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the platform-config.toml.template (Layer 1 defaults); the Platform-Config Resolution Protocol; deploy.sh config checks; every skill reading a platform-config field
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # platform-config.toml Schema

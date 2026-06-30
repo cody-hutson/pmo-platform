@@ -1,3 +1,11 @@
+---
+title: Standard Output Format
+purpose: The standard output structure every skill follows, so the user can scan any skill output with one mental model and trust that evidence quality and follow-up routing are systematic.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every skill (the standard output structure); pmo-qa-auditor (structural compliance); per-skill-output-contracts.md
+---
 # Standard Output Format
 
 ## Purpose

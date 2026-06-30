@@ -1,3 +1,10 @@
+---
+title: Doc-Link Maintenance — pmo-platform
+purpose: The operating rule for detecting and remediating stale cross-references in the documentation corpus, via Check 14, so reorganizations do not silently erode navigability.
+type: rule
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Doc-Link Maintenance — pmo-platform
 

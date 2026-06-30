@@ -1,3 +1,11 @@
+---
+title: Template Protocol — PMO Platform
+purpose: Layer 4 of the 5-Layer Template Architecture — the lifecycle workflow, provenance-header schema, and trigger/promotion protocol governing every template in operations/templates/.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: operations/templates/ template authors; L3 template-storage (single-source-of-truth gate); the template lifecycle and promotion workflow; deploy.sh template checks
+---
 <!-- reference-durability: allow-link -->
 # Template Protocol — PMO Platform
 

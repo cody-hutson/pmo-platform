@@ -1,3 +1,12 @@
+---
+title: Review Composition Framework
+purpose: The framework consolidating cross-stage review composition and agent-correction discipline — how review-class work composes across pipeline stages.
+type: standard
+framework_version_anchor: "v11.13"
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: review-class skills composing across stages; build-reviewer and pmo-qa-auditor; framework-catalog.md (the review-composition-framework INTERNAL row); the agent-correction discipline
+---
 <!-- reference-durability: allow-link -->
 # Review Composition Framework
 

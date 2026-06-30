@@ -1,3 +1,11 @@
+---
+title: Health Check Specification — Document Ecosystem Integrity
+purpose: Defines every health check the agent runs on the document ecosystem — validating metadata integrity, freshness, coverage, relationship, and navigation consistency, with zero orphans as the primary KPI.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the health-check skill (every ecosystem health check); the document-ecosystem integrity KPIs; the SQLite index and navigation-layer consumers
+---
 # Health Check Specification — Document Ecosystem Integrity
 
 ## Purpose

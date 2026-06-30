@@ -1,6 +1,10 @@
 ---
 title: Review Discipline Principles
 purpose: Shared discipline methodology for review-class skills (audits, QA, reviews)
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+framework_version_anchor: "v10.2"
 applies_to: build-reviewer, pmo-qa-auditor, pmo-skill-editor Mode D, future audit skills
 source: Extracted from build-reviewer/SKILL.md (2026-04-18 Anthropic mapping analysis)
 ---

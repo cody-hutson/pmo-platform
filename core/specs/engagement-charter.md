@@ -1,6 +1,10 @@
 ---
 title: Operator Engagement Charter
 purpose: Shared discipline methodology for Claude Code ↔ operator engagement on pmo-platform repo changes via the 13-stage pipeline
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: "All Claude Code skills + chips + spokes producing operator-directed outputs; the 13-stage pipeline stage shards (operator-engagement contract); decision-discipline.md / reversibility-protocol.md / review-discipline-principles.md (sibling disciplines this charter composes with)"
 applies_to: All Claude Code skills + chips + spokes producing operator-directed outputs
 parallel_to: decision-discipline.md, reversibility-protocol.md, review-discipline-principles.md
 source: "2026-05-04 engagement research brief"

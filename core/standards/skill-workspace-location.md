@@ -1,3 +1,11 @@
+---
+title: Skill Workspace Location Convention
+purpose: Disambiguates the two PMO conventions for skill-adjacent artifacts — operational baselines under release/skills/<skill>-workspace/ versus other skill-adjacent storage.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: pmo-skill-refiner and pmo-skill-editor (skill-adjacent artifact placement); release/skills/<skill>-workspace baselines; deploy.sh skill-workspace checks
+---
 # Skill Workspace Location Convention
 
 **Last Refreshed:** 2026-05-11

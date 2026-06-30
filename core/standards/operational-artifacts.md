@@ -1,3 +1,11 @@
+---
+title: Operational Artifacts Reference
+purpose: The authoritative inventory of the platform's operational artifacts — their lifecycle patterns, tier classifications, cross-artifact dependencies, and stage-artifact mappings that skills read during processing.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every skill that reads/writes/updates an operational artifact during processing; the stage-artifact mappings in the pipeline; tracker-manager and artifact-generator
+---
 # Operational Artifacts Reference
 
 ## Purpose

@@ -2,6 +2,8 @@
 title: Terminology Glossary
 purpose: The shared terminology contract between governance docs, skills, and execution tools across the pmo-platform — defines how six categories of terms (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown units, Scope/Time boxes) plus first-class actor terms are used canonically, each mapped to an authoritative-file owner.
 type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 source: "Pre-triage terminology-collision audit (2026-03-29); actor-term + tier-anchoring + frontmatter refresh for cold-agent comprehension as Autonomy Tier 2/3 expands."
 consumers: "All agents resolving platform vocabulary; execution-framework.md (Role/Function/Persona/Work-Breakdown anchors); hub-spoke-bridge.md (Hub/Spoke/Sub-agent/Task/Role); registry.md (Skill); release-process.md + pipeline/ (Stage/Phase/Step/Deliverable); methodology-parameterization-v1.md (Methodology)."
 ---

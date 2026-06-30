@@ -1,3 +1,11 @@
+---
+title: Navigation Layer Schema — View Generation Specification
+purpose: Defines how the document ecosystem's navigation pages are generated, structured, and refreshed across the Portfolio -> Program -> Project -> Team hierarchy — the Presentation Layer of the ecosystem.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the navigation-page generator; the document-ecosystem Presentation Layer; health-check (navigation consistency); the Portfolio→Program→Project→Team hierarchy consumers
+---
 # Navigation Layer Schema — View Generation Specification
 
 ## Purpose

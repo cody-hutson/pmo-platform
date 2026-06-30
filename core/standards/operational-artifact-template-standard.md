@@ -1,3 +1,11 @@
+---
+title: Operational-Artifact Template Standard — PMO Platform
+purpose: The PDA-side contract overlay binding operational-artifact templates to the entity-field schema and entity-model — adding entity-derivation and machine-schema compliance to the 5-Layer Template Architecture.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: operations/templates/ template authors; the 5-Layer Template Architecture (entity-derivation overlay); entity-field-schemas.md and project-entity-model.md; deploy.sh template-sync checks
+---
 # Operational-Artifact Template Standard — PMO Platform
 
 **Last Refreshed:** 2026-05-16 (project-data-foundation — )

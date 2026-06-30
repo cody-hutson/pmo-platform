@@ -1,3 +1,11 @@
+---
+title: Stage I/O Contracts
+purpose: Defines the structured input/output contract at each pipeline stage boundary — exactly what artifacts cross a boundary, in what format, and how the receiving stage validates them.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every pipeline stage at its boundary; the handoff-coordinator-spec (contract pre-check); gate-evaluation-spec.md; the receiving-stage validators
+---
 <!-- reference-durability: allow-link -->
 # Stage I/O Contracts
 

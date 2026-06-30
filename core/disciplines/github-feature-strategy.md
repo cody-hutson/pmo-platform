@@ -1,3 +1,10 @@
+---
+title: GitHub Feature Utilization Strategy
+purpose: Defines which GitHub features beyond basic Issues the single-operator platform adopts, which it defers, and how the adopted ones map onto the 13-stage improvement pipeline.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # GitHub Feature Utilization Strategy
 
 **Milestone:** v-pretriage

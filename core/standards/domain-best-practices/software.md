@@ -2,6 +2,7 @@
 title: Domain Best-Practice Guide — Software Engineering
 purpose: A K1 universal reference that carries an Applicability Profile and indexes the authoritative best-practice sources for the software-engineering domain, for Stage-5 design and Stage-7 review consumption. One of the two seed guides establishing the domain-best-practice guide class.
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: software
 framework_version_anchor: "domain-aware-stage5-design"

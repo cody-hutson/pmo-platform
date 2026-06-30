@@ -1,3 +1,11 @@
+---
+title: Entity Lifecycle Protocol — Project-Scoped Entities (G8)
+purpose: The G8 entity-lifecycle-automation protocol for project-scoped entities — the lifecycle states, transitions, and write-authority for per-project entities in the project-data-architecture layer.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the G8 entity-lifecycle-automation layer; entity-field-lifecycle-matrix.md; agents writing project-scoped entity records in the project-data layer
+---
 # Entity Lifecycle Protocol — Project-Scoped Entities (G8)
 
 **Status:** Canonical (Stage 6 Engineering until merged)

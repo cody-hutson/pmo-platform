@@ -1,3 +1,10 @@
+---
+title: Harness Deployment — pmo-platform
+purpose: "The deployment rule for harness artifacts — workspace-global runtime tools governed and deployed identically to skills: source-of-truth in git, deploy-script-driven sync to the runtime path."
+type: rule
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Harness Deployment — pmo-platform
 

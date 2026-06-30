@@ -1,3 +1,10 @@
+---
+title: "Rubrics: people-graph-consumption"
+purpose: The binary PASS/FAIL rubric for the people-graph-consumption eval suite — the rationale and criteria for grading consumption as wired-versus-not without a Likert scale.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Rubrics: people-graph-consumption
 
 ## Scoring scale

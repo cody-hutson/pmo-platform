@@ -2,6 +2,8 @@
 title: Anthropic Base-vs-Build Registry
 purpose: Observational catalog of PMO source-roster skills mapped against the Anthropic skill catalog
 type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 framework: release/references/protocols/platform-health-audit-framework.md
 audit_baseline_sha: 4a943131c9e0323d5811f92704914657d7f7c314
 audit_baseline_date: 2026-05-03

@@ -1,3 +1,10 @@
+---
+title: Document Management Ecosystem — Design Specification
+purpose: The narrative spine of the document-management ecosystem design — the architecture decisions, cross-cutting concerns, and integration of the six deliverable specifications into one coherent layer.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Document Management Ecosystem — Design Specification
 
 **Status:** Canonical design specification for the document management ecosystem layer.

@@ -1,7 +1,9 @@
 ---
 title: Public-Repo vs. Operator-Instance Taxonomy
 purpose: K1 standard articulating the content-nature classification (UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE) that determines whether an artifact is git-tracked in the public repo, ships as a customizable template, or remains operator-machine-local. Composes with (does NOT restate) `knowledge-architecture.md` (K1-K5 tiers), `universal-vs-release-pipeline-split-rule.md` (subdirectory placement), `public-repo-gitignore-template.md` (extraction patterns), and `secrets-handling-policy.md` (C1-C7 secrets).
-type: standards
+type: standard
+status: ACTIVE
+consumers: "authors + Stage-5 placement decisions (apply the UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE classification to decide git-tracked vs template vs operator-local); universal-vs-release-pipeline-split-rule.md (operates above this classification for subdir placement); public-repo-gitignore-template.md (the extraction-pattern surface this classification feeds)"
 composes_with: [knowledge-architecture.md, universal-vs-release-pipeline-split-rule.md, public-repo-gitignore-template.md, secrets-handling-policy.md, composition-surface-spec.md, depersonalization-spec.md, hub-session-continuity.md]
 reversibility: CHEAP / Confidence HIGH
 ---

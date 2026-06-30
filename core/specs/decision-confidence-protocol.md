@@ -1,6 +1,10 @@
 ---
 title: Decision-Confidence Protocol
 purpose: Canonical mechanism for an agent to decide proceed-vs-pause-vs-escalate on a pending decision — a 3-source consistency signal (never verbalized self-confidence), a reversibility × autonomy threshold matrix (no global numeric cutoff), and a bounded pause-to-learn loop that injects new external signal. Consumed by decision-class pipeline stages and skills as a pre-action gate.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: "Decision-class skills and pipeline stages (pre-action gate across the six in-scope decision-domains: Deferrals, Estimations, Slicing & Decomposition, Internal Knowledge Depth, Tool Use, Design & Architecture); the Stage-4 currency-check (named consumer)"
 applies_to: Any agent decision point across the six in-scope decision-domains (Deferrals, Estimations, Slicing & Decomposition, Internal Knowledge Depth, Tool Use, Design & Architecture); decision-class skills and pipeline stages; the Stage-4 currency-check (named consumer).
 parallel_to: reversibility-protocol.md (the cost-of-error axis) + autonomy-tiers.md (the standing-authorization axis) — this protocol composes both as its two threshold axes, never restating their tables. Imports discovery-discipline.md § 2.5 as the pause-to-learn gap-closer; registers a 3rd pre-action sibling alongside autonomous-execution-model.md Retry/Escalate; reuses decision-discipline.md verification + ceremony-guard mechanisms.
 source: "The decision-confidence Research spike (COMPOSE posture, hard design constraints); the Stage 5 Solutioning design; co-developed with the Define ADR sibling. See § Provenance."

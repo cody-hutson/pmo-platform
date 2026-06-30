@@ -1,6 +1,10 @@
 ---
 title: Autonomy Tier Classification
 purpose: Canonical classification of agent action autonomy from full-human-control through autonomous execution; consumed by SKILL.md frontmatter, governance approval gates, and downstream PreToolUse hooks.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: "All PMO skills (SKILL.md autonomy_tier: frontmatter); CLAUDE.md § Autonomy Tier Classification; governance approval gates; engagement-charter.md; autonomous-execution-model.md; future PreToolUse hooks gating actions by tier"
 applies_to: All PMO skills, future SKILL.md `autonomy_tier:` frontmatter, CLAUDE.md autonomy section, `engagement-charter.md`, `autonomous-execution-model.md`, future PreToolUse hooks.
 parallel_to: reversibility-protocol.md (orthogonal — autonomy = WHO acts; reversibility = HOW MUCH ceremony per act); composes per `decision-discipline.md` § 2 cross-framework pattern.
 disambiguates_from: Document Tier (CLAUDE.md File Management Protocol), Skill Tier (OPERATIONS.md skill classification), Automation Tier (`pipeline/` + 10 schemas), Hierarchy Tier (CLAUDE.md Context File Hierarchy) — see § Tier Disambiguation Table.

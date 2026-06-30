@@ -1,7 +1,8 @@
 ---
 title: Universal vs. Release-Pipeline Split Rule (core/ vs release/references/)
 purpose: Per-file placement rule for the new pmo-platform tree (post-reorg modular monolith). Codifies the 3-step decision tree for assigning standards / specs / protocols / templates to `core/<kind>/` (UNIVERSAL-PLATFORM-KNOWLEDGE) or `release/references/<kind>/` (RELEASE-PIPELINE-SPECIFIC). Composes with — does not restate — `public-repo-vs-operator-instance-taxonomy.md` (universal-vs-localized content classification; this rule operates ABOVE that classification — both UNIVERSAL-PUBLIC and CUSTOMIZABLE-PUBLIC cells can live in either core/ or release/references/ depending on the consumer-surface test below).
-type: standards
+type: standard
+status: ACTIVE
 source: Stage 5 Solutioning sub-task; ratified at Collective Review
 composes_with:
   - public-repo-vs-operator-instance-taxonomy.md
@@ -10,9 +11,7 @@ composes_with:
 applies_to: All files authored at or migrated to the new pmo-platform tree from the reorg forward
 reversibility: CHEAP / Confidence HIGH
 version:
-consumers:
-  - reorg dispositions
-  - future-release Stage 5 spokes selecting placement for new K1 docs
+consumers: "reorg dispositions; future-release Stage 5 spokes selecting placement for new K1 docs"
 ---
 
 # Universal vs. Release-Pipeline Split Rule

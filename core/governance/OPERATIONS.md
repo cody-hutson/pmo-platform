@@ -1,3 +1,10 @@
+---
+title: OPERATIONS.md – Program-Level Context for Project Management
+purpose: Program-level context for project management — the behavioral rules, skill protocols, cross-project rules, and operational workflows that are the operational backbone of the workspace.
+type: protocol
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- repo-integrity: allow-memory-ref -->
 # OPERATIONS.md – Program-Level Context for Project Management
 

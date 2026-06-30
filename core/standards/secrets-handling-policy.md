@@ -1,7 +1,9 @@
 ---
 title: Secrets-Handling Policy
 purpose: Single design surface for how the workspace handles credentials, API keys, tokens, and personal data — categorization, storage matrix, gitignore policy, onboarding flow, rotation, failure modes, audit surface, and public-flip implications. Composes with (does NOT restate) bypass-mode-readiness.md (runtime enforcement), depersonalization-spec.md (PII token vocabulary), and public-repo-gitignore-template.md (gitignore baseline).
-type: standards
+type: standard
+status: ACTIVE
+consumers: "the secret-scanning CI workflow (enforces the categorization + storage matrix this policy defines); the public-repo .gitignore baseline (public-repo-gitignore-template.md applies this policy's gitignore patterns); workspace onboarding (the credential/secret onboarding flow follows this policy); bypass-mode-readiness.md (runtime enforcement this composes with)"
 composes_with: [bypass-mode-readiness.md, depersonalization-spec.md, public-repo-gitignore-template.md]
 reversibility: CHEAP / Confidence HIGH
 ---

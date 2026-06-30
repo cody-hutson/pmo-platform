@@ -1,3 +1,11 @@
+---
+title: Operational-Artifact Inventory (first-pass)
+purpose: The first-pass inventory of the platform's operational artifacts under an incremental-fill posture — the per-artifact record in the project-data-architecture cross-surface contract.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the project-data-architecture cross-surface memory contract; operational-artifacts.md; the entity-derivation inventory (incremental-fill posture)
+---
 <!-- repo-integrity: allow-issue-ref -->
 # Operational-Artifact Inventory (first-pass)
 

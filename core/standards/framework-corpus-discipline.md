@@ -1,7 +1,10 @@
 ---
 title: Framework Corpus Discipline Protocol
 purpose: Catalog, version-anchor convention, and tiered review cadence for every named framework/methodology/standard the platform references
+type: standard
 status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: "deploy.sh --check Check 18 (the catalog-registry-driven enforcement this protocol defines — 18a/18b/18c); check-version-anchors.py (the primitive that implements the version-anchor convention); framework-catalog.md (the registry-of-record this protocol governs); OPERATIONS.md Framework Review Cadence Protocol (consumes the tiered review cadence)"
 owner: Workspace owner ([OPERATOR_NAME])
 adr: ""
 enforcement: deploy.sh --check Check 18 (catalog-registry-driven; 18a completeness / 18b catalog↔doc consistency / 18c cadence aging)

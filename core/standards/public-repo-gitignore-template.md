@@ -2,6 +2,7 @@
 title: Public-Repo `.gitignore` Template
 purpose: K1 codified-knowledge standard defining operator-local config patterns that MUST NOT enter tracked content in any public repo extracted from pmo-platform — a reusable PATTERN that applies to multiple repos (claude-account-switcher first; future extractions inherit)
 type: standard
+status: ACTIVE
 source: ""
 parallel_to: skill-deployment.md (operator-state preservation discipline at the skill surface); harness-deployment.md (operator-state preservation discipline at the harness surface — this standard generalizes the discipline to PUBLIC-REPO extractions)
 reversibility: CHEAP (pattern additive; per-repo `.gitignore` instances are text files; revert removes; ALL pre-cutover repos exempt)

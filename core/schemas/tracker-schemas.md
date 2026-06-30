@@ -1,3 +1,11 @@
+---
+title: Tracker Schemas — PMO Operational Trackers
+purpose: Defines the schema for every operational tracker under 04-PMO-Operations/ — used by the Tracker Manager to validate updates, produce consolidated change summaries, and maintain data integrity.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: tracker-manager (validate updates, consolidated change summaries); the operational trackers under 04-PMO-Operations/; the entity-derivation inventory
+---
 <!-- reference-durability: allow-link -->
 # Tracker Schemas — PMO Operational Trackers
 

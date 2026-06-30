@@ -2,6 +2,7 @@
 title: Knowledge Architecture & Taxonomy
 purpose: 5-tier knowledge classification + the orthogonal universality/authorship axes + the placement model (incl. the parameterization seam) + a bounded local-context leakage register for the PMO platform corpus
 type: reference
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 consumers: "corpus-curation.md, applicability-framework.md, km-protocols.md (forward-only — relocated via 2026-05-19 capacity-audit merge); CLAUDE.md §Universal Preferences (Single-source-of-truth for knowledge); memory-corpus-drift-audit.md; deploy.sh Check 36"
 glossary_anchor: "umbrella body Glossary (canonical knowledge-tier terms — verbatim source for §1)"

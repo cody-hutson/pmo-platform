@@ -1,3 +1,11 @@
+---
+title: Gate Evaluation Specification
+purpose: Defines the three-layer assessment protocol for stage-gate transitions — how to evaluate gate readiness (metrics, judgment, calibration) and whether to proceed.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the handoff-coordinator-spec (invokes it at each boundary); gate-criteria-spec.md (the WHAT it assesses); every stage-transition gate
+---
 <!-- reference-durability: allow-link -->
 # Gate Evaluation Specification
 

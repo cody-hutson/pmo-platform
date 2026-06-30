@@ -1,3 +1,11 @@
+---
+title: Subagent Security Posture — Hub-Orchestrated Autonomous Spawning
+purpose: The security posture for hub-orchestrated autonomous subagent spawning — the guardrails the hub applies at spoke launch so a spawned spoke operates within a bounded authority envelope.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the hub at spoke launch (Procedure 3, per hub-spoke-bridge.md); release-hub Orchestrate mode; the subagent-spawn guardrails
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Subagent Security Posture — Hub-Orchestrated Autonomous Spawning

@@ -1,3 +1,11 @@
+---
+title: Upstream-Reference Catalog — PMO Skill Artifacts
+purpose: Codifies the canonical upstream (Anthropic-compatibility) sources for PMO skill artifacts — the catalog the D-Gate template and Collective Review cross-D scan check skill artifacts against.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the D-Gate Template (hub-spoke-bridge.md); the Collective Review cross-D scan; design-principle-register.md (structural twin); skill-artifact authors verifying Anthropic-compatibility
+---
 <!-- reference-durability: allow-link -->
 # Upstream-Reference Catalog — PMO Skill Artifacts
 

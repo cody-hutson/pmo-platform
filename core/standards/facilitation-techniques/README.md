@@ -2,6 +2,7 @@
 title: Facilitation-Techniques Corpus — Index
 purpose: A K1 universal corpus of delivery-lifecycle facilitation techniques — one card per technique, organized by lifecycle domain — for in-execution surfacing by a delivery skill at recommendation time. This index defines the corpus purpose, the per-entry schema, the refresh protocol, the boundary against the intake-elicitation peer library, and the domain manifest.
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: facilitation
 framework_version_anchor: "v2.22"

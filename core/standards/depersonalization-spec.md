@@ -1,11 +1,13 @@
-<!-- reference-durability: allow-link -->
 ---
 title: Depersonalization Spec
 purpose: Defines the operator-identity token vocabulary and the parameterization seam through which operator-instance values resolve at workspace-setup time. Composes with (does NOT restate) universal-vs-localized-context.md.
-type: standards
+type: standard
+status: ACTIVE
+consumers: "the repo-integrity depersonalization gate (repo-integrity.yml — forbids the operator-identity values this spec catalogs in tracked core/release/operations/packages files); workspace-setup token resolution (resolves [OPERATOR_*] tokens to operator-instance values); every tokenized corpus + template file (carries the [OPERATOR_*] vocabulary this spec defines)"
 composes_with: [universal-vs-localized-context.md, knowledge-architecture.md]
 reversibility: CHEAP / Confidence HIGH
 ---
+<!-- reference-durability: allow-link -->
 
 # Depersonalization Spec
 

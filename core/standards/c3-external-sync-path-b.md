@@ -1,7 +1,9 @@
 ---
 title: C3 — Path-B External Sync + Evidence-Gate Close-Proposal
 purpose: Declares the scheduled Path-B external-sync sweep — MCP read-poll of the configured ticketing/KB/Smartsheet adapters, snapshot-diff against persisted state, tracker-reconciliation proposals, and Evidence-Gate close-PROPOSALS (Context-Decided → Context-Closed) — clamped to the automation_level ceiling. Wiring spec only — extends the existing OPERATIONS.md Daily Processing Cycle step-9 External Sync with a scheduler, a persisted snapshot, and the Evidence-Gate close path; READ/poll external + LOCAL-tracker-write only.
-type: standards
+type: standard
+status: ACTIVE
+consumers: "mcp__scheduled-tasks (the registration target that runs the sweep); OPERATIONS.md Daily Processing Cycle step-9 External Sync (the step this sweep extends with a scheduler + snapshot + Evidence-Gate close path); the configured ticketing/KB/Smartsheet MCP adapters (read-polled)"
 composes_with: [depersonalization-spec.md, ../disciplines/context-lifecycle-model.md, ../specs/autonomy-tiers.md, ../governance/OPERATIONS.md]
 reversibility: MODERATE (spec + 2 path fields + 2 token rows + consumer registration) / Confidence HIGH — git revert restores prior state; the operator-instance snapshot/run-log are runtime artifacts whose post-revert absence is harmless (cold-start re-seeds); no external-system state is ever mutated, so there is no external rollback surface.
 ---

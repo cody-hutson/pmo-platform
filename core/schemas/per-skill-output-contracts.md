@@ -1,3 +1,11 @@
+---
+title: Per-Skill Output Contracts
+purpose: Defines the exact output structure each skill must produce per mode — the per-skill, per-mode contract the QA Auditor validates structural compliance against.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: pmo-qa-auditor (structural compliance per skill per mode); every skill (its own contract); output-format.md and agent-processing-contracts.md
+---
 <!-- reference-durability: allow-link -->
 # Per-Skill Output Contracts
 

@@ -1,3 +1,11 @@
+---
+title: Meeting Agenda Output-Format Spec
+purpose: The output-format spec defining the structure and field semantics of every PMO-produced meeting agenda — purpose, attendees, coverage, prep, and join details.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: comms-writer (agenda mode); artifact-generator; any skill producing a pre-meeting agenda artifact
+---
 <!-- reference-durability: allow-link -->
 # Meeting Agenda Output-Format Spec
 

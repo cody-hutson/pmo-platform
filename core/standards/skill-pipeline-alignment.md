@@ -1,3 +1,11 @@
+---
+title: Skill ↔ Pipeline Alignment Standard
+purpose: The standard operationalizing ADR-019 (specialists compose, not absorb shared function-skills) at the skill-to-pipeline-stage boundary — which skill owns which stage work.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the role-skill wave (ADR-019 composition); the specialist skills; the per-stage operating-model blueprint; pmo-skill-editor when aligning a skill to a stage
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Skill ↔ Pipeline Alignment Standard

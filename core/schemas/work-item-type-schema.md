@@ -1,3 +1,11 @@
+---
+title: Work-Item Type-Pack Meta-Schema
+purpose: The K1 meta-schema for work-item type-packs — the grammar that user-config type-pack instances conform to, derived from the FROZEN project-entity model.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: user-config work-item type-pack instances; intake-desk / delivery-engine / ppm-agent (the declarative work-item type layer); project-entity-model.md (the FROZEN derivation source)
+---
 <!-- reference-durability: allow-link -->
 # Work-Item Type-Pack Meta-Schema
 

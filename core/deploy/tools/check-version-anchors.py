@@ -46,6 +46,14 @@ import json
 import sys
 from pathlib import Path
 
+# Shared frontmatter reader (the single F1 parse). Imported by file location so
+# the bare `_frontmatter.py` sibling resolves regardless of CWD / sys.path.
+import importlib.util as _ilu
+_FM_PATH = Path(__file__).resolve().parent / "_frontmatter.py"
+_fm_spec = _ilu.spec_from_file_location("_frontmatter", _FM_PATH)
+_frontmatter = _ilu.module_from_spec(_fm_spec)
+_fm_spec.loader.exec_module(_frontmatter)
+
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
 DEFAULT_CATALOG_REL = "core/specs/framework-catalog.md"
@@ -148,25 +156,12 @@ def _read_doc_frontmatter_anchor(doc_path: Path) -> tuple[str | None, str]:
 
     status ∈ {"no-file", "no-frontmatter", "frontmatter-no-key", "ok"}.
     anchor_value is the stripped framework_version_anchor: value when status=="ok".
+
+    Delegates to the shared `_frontmatter.read_anchor` so the frontmatter parse
+    is byte-identical to Check 50's (the F1 consistency guarantee): the doc this
+    check treats as "has frontmatter" is the same doc Check 50 treats as such.
     """
-    if not doc_path.exists():
-        return None, "no-file"
-    try:
-        text = doc_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None, "no-file"
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None, "no-frontmatter"
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        if line.startswith("framework_version_anchor:"):
-            val = line.split(":", 1)[1].strip()
-            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-                val = val[1:-1]
-            return val.strip(), "ok"
-    return None, "frontmatter-no-key"
+    return _frontmatter.read_anchor(doc_path)
 
 
 def check_18b(rows: list[dict]) -> list[dict]:

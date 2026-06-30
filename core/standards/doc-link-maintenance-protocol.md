@@ -1,3 +1,11 @@
+---
+title: Doc-Link Maintenance Protocol
+purpose: The protocol for detecting and remediating stale documentation cross-references, enforced via deploy.sh --check Check 14, with the check-doc-links.py primitive and its workspace-root fallback.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: deploy.sh --check Check 14; the check-doc-links.py primitive; every skill and governance doc authoring internal markdown links; core/rules/doc-link-maintenance.md (the operating-rule mirror)
+---
 <!-- reference-durability: allow-link -->
 # Doc-Link Maintenance Protocol
 

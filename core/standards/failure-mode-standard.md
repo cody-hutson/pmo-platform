@@ -1,3 +1,12 @@
+---
+title: Failure Mode Standard
+purpose: Defines the format every skill uses to document its own domain-specific failure surface — a conditional do-NOT-do-X-when-Y anti-pattern with a 5-field template and a 5-category taxonomy.
+type: standard
+framework_version_anchor: "v9.0"
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every SKILL.md (the ≥3 Domain-Specific Failure Modes section); pmo-qa-auditor gate G7 (structural + content checks); root-cause-analysis (promoted N≥2 anti-pattern Root-cause field); CLAUDE.md §Domain-specific failure-mode discipline
+---
 <!-- reference-durability: allow-link -->
 # Failure Mode Standard
 

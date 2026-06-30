@@ -1,3 +1,12 @@
+---
+title: Practice-Efficacy Framework — Signal Catalog · Cadence · Trigger Protocol
+purpose: The measurement framework for evaluating whether the platform's adopted practices produce their intended outcomes — a signal catalog, cadence, and trigger protocol distinct from staleness and drift.
+type: standard
+framework_version_anchor: "v11.13"
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: OPERATIONS.md (efficacy review cadence); km-governance-framework.md; framework-catalog.md (the practice-efficacy-framework INTERNAL row); operators reviewing whether adopted practices produce outcomes
+---
 <!-- reference-durability: allow-version-ref -->
 <!-- reference-durability: allow-link -->
 # Practice-Efficacy Framework — Signal Catalog · Cadence · Trigger Protocol

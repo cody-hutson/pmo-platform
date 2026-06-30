@@ -1,3 +1,11 @@
+---
+title: Gate-Efficacy Standard
+purpose: The normative standard that an automated gate's green verdict must mean the invariant it claims actually holds — so a gate that goes green without asserting its invariant is treated as a defect, not a pass.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: authors of any deploy-check, hook, or release-executor quality gate; the gate-evaluation and gate-criteria specs; CLAUDE.md §No status theater (green-must-mean-the-invariant-holds)
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Gate-Efficacy Standard

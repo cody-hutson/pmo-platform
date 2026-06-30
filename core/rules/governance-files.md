@@ -1,4 +1,9 @@
 ---
+title: Governance File Editing Rules
+purpose: The editing-protocol rules for platform governance files — the before-editing checks, the change protocol, and the extra-caution discipline that applies because these files govern the platform.
+type: rule
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 paths:
   - "CLAUDE.md"
   - "pmo-platform/governance/**"

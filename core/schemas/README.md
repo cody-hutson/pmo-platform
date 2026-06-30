@@ -1,3 +1,11 @@
+---
+title: core/schemas/
+purpose: Index of the structured contract schemas — the typed-format definitions agents and gates validate documents and handoffs against.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: readers navigating the core/schemas corpus; agents and gates locating the typed-format definition they validate against; the governance file map
+---
 <!-- reference-durability: allow-link -->
 # core/schemas/
 

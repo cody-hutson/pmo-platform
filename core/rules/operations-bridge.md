@@ -1,3 +1,10 @@
+---
+title: Operations Bridge — File Interaction Rules
+purpose: The file-interaction rules bridging the Engineering (Claude Code) and Operations (Cowork) domains — layer classification, ownership boundaries, and the concurrency rule connecting the two.
+type: rule
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Operations Bridge — File Interaction Rules
 
 ## Organizational Model

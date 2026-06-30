@@ -1,3 +1,10 @@
+---
+title: Skill Deployment — pmo-platform
+purpose: The deployment rule mapping a skill's git source to its Cowork install and Claude Code user-local mirror locations, and the deploy-sync mechanism that keeps them current.
+type: rule
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Skill Deployment — pmo-platform
 

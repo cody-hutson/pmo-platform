@@ -2,10 +2,10 @@
 title: Facilitation Techniques — Planning Domain
 purpose: The planning (iteration/release) lifecycle-domain file of the facilitation-techniques corpus. Carries the facilitation techniques an operator runs when a team plans an iteration or release — setting the iteration goal and cutting scope to capacity — surfaced by delivery-engine Mode D (Sprint Planning) when an iteration/release-planning activity is in scope. Cards conform to the 9-field schema defined in the corpus index (README.md).
 type: standard
+status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: facilitation
 lifecycle_phase: planning
-framework_version_anchor: "v2.22"
 consumers: "operations/skills/delivery-engine/SKILL.md Mode D (Sprint Planning) — the surfacing trigger consults this file's cards for the iteration/release-planning activity, distinct from the estimation activity that consults estimation.md"
 owner: "Workspace owner ([OPERATOR_NAME])"
 ---

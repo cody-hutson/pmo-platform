@@ -1,6 +1,10 @@
 ---
 title: Decision Discipline Framework
 purpose: Shared discipline methodology for decision-class work (producing recommendations the operator acts on)
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+framework_version_anchor: "v10.2"
 applies_to: hub-spoke-bridge.md, release-personas.md Stage 4, future decision-producing skills (release-planner, principal-engineer, etc.)
 parallel_to: review-discipline-principles.md (review-class output discipline)
 source: release retrospective + hub-behavior self-review 2026-04-23 (4 context-localization failure instances)

@@ -1,3 +1,10 @@
+---
+title: core/governance/
+purpose: Index of the git-tracked program-scoped governance corpus — the single source of truth for PMO protocols, the release lifecycle, and the deployment audit trail.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # core/governance/
 
 **Purpose:** Authoritative, git-tracked program-scoped governance — the single source of truth for PMO protocols, the release lifecycle, and the deployment audit trail.

@@ -7,6 +7,7 @@ parallel_to:
   - ../disciplines/review-discipline-principles.md
 source: v11.01 stage-design-quality audit finding F-Release-3 (the canonical-form-application gap — canon substance applied while the canonical artifact form is partial-or-absent, observed at the same load-bearing degradation class across multiple phases and frames); design inherited from the KA-Discipline epic
 type: discipline
+status: ACTIVE
 reversibility: CHEAP
 ---
 <!-- repo-integrity: allow-issue-ref -->

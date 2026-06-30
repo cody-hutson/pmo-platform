@@ -1,3 +1,11 @@
+---
+title: Gate Criteria Specification
+purpose: Defines the three named triage-lifecycle gates — Triage Readiness, Workflow Readiness, Release Readiness — with structured criteria for validation, automation routing, and self-repair.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the gate-evaluation-spec (which assesses these criteria); the handoff-coordinator; field-lifecycle-matrix.md; agents validating Triage/Workflow/Release readiness
+---
 <!-- repo-integrity: allow-issue-ref -->
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->

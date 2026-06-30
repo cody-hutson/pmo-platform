@@ -1,3 +1,11 @@
+---
+title: Field Lifecycle Matrix
+purpose: Defines the lifecycle of every issue field across all 13 pipeline stages — which fields are created, required, updated, or locked at each stage, who populates them, and what gates block advancement.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: agents executing the CER Claim phase across the 13 stages; the gate specs (which fields gate stage advancement); the stage-io contracts
+---
 <!-- reference-durability: allow-link -->
 # Field Lifecycle Matrix
 

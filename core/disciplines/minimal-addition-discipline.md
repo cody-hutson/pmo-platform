@@ -4,6 +4,9 @@ purpose: The default discipline for an agent ADDING content to governance or ref
   corpus — add the minimum that carries the meaning, in service of *simplicity*. The umbrella
   authoring discipline of which duplication is one facet; it composes with the durability
   ladder (which sets the floor) rather than restating it.
+type: discipline
+status: ACTIVE
+reversibility: MODERATE / Confidence HIGH
 applies_to: any agent authoring or editing durable governance / reference corpus —
   core/, release/, .claude/rules/, workspace-root governance files; Stage 5/6 spokes
 parallel_to:

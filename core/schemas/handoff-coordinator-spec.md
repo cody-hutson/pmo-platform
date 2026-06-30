@@ -1,3 +1,11 @@
+---
+title: Handoff Coordinator Specification
+purpose: "Defines the orchestration layer above the gate evaluator — how stage transitions are orchestrated at each pipeline boundary: contract pre-check, gate invocation, state-transition mechanics, and trend reporting."
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the hub orchestrating stage transitions; gate-evaluation-spec.md and gate-criteria-spec.md; stage-io-contracts.md; the iteration-tracking and trend-reporting consumers
+---
 # Handoff Coordinator Specification
 
 Defines the orchestration layer above the gate evaluator. Specifies HOW stage transitions are orchestrated at each pipeline boundary: contract pre-check, gate invocation, state transition mechanics, iteration tracking, and trend reporting. Consumes contract validation ([stage-io-contracts.md](stage-io-contracts.md)), gate evaluation ([gate-evaluation-spec.md](gate-evaluation-spec.md)), and inter-stage feedback tiers. Does NOT define what gates check (criteria — [gate-criteria-spec.md](gate-criteria-spec.md)) or how gates assess (three-layer protocol — [gate-evaluation-spec.md](gate-evaluation-spec.md)) — those remain evaluator responsibilities.
