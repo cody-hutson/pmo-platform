@@ -859,6 +859,8 @@ Route files by **content function**, not by format or keyword match. When a file
 | **07-Reference/** | External reference material not authored by this project: vendor documentation, SOPs, standards, glossaries |
 | **08-Generated/** | Claude-generated artifacts staged for promotion. Temporary — promoted to target folder on user approval, auto-archived after 10 business days |
 
+**Records management:** Retention period, classification class (vital / important / reference / transient), disposition rule, and authenticity markers for every folder above are governed by the records-management policy — [`RECORDS_POLICY.md`](RECORDS_POLICY.md) (disposition moves are logged to [`RECORDS_ARCHIVE_LOG.md`](RECORDS_ARCHIVE_LOG.md)). The `08-Generated/` 10-business-day auto-archive named here is that policy's Transient-class disposition trigger.
+
 **Operational override principle:** Documents listed in the Operational Artifacts table reside in 04-PMO-Operations/ regardless of where standard PMO taxonomy would place them. Their Document Tier classification (Document Tier 1 or Document Tier 2) maintains the appropriate governance oversight. The Operational Artifacts table is the authoritative list — this section does not enumerate its contents.
 
 **Ambiguity rule:** When a file's content serves multiple purposes (e.g., a Jira export that contains both project plan milestones and test case data), route by primary function. A project plan exported from Jira routes to 01-Governance/ even though it's a Jira CSV. A test-specific export routes to 03-Testing/. When genuinely ambiguous, File Router presents both options to the user.
