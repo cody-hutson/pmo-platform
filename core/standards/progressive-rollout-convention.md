@@ -1,3 +1,11 @@
+---
+title: Progressive-Rollout Convention — pipeline-wide
+purpose: The pipeline-wide convention that a governance mechanism (hook, deploy-check, or quality gate) advances through named rollout phases rather than flipping straight to blocking on the day it ships.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: authors of any hook, deploy-check, or release-executor gate; the warn-mode/enforce-mode shared harness; deploy.sh check rollout phases
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Progressive-Rollout Convention — pipeline-wide

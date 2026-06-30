@@ -1,3 +1,11 @@
+---
+title: Process-Flow Diagram Standards
+purpose: The canonical authority for process-flow diagrams — the Mermaid syntax template, swimlane idiom, and color/shape grammar every skill and reference doc uses when depicting a workflow.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every skill or reference doc authoring a process-flow (Mermaid) diagram; the swimlane/color/shape grammar consumers; design-artifact authors at Stage 5
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Process-Flow Diagram Standards

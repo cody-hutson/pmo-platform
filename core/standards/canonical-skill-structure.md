@@ -1,3 +1,11 @@
+---
+title: Canonical Skill Structure — PMO Skills
+purpose: The canonical structural specification every skill under {operations,release,core}/skills/ conforms to — the dual-gate-enforced contract for skill layout, required sections, and references.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every skill under {operations,release,core}/skills/; pmo-skill-editor and pmo-skill-refiner; pmo-qa-auditor structural gate; the block-skill-direct-edit hook and deploy.sh skill checks
+---
 # Canonical Skill Structure — PMO Skills
 
 **Last Refreshed:** 2026-04-22

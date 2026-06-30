@@ -1,4 +1,3 @@
-<!-- reference-durability: allow-link -->
 ---
 title: repo_host Adapter — Version-Claim Operation Interface
 purpose: Defines the four operations a repository-host adapter must provide for the host-agnostic deterministic-version-claiming capability — anchor / claimed_set / atomic_claim / lineage — with abstract, host-agnostic semantics (not a host mechanism), the config-selection binding to operator.toml [adapters].repo_host, and a GitHub/git v1 reference-adapter mapping. Interface spec only — the capability that consumes it is recorded in the version-claim-determinism ADR; the executable claim mechanism that calls these operations is a separate slice.
@@ -6,6 +5,7 @@ type: standards
 composes_with: [../config/operator.toml.template, ../ADRs/ADR-017-distribution-architecture.md, ../ADRs/ADR-022-platform-config-vs-operator-toml-split.md, version-field-semantics.md]
 reversibility: MODERATE (a new interface spec + one config-selector binding that already exists in the template) / Confidence HIGH — git revert restores prior state; the spec adds no runtime surface of its own (the executable claim mechanism that binds to it is a separate slice), and exactly one adapter (GitHub/git v1) implements it, so there is no multi-adapter migration to unwind.
 ---
+<!-- reference-durability: allow-link -->
 
 <!-- repo-integrity: allow-issue-ref -->
 

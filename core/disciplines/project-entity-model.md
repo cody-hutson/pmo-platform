@@ -1,3 +1,10 @@
+---
+title: Project Entity Model
+purpose: The canonical project-entity model — the logical entities of the project-data layer, their relationships, and the FROZEN definitions downstream schemas derive from.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Project Entity Model
 
 <!-- repo-integrity: allow-memory-ref -->

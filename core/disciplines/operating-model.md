@@ -1,3 +1,10 @@
+---
+title: Operating Model — Skill Ownership, Governance Composition, Per-Stage Execution Blueprint
+purpose: The canonical operating model — skill ownership, governance composition, and the per-stage execution blueprint that the skill-build and role-skill waves and Stage 6/7 read as their execution spec.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Operating Model — Skill Ownership, Governance Composition, Per-Stage Execution Blueprint
 

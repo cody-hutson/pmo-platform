@@ -1,3 +1,11 @@
+---
+title: Frontmatter Schema — Document Ecosystem Metadata
+purpose: Defines the Schema Layer of the document ecosystem — the entity model governing what the PMO tracks for operational K4 artifacts, their fields, valid relationships, and lifecycle states.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the document-ecosystem Storage Layer (frontmatter on operational K4 files); the SQLite index; file-router and health-check; platform-doc-frontmatter-standard.md (disjoint-population sibling)
+---
 <!-- reference-durability: allow-link -->
 # Frontmatter Schema — Document Ecosystem Metadata
 

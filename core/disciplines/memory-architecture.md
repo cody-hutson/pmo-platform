@@ -1,6 +1,3 @@
-<!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-memory-ref -->
-<!-- repo-integrity: allow-issue-ref -->
 ---
 title: Memory Architecture — the unified cross-surface read/write contract
 purpose: The single SSOT contract enumerating every memory surface with its memory-type(s), reader(s), writer(s), write-authority (Autonomy Tier), update cadence, read-only/auto-write/operator-write-only class, and trigger — the one place an agent consults to decide read-vs-write and where a fact belongs.
@@ -10,6 +7,9 @@ consumers: "core/rules/governance-files.md (citing consumer — the AC-satisfyin
 owner: "operator-class: Workspace owner ([OPERATOR_NAME]) — per km-governance-framework §2.4 (forward-only)"
 glossary_anchor: "knowledge-architecture.md §2.1 four-memory-type model (canonical Work / Knowledge / People / Learning type axis)"
 ---
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-memory-ref -->
+<!-- repo-integrity: allow-issue-ref -->
 
 # Memory Architecture — the unified cross-surface read/write contract
 

@@ -1,3 +1,11 @@
+---
+title: SIOR Escalation Protocol
+purpose: The SIOR (Situation / Impact / Options / Recommendation) escalation discipline that requires every escalation to carry a recommended course of action rather than transfer the analytic burden back to the decision-maker.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: comms-writer (escalation drafts); ppm-agent and delivery-engine (RAID/escalation framing); any skill producing an escalation
+---
 <!-- reference-durability: allow-link -->
 # SIOR Escalation Protocol
 

@@ -1,3 +1,11 @@
+---
+title: PMO Agent Suite — Regression Checks
+purpose: The regression test bank the Skill Editor runs after any skill edit to verify the edit did not break cross-skill contracts, output quality, or behavioral requirements.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: pmo-skill-editor (Regression-check mode after any skill edit); pmo-skill-refiner; the cross-skill contract verification harness
+---
 # PMO Agent Suite — Regression Checks
 
 ## Purpose

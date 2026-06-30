@@ -1,3 +1,10 @@
+---
+title: core/disciplines/
+purpose: Index of the understanding- and rationale-oriented documents — the load-bearing models, frameworks, and methodological disciplines downstream skills, governance, and schemas consume.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # core/disciplines/
 

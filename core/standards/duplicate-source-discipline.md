@@ -1,3 +1,11 @@
+---
+title: Duplicate-Source Discipline — Register or Remove
+purpose: "The register-or-remove discipline for content reused across files: duplicated content joins the enforced mirror set, consolidates to one canonical source, or is registered as an allowed exception."
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries); authors of any content reused across files; CLAUDE.md §Prefer durable structures
+---
 <!-- reference-durability: allow-link -->
 # Duplicate-Source Discipline — Register or Remove
 

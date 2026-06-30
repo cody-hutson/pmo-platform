@@ -1,3 +1,11 @@
+---
+title: Three Gulfs Methodology
+purpose: The diagnostic methodology for locating where a skill, agent, or pipeline stage is weak along three gulfs — Intention, Execution, and Comprehension — turning open-ended quality questions into structured diagnostic axes.
+type: discipline
+framework_version_anchor: "v11"
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Three Gulfs Methodology
 

@@ -1,3 +1,11 @@
+---
+title: Operator-Touchpoint Inventory + Phase-Out-Plan Schema
+purpose: The K1 grammar for the operator-touchpoint inventory and phase-out plan — the schema a populated (K4, operator-local) touchpoint inventory and phase-out instance conforms to.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the operator-touchpoint inventory + phase-out-plan instance (K4, operator-local); the touchpoint-phaseout reviewers; the operator-touchpoint reduction work
+---
 <!-- repo-integrity: allow-issue-ref -->
 # Operator-Touchpoint Inventory + Phase-Out-Plan Schema
 

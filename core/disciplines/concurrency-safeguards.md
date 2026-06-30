@@ -1,3 +1,10 @@
+---
+title: Concurrency Safeguards
+purpose: The discipline governing concurrency between Claude Code sessions (interactive, worktree, scheduled, auto-mode) via behavioral conventions, building on the operations-bridge Concurrency Rule.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Concurrency Safeguards
 
 > **Status:** Stage 6 Engineering

@@ -1,3 +1,10 @@
+---
+title: "Judge: people-graph read resolution + read-only"
+purpose: The binary LLM-judge prompt for the people-graph-consumption suite — verifying read-resolution and read-only behavior across the four local failure modes.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Judge: people-graph read resolution + read-only
 
 **Template:** T1 (LLM-as-judge, binary) — see `core/skills/eval-writer/references/rubric-templates.md` Template 1.

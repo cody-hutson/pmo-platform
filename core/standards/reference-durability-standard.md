@@ -1,3 +1,11 @@
+---
+title: Reference Durability Standard
+purpose: The standard requiring durable-corpus files to survive repo migration, milestone renumbering, and history rewrites — the reference-form ladder, the self-containment test, and the override-marker allowlist.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the reference-durability PreToolUse hook (Write/Edit on durable-corpus paths); deploy.sh reference-durability check; the reference-durability CI workflow; every author of governance/standard/spec/discipline/schema/SKILL.md content
+---
 # Reference Durability Standard
 
 ## Purpose

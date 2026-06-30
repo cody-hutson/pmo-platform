@@ -1,3 +1,11 @@
+---
+title: Version Field Semantics — PMO Skills
+purpose: "Defines the version: field in every PMO SKILL.md frontmatter — what it means, when it bumps, who maintains it, and what migration-backfill values are appropriate."
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: "every PMO SKILL.md (the version: field); pmo-skill-editor / pmo-skill-refiner (version bumps); framework-catalog.md (parallel anchor mechanism); deploy.sh skill-version checks"
+---
 # Version Field Semantics — PMO Skills
 
 ## Purpose

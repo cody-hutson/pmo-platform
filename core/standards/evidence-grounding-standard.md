@@ -1,3 +1,11 @@
+---
+title: Evidence-Grounding Standard — Stage 5 Solutioning
+purpose: Requires every Stage-5 Solutioning output that canonicalizes a convention to carry an inspectable Evidence-Grounding subsection, so a canonicalization is traceable to the evidence that justifies it.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: Stage 5 Solutioning spokes (every convention-canonicalizing output); the Stage 5/9 review of canonicalization evidence; pmo-qa-auditor Evidence audit mode
+---
 <!-- reference-durability: allow-link -->
 # Evidence-Grounding Standard — Stage 5 Solutioning
 

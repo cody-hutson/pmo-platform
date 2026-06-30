@@ -1,3 +1,11 @@
+---
+title: SQLite Index Schema — Document Ecosystem Cache
+purpose: Defines the SQLite schema for the document ecosystem's queryable index — a disposable cache rebuilt entirely from source-file frontmatter, where the files remain the source of truth.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the document-ecosystem index builder (rebuilt from frontmatter); health-check queries; the queryable-metadata consumers (files remain source of truth)
+---
 # SQLite Index Schema — Document Ecosystem Cache
 
 ## Purpose

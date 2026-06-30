@@ -1,3 +1,11 @@
+---
+title: Agent Processing Contracts — Document Ecosystem Integration
+purpose: Defines what each skill must do to build and maintain the document ecosystem during normal delivery processing — the ecosystem-specific actions additive to each skill's output contract.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every skill (the additive document-ecosystem actions); per-skill-output-contracts.md; the document-ecosystem health checks
+---
 # Agent Processing Contracts — Document Ecosystem Integration
 
 ## Purpose

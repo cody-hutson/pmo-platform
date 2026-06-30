@@ -1,3 +1,10 @@
+---
+title: People-graph consumption eval — roster → composed view → skill consumption
+purpose: The people-graph-consumption eval suite overview — proving the people capability/coverage graph is a wired capability resolved read-only by each of the four consuming skills.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- repo-integrity: allow-memory-ref -->
 # People-graph consumption eval — roster → composed view → skill consumption
 

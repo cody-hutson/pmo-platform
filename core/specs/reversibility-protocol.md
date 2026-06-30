@@ -1,3 +1,11 @@
+---
+title: Reversibility Protocol
+purpose: Operationalizes the reversibility principle with a four-tier vocabulary (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) that scales a decision-class output's process weight to the cost of being wrong.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every decision-class output (recommendations, plans, escalations); principal-standard-checklist.md §4; CLAUDE.md §Reversibility discipline; discovery and RCA disciplines (tier reclassification)
+---
 <!-- reference-durability: allow-link -->
 # Reversibility Protocol
 

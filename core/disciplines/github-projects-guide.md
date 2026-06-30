@@ -1,3 +1,10 @@
+---
+title: GitHub Projects Guide
+purpose: The operational reference for the PMO Pipeline GitHub Project — its architecture, fields, views, automations, and agent integration.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # GitHub Projects Guide
 

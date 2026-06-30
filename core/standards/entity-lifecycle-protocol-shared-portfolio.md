@@ -1,3 +1,11 @@
+---
+title: Entity Lifecycle Protocol — Shared + Portfolio Entities (G8)
+purpose: The G8 entity-lifecycle-automation protocol for shared and portfolio-scoped entities — the lifecycle rules and write-authority for cross-project entities in the project-data-architecture layer.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the G8 entity-lifecycle-automation layer; entity-field-lifecycle-matrix.md; agents writing shared/portfolio-scoped entity records in the project-data layer
+---
 # Entity Lifecycle Protocol — Shared + Portfolio Entities (G8)
 
 **Status:** Canonical (Stage 6 Engineering until merged)

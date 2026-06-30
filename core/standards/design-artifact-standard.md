@@ -1,3 +1,11 @@
+---
+title: Design-Artifact Standard
+purpose: The K1 standard governing the design artifact produced at Stage 5 Solutioning and consumed at Stage 13 — its structure, tier, and primary consumers.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: Stage 5 Solutioning spokes (per stage-05-solutioning.md); Stage 13 Close (design-artifact capture); the design-artifact review criterion
+---
 <!-- reference-durability: allow-link -->
 # Design-Artifact Standard
 

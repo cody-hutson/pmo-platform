@@ -1,3 +1,10 @@
+---
+title: "Calibration Protocol: people-graph-consumption"
+purpose: The calibration protocol for the people-graph-consumption eval suite's binary judge — the labeled-example set and agreement thresholds that validate the judge layer.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Calibration Protocol: people-graph-consumption
 
 Validates the binary-judge layer (`judge_prompts/people-graph-read-resolution.md`). The deterministic runner layer needs no calibration — it is code-checkable and exact.

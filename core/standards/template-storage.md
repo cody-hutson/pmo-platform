@@ -1,3 +1,11 @@
+---
+title: Template Storage Protocol — PMO Platform
+purpose: Layer 3 of the 5-Layer Template Architecture — the canonical registry folder layout, deploy-sync propagation mechanism, and sync-map registration workflow for platform templates.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the template registry under operations/templates/; deploy.sh template-sync (the propagation mechanism); the sync-map registration workflow; L4 template-protocol
+---
 <!-- reference-durability: allow-link -->
 # Template Storage Protocol — PMO Platform
 

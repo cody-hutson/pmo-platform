@@ -1,3 +1,11 @@
+---
+title: Template Taxonomy — PMO Platform
+purpose: Layer 1 of the 5-Layer Template Architecture — the canonical artifact-family taxonomy across project, software, and platform-internal domains, each bound to a named best-practice canon.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the 5-Layer Template Architecture (L1); template-storage and template-protocol; artifact-generator and the artifact-family-to-best-practice-canon binding
+---
 <!-- reference-durability: allow-link -->
 # Template Taxonomy — PMO Platform
 

@@ -1,3 +1,11 @@
+---
+title: Entity Field Lifecycle Matrix
+purpose: The per-entity x per-field x per-agent write-permission matrix for the 18 logical entities of the project-entity model — the entity-tier sibling of the ticket-tier field-lifecycle matrix.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: agents writing project-data entity records (the write-permission matrix); the G8 entity-lifecycle protocols; entity-field-schemas.md; the CER Claim phase
+---
 <!-- reference-durability: allow-link -->
 # Entity Field Lifecycle Matrix
 

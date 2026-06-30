@@ -1,3 +1,11 @@
+---
+title: PROJECT.md Schema
+purpose: The canonical schema for PROJECT.md — the fields a project context file carries, consumed by the PROJECT.md-reading skills and the Methodology Awareness Protocol.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the 13 PROJECT.md-reading skills; OPERATIONS.md §Methodology Awareness Protocol; project-initiator; the role-skill wave
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-memory-ref -->
 # PROJECT.md Schema

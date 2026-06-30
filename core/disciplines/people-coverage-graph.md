@@ -1,3 +1,10 @@
+---
+title: People Capability/Coverage Graph
+purpose: The K1 spec for the people capability/coverage graph — composing the operator-instance people-roster with the FROZEN Person and Resource entities into a queryable coverage view.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # People Capability/Coverage Graph
 
 <!-- repo-integrity: allow-issue-ref -->

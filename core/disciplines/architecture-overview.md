@@ -1,3 +1,10 @@
+---
+title: PMO Platform — Architecture Overview
+purpose: The single source of truth for how the PMO platform works — read before any structural decision, deployment change, or assumption about file ownership.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # PMO Platform — Architecture Overview
 

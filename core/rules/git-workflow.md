@@ -1,3 +1,10 @@
+---
+title: Git Workflow — pmo-platform
+purpose: The git workflow rules for pmo-platform — branching, commit-message, primary-checkout, worktree, PR-process, and repository-integrity-gate discipline.
+type: rule
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Git Workflow — pmo-platform
 
 ## Repository

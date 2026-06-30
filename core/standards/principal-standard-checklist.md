@@ -1,3 +1,11 @@
+---
+title: Principal Contributor Standard — Evaluation Checklist
+purpose: The 10-competency Principal Contributor Standard evaluation checklist with observable PASS/FAIL behaviors, used by the QA Auditor and as a self-check by every skill.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: pmo-qa-auditor (every output review); every skill (self-check); the Principal Standard checklist embedded in skill output contracts
+---
 <!-- reference-durability: allow-link -->
 # Principal Contributor Standard — Evaluation Checklist
 

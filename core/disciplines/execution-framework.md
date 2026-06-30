@@ -1,3 +1,10 @@
+---
+title: Execution Framework
+purpose: The tool-agnostic, methodology-agnostic pattern set governing HOW work executes — work breakdown, assignment, tracking, handoffs, and state persistence — across any delivery methodology.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Execution Framework
 

@@ -1,3 +1,10 @@
+---
+title: "Failure Taxonomy: people-graph-consumption"
+purpose: The failure taxonomy the people-graph-consumption eval suite is built to catch — the consumption failures where the graph read is instructional-but-unverified or leaks a write.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Failure Taxonomy: people-graph-consumption
 
 The failure modes this suite is built to catch. These are the *consumption* failures the parent issue names: the read is instructional-but-unverified — nothing proves it fires, and nothing proves it stays read-only. Each maps to a Module 6 F-XX where the research supports it, else a local ID.

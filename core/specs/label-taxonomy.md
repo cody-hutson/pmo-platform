@@ -1,3 +1,11 @@
+---
+title: Label Taxonomy
+purpose: Defines every GitHub Issue label — its purpose and when it is applied — as the state-anchor layer for issues, including the one-category-label-at-intake rule.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: intake-desk and triage (one category label at intake); every gh issue label operation; ticket-information-architecture.md; the improvement/bug/observation templates
+---
 <!-- reference-durability: allow-link -->
 # Label Taxonomy
 

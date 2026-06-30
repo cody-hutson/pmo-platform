@@ -1,3 +1,11 @@
+---
+title: Planning-to-Solutioning Handoff — Activation-Criteria Matrix
+purpose: The activation-criteria matrix governing the Stage-4 Planning to Stage-5 Solutioning handoff — when Solutioning activates and what the handoff must carry.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: Stage 4 Planning spokes; Stage 5 Solutioning spokes; the handoff-coordinator and stage-io-contracts at the Stage 4→5 boundary
+---
 <!-- reference-durability: allow-link -->
 # Planning-to-Solutioning Handoff — Activation-Criteria Matrix
 

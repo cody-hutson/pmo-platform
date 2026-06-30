@@ -1,3 +1,11 @@
+---
+title: Five-Function Spine and Cross-Cutting Process Flows
+purpose: Maps each of the 13 pipeline stages to the 5 PMBOK Process Groups and enumerates the 10 cross-cutting process flows that thread through the pipeline.
+type: discipline
+framework_version_anchor: "v11.03"
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Five-Function Spine and Cross-Cutting Process Flows
 
 **Status:** Canonical

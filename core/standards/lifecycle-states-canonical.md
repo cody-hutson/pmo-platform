@@ -1,3 +1,11 @@
+---
+title: Lifecycle States — Canonical Source
+purpose: The canonical source for the platform's seven independent state-vocabulary spaces — the single place each lifecycle state enum (Context, Domain C, Artifact, and the rest) is defined.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every skill and schema referencing a lifecycle-state enum (Context / Domain C / Artifact / and the other state spaces); frontmatter-schema.md; the health-check and document-ecosystem specs
+---
 <!-- reference-durability: allow-link -->
 # Lifecycle States — Canonical Source
 

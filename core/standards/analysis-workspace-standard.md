@@ -1,3 +1,11 @@
+---
+title: Analysis-Workspace Standard
+purpose: Defines the in-repo git-ignored analysis workspace for read-once platform analysis (audits, reviews, gap analyses) — folder + frontmatter schema + sunset rule — so analysis stays operator working material, never shipped corpus.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: CLAUDE.md §Governance File Map (Program-scoped analysis row); operators and agents creating audit/review/gap-analysis artifacts; the analysis-folder convention cited across the disciplines
+---
 # Analysis-Workspace Standard
 
 ## Purpose

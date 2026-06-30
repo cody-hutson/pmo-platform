@@ -1,3 +1,11 @@
+---
+title: Audit-Recommendation Status-Badge Standard
+purpose: Defines the per-recommendation status-badge convention (OPEN / BUNDLED / SHIPPED / DEFERRED / REJECTED) maintained at merge-time so shipped audit recommendations stop reading as open scope.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: audit/review recommendations.md authors; release-planner and triage (so shipped recommendations stop reading as open scope); CLAUDE.md §Audit-baseline discipline
+---
 # Audit-Recommendation Status-Badge Standard
 
 ## Purpose

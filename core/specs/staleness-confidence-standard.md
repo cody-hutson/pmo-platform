@@ -1,3 +1,11 @@
+---
+title: Staleness-Confidence Standard
+purpose: Defines the one shared representation of staleness-confidence for the platform's ticket-facing staleness detectors — a four-band ordinal depth scale optionally backed by a continuous score.
+type: spec
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: every ticket-facing staleness-detection mechanism; health-check (timeline/freshness drift); the four-band depth scale consumers across the staleness detectors
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Staleness-Confidence Standard

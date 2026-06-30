@@ -1,3 +1,10 @@
+---
+title: "Characterization: people-graph-consumption"
+purpose: The Stage-0 characterization five-tuple for the people-graph-consumption system under test — how the four consuming skills read the people capability/coverage graph view.
+type: discipline
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Characterization: people-graph-consumption
 
 Stage 0 five-tuple (per `core/skills/eval-writer/references/canonical-workflow.md`) for the system under test — the 4 skills' consumption of the people capability/coverage graph view.

@@ -1,3 +1,11 @@
+---
+title: Design-Principle Register — Agent Operating Principles
+purpose: The auditable index of agent-operating design principles the hub's Decision Briefing is checked against — the structural twin of the upstream-reference catalog's Anthropic-compatibility axis.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: the hub's Decision Briefing (agent-operating-principles audit axis); build-reviewer and pmo-qa-auditor; upstream-reference-catalog.md (structural twin)
+---
 <!-- reference-durability: allow-link -->
 # Design-Principle Register — Agent Operating Principles
 

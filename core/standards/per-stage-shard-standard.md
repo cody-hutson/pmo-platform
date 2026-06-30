@@ -1,3 +1,11 @@
+---
+title: Per-Stage Shard Standard — Pipeline Stage Definition Files
+purpose: The authoring discipline for the per-stage pipeline stage-definition shard files — the structure each stage-NN shard follows after the monolithic pipeline-stages.md was split.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: authors of the per-stage stage-NN pipeline shard files; the pipeline-stage README; deploy.sh shard-structure checks
+---
 # Per-Stage Shard Standard — Pipeline Stage Definition Files
 
 **Origin:** sub-task re-scoped under Tier 0 Override (Option B) on 2026-05-23 — original premise referenced the now-deleted `pipeline-stages.md` (per [ADR-002](../../release/ADRs/ADR-002-modular-pipeline-stages-split.md)); re-scoped to per-stage shard authoring discipline.

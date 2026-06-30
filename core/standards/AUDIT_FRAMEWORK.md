@@ -1,3 +1,11 @@
+---
+title: PMO Platform Operational Readiness Audit — Framework
+purpose: The 3-session operational-readiness audit framework for the PMO platform — structural/behavioral, then deep-dive, then synthesis — each session producing a chained output file.
+type: standard
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: operators running a platform operational-readiness audit; pmo-qa-auditor (Platform health audit mode); the session-chained audit output files it defines
+---
 <!-- reference-durability: allow-link -->
 # PMO Platform Operational Readiness Audit — Framework
 

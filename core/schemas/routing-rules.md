@@ -1,3 +1,11 @@
+---
+title: File Routing Rules
+purpose: Defines the classification patterns the File Router uses to identify file types and route them to target folders — a self-updating ruleset corrected when a user fixes a misclassification.
+type: schema
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+consumers: file-router (classification + routing); the self-update path when a user corrects a misclassification; the auto-write folder routing
+---
 # File Routing Rules
 
 ## Purpose
