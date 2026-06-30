@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.30] - 2026-06-30
+
+The five software-domain specialist skills (architect, principal engineer, software engineer, DevOps/SRE, technical program manager) now cite one shared software best-practice guide as their design-time anchor instead of asserting practices ad-hoc — via compose-by-reference pointers, with no content copied into the skills. The build-philosophy coverage map was corrected so it no longer claims skill-grounding that didn't exist (the software row is marked wired; governance and process remain pending their sibling releases). Additive reference wiring; no behavior, command, or workflow changes.
+
+[Full notes](release/releases/notes/v3.30_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.30)
+
 ## [v3.27] - 2026-06-30
 
 Platform-reference docs now have a single, written frontmatter standard. It says what YAML metadata each kind of doc (standard, schema, spec, discipline, rule, …) must carry — title, purpose, type, status, reversibility, plus a couple of fields that depend on the doc's class. About 140 framework reference docs that had no frontmatter were backfilled to match, and a new CI check enforces the standard on the governance-class docs (Tier A) and warns everywhere else, so the corpus stays consistent going forward.
