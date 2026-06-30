@@ -332,6 +332,20 @@ operator-approval gate PPM Agent records; `active` makes the plan the live basel
 `SUPERSEDES` self-edge moves a prior `Plan-active → Plan-superseded`) — those transitions
 are PPM Agent's to maintain.
 
+**`plan_type` recognition contract (the OPEN discriminator — `entity-field-schemas.md` §3.4a,
+resolved at #159).** When artifact-generator creates a Plan, it stamps the required
+`plan_type` discriminator from the OPEN registry (§3.4a: `comms` / `training` / `hypercare` /
+`cutover` / `change-management` / `raid` + the §5.5 anchors `release` / `implementation` /
+`project` / `test`), seeding from the matching per-subtype template under
+`operations/templates/plan-templates/`. The discriminator is **required** (V-PLN-02 presence) —
+artifact-generator never emits a Plan without it; an unregistered-but-well-formed value WARNs
+(OPEN-tail), it does not block. The subtype-conditioned operational-terminals (`training:delivered`,
+`cutover:executed`, `hypercare:closed`) are **PPM Agent transitions**, not create-time stamps —
+artifact-generator still only stamps the `draft` entry. The `raid` value names the **RAID Log**
+(a Plan-class register), **not** the RAID-Item entity (§3.6). For a `change-management` Plan,
+artifact-generator routes to the `change-management` specialist per the Step-3 output-contract
+(that skill owns `plan_type: change-management`).
+
 **Canonical field — the entry state is `lifecycle_state`, never the deprecated single-field
 machine.** Both entities' entry state is written to the canonical `lifecycle_state` field
 (`frontmatter-schema.md` § Category 2). The legacy single-field Artifact Workflow machine is
