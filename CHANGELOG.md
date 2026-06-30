@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.35] - 2026-06-30
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.35_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.35)
+
 ## [v3.34] - 2026-06-30
 
 The release pipeline now measures itself — DORA-4 delivery metrics and Close-class observability, computed per release from tracked schemas.
