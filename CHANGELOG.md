@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.23] - 2026-06-30
+
+A new `health-check` skill: run it on a project to get an evidence-backed answer to "is this project's tracked state still accurate?" It audits one project for drift between the state you track and its canonical sources (Confluence, Jira, Smartsheet, SharePoint, plus your local trackers and PROJECT.md) and returns a categorized punch list — confirmed-current, safe-to-fix, needs-a-decision, could-not-verify, and proposed portfolio-file edits — that is never applied automatically. Seven modes scope the question (whole project, timeline, ownership, comms, a named plan, RAID, or your source inventory). Additive net-new skill plus one decision record (ADR-051); no change to any existing skill, schema, or stored artifact — and because the skill only reads and recommends, running it cannot change project state. novel class.
+
+### Added
+
+- **`health-check` skill — on-demand project drift audit.** A new intent-driven skill audits one project for drift between its tracked state and its canonical sources and emits a fixed five-section punch list (Confirmed / Auto-Actionable / Decisions / Unknowns / Rollup-Diffs); nothing is auto-applied — auto-actionable items stage a tracker-update block for your approval, and portfolio-file edits are diff-only. ([#1125](https://github.com/cody-hutson/pmo-platform/issues/1125))
+- **Seven health-check modes.** `full` (whole project), `timeline` (dates/milestones with day-of-week validation), `attribution` (owners), `comms` (communications coverage), `plan <name>` (one named plan), `raid` (RAID-log guardrails), and `sources` (canonical-source inventory with per-source freshness). ([#1126](https://github.com/cody-hutson/pmo-platform/issues/1126))
+- **ADR-051 — canonical source set + graceful degradation.** Records the MCP-primary / local-fallback source set and the graceful-degradation contract: an unreachable connector continues the run local-only with a banner, and a finding that could not be cross-validated is never promoted to auto-actionable. ([#1125](https://github.com/cody-hutson/pmo-platform/issues/1125))
+
+[Full notes](release/releases/notes/v3.23_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.23)
+
 ## [v3.22] - 2026-06-29
 
 PMBOK artifact coverage plus three additive PROJECT.md frontmatter axes, with no change to any existing project until the new fields are filled in: a project can now declare what kind of deliverable it produces (`deliverable_type`, separate from how it is governed), its team's org structure (`org_structure_type`), and its team roster by reference (`team_roster`, references only — no names stored in the file); and five ready-made PMBOK artifact templates (charter, lessons-learned, change-log, RACI, stakeholder-register) ship with the platform. Additive schema and template additions — no data migration, no stored-content move, no breaking change. cross-cutting class.
