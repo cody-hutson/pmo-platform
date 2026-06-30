@@ -235,6 +235,10 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
   and a misread signal turns a recoverable blip into a rolled-back release plus an
   incident recovery.
 
+## Reference docs
+
+- **Design-time best-practice anchor:** [`core/standards/domain-best-practices/software.md`](../../../core/standards/domain-best-practices/software.md) — the authoritative software-engineering practice guide (design patterns, ADR discipline, YAGNI; SRE/DORA reliability practice consulted for the deploy/reliability modes) this Specialist consults as design-consumption input. Pointer only — no content absorption ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) compose-by-reference); mirrors the Stage-5 design spoke's domain-guide consultation in [`release/references/pipeline/stage-05-solutioning.md`](../../references/pipeline/stage-05-solutioning.md) §5.7.
+
 ### go/no-go decision absorbed from the Release Manager surface — TRIG
 
 - **Signature (observable signal):** pmo-devops-sre fires on a request that is actually a
