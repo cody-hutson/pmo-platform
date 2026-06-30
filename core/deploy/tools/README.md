@@ -12,7 +12,7 @@ to a Python helper.
 |---|---|---|---|
 | `check-doc-links.py` | `deploy.sh` Check 14 + operator workflows + audit wrapper | broken-refs, rewrite-map | Doc-link drift detection + per-edit reference rewriting |
 | `check-version-anchors.py` | `deploy.sh` Check 18 | structural | Verify version-anchor citations against current state |
-| `check-doc-frontmatter.py` | `deploy.sh` Check 50 | structural (warn-mode across `core/`; enforce-flip deferred to #2221) | Validate platform-doc frontmatter per the #295 standard: Tier-1 required fields + `type` singular enum + `framework_version_anchor`-IFF-cataloged + `consumers` for standard/schema/spec + `reversibility` tier-prefix |
+| `check-doc-frontmatter.py` | `deploy.sh` Check 50 | structural (warn-mode across `core/`; enforce-flip deferred to the Tier-B/C backfill) | Validate platform-doc frontmatter per the platform-doc frontmatter standard: Tier-1 required fields + `type` singular enum + `framework_version_anchor`-IFF-cataloged + `consumers` for standard/schema/spec + `reversibility` tier-prefix |
 | `_frontmatter.py` | `check-version-anchors.py` + `check-doc-frontmatter.py` (shared library) | library (not a check) | The single shared YAML-frontmatter block reader — the F1 consistency seam so Check 18b and Check 50 parse frontmatter byte-identically |
 | `generate_release_index.py` | `release-executor` Mode E (Stage 13 close) | generative | Generate `RELEASE_INDEX.md` from `RELEASE_LOG.md` |
 | `lint_release_corpus.py` | Operator workflows (release-corpus moved to operator-instance) | structural | Validate release-corpus filename regex + frontmatter schema + INDEX row count + type-coherence |
@@ -102,8 +102,8 @@ FM-2 in adversarial-design-review at Stage 5.
 ## check-doc-frontmatter.py — Platform-Doc Frontmatter Gate (Check 50)
 
 Validates the YAML frontmatter of authored K1 platform-reference docs under
-`core/**` against [`core/standards/platform-doc-frontmatter-standard.md`](../../standards/platform-doc-frontmatter-standard.md)
-(#295). It is the **presence-and-shape** complement to `check-version-anchors.py`
+`core/**` against [`core/standards/platform-doc-frontmatter-standard.md`](../../standards/platform-doc-frontmatter-standard.md).
+It is the **presence-and-shape** complement to `check-version-anchors.py`
 Check 18b: 18b checks the `framework_version_anchor` **value** and skips
 no-frontmatter docs; Check 50 checks frontmatter **presence + required-field
 shape** and treats a no-frontmatter doc as the headline finding.
@@ -142,10 +142,10 @@ disciplines|rules|governance/`), `other` for the rest of the scanned surface
 - `0` — no violations
 - `1` — violations found (count in the header line)
 - `3` — path-resolution failure: a `--target-paths` glob OR `--catalog-path`
-  resolved to zero/missing files (unverifiable, not clean — the #459 fail-loud
+  resolved to zero/missing files (unverifiable, not clean — the fail-loud
   contract that 18b and Check 42 also honor).
 
-**Split-mode + warn-mode posture (v3.25 / #2220).** Per the D-4 scope-lock the
+**Split-mode + warn-mode posture (v3.25 frontmatter gate).** Per the D-4 scope-lock the
 gate **ships warn-mode across all of `core/`, Tier A included** — every finding
 routes through the warn dispatcher; the gate reports non-compliance but does not
 fail the build red, so an incomplete Tier-A backfill on the branch cannot break
@@ -154,7 +154,7 @@ mode via `resolve_check_mode "doc-frontmatter"` (a dedicated, un-committed
 `doc-frontmatter.mode` file). When that flips to `enforce`, the Tier-A leg
 graduates to a hard `FAIL` (the dormant enforce branch) while the rest of `core/`
 keeps warning; the global flip (route `tier == other` to `FAIL` as well) is the
-final graduation. **Both flips are deferred to #2221.**
+final graduation. **Both flips are deferred to the Tier-B/C backfill.**
 
 **F1 consistency (shared with Check 18b).** Check 50 reads each doc's frontmatter
 via the shared `_frontmatter.read_frontmatter` and builds the cataloged-doc set
@@ -165,8 +165,9 @@ So Check 50 and Check 18b cannot disagree about *what a frontmatter block is* or
 **Allowlist** (`core/deploy/allowlists/skip-doc-frontmatter-check.txt`):
 repo-relative paths, one per line (`#` comments + blanks ignored); a listed file
 is skipped entirely. Seeded with the 11 `bypass-mode-readiness` files (1 generated
-index + 10 ADR-030 assembly fragments) — generated content the #295 standard's §5
-carve-out exempts and the #109 Tier-A backfill deliberately left un-backfilled.
+index + 10 ADR-030 assembly fragments) — generated content the platform-doc
+frontmatter standard's §5 carve-out exempts and the Tier-A backfill deliberately
+left un-backfilled.
 
 **Self-test:** `python3 core/deploy/tools/check-doc-frontmatter.py --self-test`
 runs fixtures (a)–(j): a clean doc, the two falsification fixtures (each Tier-1
