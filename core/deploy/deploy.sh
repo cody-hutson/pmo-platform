@@ -6506,7 +6506,77 @@ cmd_check() {
   fi
 
 
-  # Check 49 — Platform-doc frontmatter standard (warn-mode across core/) [#2220]
+  # ─── Check 49: platform-convention linter (warn-mode initial) [#228] ──────────
+  #
+  # The convention-linter for the FOUR residual platform-convention dimensions no
+  # existing gate covers — (1) [topic]-[type].md file-naming, (2) a Layer-2 path
+  # (projects/…) in a git-tracked file, (3) evidence-quality-label presence on a
+  # dated factual claim in a (non-process-spec) governance file, (4) [TBD]/[INSERT]/
+  # [TODO] placeholder leakage outside backticks. The predicate lives ONCE in the
+  # shared invokable core/deploy/tools/check-convention.sh (single source; an
+  # optional PR-time job can invoke the same script). This is NOT a pre-commit hook
+  # — CLAUDE.md forbids normalizing --no-verify, so platform-convention enforcement
+  # rides the deploy.sh check family per the #228 placement decision.
+  #
+  # DELEGATED (documented in-tool, NOT duplicate-enforced here): dead-file-ref +
+  # depersonalization + issue-ref -> repo-integrity.yml; localized-context ->
+  # Check 25; internal-link integrity -> link-check.yml.
+  #
+  # Findings route through flag_warn_or_issue (warn-mode-initial per
+  # bypass-mode-readiness.md): in warn-mode they annotate + jsonl-log without
+  # incrementing ISSUES; flip core/hooks/check-convention.mode (or the shared
+  # deploy-check.mode) to 'enforce' after the shakedown window. A non-zero exit
+  # with no parsed FAIL (scan-surface error, exit 3) still flags so a broken
+  # predicate run never reads green.
+  #
+  # Cutover discipline: applies to ./deploy.sh --check on or after this release's
+  # merge SHA in RELEASE_LOG.md.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 49: platform-convention linter (naming / layer-2 / evidence-label / placeholder) (#228)"
+    local c49_mode
+    c49_mode=$(resolve_check_mode "check-convention")
+    local c49_script="core/deploy/tools/check-convention.sh"
+    if [[ ! -f "$c49_script" ]]; then
+      flag_warn_or_issue "convention-linter" "predicate script missing: $c49_script"
+    else
+      local c49_out c49_rc
+      c49_out=$(bash "$c49_script" 2>&1)
+      c49_rc=$?
+      if [[ $c49_rc -eq 3 ]]; then
+        # scan-surface error — fail-loud independent of warn-mode
+        log "  FAIL:  Check 49 — convention-linter scan-surface error (exit 3)"
+        ISSUES=$((ISSUES + 1))
+        printf '%s\n' "$c49_out" | grep -E '^(FAIL|SUMMARY):' | sed 's/^/         /'
+      else
+        local c49_findings c49_line
+        c49_findings=0
+        while IFS= read -r c49_line; do
+          [[ -z "$c49_line" ]] && continue
+          case "$c49_line" in
+            FAIL:*)
+              # route each convention finding through the warn-mode gate, honoring a
+              # check-specific check-convention.mode (falls back to the shared mode).
+              if [[ "$c49_mode" == "enforce" ]]; then
+                log "  ${c49_line}"
+                ISSUES=$((ISSUES + 1))
+              elif [[ "$c49_mode" == "warn" ]]; then
+                log "  WARN:  ${c49_line#FAIL: } (warn-mode; flip check-convention.mode to 'enforce' after shakedown)"
+              fi
+              c49_findings=$((c49_findings + 1))
+              ;;
+            SUMMARY:*) : ;;   # deploy.sh prints its own aggregate
+            OK:*) log "  ${c49_line}" ;;
+          esac
+        done <<< "$c49_out"
+        if [[ $c49_findings -eq 0 ]]; then
+          log "  OK:    no platform-convention findings"
+        fi
+      fi
+    fi
+  fi
+
+
+  # Check 50 — Platform-doc frontmatter standard (warn-mode across core/) [#2220]
   #
   # Enforces core/standards/platform-doc-frontmatter-standard.md (#295) over the
   # authored K1 core/ corpus: Tier-1 required fields (title/purpose/type/status/
@@ -6515,7 +6585,7 @@ cmd_check() {
   # Check 18b's anchor VALUE-consistency); consumers for standard/schema/spec;
   # reversibility tier-PREFIX match. The tool reads frontmatter via the shared
   # _frontmatter helper and the cataloged-doc set via check-version-anchors.py's
-  # own parse_catalog_table, so Check 49 and Check 18b agree by construction (F1).
+  # own parse_catalog_table, so Check 50 and Check 18b agree by construction (F1).
   #
   # SHIP POSTURE — WARN-MODE ACROSS ALL OF core/, TIER A INCLUDED (D-4 scope-lock,
   # 2026-06-29 Collective Review on #2220): every finding routes through the warn
@@ -6535,53 +6605,53 @@ cmd_check() {
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (the 14/18/42/43
   # precedent); the introducing release is itself exempt (reflexive-pipeline loop).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 49: Platform-doc frontmatter standard (warn-mode across core/; enforce-flip deferred to #2221)"
-    local c49_script="core/deploy/tools/check-doc-frontmatter.py"
-    local c49_allowlist="core/deploy/allowlists/skip-doc-frontmatter-check.txt"
-    if [[ ! -f "$c49_script" ]]; then
-      flag_warn_or_issue "doc-frontmatter" "primitive script missing: $c49_script"
+    log "Check 50: Platform-doc frontmatter standard (warn-mode across core/; enforce-flip deferred to #2221)"
+    local c50_script="core/deploy/tools/check-doc-frontmatter.py"
+    local c50_allowlist="core/deploy/allowlists/skip-doc-frontmatter-check.txt"
+    if [[ ! -f "$c50_script" ]]; then
+      flag_warn_or_issue "doc-frontmatter" "primitive script missing: $c50_script"
     else
-      local c49_mode
-      c49_mode=$(resolve_check_mode "doc-frontmatter")
+      local c50_mode
+      c50_mode=$(resolve_check_mode "doc-frontmatter")
       # The six Tier-A governance-class dirs (enforce target post-flip) + the
       # warn-only remainder (core/skills/**/references). The tool tags the split;
       # this glob list is just the scan surface.
-      local c49_targets="core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/skills/**/references/*.md"
-      local c49_out c49_exit=0
-      c49_out=$(/usr/bin/python3 "$c49_script" --target-paths "$c49_targets" --allowlist "$c49_allowlist" --output-format tsv 2>&1) || c49_exit=$?
-      if [[ $c49_exit -eq 3 ]]; then
-        flag_warn_or_issue "doc-frontmatter" "path-resolution failure (exit 3): $(echo "$c49_out" | head -1) — a --target-paths glob or --catalog-path resolved to zero files; fix the glob list in this check"
-      elif [[ $c49_exit -eq 0 || $c49_exit -eq 1 ]]; then
+      local c50_targets="core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/skills/**/references/*.md"
+      local c50_out c50_exit=0
+      c50_out=$(/usr/bin/python3 "$c50_script" --target-paths "$c50_targets" --allowlist "$c50_allowlist" --output-format tsv 2>&1) || c50_exit=$?
+      if [[ $c50_exit -eq 3 ]]; then
+        flag_warn_or_issue "doc-frontmatter" "path-resolution failure (exit 3): $(echo "$c50_out" | head -1) — a --target-paths glob or --catalog-path resolved to zero files; fix the glob list in this check"
+      elif [[ $c50_exit -eq 0 || $c50_exit -eq 1 ]]; then
         # Partition findings on the tier column (TSV row 2 is the header;
         # data rows: file<TAB>tier<TAB>field<TAB>violation<TAB>severity).
-        local c49_a c49_o
-        c49_a=$(echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="A"'     | grep -c . || true)
-        c49_o=$(echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="other"' | grep -c . || true)
-        c49_a=${c49_a:-0}; c49_o=${c49_o:-0}
-        if [[ "$c49_a" -eq 0 && "$c49_o" -eq 0 ]]; then
+        local c50_a c50_o
+        c50_a=$(echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"'     | grep -c . || true)
+        c50_o=$(echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="other"' | grep -c . || true)
+        c50_a=${c50_a:-0}; c50_o=${c50_o:-0}
+        if [[ "$c50_a" -eq 0 && "$c50_o" -eq 0 ]]; then
           log "  OK:    all scanned core/ docs carry conformant frontmatter"
         else
-          if [[ "$c49_a" -gt 0 ]]; then
-            if [[ "$c49_mode" == "enforce" ]]; then
+          if [[ "$c50_a" -gt 0 ]]; then
+            if [[ "$c50_mode" == "enforce" ]]; then
               # DORMANT until doc-frontmatter.mode flips to enforce (#2221). The
               # graduated Tier-A leg: a missing/invalid required field on a Tier-A
               # doc fails the build.
-              log "  FAIL:  doc-frontmatter — $c49_a Tier-A frontmatter violation(s) (enforce). Fix per core/standards/platform-doc-frontmatter-standard.md."
-              echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
+              log "  FAIL:  doc-frontmatter — $c50_a Tier-A frontmatter violation(s) (enforce). Fix per core/standards/platform-doc-frontmatter-standard.md."
+              echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
               ISSUES=$((ISSUES + 1))
             else
               # SHIP DEFAULT (D-4): Tier A warns, same as the rest of core/.
-              flag_warn_or_issue "doc-frontmatter" "$c49_a Tier-A frontmatter violation(s) (warn-mode across core/ per D-4; flips to enforce with #2221). Fix per core/standards/platform-doc-frontmatter-standard.md."
-              echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
+              flag_warn_or_issue "doc-frontmatter" "$c50_a Tier-A frontmatter violation(s) (warn-mode across core/ per D-4; flips to enforce with #2221). Fix per core/standards/platform-doc-frontmatter-standard.md."
+              echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
             fi
           fi
-          if [[ "$c49_o" -gt 0 ]]; then
-            flag_warn_or_issue "doc-frontmatter" "$c49_o non-Tier-A frontmatter violation(s) (warn-mode; flips to enforce with #2221 Tier B/C backfill)"
-            echo "$c49_out" | awk -F'\t' 'NR>2 && $2=="other"' | head -10 | sed 's/^/         /'
+          if [[ "$c50_o" -gt 0 ]]; then
+            flag_warn_or_issue "doc-frontmatter" "$c50_o non-Tier-A frontmatter violation(s) (warn-mode; flips to enforce with #2221 Tier B/C backfill)"
+            echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="other"' | head -10 | sed 's/^/         /'
           fi
         fi
       else
-        flag_warn_or_issue "doc-frontmatter" "check errored (exit $c49_exit): $(echo "$c49_out" | head -1)"
+        flag_warn_or_issue "doc-frontmatter" "check errored (exit $c50_exit): $(echo "$c50_out" | head -1)"
       fi
     fi
   fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-doc-frontmatter.py — platform-doc frontmatter conformance (deploy.sh Check 49).
+"""check-doc-frontmatter.py — platform-doc frontmatter conformance (deploy.sh Check 50).
 
 Validates the YAML frontmatter of authored K1 platform-reference docs under
 `core/**` against `core/standards/platform-doc-frontmatter-standard.md` (#295).
@@ -443,7 +443,7 @@ def run_self_test() -> int:
         #     plain `rel_path in allowlist` membership test. Verifying the loader +
         #     the membership predicate IS the allowlist contract; the integration
         #     proof that bypass-mode-readiness produces 0 warnings runs against the
-        #     live tree in the deploy.sh Check-49 run (Stage-6 evidence).
+        #     live tree in the deploy.sh Check-50 run (Stage-6 evidence).
         alf = base / "skip.txt"
         alf.write_text(
             "# generated index + ADR-030 assembly fragments (#109 left un-backfilled)\n"

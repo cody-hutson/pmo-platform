@@ -34,7 +34,7 @@ Frontmatter is the storage mechanism: YAML metadata that agents maintain on ever
 - **Applies to:** all files in `Projects/[Project]/01-08/` folders
 - **Markdown files (.md):** embedded YAML frontmatter block (standard `---` delimiters)
 - **Non-markdown files (.txt, .csv, .xlsx, .pdf, .docx, .html):** sidecar `.meta.yml` file (see Sidecar Specification below)
-- **Exclusions:** navigation layer pages (`_pmo/`) have their own simplified frontmatter; governance files at `Projects/_governance/` are exempt (governed by CLAUDE.md tier system)
+- **Exclusions:** navigation layer pages (`_pmo/`) have their own simplified frontmatter; governance files at `projects/_config/` are exempt (governed by CLAUDE.md tier system)
 - **Generated-vs-source separation:** the `domain` (A/B/C, Category 6) and `folder` (`08-generated` vs `01-07`, Category 6) fields, together with the Domain-A-vs-Domain-C field split, are the schema's canonical generated-vs-source boundary — a generated artifact is `domain: C` + `folder: 08-generated`; a source artifact is `domain: A` + an `01-07` folder.
 
 ---

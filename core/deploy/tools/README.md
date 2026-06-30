@@ -12,8 +12,8 @@ to a Python helper.
 |---|---|---|---|
 | `check-doc-links.py` | `deploy.sh` Check 14 + operator workflows + audit wrapper | broken-refs, rewrite-map | Doc-link drift detection + per-edit reference rewriting |
 | `check-version-anchors.py` | `deploy.sh` Check 18 | structural | Verify version-anchor citations against current state |
-| `check-doc-frontmatter.py` | `deploy.sh` Check 49 | structural (warn-mode across `core/`; enforce-flip deferred to #2221) | Validate platform-doc frontmatter per the #295 standard: Tier-1 required fields + `type` singular enum + `framework_version_anchor`-IFF-cataloged + `consumers` for standard/schema/spec + `reversibility` tier-prefix |
-| `_frontmatter.py` | `check-version-anchors.py` + `check-doc-frontmatter.py` (shared library) | library (not a check) | The single shared YAML-frontmatter block reader — the F1 consistency seam so Check 18b and Check 49 parse frontmatter byte-identically |
+| `check-doc-frontmatter.py` | `deploy.sh` Check 50 | structural (warn-mode across `core/`; enforce-flip deferred to #2221) | Validate platform-doc frontmatter per the #295 standard: Tier-1 required fields + `type` singular enum + `framework_version_anchor`-IFF-cataloged + `consumers` for standard/schema/spec + `reversibility` tier-prefix |
+| `_frontmatter.py` | `check-version-anchors.py` + `check-doc-frontmatter.py` (shared library) | library (not a check) | The single shared YAML-frontmatter block reader — the F1 consistency seam so Check 18b and Check 50 parse frontmatter byte-identically |
 | `generate_release_index.py` | `release-executor` Mode E (Stage 13 close) | generative | Generate `RELEASE_INDEX.md` from `RELEASE_LOG.md` |
 | `lint_release_corpus.py` | Operator workflows (release-corpus moved to operator-instance) | structural | Validate release-corpus filename regex + frontmatter schema + INDEX row count + type-coherence |
 | `cross-module-audit.sh` | Module-restructure audit + operator | audit (read-only) | Cross-module extraction-readiness audit; bash entrypoint |
@@ -99,17 +99,17 @@ the trailing segments verbatim. Decompose multi-segment restructuring
 renames into multiple invocations (one per `from→to` pair). Per failure-mode
 FM-2 in adversarial-design-review at Stage 5.
 
-## check-doc-frontmatter.py — Platform-Doc Frontmatter Gate (Check 49)
+## check-doc-frontmatter.py — Platform-Doc Frontmatter Gate (Check 50)
 
 Validates the YAML frontmatter of authored K1 platform-reference docs under
 `core/**` against [`core/standards/platform-doc-frontmatter-standard.md`](../../standards/platform-doc-frontmatter-standard.md)
 (#295). It is the **presence-and-shape** complement to `check-version-anchors.py`
 Check 18b: 18b checks the `framework_version_anchor` **value** and skips
-no-frontmatter docs; Check 49 checks frontmatter **presence + required-field
+no-frontmatter docs; Check 50 checks frontmatter **presence + required-field
 shape** and treats a no-frontmatter doc as the headline finding.
 
 ```bash
-# deploy.sh Check 49 invocation pattern
+# deploy.sh Check 50 invocation pattern
 python3 core/deploy/tools/check-doc-frontmatter.py \
   --target-paths "core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/skills/**/references/*.md" \
   --allowlist core/deploy/allowlists/skip-doc-frontmatter-check.txt \
@@ -156,10 +156,10 @@ graduates to a hard `FAIL` (the dormant enforce branch) while the rest of `core/
 keeps warning; the global flip (route `tier == other` to `FAIL` as well) is the
 final graduation. **Both flips are deferred to #2221.**
 
-**F1 consistency (shared with Check 18b).** Check 49 reads each doc's frontmatter
+**F1 consistency (shared with Check 18b).** Check 50 reads each doc's frontmatter
 via the shared `_frontmatter.read_frontmatter` and builds the cataloged-doc set
 via `check-version-anchors.py`'s own `parse_catalog_table` (imported directly).
-So Check 49 and Check 18b cannot disagree about *what a frontmatter block is* or
+So Check 50 and Check 18b cannot disagree about *what a frontmatter block is* or
 *which docs are cataloged in `framework-catalog.md`* — they agree by construction.
 
 **Allowlist** (`core/deploy/allowlists/skip-doc-frontmatter-check.txt`):

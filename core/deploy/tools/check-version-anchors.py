@@ -158,8 +158,8 @@ def _read_doc_frontmatter_anchor(doc_path: Path) -> tuple[str | None, str]:
     anchor_value is the stripped framework_version_anchor: value when status=="ok".
 
     Delegates to the shared `_frontmatter.read_anchor` so the frontmatter parse
-    is byte-identical to Check 49's (the F1 consistency guarantee): the doc this
-    check treats as "has frontmatter" is the same doc Check 49 treats as such.
+    is byte-identical to Check 50's (the F1 consistency guarantee): the doc this
+    check treats as "has frontmatter" is the same doc Check 50 treats as such.
     """
     return _frontmatter.read_anchor(doc_path)
 

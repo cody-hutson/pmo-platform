@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.26] - 2026-06-29
+
+Three new PR-time guardrails catch governance drift before it lands — a governance-file-map check, a Projects/ casing check, and a platform-convention linter — plus hardening of the existing cross-reference checks. All three ship in warn-mode first, so nothing breaks while they settle in.
+
+[Full notes](release/releases/notes/v3.26_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.26)
+
 ## [v3.24] - 2026-06-30
 
 A new `release-hub` skill: the whole-release control plane. Point it at a milestone and it drives that milestone through the release pipeline by composing the per-stage skills — it owns the sequencing and the readiness-gating between stages, but never does the stage work itself. Two modes: a Milestone Readiness pre-flight that gives one GO / NO-GO on whether a bundled milestone is ready to start (with a per-finding disposition list), and an Orchestrate Release mode that runs the full hub-and-spoke release end to end, stopping for you only at the named pipeline checkpoints. Additive net-new skill that composes existing stage skills and adds no new autonomous mutation surface; no change to any existing skill, schema, or stored artifact. novel class.

@@ -205,7 +205,7 @@ Status framework templates:
 
 ### Step 5: Update PORTFOLIO.md
 
-Read `Projects/_governance/PORTFOLIO.md`. Add the new project:
+Read `projects/_config/PORTFOLIO.md`. Add the new project:
 
 1. Increment `Active Projects` count
 2. Add row to Portfolio Health Summary table with initial health = 🟢 GREEN
@@ -455,7 +455,7 @@ Update the project's `PROJECT.md`:
 
 ### Step B6: Update PORTFOLIO.md
 
-Read `Projects/_governance/PORTFOLIO.md` and update:
+Read `projects/_config/PORTFOLIO.md` and update:
 
 1. Decrement `Active Projects` count
 2. Remove project row from the Portfolio Health Summary table

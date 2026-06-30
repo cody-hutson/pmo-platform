@@ -114,6 +114,21 @@ SKILL_SPEC_RE = re.compile(r"^(?:core|operations|release)/skills/[^/]+/SKILL\.md
 #   - a number written as words ("nineteen skills") — out of scope by design
 # A roster total phrased outside these shapes can still be guarded explicitly
 # with `<!-- skill-count-imp: allow-count -->` if a future author needs it.
+#
+# ── ACCEPTED RESIDUAL AT FLIP-TO-ENFORCE (#757) ────────────────────────────────
+# This recall boundary is ACCEPTED AS A RESIDUAL at the gate's flip-to-enforce —
+# it is deliberately NOT broadened. Rationale: the count detector trades recall
+# for precision by design, and broadening recall (matching looser "N skills"
+# shapes) would re-introduce false positives on the legitimate non-roster
+# mentions enumerated above (subtotals, module-counts, other-population counts).
+# A false positive on a true statement is a worse failure here than a missed
+# loosely-phrased roster total, which a human review still catches. The
+# pre-flip-hardening QA verdict (cross-reference-integrity-ci milestone #112,
+# QA #699) explicitly recommends this residual "remain a flip-to-enforce-window
+# watch item" rather than a recall expansion. Disposition: WATCH (not FIX) — if
+# the warn-window surfaces a real missed roster-total class, prefer adding that
+# SPECIFIC totalizing shape to _COUNT_CLAIM_PATTERNS over a broad loosening.
+# Reversibility of this decision: CHEAP (a pattern can be added later) · HIGH.
 # ---------------------------------------------------------------------------
 #
 # Roster-TOTAL claim shapes. Each alternative captures the integer in one group;

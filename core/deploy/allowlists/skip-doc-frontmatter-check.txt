@@ -1,5 +1,5 @@
 # skip-doc-frontmatter-check.txt — files exempt from the platform-doc frontmatter
-# gate (deploy.sh Check 49, core/deploy/tools/check-doc-frontmatter.py).
+# gate (deploy.sh Check 50, core/deploy/tools/check-doc-frontmatter.py).
 #
 # One repo-relative path per line; '#' comments and blank lines are ignored.
 # A listed file is skipped ENTIRELY by the gate (no frontmatter findings emitted).

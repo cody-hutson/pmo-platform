@@ -7,7 +7,7 @@ keys does it carry" can never drift apart. It is consumed by:
 
   * check-version-anchors.py (Check 18b/18d) — via read_anchor(), which preserves
     that tool's exact 4-status contract; and
-  * check-doc-frontmatter.py (Check 49) — via read_frontmatter(), the generalized
+  * check-doc-frontmatter.py (Check 50) — via read_frontmatter(), the generalized
     all-keys reader.
 
 The parse idiom is the one check-version-anchors.py shipped (the v11.12 reader):
@@ -15,7 +15,7 @@ a doc has frontmatter IFF line[0].strip() == "---"; the block runs to the next
 line whose strip() == "---"; each "key: value" line inside is split on the FIRST
 colon and the value is stripped of one matching pair of surrounding quotes
 ("…" or '…'). Keeping that idiom byte-identical here is the F1 consistency
-guarantee: a doc Check 18b treats as "has frontmatter" is the same doc Check 49
+guarantee: a doc Check 18b treats as "has frontmatter" is the same doc Check 50
 treats as "has frontmatter," because both ask THIS module.
 
 Stdlib-only; no argparse / CLI — this is a library, imported by the checks.
@@ -48,7 +48,7 @@ def read_frontmatter(doc_path: Path) -> tuple[dict[str, str], str]:
     Only flush-left (column-0) "key:" lines are treated as top-level keys, so a
     nested/indented list item does not masquerade as a top-level field. A key
     line with an empty value yields "" — the caller decides whether empty counts
-    as present (Check 49 treats present-but-empty as a missing-field finding).
+    as present (Check 50 treats present-but-empty as a missing-field finding).
     """
     if not doc_path.exists():
         return {}, "no-file"
