@@ -2,7 +2,7 @@
 name: project-initiator
 description: >
   Manages the full project lifecycle — scaffolding new projects and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]."
-version: v3.33
+version: v3.34
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -114,7 +114,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 
    - **R-a — leading `_` (infrastructure-reserved):** the name begins with `_`. The `_`-prefix is RESERVED by the standard for sanctioned infrastructure folders (`_pmo/`, `_config/`, and staging `_`-subfolders such as `08-Generated/_unclassified/`) — never for a *project* folder. The regex enforces this by construction (the leading `[A-Za-z0-9]+` anchor disallows a leading `_`).
    - **R-b — special / shell-meta / non-portable character:** the name contains any character outside the alphanumeric + single-space-or-hyphen word-break charset — e.g. `& ( ) / : * ? " < > | $ ;`, a leading/trailing/double space, or a leading `-`. These are POSIX-hostile: they break globs, link validators, search indexes, and shell paths.
-   - **R-c — empty or whitespace-only:** the name is empty or contains only whitespace (it fails the regex's `[A-Za-z0-9]+` requirement). A blank name produces `Projects//` and is unscannable. *(Human-readability beyond this — e.g. an opaque code a teammate cannot interpret, like a bare UUID — is NOT regex-enforced; the charset regex structurally cannot encode a "human-readable" predicate. That semantic concern is caught by the operator-confirmation step in Step 8, which surfaces the proposed name for the operator to accept or correct. This is the Tier-3 semantic boundary: the charset regex owns the syntax layer; the operator owns the semantic layer.)*
+   - **R-c — empty or whitespace-only:** the name is empty or contains only whitespace (it fails the regex's `[A-Za-z0-9]+` requirement). A blank name produces `Projects//` and is unscannable. *(Human-readability beyond this — e.g. an opaque code a teammate cannot interpret, like a bare UUID — is NOT regex-enforced; the charset regex structurally cannot encode a "human-readable" predicate. That semantic concern is caught by this item's own pre-Step-2 operator-confirmation re-prompt (the "On rejection" / "Re-prompt" sequence below), which surfaces the proposed name for the operator to accept or correct **before** the Step 2 scaffold write — never deferred to the post-scaffold Step 8 summary, which would be too late to prevent a partial scaffold under an opaque name. This is the Tier-3 semantic boundary: the charset regex owns the syntax layer; the operator owns the semantic layer.)*
 
    **Infrastructure carve-out (do NOT "fix" the rule into rejecting infra).** R-a rejects a `_`-prefixed *project* folder; it must never be hardened into a check that rejects the sanctioned infrastructure folders `_pmo/` / `_config/` / the staging `_`-subfolders. Mode A only ever creates `Projects/[Project Name]/` — it never creates `_pmo/` or `_config/` (those are workspace-level infrastructure, not project roots) — so this validator is never *asked* to validate an infra folder; the carve-out is a documentation guard, not a live exception branch.
 
