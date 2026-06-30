@@ -18,7 +18,7 @@ Separated from OPERATIONS.md because the release process governs the entire work
 ## File Structure
 
 ```
-Projects/_governance/
+projects/_config/
 ├── OPERATIONS.md                ← Operational protocols and cross-project rules
 ├── RELEASE_PROTOCOL.md          ← This file. How changes are managed.
 ├── Releases/
@@ -30,7 +30,7 @@ Projects/_governance/
 │   ├── v5.1_RELEASE_PLAN.md       archived IMP entries from Close step)
 │   └── ...
 
-Projects/
+projects/
 ├── _Skill-Packages/             ← Skill file lifecycle (see Skill Build Protocol)
 │   ├── [skill].skill            ← Production .skill packages (one per skill)
 │   ├── _working/[version]/      ← Release build staging (transient)

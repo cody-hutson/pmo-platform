@@ -650,3 +650,400 @@ jobs:
             exit 0
           fi
           exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 7 — Governance-file-map cross-check (#133). Regex-parses the
+  #          `## Governance File Map` table in core/CLAUDE.md.template, extracts
+  #          each CLAIMED repo path from the Location column, and asserts it
+  #          resolves on disk. ASYMMETRIC by design:
+  #            - FAIL  on an unresolvable CLAIMED path (recall — a broken map
+  #                    path mis-routes agents; high blast radius).
+  #            - WARN  on an on-disk governance file ABSENT from the map
+  #                    (precision — a completeness nudge, not a PR break).
+  #          Net-new posture: the FAIL assertion runs over the path claims on
+  #          ADDED lines in the map (the same added-lines delta the other gates
+  #          use), so a pre-existing broken claim in an unrelated PR is never
+  #          re-flagged. Warn-mode-initial per core/rules/bypass-mode-readiness.md.
+  #          A self-test (labeled expected-match fixture) runs FIRST and
+  #          hard-fails INDEPENDENT of warn-mode — a mis-parsing detector that
+  #          reads green is indistinguishable from a passing one (the CDF-2
+  #          posture the skill-count-imp gate uses).
+  #
+  #          Repo-path resolution: the repo root IS `pmo-platform` (core/,
+  #          release/, … live at root). A map token prefixed `pmo-platform/` is
+  #          the unambiguous "this file lives in the repo at this path" claim;
+  #          stripping the prefix yields the repo-relative path. Operator-
+  #          instance / placeholder tokens (`projects/`, `Claude/`, `[WorkArea]/`,
+  #          `<OPERATOR_*>`, `/roadmaps/`) are NOT repo paths and are skipped.
+  #          A mid-path placeholder segment (`<...>` / `[...]`) is truncated to
+  #          its static prefix before the existence test.
+  #
+  #          Injection-safety: BASE_SHA/HEAD_SHA are bound via env: and used only
+  #          as "$VAR" in run blocks; no github-context expression is inlined.
+  # ---------------------------------------------------------------------------
+  governance-file-map:
+    name: Governance-file-map cross-check gate
+    runs-on: ubuntu-latest
+    env:
+      WARN_MODE: 'true'   # warn-mode initial; flip to 'false' to enforce after shakedown
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+
+      - name: Parser self-test (labeled expected-match; hard-fail independent of warn-mode)
+        run: |
+          set -euo pipefail
+
+          # The detector's correctness is gated on an in-tool self-test with a
+          # labeled expected-match set. A self-test miss FAILS THE PR regardless
+          # of WARN_MODE — a broken parser is not a warn-able finding. Mirrors
+          # skill-count-imp-check.yml's --self-test step.
+
+          # extract_location_paths — given a Governance File Map markdown table on
+          # stdin, emit one CLAIMED repo path per line (the resolution candidates).
+          # Reads the Location column (field 2), pulls backtick tokens, keeps only
+          # `pmo-platform/`-prefixed tokens, strips the prefix + a trailing slash,
+          # and truncates a `<...>`/`[...]` placeholder path-segment to its static
+          # prefix. Header/separator rows are skipped.
+          extract_location_paths() {
+            awk -F'|' '
+              # table rows only (leading pipe -> empty $1)
+              $1 == "" && NF >= 3 {
+                loc = $3
+                # skip the header separator row (---|---)
+                if (loc ~ /^[[:space:]]*:?-+:?[[:space:]]*$/) next
+                # pull every `backtick token` from the Location cell
+                while (match(loc, /`[^`]+`/)) {
+                  tok = substr(loc, RSTART + 1, RLENGTH - 2)
+                  loc = substr(loc, RSTART + RLENGTH)
+                  # only pmo-platform/-prefixed tokens are repo-path claims
+                  if (tok !~ /^pmo-platform\//) continue
+                  sub(/^pmo-platform\//, "", tok)          # -> repo-relative
+                  # truncate at the first placeholder segment (<...> or [...])
+                  if (match(tok, /\/?[<\[]/)) tok = substr(tok, 1, RSTART - 1)
+                  sub(/\/+$/, "", tok)                       # drop trailing slash
+                  if (tok != "") print tok
+                }
+              }
+            '
+          }
+
+          # Labeled fixture: a synthetic 4-row map (built inline so every line stays
+          # indented inside the YAML block scalar). Rows 1-2 carry RESOLVABLE claims
+          # (the static prefixes exist in this repo); row 3 is a BROKEN claim (must
+          # be extracted so the resolver can FAIL it); row 4 is an operator-instance
+          # path (must be SKIPPED — not a repo claim). The leading `|` on each row is
+          # what marks it as a table row to the extractor.
+          GOT="$(
+            { printf '| Tier | Location | Files |\n'
+              printf '|---|---|---|\n'
+              printf '| A | `pmo-platform/core/governance/` | OPERATIONS.md |\n'
+              printf '| B | `pmo-platform/analysis/<audit-name>-YYYY-MM-DD/` | SUMMARY.md |\n'
+              printf '| C | `pmo-platform/core/THIS-PATH-DOES-NOT-EXIST/` | broken.md |\n'
+              printf '| D | `projects/_config/` | PORTFOLIO.md |\n'
+            } | extract_location_paths | sort | tr '\n' ' '
+          )"
+          # Expected (sorted, space-joined): the two resolvable + the broken claim,
+          # with placeholders truncated; the operator-instance path absent.
+          EXPECT="$(printf '%s\n' "analysis" "core/governance" "core/THIS-PATH-DOES-NOT-EXIST" | sort | tr '\n' ' ')"
+          if [ "$GOT" != "$EXPECT" ]; then
+            {
+              echo "## :x: Governance-file-map parser self-test FAILED"
+              echo ""
+              echo "The map-table path extractor did not produce the labeled expected set."
+              echo "Expected: \`$EXPECT\`"
+              echo "Got:      \`$GOT\`"
+              echo ""
+              echo "A mis-parsing detector that reads green is indistinguishable from a passing one."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error::governance-file-map parser self-test mismatch"
+            exit 1
+          fi
+          echo ":white_check_mark: Governance-file-map parser self-test passed (4-row labeled fixture)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Cross-check claimed map paths against disk
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-governance-map[[:space:]]*-->'
+          MAP_FILE='core/CLAUDE.md.template'
+          MAP_HEADER='^##[[:space:]]+Governance File Map[[:space:]]*$'
+
+          if [ ! -f "$MAP_FILE" ]; then
+            echo "::warning::repo-integrity governance-file-map: $MAP_FILE absent — nothing to cross-check." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Whole-file override.
+          if grep -qE "$OVERRIDE" "$MAP_FILE"; then
+            echo "::notice::repo-integrity governance-file-map: $MAP_FILE carries allow-governance-map — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # --- extractor (identical body to the self-test) -----------------------
+          extract_location_paths() {
+            awk -F'|' '
+              $1 == "" && NF >= 3 {
+                loc = $3
+                if (loc ~ /^[[:space:]]*:?-+:?[[:space:]]*$/) next
+                while (match(loc, /`[^`]+`/)) {
+                  tok = substr(loc, RSTART + 1, RLENGTH - 2)
+                  loc = substr(loc, RSTART + RLENGTH)
+                  if (tok !~ /^pmo-platform\//) continue
+                  sub(/^pmo-platform\//, "", tok)
+                  if (match(tok, /\/?[<\[]/)) tok = substr(tok, 1, RSTART - 1)
+                  sub(/\/+$/, "", tok)
+                  if (tok != "") print tok
+                }
+              }
+            '
+          }
+
+          # --- isolate the Governance File Map section block ---------------------
+          # From the map header to the next top-level (## ) heading.
+          MAP_BLOCK="$(awk -v hdr="$MAP_HEADER" '
+            $0 ~ hdr { inblk=1; next }
+            inblk && /^##[[:space:]]/ { exit }
+            inblk { print }
+          ' "$MAP_FILE")"
+
+          # --- RECALL (FAIL): claimed paths on ADDED lines must resolve ----------
+          # Net-new posture — scan only the path claims introduced/changed on
+          # ADDED lines in this PR, so a pre-existing broken claim in an unrelated
+          # PR is not re-flagged. If the PR did not touch the map file, the added
+          # set is empty and the FAIL assertion is a clean no-op (the inverse WARN
+          # still runs).
+          ADDED_MAP_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$MAP_FILE" \
+            | awk '/^\+/ && !/^\+\+\+/ { print substr($0, 2) }' || true)"
+          ADDED_CLAIMS="$(printf '%s\n' "$ADDED_MAP_LINES" | extract_location_paths | sort -u || true)"
+
+          FAIL_REPORT=""
+          FAILED=0
+          if [ -n "$ADDED_CLAIMS" ]; then
+            while IFS= read -r p; do
+              [ -z "$p" ] && continue
+              if [ ! -e "$p" ]; then
+                FAILED=1
+                FAIL_REPORT="${FAIL_REPORT}- \`$p\` — claimed in the map (added/changed this PR) but does not resolve on disk"$'\n'
+              fi
+            done <<< "$ADDED_CLAIMS"
+          fi
+
+          # --- PRECISION (WARN): on-disk governance files absent from the map ----
+          # Completeness nudge over the canonical governance HOMES the map names.
+          # Each home's expected governance files: if a file present on disk is not
+          # mentioned anywhere in the map block, warn (never fail). Scoped to the
+          # named governance dirs to avoid noise from the whole tree.
+          WARN_REPORT=""
+          for home in core/governance release/governance; do
+            [ -d "$home" ] || continue
+            for gf in "$home"/*.md; do
+              [ -f "$gf" ] || continue
+              base="$(basename "$gf")"
+              # The map names files by basename in the Files column; treat a
+              # basename mention anywhere in the block as "mapped".
+              if ! printf '%s' "$MAP_BLOCK" | grep -qF "$base"; then
+                WARN_REPORT="${WARN_REPORT}- \`$gf\` — present on disk under a mapped governance home but its basename is not mentioned in the map"$'\n'
+              fi
+            done
+          done
+
+          if [ -n "$WARN_REPORT" ]; then
+            {
+              echo "## :warning: Governance-file-map — on-disk files absent from the map (WARN)"
+              echo ""
+              echo "These governance files exist under a mapped home but are not named in the map (precision nudge — not blocking):"
+              echo ""
+              printf '%s' "$WARN_REPORT"
+              echo ""
+              echo "Add a map row/mention if the file is governance, or move it if it is not. See \`core/CLAUDE.md.template\` § Governance File Map."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning::governance-file-map: on-disk governance file(s) absent from the map (precision nudge, non-blocking)."
+          fi
+
+          if [ "$FAILED" -eq 0 ]; then
+            echo ":white_check_mark: Governance-file-map — every claimed path added this PR resolves on disk" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: Governance-file-map cross-check gate FAILED"
+            echo ""
+            echo "The \`## Governance File Map\` table claims a repo path (added or changed in this PR)"
+            echo "that does not resolve on disk. A broken map path mis-routes agents to a"
+            echo "non-existent location."
+            echo ""
+            echo "### Unresolvable claimed paths (resolved relative to the repo root):"
+            echo '```'
+            printf '%s' "$FAIL_REPORT"
+            echo '```'
+            echo ""
+            echo "### Fix"
+            echo ""
+            echo "Correct the path in the map's Location column, or create the missing file/dir."
+            echo "Paths are claimed as \`pmo-platform/<repo-relative>\` and resolve by stripping the"
+            echo "\`pmo-platform/\` prefix. See \`core/CLAUDE.md.template\` § Governance File Map."
+            echo ""
+            echo "### Override (a deliberately-forward-looking or external claim)"
+            echo ""
+            echo 'Add the marker anywhere in the file:'
+            echo '`<!-- repo-integrity: allow-governance-map -->`'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "::warning::Governance-file-map gate (warn-mode initial): findings reported, not blocking. Flip WARN_MODE to 'false' to enforce after shakedown."
+            exit 0
+          fi
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 8 — Projects/ casing canonicalization (#135). Net-new capital-`P`
+  #          `Projects/` path references are stale-drift: the canonical homes are
+  #          `projects/_config/` (governance) and `projects/` (Layer-2). This gate
+  #          FAILs on a net-new capital-`P` `Projects/` path in agent-readable
+  #          corpus. Appended AFTER the #133 governance-file-map job (this is the
+  #          same-file contention resolution — #133 writes first, this job second).
+  #
+  #          Precision (no false-positives on the historical "Projects" concept):
+  #            - NET-NEW DELTA only — pre-existing corpus `Projects/` references
+  #              (prose, the legacy guard, dated changelog entries) are never
+  #              re-scanned, so the gate fires only on NEW drift.
+  #            - The match requires a trailing `/` (a PATH, not the prose word
+  #              "Projects") and a non-identifier char before the `P` (so
+  #              `myProjects/` / `subProjects/` do not match).
+  #            - The `Projects/[Project]/` operator-instance schema literal is
+  #              content-exempt (a stable placeholder token, never genuine drift).
+  #            - The `release/releases/*` ledger surface is path-exempt (release
+  #              plans/notes legitimately quote the historical path when describing
+  #              the canonicalization work), mirroring the other gates' ledger
+  #              exemption.
+  #            - WHOLE-FILE override: a file carrying `repo-integrity:
+  #              allow-projects-casing` anywhere is skipped — the named legitimate-
+  #              uppercase files (core/hooks/block-destructive.sh + its test) carry
+  #              this marker, per the #135 prework allowlist.
+  #          Scope: changed `*.md` PLUS the two named legitimate `.sh` hook files
+  #          (so the allowlisted guard is in-scope and demonstrably file-exempted).
+  #          Warn-mode-initial per core/rules/bypass-mode-readiness.md.
+  #
+  #          Injection-safety: BASE_SHA/HEAD_SHA bound via env: and used as "$VAR".
+  # ---------------------------------------------------------------------------
+  projects-casing:
+    name: Projects/ casing canonicalization gate
+    runs-on: ubuntu-latest
+    env:
+      WARN_MODE: 'true'   # warn-mode initial; flip to 'false' to enforce after shakedown
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+
+      - name: Scan added lines for net-new capital-P Projects/ path references
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Whole-file override marker (any comment form — HTML or bare).
+          OVERRIDE='repo-integrity:[[:space:]]*allow-projects-casing'
+          # Capital-P Projects/ as a PATH: not preceded by an identifier char or a
+          # dot or a slash (so subProjects/, ../Projects not matched as a fresh
+          # token), followed immediately by the canonical-drift `/`.
+          CASING_RE='(^|[^A-Za-z0-9._/])Projects/'
+          # The operator-instance schema literal is content-exempt.
+          SCHEMA_EXEMPT='Projects/\[Project\]'
+
+          # Scope: changed *.md PLUS the two named legitimate-uppercase hook files
+          # (in-scope so the allowlist marker is demonstrably honored).
+          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          FILES=()
+          for f in "${ALL_CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            case "$f" in
+              release/releases/*) continue ;;  # ledger surface — exempt (mirrors the other gates)
+              *.md) FILES+=("$f") ;;
+              core/hooks/block-destructive.sh|core/hooks/tests/block-destructive.test.sh) FILES+=("$f") ;;
+              *) : ;;  # out of scope
+            esac
+          done
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo ":white_check_mark: Projects/ casing — no in-scope changed files" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          FOUND=0
+          REPORT=""
+          for f in "${FILES[@]}"; do
+            # whole-file override
+            if grep -qE "$OVERRIDE" "$f"; then
+              echo "::notice::repo-integrity projects-casing: $f carries allow-projects-casing — file-exempt." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            # NET-NEW DELTA: only lines ADDED since the base, keyed by head-file line.
+            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
+              | awk '
+                /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+                /^\+\+\+/ { next }
+                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+                /^-/ { next }
+              ' || true)"
+            [ -z "$ADDED_LINES" ] && continue
+
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              [ -z "$entry" ] && continue
+              LN="${entry%%:*}"
+              line="${entry#*:}"
+              # capital-P Projects/ present?
+              printf '%s' "$line" | grep -qE "$CASING_RE" || continue
+              # content-exempt: the operator-instance schema literal
+              if printf '%s' "$line" | grep -qE "$SCHEMA_EXEMPT"; then
+                # exempt ONLY if every Projects/ occurrence on the line is the schema literal;
+                # strip the schema literal and re-test for any remaining bare Projects/.
+                residual="$(printf '%s' "$line" | sed -E 's#Projects/\[Project\][^[:space:]]*##g')"
+                printf '%s' "$residual" | grep -qE "$CASING_RE" || continue
+              fi
+              FOUND=1
+              REPORT="${REPORT}${f}:${LN}: ${line}"$'\n'
+            done <<< "$ADDED_LINES"
+          done
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo ":white_check_mark: Projects/ casing — no net-new capital-P Projects/ path references on added lines" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: Projects/ casing canonicalization gate FAILED"
+            echo ""
+            echo "A changed file introduces a net-new capital-\`P\` \`Projects/\` path reference."
+            echo "The canonical homes are \`projects/_config/\` (governance) and \`projects/\` (Layer-2)."
+            echo ""
+            echo "### Net-new findings (file:line):"
+            echo '```'
+            printf '%s' "$REPORT"
+            echo '```'
+            echo ""
+            echo "### Fix"
+            echo ""
+            echo "Use the lowercase canonical path: \`projects/_config/\` for governance files,"
+            echo "\`projects/\` for Layer-2 operational content. See CLAUDE.md § Platform vs. Working Content Boundary."
+            echo ""
+            echo "### Exemptions (already handled)"
+            echo ""
+            echo "- The \`Projects/[Project]/\` operator-instance schema literal is content-exempt."
+            echo "- \`release/releases/*\` ledger files are path-exempt."
+            echo "- An intentional legacy-uppercase line: add \`<!-- repo-integrity: allow-projects-casing -->\` anywhere in the file."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "::warning::Projects/ casing gate (warn-mode initial): findings reported, not blocking. Flip WARN_MODE to 'false' to enforce after shakedown."
+            exit 0
+          fi
+          exit 1

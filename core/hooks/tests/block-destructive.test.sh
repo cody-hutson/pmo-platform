@@ -177,6 +177,9 @@ test_case "rm -rf .git blocks" \
   "$(bash_payload 'rm -rf .git')" \
   2 "BLOCK-DESTRUCTIVE-006"
 
+# repo-integrity: allow-projects-casing — the BLOCK-DESTRUCTIVE-007 fixture below
+# intentionally uses the legacy-uppercase Projects/ literal; file-exempt from the
+# net-new Projects/ casing gate.
 test_case "rm -rf Projects/ blocks" \
   "$(bash_payload 'rm -rf Projects/')" \
   2 "BLOCK-DESTRUCTIVE-007"

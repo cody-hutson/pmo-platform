@@ -6506,6 +6506,76 @@ cmd_check() {
   fi
 
 
+  # ─── Check 49: platform-convention linter (warn-mode initial) [#228] ──────────
+  #
+  # The convention-linter for the FOUR residual platform-convention dimensions no
+  # existing gate covers — (1) [topic]-[type].md file-naming, (2) a Layer-2 path
+  # (projects/…) in a git-tracked file, (3) evidence-quality-label presence on a
+  # dated factual claim in a (non-process-spec) governance file, (4) [TBD]/[INSERT]/
+  # [TODO] placeholder leakage outside backticks. The predicate lives ONCE in the
+  # shared invokable core/deploy/tools/check-convention.sh (single source; an
+  # optional PR-time job can invoke the same script). This is NOT a pre-commit hook
+  # — CLAUDE.md forbids normalizing --no-verify, so platform-convention enforcement
+  # rides the deploy.sh check family per the #228 placement decision.
+  #
+  # DELEGATED (documented in-tool, NOT duplicate-enforced here): dead-file-ref +
+  # depersonalization + issue-ref -> repo-integrity.yml; localized-context ->
+  # Check 25; internal-link integrity -> link-check.yml.
+  #
+  # Findings route through flag_warn_or_issue (warn-mode-initial per
+  # bypass-mode-readiness.md): in warn-mode they annotate + jsonl-log without
+  # incrementing ISSUES; flip core/hooks/check-convention.mode (or the shared
+  # deploy-check.mode) to 'enforce' after the shakedown window. A non-zero exit
+  # with no parsed FAIL (scan-surface error, exit 3) still flags so a broken
+  # predicate run never reads green.
+  #
+  # Cutover discipline: applies to ./deploy.sh --check on or after this release's
+  # merge SHA in RELEASE_LOG.md.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 49: platform-convention linter (naming / layer-2 / evidence-label / placeholder) (#228)"
+    local c49_mode
+    c49_mode=$(resolve_check_mode "check-convention")
+    local c49_script="core/deploy/tools/check-convention.sh"
+    if [[ ! -f "$c49_script" ]]; then
+      flag_warn_or_issue "convention-linter" "predicate script missing: $c49_script"
+    else
+      local c49_out c49_rc
+      c49_out=$(bash "$c49_script" 2>&1)
+      c49_rc=$?
+      if [[ $c49_rc -eq 3 ]]; then
+        # scan-surface error — fail-loud independent of warn-mode
+        log "  FAIL:  Check 49 — convention-linter scan-surface error (exit 3)"
+        ISSUES=$((ISSUES + 1))
+        printf '%s\n' "$c49_out" | grep -E '^(FAIL|SUMMARY):' | sed 's/^/         /'
+      else
+        local c49_findings c49_line
+        c49_findings=0
+        while IFS= read -r c49_line; do
+          [[ -z "$c49_line" ]] && continue
+          case "$c49_line" in
+            FAIL:*)
+              # route each convention finding through the warn-mode gate, honoring a
+              # check-specific check-convention.mode (falls back to the shared mode).
+              if [[ "$c49_mode" == "enforce" ]]; then
+                log "  ${c49_line}"
+                ISSUES=$((ISSUES + 1))
+              elif [[ "$c49_mode" == "warn" ]]; then
+                log "  WARN:  ${c49_line#FAIL: } (warn-mode; flip check-convention.mode to 'enforce' after shakedown)"
+              fi
+              c49_findings=$((c49_findings + 1))
+              ;;
+            SUMMARY:*) : ;;   # deploy.sh prints its own aggregate
+            OK:*) log "  ${c49_line}" ;;
+          esac
+        done <<< "$c49_out"
+        if [[ $c49_findings -eq 0 ]]; then
+          log "  OK:    no platform-convention findings"
+        fi
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."

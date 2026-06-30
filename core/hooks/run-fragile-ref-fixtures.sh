@@ -87,6 +87,19 @@ matches_class() {
       local _rest="${content#*|}"               # after first '|'
       _lineno="${_rest%%|*}"                     # before second '|'
       _linetext="${_rest#*|}"                    # after second '|' (may itself contain '|')
+      # NUMERIC-VALIDATE the coords (#757): refline/lineno feed the classifier, which
+      # `+0`-coerces them — a malformed coord (typo, missing '|') would SILENTLY become
+      # 0 (refline 0 = "no block"; lineno 0 = phantom position), making a broken fixture
+      # row read CLEAN. Fail LOUD instead of silent fail-safe coercion. Both must be
+      # non-negative integers (refline 0 is the legitimate "no block in file" sentinel).
+      if ! printf '%s' "$_refline" | "$GREP" -qE '^[0-9]+$'; then
+        "$PRINTF" 'FAIL: ISSUEREF-POS fixture row has a non-numeric refline %s in content: %s\n' "[$_refline]" "$content" >&2
+        exit 1
+      fi
+      if ! printf '%s' "$_lineno" | "$GREP" -qE '^[0-9]+$'; then
+        "$PRINTF" 'FAIL: ISSUEREF-POS fixture row has a non-numeric lineno %s in content: %s\n' "[$_lineno]" "$content" >&2
+        exit 1
+      fi
       _verdict="$("$PRINTF" '%s\t%s\n' "$_lineno" "$_linetext" \
         | "$AWK" -f "$POSITIONAL_LIB" \
             -v issuere="$ISSUEREF_RE" -v refline="$_refline" -v minwords="$MIN_SELFDESCRIBE_WORDS")"
