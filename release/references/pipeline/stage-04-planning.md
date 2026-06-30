@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Stage 4: Planning
 
 > **Source:** Stage 4 originating spec

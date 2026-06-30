@@ -1,4 +1,5 @@
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 ---
 title: Parallelism Posture Taxonomy — Stage 6 Engineering Concurrency
 purpose: Names the Stage-6 Engineering concurrency behavior the hub-spoke bridge already encodes (D-C SINGLE serial / D-C OPTION-A parallel-per-branch) as a first-class, plug-and-play posture taxonomy, and adds the per-posture mechanics (hook-execution / commit-attribution / rollback), the multi-chip-safety-class attribute, and the force-push prohibition a prior multi-chip lease-race near-miss requires.
