@@ -1091,6 +1091,66 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ---
 
+## Skill 14: Generated Cleanup (Tier 1 — Generated-Surface Retirement Proposals)
+
+### Output Contract (Staged Proposal — 3 Required Sections)
+
+Generated Cleanup produces a single staged proposal at `08-Generated/generated-cleanup-YYYY-MM-DD.md` (itself a Domain-C `analysis` artifact with a `lifecycle_state: draft` + `promotion_state: staged` header). The proposal has three required sections.
+
+| Section | Content | Format | Notes |
+|---------|---------|--------|-------|
+| 1. Scope | In-scope surface (08-Generated/ approaching-timeout + promoted 01-07 promoted-and-stale), honored exclusions (09-Prototype/, _templates/, _archived/), the artifact-lint report consumed (or explicit "NONE FOUND"), artifacts-scanned + candidate counts | Structured block | The exclusion posture + the Auto-Archive composition (>10-bd staged ceded to the sweep) stated every run |
+| 2. Candidates | Three group sub-sections — promoted-and-stale, approaching-timeout, superseded — each a table of candidates with evidence + proposed archive action + reversibility | One table per group | Empty groups reported explicitly as "none" (honest no-finding signal), never omitted |
+| 3. Summary | Total candidate count + the recommend-only assertion ("no file moves performed; user approves each action; scheduled runs never self-apply") | Structured line | The Tier-1 no-auto-mutation statement |
+
+(The metadata header — artifact-generator-format frontmatter with `artifact_type: analysis`, `lifecycle_state: draft`, `promotion_state: staged` — is the proposal's own YAML, staged like any Domain-C artifact.)
+
+### Required Elements
+
+**Three groups, each recommend-only:** promoted-and-stale (`promotion_state: promoted` ∧ derived >30-day-unreferenced, intersection — plus stamped `lifecycle_state: superseded`), approaching-timeout (`promotion_state: staged` ∧ `lifecycle_changed` under the 10-bd staging timeout, disjoint from the Auto-Archive sweep), superseded (consumed from the artifact-lint report, not re-derived). Each candidate cites the field values / derived signal / lint-report citation that triggered it.
+
+**Zero reads of the deprecated single-field machine:** the grouping keys on the reconciled `lifecycle_state` + `promotion_state` (+ `lifecycle_changed` + the derived >30-day signal + the lint report). The deprecated single-field workflow machine is read zero times (no fallback read — it is no longer stamped; see `core/standards/lifecycle-states-canonical.md §3.2`). Staleness is **derived** (>30-day-unreferenced, recommend-only, labeled `[INFERRED]`), never read as a stamped `lifecycle_state: stale` value.
+
+**Protocol-legal archive split (branches by `promotion_state`):** staged ⇒ location sweep to `08-Generated/_archived/` (`archived-in-place`); promoted ⇒ `lifecycle_state: archived` in place + `trust_category: historical-record` (no folder move). No `promoted → archived-in-place` action is ever proposed (`artifact-workflow-protocol.md §4.1`). Never delete — both paths recoverable.
+
+**Auto-Archive composition:** the >10-bd staged population is ceded to the artifact-generator Auto-Archive sweep; the approaching-timeout group surfaces only the disjoint under-10-bd window — no duplication, no silent re-gating.
+
+**No auto-mutation:** the proposal is the ONLY write. No scanned artifact is moved, content-retired, archived, or deleted by the skill — every action is operator-approved (Autonomy Tier 1), and a scheduled run (via the `/schedule` seam) stages a pending proposal that never self-applies.
+
+**Conflation boundary:** never invokes, names as executor, or routes a recommendation through `cleanup-orphan-state.sh` (a git/runtime state-file tool — a different object class).
+
+### Reversibility Tier + Confidence
+
+Output class → default tier + confidence (per `../specs/reversibility-protocol.md`):
+
+| Output class | Tier | Confidence |
+|---|---|---|
+| The cleanup proposal itself; an approaching-timeout location sweep on an unreferenced staged file | CHEAP | HIGH (staged draft / recoverable from _archived/) |
+| Content-retirement of a promoted file; superseded archive of a promoted member | MODERATE | HIGH (stamped `superseded`) / MEDIUM-LOW (derived-stale) |
+| Content-retirement of a promoted artifact consumed by downstream reviewers / stakeholder comms | EXPENSIVE | per evidence strength |
+
+Every candidate carries tier + confidence explicitly. No unlabeled recommendations (pmo-qa-auditor G4).
+
+### Evidence Labels
+
+All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal Preferences. A candidate's stamped evidence (`lifecycle_state` / `promotion_state` / `lifecycle_changed`, or the artifact-lint report citation) is `[SOURCE]`; the **derived** staleness signal (computed >30-day-unreferenced) is `[INFERRED]` (computed, not stamped — never presented as a stamped `stale`); a proposed archive action is `[RECOMMENDED]`. Never fabricate a last-referenced date or a lifecycle value — a missing field is surfaced or skipped-with-note, not invented.
+
+### Failure-Mode Conformance (G7)
+
+`generated-cleanup/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with the 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings. (Ships with 5: promoted-file-illegal-terminal PROC, group-duplicates-auto-sweep PROC, stale-value-not-stamped INPUT, scheduled-auto-apply PROC, cleanup-tool-conflation HAND.)
+
+### Validation Checklist (QA Gate)
+- [ ] Proposal staged at `08-Generated/generated-cleanup-YYYY-MM-DD.md` with the artifact-generator metadata header
+- [ ] Scope block names the in-scope surface, the exclusions (incl. _archived/), and the artifact-lint report consumed (or "NONE FOUND")
+- [ ] All three group sub-sections present (empty ones reported as "none")
+- [ ] Every candidate cites evidence and carries a reversibility tier + confidence
+- [ ] Zero reads of the deprecated single-field machine; staleness derived (>30-day), never read as stamped `stale`
+- [ ] Archive action branches by `promotion_state` — no `promoted → archived-in-place` proposed
+- [ ] Group 2 (approaching-timeout) is disjoint from the Auto-Archive sweep (under-10-bd only)
+- [ ] Recommend-only — proposal states no file moves performed; user approves each action; scheduled runs never self-apply
+
+---
+
 ## Appendix: RAID Entry Prefix Reference
 
 | Skill | Prefix | Example |

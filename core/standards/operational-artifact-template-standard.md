@@ -66,7 +66,7 @@ The 5-Layer Template Architecture (SHIPPED — `template-taxonomy.md` / `templat
 | Registry layout, deploy-sync, **PDA boundary** | L3 `template-storage.md` §2–§5 | **REFERENCES** — esp. §5: *"Templates declare structure; PDA instances populate structure"* |
 | Instance frontmatter (Category 1–7, 7 MVP rels, Domain A/B/C) | `frontmatter-schema.md` | **REFERENCES** — the instance contract a template points at; the frontmatter-schema owns it |
 | Instance provenance for `08-Generated/` | Forthcoming generated-artifact provenance spec (OPEN/approved; downstream consumer of L4 §8) | **FORWARD-REFERENCES** — instance-level, not template-contract-level |
-| File naming syntax | Forthcoming `artifact-naming-standard.md` (OPEN/approved; **file ABSENT**) | **FORWARD-REFERENCES** — authority-when-shipped; candidate pattern is interim working basis |
+| File naming syntax | `artifact-naming-standard.md` (SHIPPED — `core/standards/`) | **REFERENCES** — the live single canonical naming authority; instances name per its `[ProjectCode]_[Type]_[…]_[YYYY-MM-DD].ext` shape |
 | V-style validation-rule pattern | `project-schema.md` §5–§6 | **MIRRORS** the structural pattern (numbered rules + completeness + traces) |
 | **Entity-derivation rule** (field → entity-field schema) | — *(net-new)* | **DEFINES** |
 | **Machine-schema-companion convention** (EAD-derivable declaration) | — *(net-new; aligns to the `EAD` derivation)* | **DEFINES** |
@@ -91,7 +91,7 @@ Every conformant operational-artifact template carries these six structural elem
 | **C** | Body typed-format spec | YES | The existing typed-format content: column headers (CSV) or section structure + placeholder semantics (MD). Unchanged from current template practice. | Consolidated (existing practice) |
 | **D** | Entity-Derivation Table | YES | NEW. One row per template field: `field · entity_binding (#N Entity.field \| template-local) · ead_class (7-class) · level (L1/L2/L3) · rationale-if-local`. Per §4 rule. | **Net-new** |
 | **E** | Machine-Schema Companion declaration | YES | NEW. A four-line block declaring the EAD inputs (`source_entity`, `entity_crosswalk`, `serialization_dialect`, `schema_mode`) so `S=EAD(E,C,D,mode)` is derivable. Per §5. | **Net-new** |
-| **F** | Naming-convention conformance line | YES | A one-line assertion that instances follow the `artifact-naming-standard.md` pattern. Until that standard ships: candidate `[ProjectCode]_[Type]_[Date]_[Desc].ext` as `[ASSUMPTION – CONFIRM]` interim. | Consolidated (forward-ref to `artifact-naming-standard.md`) |
+| **F** | Naming-convention conformance line | YES | A one-line assertion that instances follow the `artifact-naming-standard.md` pattern `[ProjectCode]_[Type]_[…]_[YYYY-MM-DD].ext` (the type is a single `-`-joined slug of a controlled type). | Consolidated (reference to `artifact-naming-standard.md`) |
 
 The per-element subsections below restate each element so the AC-2 conformance grep (`grep -cE '^### Element [A-F] '`) returns 6.
 
@@ -115,9 +115,9 @@ One row per template body field: `field · entity_binding (#N Entity.field | tem
 
 A four-line block declaring the EAD inputs — `source_entity` (E) · `entity_crosswalk` (C) · `serialization_dialect` (D) · `schema_mode` (mode) — so the validatable schema `S = EAD(E, C, D, mode)` is mechanically derivable without re-interpretation. Governed by the §5 convention.
 
-### Element F — Naming-convention conformance line (consolidated, forward-ref to `artifact-naming-standard.md`)
+### Element F — Naming-convention conformance line (consolidated, reference to `artifact-naming-standard.md`)
 
-A one-line assertion that instances follow the `artifact-naming-standard.md` pattern. Until that standard ships and `artifact-naming-standard.md` exists, the interim working basis is the candidate pattern `[ProjectCode]_[Type]_[Date]_[Desc].ext` carried as `[ASSUMPTION – CONFIRM]`. The authority-when-shipped is `artifact-naming-standard.md`; this standard forward-references it, it does not define naming syntax.
+A one-line assertion that instances follow the `artifact-naming-standard.md` pattern `[ProjectCode]_[Type]_[…]_[YYYY-MM-DD].ext` — where `[Type]` is the single `-`-joined slug of a controlled artifact type. The authority is `artifact-naming-standard.md` (the live single canonical naming home, in `core/standards/`); this standard references it, it does not define naming syntax.
 
 ---
 
@@ -314,6 +314,6 @@ AC-checkable assertions (mirrors `project-schema.md` §5 / `template-protocol.md
 | `core/schemas/raid-log.schema.json` | EAD pilot + §7 worked-example frozen authority (`S=EAD` output proof) |
 | `core/specs/operational-artifact-inventory.md` | N1 inventory — the `reconciliation_blocker` inventory-row target; FINDING-3 register |
 | ADR for the two-axis lifecycle (RATIFIED) | Two-axis entity lifecycle (Axis-1 `lifecycle_state` ⊥ Axis-2 `content_lifecycle_pattern`) — the `Status` binding basis |
-| Forthcoming `artifact-naming-standard.md` (OPEN; file ABSENT) | Naming-convention authority-when-shipped (FORWARD-REFERENCED, Element F) |
+| `artifact-naming-standard.md` (SHIPPED — `core/standards/`) | Naming-convention authority — the live single canonical naming home (REFERENCED, Element F) |
 | Forthcoming generated-artifact provenance spec (OPEN/approved) | Instance provenance for `08-Generated/` (FORWARD-REFERENCED, instance-level) |
 | `core/standards/duplicate-source-discipline.md` | The register-or-remove / cite-don't-duplicate discipline this standard observes |

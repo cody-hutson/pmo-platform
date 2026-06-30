@@ -51,6 +51,8 @@ Governance) sub-blocks and the Section 1 dominance check below cite these by rol
 
 ## Output Structure
 
+> Any roll-up artifact persisted to `08-Generated/` is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
+
 ### Section 1: Portfolio Health Dashboard
 
 A quick-reference table covering all active projects:

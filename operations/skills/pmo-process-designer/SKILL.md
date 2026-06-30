@@ -321,6 +321,8 @@ D (Dependency). Counter is auto-incremented per skill.
 Every process-designer response follows this structure. Read
 `references/output-format.md` for full field definitions.
 
+> Any artifact persisted to `08-Generated/` (requirements doc, process/workflow doc, traceability matrix, gap analysis) is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
+
 ### 1. Mode & Inputs
 Which mode(s), what artifacts ingested, evidence quality labels.
 

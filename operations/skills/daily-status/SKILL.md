@@ -95,7 +95,7 @@ AM Testing transcript.
 2. Read yesterday's PM Update from the Daily Status Log (for carry-forward actions)
 3. Read the Daily Status Update Framework → AM template
 4. Generate using the Framework's section-by-section sourcing rules
-5. Output to `08-Generated/[Project]_AM_Update_[DATE].md`
+5. Output to `08-Generated/[Project]_AM-Update_[DATE].md` — the `[Project]_AM-Update_[DATE]` / `[Project]_PM-Update_[DATE]` output filenames conform to the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug, trailing ISO-8601 date, lowercase extension).
 
 ### PM Status Update
 
@@ -107,7 +107,7 @@ PM Testing / Daily Connect transcript.
 2. Read today's AM Update from the Daily Status Log (for carry-forward comparison)
 3. Read the Daily Status Update Framework → PM template
 4. Generate using the Framework's section-by-section sourcing rules
-5. Output to `08-Generated/[Project]_PM_Update_[DATE].md`
+5. Output to `08-Generated/[Project]_PM-Update_[DATE].md`
 
 ### Daily Connect Prep
 
@@ -118,7 +118,7 @@ PM Testing / Daily Connect transcript.
 2. Read the Communications Tracker for messages since the AM update
 3. Read the Daily Status Update Framework → Daily Connect Prep template
 4. Generate using the Framework's sourcing rules
-5. Output to `08-Generated/[Project]_DC_Prep_[DATE].md`
+5. Output to `08-Generated/[Project]_DC-Prep_[DATE].md`
 
 ## Output Rules
 

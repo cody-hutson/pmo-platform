@@ -377,6 +377,7 @@ defined at `core/schemas/frontmatter-schema.md` § Category 3:
   but any artifact this skill writes fresh carries the markers. (A copy/paste-only draft that never
   lands in `08-Generated/` — a Teams post, an inline email body — is not a persisted artifact and
   needs no frontmatter.)
+- **Filename conformance.** A communication persisted to `08-Generated/` is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
 
 ### 2. Readiness assessment
 **READY FOR SEND** or **NOT READY** — with specific gaps listed for NOT READY.
