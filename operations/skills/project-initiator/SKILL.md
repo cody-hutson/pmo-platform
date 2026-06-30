@@ -193,6 +193,15 @@ Adapt to the project's likely meeting cadence based on governance model:
 
 If the user provides specific meeting cadence info, override these defaults.
 
+#### Step 2b: Bootstrap the `_pmo/` shared-entity store + link existing entities (ADR-054)
+
+The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for shared entities (Person / System / Vendor / Workstream / Decision / Cross-Project Dependency) — the `_pmo/` entity page is the record, the roster and the ADR-040 leadership-owner refs are read-time consumers (`entity-field-schemas.md` §3.10–§3.16; ADR-054). On project initiation:
+
+1. **Bootstrap if missing.** If `projects/_pmo/` (or any of its six subfolders `people/` · `systems/` · `vendors/` · `workstreams/` · `decisions/` · `dependencies/`) does not exist, create it. This is workspace-level infrastructure (the `_`-prefix carve-out in Step 1 R-a) — it is created **once** and reused by every project; a second project does not re-scaffold it, it links into it. (Q1: `dependencies/` carries `storage_tier: portfolio-level` frontmatter — a view over the §3.15 `_config/` home, not a relocation.)
+2. **Link, do not duplicate.** When the new project references a shared entity that already has a `_pmo/` page (a Person already in `people/`, a System already in `systems/`), **link to the existing page by its id** (`person_id` / `system_id` / …) — never create a second page for the same entity. The id is the dedup anchor (`person_id` is globally unique, V-PER-02).
+3. **Never auto-create a Person.** If the project names a person with **no** existing `_pmo/people/` page, do **NOT** auto-create the Person entity. Route the unresolved name to the **operator clarification queue** (`operations/templates/people-graph-clarification-queue-template.md`) for the operator to add as a Person (or record as external) — this is the Tier-1 (Recommend) gate, mirroring the ADR-040 resolve-by-name migration (zero-match → clarification queue; never silently dropped, never first-match auto-picked). Person creation is operator-confirmed, not scaffold-automatic.
+4. **Entity-page templates.** New entity pages are authored from the entity-page templates (`operations/templates/{person,system,vendor,workstream,decision,dependency}-entity-template.md`), each conforming to its frozen §3.10–§3.16 field schema. Alias/rename-safety follows the `aliases:` convention (`people-coverage-graph.md §2.3`).
+
 ### Step 3: Populate PROJECT.md
 
 Use the PROJECT.md template from `references/project-md-template.md`. Fill in all fields from
@@ -315,6 +324,7 @@ Present the user with:
 4. User Setup Checklist (actionable)
 5. Recommended next steps
 6. Any `ASSUMPTION – CONFIRM` items that need verification
+7. `_pmo/` shared-entity store: bootstrapped (if first project) or linked; entities linked by id; any names routed to the Person clarification queue (Step 2b)
 
 ---
 
