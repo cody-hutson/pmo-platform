@@ -21,6 +21,7 @@
 #   ./synthesize-release-learnings.sh --mode per-release --version v2.10
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5 --cluster-min 3 --apply
+#   ./synthesize-release-learnings.sh --mode pattern-detect --window 5 --emit rate
 #   ./synthesize-release-learnings.sh --self-test
 #   ./synthesize-release-learnings.sh --help
 #
@@ -32,6 +33,13 @@
 #   --window-by-row                       trailing N rows instead of N versions
 #   --cluster-min N                       minimum cluster size for pattern (default 3);
 #                                         spec also requires cluster spans >=2 versions
+#   --emit {report|rate}                  pattern-detect output form (default report).
+#                                         `rate` emits the cross_release_pattern_emergence_rate
+#                                         = qualifying-clusters / events-in-window (both ALREADY
+#                                         computed by pattern-detect — REUSED, not re-implemented).
+#                                         This is the rate close-class-telemetry.md Indicator 4
+#                                         POINTS to (deferred-to-aggregate). Human line + a
+#                                         machine `rate=<2dp>` token; `--apply` is ignored in rate mode.
 #   --apply                               actually create Issues via `gh issue create`
 #                                         (default is dry-run; prints the would-create
 #                                         Issue body to stdout)
@@ -92,6 +100,7 @@ WINDOW=5
 WINDOW_BY_ROW=false
 CLUSTER_MIN=3
 APPLY=false
+EMIT="report"   # report | rate — pattern-detect mode only (rate = cross_release_pattern_emergence_rate)
 SELF_TEST=false
 
 while [[ $# -gt 0 ]]; do
@@ -101,6 +110,7 @@ while [[ $# -gt 0 ]]; do
     --window) WINDOW="$2"; shift 2 ;;
     --window-by-row) WINDOW_BY_ROW=true; shift ;;
     --cluster-min) CLUSTER_MIN="$2"; shift 2 ;;
+    --emit) EMIT="$2"; shift 2 ;;
     --apply) APPLY=true; shift ;;
     --self-test) SELF_TEST=true; shift ;;
     --help|-h) usage ;;
@@ -280,6 +290,7 @@ emit_pattern_detect_report() {
   local cluster_min="$2"
   local by_row="$3"
   local apply="$4"
+  local emit="${5:-report}"   # report | rate
 
   # Read ALL learnings-triple rows (filtered by subtype).
   local rows
@@ -287,6 +298,12 @@ emit_pattern_detect_report() {
     | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
 
   if [[ -z "$rows" ]]; then
+    if [[ "$emit" == "rate" ]]; then
+      # cross_release_pattern_emergence_rate over an empty window is N/A (no
+      # events-in-window denominator) — the close-class-telemetry N/A discipline.
+      echo "cross_release_pattern_emergence_rate: N/A — no release-synthesis/learnings-triple events in window (window=$window) | rate=N/A"
+      return 0
+    fi
     echo "## Pattern-Detect Report (window=$window$([ "$by_row" == "true" ] && echo " by-row"))"
     echo ""
     echo "No \`release-synthesis/learnings-triple\` events found in \`pipeline-event-log.md\`."
@@ -308,6 +325,7 @@ window = int(sys.argv[1])
 cluster_min = int(sys.argv[2])
 by_row = (sys.argv[3] == "true")
 apply_mode = (sys.argv[4] == "true")
+emit_mode = sys.argv[5] if len(sys.argv) > 5 else "report"  # report | rate
 
 # Stopword list — minimal; operator can extend via .claude/synthesizer-stopwords.txt
 # in a future release. For now ship a small in-script default.
@@ -405,6 +423,28 @@ for (field, tok), entries in clusters.items():
 # Sort qualifying clusters by size (desc), then by token (asc) for determinism
 qualifying.sort(key=lambda c: (-len(c["entries"]), c["field"], c["token"]))
 
+# ─── --emit rate short-circuit ─────────────────────────────────────────────
+# cross_release_pattern_emergence_rate = qualifying-clusters / events-in-window.
+# BOTH numerator (len(qualifying)) and denominator (len(windowed)) are ALREADY
+# computed above by the pattern-detect machinery — this REUSES them, it does NOT
+# re-implement the window/cluster logic. This is the rate close-class-telemetry.md
+# Indicator 4 POINTS to (deferred-to-aggregate). round-half-up at 2 decimals (the
+# canonical mode taken by reference from bundle-composition-doctrine.md § 3 Step 5).
+if emit_mode == "rate":
+    events_in_window = len(windowed)
+    qualifying_clusters = len(qualifying)
+    if events_in_window == 0:
+        # no denominator -> N/A (the close-class-telemetry N/A discipline; never 0/0)
+        print(f"cross_release_pattern_emergence_rate: N/A — no events in window "
+              f"(window={window}, cluster-min={cluster_min}) | rate=N/A")
+    else:
+        hundredths = (qualifying_clusters * 10000 + events_in_window * 50) // (events_in_window * 100)
+        rate = f"{hundredths // 100}.{hundredths % 100:02d}"
+        print(f"cross_release_pattern_emergence_rate: {qualifying_clusters} qualifying cluster(s) "
+              f"/ {events_in_window} event(s) in window ({rate}) "
+              f"(window={window}, cluster-min={cluster_min}) | rate={rate}")
+    sys.exit(0)
+
 # Render report
 mode_suffix = " by-row" if by_row else ""
 print(f"## Pattern-Detect Report (window={window}{mode_suffix}; cluster-min={cluster_min})")
@@ -475,7 +515,7 @@ else:
         print(f"  - title: {title}")
 PY
 )"
-  echo "$rows" | "$PY" -c "$pattern_py" "$window" "$cluster_min" "$by_row" "$apply"
+  echo "$rows" | "$PY" -c "$pattern_py" "$window" "$cluster_min" "$by_row" "$apply" "$emit"
 }
 
 # ─── Self-test mode ──────────────────────────────────────────────────────────
@@ -545,12 +585,32 @@ run_self_test() {
     echo "$report" | /usr/bin/grep -q "Dry-run mode (default)" || die "self-test: pattern-detect dry-run footer missing"
   fi
 
+  # Test 9: --emit rate emits the cross_release_pattern_emergence_rate line with a
+  # machine `rate=` token (the Indicator-4 aggregate close-class-telemetry.md points
+  # to). Works whether the live log has events (rate=<2dp>) or is empty (rate=N/A):
+  # both paths emit the prefix + the `rate=` token. Rate is qualifying/events-in-window.
+  local rate_out
+  rate_out="$(emit_pattern_detect_report 5 3 false false rate)" || die "self-test: --emit rate failed"
+  echo "$rate_out" | /usr/bin/grep -q "^cross_release_pattern_emergence_rate:" || die "self-test: rate-emit prefix missing"
+  echo "$rate_out" | /usr/bin/grep -qE 'rate=([0-9]+\.[0-9]{2}|N/A)' || die "self-test: rate-emit machine token (rate=<2dp>|N/A) missing"
+  # The rate must be a ratio in [0.00, 1.00] when numeric (qualifying clusters cannot
+  # exceed events-in-window): assert the numeric form never exceeds 1.00.
+  local rate_val
+  rate_val="$(echo "$rate_out" | /usr/bin/sed -nE 's/.*rate=([0-9]+\.[0-9]{2}).*/\1/p')"
+  if [[ -n "$rate_val" ]]; then
+    # integer-compare hundredths <= 100
+    local rh
+    rh="$(echo "$rate_val" | /usr/bin/awk -F. '{ printf "%d", $1*100 + $2 }')"
+    [[ "$rh" -le 100 ]] || die "self-test: rate $rate_val exceeds 1.00 (qualifying > events-in-window — impossible)"
+  fi
+
   echo "self-test: PASS"
   echo "  parse_triple validated (synthetic + real payload)"
   echo "  N/A sentinel exact-match validated"
   echo "  per-release block emit validated (with-events + zero-events)"
   echo "  pattern-detect report renders cleanly on current data"
   echo "  dry-run-vs-apply switch validated"
+  echo "  --emit rate (cross_release_pattern_emergence_rate) validated"
   exit 0
 }
 
@@ -571,7 +631,8 @@ case "$MODE" in
   pattern-detect)
     [[ "$WINDOW" =~ ^[0-9]+$ ]] || die "--window must be a positive integer (got '$WINDOW')"
     [[ "$CLUSTER_MIN" =~ ^[0-9]+$ ]] || die "--cluster-min must be a positive integer (got '$CLUSTER_MIN')"
-    emit_pattern_detect_report "$WINDOW" "$CLUSTER_MIN" "$WINDOW_BY_ROW" "$APPLY"
+    case "$EMIT" in report|rate) : ;; *) die "--emit must be report|rate (got '$EMIT')" ;; esac
+    emit_pattern_detect_report "$WINDOW" "$CLUSTER_MIN" "$WINDOW_BY_ROW" "$APPLY" "$EMIT"
     ;;
   "")
     die "Required: --mode {per-release|pattern-detect} (or --self-test)"
