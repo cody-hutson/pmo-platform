@@ -869,6 +869,32 @@ Route files by **content function**, not by format or keyword match. When a file
 
 ---
 
+## Generated-Artifact Cleanup Protocol
+
+The `08-Generated/` artifact surface (plus the promoted 01-07 folders a generated artifact may have landed in) accumulates retirement candidates over a project's life — promoted files go stale, staged files approach the staging timeout, and version chains leave superseded members behind. The **`generated-cleanup`** skill is the on-demand authority that scans this surface, groups the candidates, and stages a grouped cleanup proposal the operator approves before anything is archived. Trigger-surface decision and the conflation boundary: ADR `generated-cleanup-trigger-surface`.
+
+**Invocation path (AC-1).** `generated-cleanup` is invoked on demand by name as **`/generated-cleanup`**, and is **schedulable via the existing `/schedule` seam** (it mints no new scheduling mechanism). A scheduled run produces a **pending proposal** the operator dispositions — it NEVER self-applies.
+
+**The three groups (keyed on the reconciled lifecycle fields — zero reads of the deprecated single-field machine).** The grouped candidate summary distinguishes three groups using `lifecycle_state` + `promotion_state` (+ `lifecycle_changed` for the timeout window, + a derived >30-day-unreferenced signal for staleness) — NOT filename heuristics and NOT the deprecated single-field workflow machine (which is no longer stamped — see [`../standards/lifecycle-states-canonical.md`](../standards/lifecycle-states-canonical.md) §3.2):
+
+| Group | Grouping key | Archive path |
+|---|---|---|
+| **promoted-and-stale** | `promotion_state: promoted` **AND** derived-stale (computed >30-day-unreferenced, recommend-only) — also surfaces stamped `lifecycle_state: superseded` promoted files | **content retirement** — `lifecycle_state: archived` in place + `trust_category: historical-record`, **no folder move** |
+| **approaching-timeout** | `promotion_state: staged` **AND** `lifecycle_changed` nearing but **under** the 10-business-day staging timeout (early-warning, disjoint from the Auto-Archive sweep) | **location sweep** — move to `08-Generated/_archived/`, set `promotion_state: archived-in-place` |
+| **superseded** | consumed from the `08-Generated/artifact-lint-YYYY-MM-DD.md` report (Check 2 sibling-duplicate + Check 5 version-chain members) — NOT re-derived | per the member's own `promotion_state` (staged ⇒ sweep; promoted ⇒ content retirement) |
+
+**Protocol-legal archive split (branches by `promotion_state`).** The archive action is not one terminal — it branches per [`../artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) §4.1, which lists no `promoted → archived-in-place` transition. A **staged** candidate is location-swept to `08-Generated/_archived/` (`promotion_state: archived-in-place`); a **promoted** candidate is content-retired **in place** (`lifecycle_state: archived` + `trust_category: historical-record`, no folder move — moving it to `_archived/` would relocate it backwards into staging, which `frontmatter-schema.md`'s `promotion_state: promoted ⇒ folder ≠ 08-generated` rule forbids). **No file is ever deleted** — both paths are recoverable (move-not-delete).
+
+**Auto-Archive composition.** The approaching-timeout group surfaces only staged files **under** the 10-business-day threshold; the **>10-bd staged population is ceded to the artifact-generator Auto-Archive sweep** (which automatically and ungated moves staged files over 10 bd to `_archived/`), so `generated-cleanup` complements that sweep rather than duplicating or silently re-gating it.
+
+**Inputs consumed (AC-4).** The superseded group is **consumed from** the `artifact-lint` staged report `08-Generated/artifact-lint-YYYY-MM-DD.md` (the lineage-graph integrity scan), not re-derived. The skill composes with `artifact-generator` (the producer of the lifecycle/lineage fields and the owner of the Auto-Archive sweep) and `artifact-lint` (the lineage inspector) by **data contract**, not runtime invocation.
+
+**Unconditional approval gate (Autonomy Tier 1).** No file is moved, content-retired, or deleted without **explicit operator approval** — the gate is unconditional (no candidate, group, or confidence level bypasses it). The skill's only write is the staged proposal at `08-Generated/generated-cleanup-YYYY-MM-DD.md`; the operator dispositions candidates APPROVE / REVISE / REJECT, and the archive action is performed by the operator or the artifact-generator workflow on the operator's instruction.
+
+**Conflation boundary (load-bearing).** `generated-cleanup` operates on the `08-Generated/` **artifact** surface (markdown + derivatives). It is a **different tool** from `cleanup-orphan-state.sh`, which removes orphaned git/runtime **state files** — a different object class. `generated-cleanup` never invokes, names as executor, or routes a recommendation through `cleanup-orphan-state.sh`; the two share the word "cleanup," not a contract.
+
+---
+
 ## File Format Conventions
 
 Format selection governs **how** an artifact is stored on disk. It is orthogonal to the Document Tier classification (see [/CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) § File Management Protocol), which governs **what** an artifact is and its approval gate. A RAID Log is Document Tier 1 (approval-gated) *and* stored as CSV; the two classifications compose — they do not substitute for one another.
