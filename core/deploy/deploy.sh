@@ -6657,6 +6657,68 @@ cmd_check() {
   fi
 
 
+  # Check 51 — Label-taxonomy ↔ GitHub label-set parity (warn-mode initial) [#749]
+  #
+  # Asserts core/specs/label-taxonomy.md (the canonical label registry) agrees
+  # with the live GitHub label set. Two directions, asymmetric severity per the
+  # #749 decision + the warn→enforce rollout:
+  #   MISSING (canonical label absent from GitHub) → ENFORCE-capable: the #457
+  #     `status: rejected` defect class (a gate referencing a non-existent label
+  #     fails silently). Gated via resolve_check_mode "label-parity".
+  #   ORPHAN (live GitHub label absent from the taxonomy) → WARN only (some are
+  #     legitimately operator-local or pending registration, e.g. the `type:*`
+  #     family until #1777 documents it). Never FAILs.
+  # Source-agnostic: the primitive reads the canonical set from --source (default
+  # the doc); when #1970 moves the per-pack label lists to core/packs/*,
+  # repoint --source — this block is unchanged. Title-prefix parity (the #74
+  # `[Observation]:` invariant) is a SEPARATE concern, not evaluated here.
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown (the 14/18/42/43/50
+  # precedent); the introducing release is itself exempt (reflexive-pipeline
+  # loop). gh-unavailable → SKIP (parity needs the live set; mirrors Check 39/40
+  # offline SKIP). Flip the MISSING leg to enforce via a `label-parity.mode` file
+  # after the ≥3-day warn-log review.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 51: Label-taxonomy ↔ GitHub label-set parity (warn-mode initial; MISSING-leg enforce-flip deferred)"
+    local c51_script="core/deploy/tools/check-label-parity.py"
+    local c51_source="core/specs/label-taxonomy.md"
+    if [[ ! -f "$c51_script" ]]; then
+      flag_warn_or_issue "label-parity" "primitive script missing: $c51_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — label-parity needs the live label set (offline/unauth; mirrors Check 39/40)"
+    else
+      local c51_mode
+      c51_mode=$(resolve_check_mode "label-parity")
+      local c51_out c51_exit=0
+      c51_out=$(/usr/bin/python3 "$c51_script" --source "$c51_source" --output-format tsv 2>&1) || c51_exit=$?
+      if [[ $c51_exit -eq 3 ]]; then
+        flag_warn_or_issue "label-parity" "input failure (exit 3): $(echo "$c51_out" | head -1) — --source parsed to zero labels or the live set was unreadable; fix the source/parser"
+      elif [[ $c51_exit -eq 0 || $c51_exit -eq 1 ]]; then
+        local c51_missing c51_orphan
+        c51_missing=$(echo "$c51_out" | awk -F'\t' '$1=="MISSING"{print $2}')
+        c51_orphan=$(echo "$c51_out"  | awk -F'\t' '$1=="ORPHAN"{print $2}')
+        if [[ -z "$c51_missing" && -z "$c51_orphan" ]]; then
+          log "  OK:    label-taxonomy.md and the GitHub label set are in parity"
+        else
+          if [[ -n "$c51_missing" ]]; then
+            if [[ "$c51_mode" == "enforce" ]]; then
+              log "  FAIL:  label-parity — canonical label(s) absent from GitHub:"
+              echo "$c51_missing" | sed 's/^/           - /'
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "label-parity" "canonical label(s) absent from GitHub (warn-mode; flip label-parity.mode to enforce after shakedown): $(echo "$c51_missing" | paste -sd, -)"
+            fi
+          fi
+          if [[ -n "$c51_orphan" ]]; then
+            flag_warn_or_issue "label-parity" "GitHub label(s) not registered in the taxonomy (warn-only — may be operator-local or pending registration): $(echo "$c51_orphan" | paste -sd, -)"
+          fi
+        fi
+      else
+        flag_warn_or_issue "label-parity" "check errored (exit $c51_exit): $(echo "$c51_out" | head -1)"
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."

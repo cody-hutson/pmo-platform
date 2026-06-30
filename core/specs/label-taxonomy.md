@@ -29,7 +29,7 @@ Classify what an issue **is**. Every issue gets exactly one category label at in
 | `tracker-schema` | `C5DEF5` (periwinkle) | Tracker schema change | Intake (Stage 1) |
 | `sub-task` | `C2E0C6` (light green) | Engineering sub-task for release implementation | Engineering (Stage 6) |
 | `bug` | `d73a4a` (red) | Something isn't working. Auto-applied by `bug.yml` at intake; mutually exclusive with `improvement` and other category labels. | Intake (Stage 1) — via `bug.yml` |
-| `observation` | `D4C5F9` (light lavender) | Lightweight gap-capture placeholder ticket. Created via `observation.yml` during agent auto-logging when a full Proposal is not yet authorable. Triage promotes to `improvement` + removes `observation` on promotion, or closes if the observation is no longer relevant. | Intake (Stage 1) — via `observation.yml` |
+| `observation` | `D4C5F9` (light lavender) | Lightweight gap-capture placeholder ticket. Created via `observation.yml` during agent auto-logging when a full Proposal is not yet authorable. Triage promotes to `improvement` (or the matching category) + removes `observation` **and strips the `[Observation]:` title prefix** on promotion, or closes if the observation is no longer relevant. | Intake (Stage 1) — via `observation.yml` |
 
 ### Status Labels
 
@@ -47,21 +47,24 @@ Track where an issue is in the pipeline lifecycle. Exactly one status label per 
 
 ### Cluster Labels
 
-Classify issues by capability cluster for triage. Applied during Run 1 of backlog triage. An issue may have one cluster label.
+Classify issues by capability cluster for triage. Applied during Run 1 of backlog triage.
+
+**Cluster orthogonality protocol.** Cluster labels split into two axes. The **domain clusters** (`architecture`, `automation`, `documentation`, `eval-quality`, `gate-handoff`, `pipeline-definitions`, `process-protocol`, `security`, `skill-modes`, `system-config`, `templates-schemas`) classify an issue by its capability area — an issue carries **exactly one** domain cluster. `cluster: cross-cutting` is **not** a domain; it is an **orthogonal span-marker** indicating the issue's scope crosses multiple domains. It composes *with* a domain cluster rather than replacing it: an issue may carry **one domain cluster + optionally `cluster: cross-cutting`**. The two never conflict because they answer different questions (which domain? vs. does it span domains?).
 
 | Label | Color | Description |
 |---|---|---|
-| `cluster: pipeline-definitions` | `aaaaaa` (gray) | Stage definition issues (living docs) |
-| `cluster: gate-handoff` | `aaaaaa` (gray) | Inter-stage contracts, gate manager, handoff coordinator |
-| `cluster: eval-quality` | `aaaaaa` (gray) | QA framework, eval runner, assertion framework, escape tracking |
-| `cluster: skill-modes` | `aaaaaa` (gray) | New or updated skill modes for pipeline stages |
-| `cluster: templates-schemas` | `aaaaaa` (gray) | Report templates, plan templates, schema definitions |
-| `cluster: system-config` | `aaaaaa` (gray) | GitHub Projects, statuses, labels, automation, environment |
-| `cluster: documentation` | `aaaaaa` (gray) | Reference docs, KB, process docs |
-| `cluster: process-protocol` | `aaaaaa` (gray) | Pipeline process rules, conventions, standards |
-| `cluster: architecture` | `aaaaaa` (gray) | Operating model, platform structure, folder architecture |
-| `cluster: automation` | `aaaaaa` (gray) | Linting, verification scripts, auto-mode |
-| `cluster: cross-cutting` | `aaaaaa` (gray) | Items spanning multiple clusters |
+| `cluster: pipeline-definitions` | `006B75` (teal) | Stage definition issues (living docs) |
+| `cluster: gate-handoff` | `0052CC` (blue) | Inter-stage contracts, gate manager, handoff coordinator |
+| `cluster: eval-quality` | `FBCA04` (amber) | QA framework, eval runner, assertion framework, escape tracking |
+| `cluster: skill-modes` | `0052CC` (blue) | New or updated skill modes for pipeline stages |
+| `cluster: templates-schemas` | `C5DEF5` (periwinkle) | Report templates, plan templates, schema definitions |
+| `cluster: system-config` | `BFD4F2` (light blue) | GitHub Projects, statuses, labels, automation, environment |
+| `cluster: documentation` | `5319E7` (purple) | Reference docs, KB, process docs |
+| `cluster: process-protocol` | `C5DEF5` (periwinkle) | Pipeline process rules, conventions, standards |
+| `cluster: architecture` | `BFD4F2` (light blue) | Operating model, platform structure, folder architecture |
+| `cluster: automation` | `D93F0B` (red-orange) | Linting, verification scripts, auto-mode |
+| `cluster: security` | `BFDADC` (pale cyan) | Security controls, secret/PII scanning, depersonalization gates |
+| `cluster: cross-cutting` | `0E8A16` (green) | **Span-marker** (not a domain) — items whose scope crosses multiple domain clusters; composes with one domain cluster per the orthogonality protocol above |
 
 ### Initiative Labels
 
@@ -114,10 +117,11 @@ The following default GitHub labels were removed as not applicable to a single-o
    - `observation.yml` → `observation` + `status: proposed`
    - `adr.yml` → `adr` + `status: proposed`
 2. **One status label** per issue (updated as issue progresses; mutually exclusive). `status: proposed` is auto-applied at intake by every template's top-level `labels:` field — the mechanism is structural, not convention-only.
-3. **One cluster label** per issue (assigned during triage Run 1)
+3. **One domain cluster label** per issue, **plus optionally `cluster: cross-cutting`** (the orthogonal span-marker — see the Cluster orthogonality protocol under § Cluster Labels). Assigned during triage Run 1.
 4. **Triage flags** are temporary — removed after triage decisions are executed
 5. **Status labels track lifecycle, not priority.** Priority is tracked in the issue body per intake schema.
 6. **`sub-task` is both category and lifecycle marker.** Sub-tasks are created during Engineering (Stage 6) and inherit the parent issue's status: at creation, the Stage-6 scaffolding stamps the parent's current `status:` label onto the new sub-task (mirroring the parent's lifecycle position for board/query hygiene). Sub-tasks are **out of scope for the Check 16 status-label invariant** (`deploy.sh` Check 16 scans `--label improvement` issues only); the mirrored sub-task label is a hygiene convenience, not an invariant-enforced field. A sub-task's label is a point-in-time mirror taken at creation and is not auto-resynced on later parent transitions.
+7. **Title↔category parity on promotion.** When an `observation` is promoted, the `[Observation]:` title prefix is stripped together with the `observation` label (per the `observation` row in § Category Labels and the **Stage 3 Template-Conversion Rule** in [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md#template-conversion-rule)). Deterministic invariant: **no OPEN issue carries both an `[Observation]:` title and a non-`observation` category label.** Closed issues are terminal records — exempt.
 
 ## Methodology Variation
 
