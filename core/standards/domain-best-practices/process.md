@@ -5,7 +5,7 @@ type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 domain: process
-consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is process); the domain-best-practice review criterion (a Stage-5/7 reviewer checks a process deliverable against this guide's concepts and the contraindications its Applicability Profile names); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==process)"
+consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is process); the domain-best-practice review criterion (a Stage-5/7 reviewer checks a process deliverable against this guide's concepts and the contraindications its Applicability Profile names); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==process); and the process-domain specialist skills operations/skills/pmo-scrum-master, operations/skills/pmo-release-train-engineer, operations/skills/pmo-business-analyst, and operations/skills/pmo-product-owner (each cites this guide as its design-time best-practice anchor; pmo-product-owner is dual-domain and also cites governance.md)"
 frameworks_cited: "PMI PMBOK 7th (2021); PRINCE2 2017; Scrum Guide 2020; Kanban (Anderson 2010) — all registered in core/specs/framework-catalog.md"
 ---
 <!-- reference-durability: allow-version-ref -->
