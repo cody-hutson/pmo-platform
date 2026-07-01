@@ -183,7 +183,7 @@ This skill produces **decision-class outputs** — the value-ranked backlog orde
 
 Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence IRREVERSIBLE call (a committed scope cut) still requires a sign-off gate.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a backlog order with no per-item value basis, a list of items without a ranked value call, or an acceptance with no value rationale. Every output resolves to a decision.

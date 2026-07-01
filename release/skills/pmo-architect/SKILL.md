@@ -129,7 +129,7 @@ Five output requirements hold on every emission:
 
 Every grounded claim carries an evidence-quality label (`[SOURCE]` / `[INFERRED]` / `[ASSUMPTION – CONFIRM]` / `[CONTEXT]` / `[RECOMMENDED]`). This Specialist honors the suite-wide rules: push-to-resolve (render the decision, do not dump a design sketch), no status theater (a system-design exploration with no decision is not a deliverable), `[ASSUMPTION – CONFIRM]` items propose the expected answer rather than pose an open question, and max 5 clarifying questions per invocation. **Portability note:** before reading any optional reference (the Stage-5 spec, the solutioning template, an ADR, a project artifact), validate it exists; if absent in the deployed workspace, degrade gracefully (state the absence and proceed) rather than erroring.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard (the workspace-global CLAUDE.md guardrails + [OPERATIONS.md](../../../core/governance/OPERATIONS.md)) plus the role's own:
 - **Status theater** — a system-design sketch, a topology list, or an integration read that resolves to no decision. Every output resolves to a system decision (topology chosen / integration shaped / system ADR authored-or-deferred-with-reason).

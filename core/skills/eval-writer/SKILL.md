@@ -337,7 +337,7 @@ Review-mode rule coverage verdicts, Prioritized remediation recommendations, Rec
 diffs. See `core/specs/reversibility-protocol.md` for the full protocol and
 `core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 - **Don't fake research.** If WebFetch fails, use the spine (Module 6). Don't hallucinate "current guidance."
 - **Don't over-question.** 3 targeted questions max in Author mode for characterization. Beyond that, label assumptions and proceed.

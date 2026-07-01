@@ -179,7 +179,7 @@ This skill produces **decision-class outputs** — the cross-project risk/depend
 
 A **program release go/no-go (Mode 3) is frequently the highest-reversibility output this skill produces** — a GO on a program release that has shipped to production is EXPENSIVE-to-IRREVERSIBLE; the Program Manager never renders a GO without the tier, the confidence, and (for EXPENSIVE+) the rollback posture and sign-off authority. Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a cross-project risk read with no delivery linkage, or a program posture without a program-load-bearing call. Every output resolves to a decision.

@@ -598,6 +598,11 @@ decision-class item without a reversibility tier label. See
 `core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Evidence & Quality Rules` (platform-

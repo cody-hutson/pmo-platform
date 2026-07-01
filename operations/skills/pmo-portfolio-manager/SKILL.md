@@ -145,7 +145,7 @@ This skill produces **decision-class outputs** — the portfolio health calls, t
 
 **The SteerCo readiness call (Mode 4) is frequently the highest-reversibility output the skill produces** — the skill never renders it without the tier, the confidence, and (for EXPENSIVE+) the rollback posture. Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a portfolio health picture with no portfolio-load-bearing call, or a list of cross-project risks without a portfolio ranking. Every output resolves to a decision.

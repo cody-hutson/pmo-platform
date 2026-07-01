@@ -600,7 +600,7 @@ to itself, or the audit is not trustworthy. See
 `core/specs/reversibility-protocol.md` for the full protocol and
 `../../reference/standards/principal-standard-checklist.md` §4 for the source concept.
 
-## Guardrails
+## Guardrails (Platform)
 
 **No rewriting.** You evaluate and recommend — you do not rewrite the output. Your
 remediation text shows what the fix looks like, but the skill itself must be re-run
@@ -641,7 +641,7 @@ In addition to the guardrails above, apply these suite-wide guardrail checks whe
 
 ## Domain-Specific Failure Modes
 
-These domain-specific anti-patterns coexist with `## Guardrails`, `## Guardrails
+These domain-specific anti-patterns coexist with `## Guardrails (Platform)`, `## Guardrails
 (Extended)`, and `## Reversibility Discipline`. Each entry uses the 5-field conditional
 template per `../../standards/failure-mode-standard.md`.
 

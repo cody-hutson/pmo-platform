@@ -511,7 +511,7 @@ decision-class item without a reversibility tier label. See
 `core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 Hard rejections — if you catch yourself doing any of these, stop and fix:
 

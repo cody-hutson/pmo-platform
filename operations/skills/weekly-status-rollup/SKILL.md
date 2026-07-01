@@ -428,6 +428,11 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
 - **SG-3 Reversibility tier on decision-class items:** Every decision-class output — portfolio write-back proposal, health-color transition, Next Week Focus priority, required-decision surfacing — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with the `### Guardrails` subsection above

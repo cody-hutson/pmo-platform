@@ -387,6 +387,11 @@ Currently, the Calibration Context is loaded from the active pack's `operator_pr
 
 **Do NOT:** implement `delivery_approach` field reading ahead of the Methodology Parameterization Framework. The enum and semantics are the Framework's territory.
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Anti-Laziness Rules for the Remediation Planner` and `## Reversibility Discipline`. Each entry uses the 5-field conditional template per [`core/standards/failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md). Examples reference the Copilot Builder pack (the original and most common application); the conditional grammar is domain-agnostic and applies equally to pmo-platform and generic packs. Placement after Anti-Laziness Rules and Reversibility Discipline follows the Batch 3 Finding F3 precedent for Copilot Builder skills — the section is additive, not a replacement for the Anti-Laziness Rules that already govern the planner's behavior.

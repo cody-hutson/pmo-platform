@@ -125,7 +125,7 @@ This skill produces **decision-class outputs** — the architecture choices, the
 
 **The design-decision reversibility default.** A within-component architecture or NFR choice **defaults to MODERATE · confidence: HIGH** — undoable in days while pre-Engineering. It escalates by commitment: **EXPENSIVE** once Engineering has built against it (multi-file rework); a **build-vs-buy verdict triggering an external procurement commitment** is **EXPENSIVE-to-IRREVERSIBLE**; an **ADR ratified (`status: Accepted`)** is **IRREVERSIBLE-as-audit-of-record** — reversible only by a superseding ADR, never edited in place. (Default confidence is HIGH because the tier-assignment rule is well-grounded; per-decision confidence is set at output time.) A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a design sketch, an options list, or a risk read that resolves to no decision. Every output resolves to a design decision (architecture chosen / NFR set / build-vs-buy rendered / ADR authored-or-deferred-with-reason).

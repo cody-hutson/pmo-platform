@@ -298,7 +298,7 @@ points, Design notes, labeled assumptions, target-type detection. See
 `core/specs/reversibility-protocol.md` for the full protocol and
 `core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 - **Don't fake research.** If WebFetch fails, say so and use the fallback. Do
   not hallucinate "current Anthropic guidance".

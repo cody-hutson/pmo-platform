@@ -164,7 +164,7 @@ This skill produces **decision-class outputs** — the test strategies, the acce
 
 **The QA-verdict reversibility default (load-bearing).** A QA-Lead **acceptance sign-off or dev-test gate decision is frequently the highest-reversibility output the skill produces** — an ACCEPT / advance verdict that authorizes a release to ship is **EXPENSIVE-to-IRREVERSIBLE** (a shipped release is undone only by a new forward-facing commitment); a REJECT / block on a release the operator has committed to a timeline is **EXPENSIVE**. A strategy recommendation or a fix-now-on-a-draft defect disposition is **CHEAP-to-MODERATE**. The skill never renders an ACCEPT / advance verdict without the tier, the confidence, and (for EXPENSIVE+) the rollback posture + sign-off authority. A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a findings list, a review pass, or a quality read that resolves to no decision. Every output resolves to a QA decision (strategy set / acceptance rendered / defect dispositioned / dev-test gated).
