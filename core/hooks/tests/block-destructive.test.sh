@@ -454,10 +454,39 @@ test_case "Edit CLAUDE.md with primary cwd blocks" \
   "$(edit_payload ''"$HOME"'/Claude/CLAUDE.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
-# Layer 1 writes from worktree cwd → allow (per AC: worktree context permits)
-test_case "Write CLAUDE.md with worktree cwd allows" \
-  "$(write_payload ''"$HOME"'/Claude/CLAUDE.md' ''"$HOME"'/Claude/.claude/worktrees/foo')" \
+# Layer 1 writes from REPO-ROOTED worktree cwd → allow (per AC: worktree context permits)
+# Worktrees live under the repo root (<workspace>/pmo-platform/.claude/worktrees/), NOT
+# directly under the workspace root — BLOCK-DESTRUCTIVE-019 exemption base mirrors the
+# :425 Layer-1 detection base (#1639).
+test_case "Write CLAUDE.md with REPO-ROOTED worktree cwd allows" \
+  "$(write_payload ''"$HOME"'/Claude/CLAUDE.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/foo')" \
   0
+
+# --- BLOCK-DESTRUCTIVE-019 worktree-exemption base correction (#1639) ---
+# Both-direction gate-teeth for the repo-rooted worktree exemption base. The
+# exemption base (:442) must mirror the :425 Layer-1 detection base
+# (${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/), NOT the workspace root.
+# FWD: a real repo-rooted worktree cwd editing a Layer-1 path → EXEMPT (allow).
+# REV-a: the retired workspace-rooted base is no longer a valid exemption → BLOCK
+#        (proves the exemption did not over-widen; catches the OLD base). The
+#        workspace-rooted <workspace>/.claude/worktrees/ path does not exist on
+#        disk and was never a real worktree, so blocking it is strictly correct.
+# REV-b: a non-worktree primary cwd → BLOCK (the core invariant stays green).
+
+# FWD — repo-rooted worktree cwd editing a pmo-platform Layer-1 path → allow
+test_case "Write pmo-platform/x.md with REPO-ROOTED worktree cwd allows" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/reference/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/foo')" \
+  0
+
+# REV-a — workspace-rooted 'worktrees' cwd is NO LONGER a valid exemption → block
+test_case "Write CLAUDE.md with WORKSPACE-ROOTED worktrees cwd blocks (old base retired)" \
+  "$(write_payload ''"$HOME"'/Claude/CLAUDE.md' ''"$HOME"'/Claude/.claude/worktrees/foo')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# REV-b — non-worktree primary cwd → block (base-correction leaves this invariant intact)
+test_case "Write pmo-platform/x.md with primary cwd blocks (base-correction invariant)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/reference/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
 
 # Explicit allow: .claude/skills (deploy target)
 test_case "Write .claude/skills/SKILL.md allows (deploy target)" \
@@ -492,8 +521,8 @@ test_case "../-escape from .claude/hooks to CLAUDE.md (primary cwd) blocks" \
   "$(write_payload ''"$HOME"'/Claude/.claude/hooks/../../CLAUDE.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
-test_case "../-escape from .claude/hooks to CLAUDE.md (worktree cwd) allows" \
-  "$(write_payload ''"$HOME"'/Claude/.claude/hooks/../../CLAUDE.md' ''"$HOME"'/Claude/.claude/worktrees/foo')" \
+test_case "../-escape from .claude/hooks to CLAUDE.md (REPO-ROOTED worktree cwd) allows" \
+  "$(write_payload ''"$HOME"'/Claude/.claude/hooks/../../CLAUDE.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/foo')" \
   0
 
 # ----- BLOCK-AP-001..005: absolute-path invocation coverage -----

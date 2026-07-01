@@ -28,10 +28,12 @@
 | BLOCK-DESTRUCTIVE-014 | `git filter-branch` |
 | BLOCK-DESTRUCTIVE-015 | `git filter-repo` |
 | BLOCK-DESTRUCTIVE-016 | Write/Edit to `.git/config`, `.git/hooks/*`, `.git/info/*` |
-| BLOCK-DESTRUCTIVE-019 | Write/Edit to Layer 1 primary paths when cwd is not under `.claude/worktrees/` |
+| BLOCK-DESTRUCTIVE-019 | Write/Edit to Layer 1 primary paths when cwd is not under `pmo-platform/.claude/worktrees/` (the repo-rooted worktree base, mirroring the hook's Layer-1 detection base) |
 | BLOCK-DESTRUCTIVE-020 | PATH manipulation (`PATH=`, `export PATH`, `unset PATH`) |
 | BLOCK-DESTRUCTIVE-021 | alias / function override of critical tools (`grep`, `jq`, `bash`, `sh`, `printf`) |
 | BLOCK-DESTRUCTIVE-022 | Bash subprocess script execution not in `.claude/script-execution-allowlist.txt` |
 | BLOCK-DESTRUCTIVE-023 | Mid-session setting of `CLAUDE_HOOK_BYPASS` (anti-injection) |
 
 See [`§ Absolute-Path-Aware Verb Anchor`](../bypass-mode-readiness.md) for the canonical anchor pattern (including the git-family variant declared in this hook as `ANCHOR_PREFIX_GIT`) and [`§ Known Limitations`](../bypass-mode-readiness.md) for the Write/Edit primary-write-guard `os.path.realpath` normalization posture (BSD/macOS portability).
+
+> **Second gate on governance-file writes (scope of the -019 worktree exemption).** The BLOCK-DESTRUCTIVE-019 worktree exemption (allowing Layer-1 writes from a repo-rooted worktree cwd) does NOT clear governance-file writes on its own. `block-autonomy-ceiling.sh` BLOCK-AUTONOMY-001 independently blocks writes to the governance set (`CLAUDE.md`, `OPERATIONS.md`, `RELEASE_PROTOCOL.md`, any `SKILL.md`, `.claude/settings.json`, `.claude/hooks/*`, `.claude/rules/*`) as an irreducible Tier-0 operator-only action — with NO worktree exemption and gated by its own `.autonomy-mode` (not the shared `.mode`). So a governance edit from a worktree passes -019 but still faces BLOCK-AUTONOMY-001; the -019 exemption is not a blanket Layer-1 write allowance.
