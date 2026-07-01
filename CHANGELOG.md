@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.36] - 2026-07-01
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+The four process-domain specialist skills — Scrum Master, Release Train Engineer, Business Analyst, and Product Owner — now ground their work in a shared process best-practice guide (`core/standards/domain-best-practices/process.md`) via a compose-by-reference `## Reference docs` pointer (ADR-019; no content absorption). The first three single-anchor to the process guide; the Product Owner dual-anchors to BOTH the process and governance guides, mirroring the dual-anchor Technical Program Manager. This completes the anchoring sequence after v3.30 (software) and v3.33 (governance). The release also adds a net-new support-domain best-practice guide (`core/standards/domain-best-practices/support.md`) covering ITIL 4, tiered incident and escalation practice, and SRE, registered in the framework catalog; and records the change-domain decision to keep its best-practice content self-bundled with the change-management skill — no shared guide, the OCM lead reaching the suite transitively via composition — captured in ADR-057 (`Proposed`) with a reversal trigger and a build-philosophy coverage-matrix row. `routine`-class; six cards on one branch / one merge; no re-version. Additive — CHEAP / `git revert -m 1`.
 
 [Full notes](release/releases/notes/v3.36_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.36)
 
