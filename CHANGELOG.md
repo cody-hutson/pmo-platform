@@ -10,13 +10,15 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.40] - 2026-07-01
 
-### Fixed
-- Reconciled the doc-link maintenance protocol (§8) to name the shared warn-log it actually writes (#108).
-- Canonicalized the genuine capital-P `Projects/` prose references in both OPERATIONS files to lowercase `projects/` (#131).
-- Drained the last live IMPROVEMENTS.md / IMP-### Self-Update-Protocol instruction in the routing rules, routing it to the GitHub-Issues intake (#2684).
-- Unified the project-path placeholder to the canonical `projects/[Project]/` form across the schema docs and the `project-initiator` skill (#2700).
+Four stale documentation references are drained from the internal reference corpus — places where the written guidance had fallen out of step with how the platform works. Nothing changes in how anyone uses the platform; every change is a wording or consistency correction, and all existing guards and historical records are preserved.
 
-Documentation-only drainage — no behavior, schema, or runtime-check change; historical records preserved. The migrated `project-initiator` skill's compiled package was rebuilt to match its updated text.
+### Fixed
+- The doc-link maintenance protocol (§8) now names the shared warn-log it actually writes to, instead of a drifted log surface.
+- The genuine capital-P `Projects/` prose references in both OPERATIONS files are lowercased to the canonical `projects/` form; a changelog line naming the historical casing is left intact as an accurate record.
+- The last live "log to IMPROVEMENTS.md / IMP-###" Self-Update-Protocol instruction in the routing rules is drained and routed to the current GitHub-Issues intake.
+- The project-path placeholder is unified to the canonical `projects/[Project]/` form across the schema docs and the `project-initiator` skill.
+
+Documentation-only drainage — no behavior, schema, or runtime-check change. The migrated `project-initiator` skill's compiled package was rebuilt so the shipped artifact matches its updated text.
 
 [Full notes](release/releases/notes/v3.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.40)
 
