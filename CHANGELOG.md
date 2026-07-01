@@ -8,6 +8,20 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.40] - 2026-07-01
+
+Four stale documentation references are drained from the internal reference corpus — places where the written guidance had fallen out of step with how the platform works. Nothing changes in how anyone uses the platform; every change is a wording or consistency correction, and all existing guards and historical records are preserved.
+
+### Fixed
+- The doc-link maintenance protocol (§8) now names the shared warn-log it actually writes to, instead of a drifted log surface.
+- The genuine capital-P `Projects/` prose references in both OPERATIONS files are lowercased to the canonical `projects/` form; a changelog line naming the historical casing is left intact as an accurate record.
+- The last live "log to IMPROVEMENTS.md / IMP-###" Self-Update-Protocol instruction in the routing rules is drained and routed to the current GitHub-Issues intake.
+- The project-path placeholder is unified to the canonical `projects/[Project]/` form across the schema docs and the `project-initiator` skill.
+
+Documentation-only drainage — no behavior, schema, or runtime-check change. The migrated `project-initiator` skill's compiled package was rebuilt so the shipped artifact matches its updated text.
+
+[Full notes](release/releases/notes/v3.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.40)
+
 ## [v3.38] - 2026-07-01
 
 The release pipeline's own rules get three small, additive precision fixes across the planning, design, and engineering stages — sharpening release-identity and frozen-spec handling so problems are caught earlier instead of surfacing late at deploy. Nothing changes in how anyone uses the platform; all three are wording and checklist additions to the internal release-pipeline reference corpus.
