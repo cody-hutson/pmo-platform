@@ -54,13 +54,6 @@ Await the user's selection; use the selected option as the mode. Do not proceed 
 
 Proceed to the corresponding mode section below (Mode A Project Initiation, Mode B Project Closure). Do not proceed until Step 1 or Step 2 has produced an explicit mode value.
 
-## Mode Detection
-
-Detect the mode from context:
-- **"new project", "initiate", "start", "onboard", "set up", "create", "add"** → Mode A
-- **"close", "archive", "closure", "finalize", "wrap up", "close out"** → Mode B
-- If ambiguous, ask (counts toward the 5-question limit).
-
 ---
 
 # Mode A: Project Initiation
