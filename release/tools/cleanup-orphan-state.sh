@@ -169,7 +169,20 @@ PROTECTED_ALWAYS=("$MAIN_BRANCH" "master" "HEAD")
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,74p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
+  # End-anchored header extraction (#669): print the header comment block from
+  # line 2 up to (but not including) the `# Hook compatibility` divider, instead
+  # of a fixed line-range. A fixed window (formerly `2,74p`) silently drops the
+  # SAFETY (--force / SELF / LIVE) and META (--help / --self-test) lines the
+  # moment the header grows past the hard-coded offset — a real regression this
+  # tool already suffered (#1678 widened 42→74). Anchoring on the structural
+  # divider means header growth can never push the protective-guarantee lines
+  # outside --help. Fallback: if the divider is ever renamed/removed, print
+  # through the last leading-`#` line so --help still renders the whole header.
+  /usr/bin/awk '
+    NR==1 { next }                    # skip the shebang
+    /^# Hook compatibility/ { exit }  # stop at the structural divider
+    /^#/ { print }                    # header comment line (block is contiguous #-lines)
+  ' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -2212,6 +2225,36 @@ selftest_pr_map_identity() {
   return 0
 }
 
+# #669 — --help protective-guarantee assertion. The end-anchored usage() window must
+# always surface the SAFETY (--force / SELF) and META (--self-test) lines. This fixture
+# runs the real --help and asserts each token is present, so a future window/header edit
+# that drops a protective line fails the suite instead of silently regressing (the #1678
+# defect class). Also asserts the Hook-compatibility divider stays OUTSIDE --help (the
+# window's end-anchor holds). Pure read of --help output; net-zero.
+selftest_help_surface() {
+  local script_abs help fail=0 tok
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  help=$("$script_abs" --help 2>/dev/null) || {
+    echo "self-test: help-surface check FAILED — --help exited non-zero" >&2
+    exit 1
+  }
+  for tok in "--force" "SELF" "--self-test"; do
+    if ! grep -qF -- "$tok" <<<"$help"; then
+      echo "self-test: help-surface check FAILED — --help omits the protective token '$tok' (#669 / #1678 regression)" >&2
+      fail=1
+    fi
+  done
+  # The end-anchor must stop BEFORE the Hook-compatibility divider (proves the window
+  # is bounded by structure, not runaway to EOF).
+  if grep -qF "Hook compatibility" <<<"$help"; then
+    echo "self-test: help-surface check FAILED — --help leaked past the 'Hook compatibility' divider (end-anchor broken)" >&2
+    fail=1
+  fi
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: help-surface check PASS — --help surfaces --force / SELF / --self-test; bounded at the Hook-compatibility divider" >&2
+  return 0
+}
+
 # v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
 # EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
 # Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
@@ -2663,6 +2706,8 @@ self_test() {
   selftest_no_live_worktree_pipes
   echo "self-test: exercising orphan-tag reap (authority gate, real-reap-observed, double-opt-in, canonical-guard, verify-after, ledger write-back)..." >&2
   selftest_orphan_tag_reap
+  echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
+  selftest_help_surface
   echo "self-test: PASS" >&2
   exit 0
 }
