@@ -1166,13 +1166,13 @@ Pipeline Triage produces exactly ONE consolidated batch artifact per triage run 
 
 ### Required Elements
 
-**Auto-execute default (#282):** the A1–A6.5 enrichment (DoR check, duplicate/similarity, dependency-state validation + native-dep mirror, feasibility, priority re-evaluation, oversize routing, per-issue summary, management-task identification) runs end-to-end for all in-scope `status: proposed` issues with NO per-action approval gate. Enrichment writes (comments, labels, native-dep mirror, Decision-Date/Priority Projects-field writes) post in one consolidated pass, binding the Tier-2 posture defined at `stage-02-triage.md` §8 (referenced, not restated).
+**Auto-execute default:** the A1–A6.5 enrichment (DoR check, duplicate/similarity, dependency-state validation + native-dep mirror, feasibility, priority re-evaluation, oversize routing, per-issue summary, management-task identification) runs end-to-end for all in-scope `status: proposed` issues with NO per-action approval gate. Enrichment writes (comments, labels, native-dep mirror, Decision-Date/Priority Projects-field writes) post in one consolidated pass, binding the Tier-2 posture defined at `stage-02-triage.md` §8 (referenced, not restated).
 
-**Close/Reject confirmation carve-out (#282 AC5):** the ONE state-mutating action outside auto-execute is the Reject-close (`gh issue close --reason "not planned"`) — it blocks behind an explicit operator confirmation at the verdict-execution boundary. Approve/Defer execute as normal operator-approved batch label outcomes.
+**Close/Reject confirmation carve-out:** the ONE state-mutating action outside auto-execute is the Reject-close (`gh issue close --reason "not planned"`) — it blocks behind an explicit operator confirmation at the verdict-execution boundary. Approve/Defer execute as normal operator-approved batch label outcomes.
 
-**Cite-don't-restate (#286):** each phase (A1…A6.5) references its definition in `stage-02-triage.md` §5 + the relevant gate ID (G1-*, G2-01/04/09/10/11/12); the phase *definitions* are NOT restated inline (no-duplicate-source).
+**Cite-don't-restate:** each phase (A1…A6.5) references its definition in `stage-02-triage.md` §5 + the relevant gate ID (G1-*, G2-01/04/09/10/11/12); the phase *definitions* are NOT restated inline (no-duplicate-source).
 
-**No auto-verdict (#286 AC4):** the skill presents per-issue recommendations; the Approve/Defer/Reject verdict is operator-only (Tier 3). The skill never applies a verdict as if it were the decision-maker.
+**No auto-verdict:** the skill presents per-issue recommendations; the Approve/Defer/Reject verdict is operator-only (Tier 3). The skill never applies a verdict as if it were the decision-maker.
 
 ### Reversibility Tier + Confidence
 

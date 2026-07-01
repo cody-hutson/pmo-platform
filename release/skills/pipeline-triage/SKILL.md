@@ -19,6 +19,11 @@ license: BUSL-1.1
 delivery_approach: n/a
 ---
 <!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
+<!-- The allow-version-ref marker scopes the version-cutover gate for the § Reflexive Cutover Clause
+     only — that clause is load-bearing (it names the release-boundary the skill's behavior activates
+     after) and cannot be stated unconditionally without losing its meaning. All other
+     reference-durability gates stay active for this file. -->
 
 # Pipeline Triage
 
@@ -171,7 +176,7 @@ batch (per the §5 Phase-B B3 cadence). The summary contains:
 The operator reads the batch summary and renders one verdict per issue. The enrichment (A1–A6.5)
 has already auto-executed; the summary is the single human decision point.
 
-## Auto-Execute Default (#282)
+## Auto-Execute Default
 
 Auto-execute is the **operative default** for this skill. Concretely:
 
@@ -358,7 +363,7 @@ those are skill-specific, not platform-wide.
 - **Conditional:** do NOT render or apply the Approve/Defer/Reject verdict — and specifically do NOT
   execute the Reject-close — inside the auto-execute path, because the verdict is operator-only
   (Tier 3 per `stage-02-triage.md` §3 Persona) and the Reject-close is a MODERATE-reversibility
-  state mutation the #282 carve-out explicitly reserves behind operator confirmation; auto-applying
+  state mutation the auto-execute carve-out explicitly reserves behind operator confirmation; auto-applying
   either collapses the human decision the whole stage is built around.
 - **Root cause:** Auto-execute correctly covers the A1–A6.5 enrichment, and the momentum of an
   end-to-end run makes "just apply the recommended verdict too" feel like completing the job — the

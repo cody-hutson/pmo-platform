@@ -154,6 +154,6 @@ recommendations and stops. At Resolve:
 - **Approve** → `status: approved` + Status→Approved (issue stays OPEN, advances to Stage 3 Bundle).
 - **Defer** → `status: deferred` + Milestone removed (issue stays OPEN; re-triage to re-bundle).
 - **Reject** → `status: rejected` + `gh issue close --reason "not planned"` — **held behind explicit
-  operator confirmation** (the #282 carve-out; the one state-mutating action outside auto-execute).
+  operator confirmation** (the auto-execute carve-out; the one state-mutating action outside auto-execute).
 
 See the SKILL.md `## Close/Reject Confirmation Gate` for the gate placement.
