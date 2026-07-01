@@ -18,8 +18,11 @@
 # Flags:
 #   SCOPE (one of, default --all):
 #     --release-close <slug>   Outcome 1 only — scope to one release
-#                              (matches release/<slug>, release/vX.Y-<slug>, and the
-#                               sibling chore/<slug>-* / chore/vX.Y-<slug>-* branches)
+#                              (matches release/<slug>, release/vX.Y-<slug>, the
+#                               sibling chore/<slug>-* / chore/vX.Y-<slug>-* branches,
+#                               and — when the slug carries a leading vX.Y version —
+#                               the Stage 12/13 chore/vX.Y-stage-* branches, anchored
+#                               on the literal -stage- so vX.Y never over-matches vX.YY)
 #     --spawn-task             Outcome 2 only — claude/* and agent-* orphans
 #     --historical             Outcome 3 only — all merged-no-active-work
 #     --all                    All 3 outcomes (default)
@@ -534,25 +537,56 @@ classify_worktree() {
   WORKTREE_CANDIDATES+=("${path}	${branch}	${status}	${disk}	${action}")
 }
 
+# Derive the leading version prefix (v<major>.<minor>) from a milestone slug, or
+# empty when the slug carries none. Parameter-expansion only — bash 3.2's
+# BASH_REMATCH is unreliable on macOS (matches but does not populate captures),
+# so this avoids =~ entirely. Rejects patch-form (v1.2.3) and non-numeric (vX.Y).
+version_prefix_of() {
+  local slug="$1" vp rest maj min
+  case "$slug" in
+    v[0-9]*.[0-9]*-*) vp="${slug%%-*}" ;;   # up to first '-': v1.11-foo -> v1.11
+    *) printf ''; return 0 ;;
+  esac
+  rest="${vp#v}"; maj="${rest%%.*}"; min="${rest#*.}"
+  case "$maj$min" in *[!0-9]*) printf ''; return 0 ;; esac   # non-digit -> reject
+  case "$min" in *.*) printf ''; return 0 ;; esac            # second dot (v1.2.3) -> reject
+  printf '%s' "$vp"
+}
+
 detect_release_close() {
   local slug="$1"
   [[ -z "$slug" ]] && return 0
   refresh_wt_snapshot
   local b
-  # Match both the bare slug form (release/<slug>) AND the version-prefixed form
+  # Match the bare slug form (release/<slug>), the version-prefixed form
   # (release/vX.Y-<slug>) — release branches are routinely version-prefixed when a
-  # release re-versions mid-flight. The added pattern is anchored on the literal
-  # `v…-` separator so the slug can only appear in the post-version segment, never
-  # mid-string (a leading wildcard `*${slug}*` was rejected — substring-match hazard).
+  # release re-versions mid-flight — AND (#684) the Stage 12/13 chore branches
+  # named chore/vX.Y-stage-<N>-<purpose>. Those chore branches carry the VERSION
+  # prefix but NOT the slug, so the chore/v*-${slug}* pattern (version + slug)
+  # cannot reach them; git-workflow.md § Step 10 documents them as in-scope. We
+  # derive vX.Y from the slug's leading version token and add chore/vX.Y-stage-*,
+  # anchored on the literal `-stage-` after the exact version so v1.1 cannot
+  # over-match v1.11 (proven: `chore/v1.1-stage-*` never matches `chore/v1.11-...`).
+  # When the slug carries no version token, no stage-glob is added (nothing to
+  # derive) and behavior is unchanged.
+  local vprefix stage_local="" stage_remote="" stage_case=""
+  vprefix=$(version_prefix_of "$slug")
+  if [[ -n "$vprefix" ]]; then
+    stage_local="refs/heads/chore/${vprefix}-stage-*"
+    stage_remote="chore/${vprefix}-stage-*"
+    stage_case="chore/${vprefix}-stage-*"
+  fi
   for b in $(git for-each-ref \
       "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" \
       "refs/heads/release/v*-${slug}*" "refs/heads/chore/v*-${slug}*" \
+      ${stage_local:+"$stage_local"} \
       --format='%(refname:short)' 2>/dev/null); do
     classify_local "$b" 1   # require_pr=1 (#2216): a MERGED PR rescues a squash-merged release branch from the ancestry SKIP
   done
   for b in $(git ls-remote --heads "$REMOTE_NAME" \
       "release/${slug}*" "chore/${slug}*" \
       "release/v*-${slug}*" "chore/v*-${slug}*" \
+      ${stage_remote:+"$stage_remote"} \
       2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||'); do
     classify_remote "$b"
   done
@@ -564,7 +598,17 @@ detect_release_close() {
     wbranch="${next#refs/heads/}"
     [[ -z "$wbranch" || "$wbranch" == "$next" ]] && continue
     case "$wbranch" in
-      release/${slug}*|chore/${slug}*|release/v*-${slug}*|chore/v*-${slug}*) classify_worktree "$wpath" "$wbranch" ;;
+      release/${slug}*|chore/${slug}*|release/v*-${slug}*|chore/v*-${slug}*)
+        classify_worktree "$wpath" "$wbranch" ;;
+      *)
+        # #684 stage-branch arm — separate case so the derived glob is a real
+        # pattern (not a literal). Plain `if` per the set -e discipline.
+        if [[ -n "$stage_case" ]]; then
+          case "$wbranch" in
+            $stage_case) classify_worktree "$wpath" "$wbranch" ;;
+          esac
+        fi
+        ;;
     esac
   done <<<"$WT_SNAPSHOT"
 }
@@ -1751,6 +1795,60 @@ selftest_version_prefix_release() {
   return 0
 }
 
+# #684 — Stage 12/13 chore-branch sweep + anti-over-match.
+# The Stage 12/13 chore branches are named chore/vX.Y-stage-<N>-<purpose> (version
+# prefix, NO slug), so the pre-#684 chore/v*-${slug}* pattern (version + slug) never
+# reached them. #684 derives vX.Y from the slug and adds chore/vX.Y-stage-*. This
+# fixture creates, at origin/main (0 unique → REMOVE-eligible, cleans with -D):
+#   (1) chore/v0.1-stage-12-<slug>       — MUST be enumerated by --release-close v0.1-<slug>
+#   (2) chore/v0.11-stage-12-<slug>      — a DIFFERENT version sharing the v0.1 string;
+#                                          MUST NOT be enumerated (no v0.1 vs v0.11 collision)
+# and asserts the scope includes (1) and excludes (2). Net-zero teardown.
+selftest_stage_branch_release_close() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: stage-branch check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs slug wanted decoy out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="v0.1-cleanup-selftest-stage-$$"        # version-prefixed so version_prefix_of derives v0.1
+  wanted="chore/v0.1-stage-12-cleanup-selftest-$$"
+  decoy="chore/v0.11-stage-12-cleanup-selftest-$$"
+  if is_protected "$wanted" || is_protected "$decoy"; then
+    echo "self-test: stage-branch check SKIPPED — operator protect-list matches a fixture branch" >&2
+    return 0
+  fi
+  if ! git branch "$wanted" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: stage-branch check SKIPPED — could not create '$wanted'" >&2
+    return 0
+  fi
+  if ! git branch "$decoy" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: stage-branch check SKIPPED — could not create decoy '$decoy'" >&2
+    git branch -D "$wanted" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: stage-branch check FAILED — inner --release-close dry-run exited non-zero" >&2
+  else
+    if ! grep -F "\"name\":\"${wanted}\"" <<<"$out" >/dev/null; then
+      echo "self-test: stage-branch check FAILED — chore/vX.Y-stage-* branch '$wanted' NOT enumerated by --release-close (#684 regression)" >&2
+      fail=1
+    fi
+    if grep -F "\"name\":\"${decoy}\"" <<<"$out" >/dev/null; then
+      echo "self-test: stage-branch check FAILED — decoy '$decoy' over-matched (v0.1 vs v0.11 collision)" >&2
+      fail=1
+    fi
+  fi
+
+  git branch -D "$wanted" >/dev/null 2>&1 || true
+  git branch -D "$decoy" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: stage-branch check PASS — chore/vX.Y-stage-* swept; no vX.Y vs vX.YY over-match" >&2
+  return 0
+}
+
 # v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
 # EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
 # Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
@@ -2188,6 +2286,8 @@ self_test() {
   selftest_version_prefix_release
   echo "self-test: exercising squash-merge MERGED-PR rescue on --release-close (#2216)..." >&2
   selftest_release_close_merged_pr
+  echo "self-test: exercising chore/vX.Y-stage-* sweep + anti-over-match (#684)..." >&2
+  selftest_stage_branch_release_close
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
