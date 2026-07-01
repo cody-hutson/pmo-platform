@@ -406,7 +406,19 @@ PRUNED_TRACKING_REFS=()
 
 classify_local() {
   local branch="$1" require_pr="${2:-0}"
-  local unique last pr_n pr_s action="REMOVE"
+  local unique last pr_n pr_s action="REMOVE" existing
+
+  # Dedup guard (#670) — mirrors the classify_worktree guard: under the default
+  # --all scope detect_spawn_task (claude/* branches) and detect_historical (all
+  # merged-unattached branches) both classify the same merged claude/* branches,
+  # double-counting rows + counters. First row wins so the emitters and protective
+  # counters stay truthful (one row per branch). Plain `if` per the set -e discipline.
+  for existing in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
+    [[ -z "$existing" ]] && continue
+    if [[ "${existing%%$'\t'*}" == "$branch" ]]; then
+      return 0
+    fi
+  done
 
   if is_protected "$branch"; then action="SKIP — protected"; fi
   if [[ "$action" == "REMOVE" ]] && branch_has_worktree "$branch"; then action="SKIP — active worktree attached"; fi
@@ -448,7 +460,17 @@ classify_local() {
 
 classify_remote() {
   local branch="$1"
-  local pr_n pr_s action="REMOVE"
+  local pr_n pr_s action="REMOVE" existing
+
+  # Dedup guard (#670) — symmetric with classify_local. Remote heads are not
+  # double-enumerated under --all today (only detect_spawn_task rows remotes), but
+  # the guard keeps the row set duplicate-free if a future scope re-enumerates.
+  for existing in "${REMOTE_BRANCH_CANDIDATES[@]:-}"; do
+    [[ -z "$existing" ]] && continue
+    if [[ "${existing%%$'\t'*}" == "$branch" ]]; then
+      return 0
+    fi
+  done
 
   if is_protected "$branch"; then action="SKIP — protected"; fi
 
@@ -1980,6 +2002,47 @@ selftest_behind_head_apply() {
   return 0
 }
 
+# #670 — local-branch dedup under --all. detect_spawn_task (claude/* branches) and
+# detect_historical (all merged-unattached branches) both classify a merged claude/*
+# branch, so before #670 it produced two LOCAL_BRANCH_CANDIDATES rows (report +
+# counter double-count). This fixture creates a merged claude/* branch (0 unique →
+# eligible under both passes, unattached so detect_historical enumerates it), runs
+# --all --dry-run, and asserts the branch name appears EXACTLY ONCE in local_branches.
+# Without the guard the count is 2 (verified). Net-zero teardown via git porcelain.
+selftest_dedup_local_branches() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: dedup check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs branch out count fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  branch="claude/cleanup-selftest-dedup-$$"     # claude/* so detect_spawn_task rows it; merged+unattached so detect_historical also rows it
+  if is_protected "$branch"; then
+    echo "self-test: dedup check SKIPPED — operator protect-list matches '$branch'" >&2
+    return 0
+  fi
+  if ! git branch "$branch" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: dedup check SKIPPED — could not create throwaway branch '$branch'" >&2
+    return 0
+  fi
+
+  out=$("$script_abs" --all --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: dedup check FAILED — inner --all dry-run exited non-zero" >&2
+  else
+    count=$(grep -oF "\"name\":\"${branch}\"" <<<"$out" | wc -l | tr -d ' ')
+    if [[ "$count" != "1" ]]; then
+      echo "self-test: dedup check FAILED — merged claude/* branch appears ${count}x in --all local_branches (expected 1; #670 regression)" >&2
+      fail=1
+    fi
+  fi
+
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: dedup check PASS — one local-branch row per branch under --all (spawn-task + historical overlap deduped)" >&2
+  return 0
+}
+
 # v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
 # EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
 # Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
@@ -2421,6 +2484,8 @@ self_test() {
   selftest_stage_branch_release_close
   echo "self-test: exercising behind-HEAD apply removes merged branch without --force (#683)..." >&2
   selftest_behind_head_apply
+  echo "self-test: exercising local-branch dedup under --all (spawn-task + historical overlap) (#670)..." >&2
+  selftest_dedup_local_branches
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
