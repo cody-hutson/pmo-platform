@@ -8,6 +8,22 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.38] - 2026-07-01
+
+The release pipeline's own rules get three small, additive precision fixes across the planning, design, and engineering stages — sharpening release-identity and frozen-spec handling so problems are caught earlier instead of surfacing late at deploy. Nothing changes in how anyone uses the platform; all three are wording and checklist additions to the internal release-pipeline reference corpus.
+
+### Added
+- Stage-4 placement forward-check (Phase A0.7 / G-PL3) in the planning reference plus a governance summary in the release-process reference — a pre-planning check for directory-crossing renames and in-scope deletions on the mainline since the release branch's base, closing the "release cut before a structural reorg → new-file placement collides at deploy" pattern.
+- Stage-6 commit-group traceability note (documented simplification — advisory, not enforced) after Phase B1 in the engineering reference, plus an enforcement-posture sentence in the sub-task-methodology standard.
+- Stage-5 frozen-spec prose-vs-artifact precision rule as a required-when-triggered block in the solutioning-output-template's Blast Radius section (with a DEFERRED escape), plus a routing pointer in the Stage-5 solutioning reference.
+
+### Changed
+- A stale target-path in the milestone description (`templates/` → the real `standards/` home) was corrected into the release plan's change matrix at Stage 4.
+
+`novel`-class; three file-disjoint cards on one branch / one merge. Re-versioned forward v3.37 → v3.38 at the Stage-12 pre-merge freeness check (a concurrent sibling release claimed v3.37 first). Additive — CHEAP / `git revert -m 1`; no skill or `.skill` package touched.
+
+[Full notes](release/releases/notes/v3.38_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.38)
+
 ## [v3.37] - 2026-06-30
 
 Shared project facts now live in one place, and `PROJECT.md` links to them instead of repeating them. A new shared `projects/_pmo/` area holds one consistent page per entity — people, systems, vendors, workstreams, decisions, and cross-project dependencies — and `PROJECT.md` becomes a thin composed wiki-link index that links out to those pages rather than restating the same facts in every project. Plans (communications, training, hypercare, cutover, change-management) become typed sub-entities with relationship typing. Existing projects are not moved by this release; migrating a live project's overview to the linked-index format is a separate, deferred, per-project step.
