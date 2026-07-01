@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.42] - 2026-07-01
+
+The branch-cleanup script now actually reaps squash-merged release and chore branches, reports one row per branch, and deletes merged branches without --force — instead of finding nothing on this squash-merging repo.
+
+[Full notes](release/releases/notes/v3.42_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.42)
+
 ## [v3.41] - 2026-07-01
 
 Two new skill-measurement auditors ship, and the whole skill catalog gets a structural-hygiene pass so every skill follows the same section and heading conventions. Nothing changes in the day-to-day workflow — the measurement skills are opt-in and the hygiene work is a consistency cleanup.
