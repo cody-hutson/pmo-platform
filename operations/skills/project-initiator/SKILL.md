@@ -114,9 +114,9 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 
    - **R-a — leading `_` (infrastructure-reserved):** the name begins with `_`. The `_`-prefix is RESERVED by the standard for sanctioned infrastructure folders (`_pmo/`, `_config/`, and staging `_`-subfolders such as `08-Generated/_unclassified/`) — never for a *project* folder. The regex enforces this by construction (the leading `[A-Za-z0-9]+` anchor disallows a leading `_`).
    - **R-b — special / shell-meta / non-portable character:** the name contains any character outside the alphanumeric + single-space-or-hyphen word-break charset — e.g. `& ( ) / : * ? " < > | $ ;`, a leading/trailing/double space, or a leading `-`. These are POSIX-hostile: they break globs, link validators, search indexes, and shell paths.
-   - **R-c — empty or whitespace-only:** the name is empty or contains only whitespace (it fails the regex's `[A-Za-z0-9]+` requirement). A blank name produces `Projects//` and is unscannable. *(Human-readability beyond this — e.g. an opaque code a teammate cannot interpret, like a bare UUID — is NOT regex-enforced; the charset regex structurally cannot encode a "human-readable" predicate. That semantic concern is caught by this item's own pre-Step-2 operator-confirmation re-prompt (the "On rejection" / "Re-prompt" sequence below), which surfaces the proposed name for the operator to accept or correct **before** the Step 2 scaffold write — never deferred to the post-scaffold Step 8 summary, which would be too late to prevent a partial scaffold under an opaque name. This is the Tier-3 semantic boundary: the charset regex owns the syntax layer; the operator owns the semantic layer.)*
+   - **R-c — empty or whitespace-only:** the name is empty or contains only whitespace (it fails the regex's `[A-Za-z0-9]+` requirement). A blank name produces `projects//` and is unscannable. *(Human-readability beyond this — e.g. an opaque code a teammate cannot interpret, like a bare UUID — is NOT regex-enforced; the charset regex structurally cannot encode a "human-readable" predicate. That semantic concern is caught by this item's own pre-Step-2 operator-confirmation re-prompt (the "On rejection" / "Re-prompt" sequence below), which surfaces the proposed name for the operator to accept or correct **before** the Step 2 scaffold write — never deferred to the post-scaffold Step 8 summary, which would be too late to prevent a partial scaffold under an opaque name. This is the Tier-3 semantic boundary: the charset regex owns the syntax layer; the operator owns the semantic layer.)*
 
-   **Infrastructure carve-out (do NOT "fix" the rule into rejecting infra).** R-a rejects a `_`-prefixed *project* folder; it must never be hardened into a check that rejects the sanctioned infrastructure folders `_pmo/` / `_config/` / the staging `_`-subfolders. Mode A only ever creates `Projects/[Project Name]/` — it never creates `_pmo/` or `_config/` (those are workspace-level infrastructure, not project roots) — so this validator is never *asked* to validate an infra folder; the carve-out is a documentation guard, not a live exception branch.
+   **Infrastructure carve-out (do NOT "fix" the rule into rejecting infra).** R-a rejects a `_`-prefixed *project* folder; it must never be hardened into a check that rejects the sanctioned infrastructure folders `_pmo/` / `_config/` / the staging `_`-subfolders. Mode A only ever creates `projects/[Project]/` — it never creates `_pmo/` or `_config/` (those are workspace-level infrastructure, not project roots) — so this validator is never *asked* to validate an infra folder; the carve-out is a documentation guard, not a live exception branch.
 
    **On rejection — failure-message UX (halt, never silent-rename):** present the user with a clear, actionable message and re-prompt for a corrected name:
    - **What's wrong:** name the failing class (`_`-prefix reserved for infrastructure / special-or-shell-meta character / empty-or-whitespace).
@@ -127,10 +127,10 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 
 ### Step 2: Create Folder Structure
 
-Create the project folder under `Projects/[Project Name]/` with standard structure:
+Create the project folder under `projects/[Project]/` with standard structure:
 
 ```
-[Project Name]/
+[Project]/
 ├── PROJECT.md
 ├── 01-Governance/
 │   ├── Change-Management/               ← Impact assessments, readiness, go/no-go, hypercare
@@ -461,7 +461,7 @@ Generate `[Project]_Closure_Summary.md` in the project's `01-Governance/` folder
 [List stakeholders and sign-off status — from user input or ASSUMPTION – CONFIRM]
 
 ## Archive Location
-Projects/Archive/[Project Name]/
+projects/Archive/[Project]/
 ```
 
 ### Step B4: Update PROJECT.md
@@ -470,12 +470,12 @@ Update the project's `PROJECT.md`:
 1. Set `status: CLOSED`
 2. Add `closure_date: [today]`
 3. Add `closure_reason: [from input]`
-4. Add `archive_location: Projects/Archive/[Project Name]/`
+4. Add `archive_location: projects/Archive/[Project]/`
 
 ### Step B5: Move Project to Archive
 
-1. Create `Projects/Archive/[Project Name]/` if it doesn't exist
-2. Move the entire project folder from `Projects/[Project Name]/` to `Projects/Archive/[Project Name]/`
+1. Create `projects/Archive/[Project]/` if it doesn't exist
+2. Move the entire project folder from `projects/[Project]/` to `projects/Archive/[Project]/`
 3. Verify the move completed (all files present in new location)
 
 ### Step B6: Update PORTFOLIO.md
@@ -492,7 +492,7 @@ Read `projects/_config/PORTFOLIO.md` and update:
 
 | Project | Closed | Duration | Outcome | Archive |
 |---------|--------|----------|---------|---------|
-| [Name] | [Date] | [Duration] | [Brief outcome] | Projects/Archive/[Name]/ |
+| [Name] | [Date] | [Duration] | [Brief outcome] | projects/Archive/[Project]/ |
 ```
 
 4. Update Cross-Project Dependencies section — remove any dependencies that only involved this project
@@ -651,7 +651,7 @@ structural conformance and content quality.
 ### Mode B archival with unresolved RAID entries — PROC
 
 - **Signature (observable signal):** Mode B Step B5 moves a project to
-  `Projects/Archive/[Project Name]/` while the RAID Log contains entries with status
+  `projects/Archive/[Project]/` while the RAID Log contains entries with status
   "Open" or without a final disposition (CLOSED – Resolved / Accepted / Transferred /
   Superseded), or the Closure Summary's Final RAID Disposition table has blank cells
   in the Resolved / Accepted / Transferred / Superseded columns.
@@ -729,9 +729,9 @@ structural conformance and content quality.
 
 ### Project-root folder name scaffolded without validating against the folder-naming standard — INPUT
 
-- **Signature (observable signal):** Mode A creates `Projects/_Warehouse/` (leading `_`)
-  or `Projects/Q4 Plan & Review/` (shell-meta character) — or scaffolds under an empty /
-  whitespace-only name producing `Projects//` — because Step 1 item 7 was skipped or its
+- **Signature (observable signal):** Mode A creates `projects/_Warehouse/` (leading `_`)
+  or `projects/Q4 Plan & Review/` (shell-meta character) — or scaffolds under an empty /
+  whitespace-only name producing `projects//` — because Step 1 item 7 was skipped or its
   rejection was bypassed. The malformed folder name then surfaces in PROJECT.md's project
   field, the PORTFOLIO.md health-summary row, and every `04-PMO-Operations/` tracker
   filename.

@@ -127,7 +127,7 @@ When a user corrects a misclassification:
 1. Record the correction: original classification → correct classification
 2. Identify what signal was missing or misread
 3. Propose a new rule or rule modification to this file
-4. Format proposal as IMPROVEMENTS.md entry (IMP-### format)
+4. File the proposal as a GitHub Issue via the `improvement.yml` template (or `observation.yml` for an under-specified observation)
 5. On approval: update this file, test with similar past files if available
 
 ## Version History
