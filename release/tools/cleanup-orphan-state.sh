@@ -220,6 +220,114 @@ has_merged_pr() {
   [[ "$n" -ge 1 ]]
 }
 
+# ─── PR-state prefetch map (#655) ────────────────────────────────────────────
+#
+# Replaces the per-branch `gh pr list --head` + `gh pr view` pair in
+# classify_local()/classify_remote() with a SINGLE run-scoped prefetch — an O(1)
+# `gh pr list --state all` — so an --all/--historical sweep over ~100 branches
+# issues one list call instead of ~200 serial gh calls. The map is a bash-3.2 tab-
+# string array + linear-scan accessor, cloning the LIVE_CWD_ENTRIES[]/worktree_is_live
+# idiom verbatim (NO `declare -A`, per the associative-array constraint at L309).
+#
+# Design (per the Stage 5 design, #2781):
+#  - Lazy + memoized (ensure_pr_map / PR_MAP_BUILT): a scope that classifies zero
+#    branches pays zero — mirrors ensure_liveness_map().
+#  - FAIL-CLOSED: PR_MAP_STATE defaults to `degraded`; build promotes to `ok` ONLY
+#    after a truncation guard confirms the map is complete (returned == probed AND
+#    the probe did not hit the ceiling, per git-workflow.md § Batch CLI Query Limits).
+#    Any gh failure / truncation leaves it `degraded` → pr_lookup runs the VERBATIM
+#    current per-branch calls (offline tolerance identical to the pre-#655 path).
+#  - Map-miss = "no PR" (never re-query): a COMPLETE map makes misses trustworthy;
+#    per-miss fallback was rejected (it reintroduces the pagination-misclassification
+#    risk the guard exists to prevent).
+#  - Identity linchpin: `gh pr list` is NEWEST-first; the per-branch path takes
+#    `.[0]` (newest); the map keeps FIRST-SEEN per head (= newest) → byte-identical
+#    pr_n/pr_s. (The pr_s="?" transient-error state is eliminated in map mode — a
+#    strict improvement.)
+PR_MAP_ENTRIES=()          # "headRefName<TAB>number<TAB>state" strings; first-seen (newest) per head wins
+PR_MAP_BUILT=0             # lazy-memo marker
+PR_MAP_STATE="degraded"    # degraded | ok — FAIL-CLOSED default (host evidence only via build)
+PR_MAP_CEILING=5000        # safe ceiling for this repo per git-workflow.md § Batch CLI Query Limits
+PR_LOOKUP_N=""             # out: pr_number for the last pr_lookup ("" = none)
+PR_LOOKUP_S="(none)"       # out: pr_state for the last pr_lookup ("(none)" = no PR)
+
+build_pr_map() {
+  PR_MAP_ENTRIES=(); PR_MAP_STATE="degraded"; PR_MAP_BUILT=1
+  local raw probed returned=0 line head seen
+  # Probe the true dataset size independently, then fetch at the same ceiling. If
+  # the probe fails, stay degraded (per-branch fallback). Both queries share the
+  # ceiling: probed < ceiling proves no truncation; returned == probed cross-checks
+  # the parse. gh emits newest-first; first-seen per head is therefore the newest PR.
+  probed=$(gh pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json number --jq 'length' 2>/dev/null || echo "")
+  if [[ -z "$probed" || ! "$probed" =~ ^[0-9]+$ ]]; then
+    echo "WARN pr-map prefetch unavailable — count probe failed; per-branch PR classification (offline-tolerant)" >&2
+    return 0
+  fi
+  raw=$(gh pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json headRefName,number,state --jq '.[] | [.headRefName, (.number|tostring), .state] | @tsv' 2>/dev/null || true)
+  if [[ -n "$raw" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      head="${line%%	*}"
+      # First-seen (newest) per head wins — skip a later (older) row for the same head.
+      seen=0
+      local e
+      for e in "${PR_MAP_ENTRIES[@]:-}"; do
+        [[ -z "$e" ]] && continue
+        if [[ "${e%%	*}" == "$head" ]]; then seen=1; break; fi
+      done
+      [[ "$seen" -eq 1 ]] && continue
+      PR_MAP_ENTRIES+=("$line")
+      ((returned++)) || true
+    done <<<"$raw"
+  fi
+  # Truncation guard: the map is trustworthy ONLY if the probe did not hit the
+  # ceiling AND every probed PR is represented. Distinct heads collapse duplicates,
+  # so the parse cross-check counts TOTAL rows read, not distinct heads.
+  local total_rows
+  total_rows=$(awk 'END{print NR}' <<<"$raw" 2>/dev/null || echo 0)
+  [[ -z "$raw" ]] && total_rows=0
+  if [[ "$probed" -lt "$PR_MAP_CEILING" && "$total_rows" -eq "$probed" ]]; then
+    PR_MAP_STATE="ok"
+    echo "PASS pr-map prefetch — ${#PR_MAP_ENTRIES[@]} head(s) mapped from ${probed} PR(s) in one gh list" >&2
+  else
+    echo "WARN pr-map prefetch degraded — probe=${probed} rows=${total_rows} ceiling=${PR_MAP_CEILING} (truncation-suspect); per-branch fallback" >&2
+  fi
+  return 0
+}
+
+ensure_pr_map() {
+  if [[ "$PR_MAP_BUILT" -eq 0 ]]; then
+    build_pr_map
+  fi
+  return 0
+}
+
+# pr_lookup <branch> — sets PR_LOOKUP_N / PR_LOOKUP_S. In `ok` map mode: linear scan,
+# map-miss = "no PR". In `degraded` mode: the VERBATIM pre-#655 per-branch calls.
+pr_lookup() {
+  local branch="$1" e head
+  PR_LOOKUP_N=""; PR_LOOKUP_S="(none)"
+  if [[ "$PR_MAP_STATE" == "ok" ]]; then
+    for e in "${PR_MAP_ENTRIES[@]:-}"; do
+      [[ -z "$e" ]] && continue
+      head="${e%%	*}"
+      if [[ "$head" == "$branch" ]]; then
+        local rest="${e#*	}"
+        PR_LOOKUP_N="${rest%%	*}"
+        PR_LOOKUP_S="${rest#*	}"
+        return 0
+      fi
+    done
+    return 0   # map-miss = no PR (complete map → trustworthy)
+  fi
+  # Degraded: identical to the pre-#655 per-branch path (offline tolerance).
+  PR_LOOKUP_N=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
+  if [[ -n "$PR_LOOKUP_N" ]]; then
+    PR_LOOKUP_S=$(gh pr view "$PR_LOOKUP_N" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
+  fi
+  return 0
+}
+
 # One-shot snapshot of the porcelain worktree list, reused by every worktree
 # reader below through here-strings. It replaces per-call live pipes that
 # SIGPIPE the generator when a consumer (grep -q, or awk that calls exit) closes
@@ -431,13 +539,14 @@ classify_local() {
   # the branch content is on main even when the source commits are not ancestors
   # of main — the squash-merge case. Without this, the ancestry SKIP below fires
   # unconditionally on every squash-merged branch ("unique commits exist (N)") and
-  # --release-close reaps nothing. pr_s is the single PR-state source #655 later
-  # rewires to the prefetch map, so the MERGED rescue rides that map for free.
-  pr_n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
-  pr_s="(none)"
-  if [[ -n "$pr_n" ]]; then
-    pr_s=$(gh pr view "$pr_n" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
-  fi
+  # --release-close reaps nothing. The PR-state source is the #655 prefetch map
+  # (ensure_pr_map / pr_lookup), so BOTH the report row AND the MERGED rescue ride
+  # one run-scoped gh list — zero surviving per-branch gh calls on --release-close
+  # in map-`ok` mode; a degraded map falls back to the verbatim per-branch calls.
+  ensure_pr_map
+  pr_lookup "$branch"
+  pr_n="$PR_LOOKUP_N"
+  pr_s="$PR_LOOKUP_S"
 
   # Ancestry SKIP yields ONLY to a confirmed MERGED-PR rescue on the release-close
   # path (require_pr=1 && pr_s=="MERGED"). On require_pr=0 the rescue clause is
@@ -474,11 +583,11 @@ classify_remote() {
 
   if is_protected "$branch"; then action="SKIP — protected"; fi
 
-  pr_n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
-  pr_s="(none)"
-  if [[ -n "$pr_n" ]]; then
-    pr_s=$(gh pr view "$pr_n" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
-  fi
+  # PR-state via the #655 prefetch map (see classify_local); degraded → per-branch.
+  ensure_pr_map
+  pr_lookup "$branch"
+  pr_n="$PR_LOOKUP_N"
+  pr_s="$PR_LOOKUP_S"
   if [[ "$action" == "REMOVE" && "$pr_s" != "MERGED" ]]; then action="SKIP — PR not merged ($pr_s)"; fi
 
   REMOTE_BRANCH_CANDIDATES+=("${branch}	${pr_n}	${pr_s}	${action}")
@@ -2043,6 +2152,66 @@ selftest_dedup_local_branches() {
   return 0
 }
 
+# #655 — PR-map identity. The prefetch map must return byte-identical (pr_n, pr_s)
+# to the per-branch path for the same branch (the correctness precondition for
+# replacing ~2 gh calls per branch with one run-scoped list). This fixture samples
+# real local branches and, for each, compares pr_lookup in the built-map state
+# against pr_lookup in a FORCED-degraded state (the per-branch fallback). They must
+# agree. Also asserts the map's own state is honestly self-reported (built → ok or
+# degraded, never a silent claim). In-process; saves/restores the PR_MAP_* globals.
+# Offline / gh-unreachable degrades both paths to the same per-branch calls, so the
+# equality still holds (and pr_s="?" transient state is absent in map mode — a strict
+# improvement). Net-zero (read-only; no branch/worktree state touched).
+selftest_pr_map_identity() {
+  local saved_built="$PR_MAP_BUILT" saved_state="$PR_MAP_STATE"
+  local saved_entries_n=${#PR_MAP_ENTRIES[@]}
+  # Snapshot the entries array so we can restore it (bash-3.2 copy).
+  local saved_entries=(); local e
+  for e in "${PR_MAP_ENTRIES[@]:-}"; do [[ -n "$e" ]] && saved_entries+=("$e"); done
+
+  local b sample=() n=0 fail=0
+  # Sample up to 8 real local branches (deterministic: first-listed). Read-only.
+  for b in $(git for-each-ref 'refs/heads/' --format='%(refname:short)' 2>/dev/null); do
+    sample+=("$b"); ((n++)) || true
+    [[ "$n" -ge 8 ]] && break
+  done
+  if [[ "$n" -eq 0 ]]; then
+    echo "self-test: pr-map identity check SKIPPED — no local branches to sample" >&2
+    return 0
+  fi
+
+  # Build the map once, record its honestly-reported state.
+  PR_MAP_BUILT=0; PR_MAP_ENTRIES=(); PR_MAP_STATE="degraded"
+  build_pr_map >/dev/null 2>&1 || true
+  case "$PR_MAP_STATE" in
+    ok|degraded) : ;;
+    *) echo "self-test: pr-map identity check FAILED — PR_MAP_STATE='$PR_MAP_STATE' (must be ok|degraded)" >&2; fail=1 ;;
+  esac
+
+  local map_n map_s deg_n deg_s
+  for b in "${sample[@]}"; do
+    # Map-mode lookup (whatever state build produced).
+    pr_lookup "$b"; map_n="$PR_LOOKUP_N"; map_s="$PR_LOOKUP_S"
+    # Forced-degraded lookup (the verbatim per-branch fallback).
+    local hold_state="$PR_MAP_STATE"; PR_MAP_STATE="degraded"
+    pr_lookup "$b"; deg_n="$PR_LOOKUP_N"; deg_s="$PR_LOOKUP_S"
+    PR_MAP_STATE="$hold_state"
+    if [[ "$map_n" != "$deg_n" || "$map_s" != "$deg_s" ]]; then
+      echo "self-test: pr-map identity check FAILED — branch '$b': map=($map_n,$map_s) != per-branch=($deg_n,$deg_s)" >&2
+      fail=1
+    fi
+  done
+
+  # Restore globals for the rest of the suite.
+  PR_MAP_BUILT="$saved_built"; PR_MAP_STATE="$saved_state"
+  PR_MAP_ENTRIES=()
+  for e in "${saved_entries[@]:-}"; do [[ -n "$e" ]] && PR_MAP_ENTRIES+=("$e"); done
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: pr-map identity check PASS — map-path (pr_n,pr_s) identical to per-branch over ${n} sampled branch(es) [map state: ${saved_state}→built]" >&2
+  return 0
+}
+
 # v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
 # EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
 # Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
@@ -2486,6 +2655,8 @@ self_test() {
   selftest_behind_head_apply
   echo "self-test: exercising local-branch dedup under --all (spawn-task + historical overlap) (#670)..." >&2
   selftest_dedup_local_branches
+  echo "self-test: exercising PR-map prefetch identity vs per-branch (#655)..." >&2
+  selftest_pr_map_identity
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
