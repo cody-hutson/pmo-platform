@@ -13,7 +13,7 @@ consumers: the PROJECT.md-reading skills (the §8 consumer table); OPERATIONS.md
 **Status:** Canonical
 **Owner:** `../schemas/project-schema.md`
 **Introduced:** methodology-parameterization-core (2026-04-24)
-**Consumers:** the PROJECT.md-reading skills enumerated in the [§8 consumer table](#8-consumers) + `OPERATIONS.md § Methodology Awareness Protocol` + the future role-skill wave
+**Consumers:** the PROJECT.md-reading skills enumerated in the §8 consumer table (below) + `OPERATIONS.md § Methodology Awareness Protocol` + the future role-skill wave
 **Cross-references:**
 
 - [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md) — 8 archetype normative definitions + Custom Extension Protocol + Skill Consumption Pattern
