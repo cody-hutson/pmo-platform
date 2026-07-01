@@ -93,9 +93,10 @@ One row per deployed CI. The CI population is the **deployed roster** resolved f
 | [`eval-writer`](eval-writer/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
 | [`pmo-qa-auditor`](pmo-qa-auditor/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
 | [`prompt-builder`](prompt-builder/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
+| [`skill-compliance-auditor`](skill-compliance-auditor/SKILL.md) | core | core | active | RELATES_TO eval-writer | platform-maintainer | — | — |
 | [`pmo-skill-router`](pmo-skill-router/SKILL.md) | router | core | active | — | platform-maintainer | — | — |
 
-> **Roster note.** The catalog holds **48 deployed CIs** (resolved from the `deploy.sh` per-module arrays — 29 operations + 14 release + 5 core; the count is owned by `deploy.sh` Check 5 / 5(c), not stored here). Of these, the **19-row routing view** (`kind == role-Specialist` — 13 operations + 6 release) is the surface the `pmo-skill-router` classifies against; the other 29 CIs (function-skills, core, the router itself) are catalogued but are **not** routing targets. The 19-row routing view reached its full role-Specialist roster at v2.15 GA; ADR-038 (v2.20) expanded the catalog to all CIs while leaving that routing view unchanged.
+> **Roster note.** The catalog holds **49 deployed CIs** (resolved from the `deploy.sh` per-module arrays — 29 operations + 14 release + 6 core; the count is owned by `deploy.sh` Check 5 / 5(c), not stored here). Of these, the **19-row routing view** (`kind == role-Specialist` — 13 operations + 6 release) is the surface the `pmo-skill-router` classifies against; the other 30 CIs (function-skills, core, the router itself) are catalogued but are **not** routing targets. The 19-row routing view reached its full role-Specialist roster at v2.15 GA; ADR-038 (v2.20) expanded the catalog to all CIs while leaving that routing view unchanged.
 
 ## Routing view
 
@@ -107,13 +108,13 @@ Routing view  ≝  Configuration Items  WHERE kind == role-Specialist
               =  byte-for-byte the surface the router classifies on
 ```
 
-The router reads the `## Configuration Items` table and **filters to `kind == role-Specialist`**, then matches the request against each view row's `trigger surface`. The 29 non-role CIs (`kind ∈ {function-skill, core, router}`) are **excluded from the view** by the filter, and carry `—` in `trigger surface`/`modes` regardless — so they add **zero** strings to the router's classification input. The router's classification logic, hints, tie-break ladder, and failure modes are unchanged by the catalog expansion; only the table it is a view of grew, the view did not. This is the de-blur mechanism that lets one catalog serve both configuration-management and routing without blurring what the router classifies against (ADR-038 §Decision part 4; the direct rebuttal to ADR-035's "blur what the router classifies against" concern).
+The router reads the `## Configuration Items` table and **filters to `kind == role-Specialist`**, then matches the request against each view row's `trigger surface`. The 30 non-role CIs (`kind ∈ {function-skill, core, router}`) are **excluded from the view** by the filter, and carry `—` in `trigger surface`/`modes` regardless — so they add **zero** strings to the router's classification input. The router's classification logic, hints, tie-break ladder, and failure modes are unchanged by the catalog expansion; only the table it is a view of grew, the view did not. This is the de-blur mechanism that lets one catalog serve both configuration-management and routing without blurring what the router classifies against (ADR-038 §Decision part 4; the direct rebuttal to ADR-035's "blur what the router classifies against" concern).
 
 **Every routing-registry row is a CI; not every CI is a routing target.** The router itself (`kind == router`) and the function-skills / core skills (`kind ∈ {function-skill, core}`) are CIs but are filtered out of their own routing view — preserving "a router does not route to itself" and the role-vs-function boundary.
 
 ## What qualifies
 
-**What is a CI** (catalogued in `## Configuration Items`): every **deployed** skill — all 48 members of the `deploy.sh` per-module arrays. The source-only canary (`pmo-skill-refiner-selftest-canary`, ADR-04, no package) is **not** a CI.
+**What is a CI** (catalogued in `## Configuration Items`): every **deployed** skill — all 49 members of the `deploy.sh` per-module arrays. The source-only canary (`pmo-skill-refiner-selftest-canary`, ADR-04, no package) is **not** a CI.
 
 **What is a routing target** (in the `## Routing view`): a CI **iff it is a Role-Specialist** (`kind == role-Specialist`) — a role-named skill (named by the role it emulates: Portfolio Manager, QA Lead, …) that composes shared function-skills per ADR-019. Function-skills (`kind == function-skill`, named by what they do — `comms-writer`, `tracker-manager`, `release-planner`, `pmo-process-designer`, `pmo-technical-analyst`, …), the 3 core shared function-skills (`kind == core` — `eval-writer`, `pmo-qa-auditor`, `prompt-builder`), and the router itself (`kind == router`) are CIs but are **not** routing targets: the router routes role-shaped requests to roles; the rest are the machinery roles compose, and a router does not route to itself.
 

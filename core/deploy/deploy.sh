@@ -81,6 +81,7 @@ CORE_SKILLS=(
   pmo-qa-auditor
   pmo-skill-router
   prompt-builder
+  skill-compliance-auditor
 )
 
 # Canary skills (source-only per ADR-04; not in SUPPLEMENTARY). Lives with
