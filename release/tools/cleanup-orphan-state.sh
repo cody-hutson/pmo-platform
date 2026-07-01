@@ -18,8 +18,11 @@
 # Flags:
 #   SCOPE (one of, default --all):
 #     --release-close <slug>   Outcome 1 only — scope to one release
-#                              (matches release/<slug>, release/vX.Y-<slug>, and the
-#                               sibling chore/<slug>-* / chore/vX.Y-<slug>-* branches)
+#                              (matches release/<slug>, release/vX.Y-<slug>, the
+#                               sibling chore/<slug>-* / chore/vX.Y-<slug>-* branches,
+#                               and — when the slug carries a leading vX.Y version —
+#                               the Stage 12/13 chore/vX.Y-stage-* branches, anchored
+#                               on the literal -stage- so vX.Y never over-matches vX.YY)
 #     --spawn-task             Outcome 2 only — claude/* and agent-* orphans
 #     --historical             Outcome 3 only — all merged-no-active-work
 #     --all                    All 3 outcomes (default)
@@ -166,7 +169,20 @@ PROTECTED_ALWAYS=("$MAIN_BRANCH" "master" "HEAD")
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,74p' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
+  # End-anchored header extraction (#669): print the header comment block from
+  # line 2 up to (but not including) the `# Hook compatibility` divider, instead
+  # of a fixed line-range. A fixed window (formerly `2,74p`) silently drops the
+  # SAFETY (--force / SELF / LIVE) and META (--help / --self-test) lines the
+  # moment the header grows past the hard-coded offset — a real regression this
+  # tool already suffered (#1678 widened 42→74). Anchoring on the structural
+  # divider means header growth can never push the protective-guarantee lines
+  # outside --help. Fallback: if the divider is ever renamed/removed, print
+  # through the last leading-`#` line so --help still renders the whole header.
+  /usr/bin/awk '
+    NR==1 { next }                    # skip the shebang
+    /^# Hook compatibility/ { exit }  # stop at the structural divider
+    /^#/ { print }                    # header comment line (block is contiguous #-lines)
+  ' "$0" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -213,8 +229,125 @@ is_fully_merged() {
 has_merged_pr() {
   local branch="$1"
   local n
-  n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state merged --json number --jq 'length' 2>/dev/null || echo "0")
+  ensure_gh_bin
+  [[ -z "$GH_BIN" ]] && return 1   # no gh → cannot confirm a merged PR (fail-closed)
+  n=$("$GH_BIN" pr list --repo "$REPO_SLUG" --head "$branch" --state merged --json number --jq 'length' 2>/dev/null || echo "0")
   [[ "$n" -ge 1 ]]
+}
+
+# ─── PR-state prefetch map (#655) ────────────────────────────────────────────
+#
+# Replaces the per-branch `gh pr list --head` + `gh pr view` pair in
+# classify_local()/classify_remote() with a SINGLE run-scoped prefetch — an O(1)
+# `gh pr list --state all` — so an --all/--historical sweep over ~100 branches
+# issues one list call instead of ~200 serial gh calls. The map is a bash-3.2 tab-
+# string array + linear-scan accessor, cloning the LIVE_CWD_ENTRIES[]/worktree_is_live
+# idiom verbatim (NO `declare -A`, per the associative-array constraint at L309).
+#
+# Design (per the Stage 5 design, #2781):
+#  - Lazy + memoized (ensure_pr_map / PR_MAP_BUILT): a scope that classifies zero
+#    branches pays zero — mirrors ensure_liveness_map().
+#  - FAIL-CLOSED: PR_MAP_STATE defaults to `degraded`; build promotes to `ok` ONLY
+#    after a truncation guard confirms the map is complete (returned == probed AND
+#    the probe did not hit the ceiling, per git-workflow.md § Batch CLI Query Limits).
+#    Any gh failure / truncation leaves it `degraded` → pr_lookup runs the VERBATIM
+#    current per-branch calls (offline tolerance identical to the pre-#655 path).
+#  - Map-miss = "no PR" (never re-query): a COMPLETE map makes misses trustworthy;
+#    per-miss fallback was rejected (it reintroduces the pagination-misclassification
+#    risk the guard exists to prevent).
+#  - Identity linchpin: `gh pr list` is NEWEST-first; the per-branch path takes
+#    `.[0]` (newest); the map keeps FIRST-SEEN per head (= newest) → byte-identical
+#    pr_n/pr_s. (The pr_s="?" transient-error state is eliminated in map mode — a
+#    strict improvement.)
+PR_MAP_ENTRIES=()          # "headRefName<TAB>number<TAB>state" strings; first-seen (newest) per head wins
+PR_MAP_BUILT=0             # lazy-memo marker
+PR_MAP_STATE="degraded"    # degraded | ok — FAIL-CLOSED default (host evidence only via build)
+PR_MAP_CEILING=5000        # safe ceiling for this repo per git-workflow.md § Batch CLI Query Limits
+PR_LOOKUP_N=""             # out: pr_number for the last pr_lookup ("" = none)
+PR_LOOKUP_S="(none)"       # out: pr_state for the last pr_lookup ("(none)" = no PR)
+
+build_pr_map() {
+  PR_MAP_ENTRIES=(); PR_MAP_STATE="degraded"; PR_MAP_BUILT=1
+  local raw probed returned=0 line head seen
+  ensure_gh_bin
+  if [[ -z "$GH_BIN" ]]; then
+    echo "WARN pr-map prefetch unavailable — gh not resolvable under the pinned PATH; per-branch PR classification (offline-tolerant)" >&2
+    return 0
+  fi
+  # Probe the true dataset size independently, then fetch at the same ceiling. If
+  # the probe fails, stay degraded (per-branch fallback). Both queries share the
+  # ceiling: probed < ceiling proves no truncation; returned == probed cross-checks
+  # the parse. gh emits newest-first; first-seen per head is therefore the newest PR.
+  probed=$("$GH_BIN" pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json number --jq 'length' 2>/dev/null || echo "")
+  if [[ -z "$probed" || ! "$probed" =~ ^[0-9]+$ ]]; then
+    echo "WARN pr-map prefetch unavailable — count probe failed; per-branch PR classification (offline-tolerant)" >&2
+    return 0
+  fi
+  raw=$("$GH_BIN" pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json headRefName,number,state --jq '.[] | [.headRefName, (.number|tostring), .state] | @tsv' 2>/dev/null || true)
+  if [[ -n "$raw" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      head="${line%%	*}"
+      # First-seen (newest) per head wins — skip a later (older) row for the same head.
+      seen=0
+      local e
+      for e in "${PR_MAP_ENTRIES[@]:-}"; do
+        [[ -z "$e" ]] && continue
+        if [[ "${e%%	*}" == "$head" ]]; then seen=1; break; fi
+      done
+      [[ "$seen" -eq 1 ]] && continue
+      PR_MAP_ENTRIES+=("$line")
+      ((returned++)) || true
+    done <<<"$raw"
+  fi
+  # Truncation guard: the map is trustworthy ONLY if the probe did not hit the
+  # ceiling AND every probed PR is represented. Distinct heads collapse duplicates,
+  # so the parse cross-check counts TOTAL rows read, not distinct heads.
+  local total_rows
+  total_rows=$(awk 'END{print NR}' <<<"$raw" 2>/dev/null || echo 0)
+  [[ -z "$raw" ]] && total_rows=0
+  if [[ "$probed" -lt "$PR_MAP_CEILING" && "$total_rows" -eq "$probed" ]]; then
+    PR_MAP_STATE="ok"
+    echo "PASS pr-map prefetch — ${#PR_MAP_ENTRIES[@]} head(s) mapped from ${probed} PR(s) in one gh list" >&2
+  else
+    echo "WARN pr-map prefetch degraded — probe=${probed} rows=${total_rows} ceiling=${PR_MAP_CEILING} (truncation-suspect); per-branch fallback" >&2
+  fi
+  return 0
+}
+
+ensure_pr_map() {
+  if [[ "$PR_MAP_BUILT" -eq 0 ]]; then
+    build_pr_map
+  fi
+  return 0
+}
+
+# pr_lookup <branch> — sets PR_LOOKUP_N / PR_LOOKUP_S. In `ok` map mode: linear scan,
+# map-miss = "no PR". In `degraded` mode: the VERBATIM pre-#655 per-branch calls.
+pr_lookup() {
+  local branch="$1" e head
+  PR_LOOKUP_N=""; PR_LOOKUP_S="(none)"
+  if [[ "$PR_MAP_STATE" == "ok" ]]; then
+    for e in "${PR_MAP_ENTRIES[@]:-}"; do
+      [[ -z "$e" ]] && continue
+      head="${e%%	*}"
+      if [[ "$head" == "$branch" ]]; then
+        local rest="${e#*	}"
+        PR_LOOKUP_N="${rest%%	*}"
+        PR_LOOKUP_S="${rest#*	}"
+        return 0
+      fi
+    done
+    return 0   # map-miss = no PR (complete map → trustworthy)
+  fi
+  # Degraded: identical to the pre-#655 per-branch path (offline tolerance).
+  ensure_gh_bin
+  [[ -z "$GH_BIN" ]] && return 0   # no gh → leave PR_LOOKUP_N="" / PR_LOOKUP_S="(none)"
+  PR_LOOKUP_N=$("$GH_BIN" pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
+  if [[ -n "$PR_LOOKUP_N" ]]; then
+    PR_LOOKUP_S=$("$GH_BIN" pr view "$PR_LOOKUP_N" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
+  fi
+  return 0
 }
 
 # One-shot snapshot of the porcelain worktree list, reused by every worktree
@@ -320,12 +453,45 @@ ORACLE_STATE="unavailable"
 ORACLE_BUILT=0
 LIVE_HIT=""   # "pid <pid>, <command>" of the most recent worktree_is_live match
 
+# GitHub CLI resolved by ABSOLUTE path (#2790) — the pinned PATH /usr/bin:/bin
+# cannot see /opt/homebrew/bin or /usr/local/bin where Homebrew keeps gh, so a
+# bare `gh` fails command-not-found (exit 127) and the PR-state layer silently
+# resolves to (none). Mirrors LSOF_BIN/resolve_lsof_bin. FAIL-CLOSED: when no gh
+# binary exists GH_BIN stays "" and every call site degrades to its offline path
+# ((none) PR state / skipped remote delete), preserving offline tolerance.
+GH_BIN=""
+GH_BIN_RESOLVED=0   # lazy-memo marker: ensure_gh_bin resolves + WARNs once
+
 resolve_lsof_bin() {
   LSOF_BIN=""
   local c
   for c in /usr/sbin/lsof /usr/bin/lsof; do
     if [[ -x "$c" ]]; then LSOF_BIN="$c"; break; fi
   done
+}
+
+# gh resolver — mirror of resolve_lsof_bin for the pinned-PATH gap (#2790).
+# Scans the two Homebrew prefixes (Apple-silicon, Intel) then the system path.
+resolve_gh_bin() {
+  GH_BIN=""
+  local c
+  for c in /opt/homebrew/bin/gh /usr/local/bin/gh /usr/bin/gh; do
+    if [[ -x "$c" ]]; then GH_BIN="$c"; break; fi
+  done
+}
+
+# Lazy guard: resolve GH_BIN once, WARN once on miss. Every gh call site calls
+# this first, then degrades (see call sites) when GH_BIN stays "". Mirrors the
+# ensure_liveness_map / ensure_pr_map memo idiom. Returns 0 always (offline-safe).
+ensure_gh_bin() {
+  if [[ "$GH_BIN_RESOLVED" -eq 0 ]]; then
+    GH_BIN_RESOLVED=1
+    resolve_gh_bin
+    if [[ -z "$GH_BIN" ]]; then
+      echo "WARN gh unavailable — not found at /opt/homebrew/bin/gh, /usr/local/bin/gh, or /usr/bin/gh under the pinned PATH; PR-state features degrade to (none) (offline-tolerant)" >&2
+    fi
+  fi
+  return 0
 }
 
 build_liveness_map() {
@@ -403,21 +569,52 @@ PRUNED_TRACKING_REFS=()
 
 classify_local() {
   local branch="$1" require_pr="${2:-0}"
-  local unique last pr_n pr_s action="REMOVE"
+  local unique last pr_n pr_s action="REMOVE" existing
+
+  # Dedup guard (#670) — mirrors the classify_worktree guard: under the default
+  # --all scope detect_spawn_task (claude/* branches) and detect_historical (all
+  # merged-unattached branches) both classify the same merged claude/* branches,
+  # double-counting rows + counters. First row wins so the emitters and protective
+  # counters stay truthful (one row per branch). Plain `if` per the set -e discipline.
+  for existing in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
+    [[ -z "$existing" ]] && continue
+    if [[ "${existing%%$'\t'*}" == "$branch" ]]; then
+      return 0
+    fi
+  done
 
   if is_protected "$branch"; then action="SKIP — protected"; fi
   if [[ "$action" == "REMOVE" ]] && branch_has_worktree "$branch"; then action="SKIP — active worktree attached"; fi
 
   unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${branch}" 2>/dev/null || echo "?")
-  if [[ "$action" == "REMOVE" && "$unique" != "0" ]]; then action="SKIP — unique commits exist ($unique)"; fi
-
   last=$(git log -1 --format='%cs' "$branch" 2>/dev/null || echo "?")
-  pr_n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
-  pr_s="(none)"
-  if [[ -n "$pr_n" ]]; then
-    pr_s=$(gh pr view "$pr_n" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
+
+  # PR-state read moved ABOVE the ancestry SKIP (#2216, #2779 Option B): under
+  # --release-close (require_pr=1) a CONFIRMED MERGED PR is authoritative proof
+  # the branch content is on main even when the source commits are not ancestors
+  # of main — the squash-merge case. Without this, the ancestry SKIP below fires
+  # unconditionally on every squash-merged branch ("unique commits exist (N)") and
+  # --release-close reaps nothing. The PR-state source is the #655 prefetch map
+  # (ensure_pr_map / pr_lookup), so BOTH the report row AND the MERGED rescue ride
+  # one run-scoped gh list — zero surviving per-branch gh calls on --release-close
+  # in map-`ok` mode; a degraded map falls back to the verbatim per-branch calls.
+  ensure_pr_map
+  pr_lookup "$branch"
+  pr_n="$PR_LOOKUP_N"
+  pr_s="$PR_LOOKUP_S"
+
+  # Ancestry SKIP yields ONLY to a confirmed MERGED-PR rescue on the release-close
+  # path (require_pr=1 && pr_s=="MERGED"). On require_pr=0 the rescue clause is
+  # false, so this SKIP fires exactly as before — behavior byte-identical to the
+  # pre-#2216 ordering for every non-release-close caller.
+  if [[ "$action" == "REMOVE" && "$unique" != "0" ]] \
+     && ! { [[ "$require_pr" == "1" && "$pr_s" == "MERGED" ]]; }; then
+    action="SKIP — unique commits exist ($unique)"
   fi
 
+  # Non-MERGED downgrade (retained stale/reopened-PR safety guard, #2779 R2): on
+  # the release-close path a branch whose PR is anything but MERGED is SKIPped
+  # even if ancestry would have passed it — the rescue never over-removes.
   if [[ "$action" == "REMOVE" && "$require_pr" == "1" && "$pr_s" != "MERGED" ]]; then
     action="SKIP — PR not merged ($pr_s)"
   fi
@@ -427,15 +624,25 @@ classify_local() {
 
 classify_remote() {
   local branch="$1"
-  local pr_n pr_s action="REMOVE"
+  local pr_n pr_s action="REMOVE" existing
+
+  # Dedup guard (#670) — symmetric with classify_local. Remote heads are not
+  # double-enumerated under --all today (only detect_spawn_task rows remotes), but
+  # the guard keeps the row set duplicate-free if a future scope re-enumerates.
+  for existing in "${REMOTE_BRANCH_CANDIDATES[@]:-}"; do
+    [[ -z "$existing" ]] && continue
+    if [[ "${existing%%$'\t'*}" == "$branch" ]]; then
+      return 0
+    fi
+  done
 
   if is_protected "$branch"; then action="SKIP — protected"; fi
 
-  pr_n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
-  pr_s="(none)"
-  if [[ -n "$pr_n" ]]; then
-    pr_s=$(gh pr view "$pr_n" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
-  fi
+  # PR-state via the #655 prefetch map (see classify_local); degraded → per-branch.
+  ensure_pr_map
+  pr_lookup "$branch"
+  pr_n="$PR_LOOKUP_N"
+  pr_s="$PR_LOOKUP_S"
   if [[ "$action" == "REMOVE" && "$pr_s" != "MERGED" ]]; then action="SKIP — PR not merged ($pr_s)"; fi
 
   REMOTE_BRANCH_CANDIDATES+=("${branch}	${pr_n}	${pr_s}	${action}")
@@ -516,25 +723,56 @@ classify_worktree() {
   WORKTREE_CANDIDATES+=("${path}	${branch}	${status}	${disk}	${action}")
 }
 
+# Derive the leading version prefix (v<major>.<minor>) from a milestone slug, or
+# empty when the slug carries none. Parameter-expansion only — bash 3.2's
+# BASH_REMATCH is unreliable on macOS (matches but does not populate captures),
+# so this avoids =~ entirely. Rejects patch-form (v1.2.3) and non-numeric (vX.Y).
+version_prefix_of() {
+  local slug="$1" vp rest maj min
+  case "$slug" in
+    v[0-9]*.[0-9]*-*) vp="${slug%%-*}" ;;   # up to first '-': v1.11-foo -> v1.11
+    *) printf ''; return 0 ;;
+  esac
+  rest="${vp#v}"; maj="${rest%%.*}"; min="${rest#*.}"
+  case "$maj$min" in *[!0-9]*) printf ''; return 0 ;; esac   # non-digit -> reject
+  case "$min" in *.*) printf ''; return 0 ;; esac            # second dot (v1.2.3) -> reject
+  printf '%s' "$vp"
+}
+
 detect_release_close() {
   local slug="$1"
   [[ -z "$slug" ]] && return 0
   refresh_wt_snapshot
   local b
-  # Match both the bare slug form (release/<slug>) AND the version-prefixed form
+  # Match the bare slug form (release/<slug>), the version-prefixed form
   # (release/vX.Y-<slug>) — release branches are routinely version-prefixed when a
-  # release re-versions mid-flight. The added pattern is anchored on the literal
-  # `v…-` separator so the slug can only appear in the post-version segment, never
-  # mid-string (a leading wildcard `*${slug}*` was rejected — substring-match hazard).
+  # release re-versions mid-flight — AND (#684) the Stage 12/13 chore branches
+  # named chore/vX.Y-stage-<N>-<purpose>. Those chore branches carry the VERSION
+  # prefix but NOT the slug, so the chore/v*-${slug}* pattern (version + slug)
+  # cannot reach them; git-workflow.md § Step 10 documents them as in-scope. We
+  # derive vX.Y from the slug's leading version token and add chore/vX.Y-stage-*,
+  # anchored on the literal `-stage-` after the exact version so v1.1 cannot
+  # over-match v1.11 (proven: `chore/v1.1-stage-*` never matches `chore/v1.11-...`).
+  # When the slug carries no version token, no stage-glob is added (nothing to
+  # derive) and behavior is unchanged.
+  local vprefix stage_local="" stage_remote="" stage_case=""
+  vprefix=$(version_prefix_of "$slug")
+  if [[ -n "$vprefix" ]]; then
+    stage_local="refs/heads/chore/${vprefix}-stage-*"
+    stage_remote="chore/${vprefix}-stage-*"
+    stage_case="chore/${vprefix}-stage-*"
+  fi
   for b in $(git for-each-ref \
       "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" \
       "refs/heads/release/v*-${slug}*" "refs/heads/chore/v*-${slug}*" \
+      ${stage_local:+"$stage_local"} \
       --format='%(refname:short)' 2>/dev/null); do
-    classify_local "$b" 0
+    classify_local "$b" 1   # require_pr=1 (#2216): a MERGED PR rescues a squash-merged release branch from the ancestry SKIP
   done
   for b in $(git ls-remote --heads "$REMOTE_NAME" \
       "release/${slug}*" "chore/${slug}*" \
       "release/v*-${slug}*" "chore/v*-${slug}*" \
+      ${stage_remote:+"$stage_remote"} \
       2>/dev/null | awk '{print $2}' | sed 's|^refs/heads/||'); do
     classify_remote "$b"
   done
@@ -546,7 +784,17 @@ detect_release_close() {
     wbranch="${next#refs/heads/}"
     [[ -z "$wbranch" || "$wbranch" == "$next" ]] && continue
     case "$wbranch" in
-      release/${slug}*|chore/${slug}*|release/v*-${slug}*|chore/v*-${slug}*) classify_worktree "$wpath" "$wbranch" ;;
+      release/${slug}*|chore/${slug}*|release/v*-${slug}*|chore/v*-${slug}*)
+        classify_worktree "$wpath" "$wbranch" ;;
+      *)
+        # #684 stage-branch arm — separate case so the derived glob is a real
+        # pattern (not a literal). Plain `if` per the set -e discipline.
+        if [[ -n "$stage_case" ]]; then
+          case "$wbranch" in
+            $stage_case) classify_worktree "$wpath" "$wbranch" ;;
+          esac
+        fi
+        ;;
     esac
   done <<<"$WT_SNAPSHOT"
 }
@@ -1024,18 +1272,34 @@ emit_json() {
 # Pipeline exit status (git → sed) is git's, not sed's, because `set -o pipefail` is on.
 apply_removals() {
   echo "── Apply phase — executing REMOVE actions ──" >&2
-  local branch_flag="-d" wt_flag=""
-  if [[ "$FORCE" == "1" ]]; then branch_flag="-D"; wt_flag="--force"; fi
+  local wt_flag=""
+  if [[ "$FORCE" == "1" ]]; then wt_flag="--force"; fi
 
-  local r name path action idx
+  local r name path action idx unique del_flag
 
   idx=-1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
     ((idx++)) || true
     [[ -z "$r" ]] && continue
     name=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $6}' <<<"$r")
+    unique=$(awk -F'\t' '{print $2}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED local $name — $action" >&2; continue; }
-    if git branch $branch_flag "$name" 2>&1 | sed 's/^/  git: /' >&2; then
+    # #683 (#2780 Option A') deletability-baseline fix: classification proves
+    # merged-ness against origin/main (is_fully_merged / field-2 unique==0), but
+    # `git branch -d` is HEAD-relative — from a behind-HEAD checkout (the Stage 13
+    # hub-worktree case) it refuses a genuinely-merged branch and it survives. Use
+    # -D when the branch is proven merged on the SAME ref classification used:
+    # field-2 unique==0 AND a re-verify of is_fully_merged at the delete site
+    # (collapses the staleness window between the classify loop and here). Fall
+    # back to -d otherwise, so an unmerged branch (unique!=0 — never reaches this
+    # loop as REMOVE, doubly-guarded) still requires --force. FORCE=1 keeps -D.
+    del_flag="-d"
+    if [[ "$FORCE" == "1" ]]; then
+      del_flag="-D"
+    elif [[ "$unique" == "0" ]] && is_fully_merged "$name"; then
+      del_flag="-D"
+    fi
+    if git branch $del_flag "$name" 2>&1 | sed 's/^/  git: /' >&2; then
       echo "PASS local $name removed" >&2
       LOCAL_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
     else
@@ -1050,7 +1314,13 @@ apply_removals() {
     [[ -z "$r" ]] && continue
     name=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $4}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED remote $name — $action" >&2; continue; }
-    if gh api -X DELETE "repos/${REPO_SLUG}/git/refs/heads/${name}" --silent 2>&1 | sed 's/^/  gh: /' >&2; then
+    ensure_gh_bin
+    if [[ -z "$GH_BIN" ]]; then
+      echo "FAIL remote $name — gh unavailable under the pinned PATH; cannot delete remote ref" >&2
+      REMOTE_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — gh unavailable"
+      continue
+    fi
+    if "$GH_BIN" api -X DELETE "repos/${REPO_SLUG}/git/refs/heads/${name}" --silent 2>&1 | sed 's/^/  gh: /' >&2; then
       echo "PASS remote $name removed" >&2
       REMOTE_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
     else
@@ -1254,10 +1524,7 @@ FREED_RESOLVED=0
 
 resolve_freed_branches() {
   echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
-  local branch_flag="-d"
-  if [[ "$FORCE" == "1" ]]; then branch_flag="-D"; fi
-
-  local r wbranch waction freed
+  local r wbranch waction freed del_flag
   freed=()
   for r in "${WORKTREE_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
@@ -1311,7 +1578,19 @@ resolve_freed_branches() {
       echo "SKIPPED resolve $b — $action" >&2; continue
     fi
 
-    if git branch $branch_flag "$b" 2>&1 | sed 's/^/  git: /' >&2; then
+    # #683 (#2780 Option A') — same deletability-baseline fix as apply_removals:
+    # every REMOVE path above proves unique==0 vs origin/main (the fresh classify,
+    # or the re-eval's explicit unique=="0" gate), so re-verify is_fully_merged at
+    # the delete site and use -D on confirmation (HEAD-relative -d would refuse a
+    # merged branch from a behind-HEAD checkout). FORCE=1 keeps -D; the -d fallback
+    # holds for any branch not re-provable merged.
+    del_flag="-d"
+    if [[ "$FORCE" == "1" ]]; then
+      del_flag="-D"
+    elif is_fully_merged "$b"; then
+      del_flag="-D"
+    fi
+    if git branch $del_flag "$b" 2>&1 | sed 's/^/  git: /' >&2; then
       echo "PASS resolve $b removed (freed by same-run worktree removal)" >&2
       LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"REMOVED"
       ((FREED_RESOLVED++)) || true
@@ -1733,6 +2012,297 @@ selftest_version_prefix_release() {
   return 0
 }
 
+# #684 — Stage 12/13 chore-branch sweep + anti-over-match.
+# The Stage 12/13 chore branches are named chore/vX.Y-stage-<N>-<purpose> (version
+# prefix, NO slug), so the pre-#684 chore/v*-${slug}* pattern (version + slug) never
+# reached them. #684 derives vX.Y from the slug and adds chore/vX.Y-stage-*. This
+# fixture creates, at origin/main (0 unique → REMOVE-eligible, cleans with -D):
+#   (1) chore/v0.1-stage-12-<slug>       — MUST be enumerated by --release-close v0.1-<slug>
+#   (2) chore/v0.11-stage-12-<slug>      — a DIFFERENT version sharing the v0.1 string;
+#                                          MUST NOT be enumerated (no v0.1 vs v0.11 collision)
+# and asserts the scope includes (1) and excludes (2). Net-zero teardown.
+selftest_stage_branch_release_close() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: stage-branch check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs slug wanted decoy out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="v0.1-cleanup-selftest-stage-$$"        # version-prefixed so version_prefix_of derives v0.1
+  wanted="chore/v0.1-stage-12-cleanup-selftest-$$"
+  decoy="chore/v0.11-stage-12-cleanup-selftest-$$"
+  if is_protected "$wanted" || is_protected "$decoy"; then
+    echo "self-test: stage-branch check SKIPPED — operator protect-list matches a fixture branch" >&2
+    return 0
+  fi
+  if ! git branch "$wanted" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: stage-branch check SKIPPED — could not create '$wanted'" >&2
+    return 0
+  fi
+  if ! git branch "$decoy" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: stage-branch check SKIPPED — could not create decoy '$decoy'" >&2
+    git branch -D "$wanted" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: stage-branch check FAILED — inner --release-close dry-run exited non-zero" >&2
+  else
+    if ! grep -F "\"name\":\"${wanted}\"" <<<"$out" >/dev/null; then
+      echo "self-test: stage-branch check FAILED — chore/vX.Y-stage-* branch '$wanted' NOT enumerated by --release-close (#684 regression)" >&2
+      fail=1
+    fi
+    if grep -F "\"name\":\"${decoy}\"" <<<"$out" >/dev/null; then
+      echo "self-test: stage-branch check FAILED — decoy '$decoy' over-matched (v0.1 vs v0.11 collision)" >&2
+      fail=1
+    fi
+  fi
+
+  git branch -D "$wanted" >/dev/null 2>&1 || true
+  git branch -D "$decoy" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: stage-branch check PASS — chore/vX.Y-stage-* swept; no vX.Y vs vX.YY over-match" >&2
+  return 0
+}
+
+# #683 — behind-HEAD apply (FMF-2 production gap). Classification proves merged-ness
+# against origin/main, but `git branch -d` is HEAD-relative — from a checkout whose
+# HEAD is behind origin/main (the Stage 13 hub-worktree case) it refuses a genuinely-
+# merged branch. #683 re-verifies is_fully_merged at BOTH delete sites (apply_removals
+# + resolve_freed_branches) and uses -D on confirmation. Two sub-cases:
+#   (1) AC-1 END-TO-END (resolve delete site): a merged branch (0 unique vs origin/main)
+#       attached to a throwaway worktree at origin/main tip, invoked via
+#       --release-close --apply (NO --force) from a SEPARATE detached worktree whose
+#       HEAD is behind origin/main. The worktree removal frees the branch; the resolve
+#       pass removes it with -D. Without the fix the resolve -d refuses → branch
+#       survives with "FAILED — git branch refused" (verified). This is the exact
+#       documented FMF-2 scenario. --release-close keeps the scope slug-local (safe /
+#       net-zero) — a workspace-wide --historical --apply would delete real branches.
+#       (The direct apply_removals delete site is unreachable for a no-PR branch under
+#       --release-close require_pr=1 (#2216), so AC-1 exercises the resolve twin.)
+#   (2) AC-2 UNIT (apply_removals delete site + fallback): a REAL unmerged branch
+#       (≥1 unique vs origin/main) seeded as a REMOVE row and run through apply_removals
+#       IN-PROCESS. del_flag must be -d (unique!=0), so `git branch -d` refuses (the
+#       branch is not merged into the self-test HEAD) → row FAILED, branch SURVIVES —
+#       proving an unmerged branch is never force-deleted without --force (no guard
+#       regression). If the fix wrongly forced -D unconditionally the branch would
+#       vanish. Net-zero teardown via git porcelain on every exit path.
+selftest_behind_head_apply() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: behind-HEAD apply check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs tip base slug merged_branch attach_wt inv_wt out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  tip=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}~1" 2>/dev/null || true)
+  if [[ -z "$tip" || -z "$base" ]]; then
+    echo "self-test: behind-HEAD apply check SKIPPED — ${REMOTE_NAME}/${MAIN_BRANCH} has no parent to anchor a behind-HEAD checkout" >&2
+    return 0
+  fi
+
+  # ── (1) AC-1: resolve-site behind-HEAD removal ──
+  slug="v0.0-cleanup-selftest-bh-$$"
+  merged_branch="release/v0.0-cleanup-selftest-bh-$$"
+  attach_wt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bh-$$"
+  inv_wt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bhinv-$$"
+  if is_protected "$merged_branch"; then
+    echo "self-test: behind-HEAD apply check SKIPPED — operator protect-list matches '$merged_branch'" >&2
+    return 0
+  fi
+  if ! git worktree add -b "$merged_branch" "$attach_wt" "$tip" >/dev/null 2>&1; then
+    echo "self-test: behind-HEAD apply check SKIPPED — could not create attached worktree at origin/main" >&2
+    return 0
+  fi
+  if ! git worktree add --detach "$inv_wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: behind-HEAD apply check SKIPPED — could not create behind-HEAD invoking worktree" >&2
+    git worktree remove --force "$attach_wt" >/dev/null 2>&1 || true
+    git branch -D "$merged_branch" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$(cd "$inv_wt" && "$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: behind-HEAD apply check FAILED — inner --release-close --apply exited non-zero" >&2
+  elif git show-ref --verify --quiet "refs/heads/${merged_branch}"; then
+    echo "self-test: behind-HEAD apply check FAILED — merged branch '$merged_branch' survived --apply from a behind-HEAD checkout without --force (#683 / FMF-2 regression)" >&2
+    fail=1
+  fi
+  git worktree remove --force "$attach_wt" >/dev/null 2>&1 || true
+  git worktree remove --force "$inv_wt" >/dev/null 2>&1 || true
+  git branch -D "$merged_branch" >/dev/null 2>&1 || true
+
+  # ── (2) AC-2: apply_removals must NOT force-delete an unmerged branch ──
+  if [[ "$fail" -eq 0 ]]; then
+    local ub tmpwt saved_mode="$MODE" action
+    ub="chore/cleanup-selftest-bhum-$$"
+    tmpwt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bhum-$$"
+    if is_protected "$ub"; then
+      echo "self-test: behind-HEAD apply check — AC-2 sub-case SKIPPED (protect-list matches '$ub')" >&2
+    elif ! git worktree add -b "$ub" "$tmpwt" "$tip" >/dev/null 2>&1; then
+      echo "self-test: behind-HEAD apply check — AC-2 sub-case SKIPPED (could not create unmerged branch)" >&2
+    else
+      git -C "$tmpwt" commit --allow-empty -m "cleanup-selftest behind-HEAD AC-2 unmerged fixture $$" >/dev/null 2>&1 || true
+      git worktree remove --force "$tmpwt" >/dev/null 2>&1 || true   # detach so it is a plain local branch
+      # Seed a REMOVE row with a non-zero unique so del_flag must fall back to -d.
+      LOCAL_BRANCH_CANDIDATES=("${ub}"$'\t'"5"$'\t'"selftest"$'\t'""$'\t'"(none)"$'\t'"REMOVE")
+      REMOTE_BRANCH_CANDIDATES=()
+      WORKTREE_CANDIDATES=()
+      MODE="apply"
+      apply_removals >/dev/null 2>&1 || true
+      MODE="$saved_mode"
+      action=$(awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}")
+      if git show-ref --verify --quiet "refs/heads/${ub}"; then
+        case "$action" in
+          FAILED*) : ;;   # -d refused the unmerged branch — the guard held
+          *) echo "self-test: behind-HEAD apply check FAILED — unmerged branch survived but row action='$action' (expected FAILED)" >&2; fail=1 ;;
+        esac
+      else
+        echo "self-test: behind-HEAD apply check FAILED — unmerged branch '$ub' was force-deleted by apply_removals without --force (AC-2 guard regression)" >&2
+        fail=1
+      fi
+      git branch -D "$ub" >/dev/null 2>&1 || true
+      LOCAL_BRANCH_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=()
+    fi
+  fi
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: behind-HEAD apply check PASS — merged branch removed from behind-HEAD checkout (no --force); unmerged branch stays guarded (-d fallback)" >&2
+  return 0
+}
+
+# #670 — local-branch dedup under --all. detect_spawn_task (claude/* branches) and
+# detect_historical (all merged-unattached branches) both classify a merged claude/*
+# branch, so before #670 it produced two LOCAL_BRANCH_CANDIDATES rows (report +
+# counter double-count). This fixture creates a merged claude/* branch (0 unique →
+# eligible under both passes, unattached so detect_historical enumerates it), runs
+# --all --dry-run, and asserts the branch name appears EXACTLY ONCE in local_branches.
+# Without the guard the count is 2 (verified). Net-zero teardown via git porcelain.
+selftest_dedup_local_branches() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: dedup check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs branch out count fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  branch="claude/cleanup-selftest-dedup-$$"     # claude/* so detect_spawn_task rows it; merged+unattached so detect_historical also rows it
+  if is_protected "$branch"; then
+    echo "self-test: dedup check SKIPPED — operator protect-list matches '$branch'" >&2
+    return 0
+  fi
+  if ! git branch "$branch" "${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: dedup check SKIPPED — could not create throwaway branch '$branch'" >&2
+    return 0
+  fi
+
+  out=$("$script_abs" --all --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: dedup check FAILED — inner --all dry-run exited non-zero" >&2
+  else
+    count=$(grep -oF "\"name\":\"${branch}\"" <<<"$out" | wc -l | tr -d ' ')
+    if [[ "$count" != "1" ]]; then
+      echo "self-test: dedup check FAILED — merged claude/* branch appears ${count}x in --all local_branches (expected 1; #670 regression)" >&2
+      fail=1
+    fi
+  fi
+
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: dedup check PASS — one local-branch row per branch under --all (spawn-task + historical overlap deduped)" >&2
+  return 0
+}
+
+# #655 — PR-map identity. The prefetch map must return byte-identical (pr_n, pr_s)
+# to the per-branch path for the same branch (the correctness precondition for
+# replacing ~2 gh calls per branch with one run-scoped list). This fixture samples
+# real local branches and, for each, compares pr_lookup in the built-map state
+# against pr_lookup in a FORCED-degraded state (the per-branch fallback). They must
+# agree. Also asserts the map's own state is honestly self-reported (built → ok or
+# degraded, never a silent claim). In-process; saves/restores the PR_MAP_* globals.
+# Offline / gh-unreachable degrades both paths to the same per-branch calls, so the
+# equality still holds (and pr_s="?" transient state is absent in map mode — a strict
+# improvement). Net-zero (read-only; no branch/worktree state touched).
+selftest_pr_map_identity() {
+  local saved_built="$PR_MAP_BUILT" saved_state="$PR_MAP_STATE"
+  local saved_entries_n=${#PR_MAP_ENTRIES[@]}
+  # Snapshot the entries array so we can restore it (bash-3.2 copy).
+  local saved_entries=(); local e
+  for e in "${PR_MAP_ENTRIES[@]:-}"; do [[ -n "$e" ]] && saved_entries+=("$e"); done
+
+  local b sample=() n=0 fail=0
+  # Sample up to 8 real local branches (deterministic: first-listed). Read-only.
+  for b in $(git for-each-ref 'refs/heads/' --format='%(refname:short)' 2>/dev/null); do
+    sample+=("$b"); ((n++)) || true
+    [[ "$n" -ge 8 ]] && break
+  done
+  if [[ "$n" -eq 0 ]]; then
+    echo "self-test: pr-map identity check SKIPPED — no local branches to sample" >&2
+    return 0
+  fi
+
+  # Build the map once, record its honestly-reported state.
+  PR_MAP_BUILT=0; PR_MAP_ENTRIES=(); PR_MAP_STATE="degraded"
+  build_pr_map >/dev/null 2>&1 || true
+  case "$PR_MAP_STATE" in
+    ok|degraded) : ;;
+    *) echo "self-test: pr-map identity check FAILED — PR_MAP_STATE='$PR_MAP_STATE' (must be ok|degraded)" >&2; fail=1 ;;
+  esac
+
+  local map_n map_s deg_n deg_s
+  for b in "${sample[@]}"; do
+    # Map-mode lookup (whatever state build produced).
+    pr_lookup "$b"; map_n="$PR_LOOKUP_N"; map_s="$PR_LOOKUP_S"
+    # Forced-degraded lookup (the verbatim per-branch fallback).
+    local hold_state="$PR_MAP_STATE"; PR_MAP_STATE="degraded"
+    pr_lookup "$b"; deg_n="$PR_LOOKUP_N"; deg_s="$PR_LOOKUP_S"
+    PR_MAP_STATE="$hold_state"
+    if [[ "$map_n" != "$deg_n" || "$map_s" != "$deg_s" ]]; then
+      echo "self-test: pr-map identity check FAILED — branch '$b': map=($map_n,$map_s) != per-branch=($deg_n,$deg_s)" >&2
+      fail=1
+    fi
+  done
+
+  # Restore globals for the rest of the suite.
+  PR_MAP_BUILT="$saved_built"; PR_MAP_STATE="$saved_state"
+  PR_MAP_ENTRIES=()
+  for e in "${saved_entries[@]:-}"; do [[ -n "$e" ]] && PR_MAP_ENTRIES+=("$e"); done
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: pr-map identity check PASS — map-path (pr_n,pr_s) identical to per-branch over ${n} sampled branch(es) [map state: ${saved_state}→built]" >&2
+  return 0
+}
+
+# #669 — --help protective-guarantee assertion. The end-anchored usage() window must
+# always surface the SAFETY (--force / SELF) and META (--self-test) lines. This fixture
+# runs the real --help and asserts each token is present, so a future window/header edit
+# that drops a protective line fails the suite instead of silently regressing (the #1678
+# defect class). Also asserts the Hook-compatibility divider stays OUTSIDE --help (the
+# window's end-anchor holds). Pure read of --help output; net-zero.
+selftest_help_surface() {
+  local script_abs help fail=0 tok
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  help=$("$script_abs" --help 2>/dev/null) || {
+    echo "self-test: help-surface check FAILED — --help exited non-zero" >&2
+    exit 1
+  }
+  for tok in "--force" "SELF" "--self-test"; do
+    if ! grep -qF -- "$tok" <<<"$help"; then
+      echo "self-test: help-surface check FAILED — --help omits the protective token '$tok' (#669 / #1678 regression)" >&2
+      fail=1
+    fi
+  done
+  # The end-anchor must stop BEFORE the Hook-compatibility divider (proves the window
+  # is bounded by structure, not runaway to EOF).
+  if grep -qF "Hook compatibility" <<<"$help"; then
+    echo "self-test: help-surface check FAILED — --help leaked past the 'Hook compatibility' divider (end-anchor broken)" >&2
+    fail=1
+  fi
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: help-surface check PASS — --help surfaces --force / SELF / --self-test; bounded at the Hook-compatibility divider" >&2
+  return 0
+}
+
 # v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
 # EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
 # Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
@@ -2029,6 +2599,170 @@ selftest_orphan_tag_reap() {
   return 0
 }
 
+# #2216 — squash-merge MERGED-PR rescue on the --release-close path.
+# The production defect: a squash-merged release branch has source commits that
+# are NOT ancestors of main, so the ancestry SKIP ("unique commits exist (N)")
+# fires and --release-close reaps nothing even though the PR is MERGED.
+#
+# A live MERGED PR is UN-FORGEABLE in-harness (has_merged_pr / gh pr view against
+# a synthetic branch always return not-merged; there is no gh stub seam), so this
+# fixture proves the fix at TWO levels (#2779 E3 / scope-lock D5):
+#   (1) SEAM-LEVEL (AC-1): a throwaway branch with a REAL unique commit (ancestry
+#       SKIP would fire) is run through classify_local IN-PROCESS in a subshell
+#       where `gh` is shadowed to report a MERGED PR. Assert require_pr=1 yields
+#       REMOVE (the rescue overrode the ancestry SKIP) AND require_pr=0 yields the
+#       ancestry SKIP (no rescue off the release-close path) — the precedence.
+#   (2) BLACK-BOX (AC-2/R2): the SAME unique-commit branch, with NO PR (real gh),
+#       run through `--release-close <slug> --dry-run` stays SKIP — proving the
+#       rescue never over-removes a genuinely-unmerged, un-PR'd branch.
+# The "real shipped release reports non-zero removable" AC is a Stage-8 manual
+# integration check, not a fixture. Net-zero teardown via git porcelain.
+selftest_release_close_merged_pr() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: merged-PR rescue check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs base slug branch wt out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: merged-PR rescue check SKIPPED — could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    return 0
+  fi
+  slug="cleanup-selftest-mpr-$$"
+  branch="release/v0.0-${slug}"            # version-prefixed so detect_release_close enumerates it
+  if is_protected "$branch"; then
+    echo "self-test: merged-PR rescue check SKIPPED — operator protect-list matches '$branch'" >&2
+    return 0
+  fi
+  # A throwaway worktree at origin/main + 1 unique commit: source commit is NOT an
+  # ancestor of main (the squash-merge shape), so the ancestry SKIP would fire.
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: merged-PR rescue check SKIPPED — could not create throwaway worktree" >&2
+    return 0
+  fi
+  if ! git -C "$wt" commit --allow-empty -m "cleanup-selftest merged-PR-rescue fixture $$" >/dev/null 2>&1; then
+    echo "self-test: merged-PR rescue check SKIPPED — could not add unique commit" >&2
+    git worktree remove --force "$wt" >/dev/null 2>&1 || true
+    git branch -D "$branch" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  # ── (1) SEAM-LEVEL: classify_local in a subshell with a shadowed MERGED PR ──
+  # Shell-function `gh` shadows the pinned-PATH binary (functions resolve first),
+  # so the classifier reads pr_s="MERGED" for this branch. The subshell isolates
+  # the LOCAL_BRANCH_CANDIDATES mutation and the shadow from the rest of the suite.
+  # branch_has_worktree would SKIP-active-worktree this branch, so the seam case
+  # runs against the branch name only after the worktree is detached below is NOT
+  # possible (we still need the tree for the black-box run); instead the seam case
+  # uses a SEPARATE detached-free branch pointer at the same unique commit.
+  local seam_branch="chore/v0.0-${slug}-seam"
+  local unique_tip
+  unique_tip=$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)
+  if [[ -n "$unique_tip" ]] && git branch "$seam_branch" "$unique_tip" >/dev/null 2>&1; then
+    # Shadow gh so the classifier reads a MERGED PR for this branch. The two
+    # arms key on the sub-command ($2): `pr list` → a PR number; `pr view` →
+    # MERGED. Shell functions resolve ahead of the pinned-PATH binary.
+    _selftest_gh_merged() {
+      case "${2:-}" in
+        list) echo "9990" ;;
+        view) echo "MERGED" ;;
+      esac
+    }
+    local seam_remove seam_skip
+    seam_remove=$(
+      gh() { _selftest_gh_merged "$@"; }
+      GH_BIN=gh; GH_BIN_RESOLVED=1   # route "$GH_BIN" through the gh() shadow (#2790)
+      # Force the degraded per-branch path so pr_lookup exercises the shadowed gh
+      # (a globally-built ok map has no synthetic-seam entry → map-miss → (none),
+      # which would defeat the shadow now that gh is reachable). BUILT=1 skips a
+      # real rebuild; the reset is subshell-local (#2790).
+      PR_MAP_BUILT=1; PR_MAP_STATE=degraded; PR_MAP_ENTRIES=()
+      LOCAL_BRANCH_CANDIDATES=()
+      classify_local "$seam_branch" 1
+      awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
+    )
+    seam_skip=$(
+      gh() { _selftest_gh_merged "$@"; }
+      GH_BIN=gh; GH_BIN_RESOLVED=1   # route "$GH_BIN" through the gh() shadow (#2790)
+      # Force degraded per-branch path (see the require_pr=1 arm above) (#2790).
+      PR_MAP_BUILT=1; PR_MAP_STATE=degraded; PR_MAP_ENTRIES=()
+      LOCAL_BRANCH_CANDIDATES=()
+      classify_local "$seam_branch" 0
+      awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
+    )
+    if [[ "$seam_remove" != "REMOVE" ]]; then
+      echo "self-test: merged-PR rescue check FAILED — require_pr=1 + MERGED PR did not rescue the unique-commit branch (got '$seam_remove', want REMOVE)" >&2
+      fail=1
+    fi
+    case "$seam_skip" in
+      "SKIP — unique commits exist"*) : ;;
+      *) echo "self-test: merged-PR rescue check FAILED — require_pr=0 must NOT rescue (got '$seam_skip', want ancestry SKIP)" >&2; fail=1 ;;
+    esac
+    git branch -D "$seam_branch" >/dev/null 2>&1 || true
+  else
+    echo "self-test: merged-PR rescue check — seam sub-case SKIPPED (could not create seam branch)" >&2
+  fi
+
+  # ── (2) BLACK-BOX: real gh, no PR → unique-commit branch stays SKIP (no over-removal) ──
+  # Detach the worktree's branch so classify_local sees a plain local branch (not
+  # active-worktree-attached) yet the unique commit persists on the branch ref.
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 0 ]]; then
+    # The branch is worktree-attached, so its row reads "SKIP — active worktree
+    # attached"; the load-bearing black-box assertion is that it is NOT REMOVE
+    # (no false rescue for a branch with no MERGED PR).
+    if grep -F "\"name\":\"${branch}\"" <<<"$out" | grep -q '"action":"REMOVE"'; then
+      echo "self-test: merged-PR rescue check FAILED — unique-commit branch with NO PR classified REMOVE under --release-close (over-removal / R2 regression)" >&2
+      fail=1
+    fi
+  else
+    echo "self-test: merged-PR rescue check FAILED — inner --release-close dry-run exited non-zero" >&2
+  fi
+
+  git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: merged-PR rescue check PASS — MERGED PR rescues squash-merged branch (require_pr=1); ancestry SKIP holds otherwise; no-PR branch never over-removed" >&2
+  return 0
+}
+
+# #2790 — gh reachability under the pinned PATH. The shadow-based fixtures
+# (selftest_release_close_merged_pr) redefine `gh` as a function and so
+# STRUCTURALLY cannot catch binary-unreachability: a function shadow resolves
+# regardless of PATH. This fixture exercises the REAL resolution path — it
+# asserts resolve_gh_bin finds an executable absolute-path binary AND that a
+# live `"$GH_BIN" pr list` runs without the /usr/bin:/bin pin blocking it
+# (the exact production symptom). SKIP-guarded (stays green) when no gh binary
+# exists at all — offline / CI hosts — so it never turns those runs red.
+selftest_gh_bin_resolves() {
+  local saved_bin="$GH_BIN" saved_res="$GH_BIN_RESOLVED"
+  GH_BIN=""; GH_BIN_RESOLVED=0
+  resolve_gh_bin
+  if [[ -z "$GH_BIN" ]]; then
+    echo "self-test: gh-reachability check SKIPPED — no gh binary at /opt/homebrew/bin/gh, /usr/local/bin/gh, or /usr/bin/gh (offline/CI)" >&2
+    GH_BIN="$saved_bin"; GH_BIN_RESOLVED="$saved_res"
+    return 0
+  fi
+  local fail=0
+  if [[ ! -x "$GH_BIN" ]]; then
+    echo "self-test: gh-reachability check FAILED — resolve_gh_bin set GH_BIN='$GH_BIN' but it is not executable" >&2
+    fail=1
+  fi
+  # Live query under the pinned PATH: proves the absolute-path binary is
+  # reachable where a bare `gh` would exit 127. --limit 1 keeps it cheap;
+  # any non-zero exit (incl. auth failure) fails the fixture loudly.
+  if [[ "$fail" -eq 0 ]] && ! "$GH_BIN" pr list --repo "$REPO_SLUG" --limit 1 --json number >/dev/null 2>&1; then
+    echo "self-test: gh-reachability check FAILED — live \"\$GH_BIN\" pr list did not resolve (auth or reachability)" >&2
+    fail=1
+  fi
+  GH_BIN="$saved_bin"; GH_BIN_RESOLVED="$saved_res"
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: gh-reachability check PASS — resolve_gh_bin found an executable gh by absolute path AND a live \"\$GH_BIN\" pr list resolved under the pinned PATH (#2790)" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -2048,12 +2782,26 @@ self_test() {
   selftest_fixed_point
   echo "self-test: exercising version-prefixed release matcher (release/vX.Y-<slug>; EDIT 1/2/3)..." >&2
   selftest_version_prefix_release
+  echo "self-test: exercising squash-merge MERGED-PR rescue on --release-close (#2216)..." >&2
+  selftest_release_close_merged_pr
+  echo "self-test: exercising chore/vX.Y-stage-* sweep + anti-over-match (#684)..." >&2
+  selftest_stage_branch_release_close
+  echo "self-test: exercising behind-HEAD apply removes merged branch without --force (#683)..." >&2
+  selftest_behind_head_apply
+  echo "self-test: exercising local-branch dedup under --all (spawn-task + historical overlap) (#670)..." >&2
+  selftest_dedup_local_branches
+  echo "self-test: exercising PR-map prefetch identity vs per-branch (#655)..." >&2
+  selftest_pr_map_identity
+  echo "self-test: exercising gh reachability under the pinned PATH (real resolve + live query) (#2790)..." >&2
+  selftest_gh_bin_resolves
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
   selftest_no_live_worktree_pipes
   echo "self-test: exercising orphan-tag reap (authority gate, real-reap-observed, double-opt-in, canonical-guard, verify-after, ledger write-back)..." >&2
   selftest_orphan_tag_reap
+  echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
+  selftest_help_surface
   echo "self-test: PASS" >&2
   exit 0
 }
