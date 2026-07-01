@@ -4,7 +4,7 @@ purpose: The canonical schema for PROJECT.md — the fields a project context fi
 type: schema
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: the 13 PROJECT.md-reading skills; OPERATIONS.md §Methodology Awareness Protocol; project-initiator; the role-skill wave
+consumers: the PROJECT.md-reading skills (the §8 consumer table); OPERATIONS.md §Methodology Awareness Protocol; project-initiator; the role-skill wave
 ---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-memory-ref -->
@@ -13,7 +13,7 @@ consumers: the 13 PROJECT.md-reading skills; OPERATIONS.md §Methodology Awarene
 **Status:** Canonical
 **Owner:** `../schemas/project-schema.md`
 **Introduced:** methodology-parameterization-core (2026-04-24)
-**Consumers:** 13 PROJECT.md-reading skills + `OPERATIONS.md § Methodology Awareness Protocol` + the future role-skill wave
+**Consumers:** the PROJECT.md-reading skills enumerated in the §8 consumer table (below) + `OPERATIONS.md § Methodology Awareness Protocol` + the future role-skill wave
 **Cross-references:**
 
 - [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md) — 8 archetype normative definitions + Custom Extension Protocol + Skill Consumption Pattern
@@ -475,11 +475,22 @@ See [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Fr
 
 Existing `projects/<project>/PROJECT.md` files under `projects/` use an ad-hoc markdown `**Key:** value` format rather than YAML frontmatter. `[SOURCE]` — inspection of `projects/[PROJECT_KEY] Implementation/PROJECT.md` and sibling files 2026-04-24.
 
-The schema describes the **canonical forward-looking shape** — YAML frontmatter. Migration of existing PROJECT.md files to YAML frontmatter is a future concern and is **not required** by this release. Consumer skills read `delivery_approach` via the same parsing approach they use today (markdown key-value or YAML — whichever is present). The schema is authoritative for:
+The schema describes the **canonical forward-looking shape**. As of the composed-index redesign (ADR-060), that shape is a **thin composed wiki-link index** (≤50 lines): Methodology + Status stay **inline** (the §8 consumers parse them in place); People / Systems / Milestones / Plans / Workstreams become `[[wiki-link]]` lists into the `_pmo/` shared-entity pages and the typed plans, rather than inline tables. `project-initiator` Mode A scaffolds **new** projects in this shape (Step 3, `operations/templates/project-md-composed-index-template.md`). Migration of **existing** live PROJECT.md files is the gated, EXPENSIVE step (Migration Protocol below) — **not** auto-applied. Consumer skills read `delivery_approach` + `status` via the same parsing approach they use today (markdown key-value or YAML — whichever is present); because Methodology + Status remain inline, the composed-index shape is back-compatible with every §8 consumer. The schema is authoritative for:
 
-- new PROJECT.md scaffolding (via `project-initiator` Mode A once it is refit in a future release),
-- any PROJECT.md migrated to YAML frontmatter format,
+- new PROJECT.md scaffolding (composed-index shape via `project-initiator` Mode A),
+- any PROJECT.md migrated to the composed-index shape (per the protocol below),
 - the semantic definition of fields regardless of serialization format.
+
+### Composed-Index Migration Protocol (ADR-060 — gated, per-project)
+
+Migrating a live PROJECT.md from the narrative-table monolith to the composed-index shape. **EXPENSIVE / gated per project** — the live ops tree (`projects/`) is git-ignored, so there is **no git rollback**; snapshot before, verify links after. Run the four steps in order, one project at a time:
+
+- **M1 — Extract.** Read the live PROJECT.md end-to-end and extract the inline People / Systems / Milestones / Plans / Workstreams table rows into discrete entities. Snapshot the original to `08-Generated/_migration-snapshot/` (the pre-change copy — the only rollback path on the git-ignored tree).
+- **M2 — Author / link `_pmo/` pages (with alias tracking).** For each extracted entity, author (or link to an existing) `_pmo/` page from the matching entity-page template (`operations/templates/{person,system,vendor,workstream,decision,dependency}-entity-template.md`). Dedup against the entity id (`person_id`, …); on any name variant, append to `aliases[]` (`people-coverage-graph.md §2.3`), never edit the id. Unresolved person names route to the clarification queue (never auto-create — `project-initiator` Step 2b).
+- **M3 — Replace tables with wiki-link lists.** Swap the inline tables in PROJECT.md for `[[wiki-link]]` lists into the M2 pages + the typed plans. Keep Methodology + Status inline (consumer back-compat). Target the ≤50-line composed-index shape.
+- **M4 — Verify links.** Confirm every wiki-link resolves to a real `_pmo/` page (Obsidian graph view shows project↔entity edges) and that every §8 consumer still parses Methodology + Status from the migrated file without error.
+
+The POC project for the first migration is **decided at the Stage-12 gate** (not in Engineering); bulk migration beyond the POC is a gated follow-up.
 
 ## 8. Consumers
 

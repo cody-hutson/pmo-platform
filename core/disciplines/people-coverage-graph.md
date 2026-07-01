@@ -50,6 +50,20 @@ The view is computed on demand by a consumer from the three sources below. Each 
 
 Every edge and every join in the view resolves through `person_id` — the deduplication anchor that the cross-entity consistency rules across the entity model resolve against. This is why a parallel or unwired people overlay is rejected by construction: an overlay that does not dedup against `person_id` re-introduces the misspelling-and-duplicate problem the functional-graph work exists to eliminate. The view leans on the single anchor so one person is never represented twice.
 
+### 2.3 Alias tracking & rename-safety
+
+A person's display name changes (a legal-name change, a corrected spelling, a preferred-name update), but their **identity must not**. The `_pmo/people/` entity page (the SSOT per ADR-058) carries an **optional `aliases:` frontmatter convention** that makes a rename non-destructive without ever touching the identity anchor.
+
+**This is a template convention, not a frozen-schema field (Q2).** `aliases:` is an optional list on the entity page authored by the Person entity-page template (`operations/templates/person-entity-template.md`); it adds **no field** to the frozen Person entity (`entity-field-schemas.md` §3.10 / `project-entity-model.md` §4) and **no field** to the roster — the frozen-schema boundary above is preserved. It is a rename-safety affordance homed here, in the view/convention layer, exactly as the no-parallel-store rule requires.
+
+The rename-safety rules:
+
+1. **Never edit `person_id`.** `person_id` is the immutable identity anchor (globally unique, V-PER-02). A rename never changes it — every link, FK, and cross-entity reference (`owner_person_id`, `lead_person_id`, `decision_maker_person_id`, the ADR-040 leadership-owner refs, …) targets `person_id`, so they all keep resolving across the rename by construction.
+2. **Append, never delete.** On a rename, update `full_name` to the new name and **append** the prior `full_name` to `aliases[]`. The old name is retained, never dropped — so a name-resolution miss against the old spelling still resolves to the right person (the TE-3 / clarification-queue path checks `aliases[]` before enqueuing).
+3. **Links/FKs target `person_id`, not the name.** Because every cross-entity edge resolves on `person_id` (§2.2), no link needs rewriting on a rename — the alias list is purely for name-resolution and human readability, not for re-pointing references.
+
+Worked shape (on the entity page): `full_name: [NEW_NAME]` · `aliases: ["[PRIOR_NAME]", "[EARLIER_SPELLING]"]` · `person_id: person-<stable-slug>` (unchanged).
+
 ---
 
 ## 3. Ambient maintenance — event-driven refresh + clarification queue

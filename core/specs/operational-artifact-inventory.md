@@ -154,16 +154,16 @@ All map to `source_entity = #9 Artifact` (OOS-3 Artifact-seam); `reconciliation_
 
 ### 5.5 typed-plan (6) — `source_entity == #4 Plan`
 
-All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent` ( §6); `reconciliation_flag = clean` (Plan entity directly persists these). `plan_type` discriminator value domain is **deferred to G5** ( §4 entity #4 — the field is required now; its enum is G5's).
+All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent` ( §6); `reconciliation_flag = clean` (Plan entity directly persists these). `plan_type` discriminator value domain is **resolved at v3.37, ADR-059** — an OPEN discriminator whose registry is `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot). The `release` / `implementation` / `project` / `test` values below are the documented §3.4a OPEN-tail anchors (no longer G5-deferred).
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
-| `v[X.Y]_RELEASE_PLAN.md` | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | FROZEN D4 illustrative anchor: `plan_type=release` (enum value deferred to G5 per the Stage 5 spec §4 / Finding 2) |
-| implementation plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=implementation` `[ASSUMPTION – CONFIRM @ G5]` |
-| project plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=project` `[ASSUMPTION – CONFIRM @ G5]` |
-| test plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=test` `[ASSUMPTION – CONFIRM @ G5]` |
-| comms plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=comms` `[ASSUMPTION – CONFIRM @ G5]` |
-| training plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=training` `[ASSUMPTION – CONFIRM @ G5]` |
+| `v[X.Y]_RELEASE_PLAN.md` | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | D4 illustrative anchor: `plan_type=release` (§3.4a OPEN-tail anchor — resolved at v3.37) |
+| implementation plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=implementation` (§3.4a OPEN-tail anchor) |
+| project plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=project` (§3.4a OPEN-tail anchor) |
+| test plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=test` (§3.4a OPEN-tail anchor) |
+| comms plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=comms` (§3.4a registered subtype) |
+| training plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=training` (§3.4a registered subtype; operational-terminal `delivered`) |
 
 **Row count:** 5 + 21 + 6 + 10 + 6 = **48** (≥ AC-1's 40 floor by construction). All 5 `class` values present. Every row carries a non-blank `source_entity`, `format`, `template_status`, `schema_status`, `owning_skill`, and `reconciliation_flag` (mandatory-coverage invariant satisfied).
 
