@@ -31,7 +31,7 @@ Frontmatter is the storage mechanism: YAML metadata that agents maintain on ever
 
 ## Scope
 
-- **Applies to:** all files in `Projects/[Project]/01-08/` folders
+- **Applies to:** all files in `projects/[Project]/01-08/` folders
 - **Markdown files (.md):** embedded YAML frontmatter block (standard `---` delimiters)
 - **Non-markdown files (.txt, .csv, .xlsx, .pdf, .docx, .html):** sidecar `.meta.yml` file (see Sidecar Specification below)
 - **Exclusions:** navigation layer pages (`_pmo/`) have their own simplified frontmatter; governance files at `projects/_config/` are exempt (governed by CLAUDE.md tier system)

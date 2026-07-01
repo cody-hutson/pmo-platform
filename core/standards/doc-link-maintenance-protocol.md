@@ -143,7 +143,7 @@ Stage 7 Dev Testing and Stage 8 QA Testing inherit the doc-link-check via `./dep
 
 **Mode:** warn-mode (per [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) § Warn-Mode vs. Enforce-Mode shakedown precedent for Checks 8/9/10).
 
-**Mechanism:** Check 14 logs findings to `.claude/hooks/doc-link-warn-log.jsonl` and exits 0. The check does NOT block deploy during the shakedown window.
+**Mechanism:** Check 14 logs findings via `flag_warn_or_issue` to the shared deploy-check warn log (`deploy-check-warn-log.jsonl` under the operator-instance path) and exits 0. The check does NOT block deploy during the shakedown window.
 
 **Rationale:** A baseline broken-ref backlog (~78 findings at merge time, dominated by the historical RELEASE_LOG and ADR cross-references that survive multiple reorgs) cannot be drained in the same release that ships the check. Always-enforce on day 1 would block deploy on the very release that introduces the check. Warn-mode lets the protocol ship + surface drift without blocking, gives the operator visibility into the drift backlog (which informs follow-up tickets), and matches the established Check 8/9/10 rollout pattern.
 
@@ -157,7 +157,7 @@ Warn-mode without operator-driven review degrades to ceremony. To prevent that, 
 
 | Threshold | Action |
 |---|---|
-| **2-3 releases post-merge** | Operator-driven review of `doc-link-warn-log.jsonl`; broken-ref backlog drainage (F-4) progress assessed |
+| **2-3 releases post-merge** | Operator-driven review of the shared `deploy-check-warn-log.jsonl` (Check 14 findings); broken-ref backlog drainage (F-4) progress assessed |
 | **Broken-ref backlog drained to < 10 entries** | Flip to enforce-mode via `.claude/hooks/.mode` or `.claude/hooks/deploy-check.mode` |
 | **Until enforce-mode is activated** | Operator must explicitly defer the flip with rationale at each Stage 13 close; silent deferral is a process violation |
 
