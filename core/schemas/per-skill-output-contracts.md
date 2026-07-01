@@ -1151,6 +1151,60 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ---
 
+## Skill 15: Pipeline Triage (Stage-2 Triage Execution — Improvement Backlog)
+
+### Output Contract (Consolidated Triage Summary — 4 Required Sections)
+
+Pipeline Triage produces exactly ONE consolidated batch artifact per triage run — never a stream of per-action prompts. The summary is posted as the triage decision comment per the standard stage review header format (`stage-02-triage.md` §6 Outputs); no separate triage document is written (issue body is the source-of-truth layer; state anchors update at Resolve). The summary has four required sections.
+
+| Section | Content | Format | Notes |
+|---------|---------|--------|-------|
+| 1. Batch Scope | The `status: proposed` query run (untriaged-view filter with observations excluded), the issue set triaged, the count | Structured block | States the improvement-backlog boundary explicitly (not a project/Jira backlog) |
+| 2. Per-Issue Block | One block per issue: A6 summary fields (DoR status · duplicate/similarity candidates · dependency block/warn flags · `Dependency-position signal` · feasibility flags · priority assessment · size-routing outcome) + a per-issue **Approve / Defer / Reject recommendation** with evidence + reversibility tier + confidence | One block per issue | The recommendation is `[RECOMMENDED]`, never a rendered verdict |
+| 3. Management-Task Signals (A6.5) | The per-batch 4-pattern sweep output (backlog hygiene / escalation signals / coordination needs / decomposition candidates) in the `stage-02-triage.md` §5 A6.5 signal-block format | `### Management-Task Signals` H3 block | Empty patterns reported explicitly as "none detected", never omitted |
+| 4. Verdict-Reservation Note | Explicit statement that the Approve/Defer/Reject **verdict** is operator-only (Tier 3); the summary presents recommendations only | Structured line | The Tier-3 human-only reservation |
+
+### Required Elements
+
+**Auto-execute default (#282):** the A1–A6.5 enrichment (DoR check, duplicate/similarity, dependency-state validation + native-dep mirror, feasibility, priority re-evaluation, oversize routing, per-issue summary, management-task identification) runs end-to-end for all in-scope `status: proposed` issues with NO per-action approval gate. Enrichment writes (comments, labels, native-dep mirror, Decision-Date/Priority Projects-field writes) post in one consolidated pass, binding the Tier-2 posture defined at `stage-02-triage.md` §8 (referenced, not restated).
+
+**Close/Reject confirmation carve-out (#282 AC5):** the ONE state-mutating action outside auto-execute is the Reject-close (`gh issue close --reason "not planned"`) — it blocks behind an explicit operator confirmation at the verdict-execution boundary. Approve/Defer execute as normal operator-approved batch label outcomes.
+
+**Cite-don't-restate (#286):** each phase (A1…A6.5) references its definition in `stage-02-triage.md` §5 + the relevant gate ID (G1-*, G2-01/04/09/10/11/12); the phase *definitions* are NOT restated inline (no-duplicate-source).
+
+**No auto-verdict (#286 AC4):** the skill presents per-issue recommendations; the Approve/Defer/Reject verdict is operator-only (Tier 3). The skill never applies a verdict as if it were the decision-maker.
+
+### Reversibility Tier + Confidence
+
+Output class → default tier + confidence (per `../specs/reversibility-protocol.md`):
+
+| Output class | Tier | Confidence |
+|---|---|---|
+| An Approve or Defer recommendation; the A1–A6.5 enrichment writes; the consolidated summary | CHEAP | HIGH |
+| A Reject recommendation (the operator-confirmed close) | MODERATE | per evidence (reversible via T6 reopen; loses queue position — hence the confirmation gate) |
+
+Every recommendation carries tier + confidence explicitly. No unlabeled recommendations (pmo-qa-auditor G4).
+
+### Evidence Labels
+
+All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal Preferences. A verified GitHub Issue field / `gh` result / spec citation is `[SOURCE]`; a derived signal (similarity score, dependency-position count, oversize-predicate evaluation) is `[INFERRED]`; the per-issue Approve/Defer/Reject recommendation is `[RECOMMENDED]`. Never fabricate a DoR status, duplicate match, dependency state, or priority — a missing/unreadable field is surfaced or skipped-with-note, not invented.
+
+### Failure-Mode Conformance (G7)
+
+`pipeline-triage/SKILL.md` must contain ≥ 3 domain-specific failure modes per `../standards/failure-mode-standard.md` with the 5-field template + category tag (TRIG / INPUT / PROC / OUT / HAND). G7 Phase 1 regex: `## Domain-Specific Failure Modes` heading + ≥ 3 `### <Title> — <CATEGORY>` sub-headings. (Ships with 3: project-vs-improvement-backlog TRIG, phase-definition-restated OUT, auto-verdict/auto-close PROC.)
+
+### Validation Checklist (QA Gate)
+- [ ] Output is ONE consolidated batch summary (not per-action prompts); posted as the triage decision comment
+- [ ] All four sections present (Batch Scope · Per-Issue Block · Management-Task Signals · Verdict-Reservation Note)
+- [ ] Every per-issue block carries an Approve/Defer/Reject recommendation with evidence + reversibility tier + confidence
+- [ ] Auto-execute default declared; no per-action approval gate in the A1–A6.5 path
+- [ ] Close/Reject blocks behind explicit operator confirmation; Approve/Defer execute as batch outcomes
+- [ ] Each phase cites `stage-02-triage.md` §5 (phase definitions NOT restated inline)
+- [ ] Verdict-reservation note present — the Approve/Defer/Reject verdict is operator-only (Tier 3)
+- [ ] Reads the improvement backlog (`status: proposed`), never a Jira/project-delivery backlog
+
+---
+
 ## Appendix: RAID Entry Prefix Reference
 
 | Skill | Prefix | Example |
@@ -1163,6 +1217,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 | Build Reviewer | R-BR-### | R-BR-007 (Finding: Missing cross-reference in pipeline/stage-07-dev-testing.md) |
 | Implementation Planner | R-IP-### | R-IP-042 (Risk: RT-5 coordination constraint pending workflow-executor verification per implementation-execution-pattern.md) |
 | PMO Skill Refiner | R-PSR-### | R-PSR-003 (Risk: Cross-skill trigger collision detected between [new-skill] and [existing-skill] per run_eval_audit.py output; recommend description differentiation) |
+| Pipeline Triage | R-PTR-### | R-PTR-005 (Risk: proposed issue #N cites a Rejected dependency; resolve before approval per stage-02-triage.md A3) |
 
 ---
 
