@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.44] - 2026-07-01
+
+Stage-2 triage of the improvement backlog now runs as a skill: one command enriches every proposed issue and returns a single triage summary, so the operator renders one verdict per issue instead of approving each step by hand.
+
+[Full notes](release/releases/notes/v3.44_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.44)
+
 ## [v3.43] - 2026-07-01
 
 Five spoke-execution safety properties are now enforced by construction, so a pipeline spoke can no longer drift from the issue it was launched to work on, wander to the wrong checkout, run without a signing key, push unsafely under parallel work, or run outside the security-hook net. These are guardrails on the platform's own release automation; they do not change any project-facing workflow.
