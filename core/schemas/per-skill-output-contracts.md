@@ -981,7 +981,7 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 - **G4 (Artifact Readiness):** ✓ (output is the artifact; directly readable by operator).
 - **G5 (Follow-up Routing):** N/A (no emitted tags).
 - **G6 (Dual Output):** N/A (report-only; no metadata-vs-artifact split).
-- **G7 (Domain-Specific Failure Modes):** ✓ (≥3 domain-specific failure modes per `../standards/failure-mode-standard.md`, 5-field template + category tag TRIG / INPUT / PROC / OUT / HAND — the regression-safe floor form used by every other skill's G7 row; the canary currently carries 5 entries spanning all 5 categories per the ADR-04 fixture-scope decision on #581, but this row states the floor, not a by-name enumeration, so it does not go stale when a canary entry is added).
+- **G7 (Domain-Specific Failure Modes):** ✓ (≥3 domain-specific failure modes per `../standards/failure-mode-standard.md`, 5-field template + category tag TRIG / INPUT / PROC / OUT / HAND — the regression-safe floor form used by every other skill's G7 row; the canary currently carries 5 entries spanning all 5 categories per the ADR-04 fixture-scope decision, but this row states the floor, not a by-name enumeration, so it does not go stale when a canary entry is added).
 - **Reversibility:** N/A (report-only opt-out declared).
 - **Mode Identification:** Single-mode skill; invocation = mode.
 

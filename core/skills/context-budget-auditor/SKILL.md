@@ -82,7 +82,7 @@ See `core/schemas/per-skill-output-contracts.md` (Context Budget Auditor entry) 
 ## Dependency Graph Node
 
 - **Reads (DEPENDS_ON, never writes):** `core/deploy/deploy.sh` (the `OPERATIONS_SKILLS`/`RELEASE_SKILLS`/`CORE_SKILLS` arrays — the roster source of truth); `core/standards/canonical-skill-structure.md §5` (the 25 KB `wc -c` single-file soft-ceiling, reused not reinvented); `core/disciplines/knowledge-architecture.md §3` (the K1/K2 load-vs-reference boundary the hint keys to).
-- **Relates to (RELATES_TO):** #80 SKILL.md `cost:`/`stability:` frontmatter standardization — this auditor's per-skill token estimate can auto-populate a `cost:` field once that standard ships. Composes by **data contract** (its output is the value a future `cost:` field would carry), never by runtime invocation.
+- **Relates to (RELATES_TO):** the SKILL.md `cost:`/`stability:` frontmatter standard (when it ships) — this auditor's per-skill token estimate can auto-populate a `cost:` field once that standard ships. Composes by **data contract** (its output is the value a future `cost:` field would carry), never by runtime invocation.
 - **Upstream invokers:** the operator directly (on-demand); the `/schedule` seam (scheduled run → report, never self-mutates). No skill auto-invokes context-budget-auditor.
 - **Not coupled to:** `deploy.sh --check` — the auditor **reads** the deploy.sh arrays as a roster source but is NOT a `--check` gate and must not be wired into one (measuring cost is not a pass/fail gate; a bloat flag is advisory). The two share the roster source, not a contract.
 
