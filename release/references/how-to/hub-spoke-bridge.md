@@ -1172,6 +1172,64 @@ embed:
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Stage 5 Chip Pattern — Substrate-Drift Reconciliation (M1.1):**
+
+When the hub authors a Stage 5 Solutioning chip prompt, the chip MUST direct the
+spoke to run a substrate-drift reconciliation at spoke-entry: at the moment the
+spoke begins designing one issue, reconcile each checkable claim in that issue's
+body against live state and emit a structured, machine-readable drift report so
+the hub's adversarial-verification pass (Procedure 4 / the Stage 5 Phase A6.5
+adversarial review) has a typed object to reason over. This is the spoke-entry
+sibling to the Planning-time currency reconciliation: it **DEFERS TO** the
+Stage-4 currency gates (A0.5 / A0.6 / A0.7 per [`stage-04-planning.md`](../pipeline/stage-04-planning.md))
+— those run once, over the whole bundled milestone, at Planning, and terminate in
+an operator-gated body/plan edit — and re-derives nothing they already own. It
+computes ONLY the residual none of them emit: per-issue, at design-entry (after
+the plan froze — drift can accrue in the gap), a **typed** report for adversarial
+consumption. The instruction is OMITTED (with a one-line spoke rationale) when the
+issue body carries no substrate claim a canonical-source read can check — the same
+non-ceremony omission signal the sibling Stage 5 chip patterns use; an empty drift
+report is the correct "no drift" signal, not a gap.
+
+**The seam contract (anti-double-reconciliation).** When A0.5 has already
+reconciled a currency axis for this issue at Planning (recorded in the release
+plan's deviation log), the M1.1 report DEFERS TO that finding: it reads the A0.5
+verdict as authoritative for the AC-currency axis, sets
+`drift_class: currency-reconciled-upstream` for those fields, cites the plan
+deviation-log line, and re-runs no comparison A0.5 owns. M1.1 computes only the
+axes A0.5 / A0.6 / A0.7 do NOT own — body-claim-vs-live-substrate drift observable
+at spoke-entry that A0.5 did not classify (a substrate that changed between
+plan-freeze and spoke-launch; a body claim about a population — a count, an
+enumeration, a milestone-description figure — that is not an AC
+version/path/upstream-artifact reference and so falls outside A0.5's
+reconciliation surface). The two are non-overlapping by construction: A0.5 =
+existing-AC-reference currency, batch, Planning; M1.1 = spoke-entry
+body-claim-vs-live-state drift, per-issue, typed, for adversarial consumption.
+
+Required chip-prompt content — Stage 5 Solutioning chip prompts (when the
+checkable-body-claim predicate holds) MUST embed these three additions:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"At spoke-entry, run the substrate-drift reconciliation. For each checkable claim in the issue body (a count/enumeration, a lifecycle state, a milestone-description figure) emit one structured drift-report row with four fields: `drift_class` (closed enum: `state-lifecycle` = body claims a state the live item contradicts · `population-count` = body cites a count/enumeration the live substrate no longer matches · `milestone-description` = body claim vs. current milestone-description prose · `currency-reconciled-upstream` = axis already reconciled by A0.5/A0.6 at Planning; carries the plan deviation-log cite, no re-derivation), `body_claim` (the verbatim claim as authored — read-only), `current_state` (the observed live value from a `gh`/`grep`/`git` read), `gap_age_days` (days between the body-claim's introducing commit and spoke-entry). DEFER-TO A0.5 for any AC-currency axis it already reconciled (set `currency-reconciled-upstream` + cite the deviation-log line; do NOT re-run its comparison). On a non-`currency-reconciled-upstream` drift, route a disposition into the Stage-5 output — one of: `current-state-driven AC interpretation` (design proceeds against `current_state`; the body claim stays historical-record, NOT rewritten) OR `escalate-body-amendment` (where the drift invalidates the issue premise, surface a Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] finding to the hub per the Inter-Stage Feedback Protocol; the operator, never the spoke, decides any body edit). NEVER auto-amend the issue body: the canonical-spec edit wins over a substrate (issue-body) mutation per [`ADR-062`](../../../core/ADRs/ADR-062-substrate-vs-canonical-precedent.md) (issue bodies remain historical-record), and the body is directional-not-authoritative (#497). An empty report = no drift = the correct non-ceremony signal; omit the step with a one-line rationale when the body carries no checkable substrate claim."*
+2. **Output deliverables block** (entry in the chip's required-deliverables list): *"Substrate-drift report in the Stage-5 output: zero or more rows, each with `drift_class` / `body_claim` / `current_state` / `gap_age_days`. Per non-`currency-reconciled-upstream` drift, the routed disposition (`current-state-driven AC interpretation` | `escalate-body-amendment`) recorded in the `### Design Decisions` block. No issue-body mutation performed by the spoke."*
+3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/pipeline/stage-04-planning.md § Phase A0.5/A0.6/A0.7 (Planning-time currency reconciliation — the DEFER-TO surface; do not re-derive)`, `core/ADRs/ADR-062-substrate-vs-canonical-precedent.md (canonical-spec edit wins over substrate-body mutation; issue bodies are historical-record)`, `core/standards/failure-mode-standard.md § Examples (the intake-substrate drift PROC entry — the anti-pattern this chip prevents)`.
+
+The M1.1 report **reports and routes**; it never mutates the contract — the direct
+analogue of the Solutioning Pre-Read discipline above (the issue body stays the
+sole authoritative contract; no downstream stage reads the report as scope). A
+body auto-amend by a spoke would violate ADR-062 (substrate mutation over
+canonical resolution) and #497 (treating the body as authoritative rather than
+directional). The executable `check-substrate-drift.sh` primitive is a recommended
+fast-follow (deferred under epic #1190) once the report schema has run on ≥1
+release — the chip step is fully executable by a spoke using native `gh`/`grep`/`git`
+reads without it.
+
+**Shared-file coordination note:** #47, #1642, and #59 all edit this file; the
+release plan sequences them #47→#1642→#59 on the single D-C SINGLE branch, landing
+as additive, disjoint subsections (git serializes at commit/push). This is a
+coordination note, not a relocation — no merge-content collision.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Stage 13 Chip Pattern — Release-Notes Authoring Discipline:**
 
 When the hub authors a Stage 13 Close chip prompt, the prompt MUST instruct the spoke to author `release/releases/notes/vX.Y_RELEASE_NOTES.md` per [`release-notes-standard.md`](../standards/release-notes-standard.md) (9-section format). The user-facing release note is a distinct artifact from `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` (engineering audit trail) and the release plan file (implementation audit trail) — per [`release/governance/RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) Close phase (line 53), all three artifacts are authored at Stage 13 Close. [`release-process.md` Stage 13 Outputs](../../governance/release-process.md) already specifies the gate (*"Milestone close gates on note presence + structural lint pass"*); this subsection ensures the chip-prompt-level mandate matches the spec-level requirement.

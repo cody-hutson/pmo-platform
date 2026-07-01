@@ -678,6 +678,45 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   + `pmo-platform/analysis/file-overlap-audit-2026-05-01/SUMMARY.md` § 1
   UTC drift note. Tier 1 [ADJUST] documented at Stage 6.
 
+```markdown
+### intake-substrate drift — body treated as current state at spoke-entry — PROC
+
+- **Signature (observable signal):** A Stage-5 (or later) spoke designs
+  against a claim in the issue body — a count, a lifecycle state, a
+  milestone-description figure — that the live substrate no longer
+  supports (e.g., body says "0 READMEs" when 9 now exist; body says
+  "bundled" when the item advanced), and no drift report was emitted at
+  spoke-entry, so the stale premise flows silently into the design.
+- **Conditional:** do NOT treat the issue body as current state at
+  spoke-entry when the body carries substrate claims (counts, states,
+  milestone-description figures) that a canonical-source read can check,
+  because intake substrate drifts between intake and design — the body is
+  historical-record, not live truth (the body is directional, not
+  authoritative), and a design built on a stale body claim is a
+  spec-vs-reality defect caught at Stage 7 DT or later.
+- **Root cause:** The issue body is the fastest, most-proximate signal;
+  re-deriving live state at spoke-entry costs a `gh`/`grep`/`git` read and
+  feels redundant with the body — so the check is skipped and the body's
+  point-in-time claim is silently promoted to current-state truth.
+- **Mitigation:** At spoke-entry run the substrate-drift reconciliation
+  step (the Stage-5 M1.1 chip pattern in
+  [`hub-spoke-bridge.md § Procedure 3`](../../release/references/how-to/hub-spoke-bridge.md)):
+  emit a structured drift report (`drift_class` / `body_claim` /
+  `current_state` / `gap_age_days`) for each checkable body claim; on
+  drift, route a disposition (current-state-driven AC interpretation, OR
+  escalate body amendment to the operator) — never auto-amend the body,
+  because a canonical-spec edit wins over a substrate (issue-body)
+  mutation per the substrate-vs-canonical precedent (issue bodies remain
+  historical-record). Defer to A0.5's Planning-time reconciliation for any
+  AC-currency axis it already owns; do not re-derive it.
+- **Principal response vs. junior response:** Principal reconciles the
+  body against live state before designing, reports the drift as a typed
+  object for adversarial review, and designs against current state while
+  leaving the body as historical-record. Junior reads the body as the
+  spec, designs against the stale claim, and surfaces the mismatch only
+  after Dev Testing flags the spec-vs-reality defect.
+```
+
 ### Hub-spoke chip-prompt examples — release-execution-class workflow
 
 The entries below address the `snapshot-as-current-state` root failure mode at hub-and-spoke chip-construction / recommendation-rendering surfaces. The pattern emerged N=4 in-session (2026-04-25 through 2026-05-15), with a fifth instance (2026-05-16 Stage 6 sub-task body templates) confirming durability. Sister failure modes share the root pattern but address distinct surfaces — recommendation rendering (this entry, `Audit snapshot as current state`) vs. chip-prompt construction (`Chip-prompt summary embedded as canonical content`, codified at a sibling sub-task). Both cite [`decision-discipline.md` § 2.1.1 Sub-mechanism — Audit-Snapshot Reconciliation](../disciplines/decision-discipline.md) as canonical mitigation home.
