@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.41] - 2026-07-01
+
+Two new skill-measurement auditors ship, and the whole skill catalog gets a structural-hygiene pass so every skill follows the same section and heading conventions. Nothing changes in the day-to-day workflow — the measurement skills are opt-in and the hygiene work is a consistency cleanup.
+
+### Added
+- A context-budget auditor skill that measures how many tokens the loaded platform components (skills, rules, schemas) consume across the context window, so you can see which components are heaviest.
+- A skill-compliance auditor skill that measures how accurately skills trigger — how often the right skill fires and how often the wrong one does — turning trigger accuracy into a number you can track.
+
+### Changed
+- Every skill now uses the same conventions for its safety-rules section and its mode headings, so skills read and behave more predictably and the catalog can be checked for conformance in one pass.
+
+The two auditors are measurement tools you invoke deliberately; they report numbers and do not change any skill's behavior. The compliance auditor's deeper cross-skill routing-conflict scan ships as a specification this release, with the implementing code tracked as a follow-up.
+
+[Full notes](release/releases/notes/v3.41_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.41)
+
 ## [v3.40] - 2026-07-01
 
 Four stale documentation references are drained from the internal reference corpus — places where the written guidance had fallen out of step with how the platform works. Nothing changes in how anyone uses the platform; every change is a wording or consistency correction, and all existing guards and historical records are preserved.
