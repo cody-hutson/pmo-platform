@@ -229,7 +229,9 @@ is_fully_merged() {
 has_merged_pr() {
   local branch="$1"
   local n
-  n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state merged --json number --jq 'length' 2>/dev/null || echo "0")
+  ensure_gh_bin
+  [[ -z "$GH_BIN" ]] && return 1   # no gh → cannot confirm a merged PR (fail-closed)
+  n=$("$GH_BIN" pr list --repo "$REPO_SLUG" --head "$branch" --state merged --json number --jq 'length' 2>/dev/null || echo "0")
   [[ "$n" -ge 1 ]]
 }
 
@@ -267,16 +269,21 @@ PR_LOOKUP_S="(none)"       # out: pr_state for the last pr_lookup ("(none)" = no
 build_pr_map() {
   PR_MAP_ENTRIES=(); PR_MAP_STATE="degraded"; PR_MAP_BUILT=1
   local raw probed returned=0 line head seen
+  ensure_gh_bin
+  if [[ -z "$GH_BIN" ]]; then
+    echo "WARN pr-map prefetch unavailable — gh not resolvable under the pinned PATH; per-branch PR classification (offline-tolerant)" >&2
+    return 0
+  fi
   # Probe the true dataset size independently, then fetch at the same ceiling. If
   # the probe fails, stay degraded (per-branch fallback). Both queries share the
   # ceiling: probed < ceiling proves no truncation; returned == probed cross-checks
   # the parse. gh emits newest-first; first-seen per head is therefore the newest PR.
-  probed=$(gh pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json number --jq 'length' 2>/dev/null || echo "")
+  probed=$("$GH_BIN" pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json number --jq 'length' 2>/dev/null || echo "")
   if [[ -z "$probed" || ! "$probed" =~ ^[0-9]+$ ]]; then
     echo "WARN pr-map prefetch unavailable — count probe failed; per-branch PR classification (offline-tolerant)" >&2
     return 0
   fi
-  raw=$(gh pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json headRefName,number,state --jq '.[] | [.headRefName, (.number|tostring), .state] | @tsv' 2>/dev/null || true)
+  raw=$("$GH_BIN" pr list --repo "$REPO_SLUG" --state all --limit "$PR_MAP_CEILING" --json headRefName,number,state --jq '.[] | [.headRefName, (.number|tostring), .state] | @tsv' 2>/dev/null || true)
   if [[ -n "$raw" ]]; then
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
@@ -334,9 +341,11 @@ pr_lookup() {
     return 0   # map-miss = no PR (complete map → trustworthy)
   fi
   # Degraded: identical to the pre-#655 per-branch path (offline tolerance).
-  PR_LOOKUP_N=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
+  ensure_gh_bin
+  [[ -z "$GH_BIN" ]] && return 0   # no gh → leave PR_LOOKUP_N="" / PR_LOOKUP_S="(none)"
+  PR_LOOKUP_N=$("$GH_BIN" pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
   if [[ -n "$PR_LOOKUP_N" ]]; then
-    PR_LOOKUP_S=$(gh pr view "$PR_LOOKUP_N" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
+    PR_LOOKUP_S=$("$GH_BIN" pr view "$PR_LOOKUP_N" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
   fi
   return 0
 }
@@ -444,12 +453,45 @@ ORACLE_STATE="unavailable"
 ORACLE_BUILT=0
 LIVE_HIT=""   # "pid <pid>, <command>" of the most recent worktree_is_live match
 
+# GitHub CLI resolved by ABSOLUTE path (#2790) — the pinned PATH /usr/bin:/bin
+# cannot see /opt/homebrew/bin or /usr/local/bin where Homebrew keeps gh, so a
+# bare `gh` fails command-not-found (exit 127) and the PR-state layer silently
+# resolves to (none). Mirrors LSOF_BIN/resolve_lsof_bin. FAIL-CLOSED: when no gh
+# binary exists GH_BIN stays "" and every call site degrades to its offline path
+# ((none) PR state / skipped remote delete), preserving offline tolerance.
+GH_BIN=""
+GH_BIN_RESOLVED=0   # lazy-memo marker: ensure_gh_bin resolves + WARNs once
+
 resolve_lsof_bin() {
   LSOF_BIN=""
   local c
   for c in /usr/sbin/lsof /usr/bin/lsof; do
     if [[ -x "$c" ]]; then LSOF_BIN="$c"; break; fi
   done
+}
+
+# gh resolver — mirror of resolve_lsof_bin for the pinned-PATH gap (#2790).
+# Scans the two Homebrew prefixes (Apple-silicon, Intel) then the system path.
+resolve_gh_bin() {
+  GH_BIN=""
+  local c
+  for c in /opt/homebrew/bin/gh /usr/local/bin/gh /usr/bin/gh; do
+    if [[ -x "$c" ]]; then GH_BIN="$c"; break; fi
+  done
+}
+
+# Lazy guard: resolve GH_BIN once, WARN once on miss. Every gh call site calls
+# this first, then degrades (see call sites) when GH_BIN stays "". Mirrors the
+# ensure_liveness_map / ensure_pr_map memo idiom. Returns 0 always (offline-safe).
+ensure_gh_bin() {
+  if [[ "$GH_BIN_RESOLVED" -eq 0 ]]; then
+    GH_BIN_RESOLVED=1
+    resolve_gh_bin
+    if [[ -z "$GH_BIN" ]]; then
+      echo "WARN gh unavailable — not found at /opt/homebrew/bin/gh, /usr/local/bin/gh, or /usr/bin/gh under the pinned PATH; PR-state features degrade to (none) (offline-tolerant)" >&2
+    fi
+  fi
+  return 0
 }
 
 build_liveness_map() {
@@ -1272,7 +1314,13 @@ apply_removals() {
     [[ -z "$r" ]] && continue
     name=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $4}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED remote $name — $action" >&2; continue; }
-    if gh api -X DELETE "repos/${REPO_SLUG}/git/refs/heads/${name}" --silent 2>&1 | sed 's/^/  gh: /' >&2; then
+    ensure_gh_bin
+    if [[ -z "$GH_BIN" ]]; then
+      echo "FAIL remote $name — gh unavailable under the pinned PATH; cannot delete remote ref" >&2
+      REMOTE_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — gh unavailable"
+      continue
+    fi
+    if "$GH_BIN" api -X DELETE "repos/${REPO_SLUG}/git/refs/heads/${name}" --silent 2>&1 | sed 's/^/  gh: /' >&2; then
       echo "PASS remote $name removed" >&2
       REMOTE_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
     else
@@ -2625,12 +2673,21 @@ selftest_release_close_merged_pr() {
     local seam_remove seam_skip
     seam_remove=$(
       gh() { _selftest_gh_merged "$@"; }
+      GH_BIN=gh; GH_BIN_RESOLVED=1   # route "$GH_BIN" through the gh() shadow (#2790)
+      # Force the degraded per-branch path so pr_lookup exercises the shadowed gh
+      # (a globally-built ok map has no synthetic-seam entry → map-miss → (none),
+      # which would defeat the shadow now that gh is reachable). BUILT=1 skips a
+      # real rebuild; the reset is subshell-local (#2790).
+      PR_MAP_BUILT=1; PR_MAP_STATE=degraded; PR_MAP_ENTRIES=()
       LOCAL_BRANCH_CANDIDATES=()
       classify_local "$seam_branch" 1
       awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
     )
     seam_skip=$(
       gh() { _selftest_gh_merged "$@"; }
+      GH_BIN=gh; GH_BIN_RESOLVED=1   # route "$GH_BIN" through the gh() shadow (#2790)
+      # Force degraded per-branch path (see the require_pr=1 arm above) (#2790).
+      PR_MAP_BUILT=1; PR_MAP_STATE=degraded; PR_MAP_ENTRIES=()
       LOCAL_BRANCH_CANDIDATES=()
       classify_local "$seam_branch" 0
       awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
@@ -2671,6 +2728,41 @@ selftest_release_close_merged_pr() {
   return 0
 }
 
+# #2790 — gh reachability under the pinned PATH. The shadow-based fixtures
+# (selftest_release_close_merged_pr) redefine `gh` as a function and so
+# STRUCTURALLY cannot catch binary-unreachability: a function shadow resolves
+# regardless of PATH. This fixture exercises the REAL resolution path — it
+# asserts resolve_gh_bin finds an executable absolute-path binary AND that a
+# live `"$GH_BIN" pr list` runs without the /usr/bin:/bin pin blocking it
+# (the exact production symptom). SKIP-guarded (stays green) when no gh binary
+# exists at all — offline / CI hosts — so it never turns those runs red.
+selftest_gh_bin_resolves() {
+  local saved_bin="$GH_BIN" saved_res="$GH_BIN_RESOLVED"
+  GH_BIN=""; GH_BIN_RESOLVED=0
+  resolve_gh_bin
+  if [[ -z "$GH_BIN" ]]; then
+    echo "self-test: gh-reachability check SKIPPED — no gh binary at /opt/homebrew/bin/gh, /usr/local/bin/gh, or /usr/bin/gh (offline/CI)" >&2
+    GH_BIN="$saved_bin"; GH_BIN_RESOLVED="$saved_res"
+    return 0
+  fi
+  local fail=0
+  if [[ ! -x "$GH_BIN" ]]; then
+    echo "self-test: gh-reachability check FAILED — resolve_gh_bin set GH_BIN='$GH_BIN' but it is not executable" >&2
+    fail=1
+  fi
+  # Live query under the pinned PATH: proves the absolute-path binary is
+  # reachable where a bare `gh` would exit 127. --limit 1 keeps it cheap;
+  # any non-zero exit (incl. auth failure) fails the fixture loudly.
+  if [[ "$fail" -eq 0 ]] && ! "$GH_BIN" pr list --repo "$REPO_SLUG" --limit 1 --json number >/dev/null 2>&1; then
+    echo "self-test: gh-reachability check FAILED — live \"\$GH_BIN\" pr list did not resolve (auth or reachability)" >&2
+    fail=1
+  fi
+  GH_BIN="$saved_bin"; GH_BIN_RESOLVED="$saved_res"
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: gh-reachability check PASS — resolve_gh_bin found an executable gh by absolute path AND a live \"\$GH_BIN\" pr list resolved under the pinned PATH (#2790)" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -2700,6 +2792,8 @@ self_test() {
   selftest_dedup_local_branches
   echo "self-test: exercising PR-map prefetch identity vs per-branch (#655)..." >&2
   selftest_pr_map_identity
+  echo "self-test: exercising gh reachability under the pinned PATH (real resolve + live query) (#2790)..." >&2
+  selftest_gh_bin_resolves
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
