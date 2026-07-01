@@ -776,6 +776,10 @@ The Agent tool's `isolation: "worktree"` parameter (per Spoke Launch Mechanisms 
 
 This branch-on-detection rule replaces any blanket "never run `git worktree add`" phrasing: the prohibition is scoped to the nested case, not to the command.
 
+**No `cd`; operate from the worktree cwd; NEVER touch the primary.** The `isolation: "worktree"` mandate gives a content-modifying spoke (Stage 6 / 12 / 13) its own checkout; this clause is the behavioral guardrail for when a spoke — despite that isolation — still tries to reach the operator's primary checkout at `${HOME}/Claude/pmo-platform`. Every content-modifying spoke prompt MUST instruct the spoke to: (a) **forbid `cd`** — do not `cd` to any repo root, and in particular never `cd` to `${HOME}/Claude/pmo-platform`; (b) **operate from the default worktree cwd** — run git and file operations in place, or address a specific tree with `git -C <worktree-path>` (absolute worktree paths only), never a bare `cd`; (c) **NEVER operate on `${HOME}/Claude/pmo-platform` (the primary)** — the primary is READ-ONLY (per [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § Primary Checkout Discipline); a spoke that commits, resets, or otherwise mutates state there risks orphaning or destroying operator work. This complements — does not restate — the `isolation: "worktree"` mandate above (isolation provisions the separate checkout; this clause bars reaching the primary even so). It emerged from the C-class incident (2026-06-20, surfaced during #215 Stage 6) where a non-isolated Stage-6 spoke `cd`'d to a repo root that resolved to the primary and ran a destructive git command on it — self-remediated (stray commit local-only + orphaned), but the latent risk is a future spoke losing operator work.
+
+The **prompt-level clause above is the spoke-facing half** of that hardening. The complementary **hook-level enforcement** — closing the subagent-Bash coverage gap so `block-destructive` / primary-write PreToolUse guards fire for a spawned spoke's Bash calls the way they do for main-session calls — is owned by the update/deploy-machinery hook-coverage work (#1531), not by this discipline; this prompt clause does not depend on that enforcement landing.
+
 Canonical patterns to embed in Stage 6 spoke prompts:
 
 - **First commit on a new release branch** (no branch yet on origin): `git checkout -b release/<milestone> main && git push -u origin release/<milestone>`, then `git checkout --detach` at session end to release the branch lock.
@@ -1001,6 +1005,33 @@ This workaround is load-bearing because of the repo/worktree-session hook-load g
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Commit-Producing-Spoke ssh-agent Pre-flight:**
+
+Before the hub spawns a **commit-producing** spoke, it runs `ssh-add -l` as a pre-flight gate. This fires ONLY for the spawn procedures that produce a commit — the Stage 6 Engineering spoke (including the first "Commit 0" on a new release branch), the Stage 12 Execute chore-PR spoke (RELEASE_LOG row per the Stage 12 RELEASE_LOG Chore-PR Discipline above), and the Stage 13 Release-Close chore-PR spoke (RELEASE_INDEX / DIGEST / NOTES + RELEASE_LOG VERIFIED transition per Procedure 7). It does NOT fire for read-only or non-committing spawns (Stage 4 planning, Stage 5 Solutioning, Stage 7/8/9 review, the `pmo-adversarial` review spoke) — those spokes emit no commit, so a loaded signing key is not on their critical path.
+
+The gate exists because the repo runs `commit.gpgsign=true` globally: with signing on, ANY commit — operator or spoke — fails when the OS ssh-agent has no signing key loaded (e.g., post-reboot before Keychain auto-load, or after `ssh-add -d`). A spoke spawned into that state does its work, then dies at the commit step, wasting the spawn and leaving a half-done release action. The failure-mode home for this posture (the ssh-agent socket side channel, the `commit.gpgsign=true` interaction, and the Keychain recovery command) is [`core/rules/bypass-mode-readiness.md` § ssh-agent socket side channel](../../../core/rules/bypass-mode-readiness.md); this pre-flight is the hub-side, spawn-time guard that reads that posture and stops before a doomed commit-producing spawn.
+
+**Pre-flight logic (hub, before the Agent invocation for a commit-producing spoke):**
+
+1. Run `ssh-add -l`.
+2. On a non-empty identity list (exit 0, one or more keys) → the signing key is loaded; proceed to spawn the commit-producing spoke normally.
+3. On `"The agent has no identities."` (or exit 1 / empty list) → do NOT spawn. Emit the **`ssh-add` user-side handoff** to the operator FIRST, and hold the commit-producing spawn until the operator reports the key is loaded, then re-run step 1 to confirm before spawning.
+
+The handoff follows the CLAUDE.md § "Hook-Blocked → User-Side Handoff" template shape (verbatim section labels), framed honestly as a signing pre-flight — no security hook fired here; the block is the empty-agent signing state, and loading a Keychain-held key is the operator-only user-side equivalent (the hub cannot read `~/.ssh/*` or run the Keychain load itself):
+
+> ⛔ **Hook-blocked, user-side handoff** — commit-signing pre-flight (`ssh-add -l`) reports no loaded identity; with `commit.gpgsign=true` the commit-producing spoke would fail at its commit step.
+>
+> **Run in your terminal:**
+> ```bash
+> ssh-add --apple-use-keychain ~/.ssh/<your-signing-key>
+> ```
+> **Effect:** reloads your signing key from the macOS Keychain into the ssh-agent so signed commits succeed again; one sentence. Reversibility: **CHEAP**.
+> **After you run it:** the hub re-runs `ssh-add -l`, confirms a non-empty identity list, then spawns the held commit-producing spoke.
+
+**Out of scope (NOT a workspace change).** The operator-environment remedy — configuring the macOS Keychain to auto-load the signing key at login, choosing which key, or the `ssh-add --apple-use-keychain` invocation itself — is operator machine-config, not a change this discipline (or any release) makes to the workspace. This card wires the pre-flight CHECK and the handoff into the hub procedures; it does NOT modify the operator's Keychain, `~/.ssh/`, or login items. Keeping the remedy out of scope prevents the discipline from drifting into machine-configuration territory it has no authority over.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Stage 6 Chip Pattern — Concurrent-Spoke Contention Recovery:**
 
 When two or more Stage 6 Engineering spokes commit to the SAME release branch in parallel, four git races surface. Each Engineering chip launched into a shared-branch parallel wave MUST enumerate the four detection→recovery procedures so the spoke recovers in-session rather than corrupting the branch. The default push idiom for an already-checked-out branch is the detached-HEAD refspec push `git push origin HEAD:refs/heads/<branch>` (it pushes the current commit to the named branch without requiring the local branch ref to track, sidestepping the checkout-conflict race):
@@ -1169,6 +1200,64 @@ embed:
 
 1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"If you have rich pre-implementation analysis to orient the implementing agent, post a Solutioning pre-read comment on the PARENT issue #N per [`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md): open with the banner `🧭 **Solutioning pre-read — ADVISORY, not scope**`, state explicitly that it does NOT modify Acceptance Criteria / Proposed Change / Affected Files (the issue body remains the sole contract), and close with a re-verify line. The pre-read is advisory context, never scope."*
 2. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/standards/solutioning-output-template.md § 3.5 (Solutioning Pre-Read — advisory/non-binding banner + worked example #545)`.
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Stage 5 Chip Pattern — Substrate-Drift Reconciliation (M1.1):**
+
+When the hub authors a Stage 5 Solutioning chip prompt, the chip MUST direct the
+spoke to run a substrate-drift reconciliation at spoke-entry: at the moment the
+spoke begins designing one issue, reconcile each checkable claim in that issue's
+body against live state and emit a structured, machine-readable drift report so
+the hub's adversarial-verification pass (Procedure 4 / the Stage 5 Phase A6.5
+adversarial review) has a typed object to reason over. This is the spoke-entry
+sibling to the Planning-time currency reconciliation: it **DEFERS TO** the
+Stage-4 currency gates (A0.5 / A0.6 / A0.7 per [`stage-04-planning.md`](../pipeline/stage-04-planning.md))
+— those run once, over the whole bundled milestone, at Planning, and terminate in
+an operator-gated body/plan edit — and re-derives nothing they already own. It
+computes ONLY the residual none of them emit: per-issue, at design-entry (after
+the plan froze — drift can accrue in the gap), a **typed** report for adversarial
+consumption. The instruction is OMITTED (with a one-line spoke rationale) when the
+issue body carries no substrate claim a canonical-source read can check — the same
+non-ceremony omission signal the sibling Stage 5 chip patterns use; an empty drift
+report is the correct "no drift" signal, not a gap.
+
+**The seam contract (anti-double-reconciliation).** When A0.5 has already
+reconciled a currency axis for this issue at Planning (recorded in the release
+plan's deviation log), the M1.1 report DEFERS TO that finding: it reads the A0.5
+verdict as authoritative for the AC-currency axis, sets
+`drift_class: currency-reconciled-upstream` for those fields, cites the plan
+deviation-log line, and re-runs no comparison A0.5 owns. M1.1 computes only the
+axes A0.5 / A0.6 / A0.7 do NOT own — body-claim-vs-live-substrate drift observable
+at spoke-entry that A0.5 did not classify (a substrate that changed between
+plan-freeze and spoke-launch; a body claim about a population — a count, an
+enumeration, a milestone-description figure — that is not an AC
+version/path/upstream-artifact reference and so falls outside A0.5's
+reconciliation surface). The two are non-overlapping by construction: A0.5 =
+existing-AC-reference currency, batch, Planning; M1.1 = spoke-entry
+body-claim-vs-live-state drift, per-issue, typed, for adversarial consumption.
+
+Required chip-prompt content — Stage 5 Solutioning chip prompts (when the
+checkable-body-claim predicate holds) MUST embed these three additions:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"At spoke-entry, run the substrate-drift reconciliation. For each checkable claim in the issue body (a count/enumeration, a lifecycle state, a milestone-description figure) emit one structured drift-report row with four fields: `drift_class` (closed enum: `state-lifecycle` = body claims a state the live item contradicts · `population-count` = body cites a count/enumeration the live substrate no longer matches · `milestone-description` = body claim vs. current milestone-description prose · `currency-reconciled-upstream` = axis already reconciled by A0.5/A0.6 at Planning; carries the plan deviation-log cite, no re-derivation), `body_claim` (the verbatim claim as authored — read-only), `current_state` (the observed live value from a `gh`/`grep`/`git` read), `gap_age_days` (days between the body-claim's introducing commit and spoke-entry). DEFER-TO A0.5 for any AC-currency axis it already reconciled (set `currency-reconciled-upstream` + cite the deviation-log line; do NOT re-run its comparison). On a non-`currency-reconciled-upstream` drift, route a disposition into the Stage-5 output — one of: `current-state-driven AC interpretation` (design proceeds against `current_state`; the body claim stays historical-record, NOT rewritten) OR `escalate-body-amendment` (where the drift invalidates the issue premise, surface a Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] finding to the hub per the Inter-Stage Feedback Protocol; the operator, never the spoke, decides any body edit). NEVER auto-amend the issue body: the canonical-spec edit wins over a substrate (issue-body) mutation per [`ADR-062`](../../../core/ADRs/ADR-062-substrate-vs-canonical-precedent.md) (issue bodies remain historical-record), and the body is directional-not-authoritative (#497). An empty report = no drift = the correct non-ceremony signal; omit the step with a one-line rationale when the body carries no checkable substrate claim."*
+2. **Output deliverables block** (entry in the chip's required-deliverables list): *"Substrate-drift report in the Stage-5 output: zero or more rows, each with `drift_class` / `body_claim` / `current_state` / `gap_age_days`. Per non-`currency-reconciled-upstream` drift, the routed disposition (`current-state-driven AC interpretation` | `escalate-body-amendment`) recorded in the `### Design Decisions` block. No issue-body mutation performed by the spoke."*
+3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/pipeline/stage-04-planning.md § Phase A0.5/A0.6/A0.7 (Planning-time currency reconciliation — the DEFER-TO surface; do not re-derive)`, `core/ADRs/ADR-062-substrate-vs-canonical-precedent.md (canonical-spec edit wins over substrate-body mutation; issue bodies are historical-record)`, `core/standards/failure-mode-standard.md § Examples (the intake-substrate drift PROC entry — the anti-pattern this chip prevents)`.
+
+The M1.1 report **reports and routes**; it never mutates the contract — the direct
+analogue of the Solutioning Pre-Read discipline above (the issue body stays the
+sole authoritative contract; no downstream stage reads the report as scope). A
+body auto-amend by a spoke would violate ADR-062 (substrate mutation over
+canonical resolution) and #497 (treating the body as authoritative rather than
+directional). The executable `check-substrate-drift.sh` primitive is a recommended
+fast-follow (deferred under epic #1190) once the report schema has run on ≥1
+release — the chip step is fully executable by a spoke using native `gh`/`grep`/`git`
+reads without it.
+
+**Shared-file coordination note:** #47, #1642, and #59 all edit this file; the
+release plan sequences them #47→#1642→#59 on the single D-C SINGLE branch, landing
+as additive, disjoint subsections (git serializes at commit/push). This is a
+coordination note, not a relocation — no merge-content collision.
 
 **Cutover discipline:** Applies to all releases going forward.
 

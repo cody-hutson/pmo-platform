@@ -21,7 +21,7 @@
 #   A registered tool is invokable from any cwd, so each tool is listed in FOUR
 #   forms (grouped together, as the blast-radius.sh entry below illustrates):
 #     1. Absolute install form:  [PMO_PLATFORM_ROOT]/<path>/<tool>
-#     2. Worktree-glob form:     [CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/<path>/<tool>
+#     2. Worktree-glob form:     [PMO_PLATFORM_ROOT]/.claude/worktrees/*/<path>/<tool>
 #     3. Relative dot form:      ./<path>/<tool>
 #     4. Bare-relative form:     <path>/<tool>
 #   Forms 1-2 match absolute/worktree-absolute invocations (a session running
@@ -36,54 +36,54 @@
 core/deploy/deploy.sh
 
 # Worktree deploy scripts (copies of the above in feature branches)
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/core/deploy/deploy.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/deploy.sh
 
 # Claude Code hook test runner (added for hook validation during engineering)
 [CLAUDE_WORKSPACE_ROOT]/.claude/hooks/tests/test-runner.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/.claude/hooks/tests/test-runner.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/.claude/hooks/tests/test-runner.sh
 ./.claude/hooks/tests/test-runner.sh
 .claude/hooks/tests/test-runner.sh
 
 # Per-hook test files (invoked by test-runner or directly during engineering)
 [CLAUDE_WORKSPACE_ROOT]/.claude/hooks/tests/*.test.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/.claude/hooks/tests/*.test.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/.claude/hooks/tests/*.test.sh
 ./.claude/hooks/tests/*.test.sh
 .claude/hooks/tests/*.test.sh
 
 # Release-pipeline tools (Stage 5 Solutioning + Stage 6 Engineering tooling)
 [PMO_PLATFORM_ROOT]/release/tools/blast-radius.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
 ./release/tools/blast-radius.sh
 release/tools/blast-radius.sh
 [PMO_PLATFORM_ROOT]/release/tools/append-pipeline-event.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/append-pipeline-event.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/append-pipeline-event.sh
 ./release/tools/append-pipeline-event.sh
 release/tools/append-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/release/tools/synthesize-release-learnings.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/synthesize-release-learnings.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/synthesize-release-learnings.sh
 ./release/tools/synthesize-release-learnings.sh
 release/tools/synthesize-release-learnings.sh
 [PMO_PLATFORM_ROOT]/release/tools/compute-cycle-time.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/compute-cycle-time.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-cycle-time.sh
 ./release/tools/compute-cycle-time.sh
 release/tools/compute-cycle-time.sh
 [PMO_PLATFORM_ROOT]/release/tools/cleanup-orphan-state.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/cleanup-orphan-state.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/cleanup-orphan-state.sh
 ./release/tools/cleanup-orphan-state.sh
 release/tools/cleanup-orphan-state.sh
 [PMO_PLATFORM_ROOT]/release/tools/query-pipeline-event.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/query-pipeline-event.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/query-pipeline-event.sh
 ./release/tools/query-pipeline-event.sh
 release/tools/query-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/release/tools/automated-closeout.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/automated-closeout.sh
 ./release/tools/automated-closeout.sh
 release/tools/automated-closeout.sh
 # version-grammar.sh — sourced SSOT library (validate/parse/compare); consumers
 # source it, so all four invocation forms (incl. source/.) must be allowlisted
 # (BLOCK-DESTRUCTIVE-022 gates both `bash <path>` execution and `source <path>`).
 [PMO_PLATFORM_ROOT]/release/tools/version-grammar.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/version-grammar.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/version-grammar.sh
 ./release/tools/version-grammar.sh
 release/tools/version-grammar.sh
 # FM-3 (#1677): deploy.sh Check 41 sources this lib via an ABSOLUTE $_audit_src_root
@@ -99,13 +99,13 @@ release/tools/version-grammar.sh
 # operations (anchor/claimed_set/atomic_claim/lineage), so all four forms (incl.
 # source/.) are allowlisted (BLOCK-DESTRUCTIVE-022 gates both execution + source).
 [PMO_PLATFORM_ROOT]/release/tools/claim-version.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
 ./release/tools/claim-version.sh
 release/tools/claim-version.sh
 
 # extract-roster-needles.sh — generates PII needles from the operator-instance
 # people-roster into the localized-context needle file (people-graph data surface).
 [PMO_PLATFORM_ROOT]/core/deploy/extract-roster-needles.sh
-[CLAUDE_WORKSPACE_ROOT]/.claude/worktrees/*/core/deploy/extract-roster-needles.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/extract-roster-needles.sh
 ./core/deploy/extract-roster-needles.sh
 core/deploy/extract-roster-needles.sh

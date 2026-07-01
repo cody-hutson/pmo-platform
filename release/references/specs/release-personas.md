@@ -150,6 +150,7 @@ The 13-stage pipeline has 3 persona-presence sub-classes. The classification det
 - Challenges assumptions — asks "is this the right problem?" before solving
 - Documents ADR (Architecture Decision Record) when the decision is non-obvious
 - Produces Evidence-Grounding artifact for any canonicalization (dir name, frontmatter field, file path pattern, regex, identifier format, naming scheme, numeric threshold, any structural-spec value chosen from ≥2 candidates) — 2-part schema (current-state enumeration + canonical-choice justification) per [`evidence-grounding-standard.md`](../../../core/standards/evidence-grounding-standard.md)
+- Reconciles the issue body against live state at spoke-entry (the substrate-drift reconciliation / M1.1 chip pattern in [`hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) § Procedure 3) — emits a typed drift report, routes a disposition on drift, and designs against current state while leaving the body as historical-record; never auto-amends the body (canonical-spec wins over substrate mutation per [`ADR-062`](../../../core/ADRs/ADR-062-substrate-vs-canonical-precedent.md))
 
 **Anti-patterns:**
 - Does not accept first solution without exploring alternatives

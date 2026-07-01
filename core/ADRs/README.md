@@ -192,6 +192,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** MODERATE (governance-vocabulary ripple into framework + label-taxonomy; runtime = none — no code consumes the terms).
 **File:** [ADR-049-canonical-initiative-roadmap-vocabulary.md](ADR-049-canonical-initiative-roadmap-vocabulary.md)
 
+## Pipeline / solutioning-discipline ADRs
+
+### ADR-062 — Substrate-vs-canonical precedent (canonical-spec edit wins; substrate body preserved)
+
+**Status:** Accepted (operator-ratified at the `67-spoke-execution-safety` Collective Review scope-lock; authored at Stage 6 per the ADR-007 / ADR-028 / ADR-029 Stage-6 ADR-authoring precedent).
+**Decision:** For a work item that cites a **substrate-level affected file**, a canonical-spec edit at the file's governed home WINS over mutating the substrate citation or the issue body. A substrate reference — a cross-repo `originally #NNN` public-flip migration marker (whose local number may or may not resolve in this repo) or a body-level raw path — is a pointer to be translated, not a surface to be edited; issue bodies remain historical record (directional, not authoritative). The rule is enforced at Stage-5 A1 scope-assessment by the new **Phase A1.5** (canonical-surface enumeration + cross-repo-citation translation) in `stage-05-solutioning.md`. Reflexive cutover — applies to releases entering Stage 5 after the introducing-release merge SHA; the introducing release is exempt.
+**Reversibility:** CHEAP (additive — a new ADR record + one Stage-5 phase block + this index line; `git revert`-able with no data migration).
+**File:** [ADR-062-substrate-vs-canonical-precedent.md](ADR-062-substrate-vs-canonical-precedent.md)
+
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 
 ### ADR-003 — Operating Model Composition

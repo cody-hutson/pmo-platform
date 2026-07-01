@@ -437,14 +437,18 @@ case "$TOOL_NAME" in
     esac
 
     if [ -n "$is_layer1" ]; then
-      # Cwd under a worktree allows the write (per AC — worktree context permits Layer 1 edits)
+      # Cwd under a worktree allows the write (per AC — worktree context permits Layer 1 edits).
+      # Worktrees live under the REPO root (${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/),
+      # NOT directly under the workspace root — this exemption base mirrors the :425 Layer-1
+      # detection base so the hook has exactly one repo-rooted worktree base (#1639,
+      # checkout-independent per ADR-017; PRIMARY_ROOT derives from CLAUDE_WORKSPACE_ROOT).
       case "$CWD" in
-        "${PRIMARY_ROOT}/.claude/worktrees/"*)
+        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*)
           exit 0
           ;;
       esac
       block "BLOCK-DESTRUCTIVE-019" \
-        "Write/Edit to Layer 1 primary path denied: ${is_layer1}. cwd=${CWD} is not under .claude/worktrees/" \
+        "Write/Edit to Layer 1 primary path denied: ${is_layer1}. cwd=${CWD} is not under pmo-platform/.claude/worktrees/" \
         "work from a git worktree (git worktree add), or set CLAUDE_HOOK_BYPASS=1"
     fi
 
