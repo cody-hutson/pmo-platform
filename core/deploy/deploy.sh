@@ -76,6 +76,7 @@ RELEASE_SKILLS=(
 )
 
 CORE_SKILLS=(
+  context-budget-auditor
   eval-writer
   pmo-qa-auditor
   pmo-skill-router

@@ -158,9 +158,9 @@ Governs how multi-mode skills select which mode to run on a given invocation. Pa
 |---|---|---|
 | **Always-ask** | AskUserQuestion fires every time; no trigger-match heuristic. Reserved for skills with destructive asymmetry or production-critical inverse operations. | project-initiator, release-planner, release-executor (3) |
 | **Ask-when-ambiguous** | Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous across modes. | delivery-engine, change-management, pmo-process-designer, pmo-qa-auditor, pmo-skill-editor, pmo-technical-analyst, comms-writer, eval-writer (8) |
-| **Never-ask** | Single-mode skill, or mode auto-detects reliably from input artifacts / trigger phrasing. No `## Mode Selection` section. | artifact-generator, build-reviewer, daily-status, file-router, implementation-planner, ppm-agent, prompt-builder, skill-creator, tracker-manager, weekly-status-rollup (10) |
+| **Never-ask** | Single-mode skill, or mode auto-detects reliably from input artifacts / trigger phrasing. No `## Mode Selection` section. | artifact-generator, build-reviewer, context-budget-auditor, daily-status, file-router, implementation-planner, ppm-agent, prompt-builder, skill-creator, tracker-manager, weekly-status-rollup (11) |
 
-**Total:** 3 always-ask + 8 ask-when-ambiguous + 10 never-ask = 21 skills.
+**Total:** 3 always-ask + 8 ask-when-ambiguous + 11 never-ask = 22 skills.
 
 **Classification rule.** Always-ask when (a) modes have destructive or production-critical asymmetry, OR (b) modes produce substantially different outputs that cannot be recovered from wrong-mode execution. Ask-when-ambiguous when ≥2 named modes exist AND trigger phrases can plausibly match more than one mode. Never-ask when the skill has a single mode, OR mode auto-detects reliably from input artifacts / trigger phrasing. Tier reclassification requires a GitHub Issue and Release per the No-Ungoverned-Changes guardrail.
 
