@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.40] - 2026-07-01
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.40)
+
 ## [v3.38] - 2026-07-01
 
 The release pipeline's own rules get three small, additive precision fixes across the planning, design, and engineering stages — sharpening release-identity and frozen-spec handling so problems are caught earlier instead of surfacing late at deploy. Nothing changes in how anyone uses the platform; all three are wording and checklist additions to the internal release-pipeline reference corpus.
