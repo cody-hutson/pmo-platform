@@ -10,7 +10,13 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.40] - 2026-07-01
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+### Fixed
+- Reconciled the doc-link maintenance protocol (§8) to name the shared warn-log it actually writes (#108).
+- Canonicalized the genuine capital-P `Projects/` prose references in both OPERATIONS files to lowercase `projects/` (#131).
+- Drained the last live IMPROVEMENTS.md / IMP-### Self-Update-Protocol instruction in the routing rules, routing it to the GitHub-Issues intake (#2684).
+- Unified the project-path placeholder to the canonical `projects/[Project]/` form across the schema docs and the `project-initiator` skill (#2700).
+
+Documentation-only drainage — no behavior, schema, or runtime-check change; historical records preserved. The migrated `project-initiator` skill's compiled package was rebuilt to match its updated text.
 
 [Full notes](release/releases/notes/v3.40_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.40)
 
