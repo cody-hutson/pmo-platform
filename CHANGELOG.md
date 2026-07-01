@@ -8,6 +8,21 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.43] - 2026-07-01
+
+Five spoke-execution safety properties are now enforced by construction, so a pipeline spoke can no longer drift from the issue it was launched to work on, wander to the wrong checkout, run without a signing key, push unsafely under parallel work, or run outside the security-hook net. These are guardrails on the platform's own release automation; they do not change any project-facing workflow.
+
+### Added
+- A spoke-entry substrate-drift check that compares an issue's body claims against live state and emits a structured drift report, so a spoke building from a stale issue body is caught up front instead of silently producing stale work.
+- A signing-key pre-flight (`ssh-add -l`) before the platform spawns any commit-producing automation, so it no longer starts work that would fail at the commit step when no key is loaded.
+- A decision record (ADR-062) establishing that when a canonical specification and an issue body disagree, the specification wins and the issue body stays as historical record.
+
+### Changed
+- The platform's automation-safety hook now recognizes the correct project-repository worktree path, closing a latent gap where it could have blocked legitimate edits once the stricter enforcement mode is switched on.
+- The rules that govern how automated spokes run now forbid them from changing directory into, or writing to, the operator's primary checkout, and add a session-start guard against non-code sessions accidentally creating a work branch on the platform repository.
+
+[Full notes](release/releases/notes/v3.43_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.43)
+
 ## [v3.42] - 2026-07-01
 
 The branch-cleanup script now actually reaps squash-merged release and chore branches, reports one row per branch, and deletes merged branches without --force — instead of finding nothing on this squash-merging repo.
