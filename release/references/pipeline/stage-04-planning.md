@@ -6,7 +6,7 @@
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
 
 ## 1. Purpose
-Transform a scoped Milestone into a dependency-ordered implementation plan with file-level change specifications, so the engineer can execute sequentially without re-analyzing scope.
+This is an early-pipeline stage — its job is to **map current state and surface gaps** (sequence and specify the work), not to design the solution or build it. Transform a scoped Milestone into a dependency-ordered implementation plan with file-level change specifications, so the engineer can execute sequentially without re-analyzing scope.
 
 ## 2. Reference Model Alignment
 

@@ -17,6 +17,8 @@ The 13-stage pipeline is the [Process](../../../core/specs/terminology-glossary.
 
 The pipeline design standard is defined in `core/standards/per-stage-shard-standard.md`. Each stage follows the 10-point framework documented there.
 
+**Cross-stage purpose contract.** Each phase of the pipeline owns a distinct kind of work, and the phases do not overlap: **early (Intake / Triage / Bundle / Planning) = map current state / surface gaps · Solutioning = design · Engineering = build/tweak · QA = validate.** The early stages establish and enrich what is true now and where the gaps are (they do not design or build); Solutioning decides the design; Engineering builds or tweaks against that design; QA validates the built result against acceptance criteria. Each stage's §1 Purpose states its stage-specific detail; this contract fixes the phase-level intent those purposes express so no stage silently drifts into another phase's job (e.g., Planning does not design; Engineering does not re-open design).
+
 ## How to Read This Directory
 
 - This directory contains one file per stage of the 13-stage pipeline

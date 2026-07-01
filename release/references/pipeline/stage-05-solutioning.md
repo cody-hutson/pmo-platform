@@ -6,7 +6,7 @@
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
 
 ## 1. Purpose
-Resolve technical design decisions, validate feasibility, and produce implementation-ready specifications so Engineering receives unambiguous instructions — not open questions.
+This is the **design** stage of the pipeline — where the solution is designed, after the early stages have mapped state and surfaced gaps and before Engineering builds. Resolve technical design decisions, validate feasibility, and produce implementation-ready specifications so Engineering receives unambiguous instructions — not open questions.
 
 ## 2. Reference Model Alignment
 
