@@ -8,6 +8,22 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.37] - 2026-06-30
+
+Shared project facts now live in one place, and `PROJECT.md` links to them instead of repeating them. A new shared `projects/_pmo/` area holds one consistent page per entity — people, systems, vendors, workstreams, decisions, and cross-project dependencies — and `PROJECT.md` becomes a thin composed wiki-link index that links out to those pages rather than restating the same facts in every project. Plans (communications, training, hypercare, cutover, change-management) become typed sub-entities with relationship typing. Existing projects are not moved by this release; migrating a live project's overview to the linked-index format is a separate, deferred, per-project step.
+
+### Added
+- Shared `projects/_pmo/{people,systems,vendors,workstreams,decisions,dependencies}/` layout with six entity-page templates (Person / System / Vendor / Workstream / Decision / cross-project Dependency & Conflict), aligned to ADR-040 `person_id` + people-roster.
+- `project-initiator` Mode A `_pmo/` bootstrap step and Step-3 composed-index template-ref swap.
+- Composed-index PROJECT.md template (≤50-line thin wiki-link index) plus a 4-step live-migration protocol with a backwards-compatibility consumer table.
+
+### Changed
+- Plans modeled as typed sub-entities (comms / training / hypercare / cutover / change-mgmt) with relationship typing; the deferred `plan_type` G5 enum membership resolved and `plan_subtype` dropped.
+
+`novel`-class; three stories on one branch / one merge. AC-5 live-project migration DEFERRED (capability shipped; gated POC migration is a follow-up). No re-version. Additive — CHEAP / `git revert -m 1`.
+
+[Full notes](release/releases/notes/v3.37_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.37)
+
 ## [v3.36] - 2026-07-01
 
 The four process-domain specialist skills — Scrum Master, Release Train Engineer, Business Analyst, and Product Owner — now ground their work in a shared process best-practice guide (`core/standards/domain-best-practices/process.md`) via a compose-by-reference `## Reference docs` pointer (ADR-019; no content absorption). The first three single-anchor to the process guide; the Product Owner dual-anchors to BOTH the process and governance guides, mirroring the dual-anchor Technical Program Manager. This completes the anchoring sequence after v3.30 (software) and v3.33 (governance). The release also adds a net-new support-domain best-practice guide (`core/standards/domain-best-practices/support.md`) covering ITIL 4, tiered incident and escalation practice, and SRE, registered in the framework catalog; and records the change-domain decision to keep its best-practice content self-bundled with the change-management skill — no shared guide, the OCM lead reaching the suite transitively via composition — captured in ADR-057 (`Proposed`) with a reversal trigger and a build-philosophy coverage-matrix row. `routine`-class; six cards on one branch / one merge; no re-version. Additive — CHEAP / `git revert -m 1`.
