@@ -195,7 +195,7 @@ Same as CLAUDE.md, plus PMO-specific:
 - **Day-of-week validation:** Always validate: "March 18 (Tuesday)" not "March 18."
 - **No generalized dates:** All project dates in communications and status outputs must be specific and verified. Never substitute a vague range ("week of April 6") for a specific date ("April 2, Thursday"). When sources conflict, surface the conflict — don't paper over it with generalization.
 - **Write-first-speak-second:** All file changes follow: plan → user approves → write → confirm. Never report "tracker updated" or "file written" until the write has succeeded. If a write fails, report the failure. No file is modified without prior user approval; no completion is reported without prior file modification. Write sequences follow the Document Tier defined in CLAUDE.md File Management Protocol. Operational trackers (Document Tier 2) are auto-written after processing — do not wait for explicit write instructions. Stakeholder-facing documents (Document Tier 1) require user approval before writing.
-- **Project-scoped output:** All generated artifacts must route to the active project's 01-08 folder structure or its 08-Generated/ staging area. Active project = the project whose PROJECT.md is loaded. If ambiguous, ask the user. Governance files at Projects/ root are exempt.
+- **Project-scoped output:** All generated artifacts must route to the active project's 01-08 folder structure or its 08-Generated/ staging area. Active project = the project whose PROJECT.md is loaded. If ambiguous, ask the user. Governance files at projects/ root are exempt.
 - **No ungoverned changes:** Any modification to governance files, skills, folder structure, or protocols requires a GitHub Issue via `improvement.yml` template (any category label per `label-taxonomy.md`) + implementation plan + user approval before execution. Self-generated improvements are logged only — do not attempt to resolve unless the user requests it. See "Continuous Improvement Protocol" below.
 
 ### Continuous Improvement Protocol
@@ -690,7 +690,7 @@ All projects follow this structure. Do NOT create project-specific subfolders ou
 
 ### Platform Boundary Enforcement
 
-All PMO operational skills operate within Layer 2 (Operations domain — `Projects/` and its subfolders). Skills that write operational data — trackers, status logs, transcripts, generated artifacts — must target Layer 2 paths exclusively. No operational skill may modify Layer 1 files (`CLAUDE.md`, `core/`/`operations/`/`release/`, `.claude/settings.json`, `.claude/rules/`) without an approved IMP entry and a release executed through RELEASE_PROTOCOL.md. Bridge files (Layer 3) follow their dual-ownership rules defined in CLAUDE.md "Platform vs. Working Content Boundary."
+All PMO operational skills operate within Layer 2 (Operations domain — `projects/` and its subfolders). Skills that write operational data — trackers, status logs, transcripts, generated artifacts — must target Layer 2 paths exclusively. No operational skill may modify Layer 1 files (`CLAUDE.md`, `core/`/`operations/`/`release/`, `.claude/settings.json`, `.claude/rules/`) without an approved IMP entry and a release executed through RELEASE_PROTOCOL.md. Bridge files (Layer 3) follow their dual-ownership rules defined in CLAUDE.md "Platform vs. Working Content Boundary."
 
 ```
 [Project Name]/
@@ -854,7 +854,7 @@ Execute this cycle once per day, triggered by user or automation:
    - **(a) Skills count:** OPERATIONS.md Skills Section skill count matches actual `.skills/skills/` directory count.
    - **(b) Issue tracking:** GitHub Issues with `improvement` label are accessible (`gh issue list --limit 1` succeeds).
    - **(c) Session freshness:** SESSION_STATE.md `last_updated` freshness (per staleness rule in CLAUDE.md).
-   - **(d) Portfolio accuracy:** PORTFOLIO.md project list matches actual `Projects/` subdirectories (excluding `_governance/`, `Reference/`, `_Skill-Packages/`, `Archive/`).
+   - **(d) Portfolio accuracy:** PORTFOLIO.md project list matches actual `projects/` subdirectories (excluding `_governance/`, `Reference/`, `_Skill-Packages/`, `Archive/`).
    - **(e) Release sync:** RELEASE_LOG.md latest version matches RELEASE_PROTOCOL.md status line.
    - **(f) Governance file presence:** All expected files exist in `projects/_config/`: OPERATIONS.md, PORTFOLIO.md, SESSION_STATE.md, RELEASE_PROTOCOL.md, CORRECTIONS.md, Releases/RELEASE_LOG.md. Missing or relocated governance files = **critical drift** — block processing until resolved.
    Flag discrepancies as `⚠️ DRIFT DETECTED:` with proposed correction. Critical drift blocks processing; moderate/low drift is flagged and processing continues.
@@ -872,7 +872,7 @@ Execute this cycle once per day, triggered by user or automation:
 12. **Execution** — On approval, all Document Tier 2 tracker updates written; Transcript Register status → `CLOSED`.
 13. **Artifact Check** — Artifact Generator identifies missing/outdated artifacts (FDD approval sign-offs, process flows, training). Flags for creation.
 14. **Portfolio Sync** — PORTFOLIO.md updated with project status roll-up.
-15. **Orphan Detection** — Check Projects/ root and Claude/ root for files that appear to be project artifacts (not governance files). If found, flag: "⚠️ ORPHAN FILE: [filename] found at [path]. Likely belongs in [project]/[folder]. Route now?" User confirms routing or marks as intentional.
+15. **Orphan Detection** — Check projects/ root and Claude/ root for files that appear to be project artifacts (not governance files). If found, flag: "⚠️ ORPHAN FILE: [filename] found at [path]. Likely belongs in [project]/[folder]. Route now?" User confirms routing or marks as intentional.
 16. **Proactive Next Steps** — Surface upcoming decisions, escalations, risk events based on timeline.
 17. **Session State Update** — Before concluding, update SESSION_STATE.md per its Session-End Update Checklist. Overwrite the Last Session Summary (do not append). Mandatory for any session that modified governance files, processed transcripts, created/promoted artifacts, or changed project state.
 
