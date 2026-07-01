@@ -83,6 +83,7 @@ One row per deployed CI. The CI population is the **deployed roster** resolved f
 | [`pmo-software-engineer`](../../release/skills/pmo-software-engineer/SKILL.md) | role-Specialist | release | active | DEPENDS_ON implementation-planner | platform-maintainer | Executes end-to-end Stage-6 Engineering — turns an approved implementation plan or findings register into executed change, verification, and a PR. Use when an approved plan or findings register is ready to build; a bare ticket with no plan routes to planning first. | Development |
 | [`build-reviewer`](../../release/skills/build-reviewer/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
 | [`implementation-planner`](../../release/skills/implementation-planner/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
+| [`pipeline-triage`](../../release/skills/pipeline-triage/SKILL.md) | function-skill | release | active | RELATES_TO release-planner · RELATES_TO intake-desk | platform-maintainer | — | — |
 | [`pmo-skill-editor`](../../release/skills/pmo-skill-editor/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
 | [`pmo-skill-refiner`](../../release/skills/pmo-skill-refiner/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |
 | [`release-executor`](../../release/skills/release-executor/SKILL.md) | function-skill | release | active | — | platform-maintainer | — | — |

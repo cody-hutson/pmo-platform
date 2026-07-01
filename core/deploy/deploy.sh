@@ -61,6 +61,7 @@ OPERATIONS_SKILLS=(
 RELEASE_SKILLS=(
   build-reviewer
   implementation-planner
+  pipeline-triage
   pmo-architect
   pmo-devops-sre
   pmo-principal-engineer

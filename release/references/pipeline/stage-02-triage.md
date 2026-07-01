@@ -33,6 +33,8 @@ Key compression: "Request more info" deliberately absent — one-and-done intake
 
 > **Persona card:** see [`release-personas.md §Stage 2`](../specs/release-personas.md) for the chip-prompt persona card embedded in hub-spoke prompts.
 
+> **Owning skill:** the Phase-A analysis (A1–A6.5) is executed by the [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) skill — the improvement-backlog Stage-2 triage execution surface. It runs the phases end-to-end (auto-execute default per §8) and produces the consolidated triage summary for the operator's Phase-B verdict. The verdict (B2, Tier 3) stays human-only; `pipeline-triage` presents recommendations, never renders the verdict.
+
 ## 4. Inputs
 From Intake: title, priority, category, description, evidence, affected files, proposed change, dependencies, acceptance criteria, labels, board status (Proposed).
 Set at Triage: Decision Date, Board Status (Approved/Rejected/Deferred).
@@ -259,12 +261,12 @@ Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schema
 **Workflow Readiness** — per [gate-criteria-spec.md](../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness). Triage Readiness criteria pass (quality), no unresolved duplicates, dependency state validation passed (A3 — Rejected deps block, Deferred deps warn per G2-04), body `### Priority` P-level validated against backlog context (G2-01 — the canonical priority surface per the § Gate 1 Priority-Model block; label-NOT-a-surface), category label matches, Decision Date set in the Projects Date field (G2-06), Projects Priority field mirrored from the body P-level (G2-12 — body wins on mismatch; the body→Projects-Priority sync per the B2a Priority-Field Mirror block; applies to issues entering Triage after this criterion's introducing-release merge SHA), similarity composite-signal candidate pairs routed (G2-09 — fold / decompose-into-roadmap / keep-separate-with-rationale / defer; applies to all releases going forward), size:XL decomposition routing recorded (G2-10 — applies to all releases going forward), oversize-predicate decomposition routing recorded when ANY composite-OR predicate fires (G2-11 — 3-outcome enum kept-as-one / split per [fission-convention.md](../protocols/fission-convention.md) / escalate per Tier 2 [SCOPE CHANGE]; applies to all releases going forward). Approved issues sit in queue until bundled at Stage 3.
 
 ## 8. Automation Level
-Overall Tier 2. Today: fully manual on GitHub Projects board. Target: skill mode runs A1-A6, human does B1-B3. Decision (Tier 3) stays human-only.
+Overall Tier 2. Today: fully manual on GitHub Projects board. Execution surface: the [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) skill runs A1-A6 (auto-execute default — see below), human does B1-B3. Decision (Tier 3) stays human-only. The one carve-out from auto-execute is the Reject-close (`gh issue close --reason "not planned"`), which `pipeline-triage` holds behind an explicit operator confirmation.
 
 **The Tier 2 (Recommend) level refers to the final Approve/Defer/Reject verdict — NOT to per-action approval of the enrichment steps inside Phase A.** Run the full Phase A sequence (gate checks, enrichment comments, dependency links, native-dep mirror, management-task identification) end-to-end and present a single consolidated summary for the human decision. Do not gate on each individual action — each comment, each edit, each link. Per-action approval does not scale across a batch; the operator renders one verdict per issue from the summary, not an approval per enrichment step. This is the Stage-2 instance of the general Full-Phase-Scope Discipline at [`release-process.md` § Full-Phase-Scope Discipline](../../governance/release-process.md); see there for the all-phases form and the cross-phase-fork / shared-state / skill-mandated-gate carve-outs.
 
 ## 9. Gap Summary
-8 gaps identified. Key: no triage skill mode (P2), stage defs have no persistent repo home (P2, resolved).
+8 gaps identified. Key: no triage skill mode (P2, resolved — the [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) skill executes A1–A6.5), stage defs have no persistent repo home (P2, resolved).
 
 ## 10. Retro
 Key lessons: 15-stage model compresses heavily for single-operator — valid per Part 6. Priority doing triple duty (urgency, importance, scope). Approved queue is critical buffer between Triage and Bundle. Gap analysis is the compounding deliverable. "Request more info" absence is a feature.

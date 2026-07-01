@@ -18,7 +18,7 @@ This document maps each of the 13 pipeline stages defined in [`pipeline/`](../pi
 | Stage | Stage Name | Primary Skill | Skill Mode | Automation Tier | Gap Notes |
 |---|---|---|---|---|---|
 | 1 | Intake | — | — | Tier 2 (Recommend) | **GAP** — no scoped skill owns platform-internal improvement-issue authoring against `pmo-platform` repo. `ppm-agent` Section 10 Handoff Manifest produces follow-ups but does not author GitHub Issues. Forward-ref: **intake skills**. |
-| 2 | Triage | — | — | Tier 2 (Recommend) | **GAP** — no scoped skill owns Workflow Readiness gate execution (G2-01..G2-04 per [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md)). `delivery-engine` triage modes are sprint-backlog scoped (project-ops), not improvement-backlog. Forward-ref: **intake skills**. |
+| 2 | Triage | `pipeline-triage` | (single-purpose skill — runs A1–A6.5) | Tier 2 (Recommend) | Coverage. [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) owns Workflow Readiness gate execution (G1/G2 per [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md)) over the `status: proposed` **improvement** backlog — auto-executes A1–A6.5 and produces the consolidated triage summary; verdict (B1–B3) stays operator-only (Tier 3). Distinct from `delivery-engine`'s sprint-backlog (project-ops) triage modes. |
 | 3 | Bundle | `release-planner` | Mode A — Backlog Analysis | Tier 2 (Recommend) | Coverage. Mode A produces dependency graph + suggested bundles + version recommendations. Stage 3 Release Readiness gate (G3-01..G3-06) executes upstream of Mode A output. Forward-ref: **release-planner Bundle mode** enrichment. |
 | 4 | Planning | `release-planner` | Mode B — Release Planning | Tier 2 (Recommend) | Coverage. Mode B writes `release/releases/plans/[version]_RELEASE_PLAN.md` with implementation sequence, dependency ordering, risk register. |
 | 5 | Solutioning | `pmo-technical-analyst` | Mode C — Architecture / Infrastructure Review (closest-domain bridging fit) | Tier 2 (Recommend) | **PARTIAL FIT** — `pmo-technical-analyst` is project-ops scoped (vendor FDDs, IDDs, ERP architectures); Stage 5 targets platform-internal design (skill structure, governance edits, schema changes). Per [`release-personas.md`](release-personas.md) Stage 5, planned replacement is the **Principal Engineer skill**. Use Mode C as bridging fit only until the Principal Engineer skill ships. Forward-ref: **role skills**. |
@@ -33,7 +33,7 @@ This document maps each of the 13 pipeline stages defined in [`pipeline/`](../pi
 
 ## Gaps
 
-Five gaps surfaced by the table: three skill-build candidates (G1, G2, G4), one partial-fit bridging assignment with replacement scheduled at a future role-skills release (G3), and one structural gap by design (G5).
+Five gaps surfaced by the table: two open skill-build candidates (G1, G4), one **resolved** (G2 — the `pipeline-triage` skill now owns Stage 2), one partial-fit bridging assignment with replacement scheduled at a future role-skills release (G3), and one structural gap by design (G5).
 
 ### G1: Stage 1 (Intake) — no improvement-issue authoring skill
 
@@ -41,11 +41,10 @@ Five gaps surfaced by the table: three skill-build candidates (G1, G2, G4), one 
 - **Why no current skill fits:** `ppm-agent` processes project artifacts → project-tracker outputs (not GitHub Issues against `pmo-platform`). `pmo-skill-editor` edits skills. `pmo-technical-analyst` reviews vendor artifacts.
 - **Forward-reference:** intake skill expansion. Likely successor: `platform-improvement-intake` skill consuming operator observations + session-end candidate improvements + authoring `improvement.yml`-conformant issues.
 
-### G2: Stage 2 (Triage) — no improvement-backlog triage skill
+### G2: Stage 2 (Triage) — RESOLVED by the `pipeline-triage` skill
 
 - **Stage role:** Evaluate each issue for priority, feasibility, fit; produce Approved/Deferred/Rejected decision; run dependency-state validation (G2-04).
-- **Why no current skill fits:** `delivery-engine` triage modes are sprint-backlog (project-ops). `ppm-agent` produces decision frames but doesn't run Workflow Readiness gate. `release-planner` Mode A consumes Approved issues but doesn't produce triage decisions.
-- **Forward-reference:** intake skill expansion.
+- **Resolution:** the [`pipeline-triage`](../../skills/pipeline-triage/SKILL.md) skill (release module) owns this stage — it auto-executes A1–A6.5 over the `status: proposed` improvement backlog and produces the consolidated triage summary; the verdict stays operator-only (Tier 3). Standalone-skill decision per ADR-063 (delivery-engine / release-planner / ppm-agent all ruled out: `delivery-engine` triage modes are sprint-backlog project-ops; `ppm-agent` produces decision frames but doesn't run the Workflow Readiness gate; `release-planner` Mode A consumes Approved issues, downstream of triage).
 
 ### G3: Stage 5 (Solutioning) — partial-fit only via pmo-technical-analyst
 
