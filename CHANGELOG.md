@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.45] - 2026-07-01
+
+The release pipeline's own reference docs now spell out what each stage is for, and the Stage-9 mid-pipeline divergence check is listed in the gate registry it was already running under.
+
+[Full notes](release/releases/notes/v3.45_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.45)
+
 ## [v3.44] - 2026-07-01
 
 Stage-2 triage of the improvement backlog now runs as a skill: one command enriches every proposed issue and returns a single triage summary, so the operator renders one verdict per issue instead of approving each step by hand.
