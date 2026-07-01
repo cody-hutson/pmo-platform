@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: "ADR-063 — Stage-2 Triage executes as a new standalone skill (pipeline-triage), not a delivery-engine / release-planner mode"
-status: Proposed
+status: Accepted
 date: 2026-07-01
 release: v3.44-pipeline-triage-automation
 deciders: "operator (confirmed 2026-07-01) + Stage 5 Solutioning spoke + independent adversarial review"
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-Proposed. Flips to Accepted at the v3.44 Stage-9 Plan Review GO gate (novel class → Deep review), per the Nygard status convention. This ADR is the committed record of the Stage-5 D-Design decision — re-spun after an independent adversarial review refuted the initially-proposed host and the operator confirmed a standalone skill on 2026-07-01 (#2752). The operator renders the decision at the Stage-9 human gate.
+Accepted. Flipped from Proposed at the v3.44 Stage-9 Plan Review GO gate (novel class → Deep review), per the Nygard status convention — the operator rendered GO at the Stage-9 human gate on 2026-07-01. This ADR is the committed record of the Stage-5 D-Design decision — re-spun after an independent adversarial review refuted the initially-proposed host and the operator confirmed a standalone skill on 2026-07-01 (#2752).
 
 Numbered as the next-free slot across `core/ADRs/` and `release/ADRs/` (global max = ADR-062 at the authoring commit; contiguity enforced by `release/tools/check-adr-numbers.py`). Referenced downstream **by slug**, never by number. Extended or reversed only by a successor / superseding ADR — never by in-place edit.
 

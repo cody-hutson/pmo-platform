@@ -60,10 +60,8 @@ in-scope issue, then assemble the consolidated summary.
 
 ### A3 — dependency-state validation
 
-- **Definition:** `stage-02-triage.md` §5 (Dependency State Validation A3); operationalizes G2-04.
-- **Run:** validate every `#N` in the body Dependencies field against compatible states —
-  Approved/Bundled/In-Progress/Done = compatible; Proposed/Deferred = **warn**; Rejected =
-  **block** (cannot Approve); invalid/self-ref = **block**.
+- **Definition:** `stage-02-triage.md` §5 (Dependency State Validation A3) + [`gate-criteria-spec.md § Gate 2` G2-04](../../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness). The per-state compatibility matrix (which states are compatible / warn / block) lives there — do not restate it here.
+- **Run:** validate every `#N` in the body Dependencies field against the §5 A3 compatibility matrix (via `gh issue view`); apply its block/warn actions per state.
 - **Emit:** per-dependency block/warn flags for operator review at Phase B.
 
 ### A3.5 — native-dep mirror
@@ -101,11 +99,10 @@ in-scope issue, then assemble the consolidated summary.
 
 ### A5.5 — oversize-decomposition routing
 
-- **Definition:** `stage-02-triage.md` §5 (A5.5) — composite-OR predicate per [G2-10](../../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness) + [G2-11](../../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness).
-- **Run:** evaluate the COMPOSITE-OR oversize predicate (P1 `size:XL` OR declared decomposition-hook
-  OR AC count ≥ 7 OR Affected Files count ≥ 5). On the SPLIT outcome, invoke
+- **Definition:** `stage-02-triage.md` §5 (A5.5) — composite-OR predicate per [G2-10](../../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness) + [G2-11](../../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness). The predicate terms and the G2-11-subsumes-G2-10 rule are defined there (`gate-criteria-spec.md § Composite-OR Oversize Predicate`) — do not restate them here.
+- **Run:** evaluate the G2-11 composite-OR oversize predicate against the issue. On the SPLIT outcome, invoke
   [`fission-convention.md`](../../../references/protocols/fission-convention.md) Steps 1–4 BEFORE the
-  Phase-B verdict. G2-11 subsumes G2-10 when its predicate fires (one routing decision).
+  Phase-B verdict.
 - **Emit:** size-routing outcome — kept-as-one (with rationale) / split / escalate Tier 2 [SCOPE CHANGE].
 
 ### A6 — per-issue triage summary
