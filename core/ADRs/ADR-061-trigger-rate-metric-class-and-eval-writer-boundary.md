@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: trigger-rate is a new metric class in the shared calibration surface, and skill-compliance-auditor is NEW (not a mode on eval-writer)
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-30
 release: 07-INFRA-hygiene-measurement
 deciders: "[operator]"
@@ -13,7 +13,7 @@ tags: [skill-compliance-auditor, trigger-rate, metric-class, calibration-data, n
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review. Binds atomically at Stage 12.
+**Accepted** — flipped from Proposed at the Stage 9 review (GO). Binds atomically at Stage 12.
 
 Number **061** — the next gap-free slot in the global ADR sequence (verified free across both `core/ADRs/` and `release/ADRs/` at Engineering time; the sequence spans both directories under one numbering, enforced by `check-adr-numbers.py`). Authored at Stage 6 per the Stage-5 recommendation (Stage 5 recommends the ADR; Engineering authors it).
 
