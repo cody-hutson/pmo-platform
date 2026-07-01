@@ -270,6 +270,11 @@ Competencies the refiner is at risk for:
 - **Organizational Leverage** — the refiner is narrow; leverage compounds only when many new skills are created via it. Short-term it looks expensive.
 - **Mentorship & Culture** — the refiner does not itself teach skill-authoring; it structurally enforces the disciplines. Mentorship still lives with the operator + `pmo-skill-editor` Mode D reviews.
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 ### Injection before scaffold validation — PROC

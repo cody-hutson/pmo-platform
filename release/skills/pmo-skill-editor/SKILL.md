@@ -463,7 +463,7 @@ tiers on decision-class items fail the reversibility check. See
 `core/specs/reversibility-protocol.md` for the full protocol and
 `core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 These apply to the editor itself — not to the skills being edited.
 

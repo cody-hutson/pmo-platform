@@ -107,7 +107,7 @@ Proceed to the corresponding mode section below. Do not proceed until Step 1, 2,
 
 ## Modes
 
-### Mode A: Single Output Review
+### Mode A — Single Output Review
 
 **Trigger**: "Review this output", "audit this triage report", "is this ready to act on",
 or any request to evaluate one skill's output.
@@ -225,7 +225,7 @@ change-management, technical-analyst, process-designer).
      bind to — all consume the one standard, no second regex authored here.
 4. Produce the QA audit report (see Output Format below).
 
-### Mode B: Cross-Skill Coherence Review
+### Mode B — Cross-Skill Coherence Review
 
 **Trigger**: "Check coherence across these outputs", "do these outputs align", or any
 request to evaluate 2+ outputs from the same scenario for consistency.
@@ -249,7 +249,7 @@ artifact or scenario.
    compliance and principal standard only).
 5. Produce the cross-skill coherence report.
 
-### Mode C: Push-to-Resolve Audit
+### Mode C — Push-to-Resolve Audit
 
 **Trigger**: "Audit the push-to-resolve compliance", "how much did the agent actually
 resolve", or any request to evaluate the ratio of resolved vs. surfaced items.
@@ -279,7 +279,7 @@ resolve", or any request to evaluate the ratio of resolved vs. surfaced items.
 
 See `references/push-to-resolve-rubric.md` for classification rules and examples.
 
-### Mode D: Document Management Compliance
+### Mode D — Document Management Compliance
 
 **Trigger**: "Check document management compliance", "is the dual output correct",
 or any request to verify the dual-output rule and artifact update cycle.
@@ -316,7 +316,7 @@ or any request to verify the dual-output rule and artifact update cycle.
 
 See `references/dual-output-compliance.md` for the full checklist.
 
-### Mode E: Platform Health Audit
+### Mode E — Platform Health Audit
 
 **Trigger**: "Platform health audit", "base-vs-build audit", "anthropic overlap audit",
 "drift check the registry", "audit the platform health", or the quarterly / drift-watch
@@ -467,7 +467,7 @@ This is 3–5 sentences. It names the overall quality level, the most important 
 
 ## Mode-specific output variations
 
-### Mode B: Cross-Skill Coherence Report
+### Mode B — Cross-Skill Coherence Report
 
 Replace the gate table (Section 2) with:
 
@@ -479,7 +479,7 @@ Replace the gate table (Section 2) with:
 
 Then include abbreviated Mode A gate results for each skill output reviewed.
 
-### Mode C: Push-to-Resolve Scorecard
+### Mode C — Push-to-Resolve Scorecard
 
 Replace the gate table (Section 2) with:
 
@@ -499,7 +499,7 @@ Replace the gate table (Section 2) with:
 Then list each SURFACED – SHOULD HAVE RESOLVED item with the explanation of what
 should have been produced.
 
-### Mode D: Dual-Output Checklist
+### Mode D — Dual-Output Checklist
 
 Replace the gate table (Section 2) with:
 
@@ -515,7 +515,7 @@ Replace the gate table (Section 2) with:
 | D8 | Change summary: why ([SOURCE] reference) | PASS/FAIL | |
 | D9 | Change summary: stakeholder doc identified | PASS/FAIL | |
 
-### Mode E: Platform Health Audit Output
+### Mode E — Platform Health Audit Output
 
 Mode E does NOT emit a gate table or PASS/FAIL verdict (it is observational, not gate-class).
 It produces a **dated audit folder** plus an **in-chat SUMMARY echo**.
@@ -600,7 +600,7 @@ to itself, or the audit is not trustworthy. See
 `core/specs/reversibility-protocol.md` for the full protocol and
 `../../reference/standards/principal-standard-checklist.md` §4 for the source concept.
 
-## Guardrails
+## Guardrails (Platform)
 
 **No rewriting.** You evaluate and recommend — you do not rewrite the output. Your
 remediation text shows what the fix looks like, but the skill itself must be re-run
@@ -641,7 +641,7 @@ In addition to the guardrails above, apply these suite-wide guardrail checks whe
 
 ## Domain-Specific Failure Modes
 
-These domain-specific anti-patterns coexist with `## Guardrails`, `## Guardrails
+These domain-specific anti-patterns coexist with `## Guardrails (Platform)`, `## Guardrails
 (Extended)`, and `## Reversibility Discipline`. Each entry uses the 5-field conditional
 template per `../../standards/failure-mode-standard.md`.
 

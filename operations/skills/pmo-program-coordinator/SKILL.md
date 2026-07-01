@@ -120,7 +120,7 @@ This skill's outputs are **predominantly low-reversibility** by construction: th
 
 Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. Because the Coordinator's writes are approval-gated, most calls are CHEAP — but a divergence adjudication the operator acts on without re-checking is exactly where a wrong CHEAP call propagates, so the tier + confidence are stated even on the cheap path.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a reconciliation that names no corrections and no divergences, or a cadence sync that just restates the update. Every output resolves to a coherence verdict (matched / corrected / diverged).

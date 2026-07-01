@@ -229,6 +229,11 @@ Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong*. Both tr
 **Enforcement:** pmo-qa-auditor G4 FAILs any output containing a decision-class item without a
 reversibility tier label.
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Operating Principles` (platform-wide guardrails)

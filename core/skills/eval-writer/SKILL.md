@@ -94,7 +94,7 @@ below).
 
 This skill has 2 modes — Author (write evals from scratch) and Review (audit existing evals against the framework). **Trigger-match heuristic auto-routes when the intent is clearly one or the other; AskUserQuestion fires only as a fallback when the phrasing is ambiguous (e.g., "work on my evals").** Wrong-mode output is rework-expensive; err toward asking when uncertain.
 
-**Tier classification:** Ask-when-ambiguous (per [OPERATIONS.md § Mode Selection Protocol](../../governance/OPERATIONS.md)). Trigger-heuristic first; AUQ as fallback. The per-skill / stage-gate / generic playbook detection continues to live in [§ Mode detection](#mode-detection) below, invoked after Mode Selection resolves the primary Author/Review mode.
+**Tier classification:** Ask-when-ambiguous (per [OPERATIONS.md § Mode Selection Protocol](../../governance/OPERATIONS.md)). Trigger-heuristic first; AUQ as fallback. The per-skill / stage-gate / generic playbook detection continues to live in [§ Playbook & system detection](#playbook--system-detection) below, invoked after Mode Selection resolves the primary Author/Review mode.
 
 ### Step 1 — Check for chained invocation
 
@@ -111,7 +111,7 @@ Map the user's request to Author or Review using the trigger-match table below. 
 | "write evals", "author evals", "new eval suite", "build a rubric", "write the judge", "add eval coverage for", "need evals for [X]" | Author |
 | "audit these evals", "review this eval suite", "calibrate my judge", "my judge is broken", "tests keep passing when they shouldn't", existing eval content provided for improvement | Review |
 
-Note: See [§ Mode detection § Step 1](#mode-detection) below for the full per-skill trigger mapping used inside each mode. Step 2 here is the outer Author/Review gate; that section is the inner playbook detection.
+Note: See [§ Playbook & system detection § Step 1](#playbook--system-detection) below for the full per-skill / stage-gate / generic playbook mapping used inside each mode. Step 2 here is the outer Author/Review gate; that section is the inner playbook detection.
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -128,22 +128,13 @@ Await the user's selection; use it as the mode.
 
 ### Step 4 — Execute the selected mode
 
-Proceed to [§ Mode detection](#mode-detection) below for the per-skill / stage-gate / generic playbook detection, then execute per § Workflow.
+Proceed to [§ Playbook & system detection](#playbook--system-detection) below for the per-skill / stage-gate / generic playbook detection, then execute per § Workflow.
 
-## Mode detection
+## Playbook & system detection
 
-Decide mode and playbook **before** doing anything else.
+Decide the playbook **before** doing anything else. The primary Author/Review mode is already resolved by [§ Mode Selection](#mode-selection) above; this section handles the inner per-skill / stage-gate / generic playbook routing and the system characterization.
 
-### Step 1 — Detect the mode
-
-| Signal | Mode |
-|---|---|
-| "write evals for", "add eval coverage", "build evals", "author evals", "need evals for X" | **Author** |
-| "audit my evals", "review my evals", "why is my judge broken", "tests keep passing when they shouldn't", "are my evals catching anything" | **Review** |
-| User pasted existing eval content AND asked for improvement | **Review** (then optionally Author for extensions) |
-| Ambiguous | Ask once: "Write evals from scratch, or audit existing ones?" |
-
-### Step 2 — Detect the playbook
+### Step 1 — Detect the playbook
 
 | Signal | Playbook |
 |---|---|
@@ -153,7 +144,7 @@ Decide mode and playbook **before** doing anything else.
 
 When ambiguous, ask once: "Is this a pmo-platform skill, a pipeline stage-gate, or a generic AI system?"
 
-### Step 3 — Identify system characterization
+### Step 2 — Identify system characterization
 
 Whichever mode and playbook, start with the Stage 0 five-tuple (Module 6 §2, Stage 0):
 1. **Single-agent vs multi-agent**
@@ -346,7 +337,7 @@ Review-mode rule coverage verdicts, Prioritized remediation recommendations, Rec
 diffs. See `core/specs/reversibility-protocol.md` for the full protocol and
 `core/skills/pmo-qa-auditor/SKILL.md` G4 for the 4-step auditor algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 - **Don't fake research.** If WebFetch fails, use the spine (Module 6). Don't hallucinate "current guidance."
 - **Don't over-question.** 3 targeted questions max in Author mode for characterization. Beyond that, label assumptions and proceed.

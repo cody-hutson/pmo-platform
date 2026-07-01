@@ -113,7 +113,7 @@ This skill produces **decision-class outputs** — placement/routing recommendat
 
 The skill-specialized tier vocabulary (CHEAP-dominant by construction) and the reversibility-vs-confidence pairing live in [`references/composition-and-reversibility.md`](references/composition-and-reversibility.md) §2. Enforcement: pmo-qa-auditor **G4** FAILs any decision-class item missing a tier.
 
-## Guardrails
+## Guardrails (Platform)
 
 Hard rejections — the suite-wide standard plus the role's own:
 - **Pre-creation governance check** — before authoring any knowledge asset, search the CLAUDE.md governance file map, the OPERATIONS.md operational-artifacts table, and the relevant pipeline stage outputs for a defined home; cite the result. A home that exists is routed *into*, not duplicated (FM-1).

@@ -100,7 +100,7 @@ This skill produces **decision-class outputs** — the executed change set Mode 
 
 **Tier reference:** the executed-change reversibility maps to the composed `implementation-planner`'s RT-to-default-tier mapping (RT-1/2/3 → CHEAP, RT-4 → MODERATE, RT-5 → MODERATE/EXPENSIVE) — the Specialist inherits the planner's per-RT tier as the starting point and adjusts for the *execution* state (committed vs. merged vs. deployed). Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a "build complete" claim with no changed artifact, or a change with no verification evidence. Every output resolves to an executed change set + verification + a PR-readiness call.

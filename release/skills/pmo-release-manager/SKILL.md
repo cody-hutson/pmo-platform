@@ -157,7 +157,7 @@ This skill produces **decision-class outputs** — the Mode 1 go/no-go recommend
 
 Enforcement: pmo-qa-auditor **G4** FAILs any decision-class output lacking a reversibility tier label.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard (the workspace-global CLAUDE.md § Quality Standards guardrails + [OPERATIONS.md](../../../core/governance/OPERATIONS.md)) plus the role's own:
 - **Status theater** — a release-state or readiness read with no decision linkage. Every output resolves to a go/no-go recommendation, a deploy-tail action, or a close-out disposition with its tier.

@@ -171,7 +171,7 @@ This skill produces **decision-class outputs** — the project-level readiness c
 
 The **project release go/no-go (Mode 3) is the highest-reversibility output this skill produces** — EXPENSIVE-to-IRREVERSIBLE; the Project Manager never renders a GO without the tier, the confidence, the rollback posture, and the sign-off authority. Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate. Enforced by `pmo-qa-auditor` G4.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a gate verdict or backlog scan with no project-level decision, or a list of DoR/DoD verdicts without an owned readiness call. Every output resolves to a project decision.

@@ -49,7 +49,7 @@ Each anti-pattern documented in a skill's `## Domain-Specific Failure Modes` sec
   gradient surfaces the upskilling path, not just the rule.
 ```
 
-Header names are fixed. G7 gate validation keys on the exact strings `## Guardrails (Platform)` and `## Domain-Specific Failure Modes` via regex. Skills currently using `## Guardrails` rename during the Wave 4 batch rollout.
+Header names are fixed. G7 gate validation keys on the exact string `## Domain-Specific Failure Modes` via regex; the `## Guardrails (Platform)` header is a template-conformance convention (not currently gate-enforced — no G7 check or `deploy.sh` check regexes it). Skills using a bare `## Guardrails` are normalized to `## Guardrails (Platform)` as a structural-edit hygiene pass (the catalog-wide conformance pass landed with this standard's referencing release).
 
 ### The Conditional Grammar
 
@@ -975,10 +975,10 @@ Inline rationale for non-obvious design decisions, per the platform pattern. No 
 
 **≥ 3 floor vs. complexity-scaled floor.** A variable floor scaled by skill complexity was considered and rejected. Variable floors require a skill-complexity classifier and judgment calls at every skill — scope creep. Three is defensible as a universal floor because it maps to the 3-axis input / process / output failure space every skill has. Skills with richer failure surfaces exceed three naturally; the gate does not cap the ceiling.
 
-**Fixed header names.** `## Guardrails (Platform)` and `## Domain-Specific Failure Modes` are fixed strings, not flexible. G7-01 keys on the exact string for structural validation. Flexibility here buys no authorial freedom and costs deterministic gate behavior.
+**Fixed header names.** `## Guardrails (Platform)` and `## Domain-Specific Failure Modes` are fixed strings, not flexible. G7-01 keys on the exact string `## Domain-Specific Failure Modes` for structural validation; the `## Guardrails (Platform)` string is fixed by template convention, not by a G7 check (no G7 sub-check or `deploy.sh` check currently regexes it). Flexibility on either buys no authorial freedom and costs deterministic gate behavior / template conformance.
 
 **Case-sensitive "do NOT" regex.** Lowercase `do not` or uppercase `DO NOT` do not match G7-05. The fixed form is a rigor signal — authors who paraphrase break the pattern and fail the gate, which is the intended behavior. The template is a contract, not a suggestion.
 
 ---
 
-*Standard for `## Domain-Specific Failure Modes` authoring. Consumed by pmo-qa-auditor gate G7 (Wave 2) and skill-creator Interview/Write enforcement (Wave 2). 22-skill SKILL.md rollout in Wave 4. pmo-qa-auditor inherits this format for its 8 failure-mode detectors.*
+*Standard for `## Domain-Specific Failure Modes` authoring. Consumed by pmo-qa-auditor gate G7 and skill-creator Interview/Write enforcement. The `## Guardrails (Platform)` header is a template-conformance convention (not G7-enforced); the catalog-wide Guardrails-conformance pass landed with this standard's referencing release. pmo-qa-auditor inherits this format for its 8 failure-mode detectors.*

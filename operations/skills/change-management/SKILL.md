@@ -155,7 +155,7 @@ The change management skill operates in 7 modes. Detect the appropriate mode fro
 context. When multiple modes apply (e.g., a change matrix upload triggers both
 ingestion and gap analysis), execute both and organize the output clearly.
 
-### Mode A: Change Impact Assessment
+### Mode A — Change Impact Assessment
 
 **Trigger**: "What's the change impact", "build the impact assessment", any [CHANGE]
 tag for impact analysis, FDD upload needing change perspective, or when context
@@ -180,7 +180,7 @@ describes a system/process change without an existing impact assessment.
 **Output**: Change impact table + severity summary + glossary + CM notes.
 Read `references/impact-assessment.md` for the full schema and field definitions.
 
-### Mode B: Training Plan
+### Mode B — Training Plan
 
 **Trigger**: "Who needs training", "build the training plan", any [CHANGE] tag for
 training, or when an impact assessment exists with High-severity items that have no
@@ -204,7 +204,7 @@ training plan.
 **Output**: Training needs matrix + prerequisite artifact tracker + critical gaps.
 Read `references/training-plan.md` for the full schema.
 
-### Mode C: Readiness Checklist
+### Mode C — Readiness Checklist
 
 **Trigger**: "Are we ready for go-live", "build the readiness checklist", any [CHANGE]
 tag for readiness, or when a go-live milestone is within 4 weeks and no readiness
@@ -228,7 +228,7 @@ checklist exists.
 **Output**: Readiness checklist table + overall verdict + remediation plan.
 Read `references/readiness-checklist.md` for the full checklist and criteria.
 
-### Mode D: Hypercare Plan
+### Mode D — Hypercare Plan
 
 **Trigger**: "Build the hypercare plan", "what happens after go-live", any [CHANGE]
 tag for hypercare, or when go-live is within 2 weeks and no hypercare plan exists.
@@ -285,7 +285,7 @@ Classification — the tier set, scoring rule, and tier→support-model/SLA map 
 Tracking and Compliance Reporting — the SLA-event record fields and the per-tier
 compliance-report format).
 
-### Mode E: Change Matrix Ingestion
+### Mode E — Change Matrix Ingestion
 
 **Trigger**: User uploads a change matrix (Excel/CSV with impact analysis, training
 needs, communications plan, or timeline data), "review the change matrix",
@@ -310,7 +310,7 @@ needs, communications plan, or timeline data), "review the change matrix",
 **Output**: Matrix completeness scorecard + gap report + remediation items.
 Read `references/change-matrix-schema.md` for expected schemas.
 
-### Mode F: CM Communications Schedule
+### Mode F — CM Communications Schedule
 
 **Trigger**: "Build the comms schedule for the change", "what comms need to go out
 before go-live", any [CHANGE] tag for comms planning.
@@ -335,7 +335,7 @@ When a specific communication needs drafting, tag it `[COMMS]` for the comms-wri
 
 **Output**: T-minus comms calendar + gap analysis + artifact dependency tracker.
 
-### Mode G: Adoption Tracking
+### Mode G — Adoption Tracking
 
 **Trigger**: "adoption plan", "adoption tracking", "run an ADKAR barrier assessment", "where is each group stuck on adoption", "is training timed right", "champion ratio", "are we resourced for adoption", "is sponsorship slipping", "valley of despair prep", any [CHANGE] tag for adoption tracking, or when a go-live/hypercare is in flight and adoption instrumentation (ADKAR barriers, champion ratio, sponsor engagement, valley prep) has not been produced per audience.
 
@@ -511,7 +511,7 @@ decision-class item without a reversibility tier label. See
 `core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 Hard rejections — if you catch yourself doing any of these, stop and fix:
 

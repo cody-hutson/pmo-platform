@@ -2,7 +2,7 @@
 name: delivery-engine
 description: >
   Operational backbone for backlog health through release readiness. Modes: Backlog scan · Ticket insight · DoR gate · Sprint planning · Execution control · DoD gate · RAID updates. Use for sprint planning, backlog review, quality gates, or velocity tracking across Agile and Waterfall governance. Triggers: "run DoR on this", "run DoD on this", "check this backlog", "plan the sprint", "velocity check", "is this release ready", "update the RAID log."
-version: v2.25
+version: v3.41
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -106,7 +106,7 @@ the user rarely names the mode explicitly. When multiple modes apply (e.g., a Ji
 export triggers both backlog scan and DoR gate), execute both and organize the output
 clearly.
 
-### Mode A: Backlog Ingestion & Health Scan
+### Mode A — Backlog Ingestion & Health Scan
 
 **Trigger**: Jira export (CSV/Excel), "review this backlog", "how's the backlog",
 any [DELIVERY] tag referencing backlog health.
@@ -140,7 +140,7 @@ any [DELIVERY] tag referencing backlog health.
 mode identification, health scorecard, findings with remediations, RAID entries,
 paste-ready artifacts. Any artifact persisted to `08-Generated/` (RAID Log, cutover plan, go/no-go checklist, sprint review summary) is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
 
-### Mode B: Ticket Insight & Similarity
+### Mode B — Ticket Insight & Similarity
 
 **Trigger**: "What's related to [ticket]", "find similar tickets", "is this a duplicate",
 ticket-level deep dive.
@@ -156,13 +156,15 @@ ticket-level deep dive.
 **Output**: Ticket analysis, related tickets table, dependency chain, recommended
 actions (merge duplicates, link dependencies, escalate blockers).
 
-### Mode C: Refinement Manager (DoR Gate)
+### Mode C — Refinement Manager (DoR Gate)
 
 **Trigger**: "Run DoR", "is this ready for sprint", "refinement check", any [DELIVERY]
 tag referencing DoR or readiness.
 
+**Canonical gate ID:** this **DoR Gate** is the Agile-framing refinement of the pipeline's canonical **G1 — Triage Readiness** gate (`../../../core/schemas/gate-criteria-spec.md` § Gate 1). Both express the same "is this work item ready" predicate over a work item; the operator-familiar **DoR Gate** label is retained, and it maps to the canonical `G1-*` criteria so a DoR verdict and a `G1` verdict cannot silently drift. Per [`skill-pipeline-alignment.md`](../../../core/standards/skill-pipeline-alignment.md) DT-2, this is a declared **refinement-with-mapping**, not a parallel-vocabulary leak — the two framings coexist by design (the skill's Agile/Waterfall dual-framing contract), linked by this citation rather than shadowing one another.
+
 **What you do**:
-1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle). This DoR check is the specific instance of the universal §5.2 per-transition entry-criteria enforcement applied at the Prepare→Build boundary `T(6→7)` — the LG-4 gate, bound to `T(6→7)` in `references/gate-definitions.md §4.2`; render the DoR verdict in the §4.1 `PASS / CONDITIONAL PASS / FAIL` vocabulary.
+1. Read `references/gate-checklists.md` for the DoR criteria and `references/lifecycle-stages.md` for the stage entry criteria governing this transition (DoR is the entry gate to the Build phase per the universal lifecycle). This DoR check is the specific instance of the universal §5.2 per-transition entry-criteria enforcement applied at the Prepare→Build boundary `T(6→7)` — the LG-4 gate, bound to `T(6→7)` in `references/gate-definitions.md §4.2`; render the DoR verdict in the §4.1 `PASS / CONDITIONAL PASS / FAIL` vocabulary. The DoR criteria are the Agile-framing refinement of the canonical **G1 (Triage Readiness)** criteria in [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Gate 1 — a DoR PASS maps to a `G1-*` PASS.
 2. Evaluate each ticket against every DoR criterion
 3. For each failure:
    - Identify what's missing with specificity (not "needs AC" but "no testable
@@ -175,7 +177,7 @@ tag referencing DoR or readiness.
 **Output**: Gate results table, per-ticket findings, drafted remediations, overall
 gate verdict, recommended actions for any FAIL items.
 
-### Mode D: Sprint Planning
+### Mode D — Sprint Planning
 
 **Trigger**: "Plan the sprint", "sprint planning", sprint number reference + capacity
 discussion, any [DELIVERY] tag referencing sprint planning.
@@ -231,7 +233,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
 
 **Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), the **tech-debt rank** — each tech-debt item with its Fowler quadrant (or `unclassified`) and its CoD value + HIGH/MEDIUM/LOW confidence tier, the slice sorted by (quadrant × CoD), and the top-ranked items filling the under-floor deficit up to the floor (or a deferred-fill note + recommendation when the floor/deficit are not computed), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation, a Reckless/Inadvertent pattern, and a declared PM floor-override).
 
-### Mode E: Execution Control Tower
+### Mode E — Execution Control Tower
 
 **Trigger**: Mid-sprint check, "how's the sprint going", sprint board review,
 standup synthesis, any [DELIVERY] tag referencing execution tracking.
@@ -276,13 +278,15 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
 **Output**: Sprint health snapshot, item-level status, risk items, scope changes,
 recommended adjustments, drafted escalations.
 
-### Mode F: DoD & Release Readiness Gate
+### Mode F — DoD & Release Readiness Gate
 
 **Trigger**: "Is this done", "release readiness", "DoD check", end-of-sprint review,
 any [DELIVERY] tag referencing DoD or release.
 
+**Canonical gate ID:** this **DoD Gate** (the release-readiness slice of it) is the Agile-framing refinement of the pipeline's canonical **G3 — Release Readiness** gate (`../../../core/schemas/gate-criteria-spec.md` § Gate 3). Both express the "is this ready to release" predicate; the operator-familiar **DoD Gate** label is retained, and it maps to the canonical `G3-*` criteria so a DoD/release-readiness verdict and a `G3` verdict cannot silently drift. Per [`skill-pipeline-alignment.md`](../../../core/standards/skill-pipeline-alignment.md) DT-2, this is a declared **refinement-with-mapping**, not a parallel-vocabulary leak — the two framings coexist by design (the skill's Agile/Waterfall dual-framing contract), linked by this citation. (The DoD Gate's lifecycle-gate application loop below spans LG-1…LG-10; the canonical `G3` mapping is the release-readiness instance of that loop, at the Gate 3→4 boundary.)
+
 **What you do**:
-1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria, the §4 transition BLOCK rule, the **§4.1 tri-state verdict semantics**, and the **§4.2 gate→`T(n→n+1)` binding**, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition (the §3 stage→gate seam + the §5.2 per-transition enforcement). **Apply the §4 transition rule at WHICHEVER lifecycle gate the transition sits at — LG-1…LG-10, not LG-6 alone** (the gate-application loop):
+1. Read `references/gate-checklists.md` for the checklist templates AND `references/gate-definitions.md` for the lifecycle-gate entry/exit criteria, the §4 transition BLOCK rule, the **§4.1 tri-state verdict semantics**, and the **§4.2 gate→`T(n→n+1)` binding**, AND `references/lifecycle-stages.md` for the stage exit criteria governing the transition (the §3 stage→gate seam + the §5.2 per-transition enforcement). The DoD/release-readiness criteria are the Agile-framing refinement of the canonical **G3 (Release Readiness)** criteria in [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) § Gate 3 — a DoD/release-readiness PASS maps to a `G3-*` PASS. **Apply the §4 transition rule at WHICHEVER lifecycle gate the transition sits at — LG-1…LG-10, not LG-6 alone** (the gate-application loop):
    - **Identify the gate `LG-N`** this transition sits at, from the §3 stage→gate seam (or the asserted boundary). On ambiguity, ask which boundary (LG-N) is being evaluated, or infer it from the seam if the stage boundary is given and label the inference `[ASSUMPTION – CONFIRM]`; never guess a late gate to justify an advance.
    - **Evaluate that gate's `[LG-N-EX-k]` exit block per §4** — each criterion `PASS / FAIL / NO-EVIDENCE`.
    - **Render the `PASS / CONDITIONAL PASS / FAIL` verdict per §4.1** — all-PASS → PASS; `PASS WITH CONDITIONS` → CONDITIONAL PASS **only where the gate type sanctions it** (Approval gates; the LG-6 documented-exception — a hard binary Quality criterion cannot render CONDITIONAL PASS); any FAIL **or NO-EVIDENCE** → FAIL. Never round NO-EVIDENCE up to PASS or to CONDITIONAL.
@@ -316,7 +320,7 @@ any [DELIVERY] tag referencing DoD or release.
 **Output**: Gate results, per-item findings, release readiness checklist, go/no-go
 recommendation, remediation plan for failures, risk entries for any conditional passes.
 
-### Mode G: RAID / Decision / Milestone Artifact Update
+### Mode G — RAID / Decision / Milestone Artifact Update
 
 **Trigger**: "Update the RAID log", "add this to the decision log", milestone update,
 any [DELIVERY] tag referencing RAID, decisions, or milestones.
@@ -474,10 +478,10 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 
 - Mode A (Backlog Scan) — recommended dispositions (close / re-scope / escalate), drafted acceptance criteria, re-prioritization recommendations, RAID entries originated for systemic process issues.
 - Mode B (Ticket Insight) — duplicate identification with confidence level, recommended merge / link / escalate actions.
-- Mode C (DoR Gate) — PASS / CONDITIONAL PASS / FAIL verdicts, drafted remediations, story-decomposition suggestions.
+- Mode C (DoR Gate → canonical **G1 Triage Readiness**, `gate-criteria-spec.md` § Gate 1) — PASS / CONDITIONAL PASS / FAIL verdicts, drafted remediations, story-decomposition suggestions.
 - Mode D (Sprint Planning) — sprint plan proposal, scope options (A / B / C) with tradeoffs, capacity-balance recommendations, carryover handling recommendations.
 - Mode E (Execution Control) — risk-item remediations (IMMINENT / STRUCTURAL), scope-change flags, drafted escalations, recommended adjustments (re-scope / re-assign / escalate / accept-risk).
-- Mode F (DoD / Release Readiness) — PASS / CONDITIONAL PASS / FAIL per item and overall, go / no-go recommendation, remediation plan for failures.
+- Mode F (DoD / Release Readiness → canonical **G3 Release Readiness**, `gate-criteria-spec.md` § Gate 3) — PASS / CONDITIONAL PASS / FAIL per item and overall, go / no-go recommendation, remediation plan for failures.
 - Mode G (RAID / Decision / Milestone Updates) — new or updated RAID entries (R-DE-### / A-DE-### / I-DE-### / D-DE-###), downstream-impact identifications.
 - Section 7 (Next Actions) — items requiring TPM execution (sends, schedules, approvals, Jira updates).
 
@@ -505,7 +509,7 @@ decision-class item without a reversibility tier label. See
 `core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — same standard as PPM:
 

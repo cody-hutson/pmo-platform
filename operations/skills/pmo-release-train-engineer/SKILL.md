@@ -133,7 +133,7 @@ This skill produces **decision-class outputs** — the PI plan, the ART dependen
 
 A **PI-release GO is frequently the highest-reversibility output this skill produces** — a GO on a PI release that has shipped, or an externally-committed PI commitment, is EXPENSIVE-to-IRREVERSIBLE; the RTE never renders a GO without the tier, the confidence, and (for EXPENSIVE+) the rollback posture. Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate. Tier worked examples: [`references/release-train-engineer-playbook.md` §5](references/release-train-engineer-playbook.md).
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a dependency/flow read with no PI-level decision linkage, or a list of impediments without a ranked facilitation call. Every output resolves to a decision.

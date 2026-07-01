@@ -166,7 +166,7 @@ This skill produces **decision-class outputs** — the facilitated sprint recomm
 
 Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. Because the Scrum Master facilitates rather than decides, most calls are CHEAP — but a facilitated recommendation the team commits to without re-checking is exactly where a wrong CHEAP call propagates, so the tier + confidence are stated even on the cheap path. Enforced by `pmo-qa-auditor` G4.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a ceremony that captures no action, a flow read with no coaching signal, or an impediment list with no removal package. Every output resolves to a facilitation outcome (a team commitment, an owned impediment, a tracked retro action, a coaching signal).

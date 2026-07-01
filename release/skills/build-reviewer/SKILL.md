@@ -172,6 +172,11 @@ The following 3 dimensions extend the pack-specific dimensions with principal-le
 - **Specific checks:** (a) "Framework Transfer Template" — a short "how to review X domain" template at the end of the review that summarizes the review's calibration choices; (b) junior-vs-principal gradient demonstrated on at least 2 findings (parallel to `failure-mode-standard.md`'s Principal-vs-junior response structure); (c) at least 1 explicit retrospective note per review naming what the reviewer learned about the pack.
 - **Root-cause requirement:** If Framework Transfer template or junior gradient is absent, identify whether the review round had time constraints that prevented it (flag to Capacity Shortfall systemic pattern per Section 3).
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with `## Review Discipline` and

@@ -122,7 +122,7 @@ This skill produces **decision-class outputs** — the program-level risk rankin
 
 A **release go/no-go is frequently the highest-reversibility output this skill produces** — a GO on a release that has shipped to production is EXPENSIVE-to-IRREVERSIBLE; the TPM never renders a GO without the tier, the confidence, and (for EXPENSIVE+) the rollback posture. Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence IRREVERSIBLE call still requires a sign-off gate.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a technical-risk read with no delivery linkage, or a list of risks without a ranked program-level call. Every output resolves to a decision.

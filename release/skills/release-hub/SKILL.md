@@ -144,7 +144,7 @@ This skill produces **decision-class outputs** — the Mode R readiness verdict 
 
 Enforcement: pmo-qa-auditor **G4** FAILs any decision-class output lacking a reversibility tier label.
 
-## Guardrails
+## Guardrails (Platform)
 
 Hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a milestone-state read with no readiness verdict. Every output resolves to a GO/NO-GO with per-finding dispositions.

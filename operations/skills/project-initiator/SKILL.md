@@ -54,13 +54,6 @@ Await the user's selection; use the selected option as the mode. Do not proceed 
 
 Proceed to the corresponding mode section below (Mode A Project Initiation, Mode B Project Closure). Do not proceed until Step 1 or Step 2 has produced an explicit mode value.
 
-## Mode Detection
-
-Detect the mode from context:
-- **"new project", "initiate", "start", "onboard", "set up", "create", "add"** → Mode A
-- **"close", "archive", "closure", "finalize", "wrap up", "close out"** → Mode B
-- If ambiguous, ask (counts toward the 5-question limit).
-
 ---
 
 # Mode A: Project Initiation
@@ -604,6 +597,11 @@ proceeds immediately.
 decision-class item without a reversibility tier label. See
 `core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
+
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
 
 ## Domain-Specific Failure Modes
 

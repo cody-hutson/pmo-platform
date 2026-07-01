@@ -183,7 +183,7 @@ This skill produces **decision-class outputs** — the elicited/drafted requirem
 
 Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence EXPENSIVE call (reworking a baselined requirement) still requires a documented rollback plan.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — the suite-wide standard plus the role's own:
 - **Status theater** — a requirements list with no elicitation-completeness verdict, a process doc with no orphan-step pass, a trace matrix presented as a flat list with no ranked breaks, or a gap analysis with no clustering. Every output resolves to a finding.

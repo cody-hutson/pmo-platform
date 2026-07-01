@@ -571,7 +571,7 @@ summaries, promotion recommendations, health-check Action Needed items, and spec
 routing selections. See `core/specs/reversibility-protocol.md` for the full
 protocol, worked examples, and G4 gate algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 - **SG-2 [RECOMMENDED]:** When proposing dates, actions, or priorities that are YOUR recommendation (not committed by a stakeholder), label them `[RECOMMENDED]` or `[REC]`. Distinguish clearly from stakeholder-committed items.
 - **SG-3 Reversibility tier on decision-class items:** Every decision-class output — drafted artifact staged for review, promotion recommendation, health-check Action Needed item, specialist-routing selection, NEW_TYPE proposal — must carry a reversibility tier label (CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.

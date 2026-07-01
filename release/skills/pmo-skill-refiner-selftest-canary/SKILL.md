@@ -78,6 +78,11 @@ Every factual claim in this skill's outputs carries an evidence-quality label pe
 
 This skill produces report-only outputs. No decision-class items are emitted. pmo-qa-auditor G4 reversibility check is not applicable to this skill's outputs — G4 skip is intentional and declared here.
 
+## Guardrails (Platform)
+Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the source
+for the authoritative list. Domain-specific additions appear under
+§ Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
+
 ## Domain-Specific Failure Modes
 
 ### Hardcoded expected-count assumption — INPUT

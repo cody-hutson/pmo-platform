@@ -950,8 +950,8 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 
 | Section | Content | Format | Notes |
 |---|---|---|---|
-| 1. Summary paragraph | Count of skill directories + count of SKILL_LIST + SUPPLEMENTARY_SKILLS entries + drift count | Prose, single paragraph | Format: "<N> skill directories in release/skills/. <M> entries in deploy.sh SKILL_LIST + SUPPLEMENTARY_SKILLS. <K> drift entries flagged." |
-| 2. Drift table | Per-skill row with In-Folder / In-SKILL_LIST / Status columns | Markdown table | Status values: OK, Folder Only, SKILL_LIST Only |
+| 1. Summary paragraph | Count of skill directories + count of SKILL_LIST + SUPPLEMENTARY_SKILLS entries + **split drift count** | Prose, single paragraph | Format: "<N> skill directories in release/skills/. <M> entries in deploy.sh SKILL_LIST + SUPPLEMENTARY_SKILLS. <K> drift entries flagged (J expected-fixture, K−J actionable)." The drift count **splits** into fixture-induced (`[CANARY EXPECTED]`) vs. actionable so the downstream routing note (deep audit → pmo-qa-auditor Mode D) receives only actionable signal — per the § Skill 12 HAND failure mode. When no fixture rows are present, the split collapses to the actionable count alone. |
+| 2. Drift table | Per-skill row with In-Folder / In-SKILL_LIST / Status columns | Markdown table | Status values: OK, Folder Only, SKILL_LIST Only, **`[CANARY EXPECTED]`** (a Folder-Only row whose subject is a registered source-only fixture — e.g. the canary itself, source-only per ADR-04, excluded from the deploy roster by design; annotated so the reader distinguishes fixture-induced signal from a factory regression per the § Skill 12 HAND failure mode). |
 
 ### Required Elements
 
@@ -981,7 +981,7 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 - **G4 (Artifact Readiness):** ✓ (output is the artifact; directly readable by operator).
 - **G5 (Follow-up Routing):** N/A (no emitted tags).
 - **G6 (Dual Output):** N/A (report-only; no metadata-vs-artifact split).
-- **G7 (Domain-Specific Failure Modes):** ✓ (3 entries: INPUT hardcoded-count, PROC supp-array-missed, TRIG mid-refactor).
+- **G7 (Domain-Specific Failure Modes):** ✓ (≥3 domain-specific failure modes per `../standards/failure-mode-standard.md`, 5-field template + category tag TRIG / INPUT / PROC / OUT / HAND — the regression-safe floor form used by every other skill's G7 row; the canary currently carries 5 entries spanning all 5 categories per the ADR-04 fixture-scope decision, but this row states the floor, not a by-name enumeration, so it does not go stale when a canary entry is added).
 - **Reversibility:** N/A (report-only opt-out declared).
 - **Mode Identification:** Single-mode skill; invocation = mode.
 

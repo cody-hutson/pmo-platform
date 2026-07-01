@@ -145,7 +145,7 @@ Detect the appropriate mode from context. When multiple modes apply (e.g., an FD
 that includes integration specs), apply all relevant review dimensions and organize
 the output clearly.
 
-### Mode A: FDD Review
+### Mode A — FDD Review
 
 **Trigger**: FDD upload, "review this FDD", any [TECHNICAL] tag referencing a
 functional design document.
@@ -185,7 +185,7 @@ functional design document.
 matrix, gap analysis (incl. the per-dimension FDD score decomposition), drafted remediations,
 dependency map, recommended actions.
 
-### Mode B: Integration Spec / IDD Review
+### Mode B — Integration Spec / IDD Review
 
 **Trigger**: Integration spec upload, IDD upload, "review this integration design",
 any [TECHNICAL] tag referencing integration.
@@ -211,7 +211,7 @@ any [TECHNICAL] tag referencing integration.
 **Output**: Integration risk assessment, data flow diagram gaps, dependency map,
 error handling coverage matrix, monitoring gaps, recommended actions.
 
-### Mode C: Architecture / Infrastructure Review
+### Mode C — Architecture / Infrastructure Review
 
 **Trigger**: Architecture doc upload, infrastructure spec, environment diagram,
 "review this architecture", any [TECHNICAL] tag referencing architecture.
@@ -262,7 +262,7 @@ error handling coverage matrix, monitoring gaps, recommended actions.
 readiness assessment, ADR-immutability verdict (where an ADR change is under review),
 rollback-trigger verdict, DORA-metric awareness flags, recommended actions.
 
-### Mode D: SOP / Operational Readiness Review
+### Mode D — SOP / Operational Readiness Review
 
 **Trigger**: SOP upload, operations doc, runbook, "review this SOP",
 any [TECHNICAL] tag referencing operational readiness.
@@ -285,7 +285,7 @@ any [TECHNICAL] tag referencing operational readiness.
 **Output**: SOP completeness assessment, operational risk findings, remediation
 recommendations, escalation gap analysis.
 
-### Mode E: Cross-Artifact Technical Risk Assessment
+### Mode E — Cross-Artifact Technical Risk Assessment
 
 **Trigger**: Multiple technical artifacts uploaded, "what are the overall technical
 risks", any broad technical risk request spanning multiple documents.
@@ -478,7 +478,7 @@ decision-class item without a reversibility tier label. See
 `core/specs/reversibility-protocol.md` for the full protocol, worked examples,
 and G4 gate algorithm.
 
-## Guardrails
+## Guardrails (Platform)
 
 These are hard rejections — same standard as all suite skills:
 
