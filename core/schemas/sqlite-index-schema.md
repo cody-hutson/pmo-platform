@@ -42,7 +42,7 @@ Core file registry. One row per file in the ecosystem.
 ```sql
 CREATE TABLE files (
     file_id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    path            TEXT NOT NULL UNIQUE,           -- Full relative path from Projects/ root
+    path            TEXT NOT NULL UNIQUE,           -- Full relative path from projects/ root
     filename        TEXT NOT NULL,                   -- Filename only (for wiki-link resolution)
     file_format     TEXT NOT NULL,                   -- md, txt, csv, xlsx, pdf, docx, html
     domain          TEXT NOT NULL CHECK (domain IN ('A', 'B', 'C')),
@@ -397,8 +397,8 @@ Drop all tables, scan all files, rebuild from frontmatter. Guarantees index matc
 
 **Steps:**
 1. Drop all tables and recreate schema
-2. Scan `Projects/` recursively for `.md` files with YAML frontmatter
-3. Scan `Projects/` recursively for `.meta.yml` sidecar files
+2. Scan `projects/` recursively for `.md` files with YAML frontmatter
+3. Scan `projects/` recursively for `.meta.yml` sidecar files
 4. For each file with metadata: insert into `files` table, populate domain-specific columns
 5. For each relationship in frontmatter: resolve target filename to `file_id`, insert into `relationships`
 6. For each Domain C file: populate `synthesis_scope` from frontmatter array

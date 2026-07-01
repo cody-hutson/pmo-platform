@@ -497,7 +497,7 @@ The Obsidian global graph is a **supplementary visualization**, not the primary 
 
 ## Validation Checklist
 
-- [ ] Every source file in Projects/[Project]/01-08/ appears in at least one navigation page
+- [ ] Every source file in projects/[Project]/01-08/ appears in at least one navigation page
 - [ ] Every navigation page has valid frontmatter with `page_type`, `scope_project`, `last_generated`
 - [ ] Zero orphan files (files not linked from any navigation page)
 - [ ] No pipe aliases inside table cells

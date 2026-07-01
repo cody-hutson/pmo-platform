@@ -35,7 +35,7 @@ Defines all health checks the agent performs on the document ecosystem. Health c
 
 | Attribute | Value |
 |-----------|-------|
-| **Definition** | A file in Projects/[Project]/01-08/ with zero inbound or outbound relationships in the index |
+| **Definition** | A file in projects/[Project]/01-08/ with zero inbound or outbound relationships in the index |
 | **Severity** | Critical |
 | **KPI** | Orphan count = 0 is the target |
 | **Schedule** | After every processing cycle |
