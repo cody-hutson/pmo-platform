@@ -4,7 +4,7 @@
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
 
 ## 1. Purpose
-Validate release quality from an independent acceptance perspective — the gate that asks "does this meet needs?" (vs. Stage 7's "does this meet specs?"). Produces an acceptance verdict with per-criterion evidence for human review.
+This is the **validate** stage of the pipeline — where the built result is validated against acceptance criteria, after Engineering has built it. Validate release quality from an independent acceptance perspective — the gate that asks "does this meet needs?" (vs. Stage 7's "does this meet specs?"). Produces an acceptance verdict with per-criterion evidence for human review.
 
 ## 2. Reference Model Alignment
 

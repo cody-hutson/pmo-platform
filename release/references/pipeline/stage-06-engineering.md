@@ -4,7 +4,7 @@
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
 
 ## 1. Purpose
-Execute the release plan by decomposing issues into sub-tasks, implementing file changes on the release branch, and producing a PR ready for review — so the operator reviews completed work, not work-in-progress.
+This is the **build/tweak** stage of the pipeline — where the solution is built (or tweaked) per the design and requirements, after Solutioning has designed it and before QA validates it. Execute the release plan by decomposing issues into sub-tasks, implementing file changes on the release branch, and producing a PR ready for review — so the operator reviews completed work, not work-in-progress.
 
 ## 2. Reference Model Alignment
 

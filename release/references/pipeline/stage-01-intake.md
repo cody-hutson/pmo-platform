@@ -4,7 +4,7 @@
 > **Part of:** [13-stage pipeline](README.md) — [Process layer](../../../core/disciplines/execution-framework.md) of governance hierarchy.
 
 ## 1. Purpose
-Capture improvement proposals with enough structure for triage — one-and-done intake with no round-trips for clarification. Every platform improvement, gap, drift detection, or enhancement enters the pipeline through this single gate.
+This is an early-pipeline stage — its job is to **map current state and surface gaps**, not to design or build. Capture improvement proposals with enough structure for triage — one-and-done intake with no round-trips for clarification. Every platform improvement, gap, drift detection, or enhancement enters the pipeline through this single gate.
 
 ## 2. Reference Model Alignment
 
