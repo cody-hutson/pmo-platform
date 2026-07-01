@@ -187,7 +187,7 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 | Field | Type | Req | Card | Default | references: | Notes |
 |---|---|---|---|---|---|---|
 | `plan_title` | string | ✅ | 1 | — | — | — |
-| `plan_type` | string (discriminator) | ✅ | 1 | — | the plan-type registry ([§3.4a](#34a-plan-type-registry-open), OPEN) | the plan kind; membership = the registered value set in §3.4a (the 6 go-live subtypes + the §5.5-inventory anchors) **+** an OPEN extension slot — resolved at **#159 (v3.34)**, ADR-059; no longer G5-deferred (exact `XPD.dependency_kind`@G3-G4 / `WI.work_item_type`@C2 OPEN-discriminator precedent) |
+| `plan_type` | string (discriminator) | ✅ | 1 | — | the plan-type registry ([§3.4a](#34a-plan-type-registry-open), OPEN) | the plan kind; membership = the registered value set in §3.4a (the 6 go-live subtypes + the §5.5-inventory anchors) **+** an OPEN extension slot — resolved at **v3.34**, ADR-059; no longer G5-deferred (exact `XPD.dependency_kind`@G3-G4 / `WI.work_item_type`@C2 OPEN-discriminator precedent) |
 | `project_id` | ref | ✅ | 1 | — | `Project.id` | L2 — `BELONGS_TO` parent |
 | `version` | string | ⚪ | 1 | — | — | — |
 | `supersedes_plan_id` | ref | ⚪ | 1 | — | `Plan.id` | L2 — `SUPERSEDES` self-edge |
@@ -208,7 +208,7 @@ Engineering does **not** free-author 17×5 rules. The frozen surface mechanicall
 
 ##### 3.4a Plan-type registry (OPEN)
 
-The `plan_type` value domain (resolved at #159, v3.34, ADR-059 — closes the prior `[ASSUMPTION–CONFIRM @ G5]`). The discriminator is **OPEN** (per ADR-018's OPEN-discriminator convention): the registered rows below are the enforceable V-PLN-02 membership set; the `<extension slot>` row is the documented seam for new plan kinds (an unregistered-but-well-formed value WARNs at health-check, it does not block — the OPEN-tail posture). The six go-live subtypes are the build scope of #159; `release` / `implementation` / `project` / `test` are the **documented §5.5-inventory OPEN-tail anchors** (`operational-artifact-inventory.md` §5.5 — no longer G5-deferred, now registered examples).
+The `plan_type` value domain (resolved at v3.34, ADR-059 — closes the prior `[ASSUMPTION–CONFIRM @ G5]`). The discriminator is **OPEN** (per ADR-018's OPEN-discriminator convention): the registered rows below are the enforceable V-PLN-02 membership set; the `<extension slot>` row is the documented seam for new plan kinds (an unregistered-but-well-formed value WARNs at health-check, it does not block — the OPEN-tail posture). The six go-live subtypes are the build scope of this milestone (v3.34); `release` / `implementation` / `project` / `test` are the **documented §5.5-inventory OPEN-tail anchors** (`operational-artifact-inventory.md` §5.5 — no longer G5-deferred, now registered examples).
 
 | `plan_type` value | Plan kind | Producer skill | Operational-terminal (pre-`archived`, V-PLN-05 extension) |
 |---|---|---|---|
@@ -620,7 +620,7 @@ Field schema for the generic `Work Item` entity (`project-entity-model.md` §4 e
 
 | Field | Type | Req | Card | Default | references: | Notes |
 |---|---|---|---|---|---|---|
-| `work_item_type` | string (discriminator) | ✅ | 1 | — | the declarative type registry (external, OPEN) | the kind (methodology-projected per D2); **value domain deferred to the C2 type layer** — `[ASSUMPTION–CONFIRM @ C2 type layer]`; presence enforceable now, membership is the type layer's (same OPEN-discriminator family as `Plan.plan_type` (resolved @#159, §3.4a) / `XPD.dependency_kind`@G3-G4) |
+| `work_item_type` | string (discriminator) | ✅ | 1 | — | the declarative type registry (external, OPEN) | the kind (methodology-projected per D2); **value domain deferred to the C2 type layer** — `[ASSUMPTION–CONFIRM @ C2 type layer]`; presence enforceable now, membership is the type layer's (same OPEN-discriminator family as `Plan.plan_type` (resolved .34, §3.4a) / `XPD.dependency_kind`@G3-G4) |
 | `parent_ref` | typed-ref (polymorphic) | ✅ | 1 | — | `Milestone.id` OR `Workstream.id` | L2 — `BELONGS_TO` parent; polymorphic target tagged in the typed-ref value (precedent: `XPD.{from,to}_entity_ref`) |
 
 **V-rules** (inherits V-CORE-01..07; Axis-1 `backlog → ready → in-progress → in-review → done | cancelled`):

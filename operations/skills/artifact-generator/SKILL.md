@@ -333,7 +333,7 @@ operator-approval gate PPM Agent records; `active` makes the plan the live basel
 are PPM Agent's to maintain.
 
 **`plan_type` recognition contract (the OPEN discriminator — `entity-field-schemas.md` §3.4a,
-resolved at #159).** When artifact-generator creates a Plan, it stamps the required
+resolved at v3.34).** When artifact-generator creates a Plan, it stamps the required
 `plan_type` discriminator from the OPEN registry (§3.4a: `comms` / `training` / `hypercare` /
 `cutover` / `change-management` / `raid` + the §5.5 anchors `release` / `implementation` /
 `project` / `test`), seeding from the matching per-subtype template under

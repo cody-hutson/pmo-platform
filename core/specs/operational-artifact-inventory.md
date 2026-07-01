@@ -154,11 +154,11 @@ All map to `source_entity = #9 Artifact` (OOS-3 Artifact-seam); `reconciliation_
 
 ### 5.5 typed-plan (6) — `source_entity == #4 Plan`
 
-All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent` ( §6); `reconciliation_flag = clean` (Plan entity directly persists these). `plan_type` discriminator value domain is **resolved at #159 (v3.34), ADR-059** — an OPEN discriminator whose registry is `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot). The `release` / `implementation` / `project` / `test` values below are the documented §3.4a OPEN-tail anchors (no longer G5-deferred).
+All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent` ( §6); `reconciliation_flag = clean` (Plan entity directly persists these). `plan_type` discriminator value domain is **resolved at v3.34, ADR-059** — an OPEN discriminator whose registry is `entity-field-schemas.md` §3.4a (the 6 go-live subtypes + an extension slot). The `release` / `implementation` / `project` / `test` values below are the documented §3.4a OPEN-tail anchors (no longer G5-deferred).
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
-| `v[X.Y]_RELEASE_PLAN.md` | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | D4 illustrative anchor: `plan_type=release` (§3.4a OPEN-tail anchor — resolved at #159) |
+| `v[X.Y]_RELEASE_PLAN.md` | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | D4 illustrative anchor: `plan_type=release` (§3.4a OPEN-tail anchor — resolved at v3.34) |
 | implementation plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=implementation` (§3.4a OPEN-tail anchor) |
 | project plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=project` (§3.4a OPEN-tail anchor) |
 | test plan | typed-plan | #4 Plan | .md | absent | absent | ppm-agent | clean | `plan_type=test` (§3.4a OPEN-tail anchor) |

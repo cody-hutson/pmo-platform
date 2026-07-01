@@ -208,7 +208,7 @@ Use the **composed-index** PROJECT.md template from `references/project-md-compo
 (ADR-060 — the thin ≤50-line wiki-link index, replacing the narrative-table shape). Keep
 **Methodology + Status inline** (consumer back-compat per `project-schema.md` §4 / §8 consumer
 table); scaffold People / Systems / Milestones / Plans / Workstreams as `[[wiki-link]]` lists
-into the `_pmo/` entity pages (Step 2b) and the #159 typed plans — not inline tables. Fill in
+into the `_pmo/` entity pages (Step 2b) and the typed plans — not inline tables. Fill in
 all fields from user inputs. Apply conditional logic (the inline Methodology block carries the
 toggles):
 

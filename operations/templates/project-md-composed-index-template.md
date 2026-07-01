@@ -3,8 +3,8 @@
 <!--
 Composed-index PROJECT.md (ADR-060): a thin dashboard, NOT the container. Methodology + Status
 are INLINE (consumer back-compat per project-schema.md §4); People / Systems / Milestones /
-Plans / Workstreams are [[wiki-link]] lists into the _pmo/ shared-entity pages (#362) and the
-#159 typed plans — edit once on the entity page, not in a table cell here. Target: ≤50 lines.
+Plans / Workstreams are [[wiki-link]] lists into the _pmo/ shared-entity pages and the
+typed plans — edit once on the entity page, not in a table cell here. Target: ≤50 lines.
 Variables in {{BRACKETS}} are filled at scaffold; {{IF ...}}...{{ENDIF}} blocks are conditional.
 -->
 
@@ -34,7 +34,7 @@ Variables in {{BRACKETS}} are filled at scaffold; {{IF ...}}...{{ENDIF}} blocks 
 
 - {{MILESTONE_WIKILINKS}}  <!-- [[<milestone-id>]]; phase-gate or sprint milestones -->
 
-## Plans  → typed plans (#159)
+## Plans  → typed plans
 
 - {{PLAN_WIKILINKS}}  <!-- [[<plan-id>]] typed by plan_type: comms / training / hypercare / cutover / change-management / raid -->
 
