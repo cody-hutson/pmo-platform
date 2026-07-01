@@ -409,15 +409,33 @@ classify_local() {
   if [[ "$action" == "REMOVE" ]] && branch_has_worktree "$branch"; then action="SKIP — active worktree attached"; fi
 
   unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${branch}" 2>/dev/null || echo "?")
-  if [[ "$action" == "REMOVE" && "$unique" != "0" ]]; then action="SKIP — unique commits exist ($unique)"; fi
-
   last=$(git log -1 --format='%cs' "$branch" 2>/dev/null || echo "?")
+
+  # PR-state read moved ABOVE the ancestry SKIP (#2216, #2779 Option B): under
+  # --release-close (require_pr=1) a CONFIRMED MERGED PR is authoritative proof
+  # the branch content is on main even when the source commits are not ancestors
+  # of main — the squash-merge case. Without this, the ancestry SKIP below fires
+  # unconditionally on every squash-merged branch ("unique commits exist (N)") and
+  # --release-close reaps nothing. pr_s is the single PR-state source #655 later
+  # rewires to the prefetch map, so the MERGED rescue rides that map for free.
   pr_n=$(gh pr list --repo "$REPO_SLUG" --head "$branch" --state all --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
   pr_s="(none)"
   if [[ -n "$pr_n" ]]; then
     pr_s=$(gh pr view "$pr_n" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null || echo "?")
   fi
 
+  # Ancestry SKIP yields ONLY to a confirmed MERGED-PR rescue on the release-close
+  # path (require_pr=1 && pr_s=="MERGED"). On require_pr=0 the rescue clause is
+  # false, so this SKIP fires exactly as before — behavior byte-identical to the
+  # pre-#2216 ordering for every non-release-close caller.
+  if [[ "$action" == "REMOVE" && "$unique" != "0" ]] \
+     && ! { [[ "$require_pr" == "1" && "$pr_s" == "MERGED" ]]; }; then
+    action="SKIP — unique commits exist ($unique)"
+  fi
+
+  # Non-MERGED downgrade (retained stale/reopened-PR safety guard, #2779 R2): on
+  # the release-close path a branch whose PR is anything but MERGED is SKIPped
+  # even if ancestry would have passed it — the rescue never over-removes.
   if [[ "$action" == "REMOVE" && "$require_pr" == "1" && "$pr_s" != "MERGED" ]]; then
     action="SKIP — PR not merged ($pr_s)"
   fi
@@ -530,7 +548,7 @@ detect_release_close() {
       "refs/heads/release/${slug}*" "refs/heads/chore/${slug}*" \
       "refs/heads/release/v*-${slug}*" "refs/heads/chore/v*-${slug}*" \
       --format='%(refname:short)' 2>/dev/null); do
-    classify_local "$b" 0
+    classify_local "$b" 1   # require_pr=1 (#2216): a MERGED PR rescues a squash-merged release branch from the ancestry SKIP
   done
   for b in $(git ls-remote --heads "$REMOTE_NAME" \
       "release/${slug}*" "chore/${slug}*" \
@@ -2029,6 +2047,126 @@ selftest_orphan_tag_reap() {
   return 0
 }
 
+# #2216 — squash-merge MERGED-PR rescue on the --release-close path.
+# The production defect: a squash-merged release branch has source commits that
+# are NOT ancestors of main, so the ancestry SKIP ("unique commits exist (N)")
+# fires and --release-close reaps nothing even though the PR is MERGED.
+#
+# A live MERGED PR is UN-FORGEABLE in-harness (has_merged_pr / gh pr view against
+# a synthetic branch always return not-merged; there is no gh stub seam), so this
+# fixture proves the fix at TWO levels (#2779 E3 / scope-lock D5):
+#   (1) SEAM-LEVEL (AC-1): a throwaway branch with a REAL unique commit (ancestry
+#       SKIP would fire) is run through classify_local IN-PROCESS in a subshell
+#       where `gh` is shadowed to report a MERGED PR. Assert require_pr=1 yields
+#       REMOVE (the rescue overrode the ancestry SKIP) AND require_pr=0 yields the
+#       ancestry SKIP (no rescue off the release-close path) — the precedence.
+#   (2) BLACK-BOX (AC-2/R2): the SAME unique-commit branch, with NO PR (real gh),
+#       run through `--release-close <slug> --dry-run` stays SKIP — proving the
+#       rescue never over-removes a genuinely-unmerged, un-PR'd branch.
+# The "real shipped release reports non-zero removable" AC is a Stage-8 manual
+# integration check, not a fixture. Net-zero teardown via git porcelain.
+selftest_release_close_merged_pr() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: merged-PR rescue check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs base slug branch wt out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    echo "self-test: merged-PR rescue check SKIPPED — could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}" >&2
+    return 0
+  fi
+  slug="cleanup-selftest-mpr-$$"
+  branch="release/v0.0-${slug}"            # version-prefixed so detect_release_close enumerates it
+  if is_protected "$branch"; then
+    echo "self-test: merged-PR rescue check SKIPPED — operator protect-list matches '$branch'" >&2
+    return 0
+  fi
+  # A throwaway worktree at origin/main + 1 unique commit: source commit is NOT an
+  # ancestor of main (the squash-merge shape), so the ancestry SKIP would fire.
+  wt="${REPO_ROOT}/.claude/worktrees/${slug}"
+  if ! git worktree add -b "$branch" "$wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: merged-PR rescue check SKIPPED — could not create throwaway worktree" >&2
+    return 0
+  fi
+  if ! git -C "$wt" commit --allow-empty -m "cleanup-selftest merged-PR-rescue fixture $$" >/dev/null 2>&1; then
+    echo "self-test: merged-PR rescue check SKIPPED — could not add unique commit" >&2
+    git worktree remove --force "$wt" >/dev/null 2>&1 || true
+    git branch -D "$branch" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  # ── (1) SEAM-LEVEL: classify_local in a subshell with a shadowed MERGED PR ──
+  # Shell-function `gh` shadows the pinned-PATH binary (functions resolve first),
+  # so the classifier reads pr_s="MERGED" for this branch. The subshell isolates
+  # the LOCAL_BRANCH_CANDIDATES mutation and the shadow from the rest of the suite.
+  # branch_has_worktree would SKIP-active-worktree this branch, so the seam case
+  # runs against the branch name only after the worktree is detached below is NOT
+  # possible (we still need the tree for the black-box run); instead the seam case
+  # uses a SEPARATE detached-free branch pointer at the same unique commit.
+  local seam_branch="chore/v0.0-${slug}-seam"
+  local unique_tip
+  unique_tip=$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)
+  if [[ -n "$unique_tip" ]] && git branch "$seam_branch" "$unique_tip" >/dev/null 2>&1; then
+    # Shadow gh so the classifier reads a MERGED PR for this branch. The two
+    # arms key on the sub-command ($2): `pr list` → a PR number; `pr view` →
+    # MERGED. Shell functions resolve ahead of the pinned-PATH binary.
+    _selftest_gh_merged() {
+      case "${2:-}" in
+        list) echo "9990" ;;
+        view) echo "MERGED" ;;
+      esac
+    }
+    local seam_remove seam_skip
+    seam_remove=$(
+      gh() { _selftest_gh_merged "$@"; }
+      LOCAL_BRANCH_CANDIDATES=()
+      classify_local "$seam_branch" 1
+      awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
+    )
+    seam_skip=$(
+      gh() { _selftest_gh_merged "$@"; }
+      LOCAL_BRANCH_CANDIDATES=()
+      classify_local "$seam_branch" 0
+      awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
+    )
+    if [[ "$seam_remove" != "REMOVE" ]]; then
+      echo "self-test: merged-PR rescue check FAILED — require_pr=1 + MERGED PR did not rescue the unique-commit branch (got '$seam_remove', want REMOVE)" >&2
+      fail=1
+    fi
+    case "$seam_skip" in
+      "SKIP — unique commits exist"*) : ;;
+      *) echo "self-test: merged-PR rescue check FAILED — require_pr=0 must NOT rescue (got '$seam_skip', want ancestry SKIP)" >&2; fail=1 ;;
+    esac
+    git branch -D "$seam_branch" >/dev/null 2>&1 || true
+  else
+    echo "self-test: merged-PR rescue check — seam sub-case SKIPPED (could not create seam branch)" >&2
+  fi
+
+  # ── (2) BLACK-BOX: real gh, no PR → unique-commit branch stays SKIP (no over-removal) ──
+  # Detach the worktree's branch so classify_local sees a plain local branch (not
+  # active-worktree-attached) yet the unique commit persists on the branch ref.
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 0 ]]; then
+    # The branch is worktree-attached, so its row reads "SKIP — active worktree
+    # attached"; the load-bearing black-box assertion is that it is NOT REMOVE
+    # (no false rescue for a branch with no MERGED PR).
+    if grep -F "\"name\":\"${branch}\"" <<<"$out" | grep -q '"action":"REMOVE"'; then
+      echo "self-test: merged-PR rescue check FAILED — unique-commit branch with NO PR classified REMOVE under --release-close (over-removal / R2 regression)" >&2
+      fail=1
+    fi
+  else
+    echo "self-test: merged-PR rescue check FAILED — inner --release-close dry-run exited non-zero" >&2
+  fi
+
+  git worktree remove --force "$wt" >/dev/null 2>&1 || true
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: merged-PR rescue check PASS — MERGED PR rescues squash-merged branch (require_pr=1); ancestry SKIP holds otherwise; no-PR branch never over-removed" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -2048,6 +2186,8 @@ self_test() {
   selftest_fixed_point
   echo "self-test: exercising version-prefixed release matcher (release/vX.Y-<slug>; EDIT 1/2/3)..." >&2
   selftest_version_prefix_release
+  echo "self-test: exercising squash-merge MERGED-PR rescue on --release-close (#2216)..." >&2
+  selftest_release_close_merged_pr
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
