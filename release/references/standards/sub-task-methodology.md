@@ -103,6 +103,8 @@ Every sub-task carries enough information at creation that an implementer (or a 
 
 The required four (File / Action / Change description / Commit group) make a sub-task self-describing and closeable; the optional three add the sequencing and risk context that the Stage 5 spec supplies when present.
 
+**Commit-group enforcement posture:** the `Commit group` field is *advisory documentation*, not an automatically-enforced plan-vs-actual mapping — under single-agent-on-a-branch execution the commit-to-sub-task lineage is already reconstructable from B1 issue-referencing commit messages plus the SHA-naming closure comment (§ 7), so no dedicated verifier checks the declared group against the actual closing commits. The one signal that the reconstruction broke is a rollup-vs-commit-history divergence (§ 7 rollup-monitoring), which is a tracking defect to fix, not a silent gap. See [`pipeline/stage-06-engineering.md § 5`](../pipeline/stage-06-engineering.md) Phase B1 for the documented simplification.
+
 ## § 6. Writing Best Practices
 
 A well-written sub-task reads cleanly at creation, at validation, and in the milestone rollup months later.

@@ -112,11 +112,14 @@ The `## Blast Radius` content bucket — emitted as `#### Blast Radius` H4 neste
 
 This is a **required-when-triggered** checklist row: it fires only when the design introduces a new in-tree bash CLI, and is OMITTED entirely (non-ceremony) when the change introduces no new executable script. When it fires, the four allowlist lines are part of the Stage 6 `### Output for Stage 6` file-change spec (a MODIFY of `core/config/allowlists/script-execution-allowlist.txt`) — they are not deferred to a follow-up release, because the CLI is unrunnable until allowlisted. The blast-radius CLI entries already in that allowlist are the worked example of all four forms.
 
+**Required-when-triggered: frozen-spec prose–artifact precision.** When a Stage 5 spec references a quantity or enumerated set that is *frozen* in the File Change Matrix or another frozen design artifact (a file count, a NEW/MODIFY/DELETE intent, an option-enum, a phase/gate count, a checklist-item count), the `### Summary` and any restated Acceptance-Criteria prose MUST cite that quantity/enum **verbatim** — the same number and the same enum labels the frozen artifact carries. Where the prose cannot yet match the frozen artifact (a value genuinely undecided at authoring time), state the divergence explicitly with a **labelled deferral** — `[DEFERRED — <one-line rationale>]` — rather than a silently rounded or approximated figure. **Why:** a summary/AC figure that drifts from the frozen artifact hands Dev Testing and QA (and Collective Review) *two* surfaces to reconcile, forcing a re-adjudication of which one is authoritative; holding the prose to the frozen artifact's exact quantities/enums keeps **one internally-consistent surface to verify against**, so downstream gates check the spec, not the spec against itself. This is a **required-when-triggered** checklist row: it fires only when the spec restates a frozen quantity/enum in its `### Summary` or restated AC, and is OMITTED (non-ceremony) when the spec carries no such restated frozen value.
+
 **Anti-patterns:**
 - File list without intent/reversibility columns
 - Consumer enumeration omitted (R1 R4 N-way scan cannot run)
 - Cross-PR contention check skipped when Stage 4 release plan declared in-flight overlap
 - New in-tree bash CLI introduced but BLOCK-DESTRUCTIVE-022 allowlist entries omitted (or listed in fewer than all four invocation forms) — the CLI is unrunnable until allowlisted, and a partial form set blocks the un-listed invocation paths
+- `### Summary` or restated AC cites a rounded/approximate quantity or a paraphrased enum that drifts from the frozen File Change Matrix (e.g., "touches ~3 files" when the matrix freezes 4; "adds a config option" when the enum is a named 3-value set) — this hands Dev Testing / QA / Collective Review two surfaces to reconcile; cite the frozen figure verbatim or carry a `[DEFERRED — <rationale>]` label
 
 ## Feasibility Assessment
 
