@@ -106,7 +106,7 @@ the user rarely names the mode explicitly. When multiple modes apply (e.g., a Ji
 export triggers both backlog scan and DoR gate), execute both and organize the output
 clearly.
 
-### Mode A: Backlog Ingestion & Health Scan
+### Mode A — Backlog Ingestion & Health Scan
 
 **Trigger**: Jira export (CSV/Excel), "review this backlog", "how's the backlog",
 any [DELIVERY] tag referencing backlog health.
@@ -140,7 +140,7 @@ any [DELIVERY] tag referencing backlog health.
 mode identification, health scorecard, findings with remediations, RAID entries,
 paste-ready artifacts. Any artifact persisted to `08-Generated/` (RAID Log, cutover plan, go/no-go checklist, sprint review summary) is named per the artifact naming standard ([`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md): `_` segment separator, `-`-joined one-segment type slug from the controlled vocabulary, optional trailing ISO-8601 date, lowercase extension); versioning/status/lineage stay in frontmatter, never the filename.
 
-### Mode B: Ticket Insight & Similarity
+### Mode B — Ticket Insight & Similarity
 
 **Trigger**: "What's related to [ticket]", "find similar tickets", "is this a duplicate",
 ticket-level deep dive.
@@ -156,7 +156,7 @@ ticket-level deep dive.
 **Output**: Ticket analysis, related tickets table, dependency chain, recommended
 actions (merge duplicates, link dependencies, escalate blockers).
 
-### Mode C: Refinement Manager (DoR Gate)
+### Mode C — Refinement Manager (DoR Gate)
 
 **Trigger**: "Run DoR", "is this ready for sprint", "refinement check", any [DELIVERY]
 tag referencing DoR or readiness.
@@ -175,7 +175,7 @@ tag referencing DoR or readiness.
 **Output**: Gate results table, per-ticket findings, drafted remediations, overall
 gate verdict, recommended actions for any FAIL items.
 
-### Mode D: Sprint Planning
+### Mode D — Sprint Planning
 
 **Trigger**: "Plan the sprint", "sprint planning", sprint number reference + capacity
 discussion, any [DELIVERY] tag referencing sprint planning.
@@ -231,7 +231,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
 
 **Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), the **tech-debt rank** — each tech-debt item with its Fowler quadrant (or `unclassified`) and its CoD value + HIGH/MEDIUM/LOW confidence tier, the slice sorted by (quadrant × CoD), and the top-ranked items filling the under-floor deficit up to the floor (or a deferred-fill note + recommendation when the floor/deficit are not computed), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation, a Reckless/Inadvertent pattern, and a declared PM floor-override).
 
-### Mode E: Execution Control Tower
+### Mode E — Execution Control Tower
 
 **Trigger**: Mid-sprint check, "how's the sprint going", sprint board review,
 standup synthesis, any [DELIVERY] tag referencing execution tracking.
@@ -276,7 +276,7 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
 **Output**: Sprint health snapshot, item-level status, risk items, scope changes,
 recommended adjustments, drafted escalations.
 
-### Mode F: DoD & Release Readiness Gate
+### Mode F — DoD & Release Readiness Gate
 
 **Trigger**: "Is this done", "release readiness", "DoD check", end-of-sprint review,
 any [DELIVERY] tag referencing DoD or release.
@@ -316,7 +316,7 @@ any [DELIVERY] tag referencing DoD or release.
 **Output**: Gate results, per-item findings, release readiness checklist, go/no-go
 recommendation, remediation plan for failures, risk entries for any conditional passes.
 
-### Mode G: RAID / Decision / Milestone Artifact Update
+### Mode G — RAID / Decision / Milestone Artifact Update
 
 **Trigger**: "Update the RAID log", "add this to the decision log", milestone update,
 any [DELIVERY] tag referencing RAID, decisions, or milestones.

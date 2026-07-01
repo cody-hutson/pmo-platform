@@ -148,7 +148,7 @@ Detect the appropriate mode from context. When multiple modes apply (e.g., a
 requirements definition that also needs process documentation), apply all relevant
 dimensions and organize the output clearly.
 
-### Mode A: Requirements Definition
+### Mode A — Requirements Definition
 
 **Trigger**: Business requirements upload, stakeholder request, meeting transcript
 with requirements content, "define the requirements for [process]", any [PROCESS]
@@ -207,7 +207,7 @@ tag referencing requirements.
 **Output**: See `core/standards/output-format.md`. Key sections: requirements summary,
 structured requirements table, gap analysis, drafted requirements, traceability matrix.
 
-### Mode B: Process Documentation
+### Mode B — Process Documentation
 
 **Trigger**: Process mapping request, workflow documentation, "document the [X]
 process", "map the as-is/to-be workflow", any [PROCESS] tag referencing process
@@ -230,7 +230,7 @@ documentation.
 **Output**: Process summary, step-by-step documentation, decision matrix, exception
 handling inventory, system touchpoint map, gap findings.
 
-### Mode C: Gap Analysis
+### Mode C — Gap Analysis
 
 **Trigger**: "What's the gap between [X] and [Y]", requirements vs. design
 comparison, as-is vs. to-be comparison, any [PROCESS] tag referencing gap analysis.
@@ -252,7 +252,7 @@ comparison, as-is vs. to-be comparison, any [PROCESS] tag referencing gap analys
 **Output**: Gap summary, coverage matrix, gap findings with remediations, excess
 inventory, recommendations.
 
-### Mode D: Traceability Matrix
+### Mode D — Traceability Matrix
 
 **Trigger**: "Build the traceability matrix", "trace requirements to Jira",
 "where does traceability break", any [PROCESS] tag referencing traceability.
@@ -284,7 +284,7 @@ inventory, recommendations.
 **Output**: Traceability matrix, chain integrity report, broken link inventory
 with remediations, orphan item inventory, metrics dashboard.
 
-### Mode E: Requirements Review (Cross-Artifact)
+### Mode E — Requirements Review (Cross-Artifact)
 
 **Trigger**: FDD upload with "check requirements coverage", multiple artifacts
 for cross-reference, "are the requirements covered in the design", any broad
