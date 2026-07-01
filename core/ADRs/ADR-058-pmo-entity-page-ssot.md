@@ -59,5 +59,5 @@ The forks: **(1)** does the `_pmo/` page become the SSOT, or is the roster the r
 ## Related ADRs
 
 - **ADR-040** (leadership-owner Person ref) — supplies the leadership-owner refs that resolve against this SSOT; the resolve-by-name + clarification-queue migration pattern Step 2b mirrors.
-- **ADR-057** (PROJECT.md composed index) — same milestone; the composed index wiki-links INTO these entity pages.
+- **ADR-060** (PROJECT.md composed index) — same milestone; the composed index wiki-links INTO these entity pages.
 - **ADR-059** (`plan_type` open discriminator) — same milestone; a typed Plan's relationships resolve against these pages.

@@ -475,13 +475,13 @@ See [`OPERATIONS.md § Methodology Awareness Protocol § Relationship to Dual-Fr
 
 Existing `projects/<project>/PROJECT.md` files under `projects/` use an ad-hoc markdown `**Key:** value` format rather than YAML frontmatter. `[SOURCE]` — inspection of `projects/[PROJECT_KEY] Implementation/PROJECT.md` and sibling files 2026-04-24.
 
-The schema describes the **canonical forward-looking shape**. As of the composed-index redesign (ADR-057, #363), that shape is a **thin composed wiki-link index** (≤50 lines): Methodology + Status stay **inline** (the §8 consumers parse them in place); People / Systems / Milestones / Plans / Workstreams become `[[wiki-link]]` lists into the `_pmo/` shared-entity pages (#362) and the #159 typed plans, rather than inline tables. `project-initiator` Mode A scaffolds **new** projects in this shape (Step 3, `references/project-md-composed-index-template.md`). Migration of **existing** live PROJECT.md files is the gated, EXPENSIVE step (Migration Protocol below) — **not** auto-applied. Consumer skills read `delivery_approach` + `status` via the same parsing approach they use today (markdown key-value or YAML — whichever is present); because Methodology + Status remain inline, the composed-index shape is back-compatible with every §8 consumer. The schema is authoritative for:
+The schema describes the **canonical forward-looking shape**. As of the composed-index redesign (ADR-060, #363), that shape is a **thin composed wiki-link index** (≤50 lines): Methodology + Status stay **inline** (the §8 consumers parse them in place); People / Systems / Milestones / Plans / Workstreams become `[[wiki-link]]` lists into the `_pmo/` shared-entity pages (#362) and the #159 typed plans, rather than inline tables. `project-initiator` Mode A scaffolds **new** projects in this shape (Step 3, `references/project-md-composed-index-template.md`). Migration of **existing** live PROJECT.md files is the gated, EXPENSIVE step (Migration Protocol below) — **not** auto-applied. Consumer skills read `delivery_approach` + `status` via the same parsing approach they use today (markdown key-value or YAML — whichever is present); because Methodology + Status remain inline, the composed-index shape is back-compatible with every §8 consumer. The schema is authoritative for:
 
 - new PROJECT.md scaffolding (composed-index shape via `project-initiator` Mode A),
 - any PROJECT.md migrated to the composed-index shape (per the protocol below),
 - the semantic definition of fields regardless of serialization format.
 
-### Composed-Index Migration Protocol (ADR-057 — gated, per-project)
+### Composed-Index Migration Protocol (ADR-060 — gated, per-project)
 
 Migrating a live PROJECT.md from the narrative-table monolith to the composed-index shape. **EXPENSIVE / gated per project** — the live ops tree (`projects/`) is git-ignored, so there is **no git rollback**; snapshot before, verify links after. Run the four steps in order, one project at a time:
 

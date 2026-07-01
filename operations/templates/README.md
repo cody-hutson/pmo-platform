@@ -50,11 +50,11 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 ### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.34)
 
-The entity-page and typed-plan templates from the project-data-architecture initiative. Entity pages carry the frozen `entity-field-schemas.md` field schemas (§3.x); the `_pmo/` entity pages are the cross-project SSOT (ADR-058); plans carry the OPEN `plan_type` discriminator (ADR-059); PROJECT.md is the composed wiki-link index (ADR-057).
+The entity-page and typed-plan templates from the project-data-architecture initiative. Entity pages carry the frozen `entity-field-schemas.md` field schemas (§3.x); the `_pmo/` entity pages are the cross-project SSOT (ADR-058); plans carry the OPEN `plan_type` discriminator (ADR-059); PROJECT.md is the composed wiki-link index (ADR-060).
 
 | Template | Kind | Schema / ADR |
 |---|---|---|
-| `project-md-composed-index-template.md` | Composed-index PROJECT.md (≤50 lines; Methodology/Status inline, entities as `[[wiki-links]]`) | ADR-057 / project-schema.md §7 |
+| `project-md-composed-index-template.md` | Composed-index PROJECT.md (≤50 lines; Methodology/Status inline, entities as `[[wiki-links]]`) | ADR-060 / project-schema.md §7 |
 | `person-entity-template.md` | `_pmo/people/` Person entity (SSOT on `person_id`) | §3.10 / §6.2 / ADR-058 |
 | `system-entity-template.md` | `_pmo/systems/` System entity | §3.11 / ADR-058 |
 | `vendor-entity-template.md` | `_pmo/vendors/` Vendor entity | §3.12 / ADR-058 |

@@ -1,7 +1,7 @@
 # PROJECT.md — {{PROJECT_NAME}}
 
 <!--
-Composed-index PROJECT.md (ADR-057): a thin dashboard, NOT the container. Methodology + Status
+Composed-index PROJECT.md (ADR-060): a thin dashboard, NOT the container. Methodology + Status
 are INLINE (consumer back-compat per project-schema.md §4); People / Systems / Milestones /
 Plans / Workstreams are [[wiki-link]] lists into the _pmo/ shared-entity pages (#362) and the
 #159 typed plans — edit once on the entity page, not in a table cell here. Target: ≤50 lines.

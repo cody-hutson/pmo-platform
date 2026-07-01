@@ -9,13 +9,13 @@ deciders: "[operator]"
 tags: [project-schema, composed-index, wiki-link, shared-entity-layout, gated-migration, reversibility-expensive]
 ---
 
-# ADR-057 — PROJECT.md is a composed wiki-link index, not the entity container
+# ADR-060 — PROJECT.md is a composed wiki-link index, not the entity container
 
 ## Status
 
 **Proposed** — flips to Accepted at the Stage 9 review.
 
-Number **057** — the originating release plan and the Stage-5 decision record (#2635) named **052**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it), and 052/053/054/055/056 were all already claimed (the 052/054/055 slots in `release/ADRs/`; 053 in `core/ADRs/`; 056 in `release/ADRs/`) by the time this milestone reached Engineering. Reassigned to the next gap-free slot **057** at Engineering time. Binds atomically at Stage 12.
+Number **060** — the originating release plan and the Stage-5 decision record (#2635) named **052**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it), and 052–057 were all claimed by concurrent releases by the time this milestone reached Engineering (052/054/055 in `release/ADRs/`; 053 in `core/ADRs/`; 056 in `release/ADRs/`; 057 in `core/ADRs/` — the v3.36 change-domain ADR). Reassigned to the next gap-free slot **060** at Engineering time (058/059 taken by this same milestone's #362/#159 ADRs). Binds atomically at Stage 12.
 
 ## Context
 

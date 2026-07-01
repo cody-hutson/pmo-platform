@@ -205,7 +205,7 @@ The cross-project shared-entity store `projects/_pmo/` is the **SSOT** for share
 ### Step 3: Populate PROJECT.md
 
 Use the **composed-index** PROJECT.md template from `references/project-md-composed-index-template.md`
-(ADR-057 — the thin ≤50-line wiki-link index, replacing the narrative-table shape). Keep
+(ADR-060 — the thin ≤50-line wiki-link index, replacing the narrative-table shape). Keep
 **Methodology + Status inline** (consumer back-compat per `project-schema.md` §4 / §8 consumer
 table); scaffold People / Systems / Milestones / Plans / Workstreams as `[[wiki-link]]` lists
 into the `_pmo/` entity pages (Step 2b) and the #159 typed plans — not inline tables. Fill in
