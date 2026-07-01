@@ -1086,18 +1086,34 @@ emit_json() {
 # Pipeline exit status (git → sed) is git's, not sed's, because `set -o pipefail` is on.
 apply_removals() {
   echo "── Apply phase — executing REMOVE actions ──" >&2
-  local branch_flag="-d" wt_flag=""
-  if [[ "$FORCE" == "1" ]]; then branch_flag="-D"; wt_flag="--force"; fi
+  local wt_flag=""
+  if [[ "$FORCE" == "1" ]]; then wt_flag="--force"; fi
 
-  local r name path action idx
+  local r name path action idx unique del_flag
 
   idx=-1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
     ((idx++)) || true
     [[ -z "$r" ]] && continue
     name=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $6}' <<<"$r")
+    unique=$(awk -F'\t' '{print $2}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED local $name — $action" >&2; continue; }
-    if git branch $branch_flag "$name" 2>&1 | sed 's/^/  git: /' >&2; then
+    # #683 (#2780 Option A') deletability-baseline fix: classification proves
+    # merged-ness against origin/main (is_fully_merged / field-2 unique==0), but
+    # `git branch -d` is HEAD-relative — from a behind-HEAD checkout (the Stage 13
+    # hub-worktree case) it refuses a genuinely-merged branch and it survives. Use
+    # -D when the branch is proven merged on the SAME ref classification used:
+    # field-2 unique==0 AND a re-verify of is_fully_merged at the delete site
+    # (collapses the staleness window between the classify loop and here). Fall
+    # back to -d otherwise, so an unmerged branch (unique!=0 — never reaches this
+    # loop as REMOVE, doubly-guarded) still requires --force. FORCE=1 keeps -D.
+    del_flag="-d"
+    if [[ "$FORCE" == "1" ]]; then
+      del_flag="-D"
+    elif [[ "$unique" == "0" ]] && is_fully_merged "$name"; then
+      del_flag="-D"
+    fi
+    if git branch $del_flag "$name" 2>&1 | sed 's/^/  git: /' >&2; then
       echo "PASS local $name removed" >&2
       LOCAL_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
     else
@@ -1316,10 +1332,7 @@ FREED_RESOLVED=0
 
 resolve_freed_branches() {
   echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
-  local branch_flag="-d"
-  if [[ "$FORCE" == "1" ]]; then branch_flag="-D"; fi
-
-  local r wbranch waction freed
+  local r wbranch waction freed del_flag
   freed=()
   for r in "${WORKTREE_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
@@ -1373,7 +1386,19 @@ resolve_freed_branches() {
       echo "SKIPPED resolve $b — $action" >&2; continue
     fi
 
-    if git branch $branch_flag "$b" 2>&1 | sed 's/^/  git: /' >&2; then
+    # #683 (#2780 Option A') — same deletability-baseline fix as apply_removals:
+    # every REMOVE path above proves unique==0 vs origin/main (the fresh classify,
+    # or the re-eval's explicit unique=="0" gate), so re-verify is_fully_merged at
+    # the delete site and use -D on confirmation (HEAD-relative -d would refuse a
+    # merged branch from a behind-HEAD checkout). FORCE=1 keeps -D; the -d fallback
+    # holds for any branch not re-provable merged.
+    del_flag="-d"
+    if [[ "$FORCE" == "1" ]]; then
+      del_flag="-D"
+    elif is_fully_merged "$b"; then
+      del_flag="-D"
+    fi
+    if git branch $del_flag "$b" 2>&1 | sed 's/^/  git: /' >&2; then
       echo "PASS resolve $b removed (freed by same-run worktree removal)" >&2
       LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"REMOVED"
       ((FREED_RESOLVED++)) || true
@@ -1849,6 +1874,112 @@ selftest_stage_branch_release_close() {
   return 0
 }
 
+# #683 — behind-HEAD apply (FMF-2 production gap). Classification proves merged-ness
+# against origin/main, but `git branch -d` is HEAD-relative — from a checkout whose
+# HEAD is behind origin/main (the Stage 13 hub-worktree case) it refuses a genuinely-
+# merged branch. #683 re-verifies is_fully_merged at BOTH delete sites (apply_removals
+# + resolve_freed_branches) and uses -D on confirmation. Two sub-cases:
+#   (1) AC-1 END-TO-END (resolve delete site): a merged branch (0 unique vs origin/main)
+#       attached to a throwaway worktree at origin/main tip, invoked via
+#       --release-close --apply (NO --force) from a SEPARATE detached worktree whose
+#       HEAD is behind origin/main. The worktree removal frees the branch; the resolve
+#       pass removes it with -D. Without the fix the resolve -d refuses → branch
+#       survives with "FAILED — git branch refused" (verified). This is the exact
+#       documented FMF-2 scenario. --release-close keeps the scope slug-local (safe /
+#       net-zero) — a workspace-wide --historical --apply would delete real branches.
+#       (The direct apply_removals delete site is unreachable for a no-PR branch under
+#       --release-close require_pr=1 (#2216), so AC-1 exercises the resolve twin.)
+#   (2) AC-2 UNIT (apply_removals delete site + fallback): a REAL unmerged branch
+#       (≥1 unique vs origin/main) seeded as a REMOVE row and run through apply_removals
+#       IN-PROCESS. del_flag must be -d (unique!=0), so `git branch -d` refuses (the
+#       branch is not merged into the self-test HEAD) → row FAILED, branch SURVIVES —
+#       proving an unmerged branch is never force-deleted without --force (no guard
+#       regression). If the fix wrongly forced -D unconditionally the branch would
+#       vanish. Net-zero teardown via git porcelain on every exit path.
+selftest_behind_head_apply() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    echo "self-test: behind-HEAD apply check SKIPPED — no ${REMOTE_NAME}/${MAIN_BRANCH} ref" >&2
+    return 0
+  fi
+  local script_abs tip base slug merged_branch attach_wt inv_wt out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  tip=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}~1" 2>/dev/null || true)
+  if [[ -z "$tip" || -z "$base" ]]; then
+    echo "self-test: behind-HEAD apply check SKIPPED — ${REMOTE_NAME}/${MAIN_BRANCH} has no parent to anchor a behind-HEAD checkout" >&2
+    return 0
+  fi
+
+  # ── (1) AC-1: resolve-site behind-HEAD removal ──
+  slug="v0.0-cleanup-selftest-bh-$$"
+  merged_branch="release/v0.0-cleanup-selftest-bh-$$"
+  attach_wt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bh-$$"
+  inv_wt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bhinv-$$"
+  if is_protected "$merged_branch"; then
+    echo "self-test: behind-HEAD apply check SKIPPED — operator protect-list matches '$merged_branch'" >&2
+    return 0
+  fi
+  if ! git worktree add -b "$merged_branch" "$attach_wt" "$tip" >/dev/null 2>&1; then
+    echo "self-test: behind-HEAD apply check SKIPPED — could not create attached worktree at origin/main" >&2
+    return 0
+  fi
+  if ! git worktree add --detach "$inv_wt" "$base" >/dev/null 2>&1; then
+    echo "self-test: behind-HEAD apply check SKIPPED — could not create behind-HEAD invoking worktree" >&2
+    git worktree remove --force "$attach_wt" >/dev/null 2>&1 || true
+    git branch -D "$merged_branch" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  out=$(cd "$inv_wt" && "$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: behind-HEAD apply check FAILED — inner --release-close --apply exited non-zero" >&2
+  elif git show-ref --verify --quiet "refs/heads/${merged_branch}"; then
+    echo "self-test: behind-HEAD apply check FAILED — merged branch '$merged_branch' survived --apply from a behind-HEAD checkout without --force (#683 / FMF-2 regression)" >&2
+    fail=1
+  fi
+  git worktree remove --force "$attach_wt" >/dev/null 2>&1 || true
+  git worktree remove --force "$inv_wt" >/dev/null 2>&1 || true
+  git branch -D "$merged_branch" >/dev/null 2>&1 || true
+
+  # ── (2) AC-2: apply_removals must NOT force-delete an unmerged branch ──
+  if [[ "$fail" -eq 0 ]]; then
+    local ub tmpwt saved_mode="$MODE" action
+    ub="chore/cleanup-selftest-bhum-$$"
+    tmpwt="${REPO_ROOT}/.claude/worktrees/cleanup-selftest-bhum-$$"
+    if is_protected "$ub"; then
+      echo "self-test: behind-HEAD apply check — AC-2 sub-case SKIPPED (protect-list matches '$ub')" >&2
+    elif ! git worktree add -b "$ub" "$tmpwt" "$tip" >/dev/null 2>&1; then
+      echo "self-test: behind-HEAD apply check — AC-2 sub-case SKIPPED (could not create unmerged branch)" >&2
+    else
+      git -C "$tmpwt" commit --allow-empty -m "cleanup-selftest behind-HEAD AC-2 unmerged fixture $$" >/dev/null 2>&1 || true
+      git worktree remove --force "$tmpwt" >/dev/null 2>&1 || true   # detach so it is a plain local branch
+      # Seed a REMOVE row with a non-zero unique so del_flag must fall back to -d.
+      LOCAL_BRANCH_CANDIDATES=("${ub}"$'\t'"5"$'\t'"selftest"$'\t'""$'\t'"(none)"$'\t'"REMOVE")
+      REMOTE_BRANCH_CANDIDATES=()
+      WORKTREE_CANDIDATES=()
+      MODE="apply"
+      apply_removals >/dev/null 2>&1 || true
+      MODE="$saved_mode"
+      action=$(awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}")
+      if git show-ref --verify --quiet "refs/heads/${ub}"; then
+        case "$action" in
+          FAILED*) : ;;   # -d refused the unmerged branch — the guard held
+          *) echo "self-test: behind-HEAD apply check FAILED — unmerged branch survived but row action='$action' (expected FAILED)" >&2; fail=1 ;;
+        esac
+      else
+        echo "self-test: behind-HEAD apply check FAILED — unmerged branch '$ub' was force-deleted by apply_removals without --force (AC-2 guard regression)" >&2
+        fail=1
+      fi
+      git branch -D "$ub" >/dev/null 2>&1 || true
+      LOCAL_BRANCH_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=()
+    fi
+  fi
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: behind-HEAD apply check PASS — merged branch removed from behind-HEAD checkout (no --force); unmerged branch stays guarded (-d fallback)" >&2
+  return 0
+}
+
 # v2.09 EDIT 7 — agent-* detached-worktree fixtures (covers EDIT 4 + EDIT 5).
 # EDIT 4 adds a path-basename arm (*:::agent-*) to detect_spawn_task so the
 # Agent-tool worktree pool (mostly detached → no branch for the claude/* arm to
@@ -2288,6 +2419,8 @@ self_test() {
   selftest_release_close_merged_pr
   echo "self-test: exercising chore/vX.Y-stage-* sweep + anti-over-match (#684)..." >&2
   selftest_stage_branch_release_close
+  echo "self-test: exercising behind-HEAD apply removes merged branch without --force (#683)..." >&2
+  selftest_behind_head_apply
   echo "self-test: exercising agent-* detached sweep + detached-unmerged merge gate (EDIT 4/5)..." >&2
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
