@@ -140,7 +140,7 @@ Template Architecture (this initiative) and Project Data Architecture (abbreviat
 
 **What composition looks like over time.** A new project type (e.g., a hypercare-only sub-project under PDA's  typed-sub-entities) introduces a new template (Template Architecture authors it under `operations/templates/hypercare-plan-template.md`) AND a new entity-storage convention (PDA  declares `plan_subtype: hypercare` + lifecycle states in frontmatter-schema). The two changes ship in their respective initiatives' release cycles; neither blocks the other once this boundary is in place.
 
-> _Note (v3.34):_ `plan_subtype` was superseded by the OPEN `plan_type` discriminator — the plan kind is now `plan_type: hypercare` (registry: `entity-field-schemas.md` §3.4a; per-subtype templates under `operations/templates/plan-templates/`).
+> _Note (v3.37):_ `plan_subtype` was superseded by the OPEN `plan_type` discriminator — the plan kind is now `plan_type: hypercare` (registry: `entity-field-schemas.md` §3.4a; per-subtype templates under `operations/templates/plan-templates/`).
 
 **Where this boundary IS broken (acceptable cases):** Authoring conveniences. A skill consuming PDA frontmatter schemas (e.g., delivery-engine's RAID writers) may include inline frontmatter examples in its SKILL.md — those are not templates in the L3 canonical-registry sense (they are skill-internal authoring guidance per Foundation Stage 5 audit `location_class: skill-internal-standalone`). The boundary applies to canonical templates in `operations/templates/`, not to every appearance of frontmatter-shaped text across the platform.
 

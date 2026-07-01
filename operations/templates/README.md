@@ -48,7 +48,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 |---|---|
 | `PMO_Platform_Template.md` | Knowledge-transfer reference for the PMO platform itself |
 
-### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.34)
+### Project-data architecture (shared-entity SSOT + typed plans + composed index, v3.37)
 
 The entity-page and typed-plan templates from the project-data-architecture initiative. Entity pages carry the frozen `entity-field-schemas.md` field schemas (§3.x); the `_pmo/` entity pages are the cross-project SSOT (ADR-058); plans carry the OPEN `plan_type` discriminator (ADR-059); PROJECT.md is the composed wiki-link index (ADR-060).
 
