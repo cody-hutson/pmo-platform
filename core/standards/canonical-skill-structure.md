@@ -87,6 +87,26 @@ Additional frontmatter fields are allowed; unknown fields are ignored by enforce
 
 - `.editor-session` — runtime-only sentinel written by `pmo-skill-editor` at Mode A entry; committed artifacts of this file MUST NOT land in git. The workspace-root `.gitignore` excludes the per-module sentinel globs `operations/skills/*/.editor-session`, `release/skills/*/.editor-session`, and `core/skills/*/.editor-session`.
 
+### Mode-heading separator (canonical form)
+
+A **multi-mode skill** — one that declares two or more modes as body sections — MUST render each individual mode-declaration heading in the canonical form:
+
+```
+<H2-or-H3> Mode <ID> — <Name>
+```
+
+where the separator between the mode identifier and the mode name is a single **em-dash flanked by single spaces** (` — `, U+2014). The mode `<ID>` is the mode's short label (a single letter `A`/`B`/…, a digit `1`/`2`/…, or a short mnemonic such as `O`/`R`); the `<Name>` is the human-readable mode title. The container heading that introduces the mode list (`## Modes` or `## Mode Selection`) carries no `<ID> — <Name>` and is out of scope for this rule.
+
+**Canonical decision (survey-grounded).** A survey of the live catalog at authoring time found two separator forms in use across individual mode-declaration headings: the em-dash form ` — ` (majority) and a colon form `: ` (minority, a handful of skills). The em-dash form is the ratified canonical because it is the established majority idiom and matches the `Mode <ID> — <Name>` convention used throughout the platform's skill catalog and OPERATIONS.md router views. **Reversibility: CHEAP / Confidence HIGH** — the standard is a heading-string convention; conforming or reverting a skill is a per-line heading rename with no content-semantics change.
+
+**Checkable form.** A conforming individual mode-declaration heading matches the regex:
+
+```
+^#{2,3} Mode [A-Za-z0-9]+ — .+$
+```
+
+A non-conforming heading is any line matching `^#{2,3} Mode [A-Za-z0-9]+[:.-] ` (or any separator other than ` — ` immediately after the mode identifier). The check keys on the separator token ` — ` positioned immediately after the mode `<ID>`; failure-mode entries and other prose headings that merely mention a mode (e.g. `### Mode B archival with unresolved RAID entries — PROC`) are NOT mode-declaration headings — the em-dash in those sits after intervening words, not directly after the `<ID>` token, so they do not match the checkable form and are correctly excluded. This convention is not currently gate-enforced at deploy-time; it is a template-conformance convention verified by the grep above.
+
 ## §5 When Reference Files Are REQUIRED
 
 A skill MUST have a non-empty `reference/` subdirectory (≥1 `*.md` file) when ANY of the following three conditions are true (per D-Refs Option B):
