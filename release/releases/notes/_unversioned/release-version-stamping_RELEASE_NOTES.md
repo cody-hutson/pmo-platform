@@ -53,7 +53,7 @@ CHEAP / HIGH confidence. A single `git revert -m 1` of the release pull request 
 
 **Version-less identity** — The milestone `release-version-stamping` (Release Class A — Routine) ships **version-less** per the operator's Stage 4 decision (2026-06-20), following the `public-flip-install-blockers` / `intake-elicitation-skill` / `domain-aware-stage5-design` / `memory-to-corpus-codification` / `cross-reference-integrity-ci` precedents — no `vX.Y` is assigned to this release, no signed-annotated tag is cut, and no GitHub Release is published; the tag-cut and GitHub-Release steps are deliberately omitted and their absence is not a close defect. Deploy no-op — the changed set is release-tooling plus governance/reference corpus plus one regression test plus one CI-workflow wiring plus the `.version` source file, with no `SKILL.md` and no `packages/` touched. This Stage 13 corpus close-out was hand-authored because `automated-closeout.sh` is version-keyed and cannot run for a version-less release (the documented Phase-B chore-PR mechanism).
 
-For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#release-version-stamping-version-less).
+For full implementation detail see the [RELEASE_LOG.md entry](../../RELEASE_LOG.md#release-version-stamping-version-less).
 
 ### References
 

@@ -58,7 +58,7 @@ CHEAP / HIGH confidence. A single `git revert -m 1` of the release pull request 
 
 **Version-less identity** — Authored in-pipeline as `v1.15`; `v1.15` / `v1.16` / `v1.17` (and subsequently `v1.18`–`v1.20`) were all claimed by concurrent releases during this session's pipeline run, so this release ships **version-less** under the slug `parallel-launch-quota-budget-gate` (the #769 version-collision class). The signed-annotated tag name IS the slug; it points at the merge SHA `b2b5f69873075de6f9516e3f1d053a7829416114` (ED25519 signature valid; zero signing bypasses). Every load-bearing `v1.15` anchor and the cutover clause were reconciled to the slug / introducing-release-SHA markerless form, so no `allow-version-ref` marker was needed for the cutover prose. Deploy no-op — the changed set is text-only K1 corpus plus release-pipeline spec/protocol docs plus one release tool, with no `SKILL.md`, no `packages/`, and no hook/harness path touched.
 
-For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#parallel-launch-quota-budget-gate-version-less) and [the release plan](../plans/parallel-launch-quota-budget-gate_RELEASE_PLAN.md).
+For full implementation detail see the [RELEASE_LOG.md entry](../../RELEASE_LOG.md#parallel-launch-quota-budget-gate-version-less) and [the release plan](../../plans/_unversioned/parallel-launch-quota-budget-gate_RELEASE_PLAN.md).
 
 ### References
 

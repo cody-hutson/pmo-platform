@@ -58,7 +58,7 @@ CHEAP / HIGH confidence. The repository side reverses via `git revert` of the pl
 
 **Process notes** — version-less identifier (D-Identifier A; zero deliverable diff means no platform increment for a version to mark), standard two-PR shape (D-Topology A; this Stage 13 chore PR carries the LOG row folded from Stage 12 Phase B5 as an approved deviation), `routine` class (D-ReleaseClass A; Light engagement / Standard Stage 9 / SKIP-where-trivial Stage 5 / 30-day outcome window). The automated close-out could not run for this release — its CLI validation rejects a version-less identifier before its preflight, which would in turn exit on the deliberately-folded LOG row and the absent tag — so the documented Phase B chore-PR fallback applied. The 2026-05-23 intake-pre-rendered-artifacts pattern was confirmed as a second instance and promoted (N=2): already-satisfied issues take the verification-only delivery route.
 
-For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-memory-to-corpus-codification) and [the release plan](../plans/memory-to-corpus-codification_RELEASE_PLAN.md).
+For full implementation detail see the [RELEASE_LOG.md entry](../../RELEASE_LOG.md#deployment-log-memory-to-corpus-codification) and [the release plan](../../plans/_unversioned/memory-to-corpus-codification_RELEASE_PLAN.md).
 
 ### References
 

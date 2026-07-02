@@ -70,7 +70,7 @@ CHEAP / HIGH confidence. The release is purely additive — two new reference do
 
 **Process note** — single-branch (D-C SINGLE) via one release PR (#503; 14 commits · 11 files · +648/−17), Release Class `novel`, version-less per operator decision at Stage 4 following the `intake-elicitation-skill` and `public-flip-install-blockers` precedents. Stage 7 Dev Testing PASS (3/3 issues) caught and fixed two real defects across two iterations — the F-1 release-plan exemplar mismatch and a §12 fabricated worked example, both verified after fix. Stage 8 QA PASS — #1 6/6 ACs (#490), #345 3/3 (#491), #346 3/3 (#492); zero FAIL, zero conditional-pass. Stage 9 Plan Review GO (operator-rendered; Deep depth) with hub Empirical Verification 8/8. No signed-annotated tag and no GitHub Release (version-less).
 
-For full implementation detail see the [RELEASE_LOG.md entry](../RELEASE_LOG.md#deployment-log-domain-aware-stage5-design) and [the release plan](../plans/domain-aware-stage5-design_RELEASE_PLAN.md).
+For full implementation detail see the [RELEASE_LOG.md entry](../../RELEASE_LOG.md#deployment-log-domain-aware-stage5-design) and [the release plan](../../plans/_unversioned/domain-aware-stage5-design_RELEASE_PLAN.md).
 
 ### References
 
