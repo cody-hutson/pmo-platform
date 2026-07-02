@@ -19,6 +19,17 @@
 # INPUT CONTRACT
 #   -v issuere=<ISSUEREF_RE>    the bare-issue-ref regex, passed in (kept byte-identical
 #                              to the three callers — this file does NOT own the regex).
+#   -v hexcolor=<HEXCOLOR_RE>  companion hex-color mask regex, passed in (kept byte-identical
+#                              to the three callers — this file does NOT own it either). Two
+#                              ERE branches (no lookbehind available): (a) a # + a run of
+#                              hex-legal chars containing >=1 hex letter [A-Fa-f] (e.g. #28A745,
+#                              #FFF); (b) a colon-prefixed hex run `:#<3-8 hex digits>` — the
+#                              CSS/Mermaid color-value form (e.g. color:#155724), which catches
+#                              PURE-DIGIT hex colors that branch (a) cannot see. Masked to spaces
+#                              BEFORE the issue-ref test so a hex color's numeric prefix (#28) is
+#                              never mis-read as a bare issue ref (#314-companion fix, issue #2068).
+#                              A prose issue ref (#NN / `#NN` / "See #NN") never carries a hex
+#                              letter and is never colon-abutted, so it is never masked.
 #   -v refline=<N>             reference-block header file-line number (0 = no block in file).
 #   -v minwords=<MIN>          minimum non-reference words for an in-block ref to count as
 #                              self-describing (= MIN_SELFDESCRIBE_WORDS, currently 3).
@@ -43,8 +54,16 @@
 
   # Skip blank content lines.
   if (line ~ /^[[:space:]]*$/) next
+  # Mask hex-color spans (#28A745 etc.) to spaces BEFORE the issue-ref test so a hex
+  # color's numeric prefix (#28) is never mis-classified as a bare issue ref (#2068).
+  # gsub-to-space ADDS a separator and consumes no issue-ref boundary char, so it is
+  # dual-use-safe: the same `masked` copy feeds both the membership test (below) and the
+  # in-block word count (further down), and adjacent-ref counting is unharmed. A pure-digit
+  # #NN issue ref carries no hex letter, so it is never masked.
+  masked = line
+  gsub(hexcolor, " ", masked)
   # Only lines carrying a bare issue reference are in scope.
-  if (line !~ issuere) next
+  if (masked !~ issuere) next
 
   in_block = (refline > 0 && lineno >= refline)
   if (!in_block) {
@@ -53,7 +72,9 @@
   }
 
   # In-block self-describing check: count words that are NOT the issue-reference token.
-  tmp = line
+  # Seed from `masked` (hex spans already blanked) so a hex color present on the line is
+  # never counted toward the self-describe word threshold (#2068).
+  tmp = masked
   gsub(issuere, " ", tmp)               # remove the issue ref(s)
   gsub(/^[#>*[:space:]-]+/, "", tmp)    # strip leading markdown/list punctuation
   n = split(tmp, parts, /[[:space:]]+/)

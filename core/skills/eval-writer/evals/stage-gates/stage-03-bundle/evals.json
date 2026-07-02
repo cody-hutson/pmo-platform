@@ -1,0 +1,125 @@
+{
+  "suite_name": "stage-03-bundle-gate",
+  "description": "Stage-3 Bundle gate eval set (11 evals: 4 structural S1-S4, 4 principal-behavior P1-P4, 2 contract C1-C2, 1 proactivity PR1). The subject-under-test is a Stage-3 Bundle spoke output — the bundle rationale comment plus the created milestone description. Each eval is a prompt plus one binary typed assertion a judge or structural check evaluates against that output. Binary throughout (pass/fail judges, no numeric-scale rating); assertion types are structural (mechanically checkable) and judgment (a single binary LLM-judge call). Grounded in the Stage-3 Bundle spec (stage-03-bundle.md Phase A1-B4) and the bundle-composition doctrine. Stage-gate eval sets live under core/skills/eval-writer/evals/stage-gates/<gate>/ per ADR-067.",
+  "gate": "Stage 3 Bundle",
+  "escape_rate": {
+    "definition": "escapes / gate_firings over the release-close window (per-release-close, rolling)",
+    "escape": "a bundle-composition defect passed at Stage 3 (gate fired GO / the bundle shipped) but caught downstream (Stage 4 Planning, Stage 5 Collective Review, Stage 9 Plan Review, or Stage 13 Close) as a defect this set's assertions should have caught",
+    "gate_firing": "one Stage-3 Bundle evaluation (one milestone bundled)",
+    "computation": "numerator = downstream composition-defect findings citing this set's assertions (Stage-5 Reject/Adjust attributable to composition, Stage-9 NO-GO findings citing bundle composition, Stage-13 close follow-ups tagged bundle-composition escapes); denominator = milestones passing Stage-3 in the window",
+    "current_value": "[INSUFFICIENT DATA - populate at release close; <3 firings = not yet reliable]"
+  },
+  "judge": "cross-family, pinned snapshot; binary PASS/FAIL per assertion",
+  "evals": [
+    {
+      "id": 1,
+      "name": "S1-release-class-present-valid",
+      "prompt": "Evaluate a Stage-3 Bundle output's created milestone description for the Release Class declaration required by Gate-3 criterion G3-10. The milestone description is the subject-under-test.",
+      "expected_output": "The milestone description contains a `## Release Class` H2 whose Class value is one of {routine, novel, cross-cutting, hotfix} and a non-empty Rationale sub-field.",
+      "files": [],
+      "assertions": [
+        {"text": "The created milestone description contains a `## Release Class` H2 whose `Class:` value is one of the closed enum {routine, novel, cross-cutting, hotfix} AND a non-empty Rationale sub-field", "type": "structural"}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "S2-outcome-statement-after-before",
+      "prompt": "Evaluate a Stage-3 Bundle output's milestone description for the Release Outcome Statement required by Gate-3 criterion G3-11 and doctrine section 7. The milestone description is the subject-under-test.",
+      "expected_output": "The milestone description contains a `### Release Outcome Statement` H3 with both a non-empty AFTER and a non-empty BEFORE sub-field (1-3 sentences each).",
+      "files": [],
+      "assertions": [
+        {"text": "The milestone description contains a `### Release Outcome Statement` H3 with both a non-empty **AFTER** and a non-empty **BEFORE** sub-field (1-3 sentences each)", "type": "structural"}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "S3-internal-sequence-layer-annotated",
+      "prompt": "Evaluate a Stage-3 Bundle output for a declared internal sequence with layer annotations per doctrine section 3 Step 6 / section 7. The bundle output is the subject-under-test.",
+      "expected_output": "The bundle output declares an ordered internal sequence of the member issues annotated by layer (foundation, infrastructure, skill-core, eval/verification), not an unordered set.",
+      "files": [],
+      "assertions": [
+        {"text": "The bundle output declares an ordered internal sequence of the member issues annotated by layer (foundation to infrastructure to skill-core to eval/verification), not an unordered set", "type": "structural"}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "S4-affected-files-specificity",
+      "prompt": "Evaluate a Stage-3 Bundle output for per-member Affected Files specificity per Gate-3 criterion G3-03. The bundle's member issues are the subject-under-test.",
+      "expected_output": "Every in-bundle issue's Affected Files field lists at least one concrete file path; a directory-only or empty field fails.",
+      "files": [],
+      "assertions": [
+        {"text": "Every in-bundle issue's Affected Files field lists at least one concrete file path (not directory-only, not empty); a directory-only or empty field fails", "type": "structural"}
+      ]
+    },
+    {
+      "id": 5,
+      "name": "P1-capability-coherence-over-binpacking",
+      "prompt": "Judge whether a Stage-3 Bundle coheres as a single named user capability rather than a set of unrelated issues packed to hit a point-band. The bundle rationale is the subject-under-test.",
+      "expected_output": "The bundle coheres as a single named user capability with a defensible AFTER/BEFORE contrast; a size-driven bundle with no capability thread fails.",
+      "files": [],
+      "assertions": [
+        {"text": "The bundle coheres as a single named user capability (a defensible AFTER/BEFORE contrast), not a set of unrelated issues packed to hit a point-band; judge FAILs a bundle whose rationale is size-driven with no capability thread", "type": "judgment"}
+      ]
+    },
+    {
+      "id": 6,
+      "name": "P2-dependency-ordered-sequence-justified",
+      "prompt": "Judge whether a Stage-3 Bundle's declared internal sequence is consistent with the member issues' actual dependency edges. The declared sequence + the members' dependency edges are the subject-under-test.",
+      "expected_output": "The internal sequence is consistent with the members' dependency edges (foundation/regression-net dependencies land before consumers); a sequence contradicting a stated blocked-by / depends-on edge fails.",
+      "files": [],
+      "assertions": [
+        {"text": "The declared internal sequence is consistent with the member issues' actual dependency edges (foundation/regression-net dependencies land before their consumers); judge FAILs a sequence that contradicts a stated `blocked-by`/`depends-on` edge", "type": "judgment"}
+      ]
+    },
+    {
+      "id": 7,
+      "name": "P3-least-destructive-disposition",
+      "prompt": "Judge whether issues excluded from a Stage-3 Bundle are dispositioned with a least-destructive rationale. The exclusion/deferral dispositions are the subject-under-test.",
+      "expected_output": "Excluded issues are dispositioned with a least-destructive rationale (park/defer with note over silent drop); a uniform cross-reference-only deferral or an unexplained exclusion fails.",
+      "files": [],
+      "assertions": [
+        {"text": "Issues excluded from the bundle are dispositioned with a least-destructive rationale (park/defer with note over silent drop); judge FAILs a uniform cross-reference-only deferral or an unexplained exclusion", "type": "judgment"}
+      ]
+    },
+    {
+      "id": 8,
+      "name": "P4-localization-over-generic-heuristic",
+      "prompt": "Judge whether a Stage-3 Bundle reconciles the generic allocation/count heuristics (60/20/20, 5-8 item count) against the release theme rather than applying them mechanically. The bundle rationale is the subject-under-test.",
+      "expected_output": "The bundle reconciles the generic heuristics against the release theme; a rationale that cites 60/20/20 or the 5-8 count as a hard cap without theme reconciliation fails (the point-band governs).",
+      "files": [],
+      "assertions": [
+        {"text": "The bundle reconciles the generic allocation/count heuristics against the release theme rather than applying them mechanically; judge FAILs a rationale that cites 60/20/20 or the 5-8 item count as a hard cap without theme reconciliation (the point-band governs)", "type": "judgment"}
+      ]
+    },
+    {
+      "id": 9,
+      "name": "C1-cross-milestone-dependency-sequence",
+      "prompt": "Evaluate a Stage-3 Bundle for the G3-07 cross-milestone dependency-sequence contract. The members' dependency edges + their milestone positions are the subject-under-test.",
+      "expected_output": "For every dependency edge A to B on an in-bundle issue, milestone-position(A) >= milestone-position(B), OR the edge is registered in the milestone's Dependency Exceptions block; an unsequenced, unregistered cross-milestone edge fails.",
+      "files": [],
+      "assertions": [
+        {"text": "For every dependency edge `A -> B` on an in-bundle issue, milestone-position(A) >= milestone-position(B), OR the edge is registered in the milestone's `## Dependency Exceptions` block; an unsequenced, unregistered cross-milestone edge fails", "type": "structural"}
+      ]
+    },
+    {
+      "id": 10,
+      "name": "C2-risk-weighted-point-band-capacity",
+      "prompt": "Evaluate a Stage-3 Bundle for the risk-weighted point-band capacity contract per doctrine section 3 Step 5 / G3-15. The bundle's effective points vs the configured target band are the subject-under-test.",
+      "expected_output": "The bundle's effective_pts = round_half_up(sum(member_pts) * class_weight) is evaluated against the configured target band, and any breach carries a recorded disposition (split / tight-merge / operator override with rationale); a silent over-band bundle fails.",
+      "files": [],
+      "assertions": [
+        {"text": "The bundle's `effective_pts = round_half_up(sum(member_pts) * class_weight)` is evaluated against the configured target band, and any breach carries a recorded disposition (split / tight-merge / operator override with rationale); a silent over-band bundle fails", "type": "structural"}
+      ]
+    },
+    {
+      "id": 11,
+      "name": "PR1-related-issue-cluster-surfaced",
+      "prompt": "Judge whether a Stage-3 Bundle proactively surfaces an A5.1 related-issue cluster when the predicate holds, without being asked. The Approved backlog + the bundle output are the subject-under-test.",
+      "expected_output": "When the Approved backlog contains a coordinated cluster meeting the A5.1 C-1 and C-2 predicate (>=3 issues + a coordination signal), the bundle output proactively surfaces the cluster with a recommended tracking primitive from the A5.1 selection table; absence of the surfaced cluster when the predicate holds fails.",
+      "files": [],
+      "assertions": [
+        {"text": "When the Approved backlog contains a coordinated cluster meeting the A5.1 C-1 AND C-2 predicate (>=3 issues + a coordination signal), the bundle output proactively surfaces the cluster with a recommended tracking primitive from the A5.1 selection table — even though no operator prompt asked for it; absence of the surfaced cluster when the predicate holds fails", "type": "judgment"}
+      ]
+    }
+  ]
+}

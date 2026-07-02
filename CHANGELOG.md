@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.53] - 2026-07-02
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.53_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.53)
+
+## [v3.52] - 2026-07-02
+
+The eval framework is now complete — the refiner scripts have automated test coverage, the stage-gate eval sets are runnable, and QA can catch contradictions across a chain of dependent work before final review.
+
+[Full notes](release/releases/notes/v3.52_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.52)
+
+## [v3.51] - 2026-07-02
+
+RAID staleness escalation and the tier-2 support skill now cite their canonical source docs instead of a divergent threshold and a missing reference.
+
+[Full notes](release/releases/notes/v3.51_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.51)
+
 ## [v3.50] - 2026-07-02
 
 The release pipeline can now evaluate every stage transition from its own written gate specs — completing the stage-gate criteria surface so a run needs no out-of-spec operator knowledge.
@@ -16,7 +34,7 @@ The release pipeline can now evaluate every stage transition from its own writte
 
 ## [v3.49] - 2026-07-02
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+The file router now governs every direction a file can move — inbound, staging, promotion, and cross-project — instead of only inbound arrivals; intake checks for an existing owner before creating a duplicate container, and can auto-log low-touch items on its own when you've raised your automation level.
 
 [Full notes](release/releases/notes/v3.49_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.49)
 
@@ -600,7 +618,7 @@ The PMO role-Specialist suite is now GA — five Release-to-Sustain role agents 
 
 ## [v2.12] - 2026-06-21
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Filing and grading a work item now checks more of its form at intake, keeps body-stated priority in sync with the tracker, and lets you tag an improvement's domain.
 
 [Full notes](release/releases/notes/v2.12_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.12)
 

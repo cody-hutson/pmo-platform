@@ -1,0 +1,28 @@
+{
+  "suite_name": "stage-07-dev-testing-gate",
+  "description": "Stage-7 Dev Testing gate eval set. Currently holds the branch-freshness assertion: a release branch must have no base-branch commits unreachable from HEAD before Dev Testing passes, else it can merge stale. Binary judges (PASS/FAIL) per the eval-writer convention (no Likert scale). The executable half of this check is the runner assert_branch_fresh.py under the pmo-skill-refiner scripts; this eval set is the graded/discoverable half. Stage-gate eval sets live under core/skills/eval-writer/evals/stage-gates/<gate>/ per the joint stage-gate-eval-home ADR (ADR-067).",
+  "gate": "Stage 7 Dev Testing",
+  "escape_rate": {
+    "definition": "escapes / gate_firings over the release-close window",
+    "escape": "a stale-branch defect passed at Stage 7 but caught downstream (merge conflict, lost-commit regression, or Stage 9 readiness finding)",
+    "gate_firing": "one Stage-7 Dev Testing evaluation (one release branch reviewed)",
+    "computation": "numerator = downstream stale-branch findings this set's assertions should have caught; denominator = release branches passing Stage 7 in the window",
+    "current_value": "[INSUFFICIENT DATA - populate at release close; <3 firings = not yet reliable]"
+  },
+  "judge": "cross-family, pinned snapshot; binary PASS/FAIL per assertion",
+  "evals": [
+    {
+      "id": 1,
+      "name": "stage-07-branch-freshness",
+      "prompt": "Assert the release branch has no base-branch commits unreachable from HEAD before Dev Testing passes. The check runs `git log --oneline <base> ^HEAD` (base defaults to origin/main): empty output is PASS (branch is fresh); non-empty output is FAIL and lists the unreachable commits so they can be rebased in. The subject-under-test is the Stage-7 branch-freshness check as implemented by the runner assert_branch_fresh.py and referenced from stage-07-dev-testing.md.",
+      "expected_output": "A branch-freshness assertion that is executable (a runnable script, not prose-only), runs `git log --oneline <base> ^HEAD`, treats empty output as PASS, and on a stale branch FAILs while listing the unreachable commits. PASSes for a current release branch; FAILs for a branch behind its base.",
+      "files": [],
+      "assertions": [
+        {"text": "A branch-freshness assertion exists that runs `git log --oneline <base> ^HEAD` (or `git rev-list --count <base> ^HEAD`) and treats empty output as PASS", "type": "structural"},
+        {"text": "On a stale branch the FAIL output lists the unreachable commits (not a bare boolean/count)", "type": "structural"},
+        {"text": "The check is executable — a runnable script or command (assert_branch_fresh.py), not a prose-only assertion a harness must interpret", "type": "structural"},
+        {"text": "The check PASSes for a current release branch and FAILs for a branch behind its base (both directions exercised)", "type": "judgment"}
+      ]
+    }
+  ]
+}

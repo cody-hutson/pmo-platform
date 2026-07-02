@@ -216,6 +216,25 @@ jobs:
                 SUPPRESSED="${SUPPRESSED}${f}:${LN} (override-suppressed)"$'\n'
                 continue
               fi
+              # ADR deciders carve-out (#1487): the operator LITERAL NAME is a
+              # sanctioned architect-of-record authorship attribution ONLY on a
+              # frontmatter `deciders:` line inside an ADR file. Field-scoped: the
+              # skip fires iff BOTH the file is an ADR (core/ADRs/*.md or
+              # release/ADRs/*.md) AND the added line matches ^deciders:. Every
+              # other identity surface stays blocked — emails, paths, the handle on
+              # any non-deciders line or non-ADR file, the operator name in an ADR
+              # BODY line, any non-ADR file, and the whole collaborator dimension.
+              # Reuses the SUPPRESSED channel so exempted lines are reported, not
+              # silent. Sits AFTER the override block and BEFORE FOUND=1 so it can
+              # never short-circuit the email/handle-elsewhere/collaborator matches.
+              case "$f" in
+                core/ADRs/*.md|release/ADRs/*.md)
+                  if printf '%s' "$CONTENT" | grep -qE '^deciders:'; then
+                    SUPPRESSED="${SUPPRESSED}${f}:${LN} (deciders carve-out — #1487)"$'\n'
+                    continue
+                  fi
+                  ;;
+              esac
               # redact: echo only the line number + a short redacted marker, never
               # the full PII value (mirror gitleaks --redact).
               FOUND=1

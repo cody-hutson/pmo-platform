@@ -4,7 +4,7 @@ Architecture Decision Records for the `release/` module of the pmo-platform — 
 
 ## Format
 
-ADRs follow the format established by [ADR-005](ADR-005-append-pattern-aware-cross-pr-contention-scoring.md) — frontmatter with `title / status / date / release / deciders / tags / source_observations`, body with `Status / Context / Decision / Consequences / Reversibility / Related ADRs` sections. See [`../../core/ADRs/README.md`](../../core/ADRs/README.md) § Canonical ADR Format for the full template documentation.
+ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** — the single source for the frontmatter field set and body-section contract. [ADR-005](ADR-005-append-pattern-aware-cross-pr-contention-scoring.md) is the canonical worked exemplar.
 
 ## Naming convention
 
@@ -89,6 +89,7 @@ ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11
 
 ## Related references
 
-- [`../../core/ADRs/README.md`](../../core/ADRs/README.md) — core-module ADR index + canonical format documentation
+- [`../../core/schemas/adr-schema.md`](../../core/schemas/adr-schema.md) — canonical ADR frontmatter + body-section schema (field/section contract)
+- [`../../core/ADRs/README.md`](../../core/ADRs/README.md) — core-module ADR index
 - [`../../core/disciplines/decision-discipline.md`](../../core/disciplines/decision-discipline.md) — when to write an ADR + decision-class classification
 - [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md) — Stage 5 ADR materialization process
