@@ -9,7 +9,7 @@ set -euo pipefail
 # sibling traces a non-doc domain's dependency graph — v1 ships the `software`
 # domain: a code import-graph fan-out (who imports the changed module?).
 #
-# SIBLING, not an extension (ADR-067): blast-radius.sh has no scanner-plug seam;
+# SIBLING, not an extension (ADR-068): blast-radius.sh has no scanner-plug seam;
 # forking its scan loop would put every reflexive doc-corpus A3 run at regression
 # risk. This is a separate CLI that REUSES the schema-v1 output contract via the
 # shared library release/tools/lib/schema-v1-emit.sh, so a consumer that pins to
@@ -46,7 +46,7 @@ set -euo pipefail
 # The envelope is the full schema-v1 shape emitted by the shared library, but three
 # fields carry domain-specific meaning or are deliberately scoped out for v1. This
 # is the contract the design-review-checklist §1 consumer must read for `domain:
-# software` output (and the ADR-067 record states the same):
+# software` output (and the ADR-068 record states the same):
 #
 #   first_order[].path            — repo-relative path of the IMPORTING file (a file
 #                                   that directly imports/requires the changed module).
@@ -66,17 +66,17 @@ set -euo pipefail
 #                                     follow-on, NOT claimed here — this tracer does not
 #                                     over-claim full envelope parity. The doc tracer
 #                                     DOES populate second_order[].via/.depth; the
-#                                     software domain intentionally does not (ADR-067).
+#                                     software domain intentionally does not (ADR-068).
 #   stats.total_files_scanned     — count of CODE files the scanner searched for
 #                                   importers (the language-scoped candidate set), NOT
 #                                   the whole-corpus file count the doc tracer reports.
-#                                   Domain-specific denominator, documented here + ADR-067.
+#                                   Domain-specific denominator, documented here + ADR-068.
 #   stats.filtered_mirrors        — always 0 (is_mirror is always false).
 #   include_mirrors               — always false for this domain.
 # ------------------------------------------------------------------------------
 #
 # See release/references/protocols/blast-radius-protocol.md § 12 for the method,
-# core/ADRs/ADR-067-domain-fan-out-sibling-vs-extend.md for the architecture.
+# core/ADRs/ADR-068-domain-fan-out-sibling-vs-extend.md for the architecture.
 
 # ---------------------------------------------------------------------------
 # Version metadata (the contract is the schema, not the implementation)
@@ -212,7 +212,7 @@ EXAMPLE
 
 DOCS
   release/references/protocols/blast-radius-protocol.md § 12
-  core/ADRs/ADR-067-domain-fan-out-sibling-vs-extend.md
+  core/ADRs/ADR-068-domain-fan-out-sibling-vs-extend.md
 EOF
 }
 
@@ -533,7 +533,7 @@ scan_software() {
   FILTERED_MIRRORS_JSON="$(printf '%s' "$bundle" | jq -c '.filtered_mirrors_detail')"
   FILTERED_MIRRORS_COUNT="$(printf '%s' "$bundle" | jq -r '.filtered_mirrors_count')"
 
-  # second-order scoped OUT for software v1 (see header F4 note + ADR-067):
+  # second-order scoped OUT for software v1 (see header F4 note + ADR-068):
   # depth-2 import-graph traversal is a named follow-on, not claimed here.
   SECOND_ORDER_JSON="$(jq -n '[]')"
   SECOND_ORDER_COUNT=0

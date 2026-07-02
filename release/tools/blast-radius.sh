@@ -19,7 +19,7 @@ PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
 # Shared schema-v1 emitter (the single home of the output contract). This script
 # owns doc-corpus fan-out DISCOVERY; the schema-v1 EMIT (the first_order[] object
 # roll-up + the top-level envelope) lives in the sourced library so the doc tracer
-# and the domain tracer emit one identical contract. See ADR-067. Sourced relative
+# and the domain tracer emit one identical contract. See ADR-068. Sourced relative
 # to this script so it resolves under any checkout / worktree.
 # ---------------------------------------------------------------------------
 _BLAST_RADIUS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd -P)"

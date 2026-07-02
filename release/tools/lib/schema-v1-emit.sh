@@ -12,7 +12,7 @@
 # blast-radius-protocol.md §12 opt-out, mixed-release-solutioning-routing.md §6 C1)
 # read output from EITHER tracer identically. A schema v1→v2 bump edits this file
 # ONCE, not two divergent emitters (the two-emitter-drift risk this extraction closes;
-# see ADR-067). See release/references/protocols/blast-radius-protocol.md for the field
+# see ADR-068). See release/references/protocols/blast-radius-protocol.md for the field
 # semantics this library realizes.
 #
 # Design note (F3 — real function signatures): every function here takes EXPLICIT
@@ -192,7 +192,7 @@ EOF
 # them — a caller that populates second_order[] is responsible for including `via`
 # and `depth` on each element (the doc tracer does). A caller that scopes second
 # order OUT passes an empty array `[]` and second_order_count 0 (the software
-# domain does this deliberately; see ADR-067 and the domain-blast-radius.sh header).
+# domain does this deliberately; see ADR-068 and the domain-blast-radius.sh header).
 #
 # Args (explicit — F3), in envelope order:
 #   $1  cli_version           emitting tool's version string
@@ -203,7 +203,7 @@ EOF
 #   $6  include_mirrors       "true"|"false" JSON literal
 #   $7  total_files_scanned   integer (a domain tracer that does not size the whole
 #                             corpus passes the count of files it actually scanned;
-#                             see ADR-067 for the software-domain semantics)
+#                             see ADR-068 for the software-domain semantics)
 #   $8  first_order_count     integer
 #   $9  second_order_count    integer
 #   $10 filtered_mirrors      integer

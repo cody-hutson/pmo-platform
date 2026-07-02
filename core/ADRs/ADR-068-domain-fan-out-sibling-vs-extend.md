@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: "ADR-067 — Domain-fan-out impact analysis ships as a sibling CLI reproducing the schema-v1 contract via a shared library, not as an in-place extension of blast-radius.sh"
+title: "ADR-068 — Domain-fan-out impact analysis ships as a sibling CLI reproducing the schema-v1 contract via a shared library, not as an in-place extension of blast-radius.sh"
 status: Accepted
 date: 2026-07-01
 release: 80-solutioning-and-engineering-skill-modes
@@ -13,7 +13,7 @@ source_observations:
   - "Schema-reuse-without-co-location cost (Stage-5 A6.5 self-review): a bare sibling DUPLICATES the schema-v1 emitter, so a future schema v1→v2 bump would have to update two emitters or they silently diverge. The refinement folded into the build: extract the emitter into a shared sourced library both tracers consume, so the contract is shared as a LIBRARY, keeping the default binary's behavior byte-identical while removing the two-emitter drift."
 ---
 
-# ADR-067 — Domain-fan-out impact analysis: sibling CLI + shared schema-v1 library (not an in-place extension)
+# ADR-068 — Domain-fan-out impact analysis: sibling CLI + shared schema-v1 library (not an in-place extension)
 
 ## Status
 
@@ -92,7 +92,7 @@ The Stage-5 A6.5 adversarial self-review then surfaced the sibling's one real co
 ## Related ADRs
 
 - **ADR-062** (substrate-vs-canonical precedent) — establishes the Stage-6-ADR-authoring precedent and the role-string `deciders` convention this ADR follows; sibling Stage-5/6 architecture-decision record.
-- **ADR-050** (deliverable-domain axis) — establishes the `domain:` class field this tool dispatches on; ADR-067 consumes that axis as the scanner selector.
+- **ADR-050** (deliverable-domain axis) — establishes the `domain:` class field this tool dispatches on; ADR-068 consumes that axis as the scanner selector.
 - **ADR-005** (append-pattern-aware cross-PR contention scoring) — the release-scope ADR whose format this record follows.
 
 ### Issue References
