@@ -2,7 +2,7 @@
 name: release-executor
 description: >
   Executes approved release plans. Modes: Execute release · Verify release · Rollback release · Close release. Creates snapshots, applies file changes, closes IMP items, updates release log, runs verification, runs automated Stage 13 close-out. Requires an approved plan with Dry-Run Record. Triggers: "execute the release", "deploy v[X.Y]", "ship v[X.Y]", "verify the release", "rollback v[X.Y]", "go live with v[X.Y]", "close the release", "finalize v[X.Y]", "stage 13 close", "run the close-out", "automated close-out".
-version: v2.14
+version: v2.15
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -163,7 +163,10 @@ Proceed to the corresponding mode section below (Mode A Execute Release, Mode B 
 1. **Input validation:**
    - Read the release plan at `_governance/Releases/[version]_RELEASE_PLAN.md`
    - Verify it has a Dry-Run Record section
-   - If missing: halt with "Release plan has no Dry-Run Record. Run release-planner Mode C first."
+   - **If missing, discriminate by lineage** — read the plan's execution context (a plan under `release/releases/plans/` with Stage-12 PR/tag/deploy.sh obligations ⇒ git-native; a plan with a Dry-Run Record + snapshot protocol ⇒ Cowork):
+     - **Cowork-lineage plan:** halt with "Release plan has no Dry-Run Record. Run release-planner Mode C first." — do not proceed to snapshot or execution steps.
+     - **Git-native plan:** the absent Dry-Run Record is *lineage, not a missing artifact* — do NOT halt to release-planner Mode C. The execution/review surface is the pipeline (the PR diff IS the dry-run review); this skill's in-scope contributions are Mode B verification and Mode D/E/F close-out. Name the path in the execution report and route accordingly.
+     - See the failure-mode entries `Mode A execution without a Dry-Run Record in the plan — PROC` (governs the Cowork-lineage path) and `Mode A snapshot execution invoked for a git-native release — TRIG` (governs the git-native path) — this step and those entries read as one consistent rule.
    - **Resolve platform-config at session start.** Resolve the platform-behavior fields this execution consumes — `default_release_class` (and any per-stage config the hub injected) — per [`OPERATIONS.md § Platform-Config Resolution Protocol`](../../../core/governance/OPERATIONS.md) (the 5-rung resolver over `core/config/platform-config.toml.template` + Layer-2 per-tier overrides). When the hub injected a resolved value into the chip prompt, use it — do NOT re-resolve (single resolution at the hub avoids hub-vs-spoke divergence). If a field is unresolved at every rung, fall back to the documented default (`novel` for release class) and log the fallback — never hard-fail the release on an absent/corrupt config.
 
 2. **Pre-flight:**
@@ -602,13 +605,22 @@ structural conformance and content quality.
   pressure — the operator is waiting for the release to ship — the check for a specific
   subsection feels redundant.
 - **Mitigation:** At Mode A Step 1 Input validation, read the plan file, search for the
-  `## Dry-Run Record` header, verify at least one diff block exists under it; on absence
-  or empty record, halt with "Release plan has no Dry-Run Record. Run release-planner
-  Mode C first." — do not proceed to snapshot or execution steps.
-- **Principal response vs. junior response:** Principal halts and points to release-
-  planner Mode C. Junior proceeds because the plan is otherwise approved, and the
-  operator discovers after the fact that governance files were modified without a
-  reviewed diff.
+  `## Dry-Run Record` header, verify at least one diff block exists under it — then
+  branch by lineage. On a **Cowork-lineage plan** (Dry-Run Record + snapshot protocol
+  expected): on absence or empty record, halt with "Release plan has no Dry-Run Record.
+  Run release-planner Mode C first." — do not proceed to snapshot or execution steps. On
+  a **git-native plan** (plan under `release/releases/plans/`, Stage-12 PR/tag/deploy.sh
+  execution): the absent Dry-Run Record is lineage, not a missing artifact — the
+  execution surface is the pipeline (the PR diff is the dry-run review) and this skill
+  contributes Modes B/D/E/F; do NOT route to release-planner Mode C. (The `Mode A
+  snapshot execution invoked for a git-native release — TRIG` entry governs the
+  git-native path; this entry governs the Cowork-lineage path.)
+- **Principal response vs. junior response:** On a Cowork-lineage plan, Principal halts
+  and points to release-planner Mode C. On a git-native plan, Principal recognizes the
+  absent record as lineage and routes to the pipeline / Mode B/D/E/F. Junior proceeds
+  (or mis-routes a git-native plan to Mode C) because the plan is otherwise approved, and
+  the operator discovers after the fact that governance files were modified without a
+  reviewed diff, or that a git-native release was dead-ended at a Cowork-only halt.
 
 ### Snapshot write partial-success proceeding to execute — PROC
 
