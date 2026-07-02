@@ -1,5 +1,7 @@
 # Routing Patterns — File Classification Rules
 
+<!-- reference-durability: allow-link -->
+
 This file is the complete reference for all file classification patterns used by the File Router.
 It is self-updating: when a user corrects a misclassification, the File Router proposes an update
 to this file via the IMPROVEMENTS.md workflow.
