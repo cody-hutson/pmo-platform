@@ -45,7 +45,7 @@ CREATE TABLE files (
     path            TEXT NOT NULL UNIQUE,           -- Full relative path from projects/ root
     filename        TEXT NOT NULL,                   -- Filename only (for wiki-link resolution)
     file_format     TEXT NOT NULL,                   -- md, txt, csv, xlsx, pdf, docx, html
-    domain          TEXT NOT NULL CHECK (domain IN ('A', 'B', 'C')),
+    domain          TEXT NOT NULL CHECK (domain IN ('source', 'managed', 'generated', 'A', 'B', 'C')),  -- 'A'/'B'/'C' are DEPRECATED aliases of 'source'/'managed'/'generated' (migration window; frontmatter-schema.md Category 6). Union collapses to the 3 human-readable values at tail.
     type            TEXT NOT NULL,                   -- From frontmatter type taxonomy
     project         TEXT NOT NULL,                   -- Project name
     folder          TEXT NOT NULL,                   -- 01-governance through 08-generated
@@ -257,7 +257,8 @@ LEFT JOIN relationships r_source ON f.file_id = r_source.source_file_id
 LEFT JOIN relationships r_target ON f.file_id = r_target.target_file_id
 WHERE r_source.rel_id IS NULL
   AND r_target.rel_id IS NULL
-  AND f.domain IN ('A', 'B', 'C')  -- Exclude navigation pages
+  AND f.domain IN ('source', 'managed', 'generated', 'A', 'B', 'C')  -- Exclude navigation pages; union accepts deprecated A/B/C aliases during the migration window
+
 ORDER BY f.project, f.folder;
 ```
 
@@ -282,7 +283,7 @@ SELECT
     AS staleness_score
 FROM files f
 WHERE f.lifecycle_state NOT IN ('archived', 'superseded')
-  AND f.domain = :domain  -- A, B, or C
+  AND f.domain = :domain  -- source, managed, or generated (or a deprecated A/B/C alias during the migration window)
 ORDER BY staleness_score DESC;
 ```
 
@@ -303,9 +304,9 @@ SELECT
     f.project,
     f.lifecycle_state,
     COUNT(*) AS file_count,
-    SUM(CASE WHEN f.domain = 'A' THEN 1 ELSE 0 END) AS source_count,
-    SUM(CASE WHEN f.domain = 'B' THEN 1 ELSE 0 END) AS knowledge_count,
-    SUM(CASE WHEN f.domain = 'C' THEN 1 ELSE 0 END) AS synthesis_count,
+    SUM(CASE WHEN f.domain IN ('source', 'A') THEN 1 ELSE 0 END) AS source_count,       -- 'A' = deprecated alias of 'source' (migration window)
+    SUM(CASE WHEN f.domain IN ('managed', 'B') THEN 1 ELSE 0 END) AS knowledge_count,    -- 'B' = deprecated alias of 'managed'
+    SUM(CASE WHEN f.domain IN ('generated', 'C') THEN 1 ELSE 0 END) AS synthesis_count,  -- 'C' = deprecated alias of 'generated'
     SUM(CASE WHEN orphans.file_id IS NOT NULL THEN 1 ELSE 0 END) AS orphan_count
 FROM files f
 LEFT JOIN (
@@ -354,7 +355,7 @@ SELECT
 FROM files synth
 JOIN synthesis_scope ss ON synth.file_id = ss.synthesis_file_id
 JOIN files src ON ss.source_file_id = src.file_id
-WHERE synth.domain = 'C'
+WHERE synth.domain IN ('generated', 'C')  -- 'C' = deprecated alias of 'generated' (migration window)
   AND synth.lifecycle_state IN ('validated', 'published')
   AND src.modified_date > synth.created_date
 ORDER BY synth.filename;
@@ -374,7 +375,7 @@ SELECT file_id, path, filename, domain,
     CASE WHEN file_format IS NULL THEN 'file_format' END AS missing_format,
     CASE WHEN project IS NULL THEN 'project' END AS missing_project,
     CASE WHEN folder IS NULL THEN 'folder' END AS missing_folder,
-    CASE WHEN domain = 'C' AND trigger_source IS NULL THEN 'trigger_source' END AS missing_trigger
+    CASE WHEN domain IN ('generated', 'C') AND trigger_source IS NULL THEN 'trigger_source' END AS missing_trigger  -- 'C' = deprecated alias of 'generated'
 FROM files
 WHERE type IS NULL
    OR managed_by IS NULL
@@ -384,7 +385,7 @@ WHERE type IS NULL
    OR file_format IS NULL
    OR project IS NULL
    OR folder IS NULL
-   OR (domain = 'C' AND trigger_source IS NULL);
+   OR (domain IN ('generated', 'C') AND trigger_source IS NULL);  -- 'C' = deprecated alias of 'generated'
 ```
 
 ---

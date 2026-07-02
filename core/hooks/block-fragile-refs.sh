@@ -77,6 +77,16 @@ readonly URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milest
 readonly REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 # A bare issue reference: a # followed by digits, optionally bracketed (matches #42, #[42]).
 readonly ISSUEREF_RE='#\[?[0-9]+\]?'
+# Companion hex-color mask (two ERE branches, no lookbehind): (a) a # + a hex-legal run with
+# >=1 hex letter [A-Fa-f] (matches #28A745, #FFF, #0A0); (b) a colon-prefixed hex run
+# `:#<3-8 hex digits>` — the CSS/Mermaid color-value form (color:#155724) that catches
+# PURE-DIGIT hex colors branch (a) cannot see. Neither branch matches a prose issue ref
+# (#42 / `#42` / "See #42") — refs carry no hex letter and are never colon-abutted. Masked to
+# spaces in the shared classifier BEFORE the ISSUEREF_RE test so hex-color prefixes (#28) are
+# not read as issue refs (#2068). Must be byte-identical across the same 3 surfaces as
+# ISSUEREF_RE (block-fragile-refs.sh, run-fragile-ref-fixtures.sh, reference-durability.yml) —
+# the #314 anti-drift contract now governs both paired constants. ISSUEREF_RE is NOT changed.
+readonly HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)'
 # Minimum non-reference word count required on an in-block issue-reference line for it to
 # count as self-describing (operationalizes the durability-ladder rung-5 "summarize inline").
 readonly MIN_SELFDESCRIBE_WORDS=3
@@ -254,6 +264,7 @@ if [ -f "$POSITIONAL_LIB" ]; then
     | "$AWK" -f "$POSITIONAL_LIB" \
         -v refline="$refblock_line" \
         -v issuere="$ISSUEREF_RE" \
+        -v hexcolor="$HEXCOLOR_RE" \
         -v minwords="$MIN_SELFDESCRIBE_WORDS" || true)"
 else
   # Fail-open for THIS detector only if the shared classifier is missing (a deployment

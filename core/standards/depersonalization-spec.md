@@ -61,6 +61,12 @@ The GitHub Projects (v2) board identifiers used in `core/disciplines/github-proj
 
 The single-select **option** IDs (the 8-char hex literals in example commands) are NOT tokenized — preserved literally for traceability per github-projects-guide.md.
 
+### §1.2 ADR `deciders:` carve-out
+
+The operator's **literal name** is permitted in the `deciders:` frontmatter field of an ADR file (`core/ADRs/**`, `release/ADRs/**`) — and there only. This is sanctioned architect-of-record authorship attribution on a repo the operator owns; the name is already public via `LICENSE` and git history (operator decision 2026-06-20). The `[OPERATOR_NAME]` token remains the sanctioned representation everywhere else.
+
+**Explicitly still blocked** (the carve-out does NOT loosen these): the operator email and any PII-adjacent value; home/workspace paths; the GitHub handle **on any non-`deciders` line or non-ADR file**; the operator name in any ADR **body** line (only the frontmatter `deciders:` field is exempt); the operator name in **any non-ADR file** under `core/`/`release/`/`operations/`/`packages/`; and the entire **collaborator** dimension. Enforced by the field-scoped skip in the `repo-integrity.yml` depersonalization gate — the skip fires iff the changed file is an ADR (`core/ADRs/*.md` or `release/ADRs/*.md`) **AND** the added line matches `^deciders:` (both ANDed). Exempted lines are reported in the run summary (via the same `SUPPRESSED` channel as the line-scoped override), so the exemption is auditable, not silent.
+
 ---
 
 ## §2 Parameterization seam location

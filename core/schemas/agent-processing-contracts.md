@@ -63,7 +63,7 @@ Each skill contract specifies:
 |-------|-------|
 | **Trigger** | After successful classification and routing (confidence ≥ 70%) |
 | **Reads** | Classification result (type, project, confidence), filesystem metadata (dates, format) |
-| **Writes** | `type`, `domain`, `project`, `folder`, `file_format`, `managed_by` (set to `file-router`), `lifecycle_state` (initial: `created` for Domain A, `created` for Domain B, `draft` for Domain C), `trust_category` (default by domain: A=`evidence`, B=`controlled-truth`, C=`interpretation`), `created_date`, `created_by`, `source_system`, `tags` (see Tag Application below) |
+| **Writes** | `type`, `domain` (`source`/`managed`/`generated`), `project`, `folder`, `file_format`, `managed_by` (set to `file-router`), `lifecycle_state` (initial: `created` for `source`, `created` for `managed`, `draft` for `generated`), `trust_category` (default by domain: `source`=`evidence`, `managed`=`controlled-truth`, `generated`=`interpretation`), `created_date`, `created_by`, `source_system`, `tags` (see Tag Application below) |
 | **Relationships Created** | `BELONGS_TO` (file → project) |
 | **Lifecycle Transitions** | Sets initial state only (no transitions) |
 | **Ecosystem Tag** | `[ECOSYSTEM_UPDATE: {path} | FRONTMATTER_CREATED | file-router | confidence: {score}]` |
@@ -129,7 +129,7 @@ Each skill contract specifies:
 |-------|-------|
 | **Trigger** | On every artifact generation (before writing to 08-Generated/) |
 | **Reads** | Request context (what triggered this generation), source files used during generation |
-| **Writes** | Full frontmatter block: `type` (from artifact catalog), `managed_by: artifact-generator`, `domain: C`, `folder: 08-generated`, `lifecycle_state: draft`, `trust_category: interpretation`, `trigger_source` (what prompted generation), `synthesis_scope` (list of source files used), `validation_state: pending`, `created_date`, `created_by: artifact-generator` |
+| **Writes** | Full frontmatter block: `type` (from artifact catalog), `managed_by: artifact-generator`, `domain: generated`, `folder: 08-generated`, `lifecycle_state: draft`, `trust_category: interpretation`, `trigger_source` (what prompted generation), `synthesis_scope` (list of source files used), `validation_state: pending`, `created_date`, `created_by: artifact-generator` |
 | **Relationships Created** | `GENERATES` (trigger source → this artifact), `DEPENDS_ON` (this artifact → each file in synthesis_scope) |
 | **Lifecycle Transitions** | Sets initial state `draft` only |
 | **Ecosystem Tag** | `[ECOSYSTEM_UPDATE: {path} | FRONTMATTER_CREATED | artifact-generator | trigger: {trigger_source} | scope: {scope_count} files]` |
@@ -167,7 +167,7 @@ Each skill contract specifies:
 |-------|-------|
 | **Trigger** | During project initiation (after folder structure creation) |
 | **Reads** | Portfolio structure (existing projects, programs) |
-| **Writes** | Full frontmatter on PROJECT.md: `type: project-page`, `managed_by: project-initiator`, `domain: B`, `lifecycle_state: emerging`, `trust_category: controlled-truth`. Navigation page headers for folder indexes. |
+| **Writes** | Full frontmatter on PROJECT.md: `type: project-page`, `managed_by: project-initiator`, `domain: managed`, `lifecycle_state: emerging`, `trust_category: controlled-truth`. Navigation page headers for folder indexes. |
 | **Relationships Created** | `BELONGS_TO` (project → program → portfolio), `BELONGS_TO` (PROJECT.md → project) |
 | **Lifecycle Transitions** | Sets initial states only |
 | **Ecosystem Tag** | `[ECOSYSTEM_UPDATE: {project}/PROJECT.md | FRONTMATTER_CREATED | project-initiator | scaffold: {folder_count} folders]` |

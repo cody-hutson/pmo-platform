@@ -18,6 +18,7 @@ consumers: readers navigating the core/schemas corpus; agents and gates locating
 
 | Schema | Coverage area |
 |---|---|
+| [../schemas/adr-schema.md](../schemas/adr-schema.md) | ADR frontmatter (7 fields) + body-section (6) contract |
 | [../schemas/agent-processing-contracts.md](../schemas/agent-processing-contracts.md) | Agent ↔ document-ecosystem integration contracts |
 | [../schemas/field-lifecycle-matrix.md](../schemas/field-lifecycle-matrix.md) | Field create / update / retire lifecycle across the ecosystem |
 | [../schemas/frontmatter-schema.md](../schemas/frontmatter-schema.md) | Document-ecosystem metadata frontmatter schema |
