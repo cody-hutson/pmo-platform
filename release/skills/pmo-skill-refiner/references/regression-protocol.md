@@ -119,7 +119,7 @@ The refiner populates both in coordination:
 
 ## Relationship to the mirror-sync check in deploy.sh --check
 
-`deploy.sh --check` validates skill sync, package sync, duplicate detection, governance presence, and rules mirror sync. The mirror-sync check adds regression-checks.md presence verification — if a skill in SKILL_LIST has no entry in regression-checks.md, --check flags a warning. The refiner's auto-update protocol is the mechanism that keeps the file in sync with the suite; the mirror-sync check adds the drift-detection safety net.
+`deploy.sh --check` validates skill sync, package sync, duplicate detection, governance presence, and rules mirror sync. The mirror-sync check adds regression-checks.md presence verification — if a skill in the per-module arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) has no entry in regression-checks.md, --check flags a warning. The refiner's auto-update protocol is the mechanism that keeps the file in sync with the suite; the mirror-sync check adds the drift-detection safety net.
 
 ---
 
