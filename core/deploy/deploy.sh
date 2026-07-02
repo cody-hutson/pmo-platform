@@ -1964,8 +1964,8 @@ cmd_check_lifecycle() {
   cat <<'LIFECYCLE'
 deploy.sh check lifecycle registry
 ===================================
-Live check sequence: 1-14, 16-23, 25-46   (gaps: 15, 24 — both reserved)
-Next NEW top-level check number: 47
+Live check sequence: 1-14, 16-23, 25-53   (gaps: 15, 24 — both reserved)
+Next NEW top-level check number: 54
   (15 and 24 are RETIRED-RESERVED; never reuse. Sub-checks extend an existing
    number, e.g. 18a/18b/18c/18d, and do NOT consume a new top-level number.)
 
@@ -6718,6 +6718,70 @@ cmd_check() {
         fi
       else
         flag_warn_or_issue "label-parity" "check errored (exit $c51_exit): $(echo "$c51_out" | head -1)"
+      fi
+    fi
+  fi
+
+
+  # Check 53 — Approved-queue-depth monitor (warn-mode initial)
+  #
+  # The active DETECTOR behind the Stage-3 Bundle A7 "T1 Approved-queue depth"
+  # refresh trigger. Counts the open approved-but-unbundled queue (issues with
+  # `status: approved` AND no milestone) and, at/above the bundling threshold
+  # (default 5), emits an ACTIONABLE bundle-candidate summary — count + themes
+  # (from cluster:/project: labels) + priorities — so the operator sees a
+  # ready-to-triage bundle candidate at the moment they act on the platform,
+  # not just a raw number. The threshold DEFINITION lives in the Stage-3 Bundle
+  # definition (Phase B4: "threshold-triggered (5+ Approved)") and is REFERENCED
+  # via --threshold, not redefined here (per the card's AC scope).
+  # Read-only: counts issue state, mutates nothing (no issue-state or corpus
+  # write). Reversibility CHEAP — additive; `git revert`.
+  # Warn-mode initial per core/rules/bypass-mode-readiness.md §Shakedown (the
+  # 14/18/42/43/50/51 precedent): the exit-1 "bundle candidate" finding is
+  # emitted as a non-blocking WARN during calibration. The queue is ~29 today
+  # (>=5) → this check FIRES on first run; warn-mode is exactly what keeps that
+  # non-blocking. Flip to enforce via an `approved-queue-depth.mode` file after
+  # the >=3-day warn-log review — BUT note "enforce" here means the finding
+  # increments ISSUES (a full/over-threshold queue becomes a gating signal that
+  # a bundle is overdue); it does NOT change what is counted. The introducing
+  # release is itself exempt (reflexive-pipeline loop — the monitor does not
+  # fire on its own introducing release's approved-queue state).
+  # gh-unavailable → SKIP (the count needs the live issue set; mirrors Check
+  # 39/40/51 offline SKIP). Primitive: core/deploy/tools/check-approved-queue-depth.py.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 53: Approved-queue-depth monitor (warn-mode initial; enforce-flip deferred)"
+    local c53_script="core/deploy/tools/check-approved-queue-depth.py"
+    local c53_threshold=5
+    if [[ ! -f "$c53_script" ]]; then
+      flag_warn_or_issue "approved-queue-depth" "primitive script missing: $c53_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — approved-queue-depth needs the live issue set (offline/unauth; mirrors Check 39/40/51)"
+    else
+      local c53_mode
+      c53_mode=$(resolve_check_mode "approved-queue-depth")
+      local c53_out c53_exit=0
+      c53_out=$(/usr/bin/python3 "$c53_script" --threshold "$c53_threshold" --output-format tsv 2>&1) || c53_exit=$?
+      if [[ $c53_exit -eq 3 ]]; then
+        flag_warn_or_issue "approved-queue-depth" "input failure (exit 3): $(echo "$c53_out" | head -1) — the live approved-unbundled queue was unreadable; fix gh auth/connectivity"
+      elif [[ $c53_exit -eq 0 ]]; then
+        local c53_count
+        c53_count=$(echo "$c53_out" | awk -F'\t' '$1=="COUNT"{print $2}')
+        log "  OK:    approved-unbundled queue depth ${c53_count:-0} < threshold $c53_threshold — not a bundle candidate"
+      elif [[ $c53_exit -eq 1 ]]; then
+        local c53_count c53_themes c53_prios
+        c53_count=$(echo "$c53_out"  | awk -F'\t' '$1=="COUNT"{print $2}')
+        c53_themes=$(echo "$c53_out" | awk -F'\t' '$1=="THEMES"{print $2}')
+        c53_prios=$(echo "$c53_out"  | awk -F'\t' '$1=="PRIORITIES"{print $2}')
+        if [[ "$c53_mode" == "enforce" ]]; then
+          log "  FAIL:  approved-queue-depth — $c53_count approved-unbundled issue(s) >= threshold $c53_threshold; a bundle is overdue:"
+          log "           themes:     ${c53_themes:-(none)}"
+          log "           priorities: ${c53_prios:-(none)}"
+          ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "approved-queue-depth" "$c53_count approved-unbundled issue(s) >= threshold $c53_threshold — BUNDLE CANDIDATE (warn-mode; flip approved-queue-depth.mode to enforce after shakedown). themes: ${c53_themes:-(none)}; priorities: ${c53_prios:-(none)}"
+        fi
+      else
+        flag_warn_or_issue "approved-queue-depth" "check errored (exit $c53_exit): $(echo "$c53_out" | head -1)"
       fi
     fi
   fi
