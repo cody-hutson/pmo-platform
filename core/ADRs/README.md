@@ -4,7 +4,7 @@ Architecture Decision Records for the `core/` module of pmo-platform-v2. Each AD
 
 ## Format
 
-ADRs follow the format established by ADR-005 (see [`../../release/ADRs/ADR-005-append-pattern-aware-cross-pr-contention-scoring.md`](../../release/ADRs/ADR-005-append-pattern-aware-cross-pr-contention-scoring.md)) — frontmatter with `title / status / date / release / deciders / tags / source_observations`, body with `Status / Context / Decision / Consequences / Reversibility / Related ADRs` sections.
+ADRs follow the canonical **[ADR schema](../schemas/adr-schema.md)** — the single source for the frontmatter field set and body-section contract. [ADR-005](../../release/ADRs/ADR-005-append-pattern-aware-cross-pr-contention-scoring.md) is the canonical worked exemplar of that schema.
 
 ## Naming convention
 
