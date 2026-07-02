@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.56] - 2026-07-02
+
+Stage 3 Bundling becomes a self-triggering composer with automated milestone-position derivation and a first-class version-less release-identity mode.
+
+[Full notes](release/releases/notes/v3.56_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.56)
+
 ## [v3.53] - 2026-07-02
 
 <one-sentence ≤140 chars; plain language; agent-search target>

@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.56 | 81-stage3-bundling-composer-and-identity | 2026-07-02 | Stage-3 bundling composer + version-identity — a self-triggering Stage-3 composer: approved-queue-depth monitor (#30), automated milestone-position derivation feeding the G3-07 gate (#52), a bundle-composer identity distinct from Stage-4 planning (#25), and a first-class version-less release-identity mode reconciled to the version-grammar SSOT (#415). | #3096 | [notes/v3.56_RELEASE_NOTES.md](notes/v3.56_RELEASE_NOTES.md) |
 | v3.53 | 100-adr-and-frontmatter-schema | 2026-07-02 | — | #3049 | [notes/v3.53_RELEASE_NOTES.md](notes/v3.53_RELEASE_NOTES.md) |
 | v3.52 | 83-eval-framework-completion | 2026-07-02 | — | #3060 | [notes/v3.52_RELEASE_NOTES.md](notes/v3.52_RELEASE_NOTES.md) |
 | v3.51 | 106-skill-suite-tail-closeout | 2026-07-02 | — | #3013 | [notes/v3.51_RELEASE_NOTES.md](notes/v3.51_RELEASE_NOTES.md) |
