@@ -244,6 +244,12 @@ enables watermelon reporting (green outside, red inside).
 but component-level RAGs show Amber or Red, flag immediately. Require
 component-level RAGs that roll up transparently to the project-level RAG.
 
+> This is the comms-side one-line heuristic. The **canonical definition of the
+> watermelon (green-outside/red-inside) concept and the full detection signal set
+> (W1–W8)** live in [`watermelon-detection.md`](../../../../core/skills/pmo-qa-auditor/references/watermelon-detection.md)
+> (owned by `pmo-qa-auditor`) — one owner per concept, per duplicate-source-discipline
+> (ADR-065). This rule is a consumer of that concept, not a second definition of it.
+
 ### Methodology Variation: Status Cadence
 
 | Approach | Primary Executive Mechanism | Status Cadence | Key Format Difference |
