@@ -62,6 +62,13 @@ jobs:
           URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
           REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
           ISSUEREF_RE='#\[?[0-9]+\]?'
+          # Companion hex-color mask — byte-identical to core/hooks/block-fragile-refs.sh +
+          # run-fragile-ref-fixtures.sh (the #314 anti-drift contract now covers both paired
+          # constants). Two ERE branches: letter-bearing hex run, OR colon-prefixed CSS hex
+          # `:#<3-8 hex digits>` (catches pure-digit colors like color:#155724). Masked to spaces
+          # in the shared classifier before the ISSUEREF_RE test so hex-color prefixes (#28) are
+          # not read as issue refs (#2068). ISSUEREF_RE unchanged.
+          HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)'
           ALLOWLIST='core/hooks/reference-durability-allowlist.txt'
           # Shared positional-issue-ref classifier (single source of the positional
           # decision; the hook and the fixture-runner invoke this same file via `awk -f`).
@@ -225,7 +232,7 @@ jobs:
             # missed — and routing through the lib guarantees hook⇄CI agreement going forward.
             IM="$(printf '%s\n' "$ADDED_MAPPED" \
               | awk -f "$POSITIONAL_LIB" \
-                  -v issuere="$ISSUEREF_RE" -v refline="$REFBLOCK_LINE" -v minwords="$MIN_SELFDESCRIBE_WORDS" \
+                  -v issuere="$ISSUEREF_RE" -v hexcolor="$HEXCOLOR_RE" -v refline="$REFBLOCK_LINE" -v minwords="$MIN_SELFDESCRIBE_WORDS" \
               || true)"
             if [ -n "$IM" ]; then
               FOUND=1
