@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # compute-cycle-time.sh — Deployment cycle time computation for a release
-# Per pmo-platform/reference/standards/deployment-cycle-time.md.
+# Per release/references/standards/deployment-cycle-time.md.
 # Reads the operator-instance pipeline event log at
 # <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
 # (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/)

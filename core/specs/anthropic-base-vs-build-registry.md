@@ -143,7 +143,8 @@ what action is to be taken.
 Per the registry ADR D-Plan-2a (ii), the registry has **22 rows** — full source roster from
 `{operations,release,core}/skills/` directory listing at audit-baseline SHA. The roster includes:
 
-- 21 entries deployed via `deploy.sh` `SKILL_LIST` (S-2 mechanism per
+- 21 entries deployed via the `deploy.sh` per-module skill arrays (`OPERATIONS_SKILLS` /
+  `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) at that baseline (S-2 mechanism per
   [skill-deployment.md](../rules/skill-deployment.md))
 - 1 source-only entry `pmo-skill-refiner-selftest-canary` per ADR-04 (in source roster but
   excluded from Cowork deployment)
@@ -351,7 +352,7 @@ taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
 | `anthropic_overlap_status` | `independent` |
 | `anthropic_skill_ref` | `null` |
 | `anthropic_skill_provenance` | `n/a` |
-| `overlap_rationale` | Source-only smoke test for the `pmo-skill-refiner` factory; reports skill-roster drift between `pmo-platform/skills/` directory and `deploy.sh` `SKILL_LIST`. No Anthropic counterpart observed in Hybrid baseline. |
+| `overlap_rationale` | Source-only smoke test for the `pmo-skill-refiner` factory; reports skill-roster drift between the `release/skills/` directory and the `deploy.sh` per-module skill arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`). No Anthropic counterpart observed in Hybrid baseline. |
 | `overlap_notes` | ADR-04 source-only canary; not deployed to the Cowork install path; serves as a PMO `pmo-skill-refiner` regression sentinel. |
 | `build_buy_observation` | PMO custom canary fixture; no Anthropic equivalent observed (Anthropic catalog has no source-only-canary class). |
 

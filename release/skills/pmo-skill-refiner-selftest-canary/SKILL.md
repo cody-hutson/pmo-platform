@@ -4,26 +4,27 @@ description: >
   Smoke test for the pmo-skill-refiner factory — produced via the refiner's
   Create-New workflow during an AC demonstration. Reports the count of
   skill directories currently present in `release/skills/` and flags any
-  that are missing from `deploy.sh` SKILL_LIST. Report-only (no decision-class
-  outputs, no recommendations, no actions). Permanent fixture per ADR-04
-  (Stage 5 design for ) — functions as an always-on smoke test that
-  detects factory regressions. Use when the user wants to check skill-roster
-  consistency ("check the skill roster", "count tracked skills", "audit
-  skill deployment drift", "verify skills/ folder matches deploy.sh",
-  "are all my skills deployed").
+  that are missing from the `deploy.sh` per-module skill arrays
+  (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`).
+  Report-only (no decision-class outputs, no recommendations, no actions).
+  Permanent fixture per ADR-04 (Stage 5 design for ) — functions as an
+  always-on smoke test that detects factory regressions. Use when the user
+  wants to check skill-roster consistency ("check the skill roster", "count
+  tracked skills", "audit skill deployment drift", "verify skills/ folder
+  matches deploy.sh", "are all my skills deployed").
 delivery_approach: n/a
 principal_standard_pass: 6/8
-version: v1.10-canary
+version: v1.11-canary
 license: BUSL-1.1
 ---
 
 # PMO Skill Refiner Selftest Canary
 
-A minimal report-only skill that verifies consistency between the `release/skills/` directory and `deploy.sh` SKILL_LIST. Produced by `pmo-skill-refiner` during an AC demonstration; preserved as a permanent smoke test per ADR-04.
+A minimal report-only skill that verifies consistency between the `release/skills/` directory and the `deploy.sh` per-module skill arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`, together the deploy roster). Produced by `pmo-skill-refiner` during an AC demonstration; preserved as a permanent smoke test per ADR-04.
 
 ## When to use
 
-Use when the user wants a quick consistency check on the PMO skill roster — specifically the invariant that every skill directory present under `release/skills/` is also registered in `deploy.sh` SKILL_LIST (and vice versa for the non-SUPPLEMENTARY case). Typical triggers:
+Use when the user wants a quick consistency check on the PMO skill roster — specifically the invariant that every skill directory present under `release/skills/` is also registered in the `deploy.sh` per-module skill arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`), and vice versa for the non-SUPPLEMENTARY case. Typical triggers:
 
 - "Check the skill roster"
 - "Count tracked skills"
@@ -39,10 +40,10 @@ Skip and route elsewhere when:
 ## Workflow
 
 1. **Inventory `release/skills/`** via `ls` — produce the list of skill directory names.
-2. **Parse `deploy.sh` SKILL_LIST** — read the array declaration and extract tracked skill names.
+2. **Parse the `deploy.sh` per-module skill arrays** — read the `OPERATIONS_SKILLS`, `RELEASE_SKILLS`, `CORE_SKILLS`, and `CANARY_SKILLS` array declarations and union them to form the deploy roster (the tracked skill names).
 3. **Compare sets:**
-   - Skills present in folder but missing from SKILL_LIST = deployment drift (skill exists but isn't deployed)
-   - Skills in SKILL_LIST but missing from folder = orphan reference (SKILL_LIST cites a deleted skill)
+   - Skills present in folder but missing from the per-module arrays = deployment drift (skill exists but isn't deployed)
+   - Skills in the per-module arrays but missing from folder = orphan reference (the roster cites a deleted skill)
 4. **Report** — one paragraph (count summary) + one table (status per skill). No recommendations, no actions.
 
 ## Output Contract
@@ -54,9 +55,9 @@ Inline output shape:
 ```markdown
 # Skill Roster Canary — <timestamp>
 
-**Summary:** <N> skill directories in `release/skills/`. <M> entries in `deploy.sh` SKILL_LIST. <K> drift entries flagged.
+**Summary:** <N> skill directories in `release/skills/`. <M> entries in the `deploy.sh` per-module skill arrays. <K> drift entries flagged.
 
-| Skill | In Folder | In SKILL_LIST | Status |
+| Skill | In Folder | In Roster | Status |
 |---|---|---|---|
 | artifact-generator | ✓ | ✓ | OK |
 | ... | ... | ... | ... |
@@ -65,7 +66,7 @@ Inline output shape:
 ## Dependency Graph Node
 
 This skill's dependency edges are declared in its CI row in `core/skills/registry.md`.
-- Upstream: `release/skills/` directory listing, `deploy.sh` SKILL_LIST array
+- Upstream: `release/skills/` directory listing, `deploy.sh` per-module skill arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`)
 - Downstream: User (review)
 - Shared contracts: none (report-only; no follow-up tags emitted)
 - RAID prefix: none (report-only)
@@ -87,23 +88,23 @@ for the authoritative list. Domain-specific additions appear under
 
 ### Hardcoded expected-count assumption — INPUT
 
-- **Signature (observable signal):** The skill reports "drift detected" because it was written against a point-in-time expectation (e.g., "SKILL_LIST should have 20 entries") and the platform has since added a skill legitimately. The drift is a false positive.
+- **Signature (observable signal):** The skill reports "drift detected" because it was written against a point-in-time expectation (e.g., "the roster should have 20 entries") and the platform has since added a skill legitimately. The drift is a false positive.
 - **Conditional:** do NOT compare the skill-directory count against a hardcoded expected number when the skill suite grows organically across releases, because hardcoded counts become stale between releases and produce false-positive drift reports that erode trust in the smoke test.
-- **Root cause:** Writing the check once against a snapshot of the current state is easier than writing a relational check (folder-vs-SKILL_LIST comparison). Under authoring pressure, shortcut to static count.
-- **Mitigation:** Always perform a set comparison between actual folder contents and actual SKILL_LIST contents. Never embed an expected-count constant. If the check needs a floor (e.g., "SKILL_LIST should have at least N entries"), make the floor a parameterized threshold with the threshold value sourced from a living config — not hardcoded in the skill body.
+- **Root cause:** Writing the check once against a snapshot of the current state is easier than writing a relational check (folder-vs-roster comparison). Under authoring pressure, shortcut to static count.
+- **Mitigation:** Always perform a set comparison between actual folder contents and the actual per-module-array roster contents. Never embed an expected-count constant. If the check needs a floor (e.g., "the roster should have at least N entries"), make the floor a parameterized threshold with the threshold value sourced from a living config — not hardcoded in the skill body.
 - **Principal response vs. junior response:** Principal writes the check as a pure set-comparison function; the count is reported but not asserted. Junior hardcodes "20" as the expected count and ships, then files noise issues when v4.0 legitimately adds a skill.
 
 ### Supplementary-skill absence misread as drift — PROC
 
-- **Signature (observable signal):** The skill reports a canary drift for `prompt-builder` because it's in `SUPPLEMENTARY_SKILLS` array but being cross-checked against the main `SKILL_LIST` only — missing the SUPPLEMENTARY_SKILLS array in the comparison.
-- **Conditional:** do NOT report drift based on `SKILL_LIST` comparison alone when `deploy.sh` has both `SKILL_LIST` and `SUPPLEMENTARY_SKILLS` arrays tracking deployed skills, because skills registered in SUPPLEMENTARY_SKILLS are still deployed — ignoring them produces false-positive drift reports for every supplementary skill.
-- **Root cause:** The primary array (`SKILL_LIST`) is the obvious one; the supplementary array is easy to miss without reading deploy.sh end-to-end. Under time pressure, authors grep for "SKILL_LIST" and ignore the adjacent array.
-- **Mitigation:** Parse both `SKILL_LIST` and `SUPPLEMENTARY_SKILLS` arrays from deploy.sh and union them before comparison. Document the dual-array check explicitly in the workflow so future edits preserve it.
-- **Principal response vs. junior response:** Principal reads deploy.sh end-to-end and identifies all skill-tracking arrays before writing the check. Junior greps for the obvious one and ships.
+- **Signature (observable signal):** The skill reports a canary drift for `prompt-builder` because it's in the `SUPPLEMENTARY_SKILLS` array but being cross-checked against the per-module arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) only — missing the `SUPPLEMENTARY_SKILLS` array in the comparison.
+- **Conditional:** do NOT report drift based on the per-module-array comparison alone when `deploy.sh` also carries a `SUPPLEMENTARY_SKILLS` array tracking deployed skills, because skills registered in `SUPPLEMENTARY_SKILLS` are still deployed — ignoring them produces false-positive drift reports for every supplementary skill.
+- **Root cause:** The per-module arrays are the obvious roster; the supplementary array is easy to miss without reading deploy.sh end-to-end. Under time pressure, authors grep for the module arrays and ignore the adjacent `SUPPLEMENTARY_SKILLS` array.
+- **Mitigation:** Parse the per-module arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) AND the `SUPPLEMENTARY_SKILLS` array from deploy.sh and union them all before comparison. Document the multi-array check explicitly in the workflow so future edits preserve it.
+- **Principal response vs. junior response:** Principal reads deploy.sh end-to-end and identifies all skill-tracking arrays before writing the check. Junior greps for the obvious ones and ships.
 
 ### Reports drift in the middle of an in-flight refactor — TRIG
 
-- **Signature (observable signal):** The skill runs during a Wave 2 or Wave 3 release window when skill-creator has been deleted but pmo-skill-refiner hasn't been added to SKILL_LIST yet (or vice versa mid-refactor). Reports drift even though the drift is a known intermediate state.
+- **Signature (observable signal):** The skill runs during a Wave 2 or Wave 3 release window when skill-creator has been deleted but pmo-skill-refiner hasn't been added to the roster arrays yet (or vice versa mid-refactor). Reports drift even though the drift is a known intermediate state.
 - **Conditional:** do NOT report drift as "action required" when an open PR on the current branch explicitly deletes or adds a skill, because drift mid-refactor is expected — flagging it as action-required generates noise issues for work already in progress.
 - **Root cause:** The skill has no awareness of the release process or in-flight PRs. It treats the filesystem state as authoritative at every invocation, regardless of whether changes are being committed in the current session.
 - **Mitigation:** In the output's Summary paragraph, include a check for uncommitted or staged changes affecting `release/skills/` or `deploy.sh` — if present, prefix the drift report with "⚠️ In-flight changes detected; drift report is transitional" and suggest re-running after the PR merges. This is a statelessness concession: the skill does not read open PRs, but it reads working-tree state which is a proxy.
@@ -179,7 +180,7 @@ for the authoritative list. Domain-specific additions appear under
 ≥ 6/8 PASS at creation per `core/standards/principal-standard-checklist.md`.
 
 Competencies this skill naturally strengthens:
-- **Systems Thinking** — the set-comparison check requires modeling the skill deployment system (both SKILL_LIST and SUPPLEMENTARY_SKILLS).
+- **Systems Thinking** — the set-comparison check requires modeling the skill deployment system (the per-module arrays `OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS` plus `SUPPLEMENTARY_SKILLS`).
 - **Ruthless Clarity** — the output is a concrete count + table; no speculation.
 - **Evidence-Based Execution** — all output facts are [SOURCE]-labeled from filesystem and deploy.sh content.
 - **Judgment Under Uncertainty** — TRIG failure mode explicitly handles the "in-flight refactor" uncertainty case.

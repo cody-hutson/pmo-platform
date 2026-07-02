@@ -10,6 +10,6 @@
 # Governance: additions follow the "No ungoverned changes" protocol
 # (CLAUDE.md Guardrails) — GitHub Issue + plan + PR required.
 #
-# See: pmo-platform/reference/ticket-information-architecture.md §State Anchor Sync
+# See: release/references/specs/ticket-information-architecture.md §State Anchor Sync
 
 # (No current exemptions — file ships empty after header comments)

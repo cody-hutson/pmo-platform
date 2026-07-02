@@ -116,7 +116,7 @@ Decision-class outputs carry CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE labels 
 1. **New skills go in `release/skills/<name>/`.** Single-skill directories; no plugin wrapping. If the scaffolder produced a plugin-style layout, the refiner repositions to this single-skill convention.
 2. **Skills read Layer 2 for context only.** Paths allowed: `projects/_config/PORTFOLIO.md`, `SESSION_STATE.md`, `CORRECTIONS.md`. Never write.
 3. **Governance changes flow through the release process.** If a new skill would need to modify CLAUDE.md, OPERATIONS.md, or other governance files, raise a GitHub Issue per CLAUDE.md § No ungoverned changes — do not encode a direct-write path into the skill.
-4. **Deployment lives in `deploy.sh`.** New skills are added to `SKILL_LIST` (and `SUPPLEMENTARY_SKILLS` if they have scripts/agents/references beyond SKILL.md). The refiner flags this as a cascade edit in its handoff message.
+4. **Deployment lives in `deploy.sh`.** New skills are added to the per-module skill array for their module (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS`) — and to `SUPPLEMENTARY_SKILLS` if they have scripts/agents/references beyond SKILL.md. The refiner flags this as a cascade edit in its handoff message.
 
 ## Cascade Scopes for Tier 1 Artifact-Producing Skills
 

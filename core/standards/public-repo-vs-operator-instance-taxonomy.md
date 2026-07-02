@@ -3,7 +3,7 @@ title: Public-Repo vs. Operator-Instance Taxonomy
 purpose: K1 standard articulating the content-nature classification (UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE) that determines whether an artifact is git-tracked in the public repo, ships as a customizable template, or remains operator-machine-local. Composes with (does NOT restate) `knowledge-architecture.md` (K1-K5 tiers), `universal-vs-release-pipeline-split-rule.md` (subdirectory placement), `public-repo-gitignore-template.md` (extraction patterns), and `secrets-handling-policy.md` (C1-C7 secrets).
 type: standard
 status: ACTIVE
-consumers: "authors + Stage-5 placement decisions (apply the UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE classification to decide git-tracked vs template vs operator-local); universal-vs-release-pipeline-split-rule.md (operates above this classification for subdir placement); public-repo-gitignore-template.md (the extraction-pattern surface this classification feeds)"
+consumers: "authors + Stage-5 placement decisions (apply the UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE classification to decide git-tracked vs template vs operator-local); Stage-5/6 git-tracking-decision (§7 — durable/derived/runtime classification of the already-tracked set + the four verdict tokens); universal-vs-release-pipeline-split-rule.md (operates above this classification for subdir placement); public-repo-gitignore-template.md (the extraction-pattern surface this classification feeds)"
 composes_with: [knowledge-architecture.md, universal-vs-release-pipeline-split-rule.md, public-repo-gitignore-template.md, secrets-handling-policy.md, composition-surface-spec.md, depersonalization-spec.md, hub-session-continuity.md]
 reversibility: CHEAP / Confidence HIGH
 ---
@@ -130,6 +130,91 @@ Operator state that the current operator's *next* session needs (e.g., a long-ru
 Applies to every file authored in or migrated to pmo-platform from the reorg forward. Pre-reorg placements are grandfathered per the reorg state; subsequent cleanups align grandfathered placements with this taxonomy when divergence surfaces during audit.
 
 The pre-flip security audit (the public-flip gate per [`secrets-handling-policy.md`](secrets-handling-policy.md) §8 Public-Flip Implications) is the gate that verifies no UNIVERSAL-PUBLIC artifact leaks operator-specific content and no OPERATOR-INSTANCE artifact is accidentally tracked. This taxonomy is what that audit audits against on the public-class axis.
+
+---
+
+## §7 Git-Tracking-Decision Policy (durable / derived / runtime)
+
+§1-§6 own the **public-class** axis — *does this artifact ship?* (UNIVERSAL-PUBLIC / CUSTOMIZABLE-PUBLIC / OPERATOR-INSTANCE). §7 is the operational refinement of that axis's **YES branch**: of the paths that *do* ship and are therefore git-tracked, which are **durable** (author-maintained source of truth), which are **derived** (regenerable from durable source), and which are **runtime-scratch** (session state that must never track) — and, for each, what stays tracked. It answers a second, narrower question:
+
+> **This path is already tracked — should it *stay* tracked, or should it be un-tracked (`git rm --cached`), or is it a coverage gap that should be tracked but isn't?**
+
+The public-class axis (§1) decides eligibility to ship; the tracking-decision axis (§7) audits the *actual tracked set* against that eligibility and classifies every tracked path by its durability nature. The two are orthogonal-but-adjacent: a path can only reach §7 if §1 said YES, and §7 is where a YES-but-derived path (a built artifact) or a YES-but-should-not-have-shipped path (a leaked runtime file) is adjudicated. This section is authored append-only; it renames and moves nothing.
+
+### §7.1 The seven per-class criteria
+
+Every tracked path resolves to exactly one of seven classes, keyed to the observed tracked-file census (see §7.7 audit method), not invented. Each class carries a single default verdict.
+
+| # | Per-class criterion | Representative tracked paths | Layer | Default verdict |
+|---|---|---|---|---|
+| 1 | **durable governance** | `core/governance/*`, `core/CLAUDE.md.template`, `.github/workflows/*`, `.github/ISSUE_TEMPLATE/*`, `packages/README.md` | L1 | KEEP-TRACKED |
+| 2 | **durable reference** | `core/standards/*`, `core/disciplines/*`, `core/specs/*`, `core/schemas/*`, `release/references/**`, `docs/**` | L1 | KEEP-TRACKED |
+| 3 | **durable skill source** | `*/skills/*/SKILL.md` + skill-source assets (`.html` eval-viewer, `.py` helpers, `NOTICE`, `LICENSE.txt`) | L1 | KEEP-TRACKED |
+| 4 | **durable engineering script** | `core/deploy/**/*.sh`, `release/tools/*.sh`, `*.py` CI checks, `core/hooks/lib/*.awk` | L1 | KEEP-TRACKED |
+| 5 | **durable release record** | `release/releases/RELEASE_LOG.md`, `release/releases/plans/**`, `release/releases/notes/**`, `CHANGELOG.md` | L1 | KEEP-TRACKED |
+| 6 | **derived-regenerable** | `packages/*.skill`, `packages/*.sha256` (built by `core/deploy/tools/build-skill-packages.sh`) | L1 | **POLICY-AMBIGUOUS → resolved KEEP-TRACKED** (see §7.5) |
+| 7 | **runtime-scratch** | `*.log`, `*.jsonl`, `.mode`, `.editor-session`, `audit-output/`, `analysis/*` content, `*-workspace/` | L2 | SHOULD-IGNORE (already `.gitignored`) |
+
+### §7.2 Verdict tokens (closed four-set)
+
+Exactly four tokens exist. The set is closed and mutually exclusive; every audit finding carries **exactly one** (§7.3).
+
+- **KEEP-TRACKED** — the path is a durable class (1–5) — or the sanctioned derived exception (§7.5) — is currently tracked, and passes self-containment (per the depersonalization-spec token vocabulary). No action.
+- **SHOULD-IGNORE** — the path is a runtime-scratch class (7) yet is currently tracked (a leak). Action: un-track via `git rm --cached` **only** + add the covering `.gitignore` pattern. Compose with the bulk runtime-artifact cleanup effort in any such finding.
+- **SHOULD-TRACK-BUT-NOT** — the path *would* be a durable class (1–5) and should ship, but is absent from tracking (a coverage gap, not a leak). Action: add it to tracking.
+- **POLICY-AMBIGUOUS** — the path straddles durable/derived (class 6), or the §7.1 default and the §7.3 apply-test disagree. It is **resolved explicitly in this policy, never left open** (see §7.5).
+
+### §7.3 Decision rule (one token per finding)
+
+For each tracked path (evaluated at pattern-class granularity, §7.7):
+
+1. Resolve its class (1–7) from §7.1.
+2. Apply the class default verdict.
+3. Emit **one** token per finding — the audit findings table has **row count == verdict-token count** (no finding carries two tokens; no token spans two findings).
+4. The **sole** mechanism for acting on a SHOULD-IGNORE finding is `git rm --cached <path>` (un-track, preserve working copy) followed by a `.gitignore` pattern add. This policy names **no** history-rewrite mechanism: `git filter-repo`, `git filter-branch`, and history rewrite are **out of scope** and prohibited on this repo (public history has been established since the initial public release; rewriting it is IRREVERSIBLE and reserved by convention for secret-exposure remediation, not routine ignore-adds — see §7.6). Un-tracking a path with `git rm --cached` is CHEAP and non-destructive; that is the only tool this policy sanctions.
+
+### §7.4 Layer 1 / Layer 2 reconciliation
+
+The seven classes reconcile against the two-layer model in CLAUDE.md's *Platform vs. Working-Content Boundary* (Layer 1 = Platform, tracked via git; Layer 2 = Operations, git-ignored):
+
+- **Layer 1 (Platform, tracked)** = classes 1–5 **plus** the one sanctioned class-6 derived-tracked exception (§7.5).
+- **Layer 2 (Operations, ignored)** = class 7 **plus** everything under `projects/`, `personal/`, and `pmo-instance/` (OPERATOR-INSTANCE per §1).
+
+The reconciliation states one invariant:
+
+> **A tracked path MUST resolve to a Layer 1 class. A Layer 2 class MUST NOT be tracked. Class 6 (derived-regenerable) is the single sanctioned Layer-1-tracked-derived exception and MUST carry its rationale inline (§7.5).**
+
+A tracked path that resolves to a Layer 2 class is a SHOULD-IGNORE finding (§7.2). A durable Layer 1 path that is absent from tracking is a SHOULD-TRACK-BUT-NOT finding. Any class-6-shaped path lacking the §7.5 rationale is POLICY-AMBIGUOUS until the rationale is recorded.
+
+### §7.5 The sanctioned derived-tracked exception — `packages/*.skill`
+
+Class 6 is the load-bearing POLICY-AMBIGUOUS case, and this policy resolves it to **KEEP-TRACKED** with a stated rationale so the decision stops being ad-hoc.
+
+The `packages/` tree holds **96** compiled artifacts — 48 `.skill` bundles + 48 `.sha256` sidecars — plus `packages/README.md` (class 1, durable governance). The 96 are **derived**: `core/deploy/tools/build-skill-packages.sh` regenerates them from skill source. By the class-6 default (derived ⇒ ignore) they would be un-tracked. That default is **deliberately overridden** here because:
+
+1. **Install-without-build contract.** `install.sh` deploys the compiled `.skill` packages directly, so a fresh clone is installable with **no build step**. Un-tracking `packages/` would break install-from-clone.
+2. **Freshness is gated, not trusted.** `deploy.sh` **Check 7** verifies each tracked package against its source via the `.sha256` sidecar — a stale committed package fails the check. The tracked-derived risk (drift between source and built artifact) is therefore caught by a gate, not left latent.
+
+Because a concrete install-contract requirement overrides the derived default, the resolution is **KEEP-TRACKED** and this rationale is recorded inline (per §7.4, a class-6 path without its rationale is POLICY-AMBIGUOUS). This is the *only* sanctioned derived-tracked exception; any *other* derived artifact defaults to ignore unless it earns an equivalent explicit override recorded here.
+
+### §7.6 External tracking conventions
+
+The durable/derived/runtime distinction and the `git rm --cached`-only mechanism follow established Git convention, not local invention:
+
+- `[SOURCE: Pro Git, 2nd ed., Ch. 2.2 "Recording Changes to the Repository — Ignoring Files" and Ch. 10 "Git Internals" on tracked-vs-untracked state, git-scm.com/book]` — the tracked / ignored / untracked trichotomy; committing a build output is a deliberate, documented choice (an override of the usual "ignore generated files" default), not a Git default. Grounds §7.1 class 6 and the §7.5 override.
+- `[SOURCE: git gitignore(5) man page, git-scm.com/docs/gitignore]` — `.gitignore` pattern semantics and the standard idiom that a path already committed is **not** retroactively ignored by adding a pattern; it must first be un-tracked with `git rm --cached` (which removes it from the index while leaving the working copy). Grounds §7.3's sole ignore mechanism.
+- `[SOURCE: GitHub Docs, "Ignoring files" and "Removing sensitive data from a repository", docs.github.com]` — the convention that history-rewriting tools (`git filter-repo`) are reserved for removing sensitive/leaked data, not for routine ignore-adds — establishing that on a public repo with established history the correct un-track path is `git rm --cached`, never a rewrite. Grounds the §7.3 prohibition.
+
+### §7.7 Audit method — documented-pattern level over the tracked set
+
+The policy is verified by a one-pass audit run at **documented-pattern level**, not per-file. The audit is authored operator-local as a read-once artifact under `analysis/git-tracking-audit-<YYYY-MM-DD>/SUMMARY.md` (git-ignored per the `.gitignore` `/analysis/*` rule; the *policy* — this §7 — is the durable output, the audit is the read-once evidence). The audit steps:
+
+1. **Enumerate + assert count (live).** `git ls-files core/ operations/ release/ | wc -l`. The count is **asserted live at audit time** — it is a moving figure as the corpus grows, not a hardcoded constant. Design-time baseline (Stage-5 solutioning of this policy's originating git-tracking audit): **911**; the audit records whatever the live figure is on its run date and reconciles it to the class map below. The full tracked surface is `git ls-files | wc -l` (design-time baseline 1055), covered by the superset appendix (step 4).
+2. **Bucket by pattern class.** Map the observed extensions to the seven §7.1 classes via a documented extension→class map. Design-time census: `.md` · `.sh` · `.py` · `.txt` · `.yaml` · `.template` · `.json` · `.csv` · `.html` · `.awk` · `NOTICE` (no-ext) · `.example` — twelve pattern buckets with a short oddball tail, each resolving to one of the seven classes.
+3. **Assign one verdict per class.** Each class gets its single §7.1 default; only class 6 carries an exception (§7.5). Findings table: one row per class (+ per-exception), **row count == token count** (§7.3).
+4. **Superset appendix.** Reconcile the remaining non-Engineering tracked paths (workspace-root files + `packages/` + `.github/` + `docs/` + `roadmaps/README.md` + `analysis/README.md`) against the same seven classes, so the policy accounts for the *whole* tracked surface without widening the gated 100%-coverage scope beyond `git ls-files core/ operations/ release/`.
+5. **Current-tree result.** On the tree at authoring, every class resolves to **KEEP-TRACKED** except class 7 (runtime-scratch — already `.gitignored`; **zero** tracked leaks observed) and class 6 (POLICY-AMBIGUOUS → resolved KEEP-TRACKED per §7.5). The audit is baseline-pinned: a runtime-scratch path appearing later silently invalidates the zero-leak result, so the SHOULD-IGNORE token and the class-7 sweep exist for future drift and the superset check even though the current count is zero.
+6. **Any SHOULD-IGNORE / deletion finding** cites the bulk runtime-artifact cleanup effort (compose-with) and uses `git rm --cached` only (§7.3) — never a history rewrite.
 
 ---
 

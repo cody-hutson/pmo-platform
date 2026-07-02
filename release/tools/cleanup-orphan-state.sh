@@ -9,11 +9,11 @@
 # Per the Stage 5 spec (Tier 4.1). D-D LOCKED SCRIPT-ONLY.
 #
 # Usage:
-#   ./pmo-platform/engineering/tools/cleanup-orphan-state.sh                       # safe default: --all --dry-run --markdown
-#   ./pmo-platform/engineering/tools/cleanup-orphan-state.sh --release-close v2.07b-stage-execution-and-process-discipline
-#   ./pmo-platform/engineering/tools/cleanup-orphan-state.sh --spawn-task --apply
-#   ./pmo-platform/engineering/tools/cleanup-orphan-state.sh --historical --apply --json
-#   ./pmo-platform/engineering/tools/cleanup-orphan-state.sh --apply --force       # double opt-in for git branch -D / worktree remove --force
+#   ./release/tools/cleanup-orphan-state.sh                       # safe default: --all --dry-run --markdown
+#   ./release/tools/cleanup-orphan-state.sh --release-close v2.07b-stage-execution-and-process-discipline
+#   ./release/tools/cleanup-orphan-state.sh --spawn-task --apply
+#   ./release/tools/cleanup-orphan-state.sh --historical --apply --json
+#   ./release/tools/cleanup-orphan-state.sh --apply --force       # double opt-in for git branch -D / worktree remove --force
 #
 # Flags:
 #   SCOPE (one of, default --all):

@@ -6,6 +6,10 @@ Per-release user-facing release notes live here, one file per release: `vX.Y_REL
 
 `vX.Y_RELEASE_NOTES.md` where `vX.Y` is the release version matching the GitHub Milestone slug suffix.
 
+## Directory layout — major-version subfolders
+
+Note files are organized into per-major-version subfolders (`notes/v1/`, `notes/v2/`, `notes/v3/`), with a single `_unversioned/` bucket for version-less-by-design notes. Only `README.md` stays at the top level. The subfolder-disposition rule and the recursive-discovery tooling contract are documented once in [`../plans/README.md` § Directory layout](../plans/README.md#directory-layout--major-version-subfolders) and apply identically here.
+
 ## Authoring contract
 
 - **Authored by:** Stage 13 close spoke (per the Release-Notes Authoring Discipline in [`../../references/how-to/hub-spoke-bridge.md`](../../references/how-to/hub-spoke-bridge.md) § Procedure 3 §Stage 13 Chip Pattern)
