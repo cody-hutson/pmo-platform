@@ -71,7 +71,7 @@ Object-prefix discipline applies in **cross-machine prose**. In **schema-field-v
 
 | Context | Form | Rationale |
 |---|---|---|
-| YAML frontmatter field value | `lifecycle_state: active` | The field `lifecycle_state` together with the file's `domain: A` (or `B`, or `C`) declares the object scope. |
+| YAML frontmatter field value | `lifecycle_state: active` | The field `lifecycle_state` together with the file's `domain: source` (or `managed`, or `generated`) declares the object scope. |
 | SQL `WHERE` clause | `WHERE lifecycle_state = 'archived'` | The query's table/column scope already constrains the object. |
 | Authoritative-source-internal references | `domain-c-lifecycle-protocol.md` text uses bare `draft / validated / published / stale / archived` | The protocol doc IS the authoritative home for those names; object scope is unambiguous within the doc. |
 | `context-lifecycle-model.md` internal state-definition table | `Context-Captured` is fine; bare `Captured` would also be valid within that doc | The framework doc is authoritative for Context states; either form is internally unambiguous. (The framework doc uses object-prefix form for grep-verifiability and to match the canonical convention.) |
@@ -298,8 +298,8 @@ Any of the following contexts MAY use bare state names (object-prefix optional):
 
 | Context | Example |
 |---|---|
-| YAML frontmatter field value | `lifecycle_state: active` (the `domain: A` field declares the object scope) |
-| SQL `WHERE` clause | `WHERE lifecycle_state = 'archived' AND domain = 'C'` |
+| YAML frontmatter field value | `lifecycle_state: active` (the `domain: source` field declares the object scope) |
+| SQL `WHERE` clause | `WHERE lifecycle_state = 'archived' AND domain = 'generated'` |
 | Inside an authoritative-source doc | `domain-c-lifecycle-protocol.md` § Lifecycle States uses bare `draft / validated / published / stale / archived` — the doc IS the authoritative home; the object scope is unambiguous within the doc. |
 | Inside a framework-doc state-definition table | `context-lifecycle-model.md` §2 may use bare `Captured / Structured / Reviewed / Decided / Closed` in the "State" column header alongside object-typed form. (The framework doc currently uses object-typed form throughout for grep-verifiability.) |
 
