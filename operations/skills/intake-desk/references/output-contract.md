@@ -23,6 +23,12 @@ in the repo, no temp file left in the tree. The single mutable artifact at emit 
 throwaway body file passed to the tracker CLI via a process-local temp path that is
 not committed.
 
+**Mode C (Ambient Auto-Log) carve.** On the non-interactive path, the operator's
+`automation_level` ceiling *substitutes* for the per-item binary approval in path (1) —
+a standing class-authorization, not a per-item confirm (a genuine, bounded reduction of
+the guarantee; see § Mode C). The **no-write-path-to-a-tracked-file** half of this
+invariant holds absolutely on every path, interactive or ambient.
+
 ## The tool-agnostic intake-emit process
 
 This sequence is identical regardless of target tracker. The section titles use "work
@@ -45,8 +51,11 @@ tracker" / "work item" / "item reference", not a specific tool's nouns.
    the observation tier rather than emit a malformed typed item.
 3. **Confirm (AskUserQuestion).** Present the rendered body plus the 5-test verdict,
    then obtain an explicit binary approval via AskUserQuestion (see § Confirm gate).
-   The skill proposes; the human confirms what gets logged. This is Autonomy Tier 1 —
-   no auto-emit without the binary approval. State the reversibility tier on the emit
+   The skill proposes; the human confirms what gets logged. This is Autonomy Tier 1 for
+   the interactive path — no auto-emit without the binary approval. (Mode C's
+   non-interactive path substitutes the `automation_level` ceiling for this per-item
+   confirm — see § Mode C; the no-tracked-file-write invariant still holds.) State the
+   reversibility tier on the emit
    recommendation (a logged item is CHEAP — close or delete it).
 4. **Log.** On approval, write the confirmed body to a process-local temp file and run
    the configured tracker's create command (the MVP binding is GitHub — see below)

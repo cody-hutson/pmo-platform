@@ -1,22 +1,17 @@
 ---
 name: intake-desk
 description: >
-  The conversational front door for intake — turns a half-formed idea into a
-  well-formed, correctly-typed, correctly-placed work item logged to the work
-  tracker. Meets you at any altitude (a single bug or a portfolio initiative),
-  proposes the work-item type and its place in the intake hierarchy, elicits the
-  type- and level-appropriate fields (a bug's reproduction and environment; a
-  story's acceptance criteria and value), applies the 5-test rule live, confirms
-  the drafted item with you, then logs it — never a scratch file. One work item per
-  request (child candidates are noted in the body for later slicing; it does not
-  auto-decompose). Three modes:
-  Elicit (guided interview) and Triage-readiness check (run the 5-test against a
-  draft you already wrote) are the interactive front-door modes; Ambient Auto-Log
-  (Mode C) is a non-interactive path invoked programmatically by the CLAUDE.md
-  auto-logging rule, never by a conversational phrase. Use when the user says
-  "help me file this idea as an issue", "turn this into a work item", "log this
-  idea", "what type of work item is this", "scope this idea for intake", "is this
-  intake-ready", or "help me write up this bug/story/initiative".
+  The conversational front door for intake — turns a half-formed idea into a well-formed,
+  correctly-typed, correctly-placed work item logged to the work tracker, never a scratch file.
+  Meets you at any altitude (a single bug or a portfolio initiative), proposes the work-item type
+  and its place in the intake hierarchy, elicits the type- and level-appropriate fields (a bug's
+  reproduction and environment; a story's acceptance criteria and value), applies the 5-test rule
+  live, and confirms before logging. One work item per request (child candidates noted in the body
+  for later slicing; no auto-decompose). Two interactive modes — Elicit (guided interview) and
+  Triage-readiness check (5-test a draft you wrote) — plus Ambient Auto-Log (Mode C), a non-
+  interactive path invoked programmatically, not by a conversational phrase. Use when the user
+  says "help me file this idea as an issue", "turn this into a work item", "log this idea", "is
+  this intake-ready", or "help me write up this bug/story/initiative".
 version: v2.27
 license: BUSL-1.1
 ---
