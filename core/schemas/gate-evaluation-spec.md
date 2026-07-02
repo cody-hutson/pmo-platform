@@ -83,7 +83,7 @@ LLM-assess qualitative dimensions on a 1-5 scale. Each score requires a 1-2 sent
 | 1 | Failing | Does not meet requirements, blocks proceeding |
 
 **Source mapping:**
-- **Gates 1-3 (Path A):** Score each gate-criteria-spec.md criterion where `Check=judgment` individually (e.g., G1-02 "Description is actionable," G3-04 "Scope is implementation-ready").
+- **Gates 1-3 (Path A):** Score each gate-criteria-spec.md criterion where `Check=judgment` individually (e.g., G1-02 "Description is actionable," G3-04 "Scope is implementation-ready"). **G1-04 is bidirectional** — score it FAIL for BOTH under-specification (no file/protocol named) AND over-specification (mechanism/HOW prematurely committed) from the criterion text alone, per its bidirectional gate-criteria-spec.md definition; do not require loading `intake-style-guide.md` §5 to detect the over-spec direction.
 - **Gates 4+ (Path B):** Score each §7 Judgment dimension (e.g., Stage 5: "design specificity, architecture alignment, blast radius coverage, decision quality, handoff completeness" — 5 dimensions, each scored 1-5).
 
 ### Layer 3: Calibration (Self-Updating)
