@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.47] - 2026-07-02
+
+The PMO's operational data — trackers, corrections, session focus, and stakeholder communications — becomes agent-native and self-maintaining: one source per artifact, stakeholder views rendered from it, and comms that escalate themselves when they go unanswered.
+
+[Full notes](release/releases/notes/v3.47_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.47)
+
 ## [v3.45] - 2026-07-01
 
 The release pipeline's own reference docs now spell out what each stage is for, and the Stage-9 mid-pipeline divergence check is listed in the gate registry it was already running under.

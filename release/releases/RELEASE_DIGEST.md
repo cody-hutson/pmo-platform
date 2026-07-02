@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.47 (2026-07-02) — The PMO's operational data becomes agent-native and self-maintaining
+
 ### v3.45 (2026-07-01) — Pipeline docs now say what each stage is for, and one Stage-9 gate is on the books
 
 ### v3.44 (2026-07-01) — Backlog triage now runs as one command instead of issue-by-issue by hand
