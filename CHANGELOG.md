@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.48] - 2026-07-02
+
+The design-before-slicing gate now follows your declared delivery method (design-first for Scrum-style, phase-gate for Waterfall, no sprint-slice gate for Kanban) via a new advisory criterion G3-18; an agent will no longer make large destructive changes off a rough note without first checking the source of record and confirming with you; and project-health colour bands get a single defined home instead of being restated in several places. Closes the last three items of two knowledge-corpus cleanup epics.
+
+[Full notes](release/releases/notes/v3.48_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.48)
+
 ## [v3.47] - 2026-07-02
 
 The PMO's operational data — trackers, corrections, session focus, and stakeholder communications — becomes agent-native and self-maintaining: one source per artifact, stakeholder views rendered from it, and comms that escalate themselves when they go unanswered.
