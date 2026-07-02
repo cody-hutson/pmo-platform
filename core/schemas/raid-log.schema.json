@@ -133,6 +133,14 @@
       "x-pmo-class": "dialect",
       "x-pmo-dialect-only": true
     },
+    "source_ref": {
+      "type": "string",
+      "x-pmo-class": "dialect",
+      "x-pmo-dialect-only": true,
+      "x-pmo-provenance-token": true,
+      "x-pmo-value-domain": "TR-### | MSG-### | artifact id-slug | source-file path (same token set as frontmatter-schema.md Category-3 source_inputs)",
+      "description": "Structured provenance back-link: which transcript / message / artifact ESTABLISHED this RAID row. Replaces stuffing back-links into free-text Tags, making provenance queryable (joins to the source node by the same token domain as source_inputs). Populated by tracker-manager on RAID ADD from the value ppm-agent supplies in its TRACKER_UPDATE fields map; optional (a row with no recoverable establishing source carries no source_ref rather than a guessed one). x-pmo-DISAMBIGUATION: this RAID-row source_ref (a provenance back-link on a tracker row) is a DISTINCT concept from the doc-map source_ref in core/standards/dual-format-document-model.md + operations/skills/artifact-generator/SKILL.md (which source-DEFINITION a rendered stakeholder view maps FROM, with orphan_guard: reject). Same field NAME, carrier-scoped meaning — the generated_by dual-semantics precedent (frontmatter-schema.md). Not resolved by rename (a rename churns the live dual-format render path for no semantic gain). x-pmo-freeze-note: added as a schema DIALECT field (like Tags), NOT as an EAD entity-field projection, because the RAID Item entity surface in entity-field-schemas.md 3.6 is a FROZEN freeze-gate artifact whose field-list changes require a Tier-2 SCOPE CHANGE; a dialect column delivers the structured provenance carrier without reopening the freeze."
+    },
     "Section": {
       "type": "string",
       "enum": [
@@ -269,6 +277,14 @@
       },
       "expect_fail": "Impact minLength 1 (V-RAID-12, Option-A added)",
       "demonstrates": "re-frozen impact is required non-empty"
+    },
+    {
+      "id": "NT-RAID-5",
+      "input": {
+        "source_ref": "TR-042"
+      },
+      "expect": "PASS — source_ref is an accepted optional dialect property (not in required[]; additionalProperties:false admits it because it is declared); carries the provenance token domain",
+      "demonstrates": "the relationships[] edge-population work item's RAID provenance carrier — structured source_ref accepted alongside the frozen entity-projected columns"
     }
   ]
 }
