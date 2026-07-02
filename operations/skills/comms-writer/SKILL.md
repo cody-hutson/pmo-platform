@@ -2,7 +2,7 @@
 name: comms-writer
 description: >
   The voice of the PMO — produces audience-calibrated, ready-to-send communications. Covers email, Teams, Confluence, exec briefs, meeting agendas, escalation drafts, recaps, and status updates. Use when drafting any stakeholder communication. Triggers: "draft an update for [audience]", "write the exec brief", "prepare the agenda", "send the escalation email", "write the recap", "put together a message", "write a Teams post."
-version: v2.28
+version: v2.29
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -315,6 +315,40 @@ response field structure defined in `references/operational-artifacts.md`.
 New entries are created in the ACTIVE tier. Lifecycle tier assignment and transitions
 are managed by PPM Agent — CW does not apply transitions, but must use the standard
 MSG-## template so PPM can manage the entry downstream.
+
+## Stalled-Comm Follow-Up (2-Day Rule)
+
+When reviewing the Communications Tracker, auto-draft a follow-up for any **actionable**
+comm that has gone unanswered past its `Response due` date. This reads the EXISTING Tracker 2
+fields only (`Status`, `Response due`, `Direction`, `Tags`, `Parent RAID/Decision`) — no new
+columns.
+
+**Business-day aging clock (shared with daily-status' 5-day rule — stated here as the single
+source).** Anchor the clock to the comm's `Response due` date (NOT `Date sent`), matching the
+platform aging convention in `../ppm-agent/references/proactive-follow-up-tracking.md`
+(deadline-anchored, day-of-week validated). `elapsed = ` business days (Mon–Fri, weekends
+excluded; no holiday calendar) strictly after `Response due` through today. Every compared date
+is day-of-week validated.
+
+**Eligibility predicate — a comm is FOLLOW-UP-ELIGIBLE iff ALL hold:**
+1. `Status == PENDING RESPONSE`.
+2. It is NOT informational — i.e. NONE of: `Status == NO RESPONSE NEEDED`; a `[FYI]`/announcement
+   tag; an `INBOUND`/`INTERNAL` informational note with no outbound ask awaiting a counterparty.
+   **(Informational comms are exempt — do NOT draft a follow-up for them.)**
+3. `Response due` is a present, valid, day-of-week-validated date. If `PENDING RESPONSE` but
+   `Response due` is blank, surface a coverage-gap flag ("PENDING RESPONSE with no Response due —
+   set a Response due date to enable aging"); do NOT age or draft.
+
+**Banding (one aging axis, two thresholds — shared with the 5-day rule):**
+- `2 ≤ elapsed < 5` business days → **draft a follow-up message** (subject prefixed for a nudge,
+  body referencing the original ask + `Response due`, recipients = original `To`, tone: direct,
+  no alarm). Produce it per the normal draft flow (READY/NOT READY gate, reversibility tier,
+  No-internal-IDs strip). This is the early re-drive.
+- `elapsed ≥ 5` business days → the item is in the **5-day escalation band** owned by
+  daily-status (SIOR block). Still (re)draft the follow-up if useful, but attach it as the SIOR
+  "send the follow-up" option rather than an independent nag.
+
+Informational comms and `RESPONSE RECEIVED` / `NO RESPONSE NEEDED` items never draft.
 
 ## PMO-Critical Rules (bind ALL output — primary and owned-generation)
 
