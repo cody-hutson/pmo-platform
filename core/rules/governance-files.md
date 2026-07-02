@@ -6,7 +6,7 @@ status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 paths:
   - "CLAUDE.md"
-  - "pmo-platform/governance/**"
+  - "pmo-platform/core/governance/**"
 ---
 
 <!-- reference-durability: allow-link -->

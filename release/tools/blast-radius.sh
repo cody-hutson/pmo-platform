@@ -2,7 +2,7 @@
 set -euo pipefail
 # blast-radius.sh — File reference fan-out tracer for Stage 5 Solutioning
 # Source: Stage 5 Solutioning tooling.
-# See pmo-platform/reference/protocols/blast-radius-protocol.md for usage.
+# See release/references/protocols/blast-radius-protocol.md for usage.
 
 # ---------------------------------------------------------------------------
 # Version metadata (the contract is the schema, not the implementation)
@@ -121,7 +121,7 @@ EXIT CODES
 
 EXAMPLES
   # Trace what references pipeline/stage-05-solutioning.md (table to terminal)
-  blast-radius.sh pmo-platform/reference/pipeline/stage-05-solutioning.md
+  blast-radius.sh release/references/pipeline/stage-05-solutioning.md
 
   # JSON output for downstream consumption
   blast-radius.sh --format=json --depth=1 CLAUDE.md
@@ -130,7 +130,7 @@ EXAMPLES
   blast-radius.sh --include-mirrors .claude/rules/release-process.md
 
 DOCS
-  See pmo-platform/reference/protocols/blast-radius-protocol.md
+  See release/references/protocols/blast-radius-protocol.md
 EOF
 }
 
@@ -944,7 +944,7 @@ render_table() {
   fi
 
   c_dim
-  printf '\nUse --format=json for machine-readable output. See pmo-platform/reference/protocols/blast-radius-protocol.md\n'
+  printf '\nUse --format=json for machine-readable output. See release/references/protocols/blast-radius-protocol.md\n'
   c_reset
 }
 

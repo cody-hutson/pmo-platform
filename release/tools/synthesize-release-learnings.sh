@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # synthesize-release-learnings.sh — Release-learnings synthesizer
-# Per pmo-platform/reference/standards/pipeline-event-log-schema.md § 11.
+# Per release/references/standards/pipeline-event-log-schema.md § 11.
 # Reads the operator-instance pipeline event log at
 # <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md
 # (canonical default: ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/evals/results/)
