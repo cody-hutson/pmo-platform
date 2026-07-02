@@ -79,6 +79,10 @@ Proceed to the corresponding mode section below (Mode A Backlog Analysis, Mode B
 
 ## Modes
 
+### Why Mode A (Stage 3) and Mode B (Stage 4) co-locate — ADR-019
+
+Mode A (Stage-3 bundle-composition) and Mode B (Stage-4 planning) are **intentionally co-located in this one skill**, not split into separate skills, per [ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) (specialists compose, don't proliferate). The Stage-3-Bundle ↔ Stage-4-Planning **decision-rights separation** is carried at the persona-card level — the distinct `§Stage 3: Bundle` (Portfolio Manager — Bundle Approver) and `§Stage 4: Release Planning` (Release Manager) cards in [`release-personas.md`](../../references/specs/release-personas.md) — while the bundle-composition logic itself is externalized to [`bundle-composition-doctrine.md`](../../references/standards/bundle-composition-doctrine.md), which this skill consumes. A separate `pmo-bundle-composer` skill would duplicate capability against that doctrine + the hub orchestration and is precisely the ADR-019 absorb/proliferate anti-pattern; this skill's multi-mode shape **is** the compose-correct form of the Stage-3/Stage-4 separation.
+
 ### Typed Artifact Relationships (Mode A + Mode B)
 
 When emitting a dependency view, Mode A and Mode B label each in-release edge with one of four **typed artifact-relationship kinds**. The vocabulary is adopted from `core/schemas/frontmatter-schema.md` §Category 4 (a subset of the frozen 7 MVP relationship types) — referenced, not redefined — so planner output and backlog relations cannot diverge. The four kinds, one line each:

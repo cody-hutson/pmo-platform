@@ -55,6 +55,10 @@ core/deploy/deploy.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/blast-radius.sh
 ./release/tools/blast-radius.sh
 release/tools/blast-radius.sh
+[PMO_PLATFORM_ROOT]/release/tools/domain-blast-radius.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/domain-blast-radius.sh
+./release/tools/domain-blast-radius.sh
+release/tools/domain-blast-radius.sh
 [PMO_PLATFORM_ROOT]/release/tools/append-pipeline-event.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/append-pipeline-event.sh
 ./release/tools/append-pipeline-event.sh

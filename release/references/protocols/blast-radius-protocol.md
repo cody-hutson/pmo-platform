@@ -303,9 +303,14 @@ rg -n "from scripts\.(run_eval|run_eval_audit|improve_description|run_loop) impo
 
 `first_order = 4 importers` → **Behavioral** tier (§ 5) → Risk Register entry + per-caller verify at Stage 6. The fan-out is over the **import graph** (genuine `from scripts.utils import` edges `blast-radius.sh` cannot reach), not the doc-reference graph. First-order semantics for this method: a first-order consumer is a file that directly sources, imports, or calls the changed module (a re-export counted once); second-order is depth=2, matching the blast-radius depth default, so the § 5 count-tiers are computed on a reproducibly-defined population. The pinned first-order command above is the reproducibility contract — running it against the branch tree returns exactly the 4 importers shown.
 
-### Deferred fan-out tooling
+### Domain-fan-out tooling (software shipped; component/solution deferred)
 
-A domain-fan-out *instrument* — an import-graph / component-tree / solution-component-graph CLI analogous to `blast-radius.sh` for the doc corpus — is a separate future capability; no such tool exists in `release/tools/` today (`blast-radius.sh` is the only fan-out tracer, and its `SCANNED_TYPES` carry no language-import model per § 9 / § 10). Until that instrument ships, non-doc domains use the manual fan-out documented above plus the opt-out record. The manual fan-out + opt-out is a **complete** A3 on its own — design still happens; the deferred tool is an ergonomics upgrade, not a correctness gate.
+A domain-fan-out *instrument* — an import-graph / component-tree / solution-component-graph CLI analogous to `blast-radius.sh` for the doc corpus — ships as a **sibling** CLI, `release/tools/domain-blast-radius.sh`, keyed off the `domain:` class field (a sibling rather than an extension of `blast-radius.sh`, which has no scanner-plug seam — see [ADR-068](../../../core/ADRs/ADR-068-domain-fan-out-sibling-vs-extend.md)). Both tracers emit the identical schema-v1 contract via the shared library `release/tools/lib/schema-v1-emit.sh`.
+
+- **`--domain=software` — SHIPPED.** A code import-graph fan-out: it traces the files that directly `import` / `require` / `#include` the changed module (a re-export counted once) and emits schema-v1 `first_order[]`. Domain semantics that differ from the doc tracer: `reference_count` is an import-STATEMENT count (a comment-only mention is not an edge), `is_mirror` is the constant `false`, `second_order[].via`/`.depth` are **scoped out for v1** (emitted as `[]`, `second_order_count: 0` — a named follow-on, not claimed here), and `stats.total_files_scanned` is the code-file denominator, not the whole corpus. The tool's header + ADR-068 hold the full field-semantics table.
+- **`--domain=web` (component-tree) and `--domain=enterprise-platform` (solution-component graph) — DEFERRED.** The scanners are honest not-implemented stubs (exit 5). Until those ship, those domains use the manual fan-out documented above plus the opt-out record.
+
+For any domain the tool cannot run, the manual fan-out + opt-out is a **complete** A3 on its own — design still happens; the tool is an ergonomics upgrade, not a correctness gate.
 
 ### Downstream blast-radius consumers (forward-note)
 

@@ -16,6 +16,17 @@ readonly SCHEMA_VERSION="1"
 PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
 
 # ---------------------------------------------------------------------------
+# Shared schema-v1 emitter (the single home of the output contract). This script
+# owns doc-corpus fan-out DISCOVERY; the schema-v1 EMIT (the first_order[] object
+# roll-up + the top-level envelope) lives in the sourced library so the doc tracer
+# and the domain tracer emit one identical contract. See ADR-068. Sourced relative
+# to this script so it resolves under any checkout / worktree.
+# ---------------------------------------------------------------------------
+_BLAST_RADIUS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd -P)"
+# shellcheck source=lib/schema-v1-emit.sh
+. "${_BLAST_RADIUS_LIB_DIR}/schema-v1-emit.sh"
+
+# ---------------------------------------------------------------------------
 # Exit codes
 # ---------------------------------------------------------------------------
 readonly EXIT_OK=0
@@ -570,109 +581,18 @@ aggregate_first_order() {
   local partner
   partner="$(mirror_partner "$target")"
 
-  # Aggregate matches per file using jq
-  local agg
-  agg=$(awk -F '\t' '
-    {
-      file = $1
-      line = $2
-      text = $3
-      # Truncate snippet to 200 chars and strip leading whitespace
-      sub(/^[ \t]+/, "", text)
-      if (length(text) > 200) {
-        text = substr(text, 1, 200) "…"
-      }
-      key = file
-      count[key]++
-      # Store up to 5 matches per file
-      if (matches_count[key] < 5) {
-        matches_count[key]++
-        idx = matches_count[key]
-        m_line[key SUBSEP idx] = line
-        m_text[key SUBSEP idx] = text
-      }
-    }
-    END {
-      for (file in count) {
-        printf "%s\t%d", file, count[file]
-        for (i = 1; i <= matches_count[file]; i++) {
-          printf "\t%d\t%s", m_line[file SUBSEP i], m_text[file SUBSEP i]
-        }
-        printf "\n"
-      }
-    }
-  ' "$tsv")
+  # Delegate the roll-up + first_order[] emit to the shared schema-v1 library
+  # (single home of the {path, reference_count, matches, is_mirror} object). This
+  # script owns only the doc-corpus DISCOVERY that produced $tsv; the EMIT is the
+  # library's. Behavior is identical to the prior inline block — the library body
+  # was extracted verbatim (regression-guarded by test_domain_blast_radius.sh).
+  local bundle
+  bundle="$(aggregate_matches_v1 "$tsv" "$partner" "$ARG_INCLUDE_MIRRORS")"
 
-  # Build JSON entries
-  local fo_entries="[]"
-  local fm_entries="[]"
-  local fo_count=0
-  local fm_count=0
-
-  if [ -n "$agg" ]; then
-    # Sort: reference_count DESC, path ASC
-    local sorted
-    sorted=$(printf '%s\n' "$agg" | LC_ALL=C sort -t $'\t' -k2,2nr -k1,1)
-
-    fo_entries="$(jq -n '[]')"
-    fm_entries="$(jq -n '[]')"
-
-    while IFS= read -r row; do
-      [ -z "$row" ] && continue
-      local file count
-      file="$(printf '%s' "$row" | awk -F '\t' '{print $1}')"
-      count="$(printf '%s' "$row" | awk -F '\t' '{print $2}')"
-
-      local is_mirror=false
-      if [ -n "$partner" ] && [ "$file" = "$partner" ]; then
-        is_mirror=true
-      fi
-
-      # Build matches array
-      local match_pairs
-      match_pairs="$(printf '%s' "$row" | awk -F '\t' '{
-        for (i = 3; i <= NF; i += 2) {
-          if (i+1 <= NF) {
-            print $i "\t" $(i+1)
-          }
-        }
-      }')"
-
-      local matches_json
-      matches_json=$(
-        printf '%s\n' "$match_pairs" \
-          | jq -R -s '
-              split("\n")
-              | map(select(length > 0))
-              | map(split("\t"))
-              | map({line: (.[0] | tonumber), snippet: .[1]})
-            '
-      )
-
-      local entry
-      entry=$(jq -n \
-        --arg path "$file" \
-        --argjson ref_count "$count" \
-        --argjson matches "$matches_json" \
-        --argjson is_mirror "$is_mirror" \
-        '{path: $path, reference_count: $ref_count, matches: $matches, is_mirror: $is_mirror}')
-
-      if [ "$is_mirror" = "true" ] && [ "$ARG_INCLUDE_MIRRORS" = "0" ]; then
-        fm_entries=$(printf '%s\n%s\n' "$fm_entries" "$entry" | jq -s '.[0] + [.[1]]')
-        fm_count=$((fm_count + 1))
-      else
-        fo_entries=$(printf '%s\n%s\n' "$fo_entries" "$entry" | jq -s '.[0] + [.[1]]')
-        fo_count=$((fo_count + 1))
-      fi
-    done <<EOF
-$sorted
-EOF
-  fi
-
-  FIRST_ORDER_JSON="$fo_entries"
-  FIRST_ORDER_COUNT="$fo_count"
-  FILTERED_MIRRORS_JSON="$fm_entries"
-  FILTERED_MIRRORS_COUNT="$fm_count"
+  FIRST_ORDER_JSON="$(printf '%s' "$bundle" | jq -c '.first_order')"
+  FIRST_ORDER_COUNT="$(printf '%s' "$bundle" | jq -r '.first_order_count')"
+  FILTERED_MIRRORS_JSON="$(printf '%s' "$bundle" | jq -c '.filtered_mirrors_detail')"
+  FILTERED_MIRRORS_COUNT="$(printf '%s' "$bundle" | jq -r '.filtered_mirrors_count')"
 }
 
 # ---------------------------------------------------------------------------
@@ -849,41 +769,35 @@ build_json() {
   local timestamp
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  jq -n \
-    --arg schema_version "$SCHEMA_VERSION" \
-    --arg cli_version "$CLI_VERSION" \
-    --arg target "$TARGET_REL" \
-    --arg scanned_at "$timestamp" \
-    --arg scan_root "$REPO_ROOT" \
-    --argjson depth "$ARG_DEPTH" \
-    --argjson include_mirrors "$([ "$ARG_INCLUDE_MIRRORS" = "1" ] && echo true || echo false)" \
-    --argjson total_files_scanned "$TOTAL_FILES_SCANNED" \
-    --argjson first_order_count "$FIRST_ORDER_COUNT" \
-    --argjson second_order_count "$SECOND_ORDER_COUNT" \
-    --argjson filtered_mirrors "$FILTERED_MIRRORS_COUNT" \
-    --arg elapsed_seconds "$elapsed" \
-    --argjson first_order "$FIRST_ORDER_JSON" \
-    --argjson second_order "$SECOND_ORDER_JSON" \
-    --argjson filtered_mirrors_detail "$FILTERED_MIRRORS_JSON" \
-    '{
-      schema_version: $schema_version,
-      cli_version: $cli_version,
-      target: $target,
-      scanned_at: $scanned_at,
-      scan_root: $scan_root,
-      depth: $depth,
-      include_mirrors: $include_mirrors,
-      stats: {
-        total_files_scanned: $total_files_scanned,
-        first_order_count: $first_order_count,
-        second_order_count: $second_order_count,
-        filtered_mirrors: $filtered_mirrors,
-        elapsed_seconds: ($elapsed_seconds | tonumber)
-      },
-      first_order: $first_order,
-      second_order: $second_order,
-      filtered_mirrors_detail: $filtered_mirrors_detail
-    }'
+  local include_mirrors_json
+  include_mirrors_json="$([ "$ARG_INCLUDE_MIRRORS" = "1" ] && echo true || echo false)"
+
+  # Assert the tracer's schema version matches the sourced library before emit —
+  # a skew fails loudly rather than shipping a mislabeled envelope.
+  if [ "$SCHEMA_VERSION" != "$SCHEMA_V1_EMIT_VERSION" ]; then
+    err "schema version skew: blast-radius=$SCHEMA_VERSION lib=$SCHEMA_V1_EMIT_VERSION"
+    exit "$EXIT_INTERNAL"
+  fi
+
+  # Delegate the envelope assembly to the shared library (single home of the
+  # schema-v1 top-level document). Behavior is byte-identical to the prior inline
+  # jq — the assembly was extracted verbatim (regression-guarded).
+  build_json_v1 \
+    "$CLI_VERSION" \
+    "$TARGET_REL" \
+    "$timestamp" \
+    "$REPO_ROOT" \
+    "$ARG_DEPTH" \
+    "$include_mirrors_json" \
+    "$TOTAL_FILES_SCANNED" \
+    "$FIRST_ORDER_COUNT" \
+    "$SECOND_ORDER_COUNT" \
+    "$FILTERED_MIRRORS_COUNT" \
+    "$elapsed" \
+    "$FIRST_ORDER_JSON" \
+    "$SECOND_ORDER_JSON" \
+    "$FILTERED_MIRRORS_JSON" \
+    "$SCHEMA_VERSION"
 }
 
 # ---------------------------------------------------------------------------
