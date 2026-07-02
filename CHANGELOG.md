@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.53] - 2026-07-02
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.53_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.53)
+
 ## [v3.52] - 2026-07-02
 
 The eval framework is now complete — the refiner scripts have automated test coverage, the stage-gate eval sets are runnable, and QA can catch contradictions across a chain of dependent work before final review.
