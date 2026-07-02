@@ -6672,10 +6672,13 @@ cmd_check() {
   #   ORPHAN (live GitHub label absent from the taxonomy) → WARN only (some are
   #     legitimately operator-local or pending registration, e.g. the `type:*`
   #     family until #1777 documents it). Never FAILs.
-  # Source-agnostic: the primitive reads the canonical set from --source (default
-  # the doc); when #1970 moves the per-pack label lists to core/packs/*,
-  # repoint --source — this block is unchanged. Title-prefix parity (the #74
-  # `[Observation]:` invariant) is a SEPARATE concern, not evaluated here.
+  # Multi-source union (#1970): the primitive reads the canonical set as the UNION
+  # across every --source. #1970 relocated the concrete label ROWS out of the doc
+  # (which keeps the GRAMMAR: group definitions, rules, namespace patterns) into the
+  # per-pack `[[labels]]` facets under core/packs/* — so the source set is the doc
+  # PLUS every pack.toml. A relocated-but-still-live label resolves in the pack union
+  # and does not false-orphan. Title-prefix parity (the #74 `[Observation]:`
+  # invariant) is a SEPARATE concern, not evaluated here.
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (the 14/18/42/43/50
   # precedent); the introducing release is itself exempt (reflexive-pipeline
   # loop). gh-unavailable → SKIP (parity needs the live set; mirrors Check 39/40
@@ -6685,6 +6688,14 @@ cmd_check() {
     log "Check 51: Label-taxonomy ↔ GitHub label-set parity (warn-mode initial; MISSING-leg enforce-flip deferred)"
     local c51_script="core/deploy/tools/check-label-parity.py"
     local c51_source="core/specs/label-taxonomy.md"
+    # #1970: the canonical set is the UNION of the grammar doc + every pack.toml
+    # [[labels]] facet (the relocated concrete rows). Build the repeatable --source
+    # arg list: the doc, then each existing core/packs/*/pack.toml.
+    local c51_source_args=(--source "$c51_source")
+    local c51_pack
+    for c51_pack in core/packs/*/pack.toml; do
+      [[ -f "$c51_pack" ]] && c51_source_args+=(--source "$c51_pack")
+    done
     if [[ ! -f "$c51_script" ]]; then
       flag_warn_or_issue "label-parity" "primitive script missing: $c51_script"
     elif ! command -v gh >/dev/null 2>&1; then
@@ -6693,7 +6704,7 @@ cmd_check() {
       local c51_mode
       c51_mode=$(resolve_check_mode "label-parity")
       local c51_out c51_exit=0
-      c51_out=$(/usr/bin/python3 "$c51_script" --source "$c51_source" --output-format tsv 2>&1) || c51_exit=$?
+      c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --output-format tsv 2>&1) || c51_exit=$?
       if [[ $c51_exit -eq 3 ]]; then
         flag_warn_or_issue "label-parity" "input failure (exit 3): $(echo "$c51_out" | head -1) — --source parsed to zero labels or the live set was unreadable; fix the source/parser"
       elif [[ $c51_exit -eq 0 || $c51_exit -eq 1 ]]; then
