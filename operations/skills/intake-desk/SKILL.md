@@ -15,7 +15,7 @@ description: >
   issue", "turn this into a work item", "log this idea", "what type of work item
   is this", "scope this idea for intake", "is this intake-ready", or "help me write
   up this bug/story/initiative".
-version: v2.25
+version: v2.26
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -344,7 +344,9 @@ handling.
 
 - **Signature (observable signal):** The desk runs the full loop and files a new
   work item whose scope an existing open item already owns — the same defect,
-  the same capability gap, or a subset of an open item's stated scope — with no
+  the same capability gap, or a subset of an open item's stated scope — including
+  the highest-cost instance: a new **container** (an initiative / epic-equivalent)
+  proposed when an approved owning initiative already exists — with no
   tracker-search evidence in the conversation and no existing-item candidates
   surfaced at the confirm gate.
 - **Conditional:** do NOT log a new work item without consulting the work
@@ -352,12 +354,17 @@ handling.
   an input to correct placement just as the idea is — a duplicate splits one
   workstream across two homes, strands the new context away from the existing
   item's labels and history, and exits intake looking well-formed while making
-  the backlog less true.
+  the backlog less true; and, for a **container**, splits an entire initiative's
+  workstream across two homes — the costliest duplicate to unwind, because it
+  strands not one item but a whole decomposition tree away from the existing
+  owner's labels and history.
 - **Root cause:** The loop's input is the user's idea, and the framing ("log
   this idea") implies novelty; the output contract consults tracker state only
   AFTER the create (the read-back step). Nothing in the four phases forces the
   pre-filing question "does this item already exist?" — so novelty is assumed,
-  never derived.
+  never derived — and for a container the assumption is costliest because it is
+  only tested at the confirm gate, after the container's fields are already
+  elicited.
 - **Mitigation:** Between the clarity gate and the confirm gate, run a scoped
   search of the configured tracker on the drafted item's key terms (GitHub MVP:
   `gh issue list --search "<key terms>" --state open`). Surface any plausible
@@ -365,7 +372,14 @@ handling.
   existing owner: an open item with matching scope — file new anyway / enrich
   the existing item"), leaving the binary confirm untouched; on "enrich," skip
   the confirm-and-create path entirely and deliver the captured content as a
-  comment-ready block for the existing item.
+  comment-ready block for the existing item. For a **container altitude**
+  specifically, run this scan **earlier — at the Phase 2 type-landing gate**,
+  before eliciting the container's fields (per `references/elicitation-loop.md`
+  § Phase 2 container-altitude existing-owner scan): a duplicated initiative is
+  the costliest to unwind, so it is caught at container-framing time rather than
+  at confirm. Both scans apply the CLAUDE.md **Pre-creation governance check**
+  issue-creation duplicate-discipline — enrich the existing owner rather than
+  restate its scope.
 - **Principal response vs. junior response:** Principal surfaces the near-match
   at confirm and lets the user choose enrich-vs-new, so one workstream keeps
   one home. Junior files the well-formed duplicate; it passes the 5-test
