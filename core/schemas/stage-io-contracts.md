@@ -156,15 +156,149 @@ Stage 4 (Planning) produces a release plan for Stage 5 (Solutioning) when activa
 
 ---
 
+## Boundary: Stage 2 → Stage 3 (Triage → Bundle)
+
+Stage 2 (Triage) produces the classified, prioritized, DoR-validated issue for Stage 3 (Bundle) to compose into a versioned Milestone. The board-status decision (Approved / Deferred / Rejected) is the gating human decision — only `Approved` issues are eligible for bundling.
+
+| Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
+|----------|--------|----------|----------------|----------------|----------|------------|
+| Board Status | Projects field (Approved / Rejected / Deferred) | YES | Approve/Defer/Reject verdict — Tier 3 | Summary | Projects board status field, set by agent | Only `Approved` issues are bundle-eligible; verified per Gate 3 G3-01 (issue in Approved state). Rejected/Deferred do not cross. |
+| Decision Date | Projects Date field | YES | NO | Summary | `gh project item-edit --date` (agent-set) | Date field populated on the item |
+| Priority (confirmed/adjusted) | Label | YES | Priority-adjust — Tier 2 | Summary | Priority label on issue, verified at triage | Priority label present and current |
+| Category Label (verified) | Label | YES | NO | Summary | Category label per `label-taxonomy.md` | Label verified against taxonomy |
+| Native dependencies (mirrored) | Native `blocked-by` links | CONDITIONAL (issue has body `FS+0d` deps) | NO | Summary | Native dep links mirrored from body `FS+0d` subset per Stage 2 A3.5 | `#N` refs resolvable; mirror consistent with body (non-gate-blocking per shard) |
+| Triage decision comment | Comment section (stage review header format) | YES | NO | Detail | Stage 2 sub-task comment, standard stage review header | Comment posted; per-issue Approve/Defer/Reject rationale present |
+
+### Validation Rules
+
+1. **Approved-only crossing:** Only issues in `Approved` board status are eligible for Stage 3 bundling; `Deferred` / `Rejected` issues do not cross this boundary. Verified per Gate 3 **G3-01** (issue in Approved state — LIVE in gate-criteria-spec.md § Gate 3).
+2. **Dependency-state compatibility fed forward:** the mirrored native `blocked-by` set feeds Stage 3's dependency-graph build; state compatibility is validated downstream at Gate 3 **G3-04** (all `#N` refs in Approved/Bundled/In-Progress/Done). This boundary supplies the substrate; it does not itself gate on dep-state.
+3. **State-anchor completeness:** Board Status + Decision Date + Priority + Category label MUST all be set before bundling — a partially-triaged issue (missing any state anchor) is not bundle-ready.
+
+### Failure Handling
+
+- **Board Status absent / issue not Approved:** issue is held out of the bundle; Stage 3 does not pull it. Return to Stage 2 for the verdict (Tier 3 operator decision).
+- **Category / Priority label missing:** Tier 1 — Triage completes the label set before the issue is bundle-eligible.
+- **Native-dep mirror inconsistent with body:** non-gate-blocking per the Stage 2 shard; log the drift and re-run the A3.5 mirror. Does not HOLD the boundary.
+
+---
+
+## Boundary: Stage 6 → Stage 7 (Engineering → Dev Testing)
+
+Stage 6 (Engineering) produces committed changes on the release branch + the PR with verification evidence for Stage 7 (Dev Testing) to review. This boundary is the exit of the build stage; its structural completeness is gated by Gate 6 (Engineering Completeness).
+
+| Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
+|----------|--------|----------|----------------|----------------|----------|------------|
+| Committed changes on release branch | Commits on `release/vX.Y-<slug>` | YES | NO | Detail | Git commits on the release branch | Every release-scoped issue has ≥1 commit referencing its `#N` — Gate 6 **G6-02** (commits link source issues) |
+| Pull request | GitHub PR | YES | NO | Summary | PR opened for the release branch | PR exists — Gate 6 **G6-01** (`gh pr list --head <branch>` returns ≥1) |
+| PR body (parser-clean) | PR body (metadata sections) | YES | NO | Detail | PR body: implementation summary + per-issue status | Parses without a BLOCKING/parse-error signal — Gate 6 **G6-03** |
+| Verification evidence | PR-body section (per-issue PASS/FAIL) | YES | NO | Evidence | PR body `Verification Evidence` section | Per-issue PASS/FAIL present — Gate 6 **G6-04** |
+| Change Description | `## Change Description` section in release plan FILE | YES | NO | Detail | Release plan on branch, per RELEASE_PROTOCOL § Change Description Protocol | Section present + committed before PR ready — Gate 6 **G6-05** |
+| Sub-task decomposition status | GitHub sub-issues (closed) OR PR-body checklist rows | CONDITIONAL (per A2 container threshold) | NO | Summary | Sub-issues closed, or checklist rows checked | Decomposition rows resolved per the A2 threshold |
+| Deviation log | Section in release plan | CONDITIONAL (deviations occurred) | NO | Summary | Release plan deviation-log section | Deviations recorded with rationale |
+
+### Validation Rules
+
+1. **Gate 6 Engineering Completeness is the structural exit gate.** Stage 7 entry requires **G6-01..G6-05** (PR exists / commits link source issues / parser-clean PR body / verification-evidence present / Change Description section present) per [`gate-criteria-spec.md § Gate 6`](gate-criteria-spec.md#gate-6-engineering-completeness). *Forward-pointer note: Gate 6 co-lands with this contract in the same release PR (the G6 criteria and this 6→7 boundary are authored together — the G6-01..G6-05 IDs bind when the PR merges). This mirrors the Stage 1→2 contract, which forward-references the Stage 5→6 design-handoff gate.*
+2. **Commit-linkage completeness:** `issues_with_commits / total_release_issues = 1.0` — every release-scoped issue is traceable to a commit, or has a documented deviation-log entry if descoped (G6-02).
+3. **PR carries verification, not questions:** the PR body's Verification Evidence section carries per-issue PASS/FAIL results (G6-04); Stage 7 receives evidence to review, not an untested build.
+
+### Failure Handling
+
+- **No PR / commits unlinked / PR body unparseable / verification absent / Change Description absent:** return to Stage 6 Engineering at the Phase named in the matching G6-0N self-repair row (C2 for PR, B1 for commit linkage, C4 for verification, C1 for Change Description). **Warn-mode (author-time):** G6 ships warn-mode initially — log to `core/hooks/gate-g6-warn-log.jsonl` and PROCEED; flip-to-enforce deferred to a 2-3-release shakedown (G-CL6/G3-14 precedent).
+- **Deviation without a log entry:** Tier 1 `[ADJUST]` — Engineering records the deviation in the release-plan deviation log.
+
+---
+
+## Boundary: Stage 7 → Stage 8 (Dev Testing → QA Testing)
+
+Stage 7 (Dev Testing) produces the Quality Review Report, terminating in the structured Handoff Payload that is Stage 8's authoritative input. This contract formalizes the de-facto DT↔QA Handoff Payload already defined in `stage-07-dev-testing.md` — it lifts, it does not re-derive.
+
+| Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
+|----------|--------|----------|----------------|----------------|----------|------------|
+| Quality Review Report | Structured report (section scores + findings) | YES | Accept/override findings — Tier 3 (Phase E) | Detail | Stage 7 sub-task; terminates in `### Output for Stage 8` | Report present; section scores (1-5) + finding list with severity + escape rate |
+| Verdict | Enum: PASS / CONDITIONAL PASS / FAIL | YES | NO | Summary | First line of `### Output for Stage 8`: `**Verdict:** <enum> — <rationale>` | Phase A entry gate — only PASS / CONDITIONAL PASS advance to Stage 8 |
+| AC map | Table: `AC · Issue # · Verdict · Evidence` | YES | NO | Detail | Handoff Payload AC-map table | Primary input for Stage 8 Phase B acceptance review |
+| Findings | Table: `F-ID · Severity · Dimension · Routing tier · Origin · Status · Evidence · Recommendation` | YES | NO | Detail | Handoff Payload findings table | 5-bucket severity vocabulary; F-IDs stable across iterations |
+| Escape summary | Table: `Origin stage · Count` | YES | NO | Summary | Handoff Payload escape table | Stage 7 escape count for calibration |
+| Test-results | Table: `Suite · Selected-by · Result · Pass/Fail · Env · Evidence · Event ts` | YES | NO | Evidence | Handoff Payload (Phase A8 runtime-gate outcome) | Confirms the runtime-code gate ran; single `NONE — no runtime code path changed` line when no code path changed |
+| Iteration count / PR reference / Files reviewed / Downstream attention / Cross-issue notes | Fields per the Forward-Handoff schema | YES (Downstream attention & Cross-issue notes may be `None`) | NO | Summary/Detail | `### Output for Stage 8` fields | Extracted by Stage 8 Phase A Entry Validation |
+
+### Validation Rules
+
+1. **Verdict is the entry gate:** only `PASS` / `CONDITIONAL PASS` advance to Stage 8. `FAIL` routes back — Tier 1 findings to Engineering (DT↔Engineering Iteration Loop), Tier 2/3 to operator — and does not cross this boundary.
+2. **Handoff Payload is the authoritative interface:** Stage 8 Phase A extracts required fields from the `### Output for Stage 8` section per the DT↔QA Handoff Protocol. Missing required fields = malformed handoff → Stage 8 Phase A entry-validation HOLD.
+3. **Severity vocabulary reconciliation:** the Findings-table `Severity` column uses the 5-bucket vocabulary (Blocker/Major/Minor/Cosmetic/Informational); a report emitting Phase-D 3-bucket verdict severities in the Findings table fails parse validation (per the protocol's reconciliation rule).
+4. **Layered-review preservation:** QA findings re-enter the quality layer (Stage 7) before the fix layer (Stage 6); this boundary does not route DT output directly to Engineering.
+
+### Failure Handling
+
+- **Verdict = FAIL (Tier 1):** classified finding list returns to Engineering per the DT↔Engineering Iteration Loop; DT re-enters at targeted re-review scope; a new Handoff Payload (Iteration N) is produced before re-crossing.
+- **Verdict = FAIL (Tier 2/3):** escalation package to operator per the Inter-Stage Feedback Protocol; boundary HOLDS.
+- **Malformed Handoff Payload (missing anchor / fields):** Stage 8 Phase A entry validation HOLDs; return to Stage 7 Phase D to complete the payload.
+
+---
+
+## Boundary: Stage 8 → Stage 9 (QA Testing → Plan Review)
+
+Stage 8 (QA Testing) produces the Acceptance Report for Stage 9 (Plan Review) to assemble into its Go/No-Go evidence package. The upstream-reports-present check at Stage 9 (G-PR2) makes this report a required input to Plan Review.
+
+| Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
+|----------|--------|----------|----------------|----------------|----------|------------|
+| Acceptance Report | Structured report | YES | Accept/override — Tier 3 | Detail | Stage 8 sub-task; downstream to Stage 9 | Report present; consumed by Gate 9 **G-PR2** (all upstream reports present — Stage 7 quality report + Stage 8 acceptance report + Stage 6 PR + Stage 4 release plan) |
+| Acceptance matrix | Table (per-criterion verdict) | YES | NO | Detail | Acceptance Report matrix section | Per-criterion verdict present for every AC |
+| Acceptance score | Numeric | YES | NO | Summary | Acceptance Report | Score present |
+| Fitness assessment | Structured assessment | YES | NO | Summary | Acceptance Report | Fitness-for-release stated |
+| Stage 7 escape log | Table | YES | NO | Summary | Acceptance Report | Stage 7 escapes carried forward (feeds Stage 9 escape/calibration) |
+| Lane distribution | Table | YES | NO | Summary | Acceptance Report | Lane breakdown present |
+| Overall verdict | Enum (PASS / CONDITIONAL / FAIL) | YES | NO | Summary | Acceptance Report top line | Only passing verdicts advance to Stage 9; Lane 2 findings route back to Stage 7 (QA Return to Dev Testing) |
+
+### Validation Rules
+
+1. **Gate 9 Plan Review consumes this report:** the Acceptance Report is a required member of the Stage 9 evidence package per Gate 9 **G-PR2** (all upstream reports present) and feeds **G-PR1** (evidence package complete, Phase A1–A6). Cite the existing **G-PR1..G-PR9** IDs — LIVE in `gate-criteria-spec.md` § Gate 9.
+2. **Passing-verdict-only crossing:** a FAIL / Lane-2 outcome routes back to Stage 7 as a QA Return to Dev Testing payload (per the DT↔QA Handoff Protocol § Return Path); it does not cross into Plan Review.
+3. **Escape provenance preserved:** the Stage 7 escape log crosses forward so Stage 9 calibration and escape-rate accounting see the full upstream escape history.
+
+### Failure Handling
+
+- **Acceptance Report absent at Stage 9:** Gate 9 **G-PR2** self-repair — escalate per the Inter-Stage Feedback Protocol Tier 2 (SCOPE CHANGE); the upstream stage owes a return-to-Stage-9; Plan Review decision blocked.
+- **Overall verdict FAIL (Lane 2):** findings emitted as the QA Return to Dev Testing payload; boundary routes back to Stage 7, not forward.
+- **Methodology note (Waterfall/PRINCE2, Hybrid):** per the `## Methodology Variation` table, the 8→9 boundary carries an **additional** phase-gate-review / end-stage-assessment artifact (Waterfall) or BOTH phase-gate + sprint-review families (Hybrid at Stage 9). This contract is the universal baseline; `handoff-coordinator` merges the archetype's supplementary artifact per `delivery_approach`.
+
+---
+
+## Boundary: Stage 9 → Stage 12 (Plan Review → Execute, compressed)
+
+Stage 9 (Plan Review) produces the Go/No-Go decision record — the deployment authorization — for Stage 12 (Execute). The boundary is compressed: Stages 10 (Dry Run) and 11 (Snapshot) are git-native no-material-artifact stages (Dry Run validates procedure; git history IS the snapshot), so the load-bearing authorization crosses 9 → 12 directly.
+
+| Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
+|----------|--------|----------|----------------|----------------|----------|------------|
+| Go/No-Go decision record | Decision record (verdict + rationale + conditions + authorization) | YES | GO/NO-GO — Tier 3 (the merge authorization) | Detail | Stage 9 sub-task + parent issue, per the decision-record format | Decision record posted — Gate 9 **G-PR6**; the record IS the deployment authorization (no separate authorization doc) |
+| Evidence package | Assembled reports + PR scope + risk status + deployment readiness | YES | NO | Detail | Stage 9 evidence package | Complete per Gate 9 **G-PR1** (Phase A1–A6 populated) |
+| Release Readiness Scan output | 13-dimension scan (markdown table + `gate-outcome` log row) | YES | NO | Detail | Stage 9 sub-task comment + `pipeline-event-log.md` | Aggregate verdict (ALL-PASS / ANY-FAIL / ANY-PARTIAL) per Phase A6 (G-PR1) |
+| Deployment-readiness verdict | Checklist (PR mergeable / branch current / metadata / rollback) | YES | NO | Summary | Decision record deployment-readiness section | All PASS — Gate 9 **G-PR5** (`gh pr view --json mergeable`) |
+| GO baseline SHA | H3 in release plan `## Cross-PR Overlap Audit → ### Baseline SHA` | YES | NO | Summary | Release plan Baseline-SHA H3 | Recorded per Gate 9 **G-PR9** (makes the GO falsifiable; sibling-merge revalidation predicate) |
+
+### Validation Rules
+
+1. **Decision record IS the authorization:** Stage 12 proceeds only on a GO verdict recorded per Gate 9 **G-PR6**. A NO-GO returns the release to re-bundle / re-plan; it does not cross to Execute.
+2. **Compression is explicit:** Stages 10–11 add no material artifact to this boundary (Dry Run = procedure validation; Snapshot = git history). The 9 → 12 contract carries the Stage 9 authorization directly; no Stage-10/11 deliverable is required to cross.
+3. **Execute-side gate is G-EX (cite the existing IDs):** once the authorization crosses, Stage 12 must satisfy Gate 12 **G-EX1..G-EX8** (PR MERGED / tag on main / zero-diff deploy / RELEASE_LOG appended / release row present / Phase C verification PASS / no Layer-2 leakage / deferred items documented) per `gate-criteria-spec.md` § Gate 12 (LIVE). This contract hands Execute a GO; **G-EX** governs what Execute produces from it.
+4. **GO baseline currency:** the GO records its baseline SHA (G-PR9) so a sibling merge landing between GO and Execute triggers STALE-REVALIDATE / STALE-VOID revalidation rather than a silently-stale merge.
+
+### Failure Handling
+
+- **NO-GO verdict:** release returns to Stage 4 Planning / Stage 3 Bundle per the decision-record conditions; boundary does not cross.
+- **Decision record missing (G-PR6):** operator posts it — the decision record IS the closure artifact (no separate escalation tier).
+- **PR not mergeable at authorization (G-PR5):** return to Stage 6 Engineering per the Inter-Stage Feedback Protocol Tier 1/2; GO cannot be rendered until mergeable.
+- **Baseline STALE-VOID (G-PR9):** Tier 2 `[SCOPE CHANGE]` — re-baseline the release branch on `main`, return to Stage 9 for a fresh GO (fresh-Stage-9-GO-mandatory precedent).
+- **Methodology note (Waterfall/PRINCE2):** per the `## Methodology Variation` table, Stage 12 Execute requires a **change-control-board-approval** artifact when downstream stages modify upstream-locked specs. Universal baseline here; `handoff-coordinator` merges the CCB artifact per `delivery_approach`.
+
+---
+
 ## Future Boundaries
 
-Remaining stage boundaries will be added as stages are exercised per-release. Each new boundary follows the schema definition above and is appended as an H2 section. Priority order based on pipeline flow:
-
-- Stage 2 → Stage 3 (Triage → Bundle)
-- Stage 6 → Stage 7 (Engineering → Dev Testing)
-- Stage 7 → Stage 8 (Dev Testing → QA Testing)
-- Stage 8 → Stage 9 (QA Testing → Plan Review)
-- Stage 9 → Stage 12 (Plan Review → Execute, compressed)
+All primary pipeline-flow boundaries (Stage 1 → 2 through Stage 12 → 13) are now authored above. Any new boundary follows the schema definition above and is appended as an H2 section per the append convention.
 
 ---
 
