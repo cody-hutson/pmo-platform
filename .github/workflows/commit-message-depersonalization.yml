@@ -45,17 +45,41 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # NO \b (grep -E treats it literally). HARD = personal-email domains, macOS home
-          # paths, or a suffixed variant of the public repo slug (bare 'pmo-platform' is the
-          # public repo itself; 'pmo-platform-<suffix>' is a private upstream). SOFT = internal
-          # version lineage (public line is v1.0x/v2.x; internal families are v3 + v8-v18) —
-          # a NOTICE only: process-intel, redacted in the history rewrite, not a credential.
-          HARD='[A-Za-z0-9._%+-]+@(gmail|ymail|yahoo|hotmail|outlook|proton(mail)?|icloud)\.[A-Za-z]|/Users/[a-z][a-z0-9._-]+|pmo-platform-[A-Za-z0-9]'
+          # NO \b (grep -E treats it literally).
+          # IDENTITY = personal-email domains or macOS home paths — a bare presence match.
+          # SLUG = the private-upstream repo slug 'pmo-platform-<suffix>' (bare 'pmo-platform'
+          #   is the public repo itself; a suffix marks a private upstream). This is NOT a bare
+          #   presence match, because the legitimate in-repo filename 'pmo-platform-context.md'
+          #   (release/skills/pmo-skill-refiner/references/) shares that prefix. A suffix that is
+          #   a filename (ends in a known in-repo file extension, trailing dots tolerated) is
+          #   carved out; only a NON-file suffix (bare slug, or e.g. '.git') is treated as a leak.
+          # SOFT = internal version lineage (public line is v1.0x/v2.x; internal families are
+          #   v3 + v8-v18) — a NOTICE only: process-intel, redacted in the history rewrite, not
+          #   a credential.
+          IDENTITY='[A-Za-z0-9._%+-]+@(gmail|ymail|yahoo|hotmail|outlook|proton(mail)?|icloud)\.[A-Za-z]|/Users/[a-z][a-z0-9._-]+'
+          FILEXT='(md|py|sh|txt|json|yml|yaml|toml|js|ts|png|svg|csv|cfg|ini|lock)'
           SOFT='v(3|8|9|1[0-7]|18)\.[0-9]'
           FOUND=0; REPORT=""
           for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
             MSG="$(git log -1 --format='%an%n%ae%n%cn%n%ce%n%B%n%(trailers:only,unfold)' "$sha")"
-            if printf '%s' "$MSG" | grep -qE "$HARD"; then
+            HIT=0
+            # (1) Personal email / home path — unchanged bare-presence detection.
+            if printf '%s' "$MSG" | grep -qE "$IDENTITY"; then
+              HIT=1
+            fi
+            # (2) Private-upstream slug — flag pmo-platform-<token> UNLESS the token is a filename.
+            # A bracket-safe char class means surrounding punctuation ( ) , : etc. terminates the
+            # token naturally; the file-extension carve-out exempts legitimate in-repo filenames.
+            if [ "$HIT" -eq 0 ]; then
+              while IFS= read -r slug; do
+                [ -z "$slug" ] && continue
+                if printf '%s' "$slug" | grep -qiE "\.${FILEXT}\.*$"; then
+                  continue   # filename — legitimate, exempt
+                fi
+                HIT=1; break # non-file suffix — private-upstream leak
+              done < <(printf '%s' "$MSG" | grep -oE 'pmo-platform-[A-Za-z0-9._-]+')
+            fi
+            if [ "$HIT" -eq 1 ]; then
               FOUND=1
               REPORT="${REPORT}${sha}: <redacted — personal email / home path / private-upstream in message or identity>"$'\n'
             fi
