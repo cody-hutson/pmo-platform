@@ -6723,6 +6723,62 @@ cmd_check() {
   fi
 
 
+  # Check 52 — Milestone-position drift (warn-mode initial)
+  #
+  # Re-derives every open milestone's `position:` from the live dependency graph
+  # (the same Kahn's-BFS derivation the producer tool applies) and WARNs for each
+  # milestone whose current `position:` line differs from the re-derived value —
+  # the drift the live G3-07 "Milestone-Position Resolution" gate would otherwise
+  # silently resolve via its fallback tier. Read-only: the drift probe mutates
+  # nothing (the fix is an operator-run `compute-milestone-positions.py --apply`);
+  # reversibility CHEAP. The derivation DEFINITION is not redefined here — it lives
+  # in the tool and is REFERENCED via `--check-drift`, per the card's AC scope.
+  # Warn-mode initial per core/rules/bypass-mode-readiness.md §Shakedown (the
+  # 14/18/42/43/50/51/53 precedent): drift is emitted as a non-blocking WARN during
+  # calibration. Reflexive cutover clause (AC10): the drift check applies to
+  # milestones entering Stage 3 strictly AFTER this tool's introducing-release
+  # merge SHA (recorded in the release log); the introducing release is itself
+  # exempt (reflexive-pipeline loop — the check does not fire on its own
+  # introducing release's positions). Flip to enforce via a `milestone-position.mode`
+  # file after the >=3-day warn-log review — "enforce" there means the drift finding
+  # increments ISSUES (dep-order drift becomes a gating signal); it does NOT change
+  # what is derived. gh-unavailable → SKIP (the derivation needs the live milestone
+  # + issue set; mirrors Check 39/40/51/53 offline SKIP). Primitive:
+  # release/tools/compute-milestone-positions.py --check-drift.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 52: Milestone-position drift (warn-mode initial; enforce-flip deferred)"
+    local c52_script="release/tools/compute-milestone-positions.py"
+    if [[ ! -f "$c52_script" ]]; then
+      flag_warn_or_issue "milestone-position" "primitive script missing: $c52_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — milestone-position drift needs the live milestone + issue set (offline/unauth; mirrors Check 39/40/51/53)"
+    else
+      local c52_mode
+      c52_mode=$(resolve_check_mode "milestone-position")
+      local c52_out c52_exit=0
+      c52_out=$(/usr/bin/python3 "$c52_script" --check-drift --output-format tsv 2>&1) || c52_exit=$?
+      if [[ $c52_exit -eq 3 ]]; then
+        flag_warn_or_issue "milestone-position" "input failure (exit 3): $(echo "$c52_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+      elif [[ $c52_exit -eq 0 ]]; then
+        log "  OK:    all open milestone positions match the re-derived dep-graph order — no drift"
+      elif [[ $c52_exit -eq 1 ]]; then
+        local c52_count c52_drift
+        c52_count=$(echo "$c52_out" | awk -F'\t' '$1=="COUNT"{print $2}')
+        c52_drift=$(echo "$c52_out" | awk -F'\t' '$1=="DRIFT"{print $2}' | paste -sd, -)
+        if [[ "$c52_mode" == "enforce" ]]; then
+          log "  FAIL:  milestone-position — ${c52_count} milestone(s) drift from the re-derived dep-graph order:"
+          log "           ${c52_drift:-(none)}"
+          ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "milestone-position" "${c52_count} milestone(s) drift from the re-derived dep-graph order — run compute-milestone-positions.py --apply (warn-mode; flip milestone-position.mode to enforce after shakedown). drift: ${c52_drift:-(none)}"
+        fi
+      else
+        flag_warn_or_issue "milestone-position" "check errored (exit $c52_exit): $(echo "$c52_out" | head -1)"
+      fi
+    fi
+  fi
+
+
   # Check 53 — Approved-queue-depth monitor (warn-mode initial)
   #
   # The active DETECTOR behind the Stage-3 Bundle A7 "T1 Approved-queue depth"
