@@ -234,6 +234,7 @@ If any sentence has no content, use "None identified."
 
 ### Structure
 **Format:** CSV with two logical sections — Active Register and Archive.
+**Agent-native surface:** the machine-schema [`raid-log.schema.json`](raid-log.schema.json) — EAD-derived from the RAID Item entity — is the agent-native validation surface; the CSV above is its persistence *dialect*. The agent read/write path is native structured-instruction (no `csv` module on the agent path); `csv.DictReader` is the validator harness, not the agent path. The stakeholder-facing view (CSV export / Confluence) is produced on demand by **artifact-generator** via the [`dual-format-document-model.md`](../standards/dual-format-document-model.md) `raid-log--stakeholder-csv` translation map (per ADR-064) — not a bespoke export path. The 14-column schema below is unchanged.
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
