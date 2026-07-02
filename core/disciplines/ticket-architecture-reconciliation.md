@@ -81,6 +81,6 @@ This is the exact location [`stage-05-solutioning.md`](../../release/references/
 - *Mitigation:* procedure step 4 requires routing each reconciliation as a D-class decision with a C-classification; the §4 record schema has a `C-classification` field.
 - *Principal-vs-junior:* a principal classifies each reconciliation (C1/C2/C3) and routes C3 to Tier 0; a junior writes "reconciled" and moves on.
 
-## § 7. Cutover
+## § 7. Applicability
 
-Applies to releases entering Stage 4 / Stage 5 strictly AFTER this discipline's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot bind its own design/planning work, which ran before the discipline existed). This matches the sibling disciplines' cutover norm.
+This discipline governs every ticket entering Stage 4 Planning or Stage 5 Solutioning: when a tracked ticket touches an architecture surface (an ADR, a governing discipline, a registry / ledger / charter, or the roadmap), the reconciliation step fires at stage entry. It is a standing entry-gate obligation alongside the sibling design-stage disciplines — a discipline governs the work done after it exists, and needs no release-scoped rollout clause.

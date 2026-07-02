@@ -346,7 +346,7 @@ When QA checkpoints are implemented, the evaluator can consume them as additiona
 - Added **Per-Boundary Judgment-Dimension Anchors** subsection binding the existing §7 prose judgment dimensions of Stage 9 / 12 / 13 to their structural criteria (G-PR* / G-EX* / G-CL*). No new dimensions authored — the shard §7 `Judgment` lines are cited, not restated (Gate 6→7 precedent). Enumerated the three late boundaries in the Layer-2 worked-example (Source-mapping) so the rubric names all Path-B boundaries, not just Stage 5.
 - **Convention:** prose Path-B dimensions (no `J-*` IDs). The "Stages 1-8 have J-* IDs" premise is void — no such convention exists; Gates 4+ score named prose dimensions, Gates 1-3 score `Check=judgment` criteria by structural ID.
 - **Calibration:** no `calibration-data.md` schema change needed — the calibration row is boundary-keyed and dimension-agnostic (Prior Version / Confidence / Rec / Outcome Items / Escapes / Accuracy); adding named dimensions to a boundary already in the calibration population adds zero columns and zero rows-schema change.
-- Added a one-line **G1-04 bidirectional** scoring note to the Layer-2 Source-mapping (Path A) per #96 — G1-04 scores FAIL for both under- and over-specification from the criterion text alone.
+- Added a one-line **G1-04 bidirectional** scoring note to the Layer-2 Source-mapping (Path A) — G1-04 scores FAIL for both under- and over-specification from the criterion text alone.
 - Also reconciled the header §Schema `Schema version` stanza to the versioning value (it had lagged at 1.0 through the v1.1 bump).
 - Schema bump v1.1 → v1.2. Consumers (handoff-coordinator) require no structural change; the Path-B parse path already reads named §7 dimensions.
 
