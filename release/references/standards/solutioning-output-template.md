@@ -276,6 +276,8 @@ The `### Output for Stage 6` H3 (#7 in the comment frame) is the boundary handof
 
 **Composition with Stage 5 § 6 Date-variable discipline:** If the spec creates ≥1 downstream load-bearing identifier carrying a date in `YYYY-MM-DD` form (audit-folder paths, AC verifier identifiers), the `### Output for Stage 6` H3 MUST include a `### Date Variable` sibling block per [`date-variable-convention.md`](../../../core/standards/date-variable-convention.md). Variable `${AUDIT_DATE_UTC}` resolves at Stage 6 first commit.
 
+**Composition with Stage 5 Phase A4.2 Integration-AC Emission:** If the issue under design has ≥1 upstream dependency (a native `blocked-by` edge OR a directional soft edge naming this issue as downstream in the Stage-4 § Dependency Graph), the `### Output for Stage 6` H3 MUST include an optional `### Integration Acceptance Criteria` sub-heading listing the `INT-N` integration ACs authored at Phase A4.2 (per [`stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) § Phase A4.2). Each `INT-N` names the upstream issue, the shared surface, and a mutual-consistency assertion gradable at Stage 8 under the standard per-criterion verdict enum. The sub-heading is **present-when-triggered** and **OMITTED (non-ceremony) when the issue has no upstream dependency** — the same conditional-omission discipline as the Cascade-Sweep and ref-form blocks above.
+
 ## § 5. Template Scaffold (copy-paste ready)
 
 Stage 5 spokes use the scaffold below as starting draft. Replace bracketed placeholders; remove conditional sections (Evidence-Grounding / Tier-A) when their omission rules fire.
@@ -387,6 +389,11 @@ Stage 5 spokes use the scaffold below as starting draft. Replace bracketed place
 \`\`\`
 
 #### Change 2 — ...
+
+### Integration Acceptance Criteria
+<!-- OPTIONAL — present ONLY when this issue has ≥1 upstream dependency (Phase A4.2); OMIT entirely otherwise -->
+
+- [ ] **INT-1 (vs #<upstream-N>):** On <shared surface — file/table/schema/enum/capability>, this issue's output remains mutually consistent with #<N>'s output — <the concrete consistency assertion, gradable yes/no by the Stage-8 judge>. *Grades at Stage 8 Phase B under the standard per-criterion verdict enum.*
 ```
 
 ## § 6. Failure Modes
