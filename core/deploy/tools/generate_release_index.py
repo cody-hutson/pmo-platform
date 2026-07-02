@@ -113,21 +113,29 @@ def find_artifact(version_key: str, milestone: str, kind: str) -> str | None:
     keys = [k for k in (vslug, mslug) if k]
     short = vslug.split("-", 1)[0] if vslug else ""
 
-    for candidate in sorted(directory.glob(f"*{suffix}")):
+    # rglob (recursive) — plan/note artifacts are foldered into major-version
+    # subdirectories (plans/v1|v2|v3/…, notes/…, plus the _unversioned/ bucket)
+    # per the plans/README.md disposition rule (#230, v3.46). A flat glob would
+    # miss every subfoldered file and regenerate an all-"—" Release-Notes column
+    # (FM-1 destructive-regenerate). The returned INDEX-relative path carries the
+    # subfolder segment (e.g. "notes/v3/v3.45_RELEASE_NOTES.md") so the link
+    # resolves from release/releases/ where the INDEX lives.
+    for candidate in sorted(directory.rglob(f"*{suffix}")):
         name = candidate.name
         stem_key = name[:-len(suffix)]
+        rel = f"{directory.name}/{candidate.relative_to(directory).as_posix()}"
         for key in keys:
             if stem_key == key:
-                return f"{directory.name}/{name}"
+                return rel
             # Slug suffix only ('<key>-<slug>'); never a patch sibling. A bare
             # startswith(key) makes vX.Y greedily match vX.Y.Z (e.g. v2.06 -> the
             # v2.06.1 note), since the patch note sorts first and is a string prefix
             # of the base version. Requiring the '-' separator admits the legitimate
             # vX.Y-<theme-slug> form while rejecting the vX.Y.Z patch form.
             if key and stem_key.startswith(key + "-"):
-                return f"{directory.name}/{name}"
+                return rel
         if short and (vslug.startswith(stem_key + "-") and stem_key.startswith(short)):
-            return f"{directory.name}/{name}"
+            return rel
 
     if kind == "plan" and ARCHIVE_PLANS_DIR.exists():
         for candidate in sorted(ARCHIVE_PLANS_DIR.glob(f"*{suffix}")):
