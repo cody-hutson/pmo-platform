@@ -106,7 +106,7 @@ paths remain the logged item or the chat-returned copy/paste body; no scratch `.
 [`core/specs/autonomy-tiers.md` § Irreducible Human Tasks](../../../../core/specs/autonomy-tiers.md)
 (governance-file / financial / security-permission / RAID-close / …). On any hit,
 downgrade to the `recommend` (surface-only) path even at `bounded_auto`. This floor is
-a **skill-level self-limit** — the C5 enforcement hook (#1163) hard-blocks only the
+a **skill-level self-limit** — the C5 enforcement hook hard-blocks only the
 payload-detectable Tier-0 classes (governance-file writes / cross-domain bridge
 paths), and Mode C's `gh issue create` is not payload-detectable, so **no hook fires
 on this create**. The classifier is the only guard; run it unconditionally.

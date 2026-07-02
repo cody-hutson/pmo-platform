@@ -176,7 +176,7 @@ not to ship, but both bound what the clamp actually guarantees:
    weakening." State the reduced guarantee honestly.
 
 2. **Mode C's create hazard has NO mechanical hook backstop.** The C5 PreToolUse
-   enforcement hook (#1163 — **CLOSED**, shipped v2.07) is often cited as the
+   enforcement hook (**CLOSED**, shipped) is often cited as the
    backstop for the `automation_level` ceiling. It is not a backstop for Mode C.
    When the operator flips it warn→enforce, the hook hard-blocks **only the
    payload-detectable Tier-0 classes** — governance-file writes and cross-domain
@@ -200,7 +200,7 @@ A signal whose **implied work item** would touch any Irreducible Human Task is
 GO/NO-GO, Stage 12 Execute, governance-file modification, cross-domain bridge write,
 destructive-op-outside-workspace) plus the RAID-Log-close / stakeholder-facing rule.
 Mode C **cites** that set; it does **not** re-author a competing list here or in
-`operator.toml` (duplicate-source discipline — the same discipline the #322 pre-read
+`operator.toml` (duplicate-source discipline — the same discipline the ambient-automation pre-read
 warned against). The 4-name gloss in AC5 (governance / financial / security /
 RAID-close) is the plain-language shorthand for that canonical set.
 
@@ -241,7 +241,7 @@ performs in the "Work item filed without consulting existing tracker state" FM b
 plausible open match it **enriches** the existing item (a comment-ready block) or
 **no-ops**, rather than create; only a no-match proceeds to the create branch. That
 scan **pre-exists** in this file — Mode C consumes it; it does not build it. (The
-same-file relationship with #565, which reconciled a different FM in this file, is
+same-file relationship with the sibling reconcile that touched a different FM in this file, is
 **file-contention**, not a build dependency.)
 
 ## The type registry
@@ -399,7 +399,7 @@ handling.
   shift). Do NOT claim "no weakening." The reduction is *bounded* — auto-create is
   `bounded_auto`-only, a Tier-0-implied item never auto-files at any level, and the
   interactive default (Modes A/B) keeps its per-item confirm unchanged — **and it has
-  no mechanical hook backstop**: the C5 enforcement hook (#1163, CLOSED) hard-blocks
+  no mechanical hook backstop**: the C5 enforcement hook (CLOSED) hard-blocks
   only payload-detectable Tier-0 (governance-file writes / cross-domain bridge
   paths), and Mode C's `gh issue create` is neither, so the Tier-0 floor here is a
   skill-level self-limit only. **The "no scratch-file write" half of this FM is
@@ -614,7 +614,7 @@ handling.
   financial / security-permission / RAID-close / …), even at `bounded_auto`, because
   the Tier-0 floor is `effective = min(automation_level, per-action max)` and the
   per-action max for a Tier-0 item is **manual** regardless of the dial — and because
-  **there is no mechanical backstop for this create**: the C5 hook (#1163, CLOSED)
+  **there is no mechanical backstop for this create**: the C5 hook (CLOSED)
   hard-blocks only payload-detectable Tier-0 (governance-file writes / cross-domain
   bridge paths), and Mode C's `gh issue create` is not payload-detectable, so the
   hook never fires on it. The Tier-0 floor is a skill-level self-limit; if the
@@ -651,9 +651,9 @@ handling.
   tracker state" FM), non-interactively: on a plausible open match, **enrich**
   (append a comment-ready block to the existing item) or **no-op** rather than create;
   only a no-match proceeds to create. That scan **pre-exists** — Mode C consumes it,
-  it does not build it. (The same-file relationship with #565, which reconciled a
+  it does not build it. (The same-file relationship with the sibling reconcile that touched a
   *different* FM in this file, is **file-contention** — serialize the SKILL.md edits —
-  **not a capability dependency**; the scan Mode C reuses does not come from #565.)
+  **not a capability dependency**; the scan Mode C reuses does not come from that sibling change.)
 - **Principal response vs. junior response:** Principal enriches the standing item and
   keeps one home; junior floods the backlog and Triage burns a cycle reconciling 12
   dupes.
@@ -669,7 +669,7 @@ handling.
   because a dropped signal is indistinguishable from no signal and defeats the
   auto-logging rule's purpose.
 - **Root cause:** Conflating "create nothing" (correct at `off`) with "do nothing"
-  (wrong) — the ambient-automation precedent (#322's C1 clamp) shows `off` still
+  (wrong) — the ambient-automation precedent (its C1 clamp) shows `off` still
   records a passive trace; Mode C must likewise leave one.
 - **Mitigation:** At `off`, Mode C returns a structured "held — dial off" result to
   the caller, and (per the CLAUDE.md auto-logging rule) the calling skill notes the
