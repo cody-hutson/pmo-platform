@@ -48,6 +48,8 @@ Named gates inherit all structural checks from the corresponding [field-lifecycl
 | Triage Readiness | Gate 1->2 (field-lifecycle-matrix.md) | Superset — adds judgment criteria to structural checks |
 | Workflow Readiness | Gate 2->3 (field-lifecycle-matrix.md) | Superset — adds routing validation and management action checks |
 | Release Readiness | Gate 3->4 (field-lifecycle-matrix.md) | Superset — adds dependency chain validation and scope assessment |
+| Plan Readiness | Gate 3->4 (field-lifecycle-matrix.md) | Superset — adds release-plan-artifact-presence criteria to the structural Bundle->Planning exit |
+| Engineering Completeness | Gate 6->7 (field-lifecycle-matrix.md) | Superset — adds PR-completeness, commit-linkage, and verification-evidence criteria to the structural Engineering->DevTest exit |
 | Plan Review | Gate 8->9 + Gate 9->12 (field-lifecycle-matrix.md) | Superset — adds evidence-package and decision-record criteria to structural entry/exit checks |
 | Execute Readiness | Gate 12->13 (field-lifecycle-matrix.md) | Superset — adds deployment-execution and verification criteria to structural transition checks |
 | Close Readiness | Gate 13 Exit (field-lifecycle-matrix.md) | Superset — adds operational-deployment and verification-evidence criteria to structural close checks |
@@ -417,6 +419,60 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ---
 
+## Gate 4: Plan Readiness
+
+*"Is the release plan complete enough to hand to Engineering?"*
+
+**Stage boundary:** 4->5/6 (Planning -> Solutioning/Engineering)
+**Inherits:** Gate 3->4 from [field-lifecycle-matrix.md](field-lifecycle-matrix.md) (the structural Bundle->Planning exit)
+
+| ID | Criterion | Type | Check | Automation |
+|---|---|---|---|---|
+| G4-01 | **Implementation Sequence present.** Release plan file contains a `## Implementation Sequence` (or `### Implementation Sequence`) section that is non-empty. Detection: `grep -qE '^#{2,3} Implementation Sequence' <release-plan>`. | artifact | structural | auto |
+| G4-02 | **File-Change Matrix present.** Release plan file contains a `## File Change Matrix` (or `### File Change Matrix`) section that is non-empty. Detection: `grep -qE '^#{2,3} File Change Matrix' <release-plan>`. | artifact | structural | auto |
+| G4-03 | **Risk Register present.** Release plan file contains a `## Risk Register` (or `### Risk Register`) section that is non-empty. Detection: `grep -qE '^#{2,3} Risk Register' <release-plan>`. | artifact | structural | auto |
+| G4-04 | **Verification Plan present.** Release plan file contains a `## Verification Plan` (or `### Verification Plan`) section that is non-empty. Detection: `grep -qE '^#{2,3} Verification Plan' <release-plan>`. | artifact | structural | auto |
+| G4-05 | **Delivery Strategy present.** Release plan file contains a `## Delivery Strategy` (or `### Delivery Strategy`) section naming branch + merge approach + rollback. Detection: `grep -qE '^#{2,3} Delivery Strategy' <release-plan>`. | artifact | structural | auto |
+
+### Self-Repair Actions
+
+| ID | On Failure | Action |
+|---|---|---|
+| G4-01 | Implementation Sequence section absent or empty | Return to Stage 4 Planning: author the `## Implementation Sequence` section (dependency-ordered issue list) per [stage-04-planning.md](../../release/references/pipeline/stage-04-planning.md) §6 before handoff to Stage 5/6. Warn-mode: log to `core/hooks/gate-g4-warn-log.jsonl` and proceed. |
+| G4-02 | File Change Matrix section absent or empty | Return to Stage 4 Planning: author the `## File Change Matrix` (per-issue affected-files table) per §6. Warn-mode: log + proceed. |
+| G4-03 | Risk Register section absent or empty | Return to Stage 4 Planning: populate the `## Risk Register` (named risk + owner + mitigation, no passive-risk voice per the platform guardrail). Warn-mode: log + proceed. |
+| G4-04 | Verification Plan section absent or empty | Return to Stage 4 Planning: author the `## Verification Plan` (per-issue AC->method mapping per §6). Warn-mode: log + proceed. |
+| G4-05 | Delivery Strategy section absent or missing branch/merge/rollback | Return to Stage 4 Planning: author `## Delivery Strategy` naming branch + merge approach + rollback strategy per §6. Warn-mode: log + proceed. |
+
+---
+
+## Gate 6: Engineering Completeness
+
+*"Is the implementation complete and reviewable enough to hand to Dev Testing?"*
+
+**Stage boundary:** 6->7 (Engineering -> Dev Testing)
+**Inherits:** Gate 6->7 from [field-lifecycle-matrix.md](field-lifecycle-matrix.md) (PR created + Engineering sub-tasks closed + Assignee set + Status = In Progress)
+
+| ID | Criterion | Type | Check | Automation |
+|---|---|---|---|---|
+| G6-01 | **PR exists for the release.** A pull request exists for the release branch. Detection: `gh pr list --head <release-branch> --json number` returns >=1 PR (or `gh pr view <PR> --json state` resolves). | artifact | structural | auto |
+| G6-02 | **Commits link source issues.** Every release-scoped issue has >=1 commit on the release branch referencing its `#N`. Detection: `git log --grep="#<N>"` against the Milestone issue list; `issues_with_commits / total_release_issues = 1.0`. | validation | structural | auto |
+| G6-03 | **PR body is parser-clean.** The PR body parses without a BLOCKING/parse-error signal (required metadata sections resolvable: implementation summary, per-issue status). Detection: PR-body parse yields no parse-error signal (mirrors the release-planner parse-status `clean` semantics; inline `gh pr view <PR> --json body` feeds the parse). | artifact | structural | auto |
+| G6-04 | **Verification evidence present.** The PR body contains a Verification Evidence section with per-issue PASS/FAIL results. Detection: `gh pr view <PR> --json body` -> `grep -qE 'Verification Evidence'`; `issues_with_verification_block / total_issues = 1.0`. | artifact | structural | auto |
+| G6-05 | **Change Description section present.** The release plan FILE contains a `## Change Description` section (authored at Stage 6 Phase C1 per RELEASE_PROTOCOL § Change Description Protocol), committed on the release branch before PR ready-for-review. Detection: `grep -qE '^#{2} Change Description' <release-plan>`. | artifact | structural | auto |
+
+### Self-Repair Actions
+
+| ID | On Failure | Action |
+|---|---|---|
+| G6-01 | No PR for the release branch | Return to Stage 6 Engineering Phase C2: create the PR with full metadata per [stage-06-engineering.md](../../release/references/pipeline/stage-06-engineering.md) C2. Warn-mode: log to `core/hooks/gate-g6-warn-log.jsonl` and proceed. |
+| G6-02 | An issue has no commit referencing its `#N` | Return to Stage 6 Engineering: land a commit referencing the issue per Phase B1 commit convention, or record a documented deviation in the release-plan deviation log if the issue was descoped. Warn-mode: log + proceed. |
+| G6-03 | PR body fails parse (missing/malformed required sections) | Return to Stage 6 Engineering Phase C2: repair the PR body to the metadata template (implementation summary + per-issue status). Warn-mode: log + proceed. |
+| G6-04 | Verification Evidence section absent from PR body | Return to Stage 6 Engineering Phase C4: author the Verification Evidence section with per-issue PASS/FAIL results before handoff. Warn-mode: log + proceed. |
+| G6-05 | Change Description section absent from release plan | Return to Stage 6 Engineering Phase C1: author the `## Change Description` section in the release plan FILE per RELEASE_PROTOCOL § Change Description Protocol; commit on the release branch before PR ready-for-review. Warn-mode: log + proceed. |
+
+---
+
 ## Gate G-BR: Bundle Refresh Readiness
 
 *"Has the bundle drifted enough since creation to require operator decision, and is the refresh decision recorded?"*
@@ -545,7 +601,17 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 1.21
+**Schema version:** 1.22
+
+**v1.22 changes (non-breaking — minor; additive — Gate 4 + Gate 6; no criterion ID renumber; existing IDs stable):**
+
+- Added **Gate 4: Plan Readiness** (G4-01..G4-05) — the Planning->Solutioning/Engineering (4->5/6) exit gate. 5 `artifact`/`structural`/`auto` criteria (Implementation Sequence / File Change Matrix / Risk Register / Verification Plan / Delivery Strategy present) + 5 self-repair rows + 1 Inheritance-Rules row (inherits Gate 3->4). Closes the long-standing hole: Stage 4 was one of only two stages with no discrete gate ID (gate-evaluation-spec.md already defined the 4->5/6 metrics boundary but sourced no gate-criteria-spec IDs).
+- Added **Gate 6: Engineering Completeness** (G6-01..G6-05) — the Engineering->DevTesting (6->7) exit gate. 5 criteria (PR exists / commits link source issues / parser-clean PR body / verification-evidence present / Change Description section present) + 5 self-repair rows + 1 Inheritance-Rules row (inherits Gate 6->7). Closes the second no-ID stage.
+- Both gates ship **warn-mode** — structural FAILs log to `core/hooks/gate-g4-warn-log.jsonl` / `core/hooks/gate-g6-warn-log.jsonl` and the boundary PROCEEDS with an operator-visible warning; flip-to-enforce deferred to a 2-3-release shakedown per the G-CL6/G-CL7/G-CL8/G3-14/G3-15 shakedown-then-enforce precedent ([`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md)).
+- Cross-refs: `stage-04-planning.md` §7 cites G4; `stage-06-engineering.md` §7 cites G6.
+- G4/G6 use the **numeric-gate ID format** (G4-01 / G6-01), consistent with the G1-01..G3-18 numeric-gate convention for contiguous-numbered stages; the stage-abbrev format (G-PR/G-EX/G-CL) stays reserved for the compressed late stages (9/12/13). G4-* and G6-* are fresh namespaces (no prior G4-/G6- IDs existed).
+- Schema bump v1.21 -> v1.22 (non-breaking minor; additive — Gate 4 + Gate 6). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no structural change. Existing G1-01..G1-09 / G2-01..G2-12 / G3-01..G3-18 + G-BR1..G-BR4 + G-PR1..G-PR9 + G-EX1..G-EX8 + G-CL1..G-CL8 IDs unchanged; no ID renumber, no column/type change.
+- **Cutover discipline (v1.22 additions):** G4 applies to releases entering Stage 4 and G6 to releases entering Stage 6 strictly AFTER this change's introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new gate; its own Stage 4/6 ran before these gates existed).
 
 **v1.21 changes (non-breaking — minor; additive — G3-18; no criterion ID renumber; G1-01..G3-17 stable):**
 

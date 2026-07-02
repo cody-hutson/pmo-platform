@@ -176,6 +176,7 @@ Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schema
 Metrics: dep satisfaction, file coverage verified, change spec completeness, contention resolved, risk register populated, verification plan complete, Delivery Strategy specified, routing decision made.
 Judgment (1-5): sequence coherence, risk awareness, verification completeness, plan actionability.
 Calibration: planned vs. actual sequence, files, risks, verification — tracked post-release.
+Named-gate criteria: **G4 Plan Readiness** (G4-01..G4-05) per [`core/schemas/gate-criteria-spec.md § Gate 4`](../../../core/schemas/gate-criteria-spec.md). Structural artifact-presence checks on the release-plan sections (Implementation Sequence / File Change Matrix / Risk Register / Verification Plan / Delivery Strategy); warn-mode.
 
 ## 8. Automation Level
 Overall Tier 2. Today: agent runs A1-A5 in conversation. Target: Planning mode in release-planner skill.
