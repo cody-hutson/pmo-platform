@@ -74,6 +74,58 @@ tracker" / "work item" / "item reference", not a specific tool's nouns.
 - **No auto-emit, ever.** The only persistence paths remain the post-approval logged
   item or the copy/paste-ready body. There is no write path to a tracked scratch file
   (the originating-defect invariant).
+- **Scope of this gate.** This AskUserQuestion confirm governs the **interactive**
+  modes (A/B), where a human is present. The **non-interactive** ambient path
+  (Mode C) substitutes a standing `automation_level` ceiling + a Tier-0 floor for the
+  binary confirm — see § Mode C — non-interactive emit below. That substitution does
+  NOT relax the interactive gate, and it does NOT touch the emit invariant.
+
+## Mode C — non-interactive emit
+
+Mode C (Ambient Auto-Log, `SKILL.md` § Mode C) drives the **same emit process above**
+with **one substitution**: the human `AskUserQuestion` confirm is replaced by a
+standing `operator.toml [automation].automation_level` ceiling plus the Tier-0
+never-auto floor. Everything else — Render, Gate (5-test + title-informativeness),
+Log, Read back, Report, and the § Structured-field carriage rules — is **reused
+verbatim**. There is **no parallel emit schema** and **no new persistence surface**:
+the § The emit invariant above holds absolutely for Mode C (the only persistence
+paths remain the logged item or the chat-returned copy/paste body; no scratch `.md`).
+
+**Confirm-gate substitution (per `automation_level`):**
+
+- `off` — author nothing, create nothing; return a structured **"signal detected,
+  held — dial is off"** record to the caller so the signal is surfaced, not dropped.
+- `recommend` — run Render + Gate, then **surface** the rendered body **plus the exact
+  `gh issue create` command** to the caller; do NOT run Log. (The `recommend`
+  equivalent of the no-tracker fallback body, produced proactively.)
+- `bounded_auto` — run the full create path (Render → Gate → Log → Read back →
+  Report) **without** the AskUserQuestion, **unless** the Tier-0 floor forces
+  surface-only.
+
+**Tier-0 floor.** Before the Log step, classify the implied item against
+[`core/specs/autonomy-tiers.md` § Irreducible Human Tasks](../../../../core/specs/autonomy-tiers.md)
+(governance-file / financial / security-permission / RAID-close / …). On any hit,
+downgrade to the `recommend` (surface-only) path even at `bounded_auto`. This floor is
+a **skill-level self-limit** — the C5 enforcement hook (#1163) hard-blocks only the
+payload-detectable Tier-0 classes (governance-file writes / cross-domain bridge
+paths), and Mode C's `gh issue create` is not payload-detectable, so **no hook fires
+on this create**. The classifier is the only guard; run it unconditionally.
+
+**Non-interactive self-repair → observation downgrade.** With no operator to fix a
+failed Gate, Mode C **re-authors once** from the structured signal input on a fixable
+failure (a vague field, a non-informative title, a read-back mismatch). If it still
+fails, it **downgrades to the observation tier** (the § Observation-tier fallback
+below — reused, not reinvented): render as `observation.yml`, emit under the same
+`automation_level` clamp, and record that it was filed as an observation placeholder
+for Triage to promote. Never emit a malformed typed item; never silently drop the
+signal.
+
+**Honest note (do NOT soften):** substituting the per-item human confirm with a
+standing dial is a **genuine reduction** of the confirm-gate guarantee (a per-item
+approval becomes a standing class-authorization) — bounded (auto-create is
+`bounded_auto`-only; Tier-0 never auto-files; the emit invariant is untouched) but
+real, and with no mechanical hook backstop for the `gh issue create` path. It applies
+to Mode C **only**; Modes A/B keep the per-item AskUserQuestion confirm unchanged.
 
 ## Assumptions-as-owned-items (in the render step)
 

@@ -9,13 +9,15 @@ description: >
   story's acceptance criteria and value), applies the 5-test rule live, confirms
   the drafted item with you, then logs it — never a scratch file. One work item per
   request (child candidates are noted in the body for later slicing; it does not
-  auto-decompose). Two modes:
+  auto-decompose). Three modes:
   Elicit (guided interview) and Triage-readiness check (run the 5-test against a
-  draft you already wrote). Use when the user says "help me file this idea as an
-  issue", "turn this into a work item", "log this idea", "what type of work item
-  is this", "scope this idea for intake", "is this intake-ready", or "help me write
-  up this bug/story/initiative".
-version: v2.26
+  draft you already wrote) are the interactive front-door modes; Ambient Auto-Log
+  (Mode C) is a non-interactive path invoked programmatically by the CLAUDE.md
+  auto-logging rule, never by a conversational phrase. Use when the user says
+  "help me file this idea as an issue", "turn this into a work item", "log this
+  idea", "what type of work item is this", "scope this idea for intake", "is this
+  intake-ready", or "help me write up this bug/story/initiative".
+version: v2.27
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -85,7 +87,10 @@ rule plus the WHAT/HOW boundary; the loop and the rule are in
 |---|---|
 | User has a rough/unformed idea and wants it shaped and logged as a work item | **Mode A — Elicit** |
 | User pasted an already-drafted item and asks "is this intake-ready?" / "check this draft" | **Mode B — Triage-readiness check** |
+| A demand signal (gap / inconsistency / broken handoff / missing artifact / improvement) is detected **programmatically** during any skill's run, with no interactive operator present | **Mode C — Ambient Auto-Log** |
 | Ambiguous | Ask once: "Do you want me to help shape this from scratch, or check a draft you already have?" |
+
+Modes A and B are the interactive front door — a human is present and confirms every filed item via an explicit binary AskUserQuestion (Autonomy Tier 1). Mode C is the **non-interactive** path: it is never triggered by a conversational phrase; it is invoked programmatically (by the CLAUDE.md auto-logging rule or an ambient consumer) and substitutes the `automation_level` ceiling + the Tier-0 floor for the human confirm.
 
 ## Mode A — Elicit (the four-phase loop)
 
@@ -114,6 +119,130 @@ gate the loop reference defines (altitude gate → type-landing gate → clarity
 Run the 5-test (T1–T5 per `references/elicitation-loop.md`) against the user's
 draft. Return: PASS, or the failing test plus the WHAT-framing rewrite. Do not
 re-elicit a passing item.
+
+## Mode C — Ambient Auto-Log
+
+The **non-interactive** authoring path of this same component. It executes the
+CLAUDE.md auto-logging rule ("create a GitHub Issue immediately… do not wait to be
+asked") as a governed skill mode rather than ad-hoc agent behavior, when a demand
+signal surfaces mid-run with **no operator present to confirm**. It is the same
+authoring component as Modes A/B — the interactive/non-interactive split is a mode
+distinction, not a component split (per [ADR-016 §2](../../../core/ADRs/ADR-016-intake-front-door-architectural-boundary.md):
+`intake-desk` is the component that Authors work items; a second authoring surface
+would violate the verb-disjoint boundary).
+
+**How it is invoked (the seam).** Mode C is never triggered by a conversational
+phrase. A caller — the CLAUDE.md auto-logging rule (the primary, always-present
+consumer) or a future ambient consumer — hands Mode C (i) the detected signal as a
+structured input (what is missing / what good looks like / affected file — the
+observation-tier field triplet is the floor) and (ii) an implied work-item type
+(`improvement` by default; `bug` on a defect signature). Mode C does the rest via
+**reused machinery**: the Mode-A render/validate/create path and the
+`references/output-contract.md` emit invariant, verbatim. The **only** Mode-A step
+Mode C removes is the human `AskUserQuestion` confirm — replaced by the
+`automation_level` clamp plus the Tier-0 floor below. There is **no parallel emit
+schema** and **no new persistence surface**.
+
+### The `automation_level` clamp (the confirm-gate substitution)
+
+Mode C reads `operator.toml [automation].automation_level` as a **ceiling** (not a
+switch) and clamps every candidate create by it. The effective authority for any
+one signal is `min(automation_level, per-action max)`, and the per-action max for a
+Tier-0 item is always **manual** (the floor below), regardless of the dial.
+
+| `automation_level` | Mode C behavior |
+|---|---|
+| `off` | **No-op on creation, but never a silent black hole.** Author nothing, create nothing — but return a structured **"signal detected, held — dial is off"** record to the caller so the signal is visible (the calling skill notes the held signal in its own output). A dropped signal is indistinguishable from no signal; `off` means "create nothing," not "do nothing." |
+| `recommend` | **Author + surface, create nothing.** Render the item body (reused Mode-A render), run the 5-test + title-informativeness gate, and surface the rendered body **plus the exact `gh issue create` command** to the caller. Do NOT create. (This is the `recommend` equivalent — the operator can file it by hand.) |
+| `bounded_auto` | **Author → validate → create** without the interactive confirm gate. Render → 5-test → structured-field carriage → `gh issue create` → read-back → report (the full `output-contract.md` create path), **unless** the Tier-0 floor forces surface-only (below). |
+
+`bounded_auto` is the **sole auto-create surface**. `recommend` and `off` never
+create.
+
+### Honest safety read (do NOT soften — read this before relying on the clamp)
+
+Two facts about Mode C's safety envelope must be stated plainly; neither is a reason
+not to ship, but both bound what the clamp actually guarantees:
+
+1. **Substituting the confirm gate is a genuine reduction of the line-239 invariant,
+   not a "no-op reconciliation."** The interactive modes require a **per-item**
+   human confirm (a human approves *this specific* item before it is filed). Mode C
+   replaces that, for the ambient path only, with a **standing** `automation_level`
+   dial (the operator authorized *this class of auto-file* once, in config). This is
+   a **per-item → standing** shift, and it is a real weakening of the guarantee. It
+   is bounded (auto-create is `bounded_auto`-only; Tier-0 never auto-files; the
+   "no scratch-file write" invariant is preserved absolutely), and Modes A/B keep
+   their per-item confirm **unchanged** — but do not describe Mode C as "no
+   weakening." State the reduced guarantee honestly.
+
+2. **Mode C's create hazard has NO mechanical hook backstop.** The C5 PreToolUse
+   enforcement hook (#1163 — **CLOSED**, shipped v2.07) is often cited as the
+   backstop for the `automation_level` ceiling. It is not a backstop for Mode C.
+   When the operator flips it warn→enforce, the hook hard-blocks **only the
+   payload-detectable Tier-0 classes** — governance-file writes and cross-domain
+   bridge paths — because those are decidable from the tool-call payload (per
+   `core/config/operator.toml.template` § ENFORCEMENT POSTURE). Mode C's hazardous
+   action is **`gh issue create`**, which is **neither** a governance-file write
+   **nor** a cross-domain bridge path, so it is **not payload-detectable — the hook
+   never sees it**. Mode C's Tier-0 floor is therefore a **skill-level self-limit
+   only**; there is no mechanical enforcement behind it. This is precisely why the
+   auto-create surface is deliberately held to `bounded_auto` only and why the
+   Tier-0 classifier below runs on the skill side, unconditionally, before any
+   create branch.
+
+### The Tier-0 never-auto floor (cite the canonical set — do NOT re-list it)
+
+A signal whose **implied work item** would touch any Irreducible Human Task is
+**never auto-created at any level** — it downgrades to a surfaced proposal
+(recommend-equivalent) even at `bounded_auto`. The authoritative set is
+[`core/specs/autonomy-tiers.md` § Irreducible Human Tasks](../../../core/specs/autonomy-tiers.md)
+(the 8-item Tier-0 set: financial, account-creation, security-permission, Stage 9
+GO/NO-GO, Stage 12 Execute, governance-file modification, cross-domain bridge write,
+destructive-op-outside-workspace) plus the RAID-Log-close / stakeholder-facing rule.
+Mode C **cites** that set; it does **not** re-author a competing list here or in
+`operator.toml` (duplicate-source discipline — the same discipline the #322 pre-read
+warned against). The 4-name gloss in AC5 (governance / financial / security /
+RAID-close) is the plain-language shorthand for that canonical set.
+
+Before the create branch, Mode C classifies the implied item against the cited set:
+if the implied change would target a governance file (CLAUDE.md / OPERATIONS.md /
+RELEASE_PROTOCOL.md / any `SKILL.md` / a governance path), move money, alter an
+access grant / share control / publication / auth, close a RAID risk or a
+stakeholder-facing artifact, or hit any other class in the cited set — force the
+`recommend` (surface-only) path and route the surfaced proposal for human sign-off.
+(Governance-file writes are the one Tier-0 class the hook *would* catch when
+enforcing; the rest — and Mode C's own `gh issue create` — rely on this skill-side
+classifier, per the honest-safety read above.)
+
+### Non-interactive self-repair (no operator present)
+
+Mode C's validation failures cannot pause for a human, so:
+
+1. Render the item (reused Mode-A render) → run the 5-test clarity gate +
+   title-informativeness check (reused).
+2. On a **fixable** failure (a vague AC, a non-informative title, a read-back
+   mismatch): **re-author once** — tighten the failing field from the structured
+   signal input, re-render, re-validate.
+3. If it **still fails** (the signal is too thin to reach a well-formed typed item
+   without a human): **downgrade to the observation tier** — render as
+   `observation.yml` (what is missing / what good looks like / affected file — the
+   exact triplet the caller supplied as the floor), emit under the same
+   `automation_level` clamp, and record in the run output that it was filed as an
+   observation placeholder for Triage to promote. **Never** emit a malformed typed
+   item; **never** silently drop the signal. This mirrors the interactive
+   observation-tier fallback (`references/output-contract.md` § Observation-tier
+   fallback) — reused, not reinvented.
+
+### Duplicate guard (reuse the existing all-altitude scan)
+
+Before creating, Mode C runs the **same tracker-search dedup** the desk already
+performs in the "Work item filed without consulting existing tracker state" FM below
+(`gh issue list --search "<key terms>" --state open`), non-interactively: on a
+plausible open match it **enriches** the existing item (a comment-ready block) or
+**no-ops**, rather than create; only a no-match proceeds to the create branch. That
+scan **pre-exists** in this file — Mode C consumes it; it does not build it. (The
+same-file relationship with #565, which reconciled a different FM in this file, is
+**file-contention**, not a build dependency.)
 
 ## The type registry
 
@@ -242,25 +371,48 @@ handling.
   writes a draft `.md` into the repo) without the explicit binary AskUserQuestion
   approval on the rendered body — the user discovers a filed item they never
   approved, or a tracked scratch file appears.
-- **Conditional:** do NOT emit a logged item (or write any tracked file) before the
-  user returns an explicit binary approval via AskUserQuestion on the rendered body,
-  because the skill is Autonomy Tier 1 (assists and proposes; the human confirms)
-  and the originating defect this skill exists to fix was exactly an unapproved
-  scratch file committed for lack of a funnel — auto-emit reproduces the harm in a
-  new shape.
+- **Conditional (interactive modes A/B):** do NOT emit a logged item (or write any
+  tracked file) before the user returns an explicit binary approval via
+  AskUserQuestion on the rendered body, because the interactive paths are Autonomy
+  Tier 1 (assists and proposes; the human confirms) and the originating defect this
+  skill exists to fix was exactly an unapproved scratch file committed for lack of a
+  funnel — auto-emit reproduces the harm in a new shape. **The non-interactive path
+  (Mode C) is the governed exception** — see the reconciliation carve below; it does
+  NOT relax this gate for Modes A/B.
 - **Root cause:** Completion pressure — a filed item feels like success; the confirm
   gate is a slow step the agent is tempted to skip, and without a hard "no emit
   before the binary approval" invariant it slips.
-- **Mitigation:** Enforce the output-contract gate: render → run 5-test → present
-  the body and ask the binary AskUserQuestion ("File it as shown" / "Let me edit
-  first") → only on "File it" run the create. The ONLY persistence paths are the
-  post-approval logged item or the chat-returned copy/paste body; there is NO write
-  path to a tracked repo file. If the tracker is unavailable, return the body and
-  say it was not filed — never stage a scratch `.md`.
-- **Principal response vs. junior response:** Principal presents the rendered item,
-  waits for the binary "File it," then emits and reports the item reference. Junior
-  files immediately ("I've created the issue") or drops a `draft-issue.md` into the
-  working tree, and the user is left undoing an action they never authorized.
+- **Mitigation (interactive modes A/B):** Enforce the output-contract gate: render →
+  run 5-test → present the body and ask the binary AskUserQuestion ("File it as
+  shown" / "Let me edit first") → only on "File it" run the create. The ONLY
+  persistence paths are the post-approval logged item or the chat-returned copy/paste
+  body; there is NO write path to a tracked repo file. If the tracker is unavailable,
+  return the body and say it was not filed — never stage a scratch `.md`.
+- **Mode-C reconciliation carve (the honest weakening).** Mode C (Ambient Auto-Log)
+  must auto-create **without** the binary AskUserQuestion, so this invariant is
+  *reconciled, not deleted*. The authorization for the ambient path is a **standing
+  `automation_level` dial** (the operator's `bounded_auto`), further clamped by the
+  Tier-0 never-auto floor and capped at `recommend` (surface-only) whenever the dial
+  is not `bounded_auto`. **State this plainly: replacing the per-item human confirm
+  with a standing dial is a genuine reduction of this invariant's guarantee** (a
+  per-item approval becomes a standing class-authorization — a **per-item → standing**
+  shift). Do NOT claim "no weakening." The reduction is *bounded* — auto-create is
+  `bounded_auto`-only, a Tier-0-implied item never auto-files at any level, and the
+  interactive default (Modes A/B) keeps its per-item confirm unchanged — **and it has
+  no mechanical hook backstop**: the C5 enforcement hook (#1163, CLOSED) hard-blocks
+  only payload-detectable Tier-0 (governance-file writes / cross-domain bridge
+  paths), and Mode C's `gh issue create` is neither, so the Tier-0 floor here is a
+  skill-level self-limit only. **The "no scratch-file write" half of this FM is
+  preserved absolutely** — Mode C, exactly like Mode A, has NO write path to a
+  tracked repo file; its only persistence paths remain the logged item or the
+  surfaced copy/paste body (the `references/output-contract.md` emit invariant is
+  untouched).
+- **Principal response vs. junior response:** Principal presents the rendered item
+  (Modes A/B) or lets the standing dial + Tier-0 floor authorize the create (Mode C),
+  and never widens the ambient exception to the interactive paths; junior files
+  immediately ("I've created the issue"), drops a `draft-issue.md` into the working
+  tree, or reads `bounded_auto` as a blanket create-license that skips the Tier-0
+  floor — and the user is left undoing an action they never authorized.
 
 ### Auto-decomposing a container into child items at intake — PROC
 
@@ -449,3 +601,79 @@ handling.
   for a decision that has no acceptance criteria, files it as an improvement,
   and the decision's rationale is now findable only by someone searching the
   wrong corpus.
+
+### Auto-creating a Tier-0-implied item under `bounded_auto` (Mode C) — OUT
+
+- **Signature (observable signal):** Mode C, at `automation_level = bounded_auto`,
+  auto-files an issue whose implied work modifies a governance file (or hits another
+  Tier-0 class — money movement, an access grant, a RAID-risk close) because the dial
+  "allowed it" — the operator discovers a governance-touching item created without
+  sign-off.
+- **Conditional:** do NOT auto-create when the implied work item touches any
+  `core/specs/autonomy-tiers.md` § Irreducible Human Tasks class (governance /
+  financial / security-permission / RAID-close / …), even at `bounded_auto`, because
+  the Tier-0 floor is `effective = min(automation_level, per-action max)` and the
+  per-action max for a Tier-0 item is **manual** regardless of the dial — and because
+  **there is no mechanical backstop for this create**: the C5 hook (#1163, CLOSED)
+  hard-blocks only payload-detectable Tier-0 (governance-file writes / cross-domain
+  bridge paths), and Mode C's `gh issue create` is not payload-detectable, so the
+  hook never fires on it. The Tier-0 floor is a skill-level self-limit; if the
+  classifier is skipped, nothing else catches the miss.
+- **Root cause:** Misreading `bounded_auto` as a blanket create-license rather than a
+  ceiling clamped by the irreducible floor — compounded by an assumption that "the
+  hook will catch a bad create," which is false for the non-payload-detectable
+  `gh issue create` path.
+- **Mitigation:** Run the Tier-0 classification (Mode C § The Tier-0 never-auto floor)
+  on the *implied item* **unconditionally**, before the create branch; on any Tier-0
+  hit, force the `recommend` (surface-only) path and route the surfaced proposal for
+  human sign-off. Never rely on the hook as the backstop for a Mode-C create.
+- **Principal response vs. junior response:** Principal classifies against the cited
+  canonical set, surfaces the governance item for sign-off, and treats the missing
+  hook backstop as the reason to keep the classifier tight; junior trusts the dial
+  (and an imagined hook), files it, and the operator undoes an ungoverned issue.
+
+### Ambient duplicate flood (re-firing on the same recurring signal) — PROC
+
+- **Signature (observable signal):** Mode C fires on every invocation for a
+  persistent condition (the same lint gap seen on 12 skill runs) and files 12
+  near-identical issues, because the non-interactive path has no human to notice "we
+  already logged this."
+- **Conditional:** do NOT auto-create without first running the existing-owner
+  tracker scan (`gh issue list --search "<key terms>" --state open`) that the desk
+  already performs, because ambient invocation removes the human dedup instinct and a
+  recurring signal will duplicate — the exact harm the "Work item filed without
+  consulting existing tracker state" FM names, amplified by automation.
+- **Root cause:** The desk's dedup scan was written for the interactive path (it
+  surfaces a near-match to the user); Mode C has no user, so an un-run scan silently
+  assumes novelty on every fire.
+- **Mitigation:** Mode C runs the **same all-altitude tracker-search dedup that
+  already exists in this file** (the "Work item filed without consulting existing
+  tracker state" FM), non-interactively: on a plausible open match, **enrich**
+  (append a comment-ready block to the existing item) or **no-op** rather than create;
+  only a no-match proceeds to create. That scan **pre-exists** — Mode C consumes it,
+  it does not build it. (The same-file relationship with #565, which reconciled a
+  *different* FM in this file, is **file-contention** — serialize the SKILL.md edits —
+  **not a capability dependency**; the scan Mode C reuses does not come from #565.)
+- **Principal response vs. junior response:** Principal enriches the standing item and
+  keeps one home; junior floods the backlog and Triage burns a cycle reconciling 12
+  dupes.
+
+### Silent no-op when the dial is `off` (dropping the signal instead of recording it) — HAND
+
+- **Signature (observable signal):** At `automation_level = off`, Mode C detects a
+  real gap, correctly creates nothing — but also **surfaces nothing and records
+  nothing**, so the demand signal is lost; the operator never learns a gap was seen.
+- **Conditional:** do NOT let `off` become a silent black hole when a signal is
+  detected — `off` must still **emit a run-record / surface the signal to the caller**
+  (author nothing, create nothing, but report "signal detected, held — dial is off"),
+  because a dropped signal is indistinguishable from no signal and defeats the
+  auto-logging rule's purpose.
+- **Root cause:** Conflating "create nothing" (correct at `off`) with "do nothing"
+  (wrong) — the ambient-automation precedent (#322's C1 clamp) shows `off` still
+  records a passive trace; Mode C must likewise leave one.
+- **Mitigation:** At `off`, Mode C returns a structured "held — dial off" result to
+  the caller, and (per the CLAUDE.md auto-logging rule) the calling skill notes the
+  held signal in its own output; the signal is visible, just not auto-filed.
+- **Principal response vs. junior response:** Principal makes `off` visible-but-inert
+  (the held signal is surfaced); junior treats `off` as "skip entirely" and the gap
+  evaporates.
