@@ -1,0 +1,6 @@
+SteerCo transcript (fixture) — proj-beta — synthetic content only.
+
+This is a non-markdown (.txt) file. It cannot embed YAML frontmatter, so its node
+metadata + edges live in the co-located beta_steerco.txt.meta.yml sidecar. The
+doc-index builder must ingest the sidecar identically to embedded frontmatter — this
+file exercises the .meta.yml scan path that would otherwise be untested.

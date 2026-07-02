@@ -1,0 +1,18 @@
+# Sidecar metadata for: beta_steerco.txt
+path: proj-beta/05-transcripts/beta_steerco.txt
+filename: beta_steerco.txt
+file_format: txt
+domain: source
+type: transcript
+project: proj-beta
+folder: 05-transcripts
+managed_by: file-router
+lifecycle_state: created
+trust_category: evidence
+created_date: 2026-06-04
+lifecycle_trigger: retroactive-backfill
+relationships:
+  - type: BELONGS_TO
+    target: "proj-beta"
+    evidence: "backfill 2026-06-04 — folder-path project binding"
+    created_date: 2026-06-04

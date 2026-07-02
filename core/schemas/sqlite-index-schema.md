@@ -432,6 +432,25 @@ On file change, update only that file's rows. Faster but may drift if changes ar
 
 ---
 
+## Implementation
+
+This schema is **materialized** by [`core/deploy/tools/build-doc-index.py`](../deploy/tools/build-doc-index.py) (#1769) — a stdlib-only Python 3.9 CLI (`sqlite3` + FTS5 are stdlib). It reads node frontmatter (the 11-field NOT-NULL `files` core stamped by `stamp-node-frontmatter.py`, #3081) + `relationships[]` edges (emitted by `backfill-relationship-edges.py`, #1770) and builds all 7 tables above plus the 7 named query patterns.
+
+**Invocation + sync model:**
+
+| Operation | Command | Sync semantics |
+|---|---|---|
+| Full rebuild | `build-doc-index.py --rebuild --db <path> --root <corpus>` | Drop + rebuild all tables from frontmatter. **Deterministic** — files sorted by relative POSIX path so `file_id` is a pure function of corpus content; two rebuilds are byte-identical (verified via `--dump-canonical` + SHA-256). Never synthesizes a build-time timestamp. |
+| Incremental update | `build-doc-index.py --update-file <file> --db <path> --root <corpus>` | Updates one file's rows in place (preserving `file_id` so inbound FKs + the `lifecycle_events` audit trail stay valid); appends a `lifecycle_events` row iff the state changed. This is the **capability** the "File processed by any skill" trigger consumes — the event source that *calls* it is open epic **#1153** (no watcher ships here). |
+| Query | `build-doc-index.py --query <name> --db <path> [--param k=v]` | Runs a named reference query (`blast-radius`, `orphan`, `staleness`, `portfolio-rollup`, `cross-project-deps`, `domain-c-staleness`, `frontmatter-completeness`). |
+| Self-test | `build-doc-index.py --self-test` | Fixture-based AC1–AC4 + FMF-2/FMF-3 assertions (see the tool README). |
+
+**Edge / project resolution note.** A `relationships[]` `target` resolves to `files.file_id` by exact `filename`. A `BELONGS_TO` edge whose `target` is a **project name** (the shape #1770 emits) resolves to that project's governance-root representative node (`folder='01-governance'`) — because `relationships.target_file_id` must reference a real file, a project name cannot be stored directly. A target resolving to neither a file nor a project representative is a dangling **WARN** (row skipped, never fabricated).
+
+**`domain` enum.** The builder reads/inserts the migrated human-readable `{source, managed, generated}` values; the `{A, B, C}` aliases in the `files` CHECK + the union-enum queries remain for the migration window (see the `domain` CHECK note above).
+
+---
+
 ## Validation Checklist
 
 - [ ] All files with frontmatter have corresponding rows in `files` table
