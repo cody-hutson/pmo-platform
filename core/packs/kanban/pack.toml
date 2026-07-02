@@ -1,0 +1,57 @@
+# core/packs/kanban/pack.toml
+# Kanban methodology pack (role = "archetype"). DELTAS on _common only. Best-practice
+# defaults from the Kanban Method (K1 / Layer-3). No operator-specific values.
+# Every kind uses the ACTUAL §1.2 kind fields — no invented keys.
+
+[meta]
+pack_id = "kanban"
+pack_version = "0.1.0"
+schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
+applies_to = "Kanban"          # byte-identical archetype join key (§1.1)
+role = "archetype"
+extends = "_common"             # widened §1.1 (ADR-069 D1): inherit the base; declare deltas only
+
+[[kinds]]
+kind_id = "card"
+display_name = "Card"
+base = "Work Item"
+axis1_state_machine = "inherit"
+[kinds.methodology_projection]
+archetype = "Kanban"
+general_level = "Work Item"
+projects_as = "Card"
+level_name_ref = "derive"                       # anchor into the work-organization-mapping-framework Layer-2 Kanban row
+[kinds.fields]
+core = "inherit"
+kind_specific = []
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+checks = []
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+checks = []
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+# WIP set-aggregate pull-limit gate — the continuous lifecycle's signature gate
+# (§1.2.1 Arm 2). SHIPPED AS A STUB, not a live condition: a `set-aggregate` condition
+# REQUIRES both `scope_ref` (when scope = "board") and `on_unresolved` (§1.2.1 Arm 2),
+# and `scope_ref` for a board is inherently instance-local (a Workstream-class entity
+# id — K4), so it cannot be sourced into a git-tracked best-practice default. Populating
+# a live `condition` here would also declare the first pack-level gate condition, which
+# per ADR-039 begins the type-pack gate surface's cross toward EXPENSIVE reversibility —
+# deferred until a deployment (K4) or the consumer read-refit wires it. The resolver is
+# consumer-side (deferred consumer read-refit slice), NOT built here.
+checks = []                                     # <fill per Kanban Method + §1.2.1 Arm-2 required fields: guards_transition, condition{kind=set-aggregate, set{scope, scope_ref, status_filter, edge}, aggregate, comparator, limit|limit_ref, on_unresolved}. Class-of-service = a kind_filter on this set-aggregate count (§1.2.1 line 126), NOT a separate key.>
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
+[kinds.lifecycle_behavior]
+lifecycle = "continuous"                        # set-aggregate is the continuous lifecycle's signature gate (§1.2.1)
+
+# Kanban label contributions (SEED — the label-cleave slice relocates authoritative
+# contributions here; widened §1.1.1 / ADR-069 D2). Class-of-service lanes
+# (standard/expedite/fixed-date/intangible), if surfaced as labels, are label-cleave
+# contributions here — the GATE expresses class-of-service via a set-aggregate
+# kind_filter; labels are a separate projection.
+# [[labels]]
+#   group = "<grammar-owned>"    # seed only
+#   name = "<label instance>"

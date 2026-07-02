@@ -1,0 +1,23 @@
+# core/packs/_common/pack.toml
+# Shared methodology-pack BASE (role = "base"). Carries archetype-INVARIANT
+# contributions only. Best-practice defaults (K1 / Layer-3); a deployment SELECTS a
+# pack via operator config and MAY override per project (K4). No operator-specific
+# values. Archetype packs declare `extends = "_common"` and carry ONLY their deltas.
+# NOTE: no work-status block — the Axis-1 base machine is owned by the entity layer
+# (ADR-018 D1); kinds inherit it via `axis1_state_machine = "inherit"`. No `kinds` —
+# a role = "base" pack is non-kind-bearing (widened §1.1 / ADR-069 D4).
+
+[meta]
+pack_id = "_common"
+pack_version = "0.1.0"          # semver; §6.1 additive-minor rule
+schema_version = 1              # MANIFEST meta key (operator.toml/platform-config.toml precedent) — NOT the meta-schema grammar version
+applies_to = "*"                # role = "base" MUST be "*" (methodology-neutral; no Layer-2 join — §1.1)
+role = "base"                   # widened §1.1 (ADR-069 D1): non-kind-bearing shared base
+
+# Universal label GROUP contributions (seed skeleton). The label GROUPS + RULES grammar
+# is owned by label-taxonomy.md; a pack only CONTRIBUTES instances into a grammar-owned
+# group (ADR-018 D1 "project labels over the base"; widened §1.1.1 / ADR-069 D2). The
+# label-cleave slice populates the authoritative universal contributions here.
+# [[labels]]
+#   group = "<grammar-owned group: category|status|cluster|initiative|triage-flag|disposition>"   # seed only
+#   name = "<label instance>"

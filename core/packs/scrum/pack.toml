@@ -1,0 +1,103 @@
+# core/packs/scrum/pack.toml
+# Scrum methodology pack (role = "archetype"). DELTAS on _common only. Best-practice
+# defaults from the Scrum Guide + INVEST (K1 / Layer-3). No operator-specific values.
+# Every kind uses the ACTUAL §1.2 kind fields — no invented keys.
+
+[meta]
+pack_id = "scrum"
+pack_version = "0.1.0"
+schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
+applies_to = "Scrum"            # byte-identical archetype join key (§1.1)
+role = "archetype"              # widened §1.1; default when omitted — stated for clarity
+extends = "_common"             # widened §1.1 (ADR-069 D1): inherit the base; declare deltas only
+
+# Kinds (deltas). Each kind IS the canonical Work Item entity (const base), keyed by the
+# work_item_type discriminator. Uses the ACTUAL §1.2 kind fields.
+[[kinds]]
+kind_id = "epic"
+display_name = "Epic"
+base = "Work Item"                              # §1.2 const base (required)
+axis1_state_machine = "inherit"                 # §1.2 — inherit the entity-layer base machine
+[kinds.methodology_projection]                  # §1.2 required object (NOT a flat projects_as)
+archetype = "Scrum"
+general_level = "Work Item"
+projects_as = "Epic"
+level_name_ref = "derive"                       # anchor into the work-organization-mapping-framework Layer-2 Scrum row
+[kinds.fields]
+core = "inherit"                                # §1.2 Core 7, never re-listed
+kind_specific = []                              # <fill per Scrum Guide if the Epic kind adds fields>
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+checks = []                                     # <fill DoR per INVEST / Scrum Guide>
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+checks = []                                     # <fill DoD>
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+checks = []
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "RELATES_TO", "GENERATES"]   # subset of the 7 MVP types (by reference)
+[kinds.lifecycle_behavior]
+lifecycle = "timeboxed"                         # keyed off the PROJECT lifecycle (§7.4), not the kind
+
+[[kinds]]
+kind_id = "story"
+display_name = "User Story"
+base = "Work Item"
+axis1_state_machine = "inherit"
+[kinds.methodology_projection]
+archetype = "Scrum"
+general_level = "Work Item"
+projects_as = "Story"
+level_name_ref = "derive"
+[kinds.fields]
+core = "inherit"
+kind_specific = [
+  { name = "story_points", type = "number", required = "⚪", cardinality = "one", description = "Scrum relative estimate (best-practice: Scrum Guide / INVEST)" },
+]                                               # story points → fields.kind_specific[] (NOT a `sortable_fields` key)
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+checks = []                                     # <fill INVEST-based DoR>
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+checks = []
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+checks = []
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
+[kinds.lifecycle_behavior]
+lifecycle = "timeboxed"
+
+[[kinds]]
+kind_id = "task"
+display_name = "Task"
+base = "Work Item"
+axis1_state_machine = "inherit"
+[kinds.methodology_projection]
+archetype = "Scrum"
+general_level = "Work Item"
+projects_as = "Task"
+level_name_ref = "derive"
+[kinds.fields]
+core = "inherit"
+kind_specific = []
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+checks = []
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+checks = []
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+checks = []
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS"]
+[kinds.lifecycle_behavior]
+lifecycle = "timeboxed"
+
+# Scrum label contributions (SEED — the label-cleave slice relocates authoritative
+# contributions here; widened §1.1.1 / ADR-069 D2).
+# [[labels]]
+#   group = "<grammar-owned>"    # seed only
+#   name = "<label instance>"
