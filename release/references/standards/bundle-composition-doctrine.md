@@ -147,6 +147,8 @@ Total story points (XS=1 / S=2 / M=4 / L=8 / XL=16). Target **15-25 pts per slic
 | 10-15 pts | **Acceptable band** — slice ships if capability boundary is clear; consider merging if drift-prone |
 | < 10 pts | **Merge or keep as gating-only** — too small for standalone capability; merge with adjacent slice OR keep as gating/cleanup-only slice |
 
+**Single-item / milestone-of-one shape.** A release may legitimately ship a **single work item**. The `< 10 pts` row is positive guidance to prefer merging *drift-prone* small slices — it is **not** a prohibition on a standalone single-item release. A single-item release is a first-class shape (frequently paired with the `version-less` identity mode — see § 5 *Version-less naming form* and [`stage-03-bundle.md § 4 Release-Identity Mode`](../pipeline/stage-03-bundle.md)); the single-item-vs-bundle choice is a **Stage-5 D-class decision**, not committed at intake.
+
 Thresholds are MEDIUM confidence — **`[CALIBRATE-AFTER-3]`** per the RELEASE_LOG calibration trigger. Review thresholds after 3 subsequent releases close.
 
 **This point-band is the primary capacity ceiling; it governs.** The Stage 3 Bundle capacity heuristic of "5-8 issues per release" (`stage-03-bundle.md` § 5 Phase A4) is a **secondary readability/coordination heuristic, not an independent hard cap.** The two are complementary, not contradictory: a bundle within the point-band may exceed 5-8 small issues, and a bundle of 5-8 large issues may exceed the point-band — in which case the (risk-weighted) point-band governs. This is the single sizing source; Phase A4 cross-references here rather than asserting a parallel ceiling.
@@ -227,6 +229,19 @@ Milestone titles follow: **`v<MAJOR>.<NN-padded>-<capability-slug>`**.
 | **Composite** | All three joined by `.` and `-` | `v1.04-pipeline-fitness-foundation` |
 
 **Padding rationale.** 2-digit padding ensures lexical sort matches numeric sort even when minor count crosses 9. `v1.10` sorts lexically AFTER `v1.09` (correct); without padding, `v1.10` sorts BEFORE `v1.2` (incorrect). The slice methodology (operator memory) ratified this convention; observed across the platform's milestones.
+
+### Version-less naming form (release-identity mode)
+
+The title convention above is the **`versioned`** identity-mode form. A **`version-less`** release (per [`stage-03-bundle.md § 4 Release-Identity Mode`](../pipeline/stage-03-bundle.md)) omits the `v<MAJOR>.<NN>` prefix entirely — its milestone title is the **capability slug alone**:
+
+| Identity mode | Title form | Example |
+|---|---|---|
+| `versioned` | `v<MAJOR>.<NN-padded>-<capability-slug>` | `v1.04-pipeline-fitness-foundation` |
+| `version-less` | `<capability-slug>` (no version prefix) | `public-flip-install-blockers` |
+
+Both forms admit either bundle size — **all four combinations** (`versioned`/`version-less` × single-item/bundle) are supported; the single-item shape is § 3 Step 5.
+
+**Reconciliation with the version grammar.** A `version-less` release carries **no version key**, so the [`version-grammar.sh`](../../tools/version-grammar.sh) input gate `version_canonical` (and the freeness/comparison path built on it) is **never invoked** for it — there is no candidate string to present, so `version-grammar.md`'s rejection of the empty form is neither reached nor contradicted. The grammar governs the string a *versioned* release claims; it has no jurisdiction over one that claims none. This is distinct from the § 9.1 rule "never ship version-less to *dodge* a slot collision" — that prohibits version-less as a collision *hedge*; the identity mode is a first-class *on-the-merits* choice.
 
 ### 5.1 Slot allocation
 
