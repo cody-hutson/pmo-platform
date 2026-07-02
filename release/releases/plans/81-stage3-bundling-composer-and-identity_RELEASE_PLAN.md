@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Release Plan — 81-stage3-bundling-composer-and-identity (milestone #166)
 
 **Status:** APPROVED at plan-approval gate 2026-07-01 (release-hub Mode O, Procedure 0).
