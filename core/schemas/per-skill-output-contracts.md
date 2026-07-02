@@ -968,7 +968,7 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 
 - [ ] Both sections present (Summary + Drift table)
 - [ ] Count of skill directories matches `ls release/skills/` cardinality at run time
-- [ ] Union of per-module arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) + SUPPLEMENTARY_SKILLS used in comparison (not just the per-module arrays — PROC failure mode #2 mitigation)
+- [ ] Union of per-module arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) + SUPPLEMENTARY_SKILLS used in comparison (not just the per-module arrays — the second PROC failure-mode mitigation)
 - [ ] Drift rows identify direction (Folder Only vs. Roster Only)
 - [ ] No recommendations / actions (report-only discipline preserved)
 - [ ] In-flight refactor warning present if uncommitted changes to release/skills/ or deploy.sh detected (TRIG failure mode #3 mitigation)

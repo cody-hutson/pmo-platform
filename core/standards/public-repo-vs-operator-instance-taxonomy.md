@@ -159,8 +159,8 @@ Every tracked path resolves to exactly one of seven classes, keyed to the observ
 
 Exactly four tokens exist. The set is closed and mutually exclusive; every audit finding carries **exactly one** (§7.3).
 
-- **KEEP-TRACKED** — the path is a durable class (1–5) — or the sanctioned derived exception (§7.5) — is currently tracked, and passes self-containment ([`depersonalization-spec.md`](depersonalization-spec.md)). No action.
-- **SHOULD-IGNORE** — the path is a runtime-scratch class (7) yet is currently tracked (a leak). Action: un-track via `git rm --cached` **only** + add the covering `.gitignore` pattern. Compose with #368 (bulk runtime-artifact cleanup) in any such finding.
+- **KEEP-TRACKED** — the path is a durable class (1–5) — or the sanctioned derived exception (§7.5) — is currently tracked, and passes self-containment (per the depersonalization-spec token vocabulary). No action.
+- **SHOULD-IGNORE** — the path is a runtime-scratch class (7) yet is currently tracked (a leak). Action: un-track via `git rm --cached` **only** + add the covering `.gitignore` pattern. Compose with the bulk runtime-artifact cleanup effort in any such finding.
 - **SHOULD-TRACK-BUT-NOT** — the path *would* be a durable class (1–5) and should ship, but is absent from tracking (a coverage gap, not a leak). Action: add it to tracking.
 - **POLICY-AMBIGUOUS** — the path straddles durable/derived (class 6), or the §7.1 default and the §7.3 apply-test disagree. It is **resolved explicitly in this policy, never left open** (see §7.5).
 
@@ -209,12 +209,12 @@ The durable/derived/runtime distinction and the `git rm --cached`-only mechanism
 
 The policy is verified by a one-pass audit run at **documented-pattern level**, not per-file. The audit is authored operator-local as a read-once artifact under `analysis/git-tracking-audit-<YYYY-MM-DD>/SUMMARY.md` (git-ignored per the `.gitignore` `/analysis/*` rule; the *policy* — this §7 — is the durable output, the audit is the read-once evidence). The audit steps:
 
-1. **Enumerate + assert count (live).** `git ls-files core/ operations/ release/ | wc -l`. The count is **asserted live at audit time** — it is a moving figure as the corpus grows, not a hardcoded constant. Design-time baseline (Stage-5 solutioning, #73): **911**; the audit records whatever the live figure is on its run date and reconciles it to the class map below. The full tracked surface is `git ls-files | wc -l` (design-time baseline 1055), covered by the superset appendix (step 4).
+1. **Enumerate + assert count (live).** `git ls-files core/ operations/ release/ | wc -l`. The count is **asserted live at audit time** — it is a moving figure as the corpus grows, not a hardcoded constant. Design-time baseline (Stage-5 solutioning of this policy's originating git-tracking audit): **911**; the audit records whatever the live figure is on its run date and reconciles it to the class map below. The full tracked surface is `git ls-files | wc -l` (design-time baseline 1055), covered by the superset appendix (step 4).
 2. **Bucket by pattern class.** Map the observed extensions to the seven §7.1 classes via a documented extension→class map. Design-time census: `.md` · `.sh` · `.py` · `.txt` · `.yaml` · `.template` · `.json` · `.csv` · `.html` · `.awk` · `NOTICE` (no-ext) · `.example` — twelve pattern buckets with a short oddball tail, each resolving to one of the seven classes.
 3. **Assign one verdict per class.** Each class gets its single §7.1 default; only class 6 carries an exception (§7.5). Findings table: one row per class (+ per-exception), **row count == token count** (§7.3).
 4. **Superset appendix.** Reconcile the remaining non-Engineering tracked paths (workspace-root files + `packages/` + `.github/` + `docs/` + `roadmaps/README.md` + `analysis/README.md`) against the same seven classes, so the policy accounts for the *whole* tracked surface without widening the gated 100%-coverage scope beyond `git ls-files core/ operations/ release/`.
 5. **Current-tree result.** On the tree at authoring, every class resolves to **KEEP-TRACKED** except class 7 (runtime-scratch — already `.gitignored`; **zero** tracked leaks observed) and class 6 (POLICY-AMBIGUOUS → resolved KEEP-TRACKED per §7.5). The audit is baseline-pinned: a runtime-scratch path appearing later silently invalidates the zero-leak result, so the SHOULD-IGNORE token and the class-7 sweep exist for future drift and the superset check even though the current count is zero.
-6. **Any SHOULD-IGNORE / deletion finding** cites #368 (compose-with) and uses `git rm --cached` only (§7.3) — never a history rewrite.
+6. **Any SHOULD-IGNORE / deletion finding** cites the bulk runtime-artifact cleanup effort (compose-with) and uses `git rm --cached` only (§7.3) — never a history rewrite.
 
 ---
 
