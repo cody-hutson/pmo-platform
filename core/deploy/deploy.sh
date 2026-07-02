@@ -52,6 +52,7 @@ OPERATIONS_SKILLS=(
   pmo-technical-program-manager
   pmo-tier-1-support
   pmo-tier-2-support
+  pmo-wms-specialist
   ppm-agent
   project-initiator
   tracker-manager
