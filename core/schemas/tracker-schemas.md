@@ -274,6 +274,8 @@ The RAID Log maintains two representations:
 - The workspace owner is responsible for syncing the Confluence version after local changes. The agent may remind the owner when significant RAID changes are approved but does not upload to Confluence directly.
 - If a future MCP integration enables direct Confluence writes, the agent should strip internal fields before publishing.
 
+**Governing model (proof-of-concept):** this RAID CSV→Confluence dual-format is the proof-of-concept instance of the general [Dual-Format Document Model](../standards/dual-format-document-model.md); the stakeholder rendering is its `raid-log--stakeholder-csv` translation map (the strip-internal-fields rule above, formalized). The model is the reusable seam for future dual-format artifacts — see that standard rather than re-deriving the strip rule per artifact.
+
 ### Machine-Schema (entity-derived)
 **Companion schema:** [`raid-log.schema.json`](raid-log.schema.json) — machine-readable JSON Schema (draft-07) validating one RAID Log CSV row.
 **Entity-derivation note:** This artifact is NOT hand-schema'd — `raid-log.schema.json` is *derived* from the **RAID Item entity field schema** ([`entity-field-schemas.md`](entity-field-schemas.md)) via the **EAD** mechanism (Entity→Artifact-Schema Derivation: 7-class column crosswalk + L1-native/L2-L3-annotation projection). The entity model is authoritative (per ADR); the CSV above is its persistence *dialect*. The generalized `EAD` contract is the pattern the new-artifact templatization harness applies to all artifacts; Daily Status / Transcript Register machine-schemas are produced incrementally by that harness as their entities' field schemas land — **not** here.

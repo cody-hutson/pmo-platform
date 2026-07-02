@@ -2,7 +2,7 @@
 name: artifact-generator
 description: >
   Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in 08-Generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
-version: v2.28
+version: v2.29
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -382,6 +382,36 @@ ARTIFACT STAGED: [artifact name]
   - REJECT: Delete from 08-Generated/
 ```
 
+## Dual-Format Rendering (translation-map execution)
+
+You are the executor for the [Dual-Format Document Model](../../../core/standards/dual-format-document-model.md):
+when an artifact is dual-format (an agent-native source plus a stakeholder-facing rendering), you render
+the stakeholder view **from the source by applying its translation map** — never a bespoke, hand-written
+export path. This is the ADR-064 executor decision (artifact-generator, not comms-writer — you are the
+owning-agent creator of the Artifact entity and stage to 08-Generated/ for Tier-1 approval).
+
+To render a dual-format target:
+1. **Resolve the source.** Read the source-definition (`source.artifact`, `source.container`,
+   `source.fields`, `source.schema_ref`). **Orphan guard (`orphan_guard: reject`):** if `source_ref`
+   resolves to no live source — the source file is absent, or it has no Artifact Register row — **HALT and
+   flag**; do NOT emit a stakeholder view for an orphan source (see the domain-specific failure mode below).
+2. **Apply the translation map.** Strip `field_rules.exclude`, apply `field_rules.rename`, order by
+   `field_rules.include_order` (when present), and emit in `target_format`.
+3. **Record the render stamp.** Write the source's `Current Version` + `Last Updated` (from its Artifact
+   Register row) onto the produced target — a metadata header for a staged file, or a recorded render date
+   for an external target (e.g. Confluence). This is the drift key.
+4. **Stage for review.** A stakeholder view of a Tier-1 artifact (e.g. the RAID Log) stages to
+   `08-Generated/` and follows the Promotion Workflow — you propose, the user promotes; you do not modify a
+   Tier-1 artifact directly.
+5. **Drift surfacing.** Drift is detected when the source's Artifact-Register `Last Updated` is newer than
+   the target's render stamp (source changed, target not re-rendered) OR a target field violates the map's
+   `field_rules`. Surface drift through the Artifact Health Check (`stale artifacts` / `lifecycle-debt`
+   rows) — do not silently reconcile.
+
+The RAID Log is the worked example: source `container: csv`, map `raid-log--stakeholder-csv`, `exclude:
+[RAID_ID, Date Opened, Date Closed, Section]`. tracker-manager owns the RAID source read/write; you own the
+on-demand stakeholder export via the map.
+
 ## Promotion Workflow
 
 When the user approves promotion:
@@ -680,6 +710,28 @@ structural conformance and content quality.
   single file and verifies the header is intact. Junior writes content alone, the health
   check misses the artifact, and the auto-archive never triggers — the file accumulates
   in 08-Generated/ indefinitely.
+
+### Orphan stakeholder view rendered without a live source — OUT
+
+- **Signature (observable signal):** A dual-format stakeholder view is produced (staged or emitted)
+  whose `source_ref` resolves to no live source — the source file is absent, or it has no Artifact
+  Register row — yet the render proceeds and publishes a stakeholder-facing document with nothing
+  authoritative behind it.
+- **Conditional:** do NOT render or emit a dual-format stakeholder view when the translation map's
+  `source_ref` has no live source (`orphan_guard: reject`), because a stakeholder view with no live
+  source defeats the drift-detection the [Dual-Format Document Model](../../../core/standards/dual-format-document-model.md)
+  exists to provide — the target can never be checked against a source that is not there, so it silently
+  becomes a fabricated document that no source change will ever flag as stale.
+- **Root cause:** The render pipeline keys on the map; when the source lookup returns empty it is easy to
+  treat "no source" as "empty source" and render an empty-or-cached target rather than halting — the map is
+  present and looks complete, so the missing source is not noticed.
+- **Mitigation:** Resolve and verify the source FIRST (source file present AND an Artifact Register row
+  exists); on a miss, HALT and flag ("dual-format render refused: `source_ref` has no live source — orphan
+  guard"), never emit. Only apply `field_rules` and record the render stamp once the source is confirmed live.
+- **Principal response vs. junior response:** Principal checks the source resolves to a live file + register
+  row before applying the map, and refuses with an orphan-guard flag when it does not. Junior sees a
+  complete-looking map, renders the target, and publishes a stakeholder view backed by nothing — undetectable
+  drift from the first render.
 
 ### Prior-artifact content carried forward as current fact — INPUT
 
