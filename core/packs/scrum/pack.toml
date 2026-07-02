@@ -96,8 +96,33 @@ allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS"]
 [kinds.lifecycle_behavior]
 lifecycle = "timeboxed"
 
-# Scrum label contributions (SEED — the label-cleave slice relocates authoritative
-# contributions here; widened §1.1.1 / ADR-069 D2).
-# [[labels]]
-#   group = "<grammar-owned>"    # seed only
-#   name = "<label instance>"
+# Scrum label contributions (DELTAS on _common; widened §1.1.1 / ADR-069 D2). The
+# archetype delta is the `type:*` work-item-kind category labels that PROJECT this pack's
+# kinds[] — one `type:<kind_id>` row per declared kind, bound by `projects_kind` so the
+# label family stays in lockstep with the kinds (no independent drift). `type:*` is a
+# category-group member (one-per-issue, the kind an issue IS — label-taxonomy.md
+# § Work-Item-Kind Labels). Colors match the live `type:*` family. Cross-cutting intake
+# kinds (bug, observation) are carried by _common's category rows, not re-projected here.
+[[labels]]
+group = "category"
+name = "type:epic"
+color = "5319e7"
+projects_kind = "epic"
+description = "Scrum kind: a large body of work decomposed into stories"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "type:story"
+color = "0e8a16"
+projects_kind = "story"
+description = "Scrum kind: user/operator-facing value increment"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "type:task"
+color = "1d76db"
+projects_kind = "task"
+description = "Scrum kind: an engineering unit of work under a story/epic"
+applied_at = "Intake (Stage 1)"

@@ -47,11 +47,16 @@ allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
 [kinds.lifecycle_behavior]
 lifecycle = "continuous"                        # set-aggregate is the continuous lifecycle's signature gate (§1.2.1)
 
-# Kanban label contributions (SEED — the label-cleave slice relocates authoritative
-# contributions here; widened §1.1.1 / ADR-069 D2). Class-of-service lanes
-# (standard/expedite/fixed-date/intangible), if surfaced as labels, are label-cleave
-# contributions here — the GATE expresses class-of-service via a set-aggregate
-# kind_filter; labels are a separate projection.
-# [[labels]]
-#   group = "<grammar-owned>"    # seed only
-#   name = "<label instance>"
+# Kanban label contributions (DELTAS on _common; widened §1.1.1 / ADR-069 D2). The
+# archetype delta is the `type:*` card-kind category label projecting this pack's kinds[]
+# (bound by `projects_kind`). Class-of-service lanes (standard/expedite/fixed-date/
+# intangible) are NOT shipped as best-practice default labels: the GATE expresses
+# class-of-service via a set-aggregate `kind_filter` (§1.2.1 line 126), and any surfaced
+# class-of-service LABEL is an instance-local (K4) operator override, not a corpus default.
+[[labels]]
+group = "category"
+name = "type:card"
+color = "0052cc"
+projects_kind = "card"
+description = "Kanban kind: a unit of work flowing across the board"
+applied_at = "Intake (Stage 1)"
