@@ -49,6 +49,7 @@ from scripts.run_eval_audit import (  # noqa: E402
     render_markdown,
 )
 from scripts.run_loop import split_eval_set  # noqa: E402
+from scripts.assert_branch_fresh import is_fresh  # noqa: E402
 
 
 # --- Assertion helper -------------------------------------------------------
@@ -117,6 +118,54 @@ def test_extract_trigger_phrases() -> None:
         "multiline description handled (DOTALL)",
         extract_trigger_phrases(multiline) == ["first phrase", "second phrase"],
         f"got {extract_trigger_phrases(multiline)}",
+    )
+
+    # --- Fallback branch (SC-2): 'Use whenever ...' / 'phrases like ...' form ---
+    # These descriptions carry no 'Triggers:' keyword; without the fallback they
+    # would contribute an EMPTY trigger set and be silently un-audited.
+
+    # Sub-form 2 — unquoted comma / " or "-separated verb phrases (eval-writer shape).
+    use_whenever = (
+        "Authors eval suites. "
+        "Use whenever the user asks to write evals, audit evals, or build a rubric."
+    )
+    check(
+        "'Use whenever' unquoted clause -> comma/or-split phrases (non-empty)",
+        extract_trigger_phrases(use_whenever)
+        == ["the user asks to write evals", "audit evals", "build a rubric"],
+        f"got {extract_trigger_phrases(use_whenever)}",
+    )
+
+    # Sub-form 1 — quoted phrases inside a 'phrases like' clause (prompt-builder shape).
+    phrases_like = (
+        'Improves prompts. Use whenever the user asks, '
+        'phrases like "improve this prompt", "rewrite this".'
+    )
+    check(
+        "'phrases like' quoted clause -> quoted phrases (non-empty)",
+        extract_trigger_phrases(phrases_like) == ["improve this prompt", "rewrite this"],
+        f"got {extract_trigger_phrases(phrases_like)}",
+    )
+
+    # Regression guard: the fallback is SUBORDINATE — a description that DOES match
+    # 'Triggers:' must NOT be re-parsed by the fallback even if it also contains
+    # 'Use whenever' prose. Primary path wins, output is the quoted 'Triggers:' set.
+    both = (
+        'Use whenever you feel like it. '
+        'Triggers: "the canonical phrase".'
+    )
+    check(
+        "primary 'Triggers:' wins when both markers present (fallback subordinate)",
+        extract_trigger_phrases(both) == ["the canonical phrase"],
+        f"got {extract_trigger_phrases(both)}",
+    )
+
+    # A description with neither marker still returns [] (no false extraction).
+    neither = "A plain description with no trigger clause of any recognized form."
+    check(
+        "no 'Triggers:' and no fallback marker -> []",
+        extract_trigger_phrases(neither) == [],
+        f"got {extract_trigger_phrases(neither)}",
     )
 
 
@@ -221,6 +270,42 @@ def test_split_eval_set() -> None:
     check("min-1 test floor per group with tiny set", len(t_test) == 2, f"got {len(t_test)}")
 
 
+# --- assert_branch_fresh (pure is_fresh core, injected git runner) ----------
+
+def test_is_fresh() -> None:
+    print("is_fresh (branch-freshness pure core):")
+
+    # Empty git output -> branch is fresh, no unreachable commits.
+    fresh, unreachable = is_fresh("origin/main", "HEAD", lambda argv: "")
+    check("empty git output -> fresh", fresh is True and unreachable == [],
+          f"got fresh={fresh} unreachable={unreachable}")
+
+    # Non-empty output -> stale, and the unreachable lines are returned verbatim.
+    two_lines = "abc1234 chore: a\ndef5678 feat: b"
+    fresh, unreachable = is_fresh("origin/main", "HEAD", lambda argv: two_lines)
+    check("two commit lines -> stale with 2 unreachable",
+          fresh is False and unreachable == ["abc1234 chore: a", "def5678 feat: b"],
+          f"got fresh={fresh} unreachable={unreachable}")
+
+    # Whitespace-only output is treated as empty (fresh) — no phantom stale commit.
+    fresh, unreachable = is_fresh("origin/main", "HEAD", lambda argv: "\n   \n")
+    check("whitespace-only output -> fresh (no phantom commit)",
+          fresh is True and unreachable == [],
+          f"got fresh={fresh} unreachable={unreachable}")
+
+    # The core issues exactly `git log --oneline <base> ^<head>` (the design command).
+    captured: dict = {}
+
+    def _spy(argv: list) -> str:
+        captured["argv"] = argv
+        return ""
+
+    is_fresh("origin/main", "HEAD", _spy)
+    check("issues `git log --oneline origin/main ^HEAD`",
+          captured.get("argv") == ["log", "--oneline", "origin/main", "^HEAD"],
+          f"got {captured.get('argv')}")
+
+
 # --- runner -----------------------------------------------------------------
 
 def main() -> int:
@@ -231,6 +316,7 @@ def main() -> int:
     test_trigger_token_set()
     test_render_markdown()
     test_split_eval_set()
+    test_is_fresh()
 
     print()
     if _FAILURES:
