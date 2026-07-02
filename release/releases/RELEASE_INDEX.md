@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.48 | 105-knowledge-corpus-tail-closeout | 2026-07-02 | Knowledge-corpus tail close-out — the design-before-slicing gate conditioned on `delivery_approach` (ADR-066 + criterion G3-18, schema v1.20→v1.21), a notes-non-authoritative + destructive-action guardrail in CLAUDE.md (#1093), and the health-RAG band/watermelon canonical home (ADR-065, #930); closes the last child of KA-Standards #1171 and KA-Discipline #1174. | #2918 | [notes/v3.48_RELEASE_NOTES.md](notes/v3.48_RELEASE_NOTES.md) |
 | v3.47 | 23-tracker-comms-session-config | 2026-07-02 | — | #2860 | [notes/v3.47_RELEASE_NOTES.md](notes/v3.47_RELEASE_NOTES.md) |
 | v3.45 | 42-pipeline-skill-doc-reconciliation | 2026-07-01 | — | #2851 | [notes/v3.45_RELEASE_NOTES.md](notes/v3.45_RELEASE_NOTES.md) |
 | v3.44 | 78-pipeline-triage-automation | 2026-07-01 | — | #2801 | [notes/v3.44_RELEASE_NOTES.md](notes/v3.44_RELEASE_NOTES.md) |
