@@ -60,16 +60,49 @@ STOPWORDS = frozenset({
 
 
 def extract_trigger_phrases(description: str) -> list[str]:
-    """Extract quoted trigger phrases from a description's 'Triggers: ...' prose.
+    """Extract trigger phrases from a skill description.
+
+    Primary path (unchanged): the ``Triggers: ...`` prose convention — extract the
+    ``"..."``-quoted phrases from the region after the ``Triggers:`` keyword.
+
+    Additive fallback (fires ONLY when the primary path yields nothing): descriptions
+    that carry their trigger clause in the ``Use whenever ...`` / ``phrases like "..."``
+    form instead of a ``Triggers:`` keyword. Without this branch such descriptions
+    contribute an EMPTY trigger token set and are silently un-audited by the
+    cross-skill routing-conflict check (e.g. eval-writer, prompt-builder). The
+    fallback is subordinate by construction: any description matched by the primary
+    ``Triggers:`` path returns before it is reached, so already-audited skills keep
+    byte-identical output (regression-preserving).
 
     Returns phrases in source order. Handles multiline descriptions.
     """
     match = re.search(r"Triggers\s*:\s*(.+)", description, re.DOTALL | re.IGNORECASE)
-    if not match:
+    if match:
+        trigger_region = match.group(1)
+        phrases = re.findall(r'"([^"]+)"', trigger_region)
+        return [p.strip() for p in phrases if p.strip()]
+
+    # Fallback (primary matched nothing): the "Use whenever ..." / "phrases like ..."
+    # trigger-clause form. Anchor on whichever marker appears first, then read to the
+    # end of the description.
+    fallback = re.search(r"(?:phrases like|Use whenever)\s*(.+)", description,
+                         re.DOTALL | re.IGNORECASE)
+    if not fallback:
         return []
-    trigger_region = match.group(1)
-    phrases = re.findall(r'"([^"]+)"', trigger_region)
-    return [p.strip() for p in phrases if p.strip()]
+    trigger_region = fallback.group(1)
+
+    # Sub-form 1: quoted phrases inside the clause (e.g. prompt-builder's
+    # `phrases like "help me write a prompt for…", "improve this prompt"`).
+    quoted = re.findall(r'"([^"]+)"', trigger_region)
+    if quoted:
+        return [p.strip() for p in quoted if p.strip()]
+
+    # Sub-form 2: unquoted, comma / " or "-separated verb phrases (e.g. eval-writer's
+    # `Use whenever the user asks to write evals, audit evals, add eval coverage, …`).
+    # Split on commas and the " or " connective; STOPWORDS in tokenize() strip the
+    # connective/filler tokens so scoring stays on domain tokens.
+    candidates = re.split(r",|\bor\b", trigger_region)
+    return [p.strip(" .\t\n") for p in candidates if p.strip(" .\t\n")]
 
 
 def tokenize(phrase: str) -> set[str]:
