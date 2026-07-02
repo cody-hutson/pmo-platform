@@ -2,7 +2,7 @@
 name: tracker-manager
 description: >
   Generic update engine for all operational trackers in 04-PMO-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
-version: v2.23
+version: v2.24
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -459,6 +459,14 @@ The RAID Log uses an active/archive CSV structure. When processing RAID Log upda
 4. **Reactivating:** Change Status back to Open, clear Date_Closed, change Section to ACTIVE. Preserve Closure_Comments as context.
 5. **Schema validation:** Validate all 14 fields per tracker-schemas.md Tracker 5 definition before writing.
 6. **Integrity guards:** RAID `ADD` runs the Step-1.5 dedup check; scope-change RAID updates run the Step-2.5 cascade guard; every write runs the Step-5 lifecycle-state precondition. The dedup threshold (≥ 0.70 token-set Jaccard), cascade-trigger signal set, and lifecycle-state predicate are documented in `references/tracker-schemas.md` § Tracker Integrity Rules.
+
+### RAID Log container + agent-native surface
+
+The RAID Log source container stays **CSV** (`[Project]_RAID_Log.csv`) — it is NOT converted to a Markdown table. The agent-native surface the RAID Log needs already exists as the machine-schema, so no container swap is warranted:
+
+- **Agent read/write is native.** Your RAID read/write path consumes structured `TRACKER_UPDATE` field→value instructions (see Input Format) against the schema-governed 14-field roster — it does **not** import a `csv` module on the agent path. Reading the CSV as text and writing rows via the instruction contract is the native path.
+- **Validation surface = the JSON machine-schema.** Row validation is via [`raid-log.schema.json`](../../../core/schemas/raid-log.schema.json) (EAD-derived from the RAID Item entity — the agent-native validation surface). The `csv.DictReader` bridge in that schema's validator is a *validation harness*, not the agent read/write path. The entity model is authoritative; the CSV is its persistence dialect.
+- **Stakeholder export is produced on demand by artifact-generator, not here.** The stakeholder-facing CSV/Confluence view is rendered by **artifact-generator** applying the `raid-log--stakeholder-csv` translation map (per [`dual-format-document-model.md`](../../../core/standards/dual-format-document-model.md), ADR-064) — it strips the internal fields (`RAID_ID`, `Date Opened`, `Date Closed`, `Section`) and stages to `08-Generated/`. tracker-manager owns the RAID *source* read/write; it does **not** author a bespoke export path.
 
 ## Evidence Gate Enforcement
 

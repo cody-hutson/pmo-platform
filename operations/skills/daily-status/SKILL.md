@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v2.31
+version: v2.32
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -272,6 +272,49 @@ read.
 - **Held queue present but length budget tight** → drop rollup detail before dropping the
   held queue; the held queue is the operator's action list, the rollup is context. Always
   surface the held count even when detail is trimmed.
+
+## Stalled-Comm Escalation (5-Day SIOR)
+
+When generating an AM/PM update, scan the Communications Tracker (already read as Input 5) for
+**actionable** comms stalled **≥5 business days** past their `Response due`, and surface each as
+a **SIOR escalation block** per `../../../core/standards/sior-escalation-protocol.md` — NOT a bare
+"no response" note. This reads EXISTING Tracker 2 fields only; it adds no column.
+
+**Eligibility + business-day clock:** identical to the 2-Day Rule in
+`../comms-writer/SKILL.md` § Stalled-Comm Follow-Up — same `PENDING RESPONSE`-only,
+informational-exempt (`NO RESPONSE NEEDED` / `[FYI]` / informational Direction) predicate and the
+same `Response due`-anchored, day-of-week-validated business-day count (referenced by role; not
+restated here — one canonical statement lives in comms-writer). Fires at `elapsed ≥ 5` business
+days. **Informational comms are exempt — do NOT escalate them.**
+
+**Reversibility-Scope preservation (load-bearing).** This block does NOT make daily-status a
+decision-class producer. Exactly like `## RAG, Variance & Buffer Status` and the ambient-sweep
+held-proposals, it **surfaces** the escalation of the tracked comm — the SIOR Recommendation is the
+*item's* recommended course (authored per the SIOR protocol), attributed to the escalation, never a
+first-person recommendation by this skill. This preserves the `## Reversibility Scope` opt-out.
+
+**SIOR render (per the protocol — presentation-neutral content, rendered here as a PMO-internal
+prep-note OUTSIDE the Teams-ready body, same placement as the anomaly-flag / unprocessed-Comms
+prep-notes; No-internal-IDs strip applies):**
+- **S — Situation:** the actionable comm (descriptive subject, `To`, `Date sent`), its `Response
+  due`, and `<N>` business days elapsed with no response. Factual, no alarm language.
+- **I — Impact:** what it blocks — quantified from the `Parent RAID/Decision` link where present,
+  qualified ("the stalled ask itself") where absent. Never blank.
+- **O — Options:** 2–3 — (1) send the drafted follow-up (comms-writer's draft), (2) escalate to the
+  decision owner / route to PgM, (3) status-quo (re-scope or mark `NO RESPONSE NEEDED` if no longer
+  needed). Each with its trade-off.
+- **R — Recommendation:** preferred option + rationale + explicit confidence (HIGH/MED/LOW).
+- **Severity threshold** (per the protocol): a 5-bd-stalled actionable comm is ≥ MEDIUM and emits
+  SIOR **iff it blocks downstream work** (has a `Parent RAID/Decision` or is on a path to a dated
+  commitment); a stalled comm with no downstream block is tracked, not escalated. A comm tagged
+  `[ESCALATION]`/`[EXEC]` is treated HIGH.
+- **Decision-Owner Mapping** (per the protocol): resolve the owner by decision domain from
+  `## Key People` (or the Stakeholder Register when maintained). **If no authority owner resolvable
+  → warn and route to the PgM** ("⚠️ No authority owner resolvable for `<domain>`; routing to PgM").
+
+**Negative paths:** informational comm → no escalation; `Response due` blank → coverage-gap
+surface, not an escalation; no downstream block → tracked, not SIOR-escalated. Never fabricate a
+SIOR block on absent input. This surface never enters the under-40-line Teams-ready body.
 
 ## Post-Generation Actions
 
