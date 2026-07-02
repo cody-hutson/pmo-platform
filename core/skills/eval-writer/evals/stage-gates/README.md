@@ -22,6 +22,7 @@ per the eval-writer consensus.
 
 | Gate | Set | Contents |
 |---|---|---|
+| Stage 3 — Bundle | [`stage-03-bundle/evals.json`](stage-03-bundle/evals.json) | Stage-3 Bundle gate eval set — 11 typed evals (4 structural S1-S4, 4 principal-behavior P1-P4, 2 contract C1-C2, 1 proactivity PR1). Grades a bundle rationale + created milestone description for Gate-3 conformance, principal bundling judgment, the two hard bundle contracts, and A5.1 cluster proactivity. Declares its own escape-rate metric in the set header. |
 | Stage 7 — Dev Testing | [`stage-07-dev-testing/evals.json`](stage-07-dev-testing/evals.json) | Branch-freshness assertion (release branch has no base commits unreachable from HEAD before Dev Testing passes). Executable half: the `assert_branch_fresh.py` runner in the pmo-skill-refiner scripts. |
 
 *(Additional stage-gate sets are appended to this table as they are authored.)*
