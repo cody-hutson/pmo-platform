@@ -74,5 +74,5 @@ Adopt the **registry-as-classification-source** model, with five coupled parts:
 
 ### Source(s)
 
-- The registry-foundation work item of the `05-ROLE-sustain-coverage-router` (v2.15) release — establish the `core/` logical skill registry; references the foundation work item (#1564) and the capstone router story (#181) that consumes the registry. The Stage 4 release plan (`release/releases/plans/v2.15_RELEASE_PLAN.md`) carries the dependency graph, contention map, and the Risk R6 (novel registry schema) that recommended this ADR.
+- The registry-foundation work item of the `05-ROLE-sustain-coverage-router` (v2.15) release — establish the `core/` logical skill registry; references the foundation work item (#1564) and the capstone router story (#181) that consumes the registry. The Stage 4 release plan (`release/releases/plans/v2/v2.15_RELEASE_PLAN.md`) carries the dependency graph, contention map, and the Risk R6 (novel registry schema) that recommended this ADR.
 - The central-index precedent: `core/schemas/per-skill-output-contracts.md` — a central per-skill index keyed by skill, consumed by path, carrying no per-skill frontmatter field; the proven pattern this decision adopts for the role-routing surface.
