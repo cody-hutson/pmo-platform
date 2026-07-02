@@ -1,6 +1,6 @@
 ---
 title: ADR-019 — Specialists compose (not absorb) shared function-skills
-status: Proposed
+status: Accepted
 date: 2026-06-08
 release: skill-suite-architecture-spine
 deciders: "operator (decision adopted 2026-06-06) + Stage 5 Solutioning spoke"
@@ -18,16 +18,20 @@ source_observations:
 
 ## Status
 
-Proposed. This decision flips to Accepted at the skill-suite-architecture-spine
-Collective Review scope-lock — the release activates Stage 5 with two or more
-Solutioning issues, so Collective Review fires and is the ratification gate per the
-[Nygard status convention](README.md#status-enum).
+Accepted (operator-adopted at the skill-suite-architecture-spine Collective Review
+scope-lock; that release activated Stage 5 with two or more Solutioning issues, so
+Collective Review fired as the ratification gate per the
+[Nygard status convention](README.md#status-enum), and the skill-suite-architecture-spine
+milestone reached closure on 2026-06-08). The decision itself was operator-adopted on
+2026-06-06; this ADR is the committed record of that adopted decision.
 
 Provenance: the decision was operator-adopted on 2026-06-06 (recorded on the
 adopting decision-record intake for the role-skill suite); this ADR is the committed
 record of that adopted decision, authored per the core-ADR convention. The
 decision-adoption date (2026-06-06) and this ADR's authoring date (2026-06-08) are
-distinct: the ADR transcribes an already-made decision, it does not re-decide it.
+distinct: the ADR transcribes an already-made decision, it does not re-decide it. The
+status transcription from Proposed to Accepted was reconciled under the ADR-019
+ratification-tracking work item after the ratifying review had already closed.
 
 ## Context
 
