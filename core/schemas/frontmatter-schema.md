@@ -41,7 +41,7 @@ Frontmatter is the storage mechanism: YAML metadata that agents maintain on ever
 
 ## Field Categories
 
-Six categories. Every file has core fields (required across all domains). Domain-specific fields apply based on the file's `domain` classification.
+Seven categories. Every file has core fields (required across all domains). Domain-specific fields apply based on the file's `domain` classification.
 
 ### Category 1: Identity
 
