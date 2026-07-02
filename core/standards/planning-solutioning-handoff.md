@@ -70,6 +70,20 @@ When T3 (structural design decisions) fires on an issue, that issue's design car
 
 **Carry-forward.** The obligation's discharge (named seam OR point-wise-with-search) is recorded in the issue's Stage 5 Solutioning spec and is a precondition the design-review checklist's seam-composition gate confirms. A T3 issue whose Stage 5 spec discharges neither limb of the obligation is incomplete — the gate fails it (a hardcoded host tool where a seam exists is a host-binding leak per [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) §4).
 
+### § 3.2 Structural-Premise-Review Obligation (rider on T3) {#structural-premise-review-obligation}
+
+When T3 (structural design decisions) fires on an issue, and the issue's design would **perpetuate or extend an existing structure** (reuse a file/record/directory pattern, extend a schema, replicate a naming scheme), that issue carries a **structural-premise-review obligation** that travels with it from Stage 4 Planning into the Stage 5 Solutioning spec. The obligation is a *rider on T3, not a seventh activation trigger*: it does not change the release-level ACTIVATE/SKIP verdict — it adds a determination the Stage 5 design must record. (No trigger-cardinality change → no §5.6 Cascade-Completeness Sweep; the `T1-T6` range strings are untouched.)
+
+**The obligation.** The Stage 5 design MUST record, per perpetuated-or-changed structure:
+1. An explicit **`reviewed → {retained | changed} because {evidence}`** determination — the evidence being a concrete file/pattern citation, not "follows convention"; AND
+2. A positive **best-practice / scalability / maintainability** conformance *assertion* (not assumption) for the retained-or-changed structure, with a one-line basis per axis.
+
+**Why it fires at Stage 4 (mirrors §3.1 rationale).** Recording the obligation at activation keeps the structural premise a *design variable while the frame is still open*, upstream of Stage 5 frame-hardening — so the adversarial reviewer is not estopped from challenging a pre-decided structure. The obligation **bounds** re-examination to the *structural premise* (per [`stage-02-triage.md`](../../release/references/pipeline/stage-02-triage.md) §4); it is not a license to re-litigate the whole ticket.
+
+**Reconciliation input (the pre-build step this obligation consumes).** The reviewed→retained/changed determination is informed by the ticket-vs-live-architecture reconciliation performed per the [ticket-architecture reconciliation discipline](../disciplines/ticket-architecture-reconciliation.md) — the pre-build step (fired at Stage 4 Phase A0 / Stage 5 Phase 0.5 entry) that reconciles the ticket's structural premise against the live architecture (ADRs, disciplines, registries/ledgers/charters, roadmap) BEFORE design, using ticket-age-vs-architecture-date as the staleness signal. This obligation is the activation-time record; the reconciliation discipline is the method it consumes.
+
+**Carry-forward.** The determination is recorded in the Stage 5 spec and is a precondition the design-review-checklist §4.8 gate + the `stage-05-solutioning.md` §7.2 Structure-Review Gate (SR-G1..SR-G4) confirm.
+
 ## § 4. Per-Release Evaluation Pattern
 
 Stage 4 Planning spokes instantiate the matrix below in the release plan's `## Stage Applicability Matrix` section. The instantiation produces a Verdict + per-trigger rationale that Stage 5 spokes (or the SKIP-path downstream stages) read at gate-entry.

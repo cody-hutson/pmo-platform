@@ -52,6 +52,7 @@ These are parallel — each governs a distinct activity-class at a distinct temp
 
 Decision sub-mechanism (not a peer activity-class — an edit-time twin of `decision-discipline.md` §2.1.1):
 - [reconcile-dont-annotate.md](reconcile-dont-annotate.md) — when editing an artifact that carries stale/contradictory state, reconcile it to current state rather than annotating-and-deferring. The edit-time twin of verify-before-recommend (§2.1.1).
+- [ticket-architecture-reconciliation.md](ticket-architecture-reconciliation.md) — the pre-build ticket-vs-live-architecture specialization of Discovery's stage-entry premise-currency check and Decision §2.1.1. Fires at Stage 4/5 entry when a ticket touches ≥1 architecture surface; uses ticket-age-vs-architecture-date as the staleness signal. "Is the ticket's premise still valid vs live architecture?"
 
 Authoring sub-mechanism (not a peer activity-class — the default posture when ADDING durable-corpus content):
 - [minimal-addition-discipline.md](minimal-addition-discipline.md) — when adding content to governance/reference corpus, add the minimum that carries the meaning (in service of *simplicity*). The umbrella authoring discipline of which duplication is one facet; complements the reference-durability floor via the floor/ceiling boundary.
