@@ -27,7 +27,7 @@ Defines the three-layer assessment protocol for stage-gate transitions: how to e
 
 ## Schema
 
-**Schema version:** 1.0
+**Schema version:** 1.2
 **Introduced in:** v7.5
 
 ---
@@ -83,8 +83,8 @@ LLM-assess qualitative dimensions on a 1-5 scale. Each score requires a 1-2 sent
 | 1 | Failing | Does not meet requirements, blocks proceeding |
 
 **Source mapping:**
-- **Gates 1-3 (Path A):** Score each gate-criteria-spec.md criterion where `Check=judgment` individually (e.g., G1-02 "Description is actionable," G3-04 "Scope is implementation-ready").
-- **Gates 4+ (Path B):** Score each §7 Judgment dimension (e.g., Stage 5: "design specificity, architecture alignment, blast radius coverage, decision quality, handoff completeness" — 5 dimensions, each scored 1-5).
+- **Gates 1-3 (Path A):** Score each gate-criteria-spec.md criterion where `Check=judgment` individually (e.g., G1-02 "Description is actionable," G3-04 "Scope is implementation-ready"). **G1-04 is bidirectional** — score it FAIL for BOTH under-specification (no file/protocol named) AND over-specification (mechanism/HOW prematurely committed) from the criterion text alone, per its bidirectional gate-criteria-spec.md definition; do not require loading `intake-style-guide.md` §5 to detect the over-spec direction.
+- **Gates 4+ (Path B):** Score each §7 Judgment dimension (e.g., Stage 5: "design specificity, architecture alignment, blast radius coverage, decision quality, handoff completeness" — 5 dimensions, each scored 1-5; Stage 9: "evidence completeness, risk assessment quality, decision clarity, handoff readiness"; Stage 12: "execution fidelity, deployment completeness, verification thoroughness, audit trail quality, handoff readiness"; Stage 13: "closure completeness, audit trail quality, carry-forward accuracy, operational deployment thoroughness"). For Stages 9/12/13, each dimension is anchored to its structural criterion per § Per-Boundary Judgment-Dimension Anchors below.
 
 ### Layer 3: Calibration (Self-Updating)
 
@@ -209,6 +209,48 @@ Consume each `pipeline/stage-NN-*.md` §7 (Stage-Transition Gate) Metrics line d
 
 ---
 
+## Per-Boundary Judgment-Dimension Anchors
+
+The judgment twin of the Per-Boundary Computed Metrics above. The three late boundaries (Stage 9 / 12 / 13) carry **prose judgment dimensions** in their shard §7 `Judgment (1-5)` lines (Path B). This subsection **anchors** each existing dimension to the structural criterion it qualitatively reads — it does NOT restate the dimensions (the shard §7 line is the source, exactly as the Gate 6→7 block above states "Consumed from pipeline/stage-06-engineering.md §7 … No new dimensions defined here"). The anchoring closes the mapping hole: the Layer-2 Source-mapping generically routes Gates 4→5..12→13 to "§7 Judgment dimensions," but Stages 9/12/13 were named nowhere and anchored to no structural criterion. Convention is **prose Path-B** (no `J-*` IDs — Gates 4+ score named prose dimensions; Gates 1-3 score `Check=judgment` criteria by structural ID; there is no id-tagged-dimension object).
+
+### Gate 9 (Plan Review) — Gate 9→12 · anchors to G-PR\*
+
+Dimensions cited from [`pipeline/stage-09-plan-review.md`](../../release/references/pipeline/stage-09-plan-review.md) §7 `Judgment` line (not restated):
+
+| Judgment dimension (shard §7) | Anchored structural criterion (G-PR*) | Anchoring rationale |
+|---|---|---|
+| evidence completeness | G-PR1 (evidence package complete, Phase A1-A6) + G-PR2 (all upstream reports present) | Dimension is the qualitative read of the same evidence-assembly surface G-PR1/G-PR2 check structurally-present. |
+| risk assessment quality | G-PR4 (risk register reviewed — all mitigated/accepted) | Structural check = "flag set"; judgment = "is the mitigation *sound*". |
+| decision clarity | G-PR6 (decision record posted) + G-PR7 (goal-conformance ALIGNED/DIVERGED/MISALIGNED — itself `Check=judgment`) | G-PR7 is the sole existing late-stage `Check=judgment` criterion; "decision clarity" is its Layer-2 dimensional expression. |
+| handoff readiness | G-PR3 (PR scope matches plan) + G-PR5 (deployment-readiness checklist all PASS) | Judgment read of whether the Stage 9->12 handoff (mergeable PR, conformant scope) is *execution-ready*, not merely present. |
+
+### Gate 12 (Execute) — Gate 12→13 · anchors to G-EX\*
+
+Dimensions cited from [`pipeline/stage-12-execute.md`](../../release/references/pipeline/stage-12-execute.md) §7 `Judgment` line (not restated):
+
+| Judgment dimension (shard §7) | Anchored structural criterion (G-EX*) | Anchoring rationale |
+|---|---|---|
+| execution fidelity | G-EX1 (PR MERGED) + G-EX2 (tag exists) | Qualitative read of whether the merge/tag *executed the plan* vs. merely completed. |
+| deployment completeness | G-EX3 (all S-2 deployments zero-diff) + G-EX4 (deployment log appended) | Dimension = "did every deploy target land"; G-EX3/G-EX4 are its structural checks. |
+| verification thoroughness | G-EX6 (all Phase C verification PASS, C1-C5) | Structural = "C1-C5 documented"; judgment = "were the checks *substantive*". |
+| audit trail quality | G-EX5 (release row present) + G-EX4 (deployment log) | Judgment read of whether the RELEASE_LOG audit trail is *reconstructable*, not just row-present. |
+| handoff readiness | G-EX7 (no Layer 2 leakage) + G-EX8 (deferred items documented) | Whether the Stage 12->13 handoff state is clean (no leakage) and complete (deferrals captured). |
+
+### Gate 13 (Close) — Gate 13 Exit · anchors to G-CL\*
+
+Dimensions cited from [`pipeline/stage-13-close.md`](../../release/references/pipeline/stage-13-close.md) §7 `Judgment` line (not restated):
+
+| Judgment dimension (shard §7) | Anchored structural criterion (G-CL*) | Anchoring rationale |
+|---|---|---|
+| closure completeness | G-CL1 (all issues CLOSED/deferred) + G-CL2 (Milestone CLOSED) | Qualitative read of whether the release is *genuinely* closed vs. mechanically closed. |
+| audit trail quality | G-CL3 (RELEASE_LOG VERIFIED) + G-CL4 (verification evidence persisted) | Judgment read of evidence *reconstructability*; G-CL3/G-CL4 are the structural anchors. |
+| carry-forward accuracy | G-CL1 (documented-deferred branch) + inherited carry-forward-items-tracked (field-lifecycle Gate 13 Exit) | Whether deferrals are *correctly* carried, not merely listed. |
+| operational deployment thoroughness | G-CL5 (operational deployment manifest fully executed, Phase B-OPS) | Structural = "manifest entries PASS"; judgment = "was the operational rollout *complete*". |
+
+**Non-omission note.** Stage 13's warn-mode criteria **G-CL6/G-CL7/G-CL8** (design-artifact refresh, goal-attainment, doc-impact) are conditional/warn-mode and carry their own verdict semantics + warn-log escape hatches; they are deliberately NOT folded under a 1-5 base dimension (doing so would double-govern them). The four base dims anchor to the unconditional G-CL1..G-CL5 + inherited criteria.
+
+---
+
 ## Decision Matrix
 
 | Metrics Pass Rate | Judgment Avg | Judgment Floor | → Recommendation |
@@ -297,8 +339,16 @@ When QA checkpoints are implemented, the evaluator can consume them as additiona
 
 ## Versioning
 
-**Schema version:** 1.1
+**Schema version:** 1.2
 **Introduced in:** v7.5
+
+**v1.2 changes (non-breaking — minor; additive — late-stage judgment anchors + G1-04 bidirectional rubric note):**
+- Added **Per-Boundary Judgment-Dimension Anchors** subsection binding the existing §7 prose judgment dimensions of Stage 9 / 12 / 13 to their structural criteria (G-PR* / G-EX* / G-CL*). No new dimensions authored — the shard §7 `Judgment` lines are cited, not restated (Gate 6→7 precedent). Enumerated the three late boundaries in the Layer-2 worked-example (Source-mapping) so the rubric names all Path-B boundaries, not just Stage 5.
+- **Convention:** prose Path-B dimensions (no `J-*` IDs). The "Stages 1-8 have J-* IDs" premise is void — no such convention exists; Gates 4+ score named prose dimensions, Gates 1-3 score `Check=judgment` criteria by structural ID.
+- **Calibration:** no `calibration-data.md` schema change needed — the calibration row is boundary-keyed and dimension-agnostic (Prior Version / Confidence / Rec / Outcome Items / Escapes / Accuracy); adding named dimensions to a boundary already in the calibration population adds zero columns and zero rows-schema change.
+- Added a one-line **G1-04 bidirectional** scoring note to the Layer-2 Source-mapping (Path A) — G1-04 scores FAIL for both under- and over-specification from the criterion text alone.
+- Also reconciled the header §Schema `Schema version` stanza to the versioning value (it had lagged at 1.0 through the v1.1 bump).
+- Schema bump v1.1 → v1.2. Consumers (handoff-coordinator) require no structural change; the Path-B parse path already reads named §7 dimensions.
 
 **v1.1 changes (non-breaking — minor):**
 - Added "Tier-branched criteria" routing protocol to Consumer Contract. Backwards-compatible: criteria without `Tier-branched:` prefix evaluate identically to v1.0. Forward-extends: tier-branched criteria route by primary intake-tier label before LLM judgment evaluation.

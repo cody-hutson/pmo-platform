@@ -271,7 +271,7 @@ def check_filename_compliance() -> list[str]:
         return [f"CORPUS-PATH-UNRESOLVED: plans dir does not resolve at {_rel(PLANS_DIR)} — corpus path misconfigured"]
     # rglob (recursive) — plans are foldered into major-version subdirectories
     # (plans/v1|v2|v3/… + the _unversioned/ bucket) per plans/README.md (#230,
-    # v3.51). A flat glob would stop scanning every subfoldered plan, silently
+    # v3.54). A flat glob would stop scanning every subfoldered plan, silently
     # passing the filename gate. README.md lives only at the plans/ top level and
     # stays allowlisted.
     for path in sorted(PLANS_DIR.rglob("*.md")):
@@ -469,7 +469,7 @@ def check_note_content() -> list[str]:
 
     # rglob (recursive) — notes are foldered into major-version subdirectories
     # (notes/v1|v2|v3/… + the _unversioned/ bucket) per plans/README.md (#230,
-    # v3.51). version_tuple keys off path.name (folder-agnostic), so the cutover
+    # v3.54). version_tuple keys off path.name (folder-agnostic), so the cutover
     # floor and exempt-set logic are unchanged; only discovery must recurse or the
     # §3.2 content lint silently stops scanning the foldered notes.
     for path in sorted(NOTES_DIR.rglob("v*.md")):

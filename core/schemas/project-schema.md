@@ -208,7 +208,7 @@ The bare word `domain` is overloaded across the platform; `deliverable_type` is 
 |---|---|---|---|
 | **`deliverable_type`** | *What kind of deliverable a project produces* (project-level) | `project-schema.md` §3 frontmatter | — (this field) |
 | `work_item_type` | *Declarative discriminator for a work-item kind* (story/task/bug/spike), the **domain-neutral methodology→hierarchy map** | `work-item-type-schema.md` | **Does NOT extend it.** Orthogonal: a `deliverable_type: software` project still contains `work_item_type: story` items. `deliverable_type` is a PROJECT-level frontmatter field; it is never a type-pack grammar entry (ADR-018 `core/`-independence kernel). |
-| artifact-provenance `domain: A\|B\|C` | Three-domain artifact classification | `frontmatter-schema.md` Category 6 | **Distinct.** A per-artifact provenance tag, not a project-level deliverable class. |
+| artifact-provenance `domain: source\|managed\|generated` | Three-domain artifact classification | `frontmatter-schema.md` Category 6 | **Distinct.** A per-artifact provenance tag, not a project-level deliverable class. |
 | content-area `delivery/{domain}` | Obsidian content-area tag (`governance`/`design`/`testing`/…) | `frontmatter-schema.md` Tag Taxonomy | **Distinct.** A content-filing tag, not a deliverable class. |
 | Stage-4 `domain:` class field | Abstract deliverable-domain signal consumed by the impact-analysis selector / guides / guide-index | `stage-04-planning.md` § 5.7 | **Consumes `deliverable_type`.** The Stage-4 field reads `deliverable_type` as its authoritative source where present (the reconciliation seam). |
 

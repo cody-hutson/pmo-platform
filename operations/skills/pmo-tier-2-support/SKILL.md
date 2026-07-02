@@ -108,6 +108,11 @@ Five requirements hold on every emission: (1) the audience is named and the fram
 - **Upstream invokers:** `pmo-tier-1-support` (escalation hand-off); the operator (the "tier 2" / "root cause this" address); `pmo-skill-router` (once it routes role-shaped support requests).
 - Cross-skill handoff tags draw from the controlled vocabulary; a new tag carries the `[DOMAIN_ACTION]` flag for review. Composition edges are skill→skill (invocation), never role→role (absorption).
 
+## Reference docs
+
+- [`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md) — the 6-step RCA method this skill invokes (never redefines).
+- [`core/standards/domain-best-practices/support.md`](../../../core/standards/domain-best-practices/support.md) — the support-domain best-practice guide (ITIL 4 / SRE); tier-2's design-time best-practice anchor. `support.md` lists this skill in its `consumers:`.
+
 ## Delivery Model Variation
 
 Tier-2's escalation cadence varies by delivery model (`delivery_approach: context-aware`, resolved per the project's governance — see [`operations/skills/_shared/five-model-variations.md`](../_shared/five-model-variations.md)): RCA close-out and the runbook sweep align to **phase-gate exits** (Waterfall), the **sprint boundary** (Agile/Scrum), the **policy/SLA cadence** (Kanban), **both** with disagreement surfaced (Hybrid), or the **implicit support rhythm** (n/a). The 6-step RCA method and the required runbook half of CAPA are model-invariant.

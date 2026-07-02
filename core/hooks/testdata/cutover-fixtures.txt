@@ -86,6 +86,32 @@ FLAG	ISSUEREF-POS	50|20|This traces back to the original triage decision in #900
 # Same self-describing ref AFTER the block (line 60) → must stay CLEAN (sanctioned form).
 CLEAN	ISSUEREF-POS	50|60|Parent issue establishes the standard and enforcement spine #90002.
 
+# ─── Hex-color exclusion (#2068): #NNNNNN color prefixes are NOT issue refs ───
+# The bug: ISSUEREF_RE's `#[0-9]+` greedily matched the numeric prefix of a hex color
+# (#28A745 → #28) and flagged it as a bare issue ref. The fix masks hex-color spans (a hex
+# run with >=1 hex letter, OR a colon-prefixed CSS `:#hexdigits` run) to spaces in the
+# shared classifier BEFORE the issue-ref test. Rows:
+# (1-2) the exact bug — a hex color outside a block must NOT flag; (3) letter-first + short-
+# hand hex shapes (#0A0/#FFF); (4) regression guard — a real #N outside a block STILL flags;
+# (5) mixed line — a hex color present but a real #N must still flag OUTSIDE-BLOCK; (6) in-
+# block self-describing line WITH a hex color present stays CLEAN (hex not counted toward the
+# 3-word self-describe threshold). Synthetic high-range issue numbers (not real refs).
+CLEAN	ISSUEREF-POS	0|10|The palette success color is #28A745 in the grammar table.
+CLEAN	ISSUEREF-POS	0|10|Palette: #28A745 success, #17A2B8 info, #6C757D muted.
+CLEAN	ISSUEREF-POS	0|12|Shorthand hex #FFF and letter-first #0A0 are colors, not refs.
+FLAG	ISSUEREF-POS	0|10|This traces to the decision in #90002 for context.
+FLAG	ISSUEREF-POS	0|10|Palette #28A745 relates to the fix in #90002 here.
+CLEAN	ISSUEREF-POS	5|10|Green #28A745 maps to the success state #90002 in the map.
+# Pure-digit hex colors in CSS/Mermaid `color:#NNNNNN` context (the exact process-flow-diagram-
+# standards.md classDef lines that regressed the allowlist removal). #155724 / #856404 have NO
+# hex letter, so the letter-anywhere branch alone misses them — the colon-prefixed branch
+# `:#<hexdigits>` masks them. Must stay CLEAN (they are colors, not refs).
+CLEAN	ISSUEREF-POS	0|39|    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+CLEAN	ISSUEREF-POS	0|41|    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+# Regression guard: a colon-abutted DECIMAL that is a real ref-shape but NOT CSS — refs are
+# never written `word:#NN` in the corpus; a self-describing #N after prose still flags.
+FLAG	ISSUEREF-POS	0|10|The fix for the palette bug lives in #90002 here now.
+
 # ─── Class U (raw github.com/.../{issues,pull,milestone} URL) ────────────────
 # A raw GitHub issue/PR/milestone URL is durability-ladder rung-6 — it rots on any
 # repository move/migration. The URL class asserts the regex's CONTENT-match precision

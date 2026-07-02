@@ -398,7 +398,7 @@ Every Plan edge uses **only** the 7 MVP relationship types (`frontmatter-schema.
 | `artifact_title` | string | ✅ | 1 | — | — | — |
 | `artifact_type` | enum | ✅ | 1 | — | — | values = `frontmatter-schema.md` Type Taxonomy (**referenced, not redefined**) |
 | `project_id` | ref | ✅ | 1 | — | `Project.id` | L2 — `BELONGS_TO` parent |
-| `domain` | enum{A,B,C} | ⚪ | 1 | — | — | reconciliation seam to backing file's Domain |
+| `domain` | enum{source,managed,generated} | ⚪ | 1 | — | — | reconciliation seam to backing file's Domain. `A`/`B`/`C` accepted as **deprecated aliases** during the migration window (`frontmatter-schema.md` Category 6) |
 | `version` | string | ⚪ | 1 | — | — | — |
 | `promotion_state` | enum | ⚪ | 1 | — | — | **promotion-location** (orthogonal to `lifecycle_state`); values `frontmatter-schema.md` § Domain C / `artifact-workflow-protocol.md` §4 (**referenced, not redefined**); owner `artifact-generator` |
 
@@ -409,7 +409,7 @@ Every Plan edge uses **only** the 7 MVP relationship types (`frontmatter-schema.
 | **V-ART-01** | `artifact_title` present ∧ non-empty | L1 | — | schema parse | AC-2 |
 | **V-ART-02** | `artifact_type` present ∧ ∈ `frontmatter-schema.md` Type Taxonomy (membership resolved against that referenced doc — not re-listed here) | L1 | — | schema parse | AC-2 |
 | **V-ART-03** | `project_id` resolves to an existing **Project** entity | L2 | BLOCK-WRITE | cross-entity integrity | AC-4 |
-| **V-ART-04** | `domain`, if present, ∈ {A, B, C} | L1 | — | schema parse | AC-2 |
+| **V-ART-04** | `domain`, if present, ∈ {source, managed, generated} (union also accepts the deprecated aliases {A, B, C} during the migration window — `frontmatter-schema.md` Category 6) | L1 | — | schema parse | AC-2 |
 | **V-ART-05** | `lifecycle_state` **delegates to Axis-2** — equals a content-state valid for the backing file's `domain` per `frontmatter-schema.md` §Cat-2 (the reconciliation seam; physical check = G3/G4) | L2 (seam resolve against frontmatter-schema content-state machine) | DEFER-G8 | — | AC-4 |
 | **V-ART-06** | `created_date` ISO ∧ ≤ today (= V-CORE-06 instance) | L1 | — | schema parse | AC-2 |
 | **V-ART-07** | `promotion_state`, if present, ∈ {`staged`, `promoted`, `archived-in-place`} (the **orthogonal promotion-location** field — *where the file physically sits*, distinct from `lifecycle_state` content-maturity; canonical home `frontmatter-schema.md` § Domain C / `artifact-workflow-protocol.md` §4, **referenced, not redefined**) ∧ consistency: `promotion_state: promoted ⇒ folder ≠ 08-generated` (location-move actually happened; physical check = G3/G4) | L2 (seam resolve against the `frontmatter-schema.md` promotion-location field + `folder`) | DEFER-G8 | — | AC-4 |

@@ -46,7 +46,7 @@ source:
   artifact: <artifact_title>            # binds to the Artifact entity's artifact_title
   artifact_type: <Type Taxonomy value>  # = frontmatter-schema Type Taxonomy (referenced, not redefined)
   container: <csv | md-table | json>    # the on-disk format of the SOURCE
-  domain: <A | B | C>                   # Artifact entity reconciliation seam (frontmatter Domain A/B/C)
+  domain: <source | managed | generated>   # Artifact entity reconciliation seam (frontmatter Domain; A/B/C = deprecated aliases during migration window)
   content_lifecycle_pattern: <Baselined | Living | Hybrid>   # Axis-2 (mirrors domain)
   schema_ref: <path | null>             # machine-schema if entity-derived (e.g., raid-log.schema.json); null if none
   fields: [<field-name>, ...]           # the authoritative field roster (source of the include/exclude decisions)
@@ -130,7 +130,7 @@ source:
   artifact: RAID Log
   artifact_type: RAID Log
   container: csv
-  domain: B
+  domain: managed
   content_lifecycle_pattern: Living
   schema_ref: core/schemas/raid-log.schema.json
   fields: [RAID_ID, RAID Category, Description, Impact, Owner, Priority, Status,

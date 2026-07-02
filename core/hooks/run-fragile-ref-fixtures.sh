@@ -34,6 +34,12 @@ CUTOVER_RE='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0
 URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/#?]|$)'
 REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 ISSUEREF_RE='#\[?[0-9]+\]?'
+# Companion hex-color mask — byte-identical to block-fragile-refs.sh + reference-durability.yml
+# (the #314 anti-drift contract now covers both paired constants). Two ERE branches: letter-
+# bearing hex run, OR colon-prefixed CSS hex `:#<3-8 hex digits>` (catches pure-digit colors
+# like color:#155724). Masked to spaces in the shared classifier before the ISSUEREF_RE test so
+# hex-color prefixes (#28) are not read as issue refs (#2068). ISSUEREF_RE itself is unchanged.
+HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)'
 MIN_SELFDESCRIBE_WORDS=3
 
 # matches_class — returns 0 (match) / 1 (no match) for a given class + content line.
@@ -102,7 +108,7 @@ matches_class() {
       fi
       _verdict="$("$PRINTF" '%s\t%s\n' "$_lineno" "$_linetext" \
         | "$AWK" -f "$POSITIONAL_LIB" \
-            -v issuere="$ISSUEREF_RE" -v refline="$_refline" -v minwords="$MIN_SELFDESCRIBE_WORDS")"
+            -v issuere="$ISSUEREF_RE" -v hexcolor="$HEXCOLOR_RE" -v refline="$_refline" -v minwords="$MIN_SELFDESCRIBE_WORDS")"
       [ -n "$_verdict" ]   # non-empty verdict => match (FLAG); empty => CLEAN
       ;;
     *)
