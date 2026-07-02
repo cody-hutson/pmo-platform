@@ -2,7 +2,7 @@
 name: file-router
 description: >
   Classifies, routes, and triggers processing for new files arriving in the PMO workspace. Uses three-layer classification (content analysis, project identification, filename patterns) with confidence thresholds. Triggers: "route this", "file this", "where does this go", "classify this", "I have a new transcript", "I just uploaded this", "what folder does this go in."
-version: v1.10
+version: v1.11
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -92,13 +92,83 @@ This skill is a registered consumer of the [Context Lifecycle Model](../../../co
 
 Downstream stall detection on `Context-Captured` (orphan files unrouted >1 business day) and `Context-Structured` (TR-### entries `UNASSIGNED` >3 / >5 business days) is specified in [`context-lifecycle-model.md` §4 Per-State Stall Detection](../../../core/disciplines/context-lifecycle-model.md). This skill does not implement stall detection directly; the `08-Generated/_unclassified/_queue.md` review prompt and the Unassigned Transcript Escalation in OPERATIONS.md are the existing mechanisms the framework allocates to these states.
 
-## Confidence Thresholds and Actions
+## Movement Directions
+
+Every file placement in the workspace is one of **four movement directions**. This skill is the single governed front door for all four — one routing pipeline (Direction Classification → Target Resolution → gate), not four parallel skills. The inbound direction below is the classic file-router behavior (unchanged); the other three consolidate previously-scattered movement under the same governance surface. Two of them (staging, promotion) already have their *machinery* elsewhere — file-router's role there is **target resolution + the approval gate**, and it **cites** the owning skill rather than re-implementing the move.
+
+Each direction fires the shared 3-step pipeline:
+
+1. **Direction Classification** — decide which of the four directions this file is (see § Direction Classification below). Run this **before** the Layer 1-3 inbound classifier: an already-registered / staged file is a promotion or cross-project candidate, not a fresh arrival, and must not be re-run through inbound content classification (see the direction-misclassification failure mode).
+2. **Target Resolution** — resolve the destination folder. Only *this* step differs per direction.
+3. **Gate** — apply the direction's gate-type (see § Confidence & Approval Gate). The inbound-family directions (inbound, cross-project) use the confidence-threshold gate; the Domain-C-family directions (generated-staging, promotion) use a flat-approval gate.
+
+### Direction #1 — Inbound (existing)
+
+- **Trigger:** a file arrives in the workspace unclassified and unregistered (the `Context-Captured` entry state).
+- **Target resolution:** the existing three-layer classifier (§ Classification Approach) → a `[Project]/01-08` folder. **Unchanged.** The Classification Approach (3 layers), Confidence Thresholds, Routing Targets, Multi-Project Routing, and Unclassified Queue sections below are direction #1's machinery and are preserved verbatim (regression AC-6).
+- **Gate:** confidence-threshold (HIGH auto-route / MEDIUM propose / LOW queue) per § Confidence & Approval Gate.
+- **Lifecycle state driven:** `Context-Captured → Context-Structured` (Context machine, mechanism #1) — see [`context-lifecycle-model.md` §5](../../../core/disciplines/context-lifecycle-model.md).
+
+### Direction #2 — Generated-file staging
+
+- **Trigger:** a skill emits a synthesized artifact into `08-Generated/` (e.g., artifact-generator produces a draft).
+- **Target resolution:** the staging location is `08-Generated/` (the emitting skill's declared target folder is recorded in the artifact's metadata header for later promotion). **08-Generated emission is a file-router-governed staging action, not an ad-hoc write** (AC-2): file-router recognizes the staging placement as movement direction #2.
+- **Gate:** flat-approval / auto-write. `08-Generated/` is a CLAUDE.md auto-write folder, so staging itself needs no confidence score and no approval gate — it is a Tier-2 auto-write. There is no confidence variable here: the target is pre-stamped by the emitting skill.
+- **Composes with (does NOT re-implement):** the staging emit + metadata stamp are owned by [`operations/skills/artifact-generator/SKILL.md`](../artifact-generator/SKILL.md) (it stamps `lifecycle_state: draft` + `promotion_state: staged` on emit). The `promotion_state` field itself is defined in [`core/schemas/frontmatter-schema.md` § Domain C](../../../core/schemas/frontmatter-schema.md) (live field); the promotion-location protocol is [`core/artifact-workflow-protocol.md` §4](../../../core/artifact-workflow-protocol.md) (Stage-6-current). file-router **cites** these — it does not restate the `promotion_state` enum or transitions.
+- **Lifecycle state driven:** Domain-C machine — `(none) → promotion_state: staged` (co-stamped with `lifecycle_state: draft` at emit). See § Distinction: this is the Domain-C synthesis machine, not the Context machine.
+
+### Direction #3 — Promotion (08-Generated → target folder)
+
+- **Trigger:** the operator elects to promote a staged artifact out of `08-Generated/` to its declared target folder.
+- **Target resolution:** file-router resolves the destination from the artifact's metadata header (its declared target folder) and carries the artifact's **document identity** (name, `generated_by`, version fields already in the frontmatter schema) into that resolution. Versioning is delegated to the document-identity/version fields already in `frontmatter-schema.md` — file-router does not mint a parallel version scheme.
+- **Gate:** flat-approval. file-router **resolves the target and enforces the approval gate**, then **cites and defers to** the existing PROMOTE / REVISE / REJECT gate in [`operations/skills/artifact-generator/SKILL.md`](../artifact-generator/SKILL.md) (its `Actions available:` block + `## Promotion Workflow`) — file-router does **not** restate that gate and does **not** perform the physical move. Promotion into a **non-auto-write** target folder (01-Governance/, 02-Design/, 03-Testing/, 04-PMO-Operations/, 07-Reference/) requires user approval before the write, consistent with the CLAUDE.md File Management Protocol auto-write-vs-approval folder list. This is a flat approval, not a confidence decision: the target is already known (it was stamped at staging), so there is no confidence variable — either the operator approves the promotion or they do not (AC-3).
+- **Composes with (does NOT re-implement):** the physical staged→promoted move and the `promotion_state: promoted` stamp are owned by artifact-generator's `## Promotion Workflow` (the move IS the authorization; artifact-generator never self-advances `promotion_state` past `staged`). file-router is the **router + gatekeeper** for promotion, not the **mover**.
+- **Lifecycle state driven:** Domain-C machine — `promotion_state: staged → promoted` (gate-enforced by file-router; move + stamp executed by the Promotion Workflow). Cited field: [`frontmatter-schema.md` § Domain C](../../../core/schemas/frontmatter-schema.md); protocol: [`artifact-workflow-protocol.md` §4](../../../core/artifact-workflow-protocol.md) (Stage-6-current).
+
+### Direction #4 — Cross-project routing (out to another project's tree)
+
+- **Trigger:** a file (arriving or already staged) is identified by Layer-2 project identification as belonging to a project **other than** the active project (the project whose PROJECT.md is loaded for the current session).
+- **Target resolution (the one net-new resolver):**
+  1. Run Layer-2 scoring across **all** active PROJECT.md files (existing capability).
+  2. If the winning project ≠ the active project **and** the gap to the second-place project is ≥ the existing 10-point tie bar (see the multi-project tie failure mode), resolve to `<winning-project>/<01-08 subfolder per classification>` — the file routes to the *other* project's folder structure, not the active project's (AC-4).
+  3. If the top-two gap is < 10 points, this is a tie → do not auto-resolve; present both projects and ask (same tie discipline as inbound multi-project routing).
+- **Gate:** confidence-threshold (this is an inbound-family, Layer-2-scored decision) — **AND** a cross-project write is a **new approval gate this skill owns**: a write into another project's tree is **always approval-gated**, even into that project's 05-Transcripts/ 06-Emails/ 08-Generated/ auto-write folders. "Auto-write" is scoped to the *active* project; a cross-project placement is a higher-stakes routing decision (it contaminates another project's downstream if wrong). This is the one greenfield gate file-router adds — there is no pre-existing owner for a cross-project-out approval, so file-router owns it here. See § Confidence & Approval Gate.
+- **Lifecycle state driven:** Context machine — `Context-Captured → Context-Structured` **in the target project's tree** (mechanism #1 at cross-project altitude; the resolver decides *which project's* Context machine advances). Citation: [`context-lifecycle-model.md` §5](../../../core/disciplines/context-lifecycle-model.md).
+
+### Direction Classification
+
+Before running any target resolution, decide which direction fires:
+
+| If the file… | Direction | Then run |
+|---|---|---|
+| Is unclassified/unregistered and belongs to the **active** project | #1 Inbound | 3-layer classifier + confidence gate |
+| Is being emitted by a skill into `08-Generated/` | #2 Generated-staging | record staging (auto-write); cite `promotion_state: staged` |
+| Is a staged `08-Generated/` artifact the operator is promoting | #3 Promotion | resolve target from metadata; enforce approval gate; cite artifact-generator PROMOTE/REVISE/REJECT |
+| Layer-2 resolves to a project **other than** the active project | #4 Cross-project | cross-project resolver + confidence gate + mandatory cross-project approval |
+
+An already-`Context-Structured` or `promotion_state: staged` file is **never** re-run through the inbound Layer 1-3 content classifier as though it were a fresh arrival (see the direction-misclassification failure mode) — that would double-register it or bounce a promoted artifact back to staging.
+
+## Confidence & Approval Gate
+
+The four movement directions split into **two gate-types**, because two directions carry a *confidence* variable (a classification could be wrong) and two do not (the target is already known / pre-stamped):
+
+- **Confidence-threshold gate — the inbound-family (#1 Inbound, #4 Cross-project).** These are Layer-2-scored decisions: the skill computed a project/type classification that could be wrong, so the HIGH/MEDIUM/LOW threshold table below is the gate. #4 Cross-project additionally carries a **mandatory approval** on top of its confidence score (a cross-project write is always approval-gated — see below).
+- **Flat-approval gate — the Domain-C family (#2 Generated-staging, #3 Promotion).** The target folder was already pre-stamped in the artifact's metadata at staging time, so there is **no confidence variable**. #2 staging is a Tier-2 auto-write into `08-Generated/` (no gate). #3 promotion is a flat operator approval — file-router enforces the gate and defers to artifact-generator's PROMOTE/REVISE/REJECT (it does not compute a confidence score for a promotion).
+
+### Confidence-threshold gate (directions #1, #4)
 
 | Confidence | Range | Action |
 |-----------|-------|--------|
 | **High** | ≥90% | Auto-route with notification. No approval needed for 05-Transcripts/, 06-Emails/, 08-Generated/. Approval required for 01-Governance/, 02-Design/, 03-Testing/, 04-PMO-Operations/, 07-Reference/. |
 | **Medium** | 60-89% | Propose route with reasoning. Show classification evidence. User confirms or corrects. |
 | **Low** | <60% | Route to `08-Generated/_unclassified/`. Add entry to unclassified queue file. |
+
+The threshold values above are unchanged from inbound-only file-router (regression AC-6): direction #1 uses this table exactly as before. Direction #4 (cross-project) uses the same threshold *scoring* to decide confidence, **but** its write is always approval-gated regardless of confidence — even a HIGH-confidence cross-project match into another project's 05/06/08 auto-write folder is surfaced for approval, because auto-write is scoped to the *active* project and a cross-project placement is a higher-stakes decision.
+
+### Flat-approval gate (directions #2, #3)
+
+- **#2 Generated-staging:** `08-Generated/` is a CLAUDE.md auto-write folder — staging is a Tier-2 auto-write, no approval and no confidence score. file-router records the staging placement; the emit + `promotion_state: staged` stamp are artifact-generator's.
+- **#3 Promotion:** flat operator approval. Promotion into a **non-auto-write** target folder (01-Governance/, 02-Design/, 03-Testing/, 04-PMO-Operations/, 07-Reference/) requires user approval before the write, aligned to the CLAUDE.md auto-write-vs-approval folder list. file-router resolves the target and enforces the approval gate, then **cites and defers to** the PROMOTE / REVISE / REJECT gate in [`artifact-generator/SKILL.md`](../artifact-generator/SKILL.md) — it does not restate that gate and does not perform the move.
 
 ## Routing Targets
 
@@ -276,7 +346,7 @@ is CHEAP. Every decision-class item must carry a **reversibility tier** paired w
 
 **Decision-class outputs in this skill:**
 
-- Confidence Thresholds and Actions — the HIGH / MEDIUM / LOW routing decision itself, with the MEDIUM proposals explicitly awaiting user confirmation.
+- Confidence & Approval Gate — the HIGH / MEDIUM / LOW routing decision itself (confidence-threshold gate for the inbound-family), with the MEDIUM proposals explicitly awaiting user confirmation, plus the flat-approval promotion gate and the mandatory cross-project approval.
 - High-confidence auto-routes to approval-required folders (01-Governance/, 02-Design/, 03-Testing/, 04-PMO-Operations/, 07-Reference/) that are surfaced for approval despite HIGH confidence.
 - FILE ROUTING SUMMARY output sections — HIGH CONFIDENCE (auto-routed), MEDIUM CONFIDENCE (proposed), LOW CONFIDENCE (queued), DOWNSTREAM TRIGGERS, ROUTING RULE UPDATES PROPOSED.
 - Self-Update Protocol — routing-rule update proposals opened as GitHub Issues with the `improvement` label, and the subsequent post-approval update to `references/routing-patterns.md`.
@@ -456,6 +526,86 @@ structural conformance and content quality.
   later the operator finds an unprocessed transcript in the folder that no stall flag
   ever surfaced — because the stall detection watches the register the transcript
   never entered.
+
+### Promotion executed as a move by file-router instead of gate-and-delegate — PROC
+
+- **Signature (observable signal):** On a direction #3 (Promotion) action, file-router
+  physically moves a staged file from `08-Generated/` to its target folder and/or stamps
+  `promotion_state: promoted` itself, rather than resolving the target, enforcing the
+  approval gate, and deferring the move to artifact-generator's `## Promotion Workflow`.
+- **Conditional:** do NOT let file-router perform the physical staged→promoted move or
+  advance the `promotion_state` field when [`core/artifact-workflow-protocol.md` §4](../../../core/artifact-workflow-protocol.md)
+  reserves that transition for the operator-gated Promotion Workflow (owned by
+  artifact-generator — "the move IS the authorization; artifact-generator never
+  self-advances `promotion_state` past `staged`"), because two owners of the
+  staged→promoted transition drift the `promotion_state` field and bypass the operator
+  gate that the move itself encodes.
+- **Root cause:** "Promotion" reads as "move the file," and file-router already has the
+  filesystem access to do it. The gate-and-delegate boundary (file-router = router +
+  gatekeeper; artifact-generator = mover + stamper) is a governance seam, not a technical
+  limit, so under a "just finish the promotion" impulse the agent collapses the two roles
+  into one and moves the bytes.
+- **Mitigation:** On a promotion, file-router does exactly two things — resolve the target
+  folder (carrying the artifact's document identity) and enforce the approval gate aligned
+  to the CLAUDE.md auto-write list — then cites and hands off to artifact-generator's
+  PROMOTE / REVISE / REJECT gate for the move and the `promotion_state: promoted` stamp.
+  file-router never writes `promotion_state` and never moves a staged file.
+- **Principal response vs. junior response:** Principal resolves + gates + delegates, and
+  the `promotion_state` field keeps a single owner. Junior moves the file "to be helpful,"
+  the field now has two writers, and a later artifact-lint displaced-content check or a
+  double-move surfaces the drift that the single-owner rule existed to prevent.
+
+### Cross-project auto-write into another project's 05/06/08 folder — TRIG
+
+- **Signature (observable signal):** On a direction #4 (Cross-project) route, a file that
+  originates outside the winning project is auto-written into that project's 05-Transcripts/,
+  06-Emails/, or 08-Generated/ folder without an approval gate, on the reasoning that those
+  folders are auto-write.
+- **Conditional:** do NOT treat a cross-project destination's auto-write folders as
+  auto-write when the file originates outside that project, because "auto-write" in the
+  CLAUDE.md File Management Protocol is scoped to the **active** project (the loaded
+  PROJECT.md); a cross-project placement is a higher-stakes routing decision that must be
+  approval-gated even into 05/06/08, since a wrong cross-project route contaminates another
+  project's Transcript Register, email archive, or generated-staging surface and is
+  expensive to unwind from the outside.
+- **Root cause:** The auto-write folder list (05/06/08 free; 01-04/07 approval) is memorized
+  as a property of the *folder name*, not of the *active-project scope* that qualifies it.
+  A cross-project route lands in a folder whose name is on the auto-write list, so the agent
+  applies the auto-write shortcut without re-checking that the scope no longer holds.
+- **Mitigation:** Gate every cross-project write behind approval regardless of the target
+  subfolder. The auto-write exemption applies only when the destination project IS the active
+  project; when the resolver picks a different project, surface the route for approval with
+  the winning-project score and the second-place gap, and write only on confirmation.
+- **Principal response vs. junior response:** Principal recognizes that auto-write is an
+  active-project privilege, gates the cross-project write, and names the target project in
+  the approval prompt. Junior sees "08-Generated" on the auto-write list and writes into the
+  other project's tree unprompted, and the misplacement surfaces only when that project's
+  downstream reads a file it never expected.
+
+### Direction misclassification collapsing promotion into inbound — INPUT
+
+- **Signature (observable signal):** A file that is already `Context-Structured` or
+  `promotion_state: staged` (a promotion or cross-project candidate) is fed through the
+  inbound Layer 1-3 content classifier as though it were a fresh `Context-Captured`
+  arrival — the Direction-Classification pre-step was skipped.
+- **Conditional:** do NOT run the inbound three-layer content classifier on a file that is
+  already registered or staged when the Direction-Classification pre-step would have routed
+  it to direction #3 or #4, because re-classifying an already-registered file double-registers
+  it (a second TR-### / a duplicate route) and can bounce a `promotion_state: staged` or
+  already-`promoted` artifact back into staging, undoing a governed transition.
+- **Root cause:** The inbound classifier is the skill's oldest and most reflexive path — "a
+  file to route" maps straight to "run the 3 layers." The Direction-Classification pre-step
+  is the new first move; under momentum the agent jumps to the familiar inbound pipeline and
+  never asks "is this actually a fresh arrival?"
+- **Mitigation:** Always run Direction Classification first. Check the file's existing state
+  (registered? `promotion_state` stamped? already in a `[Project]/01-08` folder?) before any
+  content scan. Only direction #1 (a genuinely unregistered, active-project arrival) runs the
+  Layer 1-3 classifier; directions #2/#3/#4 use their own target resolution and never re-enter
+  inbound classification.
+- **Principal response vs. junior response:** Principal runs the pre-step, detects the file is
+  already staged, and routes it as a promotion — no re-classification. Junior re-runs inbound
+  on a staged artifact, double-registers it, and a duplicate TR-### or a promoted file bounced
+  back to `08-Generated/` surfaces the collapse later.
 
 ## Shared Behavioral Rules
 
