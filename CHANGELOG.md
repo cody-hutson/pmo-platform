@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.50] - 2026-07-02
+
+The release pipeline can now evaluate every stage transition from its own written gate specs — completing the stage-gate criteria surface so a run needs no out-of-spec operator knowledge.
+
+[Full notes](release/releases/notes/v3.50_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.50)
+
 ## [v3.49] - 2026-07-02
 
 <one-sentence ≤140 chars; plain language; agent-search target>
