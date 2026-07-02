@@ -52,6 +52,7 @@ OPERATIONS_SKILLS=(
   pmo-technical-program-manager
   pmo-tier-1-support
   pmo-tier-2-support
+  pmo-wms-specialist
   ppm-agent
   project-initiator
   tracker-manager
@@ -2210,13 +2211,22 @@ cmd_check() {
       # Non-skill shared-resource directories under skills/ are not roster
       # members. Convention: an underscore-prefixed directory under
       # <module>/skills/ holds shared reference content consumed by the
-      # sibling role skills, not a deployable skill (no SKILL.md, no package,
-      # no deploy.sh array entry). It carries no roster membership and must be
-      # skipped before the roster lookup. EXACT-MATCH allowlist (fail-CLOSED):
-      # only the explicitly-named "_shared" dir is exempt — a stray
-      # underscore-prefixed directory still FAILs roster-drift. To add another
-      # non-skill shared-resource dir, extend this allowlist explicitly here.
-      [[ "$skill_name" == "_shared" ]] && continue
+      # sibling role skills, not a deployable skill (no SKILL.md the deployer
+      # ships, no package, no deploy.sh array entry). It carries no roster
+      # membership and must be skipped before the roster lookup. EXACT-MATCH
+      # allowlist (fail-CLOSED): only the two explicitly-named dirs below are
+      # exempt — a stray underscore-prefixed directory still FAILs roster-drift.
+      #   "_shared"    — shared reference content consumed by sibling role skills.
+      #   "_templates" — parameterized, NON-DEPLOYED skill templates (e.g.
+      #                  system-specialist/): each holds a placeholder-bearing
+      #                  SKILL.md that is instantiated per system into a real,
+      #                  roster+registry-registered skill. The template itself is
+      #                  never deployed (never added to a roster array, no package,
+      #                  no registry CI row), so it must be exempt from roster-drift
+      #                  exactly like _shared. An INSTANCE is a normal roster member.
+      # To add another non-skill shared-resource dir, extend this allowlist
+      # explicitly here.
+      [[ "$skill_name" == "_shared" || "$skill_name" == "_templates" ]] && continue
       local found=false
       for s in "${EXPECTED_ROSTER[@]}"; do
         [[ "$skill_name" == "$s" ]] && found=true && break
