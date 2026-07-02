@@ -69,21 +69,28 @@ test_f1_default_path_regression() {
   printf '# a\nsee [t](docs/target.md) and docs/target.md again\n' > "$fx/docs/a.md"
   printf '# b\nreference to docs/target.md\n' > "$fx/b.md"
 
-  # The pre-refactor blast-radius.sh: recover the version from the merge-base with
-  # origin/main (the state before this branch touched it). If unavailable (detached
-  # CI checkout), fall back to comparing the tool against ITSELF re-run — a weaker
-  # but still-valid determinism check (same input => same normalized output).
+  # The pre-refactor blast-radius.sh: recover the version that did NOT yet source the
+  # shared schema-v1 library, by walking this file's OWN git history and picking the
+  # newest blob whose body lacks the `schema-v1-emit.sh` source line. That commit is
+  # always locally reachable in the checkout (no origin/main ref, no network needed —
+  # respecting the offline smoke posture), so the strong before-vs-after comparison
+  # runs in CI, not only locally. If history is unavailable (e.g. a tarball export),
+  # fall back to a determinism re-run (same input => same normalized output).
   local pre_ref_script="$fx/blast-radius.prerefactor.sh"
-  local base_rev=""
-  if base_rev="$(git -C "$REPO_ROOT" merge-base HEAD origin/main 2>/dev/null)" && [ -n "$base_rev" ]; then
-    if git -C "$REPO_ROOT" show "${base_rev}:release/tools/blast-radius.sh" > "$pre_ref_script" 2>/dev/null && [ -s "$pre_ref_script" ]; then
-      :
-    else
-      pre_ref_script=""
+  local sha
+  pre_ref_script=""
+  while IFS= read -r sha; do
+    [ -z "$sha" ] && continue
+    if ! git -C "$REPO_ROOT" show "${sha}:release/tools/blast-radius.sh" 2>/dev/null \
+         | grep -q 'schema-v1-emit.sh'; then
+      # This revision predates the shared-lib source line — the pre-refactor version.
+      if git -C "$REPO_ROOT" show "${sha}:release/tools/blast-radius.sh" > "$fx/blast-radius.prerefactor.sh" 2>/dev/null \
+         && [ -s "$fx/blast-radius.prerefactor.sh" ]; then
+        pre_ref_script="$fx/blast-radius.prerefactor.sh"
+      fi
+      break
     fi
-  else
-    pre_ref_script=""
-  fi
+  done <<< "$(git -C "$REPO_ROOT" log --format='%H' -- release/tools/blast-radius.sh 2>/dev/null)"
 
   local cur_out norm_cur
   cur_out="$("$BLAST_RADIUS" --format=json --depth=2 --root="$fx" "docs/target.md" 2>/dev/null || true)"

@@ -63,6 +63,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # blast-radius test recovers the pre-refactor blast-radius.sh
+                           # from this file's git history for the F1 before-vs-after
+                           # normalized-diff regression; a shallow checkout would leave
+                           # only the current blob and degrade F1 to a determinism check.
 
       - name: Verify prerequisites
         run: |
