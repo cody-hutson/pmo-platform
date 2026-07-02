@@ -22,10 +22,10 @@
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
-#   13 post_close_milestone gh api -X PATCH state=closed
-#   14 manual_close_release_issues operator-authorized D-1 with structured comment
+#   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
+#   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
-#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1)
+#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
 #   17 generate_report     structured markdown or JSON close-out report
 #
@@ -58,7 +58,12 @@
 #     --merge-timeout <N>      Chore-PR await-merge poll budget, seconds (#1705;
 #                              default 300 — CI-realistic, not the old 30s cap)
 #     --no-merge               Create the chore PR but do NOT poll/merge it (#1705);
-#                              exit cleanly leaving the PR for the operator
+#                              exit cleanly leaving the PR for the operator. The
+#                              post-merge-dependent phases — post_close_milestone,
+#                              manual_close_release_issues, publish_github_release,
+#                              check_release_body_drift — DEFER under this flag
+#                              (#2919); re-run --apply after the chore PR merges to
+#                              complete milestone close + Release publish.
 #   META:
 #     --self-test              Validate internal logic (offline); exit 0 on success
 #     --check-paths            Resolve the four corpus paths (offline); exit 0 if all
@@ -1725,6 +1730,16 @@ phase_reparse_ledgers() {
 # ─── Phase 13: post_close_milestone (Hub Tier-1 mechanical) ──────────────────
 
 phase_post_close_milestone() {
+  # --no-merge (#2919): the Stage 13 chore PR is left open for the operator, so the
+  # DEPLOYED→VERIFIED transition has NOT landed on main. Closing the milestone now
+  # would record a false audit state (main still shows DEPLOYED). Defer per the
+  # stage-13-close.md § Phase B sequencing invariant ("chore PR MUST land on main
+  # BEFORE Phase C C1 Milestone close"); the operator re-runs --apply post-merge.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "post_close_milestone" "SKIPPED" "DEFERRED under --no-merge — chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)"
+    return 0
+  fi
+
   if [[ "$STATE_MILESTONE_STATE" == "closed" ]]; then
     mark_phase "post_close_milestone" "SKIPPED" "milestone already closed"
     return 0
@@ -1747,6 +1762,15 @@ phase_post_close_milestone() {
 # ─── Phase 14: manual_close_release_issues (D6 — D-1 anomaly handler) ────────
 
 phase_manual_close_release_issues() {
+  # --no-merge (#2919): D-1 manual issue-close is part of the post-milestone-close
+  # ceremony, which itself defers until the chore PR lands on main. Defer here too so
+  # the operator's single follow-up --apply (post-merge) performs milestone close +
+  # issue close together.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "manual_close_release_issues" "SKIPPED" "DEFERRED under --no-merge — chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)"
+    return 0
+  fi
+
   if [[ "$OPEN_ISSUE_COUNT" -eq 0 ]]; then
     mark_phase "manual_close_release_issues" "SKIPPED" "no open release issues to manually close"
     return 0
@@ -1867,6 +1891,17 @@ EOF
 # (avoids degraded "vX.Y — vX.Y" title surfacing publicly).
 #
 phase_publish_github_release() {
+  # --no-merge (#2919): Surface 1 (the GitHub Release) is published from the
+  # RELEASE_NOTES file, which lands on main only when the Stage 13 chore PR merges.
+  # Under --no-merge the note is still on the open chore branch, so publishing now
+  # would bind a public Release to unmerged content. Defer BEFORE the tag/notes
+  # preflights (avoids a needless network call) per the stage-13-close.md § Phase B
+  # sequencing invariant; the operator re-runs --apply post-merge.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "publish_github_release" "SKIPPED" "DEFERRED under --no-merge — RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)"
+    return 0
+  fi
+
   local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
 
   # Preflight 1: tag must exist on origin (Stage 12 Phase B3 push pre-requisite).
@@ -1978,6 +2013,15 @@ phase_publish_github_release() {
 # ALWAYS returns 0; exit codes from the tool map to PASS / WARN / N/A only.
 # Detective-only: it never re-emits the Release (auto-remediation is out of scope).
 phase_check_release_body_drift() {
+  # --no-merge (#2919): this detective phase compares the just-published Surface 1
+  # Release body against the in-repo note. Under --no-merge publish_github_release
+  # deferred, so there is no fresh Release to drift-check. Defer (avoids a needless
+  # network call); re-runs with the publish on the post-merge --apply.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    mark_phase "check_release_body_drift" "SKIPPED" "DEFERRED under --no-merge — no Surface 1 published this run to drift-check (re-run --apply after merge)"
+    return 0
+  fi
+
   if [[ ! -x "$DRIFT_CHECK_TOOL" ]]; then
     mark_phase "check_release_body_drift" "SKIPPED" "check-release-body-drift.sh not executable at $DRIFT_CHECK_TOOL"
     return 0
@@ -2125,6 +2169,34 @@ EOF
     done <<< "$OPEN_ISSUE_LIST"
     echo
   fi
+  # --no-merge (#2919): the post-merge-dependent phases deferred (see the guard
+  # clauses in phases 13/14/15.5/15.6). Emit the deferred set + the exact idempotent
+  # follow-up command so the operator has a single unambiguous next step — the step
+  # whose absence forced a manual milestone reopen/re-close on the v3.45 close.
+  if [[ "$NO_MERGE" -eq 1 ]]; then
+    local _excl_hint="" _ei
+    for _ei in "${EXCLUDE_ISSUES[@]:-}"; do
+      [[ -z "$_ei" ]] && continue
+      _excl_hint+=" --exclude-issue ${_ei}"
+    done
+    echo "## Deferred Under --no-merge"
+    echo
+    echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} was left open (\`--no-merge\`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):"
+    echo
+    echo "- \`post_close_milestone\` — Milestone #${MILESTONE} left OPEN"
+    echo "- \`manual_close_release_issues\` — D-1 anomaly issue-close deferred"
+    echo "- \`publish_github_release\` — Surface 1 (GitHub Release) not emitted"
+    echo "- \`check_release_body_drift\` — no published Release to drift-check"
+    echo
+    echo "**Follow-up — after the chore PR merges (CI-green):**"
+    echo
+    echo '```'
+    echo "automated-closeout.sh --pr ${PR_NUMBER} --version ${VERSION} --milestone ${MILESTONE} --apply${_excl_hint}"
+    echo '```'
+    echo
+    echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run). Idempotent: the already-landed corpus SKIPs, then milestone close + Release publish run."
+    echo
+  fi
   if [[ "$MODE" == "dry-run" ]]; then
     echo "**Next step:** review this dry-run report, then re-invoke with \`--apply\` to execute Phases 5-16."
   fi
@@ -2135,10 +2207,14 @@ generate_json_report() {
   [[ -z "$slug" ]] && slug="$VERSION"
   /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
-    "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" <<'PY'
+    "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" <<'PY'
 import sys, json
-ts, mode, pr, version, milestone, slug, log_state, ms_state, tag, cycle, open_n, chore_pr, open_list = sys.argv[1:14]
+ts, mode, pr, version, milestone, slug, log_state, ms_state, tag, cycle, open_n, chore_pr, open_list, no_merge = sys.argv[1:15]
 issues = [int(x) for x in open_list.split("\n") if x.strip()]
+# --no-merge (#2919): the post-merge-dependent phases defer; surface which ones so a
+# JSON consumer sees the same deferral the markdown report's "Deferred Under --no-merge"
+# section shows. Empty list on the normal (merge) path.
+deferred = ["post_close_milestone", "manual_close_release_issues", "publish_github_release", "check_release_body_drift"] if no_merge == "1" else []
 payload = {
     "timestamp": ts,
     "mode": mode,
@@ -2149,6 +2225,7 @@ payload = {
     "cycle_time": cycle,
     "chore_pr": int(chore_pr) if chore_pr.isdigit() else None,
     "d1_manual_close_candidates": {"count": int(open_n), "issues": issues},
+    "deferred_under_no_merge": deferred,
 }
 print(json.dumps(payload, indent=2))
 PY
@@ -2626,6 +2703,51 @@ STUB
   MERGE_TIMEOUT="$_mt_saved_timeout"; MERGE_POLL_STEP="$_mt_saved_step"; REPO_SLUG="$_mt_saved_slug"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4e.2: --no-merge post-merge phase-gating (#2919) — offline, hermetic.
+  # Asserts the four post-merge-dependent phases DEFER (SKIP with a "no-merge" detail)
+  # under NO_MERGE=1 EVEN WHEN their normal precondition to act is met (open milestone,
+  # open issues) — i.e. the guard is unconditional under --no-merge and fires before any
+  # network preflight. Then a NO_MERGE=0 negative check (dry-run, hermetic) confirms the
+  # guard is --no-merge-scoped and does NOT fire on the normal path. Regression guard for
+  # the Stage 13 sequencing invariant (stage-13-close.md § Phase B): a --no-merge run must
+  # NOT close the milestone / publish the Release while the chore PR is still open.
+  local _nm_saved_nomerge="$NO_MERGE" _nm_saved_mode="$MODE" _nm_saved_gh="$GH"
+  local _nm_saved_mstate="$STATE_MILESTONE_STATE" _nm_saved_oic="$OPEN_ISSUE_COUNT"
+  local _nm_saved_oil="$OPEN_ISSUE_LIST" _nm_saved_cpn="$CHORE_PR_NUMBER" _nm_saved_ms="$MILESTONE"
+  # A false GH proves the assertions never touch the network: a correct guard returns
+  # before any $GH / git_net call, so a phase that reached one would error, not SKIP.
+  GH="/bin/false"; CHORE_PR_NUMBER="8888"; MILESTONE="9999"; CLOSE_COMMENTS=()
+
+  # (a) NO_MERGE=1 → all four phases DEFER (SKIPPED + "no-merge" detail), even with an
+  #     OPEN milestone and OPEN issues (preconditions that would otherwise act).
+  NO_MERGE=1; MODE="apply"; STATE_MILESTONE_STATE="open"; OPEN_ISSUE_COUNT=2; OPEN_ISSUE_LIST=$'401\n402'
+  local _nm_ph
+  for _nm_ph in post_close_milestone manual_close_release_issues publish_github_release check_release_body_drift; do
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    "phase_${_nm_ph}" >/dev/null 2>&1
+    [[ "$(get_phase "$_nm_ph" | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: $_nm_ph must SKIP (defer) under --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+    get_phase "$_nm_ph" | /usr/bin/grep -qiF 'no-merge' || { echo "FAIL: $_nm_ph defer detail must cite --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+  done
+
+  # (b) NO_MERGE=0 negative check (dry-run, hermetic): post_close_milestone +
+  #     manual_close_release_issues must NOT emit the defer sentinel on the normal path
+  #     (they hit their DRY-RUN branch instead). publish/drift NO_MERGE=0 behavior is
+  #     covered by the tag-stub / drift tests elsewhere in the self-test.
+  NO_MERGE=0; MODE="dry-run"; STATE_MILESTONE_STATE="open"; OPEN_ISSUE_COUNT=1; OPEN_ISSUE_LIST="401"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_post_close_milestone >/dev/null 2>&1
+  get_phase post_close_milestone | /usr/bin/grep -qiF 'DEFERRED under --no-merge' && { echo "FAIL: post_close_milestone must NOT defer when NO_MERGE=0"; failures=$((failures+1)); }
+  [[ "$(get_phase post_close_milestone | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: post_close_milestone NO_MERGE=0 dry-run should be DRY-RUN, got '$(get_phase post_close_milestone)'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1
+  get_phase manual_close_release_issues | /usr/bin/grep -qiF 'DEFERRED under --no-merge' && { echo "FAIL: manual_close_release_issues must NOT defer when NO_MERGE=0"; failures=$((failures+1)); }
+  [[ "$(get_phase manual_close_release_issues | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: manual_close_release_issues NO_MERGE=0 dry-run should be DRY-RUN, got '$(get_phase manual_close_release_issues)'"; failures=$((failures+1)); }
+
+  NO_MERGE="$_nm_saved_nomerge"; MODE="$_nm_saved_mode"; GH="$_nm_saved_gh"
+  STATE_MILESTONE_STATE="$_nm_saved_mstate"; OPEN_ISSUE_COUNT="$_nm_saved_oic"
+  OPEN_ISSUE_LIST="$_nm_saved_oil"; CHORE_PR_NUMBER="$_nm_saved_cpn"; MILESTONE="$_nm_saved_ms"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4f: phase_transition_release_log VERIFIED re-derivation guard (#1681) —
   # offline, hermetic. Stubs $GH so `pr view` reports the release-PR merge state,
   # then asserts: a VERIFIED row + MERGED-to-main PR → SKIPPED-as-PASS (legitimate
@@ -3014,6 +3136,7 @@ STUB
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
+  echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2

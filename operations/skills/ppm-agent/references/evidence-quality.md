@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-link -->
 # Evidence Quality Standards
 
 ## Purpose
@@ -101,6 +102,12 @@ The assumption ratio measures the proportion of claims tagged as `[ASSUMPTION --
 | >40% | NOT READY | Do not present to stakeholders without additional evidence gathering |
 
 ### Watermelon Detection Integration
+
+The **canonical definition of the watermelon (green-outside/red-inside) concept and the
+full detection signal set (W1–W8)** live in [`watermelon-detection.md`](../../../../core/skills/pmo-qa-auditor/references/watermelon-detection.md)
+(owned by `pmo-qa-auditor`) — one owner per concept, per duplicate-source-discipline (ADR-065).
+The signals below are the **evidence-quality-specific** lens on that concept (which evidence-quality
+failures surface a watermelon), not a fork of the signal set.
 
 Evidence quality is the primary defense against watermelon reporting (green outside, red inside). Detection signals that indicate evidence quality failure:
 

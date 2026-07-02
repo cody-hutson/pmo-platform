@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v2.20
+version: v2.21
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -137,6 +137,47 @@ Both tracks converge on: [single unified priority or action]
 - Dependencies between projects
 - Shared resource conflicts
 - Items that affect multiple projects
+
+#### Section 3.x: Cross-Project Correction Recurrence
+
+Detect a behavioral correction recurring across projects — a redirect that is not
+project-specific after all, but a latent platform guardrail. This is the **spatial**
+recurrence axis (same correction active in ≥2 projects now), complementary to the
+**temporal** axis owned by `OPERATIONS.md § CORRECTIONS Graduation & Expiry Protocol`
+(a correction that has driven ≥2 course-corrections over time). This sub-block detects
+the signal and **routes it into that existing intake path** — it does NOT author a
+parallel `improvement.yml` mechanism.
+
+**Procedure (per weekly run):**
+1. Enumerate each active project's `[Project]/CORRECTIONS.md` (best-effort; a project
+   with no file contributes zero entries — never read absence as a signal).
+2. Tag each correction with its `(domain, theme)` tuple using the two-pass heuristic in
+   `../../../core/disciplines/decision-discipline.md` §4.3 (cited, not restated).
+3. Group corrections by `(domain, theme)` **across projects**. A group whose entries
+   span **≥2 distinct projects** fires as a cross-project recurrence candidate (the
+   canonical N=2 emergence number per `decision-discipline.md` §4.2, applied to the
+   project-count axis — same number, not a new threshold).
+4. **Emit an actionable candidate** (never a bare count): `{ what recurs — the
+   (domain,theme) + representative correction text · which projects — the ≥2 project
+   names + the entry from each · proposed guardrail — a one-line candidate governance
+   rule }`.
+5. **Route via the intake path** — surface the candidate in Section 3 output AND log it
+   as a CORRECTIONS-graduation candidate for the Pattern Review pipeline
+   (`OPERATIONS.md § CORRECTIONS Graduation & Expiry Protocol` Rule 3 field-mapping).
+   `release-planner` Mode D drafts the `improvement.yml`; the operator renders
+   PROMOTE / KEEP / EXPIRE. This roll-up **never files the issue itself** (preserves the
+   LITERAL-body operator gate and the human-in-the-loop write posture).
+
+**Single-project rule (no false positive):** a `(domain, theme)` group whose entries all
+come from **one** project has project-span 1 < 2 → does NOT fire. A correction unique to
+one project produces no cross-project candidate ("a single instance is data, not pattern").
+
+**Reversibility:** the candidate is a decision-class output — carry a reversibility tier +
+confidence per § Reversibility Discipline (an unpromoted candidate surfaced for operator
+review is CHEAP; a guardrail acted on downstream escalates per the tier table).
+
+**Single-project portfolio note:** when only one project is active this sub-block is a
+no-op (no ≥2-project span possible) — omission is the correct signal, not a gap.
 
 ### Section 4: Process Health
 
@@ -648,6 +689,28 @@ structural conformance and content quality.
   Section 7, leaves Section 1 🟢 because that is what the project reported, and the
   green-masked overdue RAID reaches leadership as on-track — then writes 🟢 back into
   PORTFOLIO.md, propagating the masked state to every downstream consumer.
+
+### Single-project correction promoted as a cross-project pattern — OUT
+
+- **Signature (observable signal):** Section 3.x emits a cross-project correction
+  candidate whose supporting entries all trace to a single project (project-span = 1),
+  or fires on one project's `CORRECTIONS.md` because the other projects' files are
+  absent (read as "no correction" rather than "no file").
+- **Conditional:** do NOT emit a cross-project recurrence candidate when the recurring
+  `(domain, theme)` group spans fewer than 2 distinct projects, because a redirect seen
+  in only one project is project-scoped by definition — promoting it to a platform
+  guardrail candidate fabricates a cross-project pattern from a single occurrence and
+  wastes an operator PROMOTE/KEEP/EXPIRE adjudication on noise.
+- **Root cause:** the detector groups by `(domain, theme)` and can fire on entry-count
+  alone if the project-span check is skipped; an absent project file (normal — most
+  projects have zero corrections) can be silently read as a same-project match.
+- **Mitigation:** bind the fire condition to **distinct-project-span ≥ 2**, not entry
+  count. Treat an absent `[Project]/CORRECTIONS.md` as zero entries for that project,
+  never as a match. When only one project is active, the sub-block is a no-op.
+- **Principal response vs. junior response:** Principal computes distinct-project-span, fires only
+  at ≥2, and states "1 project — not a cross-project pattern; project-scoped, left in
+  place." Junior groups by theme, sees 3 entries in one project, and files a
+  platform-guardrail candidate the operator must then reject.
 
 ## Generation Schedule
 

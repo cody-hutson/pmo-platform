@@ -115,7 +115,7 @@ def find_artifact(version_key: str, milestone: str, kind: str) -> str | None:
 
     # rglob (recursive) — plan/note artifacts are foldered into major-version
     # subdirectories (plans/v1|v2|v3/…, notes/…, plus the _unversioned/ bucket)
-    # per the plans/README.md disposition rule (#230, v3.46). A flat glob would
+    # per the plans/README.md disposition rule (#230, v3.50). A flat glob would
     # miss every subfoldered file and regenerate an all-"—" Release-Notes column
     # (FM-1 destructive-regenerate). The returned INDEX-relative path carries the
     # subfolder segment (e.g. "notes/v3/v3.45_RELEASE_NOTES.md") so the link

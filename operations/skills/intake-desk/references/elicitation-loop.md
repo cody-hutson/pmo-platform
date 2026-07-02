@@ -19,7 +19,7 @@ only when the checklist passes; otherwise take the "if not met" action.
 | From → To | Gate name | Advance ONLY when (binary checklist) | If not met |
 |---|---|---|---|
 | Phase 1 → 2 | **Altitude gate** | (a) An altitude is named (run-the-business vs change-the-business, then the specific level); (b) it is recorded as confirmed-by-user OR flagged `[ASSUMPTION – CONFIRM]` (never silently assumed). | Ask one altitude-disambiguating question (not a battery), or record the assumption and proceed. |
-| Phase 2 → 3 | **Type-landing gate** | All of: (a) one type proposed from `references/type-map.md` with a one-line "why this type" rationale; (b) the type-landing criteria (in `references/type-map.md`) pass for that type; (c) the user has not contradicted it; (d) the type is held provisional (re-route allowed through Phase 3). | Re-run type selection; if genuinely ambiguous, name the contenders and record the chosen one as `[ASSUMPTION – CONFIRM]` for triage. |
+| Phase 2 → 3 | **Type-landing gate** | All of: (a) one type proposed from `references/type-map.md` with a one-line "why this type" rationale; (b) the type-landing criteria (in `references/type-map.md`) pass for that type; (c) the user has not contradicted it; (d) the type is held provisional (re-route allowed through Phase 3); (e) **for a container altitude only** — the container-altitude existing-owner scan (see § Phase 2) has run and any plausible existing owner has been surfaced to the user (leaf altitudes — story / task / bug: N/A, they advance directly). | Re-run type selection; if genuinely ambiguous, name the contenders and record the chosen one as `[ASSUMPTION – CONFIRM]` for triage. If a container's existing-owner scan surfaced a match and the user chose enrich, do not advance to Phase 3 — deliver the comment-ready enrichment block for the existing owner instead. |
 | Phase 3 → 4 | **Clarity gate** (the stop condition) | The 5-test (T1–T5) passes for this type at this altitude AND every unresolved point is captured as either a deferred `[ASSUMPTION – CONFIRM]` or an owned handoff item — not left silent. | Continue eliciting the specific failing test only; do not open new lines past intake-ready (over-elicitation guard). |
 | Phase 4 → emit | **Confirm gate** | The user returns an explicit binary approval via AskUserQuestion on the rendered item. | Do not emit. Revise per the user's edit and re-present, or fall back to the copy/paste body. |
 
@@ -88,6 +88,29 @@ exist elsewhere in the platform; intake surfaces the breakdown, it does not perf
 it. (Worked example: a "customer self-service pickup tool" stays one item; the
 discovery / research / integration / dev / testing breakdown is a body callout for
 later slicing, not N child issues.) Get user confirmation on the container framing.
+
+**Container-altitude existing-owner scan (containers only).** Before advancing a
+**new container** (an initiative / epic-equivalent — the Initiative/portfolio
+altitude that maps to `improvement` with a child-decomposition callout per
+`references/type-map.md`) past the type-landing gate, scan the work tracker for an
+existing owner of the same capability surface — a scoped search on the container's
+key terms (GitHub MVP: `gh issue list --search "<container key terms>" --state open`,
+and check the milestones for already-owned scope). This scan is **altitude-gated to
+containers**: story-, task-, and bug-altitude items do **not** run it and advance
+directly to Phase 3 (the between-clarity-and-confirm tracker scan in SKILL.md failure
+mode "Work item filed without consulting existing tracker state" is their duplicate
+backstop) — the container scan fires earlier, at container-framing time, because a
+duplicated initiative strands a whole workstream and is the costliest duplicate to
+unwind after its fields are elicited. On a plausible match, surface it as a single
+question and **re-route to enrichment** ("possible existing owner: an open
+initiative / epic with matching scope — frame a new container anyway / enrich the
+existing owner"); on "enrich," stop the container loop and deliver the captured
+framing as a comment-ready block for the existing owner rather than proceeding to
+elicit a duplicate container's fields. This applies the CLAUDE.md **Pre-creation
+governance check** issue-creation duplicate-discipline (enrich an existing owner
+rather than restate its scope in a parallel issue) at the container gate. The scan
+running and any match being surfaced is a **hard condition** on the container's
+type-landing advance; the enrich-vs-new **decision** stays the user's.
 
 **Re-routing rule.** Treat the type as provisional through Phase 3. As elicitation
 develops, if the user's answers reclassify the item, re-route explicitly and say

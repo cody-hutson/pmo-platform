@@ -234,6 +234,7 @@ If any sentence has no content, use "None identified."
 
 ### Structure
 **Format:** CSV with two logical sections — Active Register and Archive.
+**Agent-native surface:** the machine-schema [`raid-log.schema.json`](raid-log.schema.json) — EAD-derived from the RAID Item entity — is the agent-native validation surface; the CSV above is its persistence *dialect*. The agent read/write path is native structured-instruction (no `csv` module on the agent path); `csv.DictReader` is the validator harness, not the agent path. The stakeholder-facing view (CSV export / Confluence) is produced on demand by **artifact-generator** via the [`dual-format-document-model.md`](../standards/dual-format-document-model.md) `raid-log--stakeholder-csv` translation map (per ADR-064) — not a bespoke export path. The 14-column schema below is unchanged.
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
@@ -273,6 +274,8 @@ The RAID Log maintains two representations:
 - All agent processing reads and writes the local CSV. Never reference RAID_IDs in stakeholder-facing output (chat summaries, status updates, meeting packages). Use descriptive references instead (e.g., "the ERP freeze window dependency" not "R-PPM-003").
 - The workspace owner is responsible for syncing the Confluence version after local changes. The agent may remind the owner when significant RAID changes are approved but does not upload to Confluence directly.
 - If a future MCP integration enables direct Confluence writes, the agent should strip internal fields before publishing.
+
+**Governing model (proof-of-concept):** this RAID CSV→Confluence dual-format is the proof-of-concept instance of the general [Dual-Format Document Model](../standards/dual-format-document-model.md); the stakeholder rendering is its `raid-log--stakeholder-csv` translation map (the strip-internal-fields rule above, formalized). The model is the reusable seam for future dual-format artifacts — see that standard rather than re-deriving the strip rule per artifact.
 
 ### Machine-Schema (entity-derived)
 **Companion schema:** [`raid-log.schema.json`](raid-log.schema.json) — machine-readable JSON Schema (draft-07) validating one RAID Log CSV row.
