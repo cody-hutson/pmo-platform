@@ -22,7 +22,7 @@ The release pipeline can now evaluate every stage transition from its own writte
 
 ## [v3.49] - 2026-07-02
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+The file router now governs every direction a file can move — inbound, staging, promotion, and cross-project — instead of only inbound arrivals; intake checks for an existing owner before creating a duplicate container, and can auto-log low-touch items on its own when you've raised your automation level.
 
 [Full notes](release/releases/notes/v3.49_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.49)
 
