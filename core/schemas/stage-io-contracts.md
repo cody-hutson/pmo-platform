@@ -51,7 +51,7 @@ Stage 1 (Intake) produces the demand artifact (the GitHub Issue) for Stage 2 (Tr
 
 ### Validation Rules
 
-1. **Structural premise is directional:** Triage, Planning, and Solutioning may overturn the ticket's structure (its Proposed Change and Affected Files) with justification; perpetuating the existing structure is a choice to justify, not a default. Enforcement lives at the Stage 5 → 6 design-handoff gate (the structure-reviewed → retained/changed determination), not at this boundary — this boundary states the property, it does not gate on it.
+1. **Structural premise is directional:** Triage, Planning, and Solutioning may overturn the ticket's structure (its Proposed Change and Affected Files) with justification; perpetuating the existing structure is a choice to justify, not a default. Enforcement lives at the Stage 5 → 6 design-handoff gate (the structure-reviewed → retained/changed determination) — *now authored — see this file's Stage 5→6 Validation Rule 4 + [`stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) §7.2 SR-G1..SR-G4* — not at this boundary; this boundary states the property, it does not gate on it.
 2. **No 1 → 2 gate added:** The directionality row is `Required = NO / Human Decision = NO` by design — it encodes the handoff property without creating a blocking gate at the intake/triage boundary, keeping all enforcement teeth at Stage 5.
 3. **Section scope:** This section authors the directionality contract plus the Proposal artifact it qualifies; remaining Stage 1 → Stage 2 artifacts are added when the boundary is next exercised per the schema convention.
 
@@ -71,6 +71,7 @@ Stage 5 (Solutioning) produces design specifications for Stage 6 (Engineering). 
 | Implementability assessment | Flags in stage review comment | YES | NO | Summary | Inline in "Output for Stage 6" | Mode 3/4 flags resolved or documented |
 | Tech debt flags | Flags in stage review comment | NO | NO | Summary | Inline in "Output for Stage 6" | Informational — no gate |
 | Spec depth indicator | Explicit declaration | YES | NO | Summary | First line of "Output for Stage 6" | States "Solutioning-level" explicitly |
+| Structure-review determination | Structured section in stage review comment | CONDITIONAL (when §3.2 structural-premise-review obligation recorded) | Structural decision — Tier 3 | Detail | "Output for Stage 6" section | Per changed structure: `reviewed → {retained\|changed} because {evidence}` + 3-axis (best-practice/scalability/maintainability) assertion present; gated by [`stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) §7.2 SR-G1..SR-G4 |
 
 ### Path B: Solutioning Skipped
 
@@ -85,6 +86,7 @@ Stage 5 (Solutioning) produces design specifications for Stage 6 (Engineering). 
 1. **Spec depth must be deterministic:** Engineering A1 checks for either (a) closed Stage 5 sub-task with "Output for Stage 6" → Solutioning-level, or (b) no Stage 5 sub-task per applicability matrix → Planning-level. Ambiguity = HOLD.
 2. **ADR closure gate:** If Solutioning created ADR issues, ALL must be closed before Engineering proceeds.
 3. **No open questions:** "Output for Stage 6" must not contain unresolved questions — Solutioning resolves or escalates. Engineering receives answers, not questions.
+4. **Structure-review determination gate:** When the T3 structural-premise-review obligation ([`planning-solutioning-handoff.md`](../standards/planning-solutioning-handoff.md#structural-premise-review-obligation) §3.2) was recorded, the `Structure-review determination` artifact MUST be present and pass [`stage-05-solutioning.md`](../../release/references/pipeline/stage-05-solutioning.md) §7.2 (SR-G1..SR-G4). Absent-or-failing = HOLD. This is the enforcement point the Stage 1→2 boundary Validation Rule 1 forward-references (*the structure-reviewed → retained/changed determination*).
 
 ---
 

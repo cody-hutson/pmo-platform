@@ -275,6 +275,27 @@ Calibration: design specs vs. actual implementation, ADR decisions vs. outcomes,
 
 These criteria apply when the Research-Methodology Design variant activates; a code or governance release does not exercise them.
 
+### 7.2 Structure-Review Gate Criteria (structural-premise changes)
+
+*These criteria SUPPLEMENT § 7's base metrics; they do not replace them. They are the engineering/architecture-axis gate-teeth for code/governance structural changes — the counterpart to §7.1's analysis-class MD-G teeth and the enforcement of the directional-structural-premise principle stated at [`stage-io-contracts.md`](../../../core/schemas/stage-io-contracts.md) Stage 1→2 Validation Rule 1 and [`stage-02-triage.md`](stage-02-triage.md) §4 (the directional-handoff principle; §7.2 is its enforcing gate).*
+
+**Conditional-fire predicate:** This criteria set fires ONLY when the T3 structural-premise-review obligation ([`planning-solutioning-handoff.md`](../../../core/standards/planning-solutioning-handoff.md#structural-premise-review-obligation) §3.2) was recorded for ≥1 in-release issue — i.e., the design perpetuates or extends an existing structure. A change that introduces a genuinely new structure with no perpetuated premise does not exercise §7.2 (omission when no structural premise is load-bearing IS the correct non-ceremony signal per [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md) G2). The base § 7 criteria remain unconditional.
+
+**Gate criteria (ALL must hold to authorize Engineering):**
+
+| # | Criterion | Method | Authority |
+|---|---|---|---|
+| SR-G1 | **Existing structure reviewed → retained/changed with evidence.** The Stage 5 output records, per changed structure, an explicit `reviewed → {retained\|changed} because {evidence}` determination — the evidence being a concrete file/pattern citation, NOT "follows convention". The review is informed by the ticket-vs-live-architecture reconciliation (the pre-build reconciliation step; SR-G1 is the exit-gate that confirms it was done and recorded). | Inspect the Stage 5 output for the determination block; each determination cites concrete evidence + (when reconciliation applies) the ticket-vs-architecture reconciliation record. *(Reserved: the reconciliation-record location is wired in by the ticket-architecture reconciliation discipline when it lands.)* | Gate-blocking |
+| SR-G2 | **Best-practice / scalability / maintainability *asserted*, not assumed.** For the retained-or-changed structure, the design states a positive conformance assertion on each of the three axes with a one-line basis — an assertion the design *makes*, not a silent assumption. | Inspect for the 3-axis assertion; reject a bare "conforms" without a stated basis | Gate-blocking |
+| SR-G3 | **Perpetuation is a justified choice, not a default.** When the design RETAINS the existing structure, the justification names ≥1 concrete reason the existing structure is correct for this change (not merely "it's what exists") — enforcing the directional-not-authoritative principle that perpetuating structure is a choice to justify. | Inspect the `retained because` clause; a retain with no affirmative reason FAILS | Gate-blocking |
+| SR-G4 | **Determination handed off.** The reviewed→retained/changed determination + 3-axis assertion appears in the `### Output for Stage 6` block per the [`stage-io-contracts.md`](../../../core/schemas/stage-io-contracts.md#boundary-stage-5--stage-6-solutioning--engineering) Stage 5→6 contract. | Confirm the handoff field is present and non-empty in Output for Stage 6 | Gate-blocking |
+
+**Why gate-blocking (not advisory):** (i) the intake/triage handoff *already* declares this the enforcement point (`stage-02-triage.md` §4, `stage-io-contracts.md` Stage 1→2 Validation Rule 1 — "enforced at the Stage 5 → 6 design-handoff gate"), so an advisory-only outcome would leave that declaration unbacked; (ii) the perpetuate-structure defect (one-file-per-record vs consolidated reference) is *invisible to* blast-radius / adversarial-review / ADR machinery because those design *within* the premise — only a gate that questions the structure catches it. A structural premise that fails SR-G1..SR-G4 **returns to Solutioning; it does not proceed to Engineering on advisory grounds.**
+
+**Compose-not-duplicate (5-axis Stage-5 design-review disambiguation).** SR-G is the **engineering/architecture axis** — distinct from and composing with: (a) §5.7 / checklist **4.6** *domain-best-practice* review-criterion (domain-practice axis — "SR-G asks *was the structure reviewed*; 4.6 asks *does it fit the domain's practice*"); (b) **§7.1 MD-G** (analysis-class methodology axis); (c) checklist **4.7** (abstraction-altitude axis — "4.7 asks *right seam?*; SR-G asks *right structure, reviewed with evidence?*" — and 4.7 is advisory while SR-G blocks); (d) **Phase 0.5** (information-premise re-review — "0.5 catches a stale *fact*; SR-G governs the *structural choice*"). SR-G duplicates none of them.
+
+**Cutover discipline (introducing-release-exempt):** Applies to releases entering Stage 5 strictly AFTER this criterion's introducing-release merge SHA recorded in the release log. The introducing release itself is exempt (reflexive-pipeline loop — it cannot fire its own new gate).
+
 ## 8. Automation Level
 Overall Tier 2. Today: agent runs A1-A5 in conversation. Target: Principal Engineer skill (Modes 1-4) auto-generates design analysis from release plan.
 
