@@ -73,6 +73,7 @@ Go/No-Go decision record (verdict, rationale, conditions, authorization), eviden
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
 Metrics (canonical IDs per [`schemas/gate-criteria-spec.md` Gate 9](../../../core/schemas/gate-criteria-spec.md#gate-9-plan-review)): evidence package complete (G-PR1), all upstream reports present (G-PR2), PR scope matches release plan (G-PR3), risk register reviewed (G-PR4), deployment readiness checklist all PASS (G-PR5), decision record posted (G-PR6), goal-conformance against Outcome Statement (G-PR7 — judgment-recommend); incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
 Judgment (1-5): evidence completeness, risk assessment quality, decision clarity, handoff readiness.
+Judgment dimensions anchored to G-PR* structural criteria per [`gate-evaluation-spec.md § Per-Boundary Judgment-Dimension Anchors`](../../../core/schemas/gate-evaluation-spec.md) — each dimension is the qualitative read of the structural criterion(s) it maps to.
 Gate output: GO → Stage 12 / GO WITH CONDITIONS → Stage 12 / NO-GO → return upstream.
 
 ## 8. Automation Level
