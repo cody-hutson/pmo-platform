@@ -84,7 +84,7 @@ acceptance_score(release) = Σ count(MET) over all issues
 
 > **Denominator note.** This all-drift-out denominator is the LOCKED formula (scope-lock, 2026-07-03). It differs from a "remove only N/A" variant: `REINTERPRET-WITH-RATIONALE` and `FLAG-UPSTREAM` also leave the denominator, matching the Stage-8 §5 treatment where all drift verdicts sit out of the gate uniformly.
 
-## 5. Acceptance-matrix columns (the #217 co-design contract)
+## 5. Acceptance-matrix columns (the acceptance-report co-design contract)
 
 The acceptance matrix that the acceptance-report template renders is the per-criterion output of this type. These are the **stable, machine-parseable** columns (verdict/score fields anchored verbatim to the Stage-8 §5 enum) — the report template renders exactly these so the report and the framework agree:
 
@@ -98,7 +98,7 @@ The acceptance matrix that the acceptance-report template renders is the per-cri
 | `Drift-rationale` | required-when-present — populated **only** for the three drift verdicts | §3 |
 | `Disposition` | `fix-now \| defer \| accept` — the Stage-8 Finding-Disposition axis (operator-rendered; advisory in the matrix) | Stage-8 §5 Finding Disposition Framework |
 
-**Footer roll-up fields** (from §4): `acceptance_score` (all-drift-out) + `acceptance_verdicts` per-verdict counts. Parseable-row contract (for #430 reuse): the stable headers above + one row per criterion + a machine block mirroring `grading.json` `summary.acceptance_*`.
+**Footer roll-up fields** (from §4): `acceptance_score` (all-drift-out) + `acceptance_verdicts` per-verdict counts. Parseable-row contract (reusing the machine-readable result schema from the closed result-tracking work): the stable headers above + one row per criterion + a machine block mirroring `grading.json` `summary.acceptance_*`.
 
 ## 6. Runner integration — DOC-ONLY
 

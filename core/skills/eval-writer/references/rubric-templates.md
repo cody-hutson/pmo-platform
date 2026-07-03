@@ -228,7 +228,7 @@ averaged across tasks.
 
 ## Acceptance-grading rubric (for the `acceptance` assertion type)
 
-**Use for:** grading a PR against its originating GitHub Issue's acceptance criteria — the `acceptance` assertion type (the sixth `assertions[].type` value). This is not a judge-prompt scaffold like T1–T7; it is the grading rubric the grader applies when it encounters a `type: acceptance` assertion. Full contract in [`acceptance-assertion-type.md`](acceptance-assertion-type.md).
+**Use for:** grading a PR against its originating GitHub Issue's acceptance criteria — the `acceptance` assertion type (the sixth `assertions[].type` value). This is not a judge-prompt scaffold like T1–T7; it is the grading rubric the grader applies when it encounters a `type: acceptance` assertion. The full contract (parse rules, two-judgment grading, verdict-projection table, all-drift-out score) lives in the `acceptance-assertion-type.md` reference in this same directory.
 
 **Two judgments per criterion** (per ADR-071 — this is why the acceptance grading stays binary at the judge while emitting the six-value drift-aware enum):
 
