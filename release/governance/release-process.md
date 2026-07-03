@@ -104,6 +104,14 @@ Downstream stage determines the plan is fundamentally unworkable for one or more
 - **Signal:** Comment on the relevant sub-task with `[PLAN REJECTION]` tag, specific blockers with evidence, and which upstream stage should re-run.
 - **Gate impact:** Operator re-runs the upstream stage (Planning or Solutioning) for the affected issue(s). Unaffected issues in the same release may continue.
 
+**PR review comments as a feedback surface (tier-mapped by change-nature).**
+A GitHub **PR review comment or review thread reply** (a comment left via `gh pr review` / an inline `pulls/comments` thread on the release PR) is an **alternate arrival channel** for inter-stage feedback — it does not introduce a new severity ladder. It maps onto the three existing tiers **by the *nature* of the change the comment requests, not by the fact that it arrived as a comment**, because the channel carries no tier information: a comment is a *transport*; the tier is the *classification*.
+- A review comment requesting a **minor correction** (outdated path, wording, a template field — no scope/sequence/AC touched) → **Tier 1 `[ADJUST]`**: resolved by the same `[ADJUST]` commit the tier already defines, with a **resolving reply** posted on the PR review thread when the fix lands. No operator notification, no re-gate.
+- A review comment requiring a change to **scope, sequence, or another issue / AC** → **Tier 2 `[SCOPE CHANGE]`**: routed to the operator via the same `[SCOPE CHANGE]` sub-task/Milestone comment the tier already defines. Do **not** map such a comment to Tier 1 by default because it "looks small" — tier by what the comment asks for.
+- A review comment **rejecting the plan** as unworkable → **Tier 3 `[PLAN REJECTION]`**: the same stop-and-return-with-blockers path (RCA invoked per Tier 3 above).
+
+The tier's action, signal tag, and gate impact are **unchanged** — the review comment is one way the feedback can arrive, resolved by the tier's existing commit-tag + resolving-reply mechanism. **Single-operator no-op:** under the single-operator reviewer convention (§ Stage 6 PR metadata) the PR ships with no external reviewer, so no review comments arrive and this surface is **dormant** — a no-op in single-operator steady state, not a missing channel. **Cutover discipline:** Applies to all releases going forward.
+
 #### AC-Drift Handling Protocol
 
 Acceptance criteria are authored at Intake (Stage 1) and evaluated at QA Testing (Stage 8). Between those points, context may shift (version numbers, scope adjustments, dependency resolutions); AC text written at Intake may reference assumptions that no longer hold at QA time. This protocol defines (1) how Planning detects and refreshes drifted AC upstream and (2) how QA renders a verdict on residual drift downstream.
