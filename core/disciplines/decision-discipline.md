@@ -17,6 +17,8 @@ Shared discipline methodology for decision-class work. When a consumer's primary
 
 **Relationship to `review-discipline-principles.md`:** Parallel, not extension. Review discipline governs review-class output (findings, severity, root-cause chains — the reviewer audience). Decision discipline governs decision-class producer behavior (localization, opposing view, pattern check — the operator audience). Different artifact types, different consumer audiences, different failure modes. Cross-reference between the two; no inheritance.
 
+> **Scope — this is not the ADR authority.** This framework governs **decision-class briefings** (recommendations the operator acts on — the localization / opposing-view / pattern-cache mechanisms). It does **not** govern **ADR authoring**. For *when to write an ADR* (the trigger/non-trigger rubric), the copy-paste template, and the supersede-not-edit immutability policy, see [`../standards/adr-authoring-guide.md`](../standards/adr-authoring-guide.md); for the ADR field/section data contract, see [`../schemas/adr-schema.md`](../schemas/adr-schema.md).
+
 ---
 
 ## Section 1 — Scope and Applicability

@@ -15,8 +15,8 @@ upstream_sources:
   - "projects/Deep Research PMO/methodology-knowledge-base/domains/C13-knowledge-management.md L166-169"
   - "projects/Deep Research PMO/methodology-knowledge-base/domains/C06-portfolio-program-management.md L45 L232"
 non_overlap:
-  - "repo-hygiene-standards — owns ADR mechanics"
-  - "adr-policy-cluster — owns ADR policy"
+  - "adr-authoring-guide.md — owns ADR mechanics + policy (when-to-write rubric, template, supersede-not-edit)"
+  - "adr-schema.md — owns the ADR field + body-section data contract"
 ---
 <!-- repo-integrity: allow-issue-ref -->
 <!-- reference-durability: allow-link -->
@@ -43,9 +43,9 @@ This framework answers five questions the platform previously left to convention
 
 The framework is not a template generator — it specifies the convention that every roadmap conforms to. Six pilot roadmaps under `pmo-platform/governance/roadmaps/` (automation, governance-hygiene, release-process-fitness, skills-distribution, project-data-architecture, template-architecture) are the empirical substrate. The framework codifies the convention those pilots converged on, plus the boundary statements and forcing function that were left implicit during pilot authoring.
 
-**In scope:** initiative-roadmap convention (when to author, what lifecycle, frontmatter schema, section structure, forcing function, cohesion-check protocol, JBGE application, quality-criteria binding to enforcement). Boundary statement to ADR governance (cross-reference only — ADR mechanics owned by repo-hygiene-standards + adr-policy-cluster). Boundary statement to Initiative GitHub Issue (cross-reference only — Initiative Issues are the existing GitHub `initiative:` label mechanism).
+**In scope:** initiative-roadmap convention (when to author, what lifecycle, frontmatter schema, section structure, forcing function, cohesion-check protocol, JBGE application, quality-criteria binding to enforcement). Boundary statement to ADR governance (cross-reference only — ADR mechanics/policy owned by [`adr-authoring-guide.md`](adr-authoring-guide.md) and the ADR data contract by [`adr-schema.md`](../schemas/adr-schema.md)). Boundary statement to Initiative GitHub Issue (cross-reference only — Initiative Issues are the existing GitHub `initiative:` label mechanism).
 
-**Out of scope (deliberate non-overlap):** ADR authoring mechanics (location, naming, immutability, supersession protocol) — governed by repo-hygiene-standards. ADR policy decisions (deprecation, retirement, scope of immutability) — governed by adr-policy-cluster. Vision artifact authoring — Vision is durable platform-purpose held in the user auto-memory store; this framework merely positions Roadmap relative to Vision in the 5-tier mental model.
+**Out of scope (deliberate non-overlap):** ADR authoring mechanics (location, naming, immutability, supersession protocol) and ADR policy decisions (deprecation, retirement, scope of immutability) — governed by [`adr-authoring-guide.md`](adr-authoring-guide.md) (the when-to-write rubric, template, and supersede-not-edit policy), with the ADR field + body-section data contract in [`adr-schema.md`](../schemas/adr-schema.md). Vision artifact authoring — Vision is durable platform-purpose held in the user auto-memory store; this framework merely positions Roadmap relative to Vision in the 5-tier mental model.
 
 ## 2. Artifact Hierarchy and Lifecycle Pattern Mapping
 
@@ -170,7 +170,7 @@ The three artifact types answer different questions. A reader who needs to under
 | Mutability | Mutable in place; archived at sunset | Immutable post-acceptance | Mutable until closed |
 | Granularity | Multi-milestone capability | One decision | One initiative-tracking work item |
 | Update cadence | Event-bound + 90-day calendar fallback | At decision-time only (no updates after) | At every sub-task state change |
-| Owning governance | This framework | repo-hygiene-standards (mechanics) + adr-policy-cluster (policy) | GitHub Issues + `initiative:`/`cluster:` labels per [label-taxonomy.md](../specs/label-taxonomy.md) |
+| Owning governance | This framework | [`adr-authoring-guide.md`](adr-authoring-guide.md) (mechanics + policy) + [`adr-schema.md`](../schemas/adr-schema.md) (data contract) | GitHub Issues + `initiative:`/`cluster:` labels per [label-taxonomy.md](../specs/label-taxonomy.md) |
 | Primary location | `core/governance/roadmaps/*.md` | `core/ADRs/*.md` (cross-cutting) or `release/ADRs/*.md` (release-scope) | github.com/[OPERATOR_GITHUB]/pmo-platform/issues |
 | Diátaxis quadrant | Explanations | Explanations | (operational tracker — not a Diátaxis-quadrant doc) |
 
@@ -187,7 +187,7 @@ An Initiative GitHub Issue captures **tracked work + dependencies** for an initi
 **Verbatim boundary statement (per AC#7 non-overlap requirement):**
 
 > **Roadmap vs ADR vs Initiative Issue boundary.**
-> An **Initiative Roadmap** captures the *architected path across milestones* for a multi-milestone initiative (Living artifact; what we're trying to deliver). An **ADR** captures a *single architectural decision and its rationale* (Baselined immutable artifact per C13 §6; why we chose what we chose). An **Initiative GitHub Issue** captures *tracked work + dependencies* (mutable artifact; what specifically lands when). ADR mechanics (immutable markdown format, location, naming, supersession protocol) are governed by repo-hygiene-standards (owns ADR mechanics) and adr-policy-cluster (owns ADR policy). **This framework authors no ADR governance.** Roadmap §4 sections that reference future ADRs use placeholder-stub convention until ADR infrastructure ships (deferred-decision-stub pattern, per §7.5).
+> An **Initiative Roadmap** captures the *architected path across milestones* for a multi-milestone initiative (Living artifact; what we're trying to deliver). An **ADR** captures a *single architectural decision and its rationale* (Baselined immutable artifact per C13 §6; why we chose what we chose). An **Initiative GitHub Issue** captures *tracked work + dependencies* (mutable artifact; what specifically lands when). ADR mechanics + policy (immutable markdown format, location, naming, supersession protocol, when-to-write rubric) are governed by [`adr-authoring-guide.md`](adr-authoring-guide.md), and the ADR field + body-section data contract by [`adr-schema.md`](../schemas/adr-schema.md). **This framework authors no ADR governance.** Roadmap §4 sections that reference future ADRs use placeholder-stub convention when the authoritative ADR does not yet exist (deferred-decision-stub pattern, per §7.5).
 
 **C13 canonical ADR definition (verbatim per AC#12):**
 
@@ -330,7 +330,7 @@ Every roadmap §3 Now/Next/Later includes a subordinate **§3 Identified Gaps** 
 
 ### 7.5 Deferred-Decision-Stub Convention (F3-auto)
 
-When a roadmap references a load-bearing decision whose authoritative ADR does not yet exist (e.g., ADR infrastructure pending repo-hygiene-standards), use the deferred-decision-stub pattern in §4 Cross-Cutting ADR References:
+When a roadmap references a load-bearing decision whose authoritative ADR does not yet exist (the decision is anticipated but not yet recorded per [`adr-authoring-guide.md`](adr-authoring-guide.md)), use the deferred-decision-stub pattern in §4 Cross-Cutting ADR References:
 
 | Future ADR | Decision | Reversibility Tier | Activates With |
 |---|---|---|---|
@@ -451,8 +451,8 @@ The 6 pilot roadmaps generated 13 distinct findings (F1–F10 from automation.md
 
 ### Non-overlap (explicit cross-reference per AC#7)
 
-- repo-hygiene-standards — owns ADR authoring mechanics (immutable markdown format, location, naming, supersession protocol). This framework cites; does NOT author.
-- adr-policy-cluster — owns ADR policy (deprecation, retirement, scope of immutability). This framework cites; does NOT author.
+- [`adr-authoring-guide.md`](adr-authoring-guide.md) — owns ADR authoring mechanics + policy (immutable markdown format, location, naming, supersession protocol, when-to-write rubric, deprecation/retirement/scope-of-immutability policy). This framework cites; does NOT author.
+- [`adr-schema.md`](../schemas/adr-schema.md) — owns the ADR field + body-section data contract. This framework cites; does NOT author.
 
 ### Sibling roadmaps (6 pilots — empirical substrate)
 
