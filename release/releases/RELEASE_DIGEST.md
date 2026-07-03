@@ -5,6 +5,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.61 (2026-07-03) — Foundation for a queryable warehouse of your project documents
+
+Installs the tooling to turn project documents into a searchable index — a node-classification tool (stamps domain/type/lifecycle frontmatter), a relationship-edge layer (write-time emission across file-router / ppm-agent / tracker-manager plus a RAID `source_ref` field), and the SQLite index builder that materializes the warehouse from that frontmatter. Ships ready and safety-gated behind an explicit `--i-am-at-stage-12` token; **the live-document backfill is deferred** to follow-up #3123, so this is foundational rather than immediately visible. A throwaway probe confirmed a scheduled-task session can spawn a sub-agent (VERDICT PASS — unblocks the per-project orchestration epic). Outcome PARTIAL; MODERATE reversibility.
+
 ### v3.60 (2026-07-03) — Methodology packs: pick a delivery method, or bring your own
 
 Methodology (Scrum, Kanban, or your own) becomes a self-contained, swappable pack — a shipped best-practice baseline you select, or your own config you bring and override, without hand-editing skills. Foundation release: the pack format (a widened type-pack meta-schema with a `role`/`extends`/`[[labels]]`/optional-`kinds` composition layer), two starter packs + a shared `_common` base, and a methodology-neutral label grammar. Consuming skills are wired in a follow-up (#2021). ADR-069 (composing-unit) + ADR-070 (composition grammar); MODERATE reversibility.
