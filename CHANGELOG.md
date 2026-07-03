@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.61] - 2026-07-03
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Ships the tooling to classify project documents and build a queryable index; the live-document backfill is deferred to a follow-up.
 
 [Full notes](release/releases/notes/v3.61_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.61)
 

@@ -5,7 +5,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
-### v3.61 (2026-07-03) — <headline — populated by operator at chore PR review>
+### v3.61 (2026-07-03) — Foundation for a queryable warehouse of your project documents
+
+Installs the tooling to turn project documents into a searchable index — a node-classification tool (stamps domain/type/lifecycle frontmatter), a relationship-edge layer (write-time emission across file-router / ppm-agent / tracker-manager plus a RAID `source_ref` field), and the SQLite index builder that materializes the warehouse from that frontmatter. Ships ready and safety-gated behind an explicit `--i-am-at-stage-12` token; **the live-document backfill is deferred** to follow-up #3123, so this is foundational rather than immediately visible. A throwaway probe confirmed a scheduled-task session can spawn a sub-agent (VERDICT PASS — unblocks the per-project orchestration epic). Outcome PARTIAL; MODERATE reversibility.
 
 ### v3.60 (2026-07-03) — Methodology packs: pick a delivery method, or bring your own
 
