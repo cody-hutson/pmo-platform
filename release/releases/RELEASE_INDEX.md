@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.60 | 86-methodology-pack-foundation | 2026-07-03 | — | #3097 | [notes/v3.60_RELEASE_NOTES.md](notes/v3.60_RELEASE_NOTES.md) |
 | v3.59 | 44-repo-structure-and-filesystem-hygiene | 2026-07-03 | — | #3011 | [notes/v3.59_RELEASE_NOTES.md](notes/v3.59_RELEASE_NOTES.md) |
 | v3.58 | 09-FRONTIER-system-business-specialists | 2026-07-02 | — | #3099 | [notes/v3.58_RELEASE_NOTES.md](notes/v3.58_RELEASE_NOTES.md) |
 | v3.56 | 81-stage3-bundling-composer-and-identity | 2026-07-02 | Stage-3 bundling composer + version-identity — a self-triggering Stage-3 composer: approved-queue-depth monitor (#30), automated milestone-position derivation feeding the G3-07 gate (#52), a bundle-composer identity distinct from Stage-4 planning (#25), and a first-class version-less release-identity mode reconciled to the version-grammar SSOT (#415). | #3096 | [notes/v3/v3.56_RELEASE_NOTES.md](notes/v3/v3.56_RELEASE_NOTES.md) |
