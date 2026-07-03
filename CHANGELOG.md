@@ -10,7 +10,11 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.60] - 2026-07-03
 
-Delivery methodology becomes a swappable pack — a shipped best-practice baseline (Scrum/Kanban) you select, or your own config you bring and override. Foundation release; consuming skills wired in a follow-up.
+### Added
+- **Methodology packs.** A delivery methodology (Scrum, Kanban, or your own) is now a swappable `core/packs/` manifest — copy, edit, or add an archetype as a thin delta. *Why it matters:* changing or adding a delivery method is a config edit, not a platform code change. ([#1968](https://github.com/cody-hutson/pmo-platform/issues/1968))
+- **Methodology-neutral label grammar.** Universal label rules live in one place; each pack contributes its own labels bound to its kinds. *Why it matters:* a methodology's labels can't drift from the platform's shared rules. ([#1970](https://github.com/cody-hutson/pmo-platform/issues/1970))
+
+Foundation release — the packs aren't read by the skills yet ([#2021](https://github.com/cody-hutson/pmo-platform/issues/2021)).
 
 [Full notes](release/releases/notes/v3.60_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.60)
 
