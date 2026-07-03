@@ -1,0 +1,271 @@
+# core/packs/_common/pack.toml
+# Shared methodology-pack BASE (role = "base"). Carries archetype-INVARIANT
+# contributions only. Best-practice defaults (K1 / Layer-3); a deployment SELECTS a
+# pack via operator config and MAY override per project (K4). No operator-specific
+# values. Archetype packs declare `extends = "_common"` and carry ONLY their deltas.
+# NOTE: no work-status block — the Axis-1 base machine is owned by the entity layer
+# (ADR-018 D1); kinds inherit it via `axis1_state_machine = "inherit"`. No `kinds` —
+# a role = "base" pack is non-kind-bearing (widened §1.1 / ADR-070 D4).
+
+[meta]
+pack_id = "_common"
+pack_version = "0.1.0"          # semver; §6.1 additive-minor rule
+schema_version = 1              # MANIFEST meta key (operator.toml/platform-config.toml precedent) — NOT the meta-schema grammar version
+applies_to = "*"                # role = "base" MUST be "*" (methodology-neutral; no Layer-2 join — §1.1)
+role = "base"                   # widened §1.1 (ADR-070 D1): non-kind-bearing shared base
+
+# Universal label GROUP contributions. The label GROUPS + RULES grammar is owned by
+# label-taxonomy.md; a pack only CONTRIBUTES instances into a grammar-owned group
+# (ADR-018 D1 "project labels over the base"; widened §1.1.1 / ADR-070 D2). These are the
+# archetype-INVARIANT rows (the ~80% shared surface) the label-cleave slice relocated out
+# of label-taxonomy.md into this base. Colors are lifted verbatim from the pre-cleave doc
+# rows. `group` ∈ {category|status|cluster|initiative|triage-flag|disposition} (grammar-owned).
+
+# --- Category (archetype-invariant content-classification rows; the two-tier intake model
+#     per label-taxonomy.md § Category Labels). `type:*` kind labels are per-archetype
+#     DELTAS and live in the archetype packs, not here.
+[[labels]]
+group = "category"
+name = "improvement"
+color = "0E8A16"
+description = "General/umbrella for platform improvement when no specific category fits (Triage fallback; not template-auto-applied)"
+applied_at = "Triage (Stage 2) — fallback only"
+
+[[labels]]
+group = "category"
+name = "protocol"
+color = "1D76DB"
+description = "Protocol change"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "skill-update"
+color = "FBCA04"
+description = "Skill modification"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "structure"
+color = "D93F0B"
+description = "Structural change"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "documentation"
+color = "0075ca"
+description = "Documentation improvements"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "enhancement"
+color = "a2eeef"
+description = "New feature or request"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "routing-rules"
+color = "BFD4F2"
+description = "Routing rules change"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "tracker-schema"
+color = "C5DEF5"
+description = "Tracker schema change"
+applied_at = "Intake (Stage 1)"
+
+[[labels]]
+group = "category"
+name = "sub-task"
+color = "C2E0C6"
+description = "Engineering sub-task for release implementation (dual category+lifecycle marker per § Rules 6)"
+applied_at = "Engineering (Stage 6)"
+
+[[labels]]
+group = "category"
+name = "bug"
+color = "d73a4a"
+description = "Something isn't working. Auto-applied by bug.yml at intake; mutually exclusive with improvement and other category labels."
+applied_at = "Intake (Stage 1) — via bug.yml"
+
+[[labels]]
+group = "category"
+name = "observation"
+color = "D4C5F9"
+description = "Lightweight gap-capture placeholder ticket (Observation tier; Triage promotes to a full category + strips the [Observation]: title prefix, or closes)"
+applied_at = "Intake (Stage 1) — via observation.yml"
+
+# --- Status (one per issue; tracks lifecycle, not priority — § Status Labels)
+[[labels]]
+group = "status"
+name = "status: proposed"
+color = "E6E6E6"
+description = "Awaiting triage"
+applied_at = "Intake (Stage 1)"
+removed_at = "Triage decision"
+
+[[labels]]
+group = "status"
+name = "status: approved"
+color = "C2E0C6"
+description = "Triaged and approved for work"
+applied_at = "Triage (Stage 2)"
+removed_at = "Bundled into release"
+
+[[labels]]
+group = "status"
+name = "status: bundled"
+color = "BFD4F2"
+description = "Assigned to a release Milestone"
+applied_at = "Bundle (Stage 3)"
+removed_at = "Engineering starts"
+
+[[labels]]
+group = "status"
+name = "status: in-progress"
+color = "FEF2C0"
+description = "Active engineering work"
+applied_at = "Engineering (Stage 6)"
+removed_at = "Work complete"
+
+[[labels]]
+group = "status"
+name = "status: done"
+color = "0E8A16"
+description = "Work complete, awaiting verification/close"
+applied_at = "QA/Close (Stage 8-13)"
+removed_at = "Issue closed"
+
+[[labels]]
+group = "status"
+name = "status: deferred"
+color = "FBCA04"
+description = "Triaged, deferred to backlog — re-triage required for milestone bundling"
+applied_at = "Triage (Stage 2)"
+removed_at = "Re-triage (returns to status: proposed or status: approved)"
+
+[[labels]]
+group = "status"
+name = "status: rejected"
+color = "D93F0B"
+description = "Triaged, rejected — premise stale or out of scope"
+applied_at = "Triage (Stage 2)"
+removed_at = "Issue closed (terminal)"
+
+# --- Cluster (one domain cluster per issue + optional cross-cutting span-marker — the
+#     orthogonality protocol in § Cluster Labels)
+[[labels]]
+group = "cluster"
+name = "cluster: pipeline-definitions"
+color = "006B75"
+description = "Stage definition issues (living docs)"
+
+[[labels]]
+group = "cluster"
+name = "cluster: gate-handoff"
+color = "0052CC"
+description = "Inter-stage contracts, gate manager, handoff coordinator"
+
+[[labels]]
+group = "cluster"
+name = "cluster: eval-quality"
+color = "FBCA04"
+description = "QA framework, eval runner, assertion framework, escape tracking"
+
+[[labels]]
+group = "cluster"
+name = "cluster: skill-modes"
+color = "0052CC"
+description = "New or updated skill modes for pipeline stages"
+
+[[labels]]
+group = "cluster"
+name = "cluster: templates-schemas"
+color = "C5DEF5"
+description = "Report templates, plan templates, schema definitions"
+
+[[labels]]
+group = "cluster"
+name = "cluster: system-config"
+color = "BFD4F2"
+description = "GitHub Projects, statuses, labels, automation, environment"
+
+[[labels]]
+group = "cluster"
+name = "cluster: documentation"
+color = "5319E7"
+description = "Reference docs, KB, process docs"
+
+[[labels]]
+group = "cluster"
+name = "cluster: process-protocol"
+color = "C5DEF5"
+description = "Pipeline process rules, conventions, standards"
+
+[[labels]]
+group = "cluster"
+name = "cluster: architecture"
+color = "BFD4F2"
+description = "Operating model, platform structure, folder architecture"
+
+[[labels]]
+group = "cluster"
+name = "cluster: automation"
+color = "D93F0B"
+description = "Linting, verification scripts, auto-mode"
+
+[[labels]]
+group = "cluster"
+name = "cluster: security"
+color = "BFDADC"
+description = "Security controls, secret/PII scanning, depersonalization gates"
+
+[[labels]]
+group = "cluster"
+name = "cluster: cross-cutting"
+color = "0E8A16"
+description = "Span-marker (not a domain) — items whose scope crosses multiple domain clusters; composes with one domain cluster per the orthogonality protocol"
+
+# --- Triage-flag (temporary; removed after triage decisions execute — § Triage Flag Labels)
+[[labels]]
+group = "triage-flag"
+name = "triage: stale"
+color = "FFFFFF"
+description = "Flagged as potentially addressed by later work"
+applied_at = "Run 1"
+removed_at = "Run 4 (decision)"
+
+[[labels]]
+group = "triage-flag"
+name = "triage: duplicate"
+color = "FFFFFF"
+description = "Flagged as potential duplicate/subsumption candidate"
+applied_at = "Run 1"
+removed_at = "Run 4 (decision)"
+
+[[labels]]
+group = "triage-flag"
+name = "triage: quick-win"
+color = "FFFFFF"
+description = "Low-effort, high-value — candidate for early bundling"
+applied_at = "Run 2"
+removed_at = "Run 5 (bundled)"
+
+# --- Disposition (final triage decisions; persist until issue closed — § Disposition Labels)
+[[labels]]
+group = "disposition"
+name = "duplicate"
+color = "cfd3d7"
+description = "This issue is a duplicate (subsumed per subsumption convention)"
+
+[[labels]]
+group = "disposition"
+name = "wontfix"
+color = "ffffff"
+description = "This will not be worked on"
