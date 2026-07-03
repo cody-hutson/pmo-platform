@@ -542,27 +542,23 @@ handle_integration() {
   else printf '%s\t%s\n' "$VERDICT_FAIL" "integration-method-exit-$rc"; fi
 }
 
-# run_deploy_check_once — run deploy --check AT MOST ONCE per executor invocation
-# and cache its exit code (deploy --check is a heavy full-workspace validation; a
+# deploy_check_exit_code — run deploy --check AT MOST ONCE per executor invocation
+# and PRINT its exit code (deploy --check is a heavy full-workspace validation; a
 # plan that declares several sync/regression methods must not re-run it per row).
-# The cached exit code is written to DEPLOY_CHECK_CACHE (a per-run temp file set in
-# main), so the memo survives the command-substitution subshells the handlers run
-# in. This memoization changes no output contract — it only avoids redundant runs.
-run_deploy_check_once() {
-  if [ -z "${DEPLOY_CHECK_CACHE:-}" ]; then
-    # No cache configured (e.g. a unit caller) — run directly, no memo.
-    ( cd "$REPO_ROOT" && bash "$DEPLOY_CHECK" --check ) >/dev/null 2>&1
-    return $?
+# The result is cached to DEPLOY_CHECK_CACHE (a per-run temp file set in main) so
+# the memo survives the command-substitution subshells the handlers run in. It
+# prints the code (rather than `return`ing it) so no non-zero return trips the
+# caller's errexit; the function itself always succeeds. Changes no output
+# contract — it only avoids redundant runs.
+deploy_check_exit_code() {
+  if [ -n "${DEPLOY_CHECK_CACHE:-}" ] && [ -s "$DEPLOY_CHECK_CACHE" ]; then
+    cat "$DEPLOY_CHECK_CACHE"; return 0
   fi
-  if [ ! -s "$DEPLOY_CHECK_CACHE" ]; then
-    local rc
-    set +e
-    ( cd "$REPO_ROOT" && bash "$DEPLOY_CHECK" --check ) >/dev/null 2>&1
-    rc=$?
-    set -e
-    printf '%s' "$rc" > "$DEPLOY_CHECK_CACHE"
-  fi
-  return "$(cat "$DEPLOY_CHECK_CACHE")"
+  local rc=0
+  ( cd "$REPO_ROOT" && bash "$DEPLOY_CHECK" --check ) >/dev/null 2>&1 || rc=$?
+  if [ -n "${DEPLOY_CHECK_CACHE:-}" ]; then printf '%s' "$rc" > "$DEPLOY_CHECK_CACHE"; fi
+  printf '%s' "$rc"
+  return 0
 }
 
 # sync + regression: delegate to deploy --check (source<->deployed byte-diff).
@@ -570,19 +566,17 @@ run_deploy_check_once() {
 handle_deploy_check() {
   local family="$1"
   if [ ! -x "$DEPLOY_CHECK" ] && [ ! -f "$DEPLOY_CHECK" ]; then
-    printf '%s\t%s\n' "$VERDICT_ERROR" "deploy.sh --check not found at $DEPLOY_CHECK"; return
+    printf '%s\t%s\n' "$VERDICT_ERROR" "deploy.sh --check not found at $DEPLOY_CHECK"; return 0
   fi
   local rc
-  set +e
-  run_deploy_check_once
-  rc=$?
-  set -e
+  rc="$(deploy_check_exit_code)"
   # deploy --check exits 0 when source and deployed copies are in sync.
-  if [ "$rc" -eq 0 ]; then
+  if [ "$rc" -eq 0 ] 2>/dev/null; then
     printf '%s\t%s\n' "$VERDICT_PASS" "deploy --check clean (in-sync)"
   else
     printf '%s\t%s\n' "$VERDICT_FAIL" "deploy --check non-clean (exit $rc); ${family} — see deploy.sh --check output"
   fi
+  return 0
 }
 
 # runtime-suite: emit a test-run event through the pipeline-event writer.

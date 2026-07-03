@@ -138,6 +138,44 @@ rm -f "$CLEAN_FIX"
 [ "$CLEAN_RC" -eq 0 ] && ok "clean all-PASS/SKIP plan exits 0" || bad "clean plan expected exit 0, got $CLEAN_RC"
 
 # ---------------------------------------------------------------------------
+# G5 — deploy-check delegation (sync + regression families) via a fast stub.
+# Regression guard: a non-zero deploy --check exit must render a FAIL verdict and
+# an overall exit 3 — NOT abort the executor with an internal error (the errexit-
+# through-command-substitution bug the C4 self-verification caught). Also proves
+# the deploy check is memoized (one run shared by the sync + regression rows).
+# ---------------------------------------------------------------------------
+echo "G5 — deploy-check delegation + memoization (stub)"
+STUB_DIR="$(mktemp -d -t verify-plan-3175-stub.XXXXXX)"
+mkdir -p "$STUB_DIR/core/deploy" "$STUB_DIR/release/tools" "$STUB_DIR/plan"
+cp "$VERIFY" "$STUB_DIR/release/tools/"
+cat > "$STUB_DIR/plan/p.md" <<'EOF'
+# stub plan
+## Verification Plan
+**#601 — deploy families**
+| AC | Predicate class | Verification method | Expected result |
+|---|---|---|---|
+| AC-1 | regression | run deploy.sh --check byte-diff regression against unchanged files | unchanged |
+| AC-2 | sync | source-to-deployed via deploy.sh --check | in-sync |
+EOF
+# Drift case: stub deploy exits 1.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB_DIR/core/deploy/deploy.sh"; chmod +x "$STUB_DIR/core/deploy/deploy.sh"
+set +e
+DRIFT_JSON="$("$STUB_DIR/release/tools/verify-release-plan.sh" --format=json --root "$STUB_DIR" "$STUB_DIR/plan/p.md" 2>/dev/null)"
+DRIFT_RC=$?
+set -e
+[ "$DRIFT_RC" -eq 3 ] && ok "deploy --check drift → overall exit 3 (not internal error)" || bad "deploy drift expected exit 3, got $DRIFT_RC"
+printf '%s\n' "$DRIFT_JSON" | grep -q '"family":"regression".*"verdict":"FAIL"\|"verdict":"FAIL".*"family":"regression"' && ok "regression family renders FAIL on drift" || { printf '%s\n' "$DRIFT_JSON" | grep -oE '\{[^{}]*regression[^{}]*\}' | grep -q '"verdict":"FAIL"' && ok "regression family renders FAIL on drift" || bad "regression family did not FAIL on drift"; }
+# Clean case: stub deploy exits 0.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$STUB_DIR/core/deploy/deploy.sh"
+set +e
+CLEANDEP_JSON="$("$STUB_DIR/release/tools/verify-release-plan.sh" --format=json --root "$STUB_DIR" "$STUB_DIR/plan/p.md" 2>/dev/null)"
+CLEANDEP_RC=$?
+set -e
+[ "$CLEANDEP_RC" -eq 0 ] && ok "deploy --check clean → overall exit 0" || bad "deploy clean expected exit 0, got $CLEANDEP_RC"
+printf '%s\n' "$CLEANDEP_JSON" | grep -oE '\{[^{}]*sync[^{}]*\}' | grep -q '"verdict":"PASS"' && ok "sync family renders PASS when clean" || bad "sync family did not PASS when clean"
+rm -rf "$STUB_DIR"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo
