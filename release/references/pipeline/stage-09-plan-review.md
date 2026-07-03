@@ -90,7 +90,7 @@ Gate output: GO → Stage 12 / GO WITH CONDITIONS → Stage 12 / NO-GO → retur
 Overall Tier 3 (Human-only). The decision is inherently human — no agent recommendation on Go/No-Go. Agent role: assemble evidence, present in tiered format, document the decision. Agent does NOT produce a recommendation for the verdict.
 
 ## 9. Gap Summary
-8 gaps. Key: no Release Manager evidence assembly mode (P2), evidence package refinement (P3), Stage 9/10 compression not formalized (P2).
+8 gaps. Key: Release Manager evidence assembly mode (P2, **resolved** — `pmo-release-manager` Mode 1 (Go/No-Go Evidence, Stage 9) assembles the package; see §3 Persona "Evidence assembly: Release Mgr Skill 13 | Mode 1" + `release/skills/pmo-release-manager/SKILL.md`), evidence package refinement (P3), Stage 9/10 compression not formalized (P2).
 
 ## 10. Retro
 To be populated after execution.
