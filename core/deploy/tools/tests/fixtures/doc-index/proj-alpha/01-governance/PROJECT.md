@@ -21,6 +21,6 @@ relationships:
 
 The project's governance-root node. The doc-index builder resolves any `BELONGS_TO
 target: "proj-alpha"` edge from other files in this project to THIS node's file_id
-(the #1770 project-name→schema-file-FK seam), so a file whose only edge is BELONGS_TO
+(the project-name→schema-file-FK seam of the relationship-edge population), so a file whose only edge is BELONGS_TO
 is correctly NOT an orphan. Its own BELONGS_TO to proj-alpha is a self-edge (skipped).
 No real project data.

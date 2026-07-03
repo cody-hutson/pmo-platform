@@ -20,7 +20,7 @@ to a Python helper.
 | `cross_module_audit_helper.py` | Invoked by `cross-module-audit.sh` | audit (read-only) | Imports check-doc-links primitives; classifies cross-module refs by 6 directionality rules + 3 cross-ref-types; emits TSV + markdown report |
 | `stamp-node-frontmatter.py` | Operator + Layer-2 Stage-12 backfill | dry-run (default) / stamp | Classify-and-stamp the 11-field node-frontmatter core onto the operational corpus (the vertices of the doc warehouse); folder→domain classification, idempotent, `.meta.yml` sidecars for non-md files |
 | `backfill-relationship-edges.py` | Operator + Layer-2 Stage-12 backfill | dry-run (default) / emit (gated) | Backfill `relationships[]` edges (the edges of the doc warehouse) — `BELONGS_TO` always-safe + evidence-anchored `GENERATES`/`DEPENDS_ON`; imports the node tool's classifiers for F1-consistent project derivation |
-| `build-doc-index.py` | Operator + `#1153` incremental caller | rebuild / update-file / query / self-test | Materialize the disposable document-ecosystem SQLite index (`sqlite-index-schema.md`) from node frontmatter + edges — all 7 tables + FTS5 + the 7 named reference queries; deterministic byte-identical rebuild |
+| `build-doc-index.py` | Operator + the lifecycle-automation incremental caller | rebuild / update-file / query / self-test | Materialize the disposable document-ecosystem SQLite index (`sqlite-index-schema.md`) from node frontmatter + edges — all 7 tables + FTS5 + the 7 named reference queries; deterministic byte-identical rebuild |
 
 ## check-doc-links.py — Two Modes
 
@@ -178,7 +178,7 @@ field removed; whole frontmatter stripped), the plural-enum case, both IFF
 directions plus the satisfied case, missing-consumers, the reversibility
 prefix-passes-with-tail proof, tier tagging, and allowlist loading.
 
-## build-doc-index.py — Document-Ecosystem SQLite Index Builder (#1769)
+## build-doc-index.py — Document-Ecosystem SQLite Index Builder
 
 Materializes the **disposable** document-ecosystem SQLite index defined by
 [`core/schemas/sqlite-index-schema.md`](../../schemas/sqlite-index-schema.md).
@@ -193,7 +193,7 @@ materializes the queryable index).
 python3 core/deploy/tools/build-doc-index.py --rebuild \
   --db /path/to/doc-index.db --root ~/Claude/projects
 
-# Incremental single-file update (the #1153 callee — capability only, no watcher).
+# Incremental single-file update (the lifecycle-automation callee — capability only, no watcher).
 python3 core/deploy/tools/build-doc-index.py --update-file <file> \
   --db /path/to/doc-index.db --root ~/Claude/projects
 
@@ -230,10 +230,10 @@ two rebuilds); the staleness queries use query-time `julianday('now')`, which do
 not touch stored rows. Verified by SHA-256 over a canonical per-table dump
 (`--dump-canonical`).
 
-**Scope (#1769 / #1153 boundary).** Ships the incremental-update **capability**
+**Scope (builder / lifecycle-automation boundary).** Ships the incremental-update **capability**
 (`update_file`, a tested callable entry point) + full rebuild + the reference
 queries. The event source/watcher that auto-invokes `update_file` on a skill-write
-stays in open epic **#1153**.
+is out of this tool's scope — it stays in the lifecycle-automation epic.
 
 **Exit codes:** `0` clean · `1` dangling edges present (count in header) · `2` usage
 error · `3` path-unresolvable (`--root`/`--db`).
