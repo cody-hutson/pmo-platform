@@ -78,6 +78,7 @@ RELEASE_SKILLS=(
 )
 
 CORE_SKILLS=(
+  adr-helper
   context-budget-auditor
   eval-writer
   pmo-qa-auditor
