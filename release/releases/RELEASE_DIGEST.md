@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.64 (2026-07-03) — QA can now grade a release against its own acceptance criteria
+
 ### v3.63 (2026-07-03) — The release pipeline now runs on GitHub's native PR-review surfaces
 
 Wires GitHub's own pull-request review machinery into the release pipeline and brings the two release-manager skills back in step with the spec they execute. The pipeline now opens release PRs in **draft** and flips them to ready-for-review at the Stage-9 gate (new `stage-09-plan-review.md` Phase A8 + a `stage-12-execute.md` draft-state merge guard, #379-F1); documents GitHub PR review-comments as an alternate QA/feedback arrival surface tiered `[ADJUST]`/`[SCOPE CHANGE]`/`[PLAN REJECTION]` (`stage-08-qa-testing.md` + `release-process.md`, #379-F2); and surfaces native review-decision state (`APPROVED`/`CHANGES_REQUESTED`) as a **NON-GATING advisory** Stage-9 input modeled on the shipped A6.5 version advisory (new Phase A9, #379-F3) — each degrading to an honest no-op under the single-operator reviewer convention. Alongside, `release-executor` **Mode A** now names + consumes the plan's **Delivery Strategy** and the current merge/tag/S-2/chore-PR mechanism (#213), and `pmo-release-manager` **Mode 1** now names the Stage-7/Stage-8 upstream-report inputs and the §5 Phase A structure, closing the stale gap notes and flipping `pmo-devops-sre`'s "future Release-Manager" framing to "sibling (built)" (#214). Release Class **routine**; single PR / single merge, clean at `3d8780f` (re-versioned forward v3.62→v3.63 on the #431 collision). Outcome SUCCESS; CHEAP reversibility.
