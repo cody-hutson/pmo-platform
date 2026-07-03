@@ -148,6 +148,8 @@ A Phase E REJECT/HOLD splits on whether the gap is an **implementation defect** 
 ## 6. Outputs
 Acceptance Report: acceptance matrix (per-criterion verdict), acceptance score, fitness assessment, Stage 7 escape log, lane distribution, overall verdict. Downstream: to Stage 9 (acceptance report + PR + DT report) or to Stage 7 (Lane 2 findings emitted as QA Return to Dev Testing payload per [DT↔QA Handoff Protocol §Return Path](stage-07-dev-testing.md#dtqa-handoff-protocol)).
 
+The Acceptance Report is rendered from the canonical template at [`operations/templates/qa-acceptance-report-template.md`](../../../operations/templates/qa-acceptance-report-template.md) — three reader tiers (verdict / detail / evidence) carrying these six sections, with a machine-parseable acceptance-matrix block whose columns and all-drift-out score are the co-design contract with the `acceptance` assertion type ([`core/skills/eval-writer/references/acceptance-assertion-type.md`](../../../core/skills/eval-writer/references/acceptance-assertion-type.md)).
+
 Stage 8 does NOT produce: quality scores (Stage 7), design decisions (Stage 5), deployment actions (Stage 12).
 
 ## 7. Stage-Transition Gate
