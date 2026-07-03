@@ -31,9 +31,9 @@ the project schema uses for custom methodologies.
   inherits it and refines it only if it genuinely narrows or extends the machine. A
   pack never declares its own state machine.
 - **Label groups and rules** are the label-taxonomy grammar's job; a pack only
-  *contributes* label instances into a grammar-owned group. The shipped packs ship a
-  seed contribution skeleton; the label-cleave slice relocates the authoritative
-  per-pack label rows into it.
+  *contributes* label instances into a grammar-owned group. The shipped packs carry
+  the authoritative per-pack label rows in their `[[labels]]` facet (relocated from
+  `label-taxonomy.md` by the label-cleave).
 - The **grammar** every `pack.toml` conforms to (the meta-schema) lives in the
   work-item type-pack meta-schema. The packs here are **instances** of that grammar.
 - The **best-practice content** in each pack is sourced from the archetype's
