@@ -5,6 +5,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.62 (2026-07-03) — Writing down an architecture decision is now a guided, one-command step
+
+Takes ADR mechanics out of operator memory and into a citable, low-friction workflow. Ships a canonical ADR authoring guide (`core/standards/adr-authoring-guide.md`: when-to-write rubric + copy-paste template + supersession/immutability policy) with the scattered ADR-governance references repointed to it (#431); a new `adr-helper` skill that scaffolds a correctly-numbered `ADR-NNN.md` at decision moments citing the guide as authority, with its `.skill` package built in-PR (#15); ADR-017 + ADR-019 index rows backfilled into `core/ADRs/README.md` (#541); and five residual decision-discipline ADR-threshold citations repointed with zero live residual (#3200). Release Class **novel**; single PR / single merge, clean at `0c4a3f8`; all four QA verdicts ACCEPT. Outcome SUCCESS; CHEAP reversibility.
+
 ### v3.61 (2026-07-03) — Foundation for a queryable warehouse of your project documents
 
 Installs the tooling to turn project documents into a searchable index — a node-classification tool (stamps domain/type/lifecycle frontmatter), a relationship-edge layer (write-time emission across file-router / ppm-agent / tracker-manager plus a RAID `source_ref` field), and the SQLite index builder that materializes the warehouse from that frontmatter. Ships ready and safety-gated behind an explicit `--i-am-at-stage-12` token; **the live-document backfill is deferred** to follow-up #3123, so this is foundational rather than immediately visible. A throwaway probe confirmed a scheduled-task session can spawn a sub-agent (VERDICT PASS — unblocks the per-project orchestration epic). Outcome PARTIAL; MODERATE reversibility.
