@@ -950,8 +950,8 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 
 | Section | Content | Format | Notes |
 |---|---|---|---|
-| 1. Summary paragraph | Count of skill directories + count of SKILL_LIST + SUPPLEMENTARY_SKILLS entries + **split drift count** | Prose, single paragraph | Format: "<N> skill directories in release/skills/. <M> entries in deploy.sh SKILL_LIST + SUPPLEMENTARY_SKILLS. <K> drift entries flagged (J expected-fixture, K−J actionable)." The drift count **splits** into fixture-induced (`[CANARY EXPECTED]`) vs. actionable so the downstream routing note (deep audit → pmo-qa-auditor Mode D) receives only actionable signal — per the § Skill 12 HAND failure mode. When no fixture rows are present, the split collapses to the actionable count alone. |
-| 2. Drift table | Per-skill row with In-Folder / In-SKILL_LIST / Status columns | Markdown table | Status values: OK, Folder Only, SKILL_LIST Only, **`[CANARY EXPECTED]`** (a Folder-Only row whose subject is a registered source-only fixture — e.g. the canary itself, source-only per ADR-04, excluded from the deploy roster by design; annotated so the reader distinguishes fixture-induced signal from a factory regression per the § Skill 12 HAND failure mode). |
+| 1. Summary paragraph | Count of skill directories + count of per-module-array (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) + `SUPPLEMENTARY_SKILLS` entries + **split drift count** | Prose, single paragraph | Format: "<N> skill directories in release/skills/. <M> entries in the deploy.sh per-module arrays + SUPPLEMENTARY_SKILLS. <K> drift entries flagged (J expected-fixture, K−J actionable)." The drift count **splits** into fixture-induced (`[CANARY EXPECTED]`) vs. actionable so the downstream routing note (deep audit → pmo-qa-auditor Mode D) receives only actionable signal — per the § Skill 12 HAND failure mode. When no fixture rows are present, the split collapses to the actionable count alone. |
+| 2. Drift table | Per-skill row with In-Folder / In-Roster / Status columns | Markdown table | Status values: OK, Folder Only, Roster Only, **`[CANARY EXPECTED]`** (a Folder-Only row whose subject is a registered source-only fixture — e.g. the canary itself, source-only per ADR-04, excluded from the deploy roster by design; annotated so the reader distinguishes fixture-induced signal from a factory regression per the § Skill 12 HAND failure mode). |
 
 ### Required Elements
 
@@ -968,8 +968,8 @@ Single-mode skill — no Interview, no Refine. Invocation is the mode.
 
 - [ ] Both sections present (Summary + Drift table)
 - [ ] Count of skill directories matches `ls release/skills/` cardinality at run time
-- [ ] Union of SKILL_LIST + SUPPLEMENTARY_SKILLS used in comparison (not just SKILL_LIST — PROC failure mode #2 mitigation)
-- [ ] Drift rows identify direction (Folder Only vs. SKILL_LIST Only)
+- [ ] Union of per-module arrays (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS` / `CANARY_SKILLS`) + SUPPLEMENTARY_SKILLS used in comparison (not just the per-module arrays — the second PROC failure-mode mitigation)
+- [ ] Drift rows identify direction (Folder Only vs. Roster Only)
 - [ ] No recommendations / actions (report-only discipline preserved)
 - [ ] In-flight refactor warning present if uncommitted changes to release/skills/ or deploy.sh detected (TRIG failure mode #3 mitigation)
 

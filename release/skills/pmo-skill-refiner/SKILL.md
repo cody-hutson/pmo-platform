@@ -13,7 +13,7 @@ description: >
   cross-skill false-positive detection). For modifying EXISTING PMO skills,
   coordinates with pmo-skill-editor. Use when the user wants to create a new
   PMO skill or iterate on an existing skill's eval/description/trigger set.
-version: v2.03
+version: v2.04
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

@@ -31,5 +31,5 @@ First-time creation: this file was created as the pmo-skill-refiner workflow exe
 ### pmo-skill-refiner-selftest-canary
 - **Invocation test:** "check the skill roster"
 - **Non-invocation test:** "does prompt-builder have a .skill package" (keyword-overlap near-miss; routes to pmo-skill-editor or direct filesystem check, not the canary)
-- **Smoke output assertion:** Output produces a paragraph with the word "skill directories" followed by a table containing at least one "Status: OK" row (positive case) OR at least one "Status: Folder Only / SKILL_LIST Only" row (drift case)
+- **Smoke output assertion:** Output produces a paragraph with the word "skill directories" followed by a table containing at least one "Status: OK" row (positive case) OR at least one "Status: Folder Only / Roster Only" row (drift case)
 - **Regression iteration reference:** none currently; first operational baseline will be created at `release/skills/pmo-skill-refiner-selftest-canary-workspace/iteration-1/benchmark.json` per the canonical skill-workspace convention (see `standards/skill-workspace-location.md`). Demo-phase artifacts in the dated demo analysis directory were removed by commit 6bc8517 on 2026-05-02 (superseded; preserved in git history).

@@ -9,5 +9,5 @@
 # Governance: additions follow the "No ungoverned changes" protocol
 # (CLAUDE.md Guardrails) — GitHub Issue + plan + PR required.
 #
-# See: pmo-platform/reference/standards/canonical-skill-structure.md §5
+# See: core/standards/canonical-skill-structure.md §5
 pmo-skill-refiner-selftest-canary

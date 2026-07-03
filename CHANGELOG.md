@@ -8,6 +8,34 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.60] - 2026-07-03
+
+### Added
+- **Methodology packs.** A delivery methodology (Scrum, Kanban, or your own) is now a swappable `core/packs/` manifest — copy, edit, or add an archetype as a thin delta. *Why it matters:* changing or adding a delivery method is a config edit, not a platform code change. ([#1968](https://github.com/cody-hutson/pmo-platform/issues/1968))
+- **Methodology-neutral label grammar.** Universal label rules live in one place; each pack contributes its own labels bound to its kinds. *Why it matters:* a methodology's labels can't drift from the platform's shared rules. ([#1970](https://github.com/cody-hutson/pmo-platform/issues/1970))
+
+Foundation release — the packs aren't read by the skills yet ([#2021](https://github.com/cody-hutson/pmo-platform/issues/2021)).
+
+[Full notes](release/releases/notes/v3.60_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.60)
+
+## [v3.59] - 2026-07-03
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.59_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.59)
+
+## [v3.58] - 2026-07-02
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.58_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.58)
+
+## [v3.56] - 2026-07-02
+
+Stage 3 Bundling becomes a self-triggering composer with automated milestone-position derivation and a first-class version-less release-identity mode.
+
+[Full notes](release/releases/notes/v3.56_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.56)
+
 ## [v3.53] - 2026-07-02
 
 <one-sentence ≤140 chars; plain language; agent-search target>

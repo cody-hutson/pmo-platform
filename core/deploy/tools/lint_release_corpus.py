@@ -269,7 +269,12 @@ def check_filename_compliance() -> list[str]:
         # distinct finding so main() can exit 3 (path-config error) rather than
         # let Check 20 read GREEN against a non-existent surface.
         return [f"CORPUS-PATH-UNRESOLVED: plans dir does not resolve at {_rel(PLANS_DIR)} — corpus path misconfigured"]
-    for path in sorted(PLANS_DIR.glob("*.md")):
+    # rglob (recursive) — plans are foldered into major-version subdirectories
+    # (plans/v1|v2|v3/… + the _unversioned/ bucket) per plans/README.md (#230,
+    # v3.54). A flat glob would stop scanning every subfoldered plan, silently
+    # passing the filename gate. README.md lives only at the plans/ top level and
+    # stays allowlisted.
+    for path in sorted(PLANS_DIR.rglob("*.md")):
         name = path.name
         if name in FILENAME_ALLOWLIST:
             continue
@@ -284,7 +289,7 @@ def check_schema_validity() -> list[str]:
         if not directory.exists():
             findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: corpus dir does not resolve at {_rel(directory)} — corpus path misconfigured")
             continue
-        for path in sorted(directory.glob("v11.04b-3*.md")):
+        for path in sorted(directory.rglob("v11.04b-3*.md")):
             text = path.read_text(encoding="utf-8")
             fm = parse_frontmatter(text)
             rel = _rel(path)
@@ -324,7 +329,7 @@ def check_type_coherence() -> list[str]:
         if not directory.exists():
             findings.append(f"{CORPUS_PATH_UNRESOLVED_PREFIX}: corpus dir does not resolve at {_rel(directory)} — corpus path misconfigured")
             continue
-        for path in sorted(directory.glob("v11.04b-3*.md")):
+        for path in sorted(directory.rglob("v11.04b-3*.md")):
             text = path.read_text(encoding="utf-8")
             fm = parse_frontmatter(text)
             if fm is None:
@@ -462,7 +467,12 @@ def check_note_content() -> list[str]:
     path_re = re.compile(r"(?:pmo-platform/|\.claude/)\S+")
     link_strip_re = re.compile(r"\[[^\]]*\]\([^)]*\)")
 
-    for path in sorted(NOTES_DIR.glob("v*.md")):
+    # rglob (recursive) — notes are foldered into major-version subdirectories
+    # (notes/v1|v2|v3/… + the _unversioned/ bucket) per plans/README.md (#230,
+    # v3.54). version_tuple keys off path.name (folder-agnostic), so the cutover
+    # floor and exempt-set logic are unchanged; only discovery must recurse or the
+    # §3.2 content lint silently stops scanning the foldered notes.
+    for path in sorted(NOTES_DIR.rglob("v*.md")):
         ver = version_tuple(path.name)
         if ver < NOTE_CONTENT_CUTOVER:
             continue

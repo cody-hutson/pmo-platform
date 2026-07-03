@@ -1,70 +1,47 @@
 ---
 title: Label Taxonomy
-purpose: Defines every GitHub Issue label — its purpose and when it is applied — as the state-anchor layer for issues, including the one-category-label-at-intake rule.
+purpose: Defines the label GRAMMAR — the label groups + the composition rules that govern them — as the state-anchor layer for issues, including the one-category-label-at-intake rule. Concrete label rows are contributed per-pack (core/packs/*) and reconciled to the live GitHub set by the label-parity gate.
 type: spec
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: intake-desk and triage (one category label at intake); every gh issue label operation; ticket-information-architecture.md; the improvement/bug/observation templates
+consumers: intake-desk and triage (one category label at intake); every gh issue label operation; ticket-information-architecture.md; the improvement/bug/observation templates; the methodology packs (core/packs/*) that contribute concrete label rows into the groups this grammar defines
 ---
 <!-- reference-durability: allow-link -->
 # Label Taxonomy
 
-Labels are the state anchor layer for GitHub Issues (per ticket-information-architecture.md). This document defines every label, its purpose, and when it is applied.
+Labels are the state anchor layer for GitHub Issues (per ticket-information-architecture.md). This document defines the label **grammar**: the label **groups**, each group's purpose and cardinality rule, and the composition **rules** that constrain any live label set.
+
+**Grammar vs. instance (the parameterization seam).** A label *group* answers a universal question ("what does a Status label track?"); a concrete label *row* answers an instance question ("does this board have `status: in-progress`?"). This document owns the former — the group definitions and the rules — and is methodology-agnostic across all `delivery_approach` archetypes. The concrete rows are the latter: they are **contributed per methodology pack** in `core/packs/<archetype>/pack.toml` (the `[[labels]]` facet, per [`work-item-type-schema.md §1.1.1`](../schemas/work-item-type-schema.md) and ADR-070 D2), with the archetype-invariant rows carried by `core/packs/_common/pack.toml`. The live GitHub label set is the union of the selected packs' contributions + `_common` + operator-local overrides; the label-parity gate (`check-label-parity.py`) reconciles that union against the doc grammar. See § Instance Model. This split realizes the CLAUDE.md "Parameterize over hardcode" rule and the K1↔K4 parameterization seam in `knowledge-architecture.md §3` — the *shape* of a label group is K1 universal; *which labels exist* is K4 selection-plus-override.
 
 ## Label Groups
 
+The taxonomy has six label **groups**. Each group definition below states the group's *purpose*, its *cardinality rule*, and its *lifecycle role* — the universal grammar. The concrete label *rows* in each group are contributed by the methodology packs (`core/packs/*` `[[labels]]`) and reconciled to the live set by the parity gate (§ Instance Model); illustrative examples are named inline for orientation but are **not** the registry.
+
 ### Category Labels
 
-Classify what an issue **is**. Every issue gets exactly one category label at intake. Category labels reflect a two-tier intake model: full Proposals carry a content-classification label (`improvement`, `protocol`, `skill-update`, `structure`, `documentation`, `enhancement`, `routing-rules`, `tracker-schema`, `bug`); the `observation` label marks lightweight placeholder tickets in the Observation tier that Triage either promotes to a full Proposal label or closes.
+Classify what an issue **is**. Every issue gets exactly one category label at intake (§ Rules 1). Category labels reflect a two-tier intake model: full Proposals carry a content-classification label; the `observation` label marks lightweight placeholder tickets in the Observation tier that Triage either promotes to a full Proposal label or closes. On promotion, Triage removes `observation`, applies the matching category, **and strips the `[Observation]:` title prefix** (§ Rules 7).
 
-| Label | Color | Description | Applied At |
-|---|---|---|---|
-| `improvement` | `0E8A16` (green) | General/umbrella for platform improvement when no specific category fits. Applied by Triage (Stage 2) as a fallback when no other dropdown selection from `improvement.yml` matches. **Not auto-applied by templates.** | Triage (Stage 2) — fallback only |
-| `protocol` | `1D76DB` (blue) | Protocol change | Intake (Stage 1) |
-| `skill-update` | `FBCA04` (yellow) | Skill modification | Intake (Stage 1) |
-| `structure` | `D93F0B` (red-orange) | Structural change | Intake (Stage 1) |
-| `documentation` | `0075ca` (dark blue) | Documentation improvements | Intake (Stage 1) |
-| `enhancement` | `a2eeef` (teal) | New feature or request | Intake (Stage 1) |
-| `routing-rules` | `BFD4F2` (light blue) | Routing rules change | Intake (Stage 1) |
-| `tracker-schema` | `C5DEF5` (periwinkle) | Tracker schema change | Intake (Stage 1) |
-| `sub-task` | `C2E0C6` (light green) | Engineering sub-task for release implementation | Engineering (Stage 6) |
-| `bug` | `d73a4a` (red) | Something isn't working. Auto-applied by `bug.yml` at intake; mutually exclusive with `improvement` and other category labels. | Intake (Stage 1) — via `bug.yml` |
-| `observation` | `D4C5F9` (light lavender) | Lightweight gap-capture placeholder ticket. Created via `observation.yml` during agent auto-logging when a full Proposal is not yet authorable. Triage promotes to `improvement` (or the matching category) + removes `observation` **and strips the `[Observation]:` title prefix** on promotion, or closes if the observation is no longer relevant. | Intake (Stage 1) — via `observation.yml` |
+**Concrete rows:** the archetype-invariant content-classification labels (illustratively `improvement`, `protocol`, `skill-update`, `structure`, `documentation`, `enhancement`, `routing-rules`, `tracker-schema`, `bug`, `sub-task`, `observation`) are contributed by `core/packs/_common/pack.toml` (`group = "category"`). The live set is the packs' union — see § Instance Model.
+
+#### Work-Item-Kind Labels (the `type:*` namespace)
+
+`type:<kind_id>` is the **work-item-kind category label** — the label-surface projection of the `work_item_type` discriminator (`work-item-type-schema.md §1.2`; ADR-018 D1/D2). It names the *kind* an issue **is** (e.g. `type:epic`, `type:story`, `type:task`, `type:card`), and is a member of the Category group: **one `type:*` label per issue**, composing with the one-category-label rule (§ Rules 1).
+
+`type:*` is documented here **as a namespace PATTERN**, exactly as `project:*` / `epic:*` are (§ Initiative Labels) — the concrete kinds are **not enumerated in this grammar**. They are declared in each selected pack's `kinds[]` and contributed as `[[labels]]` rows keyed by `projects_kind` (the join that keeps the `type:*` family in lockstep with the pack's declared kinds — no independent drift). Enumerating the kinds here would re-instance-code the grammar and duplicate the pack (`duplicate-source-discipline`). A deployment's live `type:*` set is therefore whichever kinds its selected packs declare: the Scrum pack contributes `type:{epic,story,task}`; the Kanban pack contributes `type:card`; a deployment that brings its own kinds contributes their `type:*` rows.
 
 ### Status Labels
 
-Track where an issue is in the pipeline lifecycle. Exactly one status label per issue. Updated as the issue progresses through stages.
+Track where an issue is in the pipeline lifecycle. Exactly one status label per issue (§ Rules 2), updated as the issue progresses through stages; status tracks lifecycle, **not** priority (§ Rules 5). The lifecycle machine a status label projects is the generic Axis-1 base machine owned by the entity layer (`work-item-type-schema.md §1.2`), which packs project sub-states over — never re-found.
 
-| Label | Color | Description | Applied At | Removed At |
-|---|---|---|---|---|
-| `status: proposed` | `E6E6E6` (light gray) | Awaiting triage | Intake (Stage 1) | Triage decision |
-| `status: approved` | `C2E0C6` (light green) | Triaged and approved for work | Triage (Stage 2) | Bundled into release |
-| `status: bundled` | `BFD4F2` (light blue) | Assigned to a release Milestone | Bundle (Stage 3) | Engineering starts |
-| `status: in-progress` | `FEF2C0` (light yellow) | Active engineering work | Engineering (Stage 6) | Work complete |
-| `status: done` | `0E8A16` (green) | Work complete, awaiting verification/close | QA/Close (Stage 8-13) | Issue closed |
-| `status: deferred` | `FBCA04` (amber) | Triaged, deferred to backlog — re-triage required for milestone bundling | Triage (Stage 2) | Re-triage (returns to `status: proposed` or `status: approved`) |
-| `status: rejected` | `D93F0B` (red) | Triaged, rejected — premise stale or out of scope | Triage (Stage 2) | Issue closed (terminal) |
+**Concrete rows:** the `status:*` set (illustratively `status: proposed → approved → bundled → in-progress → done`, plus the terminal `status: deferred` and `status: rejected`) is archetype-invariant and contributed by `core/packs/_common/pack.toml` (`group = "status"`). The live set is the packs' union — see § Instance Model.
 
 ### Cluster Labels
 
 Classify issues by capability cluster for triage. Applied during Run 1 of backlog triage.
 
-**Cluster orthogonality protocol.** Cluster labels split into two axes. The **domain clusters** (`architecture`, `automation`, `documentation`, `eval-quality`, `gate-handoff`, `pipeline-definitions`, `process-protocol`, `security`, `skill-modes`, `system-config`, `templates-schemas`) classify an issue by its capability area — an issue carries **exactly one** domain cluster. `cluster: cross-cutting` is **not** a domain; it is an **orthogonal span-marker** indicating the issue's scope crosses multiple domains. It composes *with* a domain cluster rather than replacing it: an issue may carry **one domain cluster + optionally `cluster: cross-cutting`**. The two never conflict because they answer different questions (which domain? vs. does it span domains?).
+**Cluster orthogonality protocol.** Cluster labels split into two axes. The **domain clusters** (illustratively `architecture`, `automation`, `documentation`, `eval-quality`, `gate-handoff`, `pipeline-definitions`, `process-protocol`, `security`, `skill-modes`, `system-config`, `templates-schemas`) classify an issue by its capability area — an issue carries **exactly one** domain cluster (§ Rules 3). `cluster: cross-cutting` is **not** a domain; it is an **orthogonal span-marker** indicating the issue's scope crosses multiple domains. It composes *with* a domain cluster rather than replacing it: an issue may carry **one domain cluster + optionally `cluster: cross-cutting`**. The two never conflict because they answer different questions (which domain? vs. does it span domains?).
 
-| Label | Color | Description |
-|---|---|---|
-| `cluster: pipeline-definitions` | `006B75` (teal) | Stage definition issues (living docs) |
-| `cluster: gate-handoff` | `0052CC` (blue) | Inter-stage contracts, gate manager, handoff coordinator |
-| `cluster: eval-quality` | `FBCA04` (amber) | QA framework, eval runner, assertion framework, escape tracking |
-| `cluster: skill-modes` | `0052CC` (blue) | New or updated skill modes for pipeline stages |
-| `cluster: templates-schemas` | `C5DEF5` (periwinkle) | Report templates, plan templates, schema definitions |
-| `cluster: system-config` | `BFD4F2` (light blue) | GitHub Projects, statuses, labels, automation, environment |
-| `cluster: documentation` | `5319E7` (purple) | Reference docs, KB, process docs |
-| `cluster: process-protocol` | `C5DEF5` (periwinkle) | Pipeline process rules, conventions, standards |
-| `cluster: architecture` | `BFD4F2` (light blue) | Operating model, platform structure, folder architecture |
-| `cluster: automation` | `D93F0B` (red-orange) | Linting, verification scripts, auto-mode |
-| `cluster: security` | `BFDADC` (pale cyan) | Security controls, secret/PII scanning, depersonalization gates |
-| `cluster: cross-cutting` | `0E8A16` (green) | **Span-marker** (not a domain) — items whose scope crosses multiple domain clusters; composes with one domain cluster per the orthogonality protocol above |
+**Concrete rows:** the domain-cluster set + the `cluster: cross-cutting` span-marker are archetype-invariant and contributed by `core/packs/_common/pack.toml` (`group = "cluster"`). The live set is the packs' union — see § Instance Model.
 
 ### Initiative Labels
 
@@ -81,22 +58,15 @@ Group issues by a long-running, multi-milestone initiative. **An initiative labe
 
 ### Triage Flag Labels
 
-Temporary labels applied during triage runs. Removed after triage decisions are executed.
+Temporary labels applied during triage runs, removed after triage decisions are executed (§ Rules 4). Each carries an *applied-at* run and a *removed-at* run.
 
-| Label | Color | Description | Applied At | Removed At |
-|---|---|---|---|---|
-| `triage: stale` | `FFFFFF` (white) | Flagged as potentially addressed by later work | Run 1 | Run 4 (decision) |
-| `triage: duplicate` | `FFFFFF` (white) | Flagged as potential duplicate/subsumption candidate | Run 1 | Run 4 (decision) |
-| `triage: quick-win` | `FFFFFF` (white) | Low-effort, high-value — candidate for early bundling | Run 2 | Run 5 (bundled) |
+**Concrete rows:** the triage-flag set (illustratively `triage: stale`, `triage: duplicate`, `triage: quick-win`) is archetype-invariant and contributed by `core/packs/_common/pack.toml` (`group = "triage-flag"`). The live set is the packs' union — see § Instance Model.
 
 ### Disposition Labels
 
-Final triage decisions. Applied when the decision is rendered. Persist until issue is closed.
+Final triage decisions. Applied when the decision is rendered; persist until the issue is closed.
 
-| Label | Color | Description |
-|---|---|---|
-| `duplicate` | `cfd3d7` (light gray) | This issue is a duplicate (subsumed per subsumption convention) |
-| `wontfix` | `ffffff` (white) | This will not be worked on |
+**Concrete rows:** the disposition set (illustratively `duplicate`, `wontfix`) is archetype-invariant and contributed by `core/packs/_common/pack.toml` (`group = "disposition"`). The live set is the packs' union — see § Instance Model.
 
 ## Removed Labels
 
@@ -110,6 +80,8 @@ The following default GitHub labels were removed as not applicable to a single-o
 | `question` | Not a valid issue category — questions are resolved in conversation, not tracked as issues |
 
 ## Rules
+
+These composition rules are the grammar's operative clauses — they constrain *any* live label set, regardless of which concrete rows the selected packs contribute.
 
 1. **One category label** per issue. Templates auto-apply category + `status: proposed` at submission:
    - `bug.yml` → `bug` + `status: proposed`
@@ -125,4 +97,20 @@ The following default GitHub labels were removed as not applicable to a single-o
 
 ## Methodology Variation
 
-Label taxonomy is methodology-agnostic — the category/status/cluster/lifecycle label sets are identical across all 8 archetypes from the `delivery_approach` enum (`Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom`). Semantic interpretation of priority/status labels SHALL be derived from PROJECT.md's `delivery_approach` per [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md). When `delivery_approach: Custom`, priority/status semantics follow the `custom_methodology_definition` block — consult `lifecycle`, `ceremonies`, and `artifacts` fields for semantic guidance.
+The label **grammar** — the six group definitions, their cardinality rules, and the composition rules — is methodology-agnostic and identical across all 8 archetypes from the `delivery_approach` enum (`Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom`). What varies per methodology is the **concrete label set**, which is *realized* by the selected packs' `core/packs/<archetype>/` contributions: the archetype-invariant rows (Category / Status / Cluster / Triage-Flag / Disposition) come from `_common`, and each archetype pack adds only its deltas — chiefly the `type:*` kind labels projecting its declared `kinds[]` (`work-item-type-schema.md §1.1.1`; the methodology-pack composing-unit and composition-grammar decisions ADR-069 / ADR-070 D2, the grammar-altitude siblings of ADR-018). The live set is the union of the selected packs + `_common` + operator overrides, reconciled to this grammar by the label-parity gate (§ Instance Model). Semantic interpretation of priority/status labels SHALL be derived from PROJECT.md's `delivery_approach` per [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md). When `delivery_approach: Custom`, priority/status semantics follow the `custom_methodology_definition` block — consult `lifecycle`, `ceremonies`, and `artifacts` fields for semantic guidance.
+
+## Instance Model
+
+This document is the label **grammar authority**; the concrete label rows are the **instance**, contributed by the methodology packs and reconciled to the live GitHub set by the label-parity gate. The live-label formula:
+
+```
+LIVE GitHub label set  ≡  _common.[[labels]]                    # archetype-invariant rows (core/packs/_common/pack.toml)
+                        ∪  ( selected packs' [[labels]] )         # per-archetype deltas; selection by delivery_approach
+                        ∪  ( operator-local overrides )           # K4 — operator.toml / operator-local, never corpus
+                        −  ( operator-local removals )
+```
+
+- **Selection** is by `delivery_approach` in operator config (e.g. a Hybrid `[Scrum, Kanban]` deployment ⇒ `_common ∪ scrum ∪ kanban`).
+- **Contribution** is the `[[labels]]` facet in `core/packs/<archetype>/pack.toml` — each row names its grammar `group` (one of the six this doc defines) and, for `type:*` rows, its `projects_kind` join into the pack's `kinds[]`. The grammar defines the groups; a pack only populates them and may never define a new group or rule.
+- **Overrides / removals** are K4 operator-local (color/description tweaks, extra project-local families like `size:*` / `layer:*` if the operator runs them) — never committed to this K1 corpus.
+- **Reconciliation** is the label-parity gate ([`core/deploy/tools/check-label-parity.py`](../deploy/tools/check-label-parity.py), `deploy.sh` Check 51). It reads the canonical set as the **union of this grammar doc + every pack `[[labels]]` facet** and diffs against the live set: a canonical label absent from GitHub is **MISSING** (enforce-capable), a live label registered by neither a concrete row nor a namespace pattern (`project:*` / `epic:*` / `type:*`) is **ORPHAN** (warn-only). The grammar doc retains the namespace patterns; the packs carry the concrete rows.

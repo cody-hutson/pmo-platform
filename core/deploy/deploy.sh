@@ -52,6 +52,7 @@ OPERATIONS_SKILLS=(
   pmo-technical-program-manager
   pmo-tier-1-support
   pmo-tier-2-support
+  pmo-wms-specialist
   ppm-agent
   project-initiator
   tracker-manager
@@ -1964,8 +1965,8 @@ cmd_check_lifecycle() {
   cat <<'LIFECYCLE'
 deploy.sh check lifecycle registry
 ===================================
-Live check sequence: 1-14, 16-23, 25-46   (gaps: 15, 24 — both reserved)
-Next NEW top-level check number: 47
+Live check sequence: 1-14, 16-23, 25-53   (gaps: 15, 24 — both reserved)
+Next NEW top-level check number: 54
   (15 and 24 are RETIRED-RESERVED; never reuse. Sub-checks extend an existing
    number, e.g. 18a/18b/18c/18d, and do NOT consume a new top-level number.)
 
@@ -2210,13 +2211,22 @@ cmd_check() {
       # Non-skill shared-resource directories under skills/ are not roster
       # members. Convention: an underscore-prefixed directory under
       # <module>/skills/ holds shared reference content consumed by the
-      # sibling role skills, not a deployable skill (no SKILL.md, no package,
-      # no deploy.sh array entry). It carries no roster membership and must be
-      # skipped before the roster lookup. EXACT-MATCH allowlist (fail-CLOSED):
-      # only the explicitly-named "_shared" dir is exempt — a stray
-      # underscore-prefixed directory still FAILs roster-drift. To add another
-      # non-skill shared-resource dir, extend this allowlist explicitly here.
-      [[ "$skill_name" == "_shared" ]] && continue
+      # sibling role skills, not a deployable skill (no SKILL.md the deployer
+      # ships, no package, no deploy.sh array entry). It carries no roster
+      # membership and must be skipped before the roster lookup. EXACT-MATCH
+      # allowlist (fail-CLOSED): only the two explicitly-named dirs below are
+      # exempt — a stray underscore-prefixed directory still FAILs roster-drift.
+      #   "_shared"    — shared reference content consumed by sibling role skills.
+      #   "_templates" — parameterized, NON-DEPLOYED skill templates (e.g.
+      #                  system-specialist/): each holds a placeholder-bearing
+      #                  SKILL.md that is instantiated per system into a real,
+      #                  roster+registry-registered skill. The template itself is
+      #                  never deployed (never added to a roster array, no package,
+      #                  no registry CI row), so it must be exempt from roster-drift
+      #                  exactly like _shared. An INSTANCE is a normal roster member.
+      # To add another non-skill shared-resource dir, extend this allowlist
+      # explicitly here.
+      [[ "$skill_name" == "_shared" || "$skill_name" == "_templates" ]] && continue
       local found=false
       for s in "${EXPECTED_ROSTER[@]}"; do
         [[ "$skill_name" == "$s" ]] && found=true && break
@@ -6672,10 +6682,13 @@ cmd_check() {
   #   ORPHAN (live GitHub label absent from the taxonomy) → WARN only (some are
   #     legitimately operator-local or pending registration, e.g. the `type:*`
   #     family until #1777 documents it). Never FAILs.
-  # Source-agnostic: the primitive reads the canonical set from --source (default
-  # the doc); when #1970 moves the per-pack label lists to core/packs/*,
-  # repoint --source — this block is unchanged. Title-prefix parity (the #74
-  # `[Observation]:` invariant) is a SEPARATE concern, not evaluated here.
+  # Multi-source union (#1970): the primitive reads the canonical set as the UNION
+  # across every --source. #1970 relocated the concrete label ROWS out of the doc
+  # (which keeps the GRAMMAR: group definitions, rules, namespace patterns) into the
+  # per-pack `[[labels]]` facets under core/packs/* — so the source set is the doc
+  # PLUS every pack.toml. A relocated-but-still-live label resolves in the pack union
+  # and does not false-orphan. Title-prefix parity (the #74 `[Observation]:`
+  # invariant) is a SEPARATE concern, not evaluated here.
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (the 14/18/42/43/50
   # precedent); the introducing release is itself exempt (reflexive-pipeline
   # loop). gh-unavailable → SKIP (parity needs the live set; mirrors Check 39/40
@@ -6685,6 +6698,14 @@ cmd_check() {
     log "Check 51: Label-taxonomy ↔ GitHub label-set parity (warn-mode initial; MISSING-leg enforce-flip deferred)"
     local c51_script="core/deploy/tools/check-label-parity.py"
     local c51_source="core/specs/label-taxonomy.md"
+    # #1970: the canonical set is the UNION of the grammar doc + every pack.toml
+    # [[labels]] facet (the relocated concrete rows). Build the repeatable --source
+    # arg list: the doc, then each existing core/packs/*/pack.toml.
+    local c51_source_args=(--source "$c51_source")
+    local c51_pack
+    for c51_pack in core/packs/*/pack.toml; do
+      [[ -f "$c51_pack" ]] && c51_source_args+=(--source "$c51_pack")
+    done
     if [[ ! -f "$c51_script" ]]; then
       flag_warn_or_issue "label-parity" "primitive script missing: $c51_script"
     elif ! command -v gh >/dev/null 2>&1; then
@@ -6693,7 +6714,7 @@ cmd_check() {
       local c51_mode
       c51_mode=$(resolve_check_mode "label-parity")
       local c51_out c51_exit=0
-      c51_out=$(/usr/bin/python3 "$c51_script" --source "$c51_source" --output-format tsv 2>&1) || c51_exit=$?
+      c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --output-format tsv 2>&1) || c51_exit=$?
       if [[ $c51_exit -eq 3 ]]; then
         flag_warn_or_issue "label-parity" "input failure (exit 3): $(echo "$c51_out" | head -1) — --source parsed to zero labels or the live set was unreadable; fix the source/parser"
       elif [[ $c51_exit -eq 0 || $c51_exit -eq 1 ]]; then
@@ -6718,6 +6739,126 @@ cmd_check() {
         fi
       else
         flag_warn_or_issue "label-parity" "check errored (exit $c51_exit): $(echo "$c51_out" | head -1)"
+      fi
+    fi
+  fi
+
+
+  # Check 52 — Milestone-position drift (warn-mode initial)
+  #
+  # Re-derives every open milestone's `position:` from the live dependency graph
+  # (the same Kahn's-BFS derivation the producer tool applies) and WARNs for each
+  # milestone whose current `position:` line differs from the re-derived value —
+  # the drift the live G3-07 "Milestone-Position Resolution" gate would otherwise
+  # silently resolve via its fallback tier. Read-only: the drift probe mutates
+  # nothing (the fix is an operator-run `compute-milestone-positions.py --apply`);
+  # reversibility CHEAP. The derivation DEFINITION is not redefined here — it lives
+  # in the tool and is REFERENCED via `--check-drift`, per the card's AC scope.
+  # Warn-mode initial per core/rules/bypass-mode-readiness.md §Shakedown (the
+  # 14/18/42/43/50/51/53 precedent): drift is emitted as a non-blocking WARN during
+  # calibration. Reflexive cutover clause (AC10): the drift check applies to
+  # milestones entering Stage 3 strictly AFTER this tool's introducing-release
+  # merge SHA (recorded in the release log); the introducing release is itself
+  # exempt (reflexive-pipeline loop — the check does not fire on its own
+  # introducing release's positions). Flip to enforce via a `milestone-position.mode`
+  # file after the >=3-day warn-log review — "enforce" there means the drift finding
+  # increments ISSUES (dep-order drift becomes a gating signal); it does NOT change
+  # what is derived. gh-unavailable → SKIP (the derivation needs the live milestone
+  # + issue set; mirrors Check 39/40/51/53 offline SKIP). Primitive:
+  # release/tools/compute-milestone-positions.py --check-drift.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 52: Milestone-position drift (warn-mode initial; enforce-flip deferred)"
+    local c52_script="release/tools/compute-milestone-positions.py"
+    if [[ ! -f "$c52_script" ]]; then
+      flag_warn_or_issue "milestone-position" "primitive script missing: $c52_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — milestone-position drift needs the live milestone + issue set (offline/unauth; mirrors Check 39/40/51/53)"
+    else
+      local c52_mode
+      c52_mode=$(resolve_check_mode "milestone-position")
+      local c52_out c52_exit=0
+      c52_out=$(/usr/bin/python3 "$c52_script" --check-drift --output-format tsv 2>&1) || c52_exit=$?
+      if [[ $c52_exit -eq 3 ]]; then
+        flag_warn_or_issue "milestone-position" "input failure (exit 3): $(echo "$c52_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+      elif [[ $c52_exit -eq 0 ]]; then
+        log "  OK:    all open milestone positions match the re-derived dep-graph order — no drift"
+      elif [[ $c52_exit -eq 1 ]]; then
+        local c52_count c52_drift
+        c52_count=$(echo "$c52_out" | awk -F'\t' '$1=="COUNT"{print $2}')
+        c52_drift=$(echo "$c52_out" | awk -F'\t' '$1=="DRIFT"{print $2}' | paste -sd, -)
+        if [[ "$c52_mode" == "enforce" ]]; then
+          log "  FAIL:  milestone-position — ${c52_count} milestone(s) drift from the re-derived dep-graph order:"
+          log "           ${c52_drift:-(none)}"
+          ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "milestone-position" "${c52_count} milestone(s) drift from the re-derived dep-graph order — run compute-milestone-positions.py --apply (warn-mode; flip milestone-position.mode to enforce after shakedown). drift: ${c52_drift:-(none)}"
+        fi
+      else
+        flag_warn_or_issue "milestone-position" "check errored (exit $c52_exit): $(echo "$c52_out" | head -1)"
+      fi
+    fi
+  fi
+
+
+  # Check 53 — Approved-queue-depth monitor (warn-mode initial)
+  #
+  # The active DETECTOR behind the Stage-3 Bundle A7 "T1 Approved-queue depth"
+  # refresh trigger. Counts the open approved-but-unbundled queue (issues with
+  # `status: approved` AND no milestone) and, at/above the bundling threshold
+  # (default 5), emits an ACTIONABLE bundle-candidate summary — count + themes
+  # (from cluster:/project: labels) + priorities — so the operator sees a
+  # ready-to-triage bundle candidate at the moment they act on the platform,
+  # not just a raw number. The threshold DEFINITION lives in the Stage-3 Bundle
+  # definition (Phase B4: "threshold-triggered (5+ Approved)") and is REFERENCED
+  # via --threshold, not redefined here (per the card's AC scope).
+  # Read-only: counts issue state, mutates nothing (no issue-state or corpus
+  # write). Reversibility CHEAP — additive; `git revert`.
+  # Warn-mode initial per core/rules/bypass-mode-readiness.md §Shakedown (the
+  # 14/18/42/43/50/51 precedent): the exit-1 "bundle candidate" finding is
+  # emitted as a non-blocking WARN during calibration. The queue is ~29 today
+  # (>=5) → this check FIRES on first run; warn-mode is exactly what keeps that
+  # non-blocking. Flip to enforce via an `approved-queue-depth.mode` file after
+  # the >=3-day warn-log review — BUT note "enforce" here means the finding
+  # increments ISSUES (a full/over-threshold queue becomes a gating signal that
+  # a bundle is overdue); it does NOT change what is counted. The introducing
+  # release is itself exempt (reflexive-pipeline loop — the monitor does not
+  # fire on its own introducing release's approved-queue state).
+  # gh-unavailable → SKIP (the count needs the live issue set; mirrors Check
+  # 39/40/51 offline SKIP). Primitive: core/deploy/tools/check-approved-queue-depth.py.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 53: Approved-queue-depth monitor (warn-mode initial; enforce-flip deferred)"
+    local c53_script="core/deploy/tools/check-approved-queue-depth.py"
+    local c53_threshold=5
+    if [[ ! -f "$c53_script" ]]; then
+      flag_warn_or_issue "approved-queue-depth" "primitive script missing: $c53_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — approved-queue-depth needs the live issue set (offline/unauth; mirrors Check 39/40/51)"
+    else
+      local c53_mode
+      c53_mode=$(resolve_check_mode "approved-queue-depth")
+      local c53_out c53_exit=0
+      c53_out=$(/usr/bin/python3 "$c53_script" --threshold "$c53_threshold" --output-format tsv 2>&1) || c53_exit=$?
+      if [[ $c53_exit -eq 3 ]]; then
+        flag_warn_or_issue "approved-queue-depth" "input failure (exit 3): $(echo "$c53_out" | head -1) — the live approved-unbundled queue was unreadable; fix gh auth/connectivity"
+      elif [[ $c53_exit -eq 0 ]]; then
+        local c53_count
+        c53_count=$(echo "$c53_out" | awk -F'\t' '$1=="COUNT"{print $2}')
+        log "  OK:    approved-unbundled queue depth ${c53_count:-0} < threshold $c53_threshold — not a bundle candidate"
+      elif [[ $c53_exit -eq 1 ]]; then
+        local c53_count c53_themes c53_prios
+        c53_count=$(echo "$c53_out"  | awk -F'\t' '$1=="COUNT"{print $2}')
+        c53_themes=$(echo "$c53_out" | awk -F'\t' '$1=="THEMES"{print $2}')
+        c53_prios=$(echo "$c53_out"  | awk -F'\t' '$1=="PRIORITIES"{print $2}')
+        if [[ "$c53_mode" == "enforce" ]]; then
+          log "  FAIL:  approved-queue-depth — $c53_count approved-unbundled issue(s) >= threshold $c53_threshold; a bundle is overdue:"
+          log "           themes:     ${c53_themes:-(none)}"
+          log "           priorities: ${c53_prios:-(none)}"
+          ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "approved-queue-depth" "$c53_count approved-unbundled issue(s) >= threshold $c53_threshold — BUNDLE CANDIDATE (warn-mode; flip approved-queue-depth.mode to enforce after shakedown). themes: ${c53_themes:-(none)}; priorities: ${c53_prios:-(none)}"
+        fi
+      else
+        flag_warn_or_issue "approved-queue-depth" "check errored (exit $c53_exit): $(echo "$c53_out" | head -1)"
       fi
     fi
   fi

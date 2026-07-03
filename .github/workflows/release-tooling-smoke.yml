@@ -1,14 +1,21 @@
 name: Release tooling smoke
 
 # gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
-#   invariant: (1) the Stage 13 close-out automation runs (self-test + offline smoke)
-#              when release tooling or the RELEASE_LOG schema changes; AND (2) each of
-#              the three core/deploy/tools node-graph tools runs its committed
-#              --self-test when any core/deploy/tools file changes — both asserted
-#              behaviorally by executing the scripts' checks and gating on exit code.
+#   invariant: the release tooling that must not rot unexercised runs its offline
+#              checks when release tooling or the RELEASE_LOG schema changes — (1) the
+#              Stage 13 close-out automation (self-test + corpus-path smoke) AND the
+#              blast-radius tool family (doc-tracer default-path regression under a
+#              normalized diff + the domain-fan-out software import-graph scanner) in
+#              the closeout-smoke job; AND (2) each of the three core/deploy/tools
+#              node-graph tools runs its committed --self-test when any
+#              core/deploy/tools file changes, in the node-graph-tools-selftest job —
+#              all asserted behaviorally by executing the scripts' checks and gating on
+#              exit code.
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
-#                  script asserts -> the closeout-smoke job fails; regress a node-graph
-#                  tool's --self-test -> the node-graph-tools-selftest job fails; on an
+#                  script asserts -> the closeout-smoke job fails; break the schema-v1
+#                  emit so the doc tracer's normalized output changes -> the
+#                  blast-radius tool-family test fails; regress a node-graph tool's
+#                  --self-test -> the node-graph-tools-selftest job fails; on an
 #                  unrelated PR both are skipped and absence is treated as pass.
 # Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
 
@@ -72,6 +79,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # blast-radius test recovers the pre-refactor blast-radius.sh
+                           # from this file's git history for the F1 before-vs-after
+                           # normalized-diff regression; a shallow checkout would leave
+                           # only the current blob and degrade F1 to a determinism check.
 
       - name: Verify prerequisites
         run: |
@@ -84,6 +96,15 @@ jobs:
       - name: Self-test (offline unit checks + parser-clean)
         # Pure helpers only — must NOT reach gh auth / network. Gate on exit code.
         run: bash release/tools/automated-closeout.sh --self-test
+
+      - name: Blast-radius tool-family tests (schema-v1 lib + domain fan-out)
+        # Exercises the blast-radius doc tracer's default-path regression under a
+        # NORMALIZED diff (proves the shared-lib refactor is a no-op) AND the
+        # domain-blast-radius software import-graph scanner + its field semantics.
+        # Offline + deterministic (mktemp fixtures scanned via --root; no network).
+        # Without this step, ZERO CI reference blast-radius — the tool could rot
+        # unexercised. Requires jq (present on the macOS runner via /usr/bin/jq).
+        run: bash release/tools/tests/test_domain_blast_radius.sh
 
       - name: Corpus path-resolution check (offline; hard-fail)
         # HARD-FAILS (exit 1) if any of the four corpus paths do not resolve in

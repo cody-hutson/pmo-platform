@@ -103,7 +103,7 @@ Detail per signal follows. Each signal is one third-level subsection so the veri
 
 **Class:** leading.
 **Definition:** Number of distinct release-stage spokes, commits, or hub Decision Briefings citing the practice per release.
-**Measurement mechanism:** `git log --grep "<practice-id>" --since="<release-base>" --until="<release-tip>" | wc -l` combined with `grep -rn "<practice-id>" pmo-platform/releases/plans/v<X.Y>_RELEASE_PLAN.md` to count plan-level citations.
+**Measurement mechanism:** `git log --grep "<practice-id>" --since="<release-base>" --until="<release-tip>" | wc -l` combined with `grep -rn "<practice-id>" release/releases/plans/v<X.Y>_RELEASE_PLAN.md` to count plan-level citations.
 **Cadence:** per-release.
 **Threshold bands:**
 
