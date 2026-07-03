@@ -8,7 +8,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037, ADR-071. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037, ADR-071, ADR-072. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
 
 ## Release-scoped ADRs
 
@@ -25,6 +25,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 | [ADR-036](ADR-036-version-claim-determinism.md) | Deterministic version-claiming: a host-agnostic capability (slug-primary, defer-to-claim, atomic CAS) bound to a config-selected `repo_host` adapter | Accepted | 2026-06-21 | release-version-claim-determinism |
 | [ADR-037](ADR-037-version-slot-cross-release-contended-axis.md) | Version slot as a cross-release contended axis (extends ADR-024): version-slot virtual-path token on the unchanged `serialize()` predicate | Proposed | 2026-06-21 | release-version-claim-determinism |
 | [ADR-071](ADR-071-region-scoped-av-invariant-verification.md) | Region-scoped AV invariant verification: QC4-05 restricts each assertion to a declared lexical region (region × polarity) so a comment-vs-code / negation match cannot produce a verdict | Proposed | 2026-07-03 | 70-verification-execution-surface |
+| [ADR-072](ADR-072-cross-issue-integration-check-stage9-extension.md) | Cross-issue release-integration check: extend Stage 9 (Phase A3.6 + QC3.5 + G-PR10) over a new Stage 7.5, reading the executor-emitted CIAC verdicts read-only (single-runner) with a G-PR9-style evidence-freshness guard | Proposed | 2026-07-03 | 70-verification-execution-surface |
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, ADR-024, ADR-025, and ADR-026 are authored natively in the modular-monolith layout.
 
@@ -70,8 +71,10 @@ ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + ope
 | ADR-026 | release | authored at Stage 6 (2026-06-13) |
 | ADR-036 | release | authored at Stage 6 (2026-06-21) |
 | ADR-037 | release | authored at Stage 6 (2026-06-21) |
+| ADR-071 | release | authored at Stage 6 (2026-07-03) |
+| ADR-072 | release | authored at Stage 6 (2026-07-03) |
 
-> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them. ADR-027 through ADR-035 are core-scope and indexed in the core README; ADR-036 and ADR-037 resume the release-scoped thread after them.
+> ADR-010 is core-scope and indexed in [`../../core/ADRs/README.md`](../../core/ADRs/README.md); ADR-011 continues the platform-global monotonic sequence as a release-scoped decision. ADR-012 through ADR-020 are core-scope and indexed in the core README; ADR-021 resumes the release-scoped thread after them. ADR-022 and ADR-023 are core-scope and indexed in the core README; ADR-024, ADR-025, and ADR-026 resume the release-scoped thread after them. ADR-027 through ADR-035 are core-scope and indexed in the core README; ADR-036 and ADR-037 resume the release-scoped thread after them. ADR-038 through ADR-070 are core-scope and indexed in the core README; ADR-071 and ADR-072 resume the release-scoped thread after them.
 
 ## Authoring new ADRs
 
