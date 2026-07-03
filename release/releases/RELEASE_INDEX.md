@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.64 | 84-executable-acceptance-testing | 2026-07-03 | — | #3202 | [notes/v3.64_RELEASE_NOTES.md](notes/v3.64_RELEASE_NOTES.md) |
 | v3.63 | 74-controlled-deployment-environment-and-modes | 2026-07-03 | GitHub-native PR-review surfaces + release-manager skill↔pipeline reconciliation | #3199 | [notes/v3.63_RELEASE_NOTES.md](notes/v3.63_RELEASE_NOTES.md) |
 | v3.62 | 31-immutable-adr-system | 2026-07-03 | — | #3193 | [notes/v3.62_RELEASE_NOTES.md](notes/v3.62_RELEASE_NOTES.md) |
 | v3.61 | 107-pda-tail-closeout | 2026-07-03 | — | #3098 | [notes/v3.61_RELEASE_NOTES.md](notes/v3.61_RELEASE_NOTES.md) |
