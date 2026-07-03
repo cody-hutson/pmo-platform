@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.60] - 2026-07-03
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Delivery methodology becomes a swappable pack — a shipped best-practice baseline (Scrum/Kanban) you select, or your own config you bring and override. Foundation release; consuming skills wired in a follow-up.
 
 [Full notes](release/releases/notes/v3.60_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.60)
 
