@@ -59,20 +59,33 @@ reader so "does this doc carry frontmatter, and what keys" is answered by the ON
 place the deploy-tool family parses it (F1 consistency). The writer (append-absent-
 keys) is local — `_frontmatter.py` is read-only by contract.
 
+**LAYER-2 EXECUTION IS GATED — this file never mutates the real corpus on its own.**
+Mutating the live `~/Claude/projects/**` corpus is GATED at release Stage 12. The node
+stamp is the FIRST link in the doc-warehouse FK chain (edges FK to nodes, so nodes are
+stamped first), which makes it the MORE dangerous of the two backfill writers — it must
+carry a gate at least as strong as its edge sibling. So `--stamp` (the write mode)
+REFUSES unless the explicit `--i-am-at-stage-12` confirmation token is ALSO passed
+(exit 3, "gate-refused"), byte-for-byte the same gate `backfill-relationship-edges.py`
+puts on its `--emit` writer. `--dry-run` (the default) and `--audit-sample` are read-only
+and are NOT gated.
+
 Interface:
   --root PATH          corpus root to scan (default: ~/Claude/projects)
   --scope active|all   active (default) excludes Archive/; all includes it (FIX 3)
   --dry-run            EMIT-ONLY, no writes (DEFAULT — the safe default)
-  --stamp              actually write frontmatter / sidecars (the mutating mode)
+  --stamp              actually write frontmatter / sidecars (Stage-12-gated; REFUSES
+                       unless --i-am-at-stage-12 is also set)
+  --i-am-at-stage-12   explicit confirmation token required to pair with --stamp
   --audit-sample N     print a random N-file sample of proposed classifications
   --self-test          run the committed-fixture assertions and exit
   --output-format tsv|json   (default tsv)
 
-Exit codes (fail-loud contract, mirroring the deploy-tool family):
+Exit codes (fail-loud contract, mirroring the deploy-tool family — identical to
+backfill-relationship-edges.py so the two backfill tools share one gate convention):
   0  clean (all in-scope files classified + stamped/would-stamp; no orphans)
   1  orphans found (>=1 in-scope file could not be confidently classified)
-  2  usage error (bad flags / mutually-exclusive modes)
-  3  path-unresolvable (the --root does not exist / is unreadable)
+  2  usage error (bad flags / mutually-exclusive modes / --root unresolvable)
+  3  gate-refused (--stamp without --i-am-at-stage-12)
 """
 from __future__ import annotations
 
@@ -559,9 +572,15 @@ def run_self_test():
       (c) exclusion fires on a backup segment (body-backups);
       (d) Archive/ excluded under scope=active, included (archived) under scope=all;
       (e) idempotent re-run produces zero further changes;
-      (f) orphan list is populated by an unclassifiable file.
+      (f) orphan list is populated by an unclassifiable file;
+      (g) every folder default-type is valid for its domain (type-taxonomy invariant);
+      (h) the Stage-12 confirmation-token gate: --stamp WITHOUT --i-am-at-stage-12 refuses
+          (exit 3) and writes nothing; --stamp WITH the token writes (mirrors the
+          backfill-relationship-edges --emit gate byte-for-byte).
     Runs against a temp COPY of the fixture so --stamp writes are throwaway.
     """
+    import contextlib
+    import io
     import shutil
     import tempfile
 
@@ -580,6 +599,37 @@ def run_self_test():
             failures.append(f"(g) default-type '{default_type}' for prefix {pfx} "
                             f"not valid for domain '{dom}'")
 
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td) / "corpus"
+        shutil.copytree(fixture, root)
+
+        # --- (h) Stage-12 confirmation-token gate (mirrors backfill-relationship-edges) ---
+        # (stdout captured so the CLI's TSV report doesn't pollute the self-test output;
+        # the gate's refusal message and exit code are what we assert.)
+        canon_before = root / "Default" / "01-Governance" / "PROJECT.md"
+        # --stamp WITHOUT --i-am-at-stage-12 must REFUSE (exit 3) and write NOTHING.
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_refused = main(["--stamp", "--root", str(root)])
+        if rc_refused != 3:
+            failures.append(f"(h) --stamp without --i-am-at-stage-12 must exit 3 "
+                            f"(gate-refused), got {rc_refused}")
+        # The refusal must not have mutated the fixture copy: the canonical file must still
+        # carry NO stamped node core (frontmatter absent or missing the core keys).
+        keys_after_refuse, _ = read_frontmatter(canon_before)
+        if all(k in keys_after_refuse for k in CORE_FIELDS):
+            failures.append("(h) gate-refused run still wrote the node core (must be inert)")
+        # --stamp WITH the token against the throwaway copy must WRITE (existing behavior:
+        # exit 0/1 depending on orphans; the canonical file gains the full core).
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_gated = main(["--stamp", "--i-am-at-stage-12", "--root", str(root)])
+        if rc_gated not in (0, 1):
+            failures.append(f"(h) --stamp --i-am-at-stage-12 must run (exit 0/1), got {rc_gated}")
+        keys_after_write, st_hw = read_frontmatter(canon_before)
+        if st_hw != "ok" or not all(k in keys_after_write for k in CORE_FIELDS):
+            failures.append("(h) gated --stamp did not write the node core to the fixture copy")
+
+    # A fresh copy for the remaining assertions (the gate test above already stamped the
+    # first copy, which would mask the dry-run / idempotence checks below).
     with tempfile.TemporaryDirectory() as td:
         root = Path(td) / "corpus"
         shutil.copytree(fixture, root)
@@ -677,7 +727,7 @@ def run_self_test():
         return 1
     print("stamp-node-frontmatter self-test OK "
           "(a full-core-set / b case-norm / c exclusion / d Archive-scope / e idempotent / "
-          "f orphan / g type-domain-validity)")
+          "f orphan / g type-domain-validity / h stage-12-gate)")
     return 0
 
 
@@ -696,7 +746,10 @@ def main(argv=None):
     mode.add_argument("--dry-run", action="store_true",
                       help="EMIT-ONLY, no writes (DEFAULT)")
     mode.add_argument("--stamp", action="store_true",
-                      help="actually write frontmatter / sidecars")
+                      help="actually write frontmatter / sidecars (Stage-12-gated; "
+                           "requires --i-am-at-stage-12)")
+    ap.add_argument("--i-am-at-stage-12", action="store_true",
+                    help="explicit confirmation that this run is the Stage-12 gated execution")
     ap.add_argument("--audit-sample", type=int, metavar="N", default=0,
                     help="print a random N-file sample of proposed classifications")
     ap.add_argument("--output-format", choices=("tsv", "json"), default="tsv")
@@ -707,12 +760,22 @@ def main(argv=None):
     if args.self_test:
         return run_self_test()
 
+    do_write = bool(args.stamp)   # dry-run is the default; --stamp is the only writer
+    if do_write and not args.i_am_at_stage_12:
+        print(
+            "GATE REFUSED: --stamp mutates the live corpus and is gated at release Stage 12 "
+            "(the node stamp is the FIRST link in the FK chain — nodes are stamped before "
+            "edges FK to them). Re-run with --i-am-at-stage-12 ONLY inside the Stage-12 "
+            "execution window, in-workspace.",
+            file=sys.stderr,
+        )
+        return 3
+
     root = Path(args.root).expanduser()
     if not root.exists() or not root.is_dir():
         print(f"stamp-node-frontmatter: --root unresolvable: {root}", file=sys.stderr)
-        return 3
+        return 2
 
-    do_write = bool(args.stamp)   # dry-run is the default; --stamp is the only writer
     result = run(root, scope=args.scope, do_write=do_write)
 
     if args.audit_sample and args.audit_sample > 0:

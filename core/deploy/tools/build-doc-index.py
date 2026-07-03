@@ -64,6 +64,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -823,6 +824,13 @@ NAMED_QUERIES = {
         {},
     ),
     "staleness": (
+        # Query 3 (sqlite-index-schema.md § Named Query Patterns): the domain is a REQUIRED
+        # bind param (`f.domain = :domain`), NOT a default. Each domain has its own staleness
+        # threshold (schema § Staleness thresholds — Source >30, Knowledge/Synthesis >14), so
+        # the caller MUST name which domain it is scoring; there is no meaningful silent
+        # default. A prior implementation defaulted to Source-only via `IN (:d0, :d1)` — that
+        # both diverged from the schema's single-`:domain` contract and silently narrowed the
+        # result set. `run_query` fail-louds (ValueError) if `:domain` is not supplied.
         """
         SELECT f.file_id, f.path, f.filename, f.lifecycle_state, f.domain,
             julianday('now') - julianday(f.modified_date) AS days_since_modified,
@@ -832,10 +840,10 @@ NAMED_QUERIES = {
             AS staleness_score
         FROM files f
         WHERE f.lifecycle_state NOT IN ('archived', 'superseded')
-          AND f.domain IN (:d0, :d1)
+          AND f.domain = :domain
         ORDER BY staleness_score DESC
         """,
-        {"d0": "source", "d1": "A"},
+        {},  # no default — :domain is required (schema Query 3 contract)
     ),
     "portfolio-rollup": (
         """
@@ -909,16 +917,35 @@ NAMED_QUERIES = {
 }
 
 
+# A `:name` placeholder in a query SQL (named bind params — the schema's query idiom).
+_BIND_PARAM_RE = re.compile(r"(?<![:\w]):([A-Za-z_]\w*)")
+
+
+def _required_binds(sql: str) -> set:
+    """Every named `:param` referenced in a query's SQL. A param with no declared default
+    is REQUIRED — the caller must supply it (schema Query 3 `:domain` has no default)."""
+    return set(_BIND_PARAM_RE.findall(sql))
+
+
 def run_query(db_path: str, name: str, params: dict = None) -> list:
     """Execute a named reference query. Returns a list of sqlite3.Row-like dict rows.
     Unknown query name → ValueError (fail-loud). Caller-supplied params override the
-    query's declared defaults (e.g. blast-radius needs :changed_file)."""
+    query's declared defaults (e.g. blast-radius needs :changed_file). A `:param` the SQL
+    references that has neither a declared default nor a caller value → ValueError (fail-
+    loud + non-silent), NOT a cryptic sqlite ProgrammingError — e.g. `staleness` requires
+    `:domain` (schema Query 3: each domain has its own staleness threshold, so there is no
+    meaningful default)."""
     if name not in NAMED_QUERIES:
         raise ValueError(f"unknown query '{name}'; known: {', '.join(sorted(NAMED_QUERIES))}")
     sql, defaults = NAMED_QUERIES[name]
     bind = dict(defaults)
     if params:
         bind.update(params)
+    missing = sorted(p for p in _required_binds(sql) if p not in bind)
+    if missing:
+        raise ValueError(
+            f"query '{name}' requires parameter(s) {missing} with no default; "
+            f"supply via --param (e.g. --param domain=source)")
     conn = _connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -1044,6 +1071,9 @@ def run_self_test() -> int:
       (AC3) a rebuild over the fixture completes well under 10s.
       (AC4) portfolio-rollup (Q4) AND cross-project-deps (Q5) both return >=1 row.
             All 7 named queries execute without error.
+      (F6) the staleness query honors the schema's Query-3 `f.domain = :domain` contract:
+            an explicit :domain filters to that one domain; a different :domain is honored;
+            omitting :domain fails LOUD (ValueError), never a silent Source-only default.
       (FMF-2) update_file round-trip: rebuild → mutate one fixture file → update_file →
               the resulting rows == a full rebuild of the mutated tree.
       (FMF-3) Query-6 discriminating logic is EXERCISED: with a source mtime pushed past a
@@ -1136,15 +1166,46 @@ def run_self_test() -> int:
         # Assert the cross-project edge is the real Beta→Alpha one.
         if q5 and not any(r["source_project"] != r["target_project"] for r in q5):
             failures.append(f"(AC4) cross-project-deps rows not actually cross-project: {q5}")
-        # All 7 named queries execute without error (schema validation checklist).
+        # All 7 named queries execute without error (schema validation checklist). Two
+        # carry required, no-default bind params that the caller must supply: blast-radius
+        # (:changed_file/:max_depth) and staleness (:domain — schema Query 3).
+        _query_params = {
+            "blast-radius": {"changed_file": "alpha_fdd.md", "max_depth": 5},
+            "staleness": {"domain": "source"},
+        }
         for qname in NAMED_QUERIES:
             try:
-                if qname == "blast-radius":
-                    run_query(db1, qname, {"changed_file": "alpha_fdd.md", "max_depth": 5})
-                else:
-                    run_query(db1, qname)
+                run_query(db1, qname, _query_params.get(qname))
             except Exception as exc:  # noqa: BLE001
                 failures.append(f"(queries) '{qname}' raised: {exc}")
+
+        # --- F6: staleness `:domain` contract (schema Query 3 = `f.domain = :domain`) ---
+        # (1) With an explicit :domain, the query executes AND every returned row is that
+        #     single domain (the equality filter, not a silent Source-only default).
+        try:
+            stale_src = run_query(db1, "staleness", {"domain": "source"})
+        except Exception as exc:  # noqa: BLE001
+            stale_src = []
+            failures.append(f"(F6) staleness with :domain raised: {exc}")
+        off_domain = {r["domain"] for r in stale_src if r["domain"] != "source"}
+        if off_domain:
+            failures.append(f"(F6) staleness :domain=source leaked other domains: {off_domain}")
+        # A different :domain must be honored (proves the param binds, not a hardcoded value).
+        try:
+            stale_mgd = run_query(db1, "staleness", {"domain": "managed"})
+            if any(r["domain"] != "managed" for r in stale_mgd):
+                failures.append("(F6) staleness :domain=managed returned non-managed rows")
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"(F6) staleness with :domain=managed raised: {exc}")
+        # (2) Omitting :domain must FAIL LOUD (ValueError), never silently default/return.
+        try:
+            run_query(db1, "staleness")
+            failures.append("(F6) staleness without :domain did not fail loud (expected ValueError)")
+        except ValueError:
+            pass  # correct — required param, non-silent
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"(F6) staleness without :domain raised {type(exc).__name__}, "
+                            f"expected ValueError: {exc}")
 
         # --- FMF-3: Query-6 temporal discrimination (os.utime, deterministic) ---
         # alpha_rollup (published, created_date 2026-06-03) draws on alpha_fdd via
@@ -1228,7 +1289,8 @@ def run_self_test() -> int:
         return 1
     print("build-doc-index self-test OK "
           "(AC1 tables+indexes / AC2 byte-identical / AC3 <10s / AC4 Q4+Q5 non-empty / "
-          "7-queries-execute / FMF-2 update_file==rebuild / FMF-3 Q6 temporal discrimination)")
+          "7-queries-execute / F6 staleness :domain contract / "
+          "FMF-2 update_file==rebuild / FMF-3 Q6 temporal discrimination)")
     return 0
 
 
