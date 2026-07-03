@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.59 (2026-07-03) — <headline — populated by operator at chore PR review>
+
 ### v3.58 (2026-07-02) — <headline — populated by operator at chore PR review>
 
 ### v3.53 (2026-07-02) — <headline — populated by operator at chore PR review>
