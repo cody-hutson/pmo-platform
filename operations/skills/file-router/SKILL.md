@@ -107,6 +107,7 @@ Each direction fires the shared 3-step pipeline:
 - **Trigger:** a file arrives in the workspace unclassified and unregistered (the `Context-Captured` entry state).
 - **Target resolution:** the existing three-layer classifier (§ Classification Approach) → a `[Project]/01-08` folder. **Unchanged.** The Classification Approach (3 layers), Confidence Thresholds, Routing Targets, Multi-Project Routing, and Unclassified Queue sections below are direction 1's machinery and are preserved verbatim (regression AC-6).
 - **Gate:** confidence-threshold (HIGH auto-route / MEDIUM propose / LOW queue) per § Confidence & Approval Gate.
+- **Edge emission (`BELONGS_TO`):** at Target-Resolution→write, emit a `BELONGS_TO` relationship edge (target = the resolved project) into the routed file's carrier — see § `BELONGS_TO` Edge Emission below. This is the step where the file's project binding is authoritatively resolved, so it is where the edge is recorded.
 - **Lifecycle state driven:** `Context-Captured → Context-Structured` (Context machine, mechanism 1) — see [`context-lifecycle-model.md` §5](../../../core/disciplines/context-lifecycle-model.md).
 
 ### Direction 2 — Generated-file staging
@@ -133,6 +134,7 @@ Each direction fires the shared 3-step pipeline:
   2. If the winning project ≠ the active project **and** the gap to the second-place project is ≥ the existing 10-point tie bar (see the multi-project tie failure mode), resolve to `<winning-project>/<01-08 subfolder per classification>` — the file routes to the *other* project's folder structure, not the active project's (AC-4).
   3. If the top-two gap is < 10 points, this is a tie → do not auto-resolve; present both projects and ask (same tie discipline as inbound multi-project routing).
 - **Gate:** confidence-threshold (this is an inbound-family, Layer-2-scored decision) — **AND** a cross-project write is a **new approval gate this skill owns**: a write into another project's tree is **always approval-gated**, even into that project's 05-Transcripts/ 06-Emails/ 08-Generated/ auto-write folders. "Auto-write" is scoped to the *active* project; a cross-project placement is a higher-stakes routing decision (it contaminates another project's downstream if wrong). This is the one greenfield gate file-router adds — there is no pre-existing owner for a cross-project-out approval, so file-router owns it here. See § Confidence & Approval Gate.
+- **Edge emission (`BELONGS_TO`):** at Target-Resolution→write (after the cross-project approval is granted), emit a `BELONGS_TO` edge (target = the **resolved winning project**, i.e., the *other* project this file routes into — not the active project) into the routed file's carrier — see § `BELONGS_TO` Edge Emission below. Cross-project is the second direction where a fresh project binding is decided, so it emits.
 - **Lifecycle state driven:** Context machine — `Context-Captured → Context-Structured` **in the target project's tree** (mechanism 1 at cross-project altitude; the resolver decides *which project's* Context machine advances). Citation: [`context-lifecycle-model.md` §5](../../../core/disciplines/context-lifecycle-model.md).
 
 ### Direction Classification
@@ -147,6 +149,35 @@ Before running any target resolution, decide which direction fires:
 | Layer-2 resolves to a project **other than** the active project | 4 Cross-project | cross-project resolver + confidence gate + mandatory cross-project approval |
 
 An already-`Context-Structured` or `promotion_state: staged` file is **never** re-run through the inbound Layer 1-3 content classifier as though it were a fresh arrival (see the direction-misclassification failure mode) — that would double-register it or bounce a promoted artifact back to staging.
+
+## `BELONGS_TO` Edge Emission
+
+At the Target-Resolution→write step, file-router records the file's project binding as a durable `BELONGS_TO` relationship edge, so the file→project membership becomes a queryable graph edge (consumed by the SQLite index builder and health-check) rather than living only in the folder path. This is the write-time source of the `BELONGS_TO` edges the relationships graph is otherwise empty of.
+
+**Which directions emit:**
+
+| Direction | Emits `BELONGS_TO`? | Why |
+|---|---|---|
+| **1 Inbound** | **YES** | This is the step where the project binding is first authoritatively resolved (the 3-layer classifier picks the project). |
+| **4 Cross-project** | **YES** | A fresh project binding into *another* project's tree is decided here; the edge target is the **resolved winning project**, not the active project. |
+| 2 Generated-staging | **NO** | The artifact already carries its project binding from its generator (ppm-agent / artifact-generator stamp it); re-emitting would double-write the edge. |
+| 3 Promotion | **NO** | A promoted artifact already carries its binding from staging; promotion moves it, it does not re-bind the project. |
+
+**Emit shape (binds byte-for-byte to `frontmatter-schema.md` § Category 4 — the same object the SQLite `relationships` table ingests, so no read-side change is needed):**
+
+- **Markdown files:** append to the file's embedded YAML frontmatter `relationships:` block.
+- **Non-markdown files:** write to the file's `.meta.yml` sidecar `relationships:` block (the sidecar carrier already defined in `frontmatter-schema.md` § Sidecar).
+
+```yaml
+relationships:
+  - type: BELONGS_TO
+    target: "<resolved-project>"        # bare project name/slug, no path (SQLite resolves target -> file_id)
+    evidence: "routed by file-router <YYYY-MM-DD> (direction 1 inbound | direction 4 cross-project)"
+    created_date: <YYYY-MM-DD>          # the routing date
+```
+
+- **Idempotency:** if the file already carries a `BELONGS_TO` edge to that same project, do NOT append a duplicate (the SQLite table is `UNIQUE(source, target, type)` — a duplicate emit is harmless but should be avoided at the write). An `ADD` that would create a second `BELONGS_TO` to a *different* project is a re-binding signal — surface it, do not silently double-bind.
+- **Evidence-gated:** the `evidence` string states what established the edge (the routing action + date). `BELONGS_TO` is always safely derivable at routing (the resolved destination IS the project), so it is never suppressed on evidence grounds — unlike the ppm-agent provenance edges, which are suppressed when their establishing evidence is `[ASSUMPTION – CONFIRM]`.
 
 ## Confidence & Approval Gate
 
@@ -219,7 +250,7 @@ After routing a transcript to the correct project folder:
 
 ### For All Other Files
 
-1. Route to the target folder per classification
+1. Route to the target folder per classification. On the routing write for a Direction-1 (Inbound) or Direction-4 (Cross-project) route, emit the `BELONGS_TO` edge per § `BELONGS_TO` Edge Emission (target = resolved project).
 2. Produce a routing summary: file type, confidence, evidence, target location
 3. If the file type suggests operational updates (email about a decision, FDD revision, etc.),
    note the potential downstream processing
@@ -316,7 +347,7 @@ Date: [YYYY-MM-DD]
 Files processed: [count]
 
 HIGH CONFIDENCE (auto-routed):
-- [filename] → [project]/[folder] (confidence: [X]%, evidence: [brief])
+- [filename] → [project]/[folder] (confidence: [X]%, evidence: [brief]) [+BELONGS_TO → [project]]
 
 MEDIUM CONFIDENCE (proposed):
 - [filename] → [project]/[folder]? (confidence: [X]%, evidence: [brief])

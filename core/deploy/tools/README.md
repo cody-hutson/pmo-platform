@@ -18,6 +18,9 @@ to a Python helper.
 | `lint_release_corpus.py` | Operator workflows (release-corpus moved to operator-instance) | structural | Validate release-corpus filename regex + frontmatter schema + INDEX row count + type-coherence |
 | `cross-module-audit.sh` | Module-restructure audit + operator | audit (read-only) | Cross-module extraction-readiness audit; bash entrypoint |
 | `cross_module_audit_helper.py` | Invoked by `cross-module-audit.sh` | audit (read-only) | Imports check-doc-links primitives; classifies cross-module refs by 6 directionality rules + 3 cross-ref-types; emits TSV + markdown report |
+| `stamp-node-frontmatter.py` | Operator + Layer-2 Stage-12 backfill | dry-run (default) / stamp | Classify-and-stamp the 11-field node-frontmatter core onto the operational corpus (the vertices of the doc warehouse); folder→domain classification, idempotent, `.meta.yml` sidecars for non-md files |
+| `backfill-relationship-edges.py` | Operator + Layer-2 Stage-12 backfill | dry-run (default) / emit (gated) | Backfill `relationships[]` edges (the edges of the doc warehouse) — `BELONGS_TO` always-safe + evidence-anchored `GENERATES`/`DEPENDS_ON`; imports the node tool's classifiers for F1-consistent project derivation |
+| `build-doc-index.py` | Operator + the lifecycle-automation incremental caller | rebuild / update-file / query / self-test | Materialize the disposable document-ecosystem SQLite index (`sqlite-index-schema.md`) from node frontmatter + edges — all 7 tables + FTS5 + the 7 named reference queries; deterministic byte-identical rebuild |
 
 ## check-doc-links.py — Two Modes
 
@@ -174,6 +177,74 @@ runs fixtures (a)–(j): a clean doc, the two falsification fixtures (each Tier-
 field removed; whole frontmatter stripped), the plural-enum case, both IFF
 directions plus the satisfied case, missing-consumers, the reversibility
 prefix-passes-with-tail proof, tier tagging, and allowlist loading.
+
+## build-doc-index.py — Document-Ecosystem SQLite Index Builder
+
+Materializes the **disposable** document-ecosystem SQLite index defined by
+[`core/schemas/sqlite-index-schema.md`](../../schemas/sqlite-index-schema.md).
+The database is a **cache** — the files remain the source of truth; deleting the
+`.db` and rebuilding produces a byte-identical result. It is the third link in the
+doc-warehouse FK chain: `stamp-node-frontmatter.py` (nodes) →
+`backfill-relationship-edges.py` (edges) → **`build-doc-index.py`** (reads both +
+materializes the queryable index).
+
+```bash
+# Full deterministic rebuild from a corpus root.
+python3 core/deploy/tools/build-doc-index.py --rebuild \
+  --db /path/to/doc-index.db --root ~/Claude/projects
+
+# Incremental single-file update (the lifecycle-automation callee — capability only, no watcher).
+python3 core/deploy/tools/build-doc-index.py --update-file <file> \
+  --db /path/to/doc-index.db --root ~/Claude/projects
+
+# Run a named reference query (7 supported).
+python3 core/deploy/tools/build-doc-index.py --query cross-project-deps \
+  --db /path/to/doc-index.db
+python3 core/deploy/tools/build-doc-index.py --query blast-radius \
+  --db /path/to/doc-index.db --param changed_file=alpha_fdd.md --param max_depth=5
+```
+
+**What it builds:** all 7 schema tables — `files`, `relationships`, `files_fts`
+(FTS5 external-content), `lifecycle_events`, `navigation_pages` (empty; a future
+read-target), `synthesis_scope`. Populated from node frontmatter (the 11-field
+NOT-NULL core; a partial stamp yields no `files` row) + `relationships[]` edges +
+`source_inputs[]` provenance.
+
+**Domain enum (migrated).** Reads/inserts the human-readable `{source, managed,
+generated}` the node tool stamps; `{A, B, C}` are DEPRECATED aliases the schema
+CHECK still accepts during the migration window, and the union-enum queries
+(rollup / staleness / orphan) collapse both vocabularies.
+
+**Edge resolution.** A `relationships[]` `target` resolves to `files.file_id` by
+exact `filename`; a `BELONGS_TO` whose `target` is a **project name** (the shape
+`backfill-relationship-edges.py` emits) resolves to that project's governance-root
+representative node (`folder='01-governance'`), so a file whose only edge is
+`BELONGS_TO` is not a false-positive orphan. A target that resolves to neither is a
+**dangling WARN** (row skipped, never fabricated).
+
+**Determinism (byte-identical rebuilds).** Discovered files are sorted by relative
+POSIX path before insert, so `file_id` is a pure function of corpus content;
+build-time timestamps are never synthesized (a missing `created_date` is stored as
+read; `modified_date` is the filesystem mtime — a per-file property identical across
+two rebuilds); the staleness queries use query-time `julianday('now')`, which does
+not touch stored rows. Verified by SHA-256 over a canonical per-table dump
+(`--dump-canonical`).
+
+**Scope (builder / lifecycle-automation boundary).** Ships the incremental-update **capability**
+(`update_file`, a tested callable entry point) + full rebuild + the reference
+queries. The event source/watcher that auto-invokes `update_file` on a skill-write
+is out of this tool's scope — it stays in the lifecycle-automation epic.
+
+**Exit codes:** `0` clean · `1` dangling edges present (count in header) · `2` usage
+error · `3` path-unresolvable (`--root`/`--db`).
+
+**Self-test:** `python3 core/deploy/tools/build-doc-index.py --self-test` builds the
+committed fixture (`tests/fixtures/doc-index/` — 2 projects, a cross-project
+`DEPENDS_ON` edge, 2 Domain-C syntheses) and asserts: all 7 tables + indexes (AC1);
+two rebuilds byte-identical (AC2); rebuild < 10s (AC3); portfolio-rollup +
+cross-project-deps both non-empty and all 7 queries execute (AC4); `update_file`
+round-trip equals a full rebuild of the mutated tree (FMF-2); Query-6's temporal
+condition discriminates via a deterministic `os.utime` mtime push (FMF-3).
 
 ## Module-Aware Prefix Table
 

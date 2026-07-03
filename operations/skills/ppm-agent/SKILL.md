@@ -252,6 +252,13 @@ date, **plus the two Category-3 provenance markers** defined at
   cross-domain carrier); where a prior run would have written the Domain-C `synthesis_scope` field,
   write `source_inputs` instead (the alias keeps old reads valid during the migration window).
   `trigger_source` (what *triggered* the run) stays distinct.
+- `id:` — a **stable, filename-independent** artifact identifier of the form
+  `<type-slug>-<project-slug>-<YYYY-MM-DD>-<nn>` (e.g., `decision-package-acme-2026-07-02-01`), per
+  `core/schemas/frontmatter-schema.md` § Category 3. Stamp it on every generated artifact alongside
+  `generated_by`/`source_inputs`. This is the **addressability anchor a `GENERATES` edge's `target:`
+  resolves to** — a back-link survives a rename because it cites the `id`, not the filename. (Distinct
+  from the 11-field node-core stamp emitted by the node-frontmatter tool, which does not include `id`;
+  this is the Category-3 provenance `id`, not a node-table column.)
 - **Missing-header → regenerate-with-header.** If a staged artifact is found without these markers,
   regenerate it with the full provenance header rather than handing back a header-less artifact.
   Forward-only: no back-fill of historical artifacts in place; every fresh write carries the markers.
@@ -418,6 +425,15 @@ Produce a **Tracker Impact Matrix** after the TRACKER_UPDATES block:
 DIRECT = change comes from the artifact content itself.
 SECONDARY = change is implied by another tracker update in this processing run.
 
+**The Impact Matrix is transient; provenance edges are durable.** Where a scanned entity relationship
+is one of the graph verbs (`GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES`), it is **also**
+written as a durable `relationships[]` edge object on the relevant artifact — see § 8.7 "Durable edge
+promotion." The Matrix row drives *this run's* tracker reconciliation; the `relationships[]` object is
+the persistent, queryable record of the same edge (ingested by the SQLite `relationships` table). The
+RAID-row provenance back-link is the exception: it is carried by the RAID `source_ref` field (supplied
+in the `TRACKER_UPDATE` `fields:` map), NOT a `relationships[]` edge, because a RAID row is a CSV row
+with no frontmatter carrier.
+
 **Pipeline status:** Every processed artifact carries a pipeline status in the
 Transcript Register (or equivalent for non-transcript artifacts):
 - OPEN → received, not yet processed
@@ -500,6 +516,28 @@ the downstream write is gated:
 Agent emits the cascade as **SECONDARY** rows in the Section-8.6 Tracker Impact Matrix —
 the existing dependency-scan apparatus already carries cross-tracker secondary effects, so
 a cascade is one more SECONDARY-effect class. The three load-bearing cascades:
+
+**Durable edge promotion (`relationships[]`) — the persistent counterpart of the Impact-Matrix row.**
+The Impact Matrix is a **transient**, per-run surface (it is resolved and discarded when the pipeline
+closes). The cascade verbs it carries — `SUPERSEDES` (Cascade A), `GENERATES` (Cascade B),
+`BLOCKS` (Cascade C) — are also **durable graph edges**, so PPM Agent additionally writes each as a
+`relationships[]` object on the relevant artifact's frontmatter (or its `.meta.yml` sidecar for a
+non-markdown carrier), conforming byte-for-byte to `core/schemas/frontmatter-schema.md` § Category 4
+— the same object the SQLite `relationships` table ingests (no read-side change). This promotes the
+edge from "noted for this run" to "persistent, queryable provenance." Emit shape:
+
+```yaml
+relationships:
+  - type: <GENERATES | DEPENDS_ON | BLOCKS | SUPERSEDES>
+    target: "<bare-filename-or-id>"   # the child artifact / superseded file / blocked milestone; no path
+    evidence: "<the transcript/decision/meeting that established this edge>"
+    created_date: <YYYY-MM-DD>
+```
+
+- **Which edge rides which cascade:** `GENERATES` rides Cascade B (Meeting → Decision/RAID/Artifact/Follow-Up) and the §3 generated-artifact header (source `id` → child); `SUPERSEDES` rides Cascade A (Decision → superseded Decision); `BLOCKS` rides Cascade C (RAID → Milestone). A cross-tracker `DEPENDS_ON` detected in the §8.6 scan is emitted the same way.
+- **Evidence gate binds unchanged.** An edge whose establishing evidence is `[ASSUMPTION – CONFIRM]` is **NOT** emitted — it surfaces as a Section-5 "Decisions needed" line instead (mirrors the follow-up evidence-gate refusal below). Only edges with concrete establishing evidence become durable.
+- **The `relationships[]` write reuses the §8.6 extraction** — it needs no new scan or file read; it writes the durable edge object from the entities the dependency scan already extracted. The Impact-Matrix row (operational) and the `relationships[]` object (durable) are the two surfaces of the same detected edge.
+- **`target` addressability.** A `GENERATES` `target` resolves to the child artifact's stable `id` (stamped in the §3 header) or its bare filename — never a path (the SQLite builder resolves `target` → `file_id`).
 
 **Cascade A — Decision `SUPERSEDES` Decision → comms entry (§5.1 chain 5, applied at
 Decision granularity via the `SUPERSEDES` MVP type).** A transcript records a new Decision

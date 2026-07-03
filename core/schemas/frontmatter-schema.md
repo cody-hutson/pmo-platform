@@ -90,7 +90,7 @@ Seven categories. Every file has core fields (required across all domains). Doma
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
-| `id` | String | No | Stable slug: `<type-slug>-<project-slug>-<YYYY-MM-DD>-<nn>` (e.g., `decision-package-acme-2026-04-09-01`) | A **stable, filename-independent** artifact identifier, assigned at generation and never changed on rename/move. Decouples addressability from `original_filename` so a back-link survives a rename and a **missing back-link is a detectable dangling edge** (a referrer cites an `id` that resolves to no artifact). Distinct from the SQLite `file_id` (a disposable cache key, rebuilt per index) and from the tracker-row entity `id` in [`entity-field-schemas.md`](entity-field-schemas.md) (which identifies a RAID/decision *row*, not a generated *file*). The structured `source_ref` tracker field + `relationships[]` edge population that consume this id are **out of scope here** (header field only). |
+| `id` | String | No | Stable slug: `<type-slug>-<project-slug>-<YYYY-MM-DD>-<nn>` (e.g., `decision-package-acme-2026-04-09-01`) | A **stable, filename-independent** artifact identifier, assigned at generation and never changed on rename/move. Decouples addressability from `original_filename` so a back-link survives a rename and a **missing back-link is a detectable dangling edge** (a referrer cites an `id` that resolves to no artifact). Distinct from the SQLite `file_id` (a disposable cache key, rebuilt per index) and from the tracker-row entity `id` in [`entity-field-schemas.md`](entity-field-schemas.md) (which identifies a RAID/decision *row*, not a generated *file*). The structured `source_ref` tracker field + `relationships[]` edge population that consume this id are defined by the **edge-population / emit contract** (see § Relationship Edge Population below); this row defines the `id` field, that section defines how writing agents emit the edges that resolve against it. |
 | `created_date` | ISO Date | Yes | `YYYY-MM-DD` | When the file entered the ecosystem |
 | `created_by` | String | Yes | Person name or skill name | Who created or ingested this file |
 | `source_system` | String | No | `teams`, `jira`, `email`, `confluence`, `manual`, `agent-generated` | Originating system |
@@ -127,6 +127,23 @@ relationships:
 | `ASSIGNED_TO` | Work → Person | This file is assigned to the target person/role | Action ASSIGNED_TO owner |
 
 **Phase 2 expansion (not MVP):** `FOLLOWS_UP`, `PARTICIPATED_IN`, `ESCALATED_TO`, `AUDIENCE_OVERLAP`, plus 1 extension slot.
+
+### Relationship Edge Population
+
+The object schema above defines the **shape** of an edge; this subsection defines **who emits which edge, when, and how** — the write-time population contract that fills the otherwise-empty `relationships[]` on operational artifacts. The emit shape binds **byte-for-byte** to the object above and to the SQLite `relationships` table (`relationship_type` 7-verb `CHECK`, `UNIQUE(source, target, type)`) in [`sqlite-index-schema.md`](sqlite-index-schema.md), so the index builder ingests emitted edges with **no read-side change**.
+
+| Emitting agent | Edge type(s) | Emitted at | Carrier |
+|---|---|---|---|
+| **file-router** | `BELONGS_TO` (target = resolved project) | Direction-1 Inbound + Direction-4 Cross-project routing write (Directions 2/3 do NOT emit — the artifact already carries its binding) | routed file's frontmatter (md) / `.meta.yml` sidecar |
+| **ppm-agent** | `GENERATES`, `DEPENDS_ON`, `BLOCKS`, `SUPERSEDES` | §8.6 dependency scan + §8.7 cascades (promoted from transient Impact-Matrix rows to durable objects) | generated/affected artifact frontmatter; `GENERATES` `target` resolves to the child's stable `id` (stamped in the ppm-agent §3 header) |
+
+**RAID rows are the carrier exception.** A RAID Log row is a CSV row with no frontmatter/sidecar, so its provenance is **not** a `relationships[]` edge — it is the dedicated RAID **`source_ref`** field (value domain `TR-###` | `MSG-###` | artifact `id`-slug | source-file path; see [`raid-log.schema.json`](raid-log.schema.json)), supplied by ppm-agent and written by tracker-manager on RAID `ADD`.
+
+**Emit rules (invariant across agents):**
+- `target` is a **bare filename or `id` — never a path** (the SQLite builder resolves `target` → `file_id`).
+- **Evidence-gated:** an edge whose establishing evidence is `[ASSUMPTION – CONFIRM]` is **not** emitted; it surfaces as a decision-needed line. `BELONGS_TO` is the exception — a routed file's project is always safely derivable, so it is never suppressed.
+- **Idempotent:** do not append a duplicate edge with the same `(source, target, type)` — the read table is `UNIQUE` on that triple.
+- **Backfill of existing artifacts is additive and evidence-gated** — `BELONGS_TO` from the folder path is always recoverable; `GENERATES` / `source_ref` are backfilled only where a machine-recoverable evidence anchor exists (an in-header source id, a Transcript-Register row, or a legacy `Tags` back-link migrated to `source_ref`); unrecoverable provenance is **logged as an orphan-candidate, not guessed**.
 
 ### Lineage Fields vs. Provenance Fields
 

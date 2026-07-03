@@ -1,0 +1,2 @@
+Fixture transcript — synthetic. Drives the non-markdown sidecar (.meta.yml) path.
+No real meeting content. Attendees: Person A, Person B (synthetic).

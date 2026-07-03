@@ -2,16 +2,21 @@ name: Release tooling smoke
 
 # gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
 #   invariant: the release tooling that must not rot unexercised runs its offline
-#              checks when release tooling or the RELEASE_LOG schema changes — the
+#              checks when release tooling or the RELEASE_LOG schema changes — (1) the
 #              Stage 13 close-out automation (self-test + corpus-path smoke) AND the
 #              blast-radius tool family (doc-tracer default-path regression under a
-#              normalized diff + the domain-fan-out software import-graph scanner) —
-#              asserted behaviorally by executing each script's checks.
+#              normalized diff + the domain-fan-out software import-graph scanner) in
+#              the closeout-smoke job; AND (2) each of the three core/deploy/tools
+#              node-graph tools runs its committed --self-test when any
+#              core/deploy/tools file changes, in the node-graph-tools-selftest job —
+#              all asserted behaviorally by executing the scripts' checks and gating on
+#              exit code.
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
 #                  script asserts -> the closeout-smoke job fails; break the schema-v1
 #                  emit so the doc tracer's normalized output changes -> the
-#                  blast-radius tool-family test fails; on an unrelated PR the job is
-#                  skipped and absence is treated as pass.
+#                  blast-radius tool-family test fails; regress a node-graph tool's
+#                  --self-test -> the node-graph-tools-selftest job fails; on an
+#                  unrelated PR both are skipped and absence is treated as pass.
 # Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
 
 # Smoke-tests the Stage 13 close-out automation on any PR that touches release
@@ -33,10 +38,19 @@ name: Release tooling smoke
 # A warn-only gate is blind to false negatives — this keeps the gate honest, the
 # same discipline reference-durability.yml applies to its fragile-ref detector.
 #
-# Platform: macos-latest. automated-closeout.sh pins PATH to /usr/bin:/bin and
-# resolves `gh` at the Homebrew (/opt/homebrew/bin) or Intel (/usr/local/bin)
-# locations at load time — the macOS image is where those paths exist. This
-# mirrors install-tests.yml, which runs the shell harness on macos-latest.
+# A second job — node-graph-tools-selftest — runs the committed --self-test of the
+# three v3.55 node-graph stdlib tools (stamp-node-frontmatter / backfill-relationship-
+# edges / build-doc-index) whenever a core/deploy/tools file changes. They are
+# pure-stdlib and OS-agnostic, so that job runs on ubuntu-latest, offline and
+# credential-free, gating on exit code — without it those self-tests could rot
+# unexercised until the next live backfill (Stage-8 QA finding F2). NOTE: path
+# filters are workflow-scoped, so a core/deploy/tools change also triggers the
+# macOS closeout-smoke job below — a harmless, fast, offline over-trigger.
+#
+# Platform (closeout-smoke): macos-latest. automated-closeout.sh pins PATH to
+# /usr/bin:/bin and resolves `gh` at the Homebrew (/opt/homebrew/bin) or Intel
+# (/usr/local/bin) locations at load time — the macOS image is where those paths
+# exist. This mirrors install-tests.yml, which runs the shell harness on macos-latest.
 #
 # Security: this workflow consumes NO untrusted github.event.* input (no issue
 # titles, PR bodies, comment bodies, head refs). Every run: block is a static
@@ -47,12 +61,14 @@ on:
     paths:
       - 'release/tools/**'
       - 'release/releases/RELEASE_LOG.md'
+      - 'core/deploy/tools/**'
       - '.github/workflows/release-tooling-smoke.yml'
   push:
     branches: [main]
     paths:
       - 'release/tools/**'
       - 'release/releases/RELEASE_LOG.md'
+      - 'core/deploy/tools/**'
 
 permissions:
   contents: read
@@ -120,3 +136,36 @@ jobs:
             exit 1
           fi
           echo "Precision probe OK — broken corpus path correctly failed --check-paths (exit $rc)."
+
+  node-graph-tools-selftest:
+    name: Node-graph stdlib tools self-test (Ubuntu)
+    # The three v3.55 node-graph tools ship a committed --self-test; without this job
+    # those self-tests rot unexercised (Stage-8 QA finding F2). Pure-stdlib and
+    # OS-agnostic, so ubuntu-latest — no pip install, no network, no gh/credentials.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        # Default depth: each --self-test reads committed fixtures from the working
+        # tree, not git history — a shallow checkout is sufficient.
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Node-graph tool --self-tests (offline, stdlib-only)
+        # Runs all three (no fail-fast) so one run reports every regression; emits a
+        # ::error:: annotation per failing tool and exits non-zero if any failed.
+        run: |
+          set -uo pipefail
+          rc=0
+          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index; do
+            echo "::group::${t}.py --self-test"
+            if python3 "core/deploy/tools/${t}.py" --self-test; then
+              echo "OK: ${t}"
+            else
+              echo "::error::${t}.py --self-test FAILED"
+              rc=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$rc"
