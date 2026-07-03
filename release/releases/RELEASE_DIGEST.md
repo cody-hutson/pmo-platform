@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.61 (2026-07-03) — <headline — populated by operator at chore PR review>
+
 ### v3.60 (2026-07-03) — Methodology packs: pick a delivery method, or bring your own
 
 Methodology (Scrum, Kanban, or your own) becomes a self-contained, swappable pack — a shipped best-practice baseline you select, or your own config you bring and override, without hand-editing skills. Foundation release: the pack format (a widened type-pack meta-schema with a `role`/`extends`/`[[labels]]`/optional-`kinds` composition layer), two starter packs + a shared `_common` base, and a methodology-neutral label grammar. Consuming skills are wired in a follow-up (#2021). ADR-069 (composing-unit) + ADR-070 (composition grammar); MODERATE reversibility.

@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.61 | 107-pda-tail-closeout | 2026-07-03 | — | #3098 | [notes/v3.61_RELEASE_NOTES.md](notes/v3.61_RELEASE_NOTES.md) |
 | v3.60 | 86-methodology-pack-foundation | 2026-07-03 | — | #3097 | [notes/v3.60_RELEASE_NOTES.md](notes/v3.60_RELEASE_NOTES.md) |
 | v3.59 | 44-repo-structure-and-filesystem-hygiene | 2026-07-03 | — | #3011 | [notes/v3.59_RELEASE_NOTES.md](notes/v3.59_RELEASE_NOTES.md) |
 | v3.58 | 09-FRONTIER-system-business-specialists | 2026-07-02 | — | #3099 | [notes/v3.58_RELEASE_NOTES.md](notes/v3.58_RELEASE_NOTES.md) |
