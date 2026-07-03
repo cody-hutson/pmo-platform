@@ -8,7 +8,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037, ADR-071. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
 
 ## Release-scoped ADRs
 
@@ -24,6 +24,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 | [ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md) | Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key | Proposed | 2026-06-13 | parallel-launch-quota-budget-gate |
 | [ADR-036](ADR-036-version-claim-determinism.md) | Deterministic version-claiming: a host-agnostic capability (slug-primary, defer-to-claim, atomic CAS) bound to a config-selected `repo_host` adapter | Accepted | 2026-06-21 | release-version-claim-determinism |
 | [ADR-037](ADR-037-version-slot-cross-release-contended-axis.md) | Version slot as a cross-release contended axis (extends ADR-024): version-slot virtual-path token on the unchanged `serialize()` predicate | Proposed | 2026-06-21 | release-version-claim-determinism |
+| [ADR-071](ADR-071-region-scoped-av-invariant-verification.md) | Region-scoped AV invariant verification: QC4-05 restricts each assertion to a declared lexical region (region × polarity) so a comment-vs-code / negation match cannot produce a verdict | Proposed | 2026-07-03 | 70-verification-execution-surface |
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, ADR-024, ADR-025, and ADR-026 are authored natively in the modular-monolith layout.
 
