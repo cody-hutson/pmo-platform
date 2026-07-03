@@ -80,7 +80,7 @@ ADR-001 establishes the baseline-pinned analysis policy (last-N merged PRs + ope
 
 ## Authoring new ADRs
 
-New release-scoped ADRs ship through the pipeline at Stage 5 (Solutioning) per [`../../core/disciplines/decision-discipline.md`](../../core/disciplines/decision-discipline.md) and [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md). File path: `release/ADRs/ADR-NNN-<short-slug>.md`. After authoring, append the new ADR row to the table above + add cross-reference to consuming files via [`../../core/standards/per-stage-shard-standard.md`](../../core/standards/per-stage-shard-standard.md) § Related ADRs (if applicable).
+New release-scoped ADRs ship through the pipeline at Stage 5 (Solutioning) per [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md). For **when to write an ADR** (the trigger / non-trigger rubric), the copy-paste template, and the supersede-not-edit immutability policy, see [`../../core/standards/adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md). File path: `release/ADRs/ADR-NNN-<short-slug>.md`. After authoring, append the new ADR row to the table above + add cross-reference to consuming files via [`../../core/standards/per-stage-shard-standard.md`](../../core/standards/per-stage-shard-standard.md) § Related ADRs (if applicable).
 
 ## Status enum
 
@@ -95,7 +95,8 @@ ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11
 
 ## Related references
 
+- [`../../core/standards/adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md) — when to write an ADR (trigger/non-trigger rubric), copy-paste template + worked example, supersede-not-edit policy
 - [`../../core/schemas/adr-schema.md`](../../core/schemas/adr-schema.md) — canonical ADR frontmatter + body-section schema (field/section contract)
 - [`../../core/ADRs/README.md`](../../core/ADRs/README.md) — core-module ADR index
-- [`../../core/disciplines/decision-discipline.md`](../../core/disciplines/decision-discipline.md) — when to write an ADR + decision-class classification
+- [`../../core/disciplines/decision-discipline.md`](../../core/disciplines/decision-discipline.md) — decision-class briefing discipline (the sibling; does NOT govern ADR authoring)
 - [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md) — Stage 5 ADR materialization process

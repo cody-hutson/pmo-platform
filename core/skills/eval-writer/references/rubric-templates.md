@@ -226,6 +226,52 @@ averaged across tasks.
 
 ---
 
+## Acceptance-grading rubric (for the `acceptance` assertion type)
+
+**Use for:** grading a PR against its originating GitHub Issue's acceptance criteria — the `acceptance` assertion type (the sixth `assertions[].type` value). This is not a judge-prompt scaffold like T1–T7; it is the grading rubric the grader applies when it encounters a `type: acceptance` assertion. The full contract (parse rules, two-judgment grading, verdict-projection table, all-drift-out score) lives in the `acceptance-assertion-type.md` reference in this same directory.
+
+**Two judgments per criterion** (per ADR-071 — this is why the acceptance grading stays binary at the judge while emitting the six-value drift-aware enum):
+
+1. **Gradability-class** (a pre-check): is the criterion gradable as-written against this PR? → `gradable` / `not-applicable` / `needs-reinterpretation` / `blocked-upstream`.
+2. **Binary satisfaction** (only when `gradable`): does the PR content satisfy the criterion? → PASS / FAIL, with a `PARTIAL` refinement when part is satisfied and an unmet remainder exists.
+
+```
+SYSTEM
+You are grading whether a PR satisfies one acceptance criterion from its issue.
+Make TWO judgments, in order. DO NOT output a single multi-point score.
+DO NOT consider response length. DO NOT favor any specific model family.
+
+JUDGMENT 1 — Gradability. Is this criterion gradable as-written against this PR?
+  gradable                | criterion is sound, applicable, PR is in scope to satisfy it
+  not-applicable          | the criterion's scope moved out of this PR
+  needs-reinterpretation  | criterion text is stale/ambiguous; grading needs intent re-read
+  blocked-upstream        | criterion depends on an upstream issue's undelivered output
+
+JUDGMENT 2 — Satisfaction (ONLY if Judgment 1 = gradable). Does the PR satisfy it?
+  PASS     | PR content fully satisfies the criterion
+  FAIL     | PR content does not satisfy it
+  PARTIAL  | PR satisfies part; an unmet remainder exists
+
+CRITERION (verbatim from the issue body): {{CRITERION_TEXT}}
+PR CONTENT / EVIDENCE SURFACE: {{PR_CONTENT}}
+
+Project the two judgments to the Stage-8 §5 verdict enum (author NO new values):
+  gradable + PASS     -> MET                          (+ evidence)
+  gradable + FAIL     -> NOT MET                       (+ evidence + Severity: Blocker|Warning)
+  gradable + PARTIAL  -> PARTIAL                       (+ evidence + unmet-remainder note)
+  not-applicable      -> N/A-WITH-RATIONALE            (+ Drift-rationale:)
+  needs-reinterpret.  -> REINTERPRET-WITH-RATIONALE    (+ Drift-rationale:)
+  blocked-upstream    -> FLAG-UPSTREAM                 (+ Drift-rationale:; routes Tier-1/Tier-2)
+
+VERDICT (one of the six values), plus the required field for that verdict.
+```
+
+**Score (ALL-DRIFT-OUT):** `acceptance_score = count(MET) / (total − count(N/A-WITH-RATIONALE) − count(REINTERPRET-WITH-RATIONALE) − count(FLAG-UPSTREAM))`. `PARTIAL` and `NOT MET` count 0 in the numerator; all three drift verdicts leave both numerator and denominator (uniform with the Stage-8 §5 out-of-gate treatment). The score is **recorded, not gated** at authoring time — the *verdict* gates (Stage-8 Step-0), the *score* is a fitness signal.
+
+**Usage notes:** Temperature 0. The six-value enum is a **projection** of the two judgments, not a native six-way scale — keep the satisfaction call binary (this is what resists the verbosity / middle-cluster bias A-04 names). Use a cross-family judge (F-03), pinned snapshot. The verdict enum is the SSOT in `stage-08-qa-testing.md` §5 — cite by section, never invent a seventh verdict value.
+
+---
+
 ## Selection logic
 
 From the Stage 0 characterization, Template selection follows:

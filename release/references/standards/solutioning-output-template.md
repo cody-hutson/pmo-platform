@@ -79,7 +79,8 @@ The `## Design Decisions` content bucket — emitted as `#### Design Decisions` 
 - Generic rationale ("best practice" / "platform convention") without citation
 
 **Cross-references:**
-- [`decision-discipline.md` § 3](../../../core/disciplines/decision-discipline.md) — ADR threshold; M1/M2/M3 mechanisms
+- [`adr-authoring-guide.md`](../../../core/standards/adr-authoring-guide.md) § When to write an ADR — ADR threshold (the when-to-write rubric)
+- [`decision-discipline.md` § 3](../../../core/disciplines/decision-discipline.md) — M1/M2/M3 mechanisms
 - [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — anti-pattern catalog
 
 ## Blast Radius
@@ -153,10 +154,10 @@ The `## ADR Pointers` content bucket — emitted as `#### ADR Pointers` H4 neste
 | Element | Form | Notes |
 |---|---|---|
 | ADR Issue references | Linked `#N` per ADR | Open or closed; ADR Issues use `adr` label per `pipeline/stage-05-solutioning.md` § 5 Phase A5 |
-| Decision class per ADR | Per [`decision-discipline.md` § 3](../../../core/disciplines/decision-discipline.md) D-class enumeration | D-class items require explicit ADR; non-D-class do not |
+| Decision class per ADR | Per the ADR threshold in [`adr-authoring-guide.md`](../../../core/standards/adr-authoring-guide.md) § When to write an ADR | D-class items require explicit ADR; non-D-class do not |
 | Skip rationale (if no ADR) | Inline narrative referencing ADR threshold criteria | Required when no ADR opened; justify against reversibility + confidence + cross-cutting impact criteria |
 
-**ADR threshold (per `decision-discipline.md` § 3):** ADR required when decision is non-obvious AND any of:
+**ADR threshold (per [`adr-authoring-guide.md`](../../../core/standards/adr-authoring-guide.md) § When to write an ADR):** ADR required when decision is non-obvious AND any of:
 - MODERATE / EXPENSIVE / IRREVERSIBLE reversibility
 - LOW / MEDIUM confidence
 - Cross-cutting governance impact (touches CLAUDE.md, OPERATIONS.md, `core/rules/`, or `release-process.md`)
@@ -434,7 +435,7 @@ Domain-specific anti-patterns observed during Stage 5 spoke authoring. Per [`fai
 
 | Field | Value |
 |---|---|
-| **Signature** | `#### ADR Pointers` section lists ADR Issues for decisions that don't meet the ADR threshold per `decision-discipline.md` § 3 |
+| **Signature** | `#### ADR Pointers` section lists ADR Issues for decisions that don't meet the ADR threshold per [`adr-authoring-guide.md`](../../../core/standards/adr-authoring-guide.md) § When to write an ADR |
 | **Conditional** | Fires when CHEAP-reversibility + HIGH-confidence + no-cross-cutting decisions are elevated to ADR audit-trail |
 | **Root cause** | Conflating "documented decision" with "ADR-grade decision" |
 | **Mitigation** | Apply the ADR threshold: ADR required when decision is non-obvious AND (MODERATE+ reversibility OR LOW/MED confidence OR cross-cutting governance impact). Below threshold = document inline in `#### Design Decisions`, no ADR. |
@@ -475,7 +476,8 @@ Future revisions append rows here. Per workspace precedent (git is canonical ret
 - [`pipeline/stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) — Stage 5 pipeline shard (consumer at § 6 Outputs cross-ref).
 - [`stage-io-contracts.md`](../../../core/schemas/stage-io-contracts.md) — Stage 5→6 boundary contract; consumed by `### Output for Stage 6` H3 format.
 - [`hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedure 3 Spoke Template — Chip-prompt injection point at Stage 5 entry.
-- [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md) — ADR threshold + M1/M2/M3 mechanisms referenced by `#### Design Decisions` content bucket spec.
+- [`adr-authoring-guide.md`](../../../core/standards/adr-authoring-guide.md) § When to write an ADR — ADR threshold (the when-to-write rubric) referenced by the `#### ADR Pointers` content bucket spec.
+- [`decision-discipline.md`](../../../core/disciplines/decision-discipline.md) — M1/M2/M3 mechanisms referenced by `#### Design Decisions` content bucket spec.
 - [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) — 5-field anti-pattern template applied in § 6 Failure Modes.
 - [`upstream-reference-catalog.md`](../../../core/standards/upstream-reference-catalog.md) — Upstream-compatibility citation source for Cross-D scan.
 - [`release-notes-standard.md`](release-notes-standard.md) — Sibling K1 standards doc; Part 1 copy-paste scaffold pattern precedent.

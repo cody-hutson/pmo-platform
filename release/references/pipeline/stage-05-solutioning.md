@@ -323,7 +323,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 
 | Event type | Subtype | When | Actor |
 |---|---|---|---|
-| `decision` | `adr-opened` / `adr-closed` | ADR issue opened or closed during per-issue Solutioning (when D-class items require explicit ADR per [`decision-discipline.md` § 3](../../../core/disciplines/decision-discipline.md)) | `spoke:#N` (Solutioning spoke) |
+| `decision` | `adr-opened` / `adr-closed` | ADR issue opened or closed during per-issue Solutioning (when a decision meets an ADR trigger per the when-to-write rubric in [`adr-authoring-guide.md`](../../../core/standards/adr-authoring-guide.md) § When to write an ADR) | `spoke:#N` (Solutioning spoke) |
 | `escalation` | `tier-0` | Phase 0.5 re-review fires Tier 0 Premise Rejection (C3 classification) per [`triage-design-rereview.md` § 9](../standards/triage-design-rereview.md) | `spoke:#N` |
 | `re-review` | `phase-0.5-row` | Phase 0.5 re-review row appended to `triage-design-rereview-instrumentation.md`; payload carries `projects_to: triage-design-rereview-instrumentation.md:<row-anchor>` | `spoke:#N` |
 | `decision` | `scope-lock` | Collective Review scope-lock decision rendered (approve / adjust / reject) — see § Release-Level Checkpoint below | `operator` |

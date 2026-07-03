@@ -3,6 +3,10 @@ description: Record an architecture or design decision
 title: "[ADR]: "
 labels: ["adr", "status: proposed"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: confirm this decision warrants an ADR and follow the canonical authoring conventions. See the **[ADR authoring guide](https://github.com/cody-hutson/pmo-platform/blob/main/core/standards/adr-authoring-guide.md)** — the when-to-write / when-NOT rubric, the copy-paste ADR template + worked example, and the supersede-not-edit immutability policy. The field + body-section data contract lives in [`core/schemas/adr-schema.md`](https://github.com/cody-hutson/pmo-platform/blob/main/core/schemas/adr-schema.md).
   - type: dropdown
     id: status
     attributes:

@@ -186,6 +186,13 @@ This is the inverse view of the differentiation note in [`stage-07-dev-testing.m
 **Phase D — Iteration Loop:**
 QA Pass 1 → Route findings per lanes → Lane actions executed (Lane 2 triggers QA→DT Return per [DT↔QA Handoff Protocol](stage-07-dev-testing.md#dtqa-handoff-protocol); DT runs full re-review per the DT-Eng iteration loop, iterates with Engineering, emits Verified Signal on PASS) → QA Pass 2 (full re-review per Stage 8 §5 Phase D) triggered by Verified Signal → If new findings, route again → Escalation at iteration count > 2 (flag to operator). Iteration cap rationale: more than 2 passes indicates a systemic issue, not incremental fixes.
 
+**PR review-comment → edit → resolving-reply path (Phase D; autonomy-tier-bound).** When a QA-surface finding arrives as a **GitHub PR review comment / review thread** on the release PR (as opposed to an internal QA finding card), it is handled by the same machinery — the channel is an alternate arrival surface, tiered by change-nature per [`release/governance/release-process.md` § Inter-Stage Feedback Protocol → PR review comments as a feedback surface](../../governance/release-process.md):
+- **Tier 1 [ADJUST]** (minor QA correction, no AC/scope/sequence touched): the fix routes via the existing `fix(qa):` commit convention on the release branch (the QA-surface analogue of the `fix(dt):`/Lane-2 machinery); the spoke posts a **resolving reply** on the originating PR review thread when the fix lands, closing the loop on that comment.
+- **Tier 2 [SCOPE CHANGE] / Tier 3 [PLAN REJECTION]** (the comment requires scope/sequence/AC change, or rejects the plan): routed to the operator per § Inter-Stage Feedback Protocol — the QA spoke does not silently absorb a scope-affecting comment as a Tier 1 edit.
+- An **AC-gap** comment (AC not met, fixable) rides the existing **Lane 2 → QA Return to Dev Testing** path per Phase C (not directly to Engineering — preserving the layered review chain); the resolving reply is posted when the returned fix re-passes QA.
+
+The tier binding is by the *nature* of the requested change, never by the fact that it arrived as a comment. **Single-operator no-op:** under the single-operator reviewer convention the PR ships with no external reviewer, so no review comments arrive and this path is **dormant** — a no-op in single-operator steady state. **Cutover discipline:** Applies to all releases entering Stage 8 going forward.
+
 **Phase E — Human Review (Tier 3):** 3 verdicts — ACCEPT (all AC met, fitness confirmed), CONDITIONAL ACCEPT (minor gaps with documented rationale), REJECT (AC gaps requiring Engineering rework) / HOLD (scope question requiring Planning review). For each finding, apply the **Finding Disposition Decision Framework** to render disposition (fix-now / defer / accept); a CONDITIONAL ACCEPT covering a `NOT MET` or AC-blocking `PARTIAL` criterion MUST carry an Operator Override Record per that framework's Step 0.
 
 ##### Phase E3 — REJECT/HOLD upstream re-scope routing (requirements-clarity vs implementation)
@@ -203,6 +210,8 @@ A Phase E REJECT/HOLD splits on whether the gap is an **implementation defect** 
 
 ## 6. Outputs
 Acceptance Report: acceptance matrix (per-criterion verdict), acceptance score, fitness assessment, Stage 7 escape log, lane distribution, overall verdict. Downstream: to Stage 9 (acceptance report + PR + DT report) or to Stage 7 (Lane 2 findings emitted as QA Return to Dev Testing payload per [DT↔QA Handoff Protocol §Return Path](stage-07-dev-testing.md#dtqa-handoff-protocol)).
+
+The Acceptance Report is rendered from the canonical template at [`operations/templates/qa-acceptance-report-template.md`](../../../operations/templates/qa-acceptance-report-template.md) — three reader tiers (verdict / detail / evidence) carrying these six sections, with a machine-parseable acceptance-matrix block whose columns and all-drift-out score are the co-design contract with the `acceptance` assertion type ([`core/skills/eval-writer/references/acceptance-assertion-type.md`](../../../core/skills/eval-writer/references/acceptance-assertion-type.md)).
 
 Stage 8 does NOT produce: quality scores (Stage 7), design decisions (Stage 5), deployment actions (Stage 12).
 
