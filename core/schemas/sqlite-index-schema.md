@@ -434,7 +434,7 @@ On file change, update only that file's rows. Faster but may drift if changes ar
 
 ## Implementation
 
-This schema is **materialized** by [`core/deploy/tools/build-doc-index.py`](../deploy/tools/build-doc-index.py) — a stdlib-only Python 3.9 CLI (`sqlite3` + FTS5 are stdlib). It reads node frontmatter (the 11-field NOT-NULL `files` core stamped by `stamp-node-frontmatter.py`, the node-frontmatter backfill tool) + `relationships[]` edges (emitted by `backfill-relationship-edges.py`, the relationship-edge population tool) and builds all 7 tables above plus the 7 named query patterns.
+This schema is **materialized** by `core/deploy/tools/build-doc-index.py` — a stdlib-only Python 3.9 CLI (`sqlite3` + FTS5 are stdlib). It reads node frontmatter (the 11-field NOT-NULL `files` core stamped by `stamp-node-frontmatter.py`, the node-frontmatter backfill tool) + `relationships[]` edges (emitted by `backfill-relationship-edges.py`, the relationship-edge population tool) and builds all 7 tables above plus the 7 named query patterns.
 
 **Invocation + sync model:**
 

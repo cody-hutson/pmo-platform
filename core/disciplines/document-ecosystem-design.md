@@ -474,7 +474,7 @@ Build the design into the platform.
 
 **Implementation order (respects dependencies):**
 1. Frontmatter schema → Update File Router to create initial frontmatter
-2. SQLite index → Build index builder tool (rebuild from frontmatter) — **MATERIALIZED** as [`core/deploy/tools/build-doc-index.py`](../deploy/tools/build-doc-index.py): all 7 tables + the 7 named queries, deterministic byte-identical rebuild + an incremental-update capability (the auto-invoking event source is out of the builder's scope, owned by the lifecycle-automation epic)
+2. SQLite index → Build index builder tool (rebuild from frontmatter) — **MATERIALIZED** as `core/deploy/tools/build-doc-index.py`: all 7 tables + the 7 named queries, deterministic byte-identical rebuild + an incremental-update capability (the auto-invoking event source is out of the builder's scope, owned by the lifecycle-automation epic)
 3. Domain C lifecycle → Update Artifact Generator to apply lifecycle
 4. Agent processing contracts → Update PPM Agent, Tracker Manager with ecosystem behavior
 5. Navigation layer → Build navigation generator (from index queries)
