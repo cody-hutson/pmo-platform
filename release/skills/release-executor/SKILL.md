@@ -167,6 +167,7 @@ Proceed to the corresponding mode section below (Mode A Execute Release, Mode B 
      - **Cowork-lineage plan:** halt with "Release plan has no Dry-Run Record. Run release-planner Mode C first." — do not proceed to snapshot or execution steps.
      - **Git-native plan:** the absent Dry-Run Record is *lineage, not a missing artifact* — do NOT halt to release-planner Mode C. The execution/review surface is the pipeline (the PR diff IS the dry-run review); this skill's in-scope contributions are Mode B verification and Mode D/E/F close-out. Name the path in the execution report and route accordingly.
      - See the failure-mode entries `Mode A execution without a Dry-Run Record in the plan — PROC` (governs the Cowork-lineage path) and `Mode A snapshot execution invoked for a git-native release — TRIG` (governs the git-native path) — this step and those entries read as one consistent rule.
+   - **Consume the Delivery Strategy (git-native lineage).** For a git-native plan, read the plan's **Delivery Strategy** section — **merge approach** (`merge` / `squash` / `rebase`), **tag convention**, **S-2 deploy targets**, and **rollback strategy** — and carry it into execution per [`stage-12-execute.md`](../../references/pipeline/stage-12-execute.md) Phase A2 (Delivery-Strategy input), A.4.1 (merge-strategy pre-check), and B0.6 / D0.1 (stacked-base posture). Mode A **consumes** this input; it does not re-derive the merge / tag mechanics — those are owned by `stage-12-execute.md` Phase B. (A Cowork-lineage plan carries no Delivery Strategy section; its execution surface is the snapshot-and-apply steps below.)
    - **Resolve platform-config at session start.** Resolve the platform-behavior fields this execution consumes — `default_release_class` (and any per-stage config the hub injected) — per [`OPERATIONS.md § Platform-Config Resolution Protocol`](../../../core/governance/OPERATIONS.md) (the 5-rung resolver over `core/config/platform-config.toml.template` + Layer-2 per-tier overrides). When the hub injected a resolved value into the chip prompt, use it — do NOT re-resolve (single resolution at the hub avoids hub-vs-spoke divergence). If a field is unresolved at every rung, fall back to the documented default (`novel` for release class) and log the fallback — never hard-fail the release on an absent/corrupt config.
 
 2. **Pre-flight:**
@@ -189,7 +190,8 @@ Proceed to the corresponding mode section below (Mode A Execute Release, Mode B 
    - Report what was pruned
 
 5. **Execute (per IMP in dependency order):**
-   **Before any file modification, run the `## Quality-Gate Ladder` (T1 → T2 → T3,
+   **Lineage branch (per Step 1):** for a **git-native** release the execution surface is the Stage-12 pipeline, not the snapshot-and-apply loop — `gh pr merge` per the Delivery Strategy's merge approach → capture the merge SHA (`gh pr view --json mergeCommit`) → cut the signed-annotated version tag per the tag convention (`claim-version.sh`) → S-2 deploy of the changed files → the Phase-B5 **chore PR** that writes the RELEASE_LOG row. All of this is owned by [`stage-12-execute.md`](../../references/pipeline/stage-12-execute.md) Phases A–B; Mode A **does not re-implement it**. The snapshot-and-apply sub-steps 5.a–5.e below govern the **Cowork** lineage only.
+   **Before any file modification (Cowork lineage), run the `## Quality-Gate Ladder` (T1 → T2 → T3,
    short-circuit) over the release's changed files.** A hard-fail (T1 or T2 under
    `enforce`) emits its 5-field finding and HALTs *before* Step 5.b applies the first
    change; T3 is the operator GO gate. The same ladder is consumed at the
@@ -213,6 +215,7 @@ Proceed to the corresponding mode section below (Mode A Execute Release, Mode B 
 
 7. **Update RELEASE_LOG.md:**
    - Add the new release entry: version, date, type, IMP items, summary, status "RELEASED"
+   - **Git-native lineage:** the RELEASE_LOG row is written by the Stage-12 **Phase-B5 chore PR** in `DEPLOYED` state, not a direct edit here — see [`stage-12-execute.md`](../../references/pipeline/stage-12-execute.md) Phase B5 commit mechanism (the merge-SHA chicken-and-egg constraint requires post-merge authoring). The `DEPLOYED` → `VERIFIED` transition is Stage 13 / Mode D. The direct-edit above is the Cowork-lineage default.
 
 8. **Update SESSION_STATE.md:**
    - Record what was done this session

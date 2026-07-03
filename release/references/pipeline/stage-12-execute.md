@@ -298,7 +298,7 @@ Gate output: PROCEED to Stage 13 / HOLD (investigate before Close).
 Overall Tier 1 (Auto-execute) with Tier 3 pre-authorization from Stage 9. Second-most autonomous stage after Stage 6. Critical Tier 3 decision (GO/NO-GO) already happened in Stage 9 — Stage 12 is pure execution.
 
 ## 9. Gap Summary
-6 gaps. Key: no Release Manager Mode 2 skill (P3), no automated deploy script (P3), Stage 12→13 handoff contract not formalized (P3). All P3 — stage is fully operable in conversation mode.
+Coverage. Stage-12 deployment execution is owned by `release-executor` **Mode A — Execute Release** (per [`stage-to-skill-mode-mapping.md`](../specs/stage-to-skill-mode-mapping.md) row 12), the automated deploy path is `core/deploy/deploy.sh --deploy`, and the Stage 12 → Stage 13 handoff contract is formalized at [`stage-io-contracts.md`](../../../core/schemas/stage-io-contracts.md#boundary-stage-12--stage-13). No open Stage-12 skill-build gaps remain — the stage is fully operable, with Mode A consuming the plan's Delivery Strategy and driving the merge / tag / S-2 / chore-PR sequence.
 
 ## 10. Retro
 To be populated after an execution cycle.
