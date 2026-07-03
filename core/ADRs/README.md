@@ -27,7 +27,9 @@ ADRs follow the canonical **[ADR schema](../schemas/adr-schema.md)** — the sin
 | ADR-007 | **core** | module-restructure | module-restructure | 2026-05-27 |
 | ADR-008 | **core** | module-restructure | architectural intent; later implementation | 2026-05-27 |
 | ADR-009 | **core** | module-restructure | architectural intent; later implementation | 2026-05-27 |
+| ADR-017 | **core** | distribution-architecture | operator directive + distribution analysis | 2026-06-07 |
 | ADR-018 | **core** | declarative-workitem-type-model | data-architecture (WITL) | 2026-06-07 |
+| ADR-019 | **core** | skill-suite-architecture-spine | operator-adopted + Stage 5 Solutioning | 2026-06-08 |
 
 ## Module-restructure ADR composition graph
 
@@ -137,6 +139,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ## Skill-architecture ADRs
 
+### ADR-019 — Specialists compose (not absorb) shared function-skills
+
+**Status:** Accepted (operator-adopted 2026-06-06; ratified at the skill-suite-architecture-spine Collective Review scope-lock — that release activated Stage 5 with ≥2 Solutioning issues, so Collective Review fired as the ratification gate; milestone closed 2026-06-08. This ADR is the committed record of the adopted decision).
+**Decision:** Role-decomposed skills are authored as **thin Specialists that COMPOSE the existing 22 function-decomposed skills** — they do NOT absorb or duplicate them; each function-skill remains the single source of its function ("compose, don't over-absorb"). A role MAY span several Specialists, but only when the **skill-boundary test** holds — all three conjuncts together: distinct trigger surface AND distinct write-scope AND distinct primary role. Composing shared skills via the Skill Chaining Protocol keeps routing depth ≤2 by construction (cascade rule C1); a role that re-implements shared logic violates the decision. Because the four named overlap pairs span all three modules, this is a cross-module platform-architecture decision.
+**Reversibility:** MODERATE (Confidence HIGH; CHEAP pre-build, crossing to MODERATE at the first role-skill authored under the rule — from that point a reversal re-casts that skill's composition structure; no data migration, no schema change).
+**File:** [ADR-019-specialists-compose-not-absorb.md](ADR-019-specialists-compose-not-absorb.md)
+
 ### ADR-023 — Skill sourcing-coupling posture: own-with-harvest default; guarded-wrap exception
 
 **Status:** Proposed (flips to Accepted at the comms-writer/artifact-generator-anthropic-offload-refactor Collective Review scope-lock — the Stage 5 N-way-consistency gate per § Status enum).
@@ -166,6 +175,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **File:** [ADR-033-methodology-conditional-skill-activation.md](ADR-033-methodology-conditional-skill-activation.md)
 
 ## Distribution-architecture ADRs
+
+### ADR-017 — Distribution architecture: four lifecycle surfaces, version-posture acquisition, and package multiplicity over shared config/state
+
+**Status:** Accepted (operator distribution-perspective directive 2026-06-07, at the operator's PR review; authored per the core-ADR convention the ADR-013 / ADR-014 / ADR-016 records followed).
+**Decision:** Records the distribution decision spine three existing initiative anchors implement but none cite. Four layered decisions: (1) classify every file by the four install/update-lifecycle **surfaces** — S1·Package (versioned repo checkout), S2·Config (`operator.toml` at XDG config), S3·State (operator-instance content, never in the package — ADR-012), S4·Runtime deployment (`~/.claude/` mirror, derived from S1) — an orthogonal cut across the CLAUDE.md Platform/Operations/Bridge layers with the load-bearing invariant *S1 is the only versioned surface; S4 is derived and always regenerable*; (2) clone-path and install-path are both first-class, distinguished only by version-pinning posture; (3) the package surface is multiply-instantiable over a singular shared config + state, with pipeline-mediated promotion between version postures; (4) operator content stays workspace-relative, only derived internals go to XDG state/cache (RECOMMENDED). `operator.toml` (S2) is the single seam telling S1's tools where S3 lives and how to produce S4.
+**Reversibility:** MODERATE (Decisions 1/2/4 HIGH-confidence; Decision 3's invariant HIGH, its recommended application MEDIUM — classification/posture decisions, revert = editing this ADR and its citing docs, no data migration).
+**File:** [ADR-017-distribution-architecture.md](ADR-017-distribution-architecture.md)
 
 ### ADR-032 — Release-corpus public-vs-instance split: ship the capability, keep per-release content operator-instance
 
