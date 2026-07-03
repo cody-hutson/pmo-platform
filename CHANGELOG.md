@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.63] - 2026-07-03
+
+The release pipeline now uses GitHub's own PR-review surfaces (draft→ready lifecycle, review comments as a feedback channel, review-decision state as an advisory signal), and the release-manager skills are back in sync with the pipeline they drive.
+
+[Full notes](release/releases/notes/v3.63_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.63)
+
 ## [v3.62] - 2026-07-03
 
 Recording an architecture decision is now low-friction: a canonical guide, a helper that scaffolds the record for you, and a complete decision index.
