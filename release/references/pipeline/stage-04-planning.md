@@ -141,7 +141,7 @@ A6's verdict is advisory — it surfaces capacity risk in the plan. The load-bea
 **Framework dimensions touched:** Work Breakdown (sub-task decomposition); State Persistence (release plan). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
 
 ## 6. Outputs
-Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output).
+Release plan file (`release/releases/plans/vX.Y_RELEASE_PLAN.md`), committed on release branch. Sections: Implementation Sequence, File Change Matrix, Integration Points, Risk Register, Delivery Strategy, Verification Plan, Rollback Strategy, Quota Budget (Phase A6 output), Cross-Issue Acceptance Criteria (present-when-nonzero — see § below).
 
 The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaffold:
 
@@ -172,6 +172,29 @@ Planning maps each in-scope issue's acceptance criteria to a verification-method
 A behavioral/domain AC's verification method is whatever its `method:` field declares; Planning records the declared method as the issue's Verification Method even when the executor for that method is not yet built. This block names the recognized method classes; it does not restate the per-issue table — that table is owned by the plan template's § Verification Plan and is populated per release.
 
 **Declared, verification deferred (honesty note).** A behavioral/domain AC may be admitted with its verification method **declared** even before an executor for that method exists. Declaration is what makes the AC honest at intake/planning; building and running the executor is a separate, later concern (Stage 7/8). A declared-but-not-yet-executable method is a valid method for gate purposes — it is recorded, surfaced, and tracked, not silently dropped or lossily rewritten. This is the canonical statement of the note; the G1-05a and G3-05 self-repair cells in `core/schemas/gate-criteria-spec.md` carry the short inline form and defer here for the full rationale.
+
+### Cross-Issue Acceptance Criteria (release-scoped)
+
+A release plan MAY declare **Cross-Issue Acceptance Criteria (CIAC)** — testable predicates that span ≥2 issues in the release and assert a cohesion constraint the *integrated* release must hold. A CIAC is distinct from a per-issue AC (which grades one issue's own outputs) and from the per-issue-pair integration AC (`INT-N`) authored at Stage 5 Phase A4.2: `INT-N` fires on a dependency edge and grades one `(this-issue × upstream-issue × shared-surface)` triple per-issue at Stage 8, whereas a CIAC is release-scoped, spans any ≥2 issues with **no dependency edge required**, and is graded on the merged PR at Stage 9. CIACs are authored HERE (Stage 4) because the release-planning spoke is the only spoke that reads all issues at once. Zero CIACs is valid (single-issue releases, or releases with no cross-issue cohesion constraint) — the section is present-when-nonzero, omitted (non-ceremony) otherwise.
+
+Each CIAC entry carries five fields:
+
+| Field | Content |
+|---|---|
+| **Identifier** | `CIAC-N` (release-local counter; a distinct namespace from `INT-N` — Stage 9 Phase A3.5 counts `INT-N`, Phase A3.6 / QC3.5 counts `CIAC-N`, so there is no ambiguity) |
+| **Issues spanned** | `#X, #Y[, …]` — ≥2 issues, no dependency edge required |
+| **Predicate** | A gradable assertion over the ≥2 issues' outputs — answerable MET / NOT MET / PARTIAL from the merged PR content |
+| **Shared surface** | The concrete file / table / schema / anchor / capability where the issues must agree |
+| **Verification method** | A reproducible command — typically `grep` (verbatim-citation / co-occurrence) or anchor-resolution; OR `dispatch the runtime-suite for <domain>` for a behavioral/runtime predicate; OR "declared, verification deferred to #<executor>" when the executor is a script not yet built (the same declared-verification-deferred honesty the note above establishes for behavioral ACs) |
+
+Scaffold (one row per CIAC — the section is present only when the release declares ≥1):
+
+```markdown
+**Cross-Issue Acceptance Criteria**
+- [ ] **CIAC-1 (#X × #Y on `<surface>`):** <predicate>. *Method:* `<grep / anchor / runtime-dispatch command>`. *Graded at Stage 9 QC3.5 on the merged PR.*
+```
+
+CIACs are consumed at Stage 9 by the release-integration check (Phase A3.6 / QC3.5) and, where the verification-execution script consumes them, are a check type that executor dispatches — the executor emits each CIAC verdict at Stage 6/7 (Verification-Evidence) and Stage 9 reads those emitted verdicts read-only (it does not re-run the method — single-runner discipline). They are graded under the Stage-8 per-criterion verdict enum verbatim — no new verdict values. The CIAC entry shape is the stable contract the executor parses (Identifier / Issues spanned / Predicate / Shared surface / Verification method); a CIAC whose method is a reproducible command needs no bespoke DSL — the executor extracts and runs the command string.
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.

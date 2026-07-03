@@ -282,6 +282,17 @@ Produce a release plan for Milestone {MILESTONE} covering:
    activation bias / Stage 13 outcome-window). Operator renders
    the class at Phase B3 alongside scope-commit. Cutover
    discipline: applies to all releases going forward.
+8. **Cross-Issue Acceptance Criteria (CIAC)** — testable
+   predicates spanning ≥2 issues in the release (cohesion
+   constraints the integrated release must hold; distinct from a
+   per-issue AC and from the Stage-5 per-issue-pair INT-N — CIAC
+   requires no dependency edge and is graded on the merged PR at
+   Stage 9). Author CIAC-N entries per
+   release/references/pipeline/stage-04-planning.md § Cross-Issue
+   Acceptance Criteria; each entry is Identifier / Issues spanned
+   / Predicate / Shared surface / Verification method. Zero is
+   valid — omit the section when the release has no cross-issue
+   cohesion constraint. Graded at Stage 9 QC3.5 / Phase A3.6.
 
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
@@ -293,6 +304,7 @@ Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 ### Stage Applicability Matrix
 ### Contention Map
 ### Risk Register
+### Cross-Issue Acceptance Criteria
 ### Recommendations
 
 Then close sub-task #{SUB_TASK_NUMBER}.
