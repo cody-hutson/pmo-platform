@@ -1,3 +1,7 @@
+<!-- repo-integrity: allow-issue-ref -->
+<!-- Test FIXTURE for verify-release-plan.sh: the #N tokens below are synthetic
+     release-plan test data (the parser's job is to group checks by their #N
+     issue headers / Issue column), not references to real work items. -->
 # vTEST Release Plan — verify-release-plan.sh fixture (canonical Issue-keyed shape)
 
 > Fixture for `release/tools/tests/test_verify_release_plan.sh` (sub-task #3175).
