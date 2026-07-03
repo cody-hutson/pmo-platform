@@ -15,7 +15,7 @@ ADR_DIRS = ("core/ADRs", "release/ADRs")
 - **Preferred mechanism:** read that constant (the single git-tracked source of the home set) so the skill inherits any future relocation for free.
 - **Fallback mechanism:** glob both `core/ADRs/ADR-*.md` and `release/ADRs/ADR-*.md` relative to the repo root.
 
-Either mechanism resolves the home at runtime. **Never bake `core/ADRs/` into the skill as a literal path** — the "read the home dynamically" requirement (parent-issue AC #4) exists so the skill survives a per-module ADR relocation without a code edit.
+Either mechanism resolves the home at runtime. **Never bake `core/ADRs/` into the skill as a literal path** — the "read the home dynamically" requirement (parent-issue AC 4) exists so the skill survives a per-module ADR relocation without a code edit.
 
 ## 2. Allocate `max(global) + 1` across BOTH directories
 
