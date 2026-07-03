@@ -1,5 +1,5 @@
 ---
-title: "ADR-072 — Cross-issue release-integration check: Stage-9 extension over new Stage 7.5"
+title: "ADR-073 — Cross-issue release-integration check: Stage-9 extension over new Stage 7.5"
 status: Proposed
 date: 2026-07-03
 release: 70-verification-execution-surface
@@ -11,10 +11,10 @@ source_observations:
   - "The pattern compounds with release size (1-issue release → 0 cohesion edges; 6-issue release → ~9 cohesion edges). Operator vigilance does not scale; a pipeline-structural gate does. This is the same 'structure over attention' argument that motivated the INT-N chain check."
 ---
 <!-- reference-durability: allow-link -->
-# ADR-072 — Cross-issue release-integration check: Stage-9 extension over new Stage 7.5
+# ADR-073 — Cross-issue release-integration check: Stage-9 extension over new Stage 7.5
 
 ## Status
-Proposed. Drafted at Stage 5 Solutioning for the Cross-Issue AC + release-integration-check card in the 70-verification-execution-surface release. Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. Sibling to ADR-071 (region-scoped AV verification) in the same release. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
+Proposed. Drafted at Stage 5 Solutioning for the Cross-Issue AC + release-integration-check card in the 70-verification-execution-surface release. Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. Sibling to ADR-072 (region-scoped AV verification) in the same release. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
 
 ## Context
 The card has two threads. **Thread 1** codifies a release-scoped **Cross-Issue Acceptance Criteria (CIAC)** section in the Stage-4 release plan — each entry a testable predicate spanning ≥2 issues with a verification method (grep / anchor-resolution / runtime-dispatch). **Thread 2** decides how the release exercises those predicates as an integrated artifact between Stage-6 close and the Stage-9 GO. This ADR records the Thread-2 architecture decision (Option A vs Option B) and the single-runner correction the Collective Review scope-lock imposed on it.
@@ -56,6 +56,6 @@ The survivor — a Stage-9 sibling phase that reads the executor's emitted CIAC 
 **MODERATE / Confidence HIGH.** Option A is 5 in-place governance/pipeline edits + one gate row + one ADR — a whole-release revert of the squash-merge restores all of them. This is materially cheaper to un-ship than Option B (a shipped pipeline stage is EXPENSIVE to reverse — corpus references, operator muscle memory, event-log history). The empty-CIAC degeneracy guarantee is the regression anchor: a zero-CIAC release runs QC3.5 as a no-op with Stage-9 behavior byte-unchanged, so the additive gate cannot regress existing releases.
 
 ## Related ADRs
-- ADR-071 (region-scoped AV invariant verification) — sibling in the same release (70-verification-execution-surface). Both harden the verification-execution surface: ADR-071 makes the QC4-05 post-deploy verdict sound; ADR-072 makes cross-issue cohesion a gated pre-GO input. ADR-072's G-PR10 is a `recommend`-tier judgment gate; ADR-071's QC4-05 mechanism is `structural`.
+- ADR-072 (region-scoped AV invariant verification) — sibling in the same release (70-verification-execution-surface). Both harden the verification-execution surface: ADR-072 makes the QC4-05 post-deploy verdict sound; ADR-073 makes cross-issue cohesion a gated pre-GO input. ADR-073's G-PR10 is a `recommend`-tier judgment gate; ADR-072's QC4-05 mechanism is `structural`.
 - ADR-024 (cross-release impact model — GO baseline-currency) — precedent for the evidence-freshness guard: G-PR9's baseline-currency staleness predicate (a GO baseline invalidated by a later mover-set) is the model this ADR's intra-release freshness guard mirrors, applied to the commit that post-dates an emitted CIAC verdict.
 - ADR-062 (substrate-vs-canonical precedent) — cited for the canonical-edit-wins discipline: the QA Checkpoint Framework gains QC3.5 at its canonical governed home (`release/governance/release-process.md`), and the checkpoint-count cascade sweep updates every downstream count reference rather than leaving stale mentions.

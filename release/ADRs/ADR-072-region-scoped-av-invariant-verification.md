@@ -1,5 +1,5 @@
 ---
-title: "ADR-071 — Region-scoped AV invariant verification"
+title: "ADR-072 — Region-scoped AV invariant verification"
 status: Proposed
 date: 2026-07-03
 release: 70-verification-execution-surface
@@ -11,7 +11,7 @@ source_observations:
   - "There is no AV DSL, no av-verify tool, and — verified across the full release-plan corpus — ZERO formal `AV-<n>` assertion rows in any release plan prior to this one. 'AV-1' was a naming convention referenced in the Checkpoint text, never an authored corpus of assertions. So this is a mechanism + a forward-looking authoring convention, not a migration of an existing formal corpus; regression is proven with synthetic fixtures, not by replaying prior assertions (there are none to replay)."
 ---
 <!-- reference-durability: allow-link -->
-# ADR-071 — Region-scoped AV invariant verification
+# ADR-072 — Region-scoped AV invariant verification
 
 ## Status
 Proposed. Drafted at Stage 5 Solutioning for the QC4-05 soundness card — the foundation card of the 70-verification-execution-surface release. Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. (Originating-issue provenance is carried in the `source_observations` frontmatter.)

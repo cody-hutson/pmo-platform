@@ -27,7 +27,7 @@ never sees comment (or fenced) bytes, so a match there can neither satisfy nor
 violate it — the #99 ambiguity class is excluded by construction, not by author
 diligence.
 
-Design decisions (ADR-071 — region-scoped-av-invariant-verification):
+Design decisions (ADR-072 — region-scoped-av-invariant-verification):
   * ``region: any`` is byte-equivalent to the old whole-file grep and is the
     default for prose targets with no code/comment split — backward-compatible.
   * An unknown lexer combined with a ``code``/``comment`` region is **fail-loud**

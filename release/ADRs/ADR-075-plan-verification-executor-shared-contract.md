@@ -1,5 +1,5 @@
 ---
-title: "ADR-074 — Plan-verification executor: a versioned shared-executor contract over a thin check-family dispatcher"
+title: "ADR-075 — Plan-verification executor: a versioned shared-executor contract over a thin check-family dispatcher"
 status: Proposed
 date: 2026-07-03
 release: 70-verification-execution-surface
@@ -11,7 +11,7 @@ source_observations:
   - "The executor becomes a surface other stages depend on: Stage-6 self-verification, Stage-7 Dev Testing re-run, and — via the runtime-evidence consume path — the Stage-8 acceptance evidence stream. Shipping it is CHEAP/Cosmetic today; later changing its emitted-evidence shape or exit-code semantics grows in blast radius as those consumers accrue. A day-one versioned output contract makes a future contract change a detectable schema bump rather than a silent break."
 ---
 <!-- reference-durability: allow-link -->
-# ADR-074 — Plan-verification executor: a versioned shared-executor contract over a thin check-family dispatcher
+# ADR-075 — Plan-verification executor: a versioned shared-executor contract over a thin check-family dispatcher
 
 ## Status
 Proposed. Drafted at Stage 5 Solutioning for the executor card — the executor (last) card of the 70-verification-execution-surface release (foundation → schema → surface → executor). The Stage-5 design recorded that no ADR was strictly required (the parse/dispatch architecture is a single-reasonable-shape build-mechanics choice, and the Evidence-Grounding artifact is the durable name/format record), while explicitly flagging that if Collective Review judged the *shared-executor output contract* — the versioned evidence shape other stages come to depend on — to warrant a standing decision record, its natural home is a short ADR authored at Stage 6 first-commit alongside the `SCHEMA_VERSION` constant. This ADR is that record. It flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
@@ -60,8 +60,8 @@ Both are read-only inputs. The executor is the *runner of their outputs*, never 
 **CHEAP / Confidence HIGH.** The executor is an additive tool plus two cross-reference lines (the Stage-6 self-verification xref and the Stage-7 Dev Testing xref); nothing consumes it until those xrefs point at it. Whole-release rollback = revert the single squash-merge, which deletes the script and its tests and removes the two xref lines, restoring exact prior behavior. The `SCHEMA_VERSION` constant makes any later contract change a versioned, revertible step rather than an untracked drift.
 
 ## Related ADRs
-- ADR-072 (cross-issue release-integration check — the same release's schema card) — sibling; authored the Cross-Issue Acceptance Criteria schema and the Stage-9 read-only integration check that this executor is the sole runner and sole emitter for. This ADR's decision 4 is the executor-side half of that schema card's single-runner discipline.
-- ADR-073 (Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance — the same release's surface card) — sibling; keys Stage-8 acceptance to the same runtime-suite selection map + `test-run` event contract this executor dispatches through, so the executor's runtime-suite emit and the Stage-8 consume path read one dispatch surface.
-- ADR-071 (region-scoped AV invariant verification — the same release's foundation card) — sibling; makes the verification substrate every gate's verdict relies on structurally sound, the foundation this executor's verdicts sit on (foundation → schema → surface → executor).
+- ADR-073 (cross-issue release-integration check — the same release's schema card) — sibling; authored the Cross-Issue Acceptance Criteria schema and the Stage-9 read-only integration check that this executor is the sole runner and sole emitter for. This ADR's decision 4 is the executor-side half of that schema card's single-runner discipline.
+- ADR-074 (Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance — the same release's surface card) — sibling; keys Stage-8 acceptance to the same runtime-suite selection map + `test-run` event contract this executor dispatches through, so the executor's runtime-suite emit and the Stage-8 consume path read one dispatch surface.
+- ADR-072 (region-scoped AV invariant verification — the same release's foundation card) — sibling; makes the verification substrate every gate's verdict relies on structurally sound, the foundation this executor's verdicts sit on (foundation → schema → surface → executor).
 - ADR-062 (substrate-vs-canonical precedent) — cited for the canonical-decision-wins discipline: the executor's name and output-format binding are authored at their canonical governed homes (the tool under `release/tools/`, the evidence shape at `release/references/pipeline/stage-06-engineering.md`), and the two consumed surfaces are read from their owners rather than duplicated.
 - ADR-068 (single-home output-contract emitter, blast-radius schema-v1 library) — cited as the pattern precedent: the executor's output contract lives in one emitter behind a `SCHEMA_VERSION`, mirroring how the fan-out tracers share one schema-v1 emit seam.

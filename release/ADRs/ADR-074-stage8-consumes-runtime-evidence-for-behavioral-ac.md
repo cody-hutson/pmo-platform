@@ -1,5 +1,5 @@
 ---
-title: "ADR-073 — Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute)"
+title: "ADR-074 — Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute)"
 status: Proposed
 date: 2026-07-03
 release: 70-verification-execution-surface
@@ -11,7 +11,7 @@ source_observations:
   - "The behavioral-AC worked example the card requires ('component renders and dismiss persists for the session') maps to the selection map's row-6 no-match today — no web/component runtime suite row exists. This is a real registry gap in the map, not a defect in the AC; it is surfaced honestly as the map's own extension path, and the worked example shows both the honest suite-skip fallback (unmapped web/component) and a mapped-domain case (hooks) where real runtime evidence is consumed."
 ---
 <!-- reference-durability: allow-link -->
-# ADR-073 — Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute)
+# ADR-074 — Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute)
 
 ## Status
 Proposed. Drafted at Stage 5 Solutioning for the Stage-8 verification-execution-surface card — the surface card of the 70-verification-execution-surface release (foundation → schema → surface → executor). Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
@@ -55,6 +55,6 @@ The survivor — consume the upstream run + an honest LLM-acceptance fallback fo
 **MODERATE / Confidence MEDIUM.** The change is an additive Phase-B grading rule + one cross-reference + a worked example; revert = delete the Runtime-Evidence Acceptance subsection, the Inputs xref, and the worked example — no tool, no schema, no gate criterion to unwind. Whole-release rollback = revert the single squash-merge (restores the pre-change Stage-8 spec) — CHEAP at the release grain. (The card body's original EXPENSIVE tier reflected the from-scratch "give Stages 7 AND 8 an execution surface" scope; the narrowed consume-only Stage-8 scope trends MODERATE — the from-scratch execution surface shipped earlier at Stage 7 and is not re-touched here.)
 
 ## Related ADRs
-- ADR-072 (cross-issue release-integration check — the same release's schema card) — sibling in the 70-verification-execution-surface bundle; its executor is the shared runner that reads the same runtime-suite selection map this ADR keys Stage-8 acceptance to (one dispatch surface, cited by both).
-- ADR-071 (region-scoped AV invariant verification — the same release's foundation card) — sibling; makes the verification substrate every gate's verdict relies on structurally sound, the foundation this surface card builds on (foundation → schema → surface).
+- ADR-073 (cross-issue release-integration check — the same release's schema card) — sibling in the 70-verification-execution-surface bundle; its executor is the shared runner that reads the same runtime-suite selection map this ADR keys Stage-8 acceptance to (one dispatch surface, cited by both).
+- ADR-072 (region-scoped AV invariant verification — the same release's foundation card) — sibling; makes the verification substrate every gate's verdict relies on structurally sound, the foundation this surface card builds on (foundation → schema → surface).
 - ADR-062 (substrate-vs-canonical precedent) — cited for the canonical-edit-wins discipline: the acceptance rule is authored at its canonical governed home (`release/references/pipeline/stage-08-qa-testing.md`), and the domain→suite keying is consumed from the selection map rather than duplicated.
