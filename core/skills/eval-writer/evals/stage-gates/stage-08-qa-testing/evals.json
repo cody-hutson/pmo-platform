@@ -1,0 +1,29 @@
+{
+  "suite_name": "stage-08-qa-testing-gate",
+  "description": "Stage-8 QA Testing gate eval set. Holds the acceptance-type worked example: an `acceptance` assertion ingests a GitHub-issue AC list (parse rules P1-P6 per references/acceptance-assertion-type.md), grades each criterion with TWO judgments (gradability-class + binary satisfaction, per ADR-071), and projects to the Stage-8 §5 verdict enum (MET / NOT MET / PARTIAL / N/A-WITH-RATIONALE / REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM). acceptance_score = MET/(total - N/A - REINTERPRET - FLAG-UPSTREAM) (ALL-DRIFT-OUT). Satisfaction is binary at the judge (no 1-5 Likert); the six-value enum is a projection of the two judgments, not a native scale. The subject-under-test issue is the fixture at ../../fixtures/acceptance-sample-issue.md. Home per ADR-067; type contract per references/acceptance-assertion-type.md.",
+  "gate": "Stage 8 QA Testing",
+  "escape_rate": {
+    "definition": "escapes / gate_firings over the release-close window",
+    "escape": "an AC that the acceptance grader passed (MET) but a downstream stage found unmet",
+    "gate_firing": "one Stage-8 acceptance evaluation (one PR's AC set graded)",
+    "computation": "numerator = downstream unmet-AC findings this set should have caught; denominator = PRs passing Stage 8 in the window",
+    "current_value": "[INSUFFICIENT DATA - populate at release close; <3 firings = not yet reliable]"
+  },
+  "judge": "cross-family, pinned snapshot; two judgments per criterion (gradability-class then binary satisfaction), projected to the Stage-8 §5 verdict enum",
+  "evals": [
+    {
+      "id": 1,
+      "name": "stage-08-acceptance-ac-ingestion-and-verdict",
+      "prompt": "Given a merged PR and its issue's Acceptance Criteria block, ingest each criterion (parse rules P1-P6), make the two judgments per criterion (gradability-class, then binary satisfaction when gradable), and emit a per-criterion verdict from the Stage-8 §5 enum plus an all-drift-out acceptance score. The subject-under-test is the `acceptance` assertion type as defined in references/acceptance-assertion-type.md and graded by the grader agent. Grade the fixture issue at ../../fixtures/acceptance-sample-issue.md against a hypothetical PR that implements checksum-sidecar emission for the default export mode only.",
+      "expected_output": "A per-criterion acceptance matrix: each row has AC-ID, criterion verbatim, a verdict from {MET, NOT MET, PARTIAL, N/A-WITH-RATIONALE, REINTERPRET-WITH-RATIONALE, FLAG-UPSTREAM}, evidence, Severity (only when NOT MET), and Drift-rationale (only for the three drift verdicts). Footer: acceptance_score = MET/(total - N/A - REINTERPRET - FLAG-UPSTREAM), plus per-verdict counts. Satisfaction is binary at the judge; the enum is a projection of the gradability-class and satisfaction judgments. For the fixture, the expected roll-up is 3/5 = 0.60 with counts {MET:3, NOT MET:1, PARTIAL:1, N/A:0, REINTERPRET:1, FLAG-UPSTREAM:1}.",
+      "files": ["../../fixtures/acceptance-sample-issue.md"],
+      "assertions": [
+        {"text": "Each issue AC becomes exactly one AC-N row (parse rules P1-P6: source block = ## Acceptance Criteria or ## Completion condition; task-list items = criteria; document order)", "type": "structural"},
+        {"text": "Every emitted verdict is one of the six Stage-8 §5 values verbatim (no invented verdict values)", "type": "acceptance"},
+        {"text": "A NOT MET row carries a Severity (Blocker/Warning); each of the three drift verdicts (N/A-WITH-RATIONALE / REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM) carries a Drift-rationale; MET and PARTIAL carry neither Severity nor Drift-rationale", "type": "acceptance"},
+        {"text": "acceptance_score = count(MET) / (total_criteria - count(N/A-WITH-RATIONALE) - count(REINTERPRET-WITH-RATIONALE) - count(FLAG-UPSTREAM)); PARTIAL and NOT MET count 0 in the numerator; all three drift verdicts leave both numerator and denominator (ALL-DRIFT-OUT); the score is recorded, not gated", "type": "acceptance"},
+        {"text": "Grading makes two judgments per criterion: first a gradability-class (gradable / not-applicable / needs-reinterpretation / blocked-upstream), then a binary satisfaction call (PASS/FAIL, PARTIAL refinement) ONLY when gradable; the six-value enum is a deterministic projection of the two judgments, not a native six-way score", "type": "judgment"}
+      ]
+    }
+  ]
+}

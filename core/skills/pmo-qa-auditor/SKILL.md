@@ -223,6 +223,44 @@ change-management, technical-analyst, process-designer).
      conditional omission, parallel to G7/G8/G9). This is the audit-time enforcement complement to
      the write-time conformance the artifact-emitting skills and `project-initiator` (folder names)
      bind to — all consume the one standard, no second regex authored here.
+   - **G11: Conditional-AUQ-presence verification** — When the output under audit is an
+     **ask-when-ambiguous-tier skill's output or transcript** (the reviewed skill resolves to a
+     member of the ask-when-ambiguous roster read live from
+     [OPERATIONS.md § Mode Selection Protocol](../../governance/OPERATIONS.md) — never a hardcoded
+     list), verify an `AskUserQuestion` (AUQ) invocation trace is present **when the trigger-match
+     heuristic did not resolve a unique mode** (the input was ambiguous) and is correctly **absent**
+     when the heuristic resolved a unique mode. The audit-time detector for a silent removal of a
+     skill's `## Mode Selection` fallback — the complement to the structural-placement prevention
+     (OPERATIONS.md § Mode Selection Protocol Enforcement). **Substrate note (spec-ahead-of-substrate
+     contract):** G11 requires a **transcript-with-AUQ-traces plus the originating request** as
+     input, but Mode A ingests **one output artifact** (see Mode A **Input** above) and AUQ traces
+     are **not** persisted as a greppable corpus — so G11 is specified as a contract and fires only
+     when a caller actually hands Mode A a qualifying transcript (the transcript-ingestion substrate
+     is a tracked follow-on, the downstream QA-acceptance-review consumer). It does **not** claim
+     "runs today with zero blast radius." **Phase 1 (structural, deterministic — operates on a
+     PRESENT transcript):** skill-identity + tier resolution against the live roster (G11-01);
+     AUQ-trace presence via the `AUQ_TRACE_RE` tool-invocation regex, excluding bare prose mentions
+     (G11-02); mode-resolution-path capture — chain-skip / heuristic-unique / auq-fallback (G11-03).
+     **Phase 2 (content, LLM-graded — judgment, not regex):** was an AUQ trace **required**? — the
+     load-bearing re-derivation of whether the request mapped to a unique mode or was ambiguous
+     across ≥2 modes (G11-04); the conditional-consistency verdict joining `trace_present` ×
+     `required` (G11-05); trace-appropriateness guarding the present-but-unnecessary false-positive
+     (G11-06). **Determinism boundary:** the load-bearing FAIL case — an ambiguous input that
+     resolved WITHOUT a trace (required-but-absent) — is a **Phase-2 judgment, not a deterministic
+     Phase-1 signal** (an absent trace has no field to grep for "requiredness"; this is the exact
+     parallel to how G8-01 renders the absent-block case at Phase 2). Phase-1 determinism covers only
+     the **present-but-unnecessary** direction (a trace *is* present — greppable — which Phase 2 then
+     judges unnecessary on a unique-match input). **PASS** iff `trace_present == required`; **FAIL**
+     on the join mismatch (required-but-absent silent mode-choice, or unique-but-present over-ask),
+     citing the transcript-loc + the maps-to-modes derivation; any Phase 1 structural FAIL → FAIL.
+     Binary — **no CONDITIONAL** (like G9/G10; the conditional-consistency verdict has no
+     partial-credit axis). The gate **does not fire** when the skill is not on the ask-when-ambiguous
+     roster (never-ask outputs have no `## Mode Selection` surface; always-ask unconditional-fire is a
+     **separate deferred gate** per OPERATIONS.md § Mode Selection Protocol Enforcement — out of scope
+     here), or the resolution path is chain-skip (mode pre-supplied). Full two-phase tables, the
+     `AUQ_TRACE_RE` derivation + the bare-prose exclusion, the truth table, the live-roster read
+     contract, the substrate-dependency statement, and the composability map live in
+     [`references/conditional-auq-presence-detection.md`](references/conditional-auq-presence-detection.md).
 4. Produce the QA audit report (see Output Format below).
 
 ### Mode B — Cross-Skill Coherence Review
@@ -425,8 +463,9 @@ Mode D uses the dual-output checklist.
 | G8 | Cascade-completeness verification | PASS / FAIL / CONDITIONAL PASS | [Phase 1 deterministic re-run (G8-02/03/04) + Phase 2 LLM judgment (G8-01/05/06); see `references/cascade-completeness-detection.md`. Fires only when output under audit is a Stage 5 spec carrying a `### Cascade-Sweep` block. Un-swept occurrence cited as `file:line` with Tier 1 [ADJUST] / Tier 2 [SCOPE CHANGE] routing.] |
 | G9 | RACI validation (ownership clarity) | PASS / FAIL | [Fires only when the output asserts ownership of an action / decision / deliverable / risk. One or more owned items with no single clear Responsible+Accountable cited as the finding with the suggested owner-line; see `references/failure-mode-detectors.md`. Consulted/Informed gaps are OBSERVATIONs, not findings.] |
 | G10 | Artifact filename-conformance | PASS / FAIL | [Fires only when the output stages or names a generated artifact. Phase 1 deterministic structural checks against the canonical charset regex (G10-01), no shell-meta (G10-02), ISO-date validity (G10-03), grammar/order ≥2-segments alpha-led (G10-05); G10-04 catalog-type resolution is WARN not FAIL. See [`../../standards/artifact-naming-standard.md`](../../standards/artifact-naming-standard.md). Non-conforming filename cited with the failing rule + the corrected name.] |
+| G11 | Conditional-AUQ-presence | PASS / FAIL | [Fires only when the output is an ask-when-ambiguous-tier skill transcript (roster read live from OPERATIONS.md § Mode Selection Protocol, never hardcoded). Phase 1 deterministic AUQ-trace detection via `AUQ_TRACE_RE` (G11-02, tool-invocation match excluding prose) + resolution-path capture (G11-03); Phase 2 LLM required-vs-not adjudication (G11-04) joined at G11-05 (PASS iff `trace_present == required`). The required-but-absent FAIL is a Phase-2 judgment, not a deterministic Phase-1 signal (G8-01 parallel). Mismatch cited with transcript-loc + maps-to-modes derivation. Spec-ahead-of-substrate — Mode A ingests output-only, not request+trace transcripts; the transcript-ingestion substrate is a tracked follow-on. Always-ask unconditional gate deferred. See [`references/conditional-auq-presence-detection.md`](references/conditional-auq-presence-detection.md).] |
 
-**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings). G9 and G10 are per-output binary — PASS / FAIL only, no CONDITIONAL — and fire only when the output asserts ownership (G9) or stages/names a generated artifact (G10).
+**Overall**: PASS (all gates pass) / FAIL (any gate fails). G7 and G8 may render CONDITIONAL PASS (all Phase 1 structural checks PASS, ≥1 Phase 2 content check below threshold, with findings). G9, G10, and G11 are per-output binary — PASS / FAIL only, no CONDITIONAL — and fire only when the output asserts ownership (G9), stages/names a generated artifact (G10), or is an ask-when-ambiguous-tier skill transcript with a resolvable mode-selection surface (G11).
 
 ### 3. Findings
 
@@ -646,7 +685,7 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)`, `##
 template per `../../standards/failure-mode-standard.md`.
 
 **Self-compliance note:** This auditor's own failure-mode section satisfies G7-01
-through G7-05 — the enforcer is itself compliant with the rule it enforces. The five
+through G7-05 — the enforcer is itself compliant with the rule it enforces. The six
 anti-patterns below pass G7 structural checks (`## Domain-Specific Failure Modes`
 heading present, ≥ 3 `###` subsections, valid category tag per subsection, all 5 fields
 per subsection, Conditional regex match on the relaxed G7-05 pattern per Amendment
@@ -654,7 +693,9 @@ A4.1). This mirrors the bidirectional-compliance principle applied to G4 in an e
 bidirectionality now applies to G8 — the INPUT entry below ("Audited output's
 self-reported quality claims accepted as gate evidence") covers the G8 swept-table-as-
 ground-truth case, so the auditor that enforces cascade-completeness documents its own
-cascade-completeness evidence-trust failure mode.
+cascade-completeness evidence-trust failure mode. The sixth entry (also INPUT) applies the
+same discipline to G11: the auditor that verifies ask-when-ambiguous skills read their
+roster live must itself read that roster live rather than hardcoding it.
 
 ### PARTIAL verdict emitted to avoid PASS/FAIL commitment — PROC
 
@@ -817,6 +858,41 @@ cascade-completeness evidence-trust failure mode.
   into the Evidence column, and
   the audit certifies a defect the audited skill had asserted away.
 
+### G11 roster hardcoded into the gate instead of read live from OPERATIONS.md — INPUT
+
+- **Signature (observable signal):** A G11 audit (Conditional-AUQ-presence) resolves the
+  reviewed skill's ask-when-ambiguous membership against an **inline list of skill names
+  embedded in the SKILL.md or the `conditional-auq-presence-detection.md` reference** — a
+  copied roster ("the 8 ask-when-ambiguous skills are delivery-engine, change-management,
+  …") — rather than reading the roster live from
+  [OPERATIONS.md § Mode Selection Protocol](../../governance/OPERATIONS.md) at audit time.
+  The tell is a gate that keeps passing its own regression while the live tier has since
+  gained or lost a member.
+- **Conditional:** do NOT resolve G11's ask-when-ambiguous roster from a hardcoded list
+  copied into this skill, when the roster's single source of truth is OPERATIONS.md
+  § Mode Selection Protocol, because a copied roster silently rots when the tier
+  reclassifies via a governed change — the gate then fires on a stale membership and
+  either false-FAILs a newly-added skill's conforming output or skips a removed skill,
+  which is the exact stale-list failure the auditor exists to catch, reproduced inside the
+  auditor itself.
+- **Root cause:** An inline list is convenient — it removes a read step and makes the
+  gate look self-contained. The convenience is the trap: the K1↔K2 parameterization seam
+  (the *rule* is durable; the *membership* is a changeable value) is easy to collapse
+  under authoring pressure, embedding the value where only a reference to its source
+  belongs.
+- **Mitigation:** Read the ask-when-ambiguous roster live from OPERATIONS.md § Mode
+  Selection Protocol on every G11 audit; resolve the reviewed skill's tier from that table,
+  never from a name-list in this skill; if a roster snapshot is ever shown for illustration,
+  mark it explicitly as illustrative and cite the live source as authoritative. The
+  reference doc's § 3 read-contract states this; the gate honors it.
+- **Principal response vs. junior response:** Principal reads OPERATIONS.md at audit time,
+  resolves membership from the live table, and the gate stays correct across a tier
+  reclassification with no edit to this skill. Junior copies the current 8 names into the
+  gate for convenience; six months later a governed change adds a ninth ask-when-ambiguous
+  skill, the gate never fires on it, and a silent Mode-Selection-fallback removal in that
+  skill ships undetected — the parameterization seam collapsed exactly where G11 was
+  supposed to hold it open.
+
 ## Reference Docs
 
 Read these before operating in any mode. Each doc serves a specific purpose:
@@ -837,3 +913,5 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `../../specs/anthropic-base-vs-build-registry.md` | Mode E | The base-vs-build registry instance Mode E audits; header carries the Overlap Detection Rubric + Scorecard Weighting |
 | `../../../release/references/pipeline/stage-05-solutioning.md` | Mode A G8 | § 5.6 Cascade-Completeness Sweep — the T1/T2/T3 trigger semantics G8 re-derives (Phase 2) and the `### Cascade-Sweep` block schema (the swept-declaration G8 reads as its swept-set) |
 | `references/cascade-completeness-detection.md` | Mode A G8 | Full G8 two-phase check tables, the swept-declaration read contract, the matrix-relative routing table, and the L1–L5 composability map |
+| `references/conditional-auq-presence-detection.md` | Mode A G11 | Full G11 two-phase check tables, the substrate-dependency statement (spec-ahead-of-substrate), the `AUQ_TRACE_RE` derivation + bare-prose exclusion, the truth table, the live-roster read contract (read from OPERATIONS.md § Mode Selection Protocol, never hardcoded), the Always-ask-deferral boundary, and the mode-selection composability map |
+| `../../governance/OPERATIONS.md` | Mode A G11 | § Mode Selection Protocol — the live source of the ask-when-ambiguous roster (G11's regression set) and the three-tier classification; read at audit time, never hardcoded into this skill |

@@ -14,9 +14,13 @@ own demonstration suite.
 
 All stage-gate eval sets conform to the live eval schema: top-level header +
 `evals[]`, each eval `{id, name, prompt, expected_output, files, assertions[]}`, each
-assertion `{text, type}` with `type` binary (`structural` = mechanically checkable /
-`judgment` = a single binary LLM-judge call). **No 1-5 Likert** — binary judges only,
-per the eval-writer consensus.
+assertion `{text, type}` with `type` binary at the judge (`structural` = mechanically
+checkable / `judgment` = a single binary LLM-judge call / `acceptance` = a PR graded
+against its issue's acceptance criteria — two judgments per criterion, gradability-class
+then binary satisfaction, projected to the Stage-8 §5 verdict enum per
+[`../../references/acceptance-assertion-type.md`](../../references/acceptance-assertion-type.md)).
+**No 1-5 Likert** — binary judges only, per the eval-writer consensus (the `acceptance`
+six-value enum is a projection of two binary-flavored judgments, not a native scale).
 
 ## Sets in this directory
 
@@ -24,6 +28,7 @@ per the eval-writer consensus.
 |---|---|---|
 | Stage 3 — Bundle | [`stage-03-bundle/evals.json`](stage-03-bundle/evals.json) | Stage-3 Bundle gate eval set — 11 typed evals (4 structural S1-S4, 4 principal-behavior P1-P4, 2 contract C1-C2, 1 proactivity PR1). Grades a bundle rationale + created milestone description for Gate-3 conformance, principal bundling judgment, the two hard bundle contracts, and A5.1 cluster proactivity. Declares its own escape-rate metric in the set header. |
 | Stage 7 — Dev Testing | [`stage-07-dev-testing/evals.json`](stage-07-dev-testing/evals.json) | Branch-freshness assertion (release branch has no base commits unreachable from HEAD before Dev Testing passes). Executable half: the `assert_branch_fresh.py` runner in the pmo-skill-refiner scripts. |
+| Stage 8 — QA Testing | [`stage-08-qa-testing/evals.json`](stage-08-qa-testing/evals.json) | The `acceptance`-type worked example: an acceptance assertion ingests a GitHub-issue AC list (parse rules P1-P6), grades each criterion with two judgments (gradability-class + binary satisfaction), and projects to the Stage-8 §5 verdict enum with an all-drift-out acceptance score. Subject-under-test is the fixture at [`../fixtures/acceptance-sample-issue.md`](../fixtures/acceptance-sample-issue.md); type contract in [`../../references/acceptance-assertion-type.md`](../../references/acceptance-assertion-type.md). |
 
 *(Additional stage-gate sets are appended to this table as they are authored.)*
 
