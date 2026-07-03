@@ -9,7 +9,7 @@ pack_version = "0.1.0"
 schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
 applies_to = "Kanban"          # byte-identical archetype join key (§1.1)
 role = "archetype"
-extends = "_common"             # widened §1.1 (ADR-069 D1): inherit the base; declare deltas only
+extends = "_common"             # widened §1.1 (ADR-070 D1): inherit the base; declare deltas only
 
 [[kinds]]
 kind_id = "card"
@@ -47,7 +47,7 @@ allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
 [kinds.lifecycle_behavior]
 lifecycle = "continuous"                        # set-aggregate is the continuous lifecycle's signature gate (§1.2.1)
 
-# Kanban label contributions (DELTAS on _common; widened §1.1.1 / ADR-069 D2). The
+# Kanban label contributions (DELTAS on _common; widened §1.1.1 / ADR-070 D2). The
 # archetype delta is the `type:*` card-kind category label projecting this pack's kinds[]
 # (bound by `projects_kind`). Class-of-service lanes (standard/expedite/fixed-date/
 # intangible) are NOT shipped as best-practice default labels: the GATE expresses

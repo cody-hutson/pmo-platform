@@ -15,7 +15,7 @@ Source-agnostic + multi-source (the #1970 per-pack restructure): --source is
 repeatable. After #1970 the concrete label ROWS moved out of
 core/specs/label-taxonomy.md (which keeps the GRAMMAR — group definitions, rules,
 and namespace PATTERNS) into the per-pack `[[labels]]` facets under core/packs/*
-(ADR-069 D2). The canonical set is therefore the UNION across:
+(ADR-070 D2). The canonical set is therefore the UNION across:
   - the grammar doc (label-taxonomy.md) — namespace patterns + any retained rows;
   - the selected packs' `pack.toml` `[[labels]]` blocks — the relocated concrete rows.
 deploy.sh Check 51 passes `--source label-taxonomy.md` plus the `core/packs/*/pack.toml`

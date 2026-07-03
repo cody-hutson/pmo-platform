@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: "ADR-068 — Methodology pack as the plug-and-play composing unit: a per-archetype manifest at core/packs/<archetype>/ bundling a methodology's full operational surface (kinds + work-status + fields + labels + body-schema + gates) as best-practice defaults, selected per delivery_approach and overridable per project"
+title: "ADR-069 — Methodology pack as the plug-and-play composing unit: a per-archetype manifest at core/packs/<archetype>/ bundling a methodology's full operational surface (kinds + work-status + fields + labels + body-schema + gates) as best-practice defaults, selected per delivery_approach and overridable per project"
 status: Accepted
 date: 2026-07-02
 release: 86-methodology-pack-foundation
@@ -13,7 +13,7 @@ source_observations:
   - "ADR-018 already established the seam this ADR completes: the operations Work Item entity projects onto the domain-neutral work-organization mapping framework, ships best-practice default schemas (K1) at layers 1-3, and supports user plug-and-play/override (K4). ADR-018 named the KIND surface; the methodology's non-kind surfaces (work-status projection, labels, gates, body-schema) had no equivalent composing unit until this ADR."
 ---
 
-# ADR-068 — Methodology pack as the plug-and-play composing unit
+# ADR-069 — Methodology pack as the plug-and-play composing unit
 
 ## Status
 
@@ -21,7 +21,7 @@ source_observations:
 
 ## Subordinate to
 
-[ADR-018 — Work-Item Type Layer (WITL)](ADR-018-work-item-type-layer.md). This ADR completes ADR-018's governance spectrum (the K1 best-practice-defaults + K4 plug-and-play/override model) for a methodology's FULL operational surface, not just the KIND surface ADR-018 named. It opens **no competing kernel**: ADR-018's kernel disciplines bind it — a pack projects onto the domain-neutral work-organization mapping framework (never a release-pipeline ticket model), `work_item_type` stays an OPEN/external value domain, and `core/` governance carries no coupling to release-pipeline dev tooling. The *composition grammar* that widens the meta-schema to carry the pack model (the pack-level `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude) is the sibling decision recorded in [ADR-069](ADR-069-methodology-pack-composition-grammar.md); this ADR records the *composing-unit + placement + selection* decision that ADR-069's grammar realizes.
+[ADR-018 — Work-Item Type Layer (WITL)](ADR-018-work-item-type-layer.md). This ADR completes ADR-018's governance spectrum (the K1 best-practice-defaults + K4 plug-and-play/override model) for a methodology's FULL operational surface, not just the KIND surface ADR-018 named. It opens **no competing kernel**: ADR-018's kernel disciplines bind it — a pack projects onto the domain-neutral work-organization mapping framework (never a release-pipeline ticket model), `work_item_type` stays an OPEN/external value domain, and `core/` governance carries no coupling to release-pipeline dev tooling. The *composition grammar* that widens the meta-schema to carry the pack model (the pack-level `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude) is the sibling decision recorded in [ADR-070](ADR-070-methodology-pack-composition-grammar.md); this ADR records the *composing-unit + placement + selection* decision that ADR-070's grammar realizes.
 
 ## Context
 
@@ -66,7 +66,7 @@ Which pack(s) a deployment runs is chosen by `delivery_approach` in `operator.to
 
 ### D4 — Physical form is TOML; the meta-schema widen is the sibling decision
 
-The pack manifest is `pack.toml` — TOML is the platform's already-canonicalized operator-selectable config-manifest format (`operator.toml`, `platform-config.toml`; ADR-022), so packs (operator-selectable config *instances*) belong on the config surface, not the `.md` grammar/spec surface. The *grammar* those manifests conform to — the widened type-pack meta-schema carrying the pack-level `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude — is decided in [ADR-069](ADR-069-methodology-pack-composition-grammar.md) and lives in `work-item-type-schema.md`. This ADR fixes the composing-unit + placement + selection; ADR-069 fixes the grammar; the #1968 slice widens the meta-schema and scaffolds the manifests; the #1970 slice restructures `label-taxonomy.md` into grammar-only + populates the packs' label facets.
+The pack manifest is `pack.toml` — TOML is the platform's already-canonicalized operator-selectable config-manifest format (`operator.toml`, `platform-config.toml`; ADR-022), so packs (operator-selectable config *instances*) belong on the config surface, not the `.md` grammar/spec surface. The *grammar* those manifests conform to — the widened type-pack meta-schema carrying the pack-level `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude — is decided in [ADR-070](ADR-070-methodology-pack-composition-grammar.md) and lives in `work-item-type-schema.md`. This ADR fixes the composing-unit + placement + selection; ADR-070 fixes the grammar; the #1968 slice widens the meta-schema and scaffolds the manifests; the #1970 slice restructures `label-taxonomy.md` into grammar-only + populates the packs' label facets.
 
 ## Consequences
 
@@ -80,7 +80,7 @@ The pack manifest is `pack.toml` — TOML is the platform's already-canonicalize
 
 ### Negative / cost
 
-- **A one-time type-pack meta-schema widen** — the grammar gains a pack-composition layer (the `[[labels]]` facet, work-status projection, optional `kinds`, the `role` altitude). Additive and backward-compatible, but it is a change to an accepted grammar (ADR-069 records it; the #1968 slice implements it).
+- **A one-time type-pack meta-schema widen** — the grammar gains a pack-composition layer (the `[[labels]]` facet, work-status projection, optional `kinds`, the `role` altitude). Additive and backward-compatible, but it is a change to an accepted grammar (ADR-070 records it; the #1968 slice implements it).
 - **A one-time `label-taxonomy.md` restructure** — the fused grammar+instance doc splits into grammar-only + per-pack label facets (the #1970 slice). Governance-doc edit, `git revert`-able.
 - **A new architectural surface `core/packs/`** — the first `core/`-tree TOML instances outside `core/config/`; a new directory class that downstream consumers (tracker-manager, delivery-engine, ppm-agent, weekly-status-rollup) will read once the consumer read-refit lands (that wiring is the separate #2021 issue, NOT this milestone — the scaffold is inert until consumed).
 - **A deploy-time pack-sync obligation** (Band 2) once packs are consumed — enumerated when the consumer read-refit lands.
@@ -96,7 +96,7 @@ The pack surface inherits ADR-018's OPEN-value-domain discipline: no downstream 
 ## Related ADRs
 
 - [ADR-018 — Work-Item Type Layer (WITL)](ADR-018-work-item-type-layer.md) — the parent kernel this ADR is subordinate to (thin generic Work Item entity + declarative type layer; methodology-projected; release-pipeline-neutral; K1 best-practice-defaults + K4 plug-and-play/override). This ADR completes ADR-018's governance spectrum for a methodology's full operational surface.
-- [ADR-069 — Methodology-pack composition grammar](ADR-069-methodology-pack-composition-grammar.md) — the sibling decision that widens the type-pack meta-schema to carry the pack-composition model (the `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude). This ADR fixes the composing unit; ADR-069 fixes the grammar it conforms to.
+- [ADR-070 — Methodology-pack composition grammar](ADR-070-methodology-pack-composition-grammar.md) — the sibling decision that widens the type-pack meta-schema to carry the pack-composition model (the `[[labels]]` facet, work-status projection, optional `kinds`, and the `role`/composition altitude). This ADR fixes the composing unit; ADR-070 fixes the grammar it conforms to.
 - [ADR-022 — platform-config.toml vs operator.toml split](ADR-022-platform-config-vs-operator-toml-split.md) — establishes TOML as the operator-selectable config-manifest surface and `operator.toml` as the environment/identity/methodology-selection home; D3/D4 consume it (packs are config instances on the TOML surface; `delivery_approach` in `operator.toml` selects them).
 - [ADR-033 — Methodology-conditional skill activation](ADR-033-methodology-conditional-skill-activation.md) — the precedent that a methodology-conditional surface gates on `delivery_approach` (active-on-match, dormant-with-notice off-match, never a silent default); pack selection (D3) is the data-surface analog of that activation model.
 - [ADR-039 — Declarative gate-condition construct](ADR-039-declarative-gate-conditions.md) — the gate facet of a pack (Kanban WIP / pull-limit; parent-design-gates-child) is expressed via ADR-039's declarative gate-condition grammar; a pack contributes gate `criteria`, it invents no new gating primitive.

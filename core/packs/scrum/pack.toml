@@ -9,7 +9,7 @@ pack_version = "0.1.0"
 schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
 applies_to = "Scrum"            # byte-identical archetype join key (§1.1)
 role = "archetype"              # widened §1.1; default when omitted — stated for clarity
-extends = "_common"             # widened §1.1 (ADR-069 D1): inherit the base; declare deltas only
+extends = "_common"             # widened §1.1 (ADR-070 D1): inherit the base; declare deltas only
 
 # Kinds (deltas). Each kind IS the canonical Work Item entity (const base), keyed by the
 # work_item_type discriminator. Uses the ACTUAL §1.2 kind fields.
@@ -96,7 +96,7 @@ allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS"]
 [kinds.lifecycle_behavior]
 lifecycle = "timeboxed"
 
-# Scrum label contributions (DELTAS on _common; widened §1.1.1 / ADR-069 D2). The
+# Scrum label contributions (DELTAS on _common; widened §1.1.1 / ADR-070 D2). The
 # archetype delta is the `type:*` work-item-kind category labels that PROJECT this pack's
 # kinds[] — one `type:<kind_id>` row per declared kind, bound by `projects_kind` so the
 # label family stays in lockstep with the kinds (no independent drift). `type:*` is a
