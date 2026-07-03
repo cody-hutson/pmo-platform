@@ -32,6 +32,7 @@ From Dev Testing: quality review report terminating in the structured Handoff Pa
 From Engineering: PR with committed changes, sub-task completion, deviation log.
 From Planning: verification plan, AC per issue, file change matrix.
 From GitHub Issues: AC per issue — primary QA source.
+From the runtime-suite contract: [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) — the domain-keying source that maps a behavioral/runtime AC's deliverable to the runtime suite whose Stage-7 A8 `test-run` outcome (carried in the DT→QA Handoff Payload **Test-results** field) gates that AC at acceptance. Stage 8 reads this map to key which suite-result applies to a given behavioral AC; it does not run the map (execution is Stage 7's A8 concern). See § Phase B → Runtime-Evidence Acceptance below.
 
 Set at Stage 8: per-criterion verdict, acceptance score, Stage 7 escape count, overall verdict (ACCEPT/CONDITIONAL ACCEPT/REJECT/HOLD).
 
@@ -49,6 +50,60 @@ Severity: [if NOT MET: Blocker / Warning]
 ```
 
 **Per-criterion verdict enum** (extended for AC drift): `MET / NOT MET / PARTIAL / N/A-WITH-RATIONALE / REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM` per [`release/governance/release-process.md § Inter-Stage Feedback Protocol § AC-Drift Handling Protocol`](../../governance/release-process.md). Drift verdicts (`N/A-WITH-RATIONALE`, `REINTERPRET-WITH-RATIONALE`, `FLAG-UPSTREAM`) carry a required `Drift-rationale:` field per the protocol; `FLAG-UPSTREAM` routes Tier 1 [ADJUST] or Tier 2 [SCOPE CHANGE] per § Inter-Stage Feedback Protocol (NOT Lane 2 QA→DT Return per Phase C). **Cutover discipline:** Applies to all releases entering Stage 8 going forward. Each non-MET verdict additionally keys the disposition axis per the **Finding Disposition Decision Framework** below (fix-now / defer / accept), with a strengthened Step 0 gate for `NOT MET` acceptance criteria.
+
+#### Runtime-Evidence Acceptance (behavioral / runtime AC)
+
+Stage 8 does NOT run test suites — execution is Stage 7's concern (Phase A8). This subsection is the acceptance-altitude consumer of that upstream run: for an acceptance criterion that asserts **runtime/behavioral** behavior of a deliverable mapped to a runtime suite per [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md), Stage 8 grades acceptance by **consuming the Stage-7 A8 `test-run` outcome** carried in the DT→QA Handoff Payload **Test-results** field (per [DT↔QA Handoff Protocol §Forward Handoff](stage-07-dev-testing.md#dtqa-handoff-protocol), the `### Output for Stage 8` block).
+
+**Where this sits in the entry flow (read this precisely).** Phase A Entry Validation **validates the Handoff Payload envelope** — it confirms a conformant `### Output for Stage 8` block is present and its required fields (including Test-results) are extractable (line 39). Phase A does NOT grade the runtime evidence; envelope-present is a structural entry gate, not an acceptance judgment. This subsection is the **new Phase B read**: Phase B **reads the Test-results field's Result** for the AC's mapped suite and lets it drive the behavioral AC's verdict. Envelope-validated at Phase A; Test-results-read-and-graded at Phase B — the two are distinct steps, and this rule adds the second.
+
+| A8 Test-results Result (for the AC's mapped suite) | Stage-8 verdict effect on that behavioral AC |
+|---|---|
+| `PASS` | the runtime predicate is satisfied → the AC may be graded **MET** (the deliverable was exercised and passed); any remaining non-runtime facets of the same AC are still graded by the Phase B LLM-acceptance path |
+| `FAIL` | **NOT MET** (Blocker) → the deliverable does not work; routes Lane 2 → QA Return to Dev Testing per Phase C (the FAIL→NOT-MET→Blocker path Gate 8→9's "no unresolved Blocker" already carries — no new gate criterion) |
+| `SKIP` (map no-match row 6) OR no mapped suite for this AC's domain | **no runtime evidence available** → the behavioral AC is graded by the existing Phase B LLM-acceptance path against PR content, and the Acceptance Report records `runtime-evidence: none (suite-skip \| unmapped-domain)` so the absence is explicit, not silent |
+
+This is **evidence consumption, not execution** — Stage 8 stays at acceptance altitude ("does the exercised deliverable meet the need?"), reading the run Stage 7 already performed. No suite is re-run at Stage 8. The domain→suite keying is owned by [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) (single dispatch source of truth, shared with the verification-execution executor); Stage 8 does not fork a second dispatch surface.
+
+**Cutover (introducing-release-exempt).** Applies to releases entering Stage 8 strictly AFTER this rule's introducing-release merge SHA; the introducing release itself is exempt (reflexive-pipeline-loop discipline — a release that ships this rule does not run the rule on its own acceptance, mirroring the Stage-7 A8 introducing-release exemption). A doc/governance/pipeline-internal release additionally has no runtime/behavioral AC to key on, so the rule is vacuously satisfied regardless of the exemption (see § Doc-release no-op below).
+
+##### Worked example — a behavioral acceptance criterion, end-to-end (Stage 7 → Stage 8)
+
+Two co-equal cases are worked below: an **unmapped** domain (web/component — the honest `suite-skip` fallback) and a **mapped** domain (hooks — the runtime evidence actually consumed). The mapped case shows the mechanism WORKING; the unmapped case shows the honest degradation when no suite covers the domain. Both are first-class — the rule is only trustworthy if it grades honestly in the gap AND consumes real evidence where it exists.
+
+**Case A (unmapped domain — honest `suite-skip` fallback).**
+
+**Behavioral AC (verbatim):** "The dismiss control renders on the notification component, and once dismissed the component stays dismissed for the rest of the browser session (dismiss state persists across re-render within the session)."
+
+**Deliverable domain:** `web` / component (a UI component + its session-scoped dismiss-persistence behavior).
+
+*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) §2 with the changed path (e.g. `web/components/Notification.tsx`). Evaluate rows top-to-bottom, most-specific-glob-wins. **No row matches a web/component path** (rows 1–5 target `core/deploy/**`, `core/hooks/**`, `core/deploy/tools/check-doc-links.py`, and the install/onboarding/update entrypoints; there is no web/component row) → the change falls to **row 6 (no match)** → A8 emits `test-run/suite-skip`, a no-op gate. The DT→QA Handoff Payload **Test-results** field carries the single line `NONE — no runtime code path changed`.
+
+> **Honest-gap note:** the absence of a web/component runtime suite is a REAL registry gap in the selection map, surfaced by this example — NOT a defect in this AC. Closing it (adding a `web/**` component-test row that runs the framework's own component test runner under the `/tmp` HOME-override) is out of this card's narrowed scope; it is the map's own extension path. Until then, a web/component behavioral AC has NO runtime-execution evidence at Stage 7, and Stage 8 must grade it honestly rather than fabricate a pass.
+
+*Step 2 — Stage 8 acceptance (acceptance altitude), per Runtime-Evidence Acceptance above.* The behavioral AC maps to `suite-skip` / unmapped-domain → the "no runtime evidence available" row fires. Stage 8:
+(i) grades the AC by the existing Phase B LLM-acceptance path against PR content — it inspects the component source + any author-provided evidence (a recorded interaction, a unit/interaction test the author ran, a screenshot or DOM assertion cited in the PR) for the two facets: *renders* and *dismiss-persists-for-session*;
+(ii) records in the Acceptance Report: `runtime-evidence: none (unmapped-domain: web/component — no selection-map row)`, so the acceptance verdict is transparent that no automated runtime run backed it;
+(iii) renders MET / NOT MET / PARTIAL on the content evidence as usual — a behavioral claim the author could not evidence at all is PARTIAL or NOT MET (the unmet remainder keyed per the Step-0 gate), NOT an automatic MET.
+
+**Case B (mapped domain — runtime evidence consumed).**
+
+**Behavioral AC (verbatim):** "The security hook blocks the disallowed command and exits non-zero; an allowed command passes through and exits zero."
+
+**Deliverable domain:** `hooks` (a `core/hooks/**` security hook + its block/allow runtime behavior).
+
+*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult the selection map §2 with the changed path (e.g. `core/hooks/block-dangerous-command.sh`). Evaluate rows top-to-bottom → the path matches **row 3** (`core/hooks/**` → hook suite, `bash core/hooks/tests/test-runner.sh`, HOME→/tmp). A8 **runs** the hook suite under the `/tmp` HOME-override sandbox and records the outcome. The DT→QA Handoff Payload **Test-results** field carries a real row, e.g. `hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | <ts>`.
+
+*Step 2 — Stage 8 acceptance (acceptance altitude), per Runtime-Evidence Acceptance above.* The behavioral AC maps to a suite whose A8 Result is populated → the `PASS` / `FAIL` row fires (not the no-evidence row). Stage 8:
+(i) reads the Test-results Result for the AC's mapped suite (row 3, hook-suite);
+(ii) grades the behavioral AC **directly on that result** — `PASS → the AC may be MET` (the deliverable was exercised by the hook suite and passed; the block/allow behavior the AC asserts is exactly what `test-runner.sh` exercises); `FAIL → NOT MET (Blocker) → Lane 2 → QA Return to Dev Testing`;
+(iii) records in the Acceptance Report: `runtime-evidence: hook-suite PASS (map row 3, actions-run:<url>)`, so the acceptance verdict cites the run that backed it.
+
+This is the deliverable-exercising acceptance path the runtime-mapped case gets **for free** by consuming the A8 run — no Stage-8 re-execution, one dispatch map, real evidence. Case A degrades honestly where the map has no row; Case B consumes the run where it does. The rule is the same rule in both — only the map lookup differs.
+
+##### Doc-release no-op preservation
+
+Governance/doc/pipeline-internal releases pass Stage 8 unchanged. The Runtime-Evidence Acceptance rule is *conditional on a behavioral/runtime AC that maps to a suite*. A doc/governance/spec release: (1) touches no runtime-mapped path → its Stage-7 A8 already emits `test-run/suite-skip` (row 6); (2) carries no runtime/behavioral AC (its ACs are file-path+state / content predicates) → the rule has **nothing to key on** and does not fire; (3) therefore grades exactly as today via the existing Phase B LLM-acceptance path — **byte-for-byte unchanged verdict**. This is the explicit Stage-8 mirror of the Stage-7 A8 suite-skip no-op row (where Stage 7 says "no path matches → `suite-skip`, no-op gate, no ceremony", Stage 8 says "no runtime evidence / no runtime AC → grade on content as today, record `runtime-evidence: none`"). This card is itself the proof: it is a governance/pipeline-internal deliverable, so its own Stage-8 run takes the no-op path — and, per the cutover exemption above, grades against pre-change Stage-8 semantics regardless.
 
 **Design-Principle Conformance QA dimension** (applies when the release touches the D-Gate-rendering surface or the design-principle register): for each option-level `### Design-Principle Conformance` verdict produced in the release's Decision Briefings / D-Gate renderings, verify the conformance verdict CITES (a) the register entry id (`DP-N`) and (b) the entry's `governing_doc` path:line — a bare `ALIGNED` / `**CONFLICT.**` with no register-entry + `governing_doc` citation is a NOT MET finding (it fails the load-bearing evidence test per `decision-discipline.md` § 5 G1/G3, the same evidence-citation discipline the Upstream-compatibility verdict carries). Cross-check: every `**CONFLICT.**` verdict enumerates ≥1 named mitigation and, when the entry's `conflict_reversibility_default` is EXPENSIVE/IRREVERSIBLE, shows an operator HALT / sign-off (not a silent annotate). This dimension is the acceptance-side twin of `deploy.sh --check` Check 45's deploy-time structural assertion: Check 45 asserts the conformance mechanism EXISTS and the register resolves; this dimension asserts each rendered conformance verdict is EVIDENCE-GROUNDED.
 
