@@ -198,7 +198,7 @@ Always end with artifacts at their correct paths (Author mode) or a structured m
 
 Populate `{core,operations,release}/skills/<name>/evals/`:
 
-- `evals.json` — test prompts in the preserved eval-harness schema (id, name, prompt, expected_output, files) — consumed by `pmo-skill-refiner/scripts/run_eval.py`
+- `evals.json` — test prompts in the preserved eval-harness schema (id, name, prompt, expected_output, files, assertions) — consumed by `pmo-skill-refiner/scripts/run_eval.py`. **Drift note:** the checked-in `run_eval.py` is a *trigger* harness (`{query, should_trigger}`); the assertion-grading path (`assertions[]` → the grader agent → `grading.json`) is a grader-honored contract, not runner-executed today. Assertion `type` is an open enum with no code validator — the grader honors the type's semantics in prose.
 - `judge_prompts/` — one file per judge: system + user prompts + substitution variables + CoT-blinding notes
 - `rubrics.md` — dimensions, scoring scale (binary preferred; 1–4 if ordinal), calibration thresholds
 - `failure-taxonomy.md` — binary failure modes observed or anticipated, mapped to F-XX where applicable, with prevalence-counting protocol
@@ -206,6 +206,19 @@ Populate `{core,operations,release}/skills/<name>/evals/`:
 - `calibration-protocol.md` — ≥30 hand-labeled items, α/κ threshold, precision / recall per class, bias-test protocol (swap order, cross-family, length)
 
 Full layout and examples in `references/playbook-per-skill.md`.
+
+**Assertion `type` enum.** Each assertion carries a `{text, type}` shape. `type` is an **open enum** (no code validator) — the grader honors each value's semantics in prose. The values:
+
+| `type` | Grades | Home |
+|---|---|---|
+| `structural` | mechanically-checkable presence/shape | grader-honored |
+| `judgment` | a single binary LLM-judge call | grader-honored |
+| `resolution` | issue/PR resolution state | grader-honored |
+| `non-triviality` | that an assertion is discriminating (not skill-independent) | grader-honored |
+| `read-only` | that no mutation occurred | grader-honored |
+| `acceptance` | **does a PR satisfy its issue's acceptance criteria** — AC-ingestion → per-criterion grading (two judgments: gradability-class + binary satisfaction) → all-drift-out acceptance score, projected to the Stage-8 §5 verdict enum | `references/acceptance-assertion-type.md` |
+
+The `acceptance` type is the AC-ingesting executor of the Stage-8 acceptance machinery — full contract (parse rules, two-judgment grading, verdict-projection table, all-drift-out score, matrix columns) in [`references/acceptance-assertion-type.md`](references/acceptance-assertion-type.md); its grading rubric is in `references/rubric-templates.md` § Acceptance-grading rubric.
 
 ### Author mode, stage-gate playbook
 
@@ -268,7 +281,8 @@ An eval-writer output is READY when:
 |---|---|
 | `references/canonical-workflow.md` | Every invocation — the 10-stage spine (Stages 0–4 in scope; 5–10 referenced for handoff) |
 | `references/decision-tree.md` | Every invocation — the 20 IF/THEN rules that fire off Stage 0 |
-| `references/rubric-templates.md` | Every Author invocation — 7 templates (binary judge, trajectory, tool-call, handoff, safety, HITL, end-to-end) |
+| `references/rubric-templates.md` | Every Author invocation — 7 templates (binary judge, trajectory, tool-call, handoff, safety, HITL, end-to-end) + the acceptance-grading rubric |
+| `references/acceptance-assertion-type.md` | When authoring or grading a `type: acceptance` assertion — the AC-ingesting Stage-8 acceptance executor (parse contract, two-judgment grading, all-drift-out score) |
 | `references/failure-modes.md` | When failure-taxonomy.md is being authored or F-XX mappings are needed |
 | `references/anti-patterns.md` | Every Review invocation — the A-01..A-23 audit |
 | `references/playbook-per-skill.md` | When dispatching to Per-skill playbook |
