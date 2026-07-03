@@ -324,13 +324,14 @@ Dimensions cited from [`pipeline/stage-13-close.md`](../../release/references/pi
 
 ## Interaction with QA Checkpoints
 
-The QA checkpoint capability defines 4 QA checkpoints at specific pipeline locations. These are complementary — QA checkpoints define WHAT to check at 4 locations, the evaluator defines HOW to assess and WHETHER to proceed at ALL locations.
+The QA checkpoint capability defines 5 QA checkpoints at specific pipeline locations. These are complementary — QA checkpoints define WHAT to check at 5 locations, the evaluator defines HOW to assess and WHETHER to proceed at ALL locations.
 
 | QA Checkpoint | Stage Boundary | Evaluator Interaction |
 |---|---|---|
 | DoR gate at Triage | 1→2 / 2→3 | Checkpoint criteria feed evaluator's metrics layer as structural checks |
 | Dependency check at Solutioning | 4→5 / 5→6 | Checkpoint criteria extend evaluator's metrics layer |
 | Pre-merge QA | 7→8 / 8→9 | QA-specific criteria — evaluator assesses the gate, not the QA test itself |
+| Release-integration QA (QC3.5) | 8→9 / 9→12 | Cross-Issue AC verdicts (release-scoped, any ≥2 issues) feed the evaluator's metrics layer at Plan Review; read-only consumption of the executor-emitted verdicts |
 | Post-deploy verify | 12→13 | Checkpoint criteria feed evaluator's metrics layer at close gate |
 
 When QA checkpoints are implemented, the evaluator can consume them as additional metrics-layer inputs at the corresponding boundaries without modification to this file.

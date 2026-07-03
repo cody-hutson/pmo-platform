@@ -553,6 +553,28 @@ QA role: confirms gate criteria are applied structurally, not optionally. Core c
 | **Self-repair** | Agent runs regression check, identifies failing assertions, proposes targeted fixes. Engineering re-implements and returns to QA. |
 | **Escalation** | >3 QA→Engineering round-trips on same issue → flag to operator as potential design deficiency |
 
+### Checkpoint 3.5: Release-Integration QA (Stage 9)
+
+**Pipeline position:** Stage 9 (Plan Review), Phase A3.6 — after per-issue Stage 8 QA (Checkpoint 3), before the GO decision.
+**Purpose:** Confirm the release's Cross-Issue Acceptance Criteria (CIAC) — release-scoped cohesion predicates spanning ≥2 issues — are graded PASS on the merged PR, so integrated-artifact cohesion is gated rather than left to operator vigilance. The hub **reads the CIAC verdicts the release's verification-execution executor emitted** at Stage 6/7 (single-runner discipline — the executor runs each declared method once and emits the verdict; QC3.5 consumes the emitted verdict read-only, it does not re-run the method).
+**Distinct from:** Checkpoint 3 (Stage 8, per-issue AC); Stage 9 Phase A3.5 `INT-N` chain validation (dependency-linked pairs). QC3.5 is the release-scoped, any-≥2-issue layer.
+
+| ID | Check | Type | Automation |
+|---|---|---|---|
+| QC3.5-01 | Every CIAC-N declared in the Stage-4 plan has an emitted verdict read against the merged PR | judgment | recommend |
+| QC3.5-02 | Each CIAC-N verdict uses the Stage-8 per-criterion verdict enum (no new values) | structural | auto |
+| QC3.5-03 | Consumed CIAC verdicts are fresh — emitted against the final PR head SHA; a stale verdict (a later commit touched a CIAC-relevant file) re-triggers the verification-execution executor before the gate reads it (evidence-freshness guard, mirroring G-PR9 baseline-currency) | structural | auto |
+| QC3.5-04 | RELEASE-INCONSISTENT (≥1 CIAC NOT MET / unresolved PARTIAL) surfaces as a NO-GO recommendation input | judgment | recommend |
+
+| Aspect | Definition |
+|---|---|
+| **Pass** | All declared CIAC-N verdicts read PASS (RELEASE-CONSISTENT), OR the plan declares zero CIACs (N/A). |
+| **Fail** | RELEASE-INCONSISTENT — surface as NO-GO recommendation input; operator may override with recorded rationale (G-PR7 precedent). |
+| **Self-repair** | Hub compiles a per-CIAC finding (issues spanned, shared surface, predicate, observed vs. expected). A stale verdict re-triggers the verification-execution executor to re-emit against the final head SHA. A non-MET verdict routes to the finding-disposition framework; fix-now returns to Engineering. |
+| **Escalation** | ≥1 RELEASE-INCONSISTENT unresolved at GO → operator NO-GO or documented override. |
+
+**Cross-issue AC checkpoint — cutover discipline:** Applies to releases entering Stage 9 strictly AFTER this checkpoint's introducing-release merge SHA (**v3.65**, ADR-072); the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new checkpoint, so v3.65 grades its own dog-food CIAC under pre-QC3.5 discipline). This is the release-scoped cross-issue AC layer of the QA Checkpoint Framework.
+
 ### Checkpoint 4: Post-Deploy Verification (Stage 13)
 
 **Pipeline position:** Stage 13 (Close), after deployment execution.
