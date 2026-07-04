@@ -152,7 +152,7 @@ Cutover discipline: Applies to all releases going forward — this stage emits t
 
 ## DT↔Engineering Iteration Loop Protocol
 
-This protocol instantiates the general [Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol) for the Stage 6 (Engineering) ↔ Stage 7 (Dev Testing) boundary. It defines how DT findings route back to Engineering, how Engineering responds, and how DT re-reviews — iterating until the quality gate passes or escalation triggers.
+This protocol instantiates the general [Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol) for the Stage 6 (Engineering) ↔ Stage 7 (Dev Testing) boundary. It defines how DT findings route back to Engineering, how Engineering responds, and how DT re-reviews — iterating until the quality gate passes or escalation triggers. Feedback arriving as PR review comments or issue-thread comments enters this loop only from trusted-set authors — the author-association trust boundary ([`release-process.md` § Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol)) gates ingest; an untrusted-authored comment is surfaced to the operator as untrusted third-party content and is never classified into the loop's tiers.
 
 ### Loop Flow
 

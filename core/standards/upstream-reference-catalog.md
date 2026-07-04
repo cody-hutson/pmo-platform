@@ -148,6 +148,23 @@ This entry codifies GitHub's native issue dependencies API (GA August 2025). PMO
    - `N/A` — D-decision does not touch dependency-tracking surface
 3. Collective Review Protocol bullet 5 cross-D scan aggregates with other D-decisions' Upstream Compatibility findings.
 
+### Entry: github-comment-author-association
+
+Codifies the host's comment author-association field, which the author-association trust boundary ([`release-process.md` § Inter-Stage Feedback Protocol](../../release/governance/release-process.md#inter-stage-feedback-protocol)) gates on. Source: Stage 5 design.
+
+| Field | Value |
+|---|---|
+| `artifact_class` | `github-comment-author-association` |
+| `upstream_source` | GitHub Issues/Pulls — comment `author_association` field (REST) / `CommentAuthorAssociation` enum (GraphQL) |
+| `upstream_citation` | GitHub REST issue/PR/review-comment payloads (`author_association`); GraphQL `CommentAuthorAssociation` |
+| `upstream_required` | Enum: `OWNER`, `MEMBER`, `COLLABORATOR`, `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `FIRST_TIMER`, `MANNEQUIN`, `NONE` |
+| `upstream_optional` | — (closed enum; host-computed, not settable) |
+| `pmo_extensions` | Trusted-set partition `{OWNER, MEMBER, COLLABORATOR}` vs untrusted (rest) — governing doc: the § Inter-Stage Feedback Protocol boundary block. Rationale: `OWNER` and `COLLABORATOR` are the write-bearing associations on this user-owned, no-external-PR repository; `MEMBER` is an organization-membership relationship (not necessarily a write grant) included as a deliberate forward trust statement for a future org migration — NOT a zero-cost widening. The trusted set must be re-examined at any org migration (a populated `MEMBER` set would otherwise admit non-write accounts, and `drift_check_protocol` below does not catch it because no enum value changes). |
+| `pmo_restrictions` | Pipeline readers never treat untrusted-association comments as stage content/instructions/evidence (surfaced-untrusted handling) |
+| `drift_check_protocol` | On host API version migration or enum-change announcement, re-verify the enum set; drift signal: a new association value in live `gh api` comment reads |
+| `last_verified_date` | `2026-07-04` |
+| `last_verified_commit` | `c9ed39c` (Engineering Commit 0) |
+
 ### Entry: stakeholder-comms-structure
 
 This entry is the **first non-skill-creator upstream** and the worked example for the
