@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.65.1 | 109-comment-trust-boundary | 2026-07-04 | Comment author-association trust boundary (prompt-injection hardening) + lock-at-close | #3304 | [notes/v3.65.1_RELEASE_NOTES.md](notes/v3.65.1_RELEASE_NOTES.md) |
 | v3.65 | 70-verification-execution-surface | 2026-07-04 | — | #3205 | [notes/v3.65_RELEASE_NOTES.md](notes/v3.65_RELEASE_NOTES.md) |
 | v3.64 | 84-executable-acceptance-testing | 2026-07-03 | — | #3202 | [notes/v3.64_RELEASE_NOTES.md](notes/v3.64_RELEASE_NOTES.md) |
 | v3.63 | 74-controlled-deployment-environment-and-modes | 2026-07-03 | GitHub-native PR-review surfaces + release-manager skill↔pipeline reconciliation | #3199 | [notes/v3.63_RELEASE_NOTES.md](notes/v3.63_RELEASE_NOTES.md) |

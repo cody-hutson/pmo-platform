@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.65.1] - 2026-07-04
+
+The release pipeline now ignores issue and PR comments from accounts outside the trusted set, so a stranger's comment can't be read as pipeline instructions.
+
+[Full notes](release/releases/notes/v3.65.1_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.65.1)
+
 ## [v3.65] - 2026-07-04
 
 The release pipeline now exercises a release's deliverables — running verifications as acceptance evidence — instead of only reading their source.
