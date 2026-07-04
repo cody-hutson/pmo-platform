@@ -99,19 +99,19 @@ The software domain organizes around the documents engineers produce. Each artif
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| ADR | **Nygard, "Documenting Architecture Decisions" (2011)** — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin (described as "Create or evaluate an ADR") | (none) | YES — gap; closure path: future software-domain release |
+| ADR | **Nygard, "Documenting Architecture Decisions" (2011)** — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin (described as "Create or evaluate an ADR") | `operations/templates/adr-template.md` | No (shipped) |
 
 ### §4.2 Operations / Runbook
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| Runbook | **Google SRE Workbook §Runbook Design** — secondary: ITIL Service Operation §Operations Management | `operations:runbook` plugin (PMO operations role-skill) | (none) | YES — gap; closure path: future software-domain release |
+| Runbook | **Google SRE Workbook §Runbook Design** — secondary: ITIL Service Operation §Operations Management | `operations:runbook` plugin (PMO operations role-skill) | `operations/templates/runbook-template.md` | No (shipped) |
 
 ### §4.3 Design / System
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| Design doc | **Google design-doc convention** (Atwood / Henderson templates) — Context / Goals / Non-goals / Proposal / Alternatives / Risks | `engineering:system-design` plugin | (none) | YES — gap; closure path: future software-domain release |
+| Design doc | **Google design-doc convention** (Atwood / Henderson templates) — Context / Goals / Non-goals / Proposal / Alternatives / Risks | `engineering:system-design` plugin | `operations/templates/design-doc-template.md` | No (shipped) |
 
 ### §4.4 Specification / Protocol (RFC)
 
@@ -154,9 +154,9 @@ Single authoritative table — 8 rows binding each artifact family to its native
 
 | # | Family | Domain | Primary Canon | Anthropic Plugin Cross-Ref | Current Canonical PMO Template | Localization Note |
 |---|---|---|---|---|---|---|
-| 1 | ADR | software | Nygard, "Documenting Architecture Decisions" (2011) — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin | (none — gap) | Anthropic plugin implements Nygard convention; no CONFLICT |
-| 2 | Runbook | software | Google SRE Workbook §Runbook Design | `operations:runbook` plugin (PMO operations role-skill — covers SOPs + recurring task documentation) | (none — gap) | ITIL Service Operation §Operations Management referenced as secondary; align template fields with `operations:runbook` field shape |
-| 3 | Design doc | software | Google design-doc convention (Atwood/Henderson templates) — Context/Goals/Non-goals/Proposal/Alternatives/Risks | `engineering:system-design` plugin | (none — gap) | Anthropic plugin co-locates system-design output; PMO template aligns with Google convention referenced therein |
+| 1 | ADR | software | Nygard, "Documenting Architecture Decisions" (2011) — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin | `adr-template.md` | Anthropic plugin implements Nygard convention; no CONFLICT |
+| 2 | Runbook | software | Google SRE Workbook §Runbook Design | `operations:runbook` plugin (PMO operations role-skill — covers SOPs + recurring task documentation) | `runbook-template.md` | ITIL Service Operation §Operations Management referenced as secondary; align template fields with `operations:runbook` field shape |
+| 3 | Design doc | software | Google design-doc convention (Atwood/Henderson templates) — Context/Goals/Non-goals/Proposal/Alternatives/Risks | `engineering:system-design` plugin | `design-doc-template.md` | Anthropic plugin co-locates system-design output; PMO template aligns with Google convention referenced therein |
 | 4 | RFC | software | IETF RFC 7322 + Rust RFC template | (no Anthropic plugin equivalent) | (none — gap) | Generic heuristic stands without localization; canon coverage complete via upstream documents |
 | 5 | PRD / Feature spec | software | Anthropic `product-management:write-spec` plugin convention | `product-management:write-spec` plugin (direct hit per Stage 4 D4) | (none — gap) | Per Stage 4 D4 +  offload-routing: PMO PRD canon IS the Anthropic plugin convention; secondary reference Aha! / Lenny Rachitsky template fills any field-shape gap |
 | 6 | Postmortem | software | Google SRE Workbook §Postmortem Culture | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | (none — gap) | Anthropic plugin implements Google SRE postmortem convention; PRINCE2 lessons-learned cross-reference for project-domain instances |
