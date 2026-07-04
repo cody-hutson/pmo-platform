@@ -1,8 +1,8 @@
 ---
 title: "ADR-076 — Comment author-association trust boundary at the pipeline's comment-I/O seam"
-status: Proposed
+status: Accepted
 date: 2026-07-04
-release: 109-comment-trust-boundary (provisional v3.65.1; binds at Stage 12)
+release: 109-comment-trust-boundary (v3.65.1; bound at Stage 12)
 deciders: "operator (plan approval / Stage 9 gate) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment)"
 tags: [release-ops, security, prompt-injection, trust-boundary, comment-channel, stage-io, moderation, lock-at-close]
 source_observations:
@@ -14,7 +14,7 @@ source_observations:
 
 ## Status
 
-Proposed — flips to Accepted at the operator's plan approval (Stage 9 gate for this release); the flip is verified against this file's `status:` field, never assumed from milestone closure.
+Accepted — ratified at the operator's Stage 9 plan-review gate (2026-07-04); the flip is verified against this file's `status:` field, never assumed from milestone closure.
 
 ## Context
 
