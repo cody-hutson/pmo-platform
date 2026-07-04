@@ -126,9 +126,10 @@ The flow that drafts acceptance criteria, validates implementation against them,
 | Stage 5 Solutioning | Gate criteria refined; QC2 dependency validation | Primary |
 | Stage 7 Dev Testing | QC3 pre-merge structural and content checks | Primary |
 | Stage 8 QA Testing | Acceptance review against AC | Primary |
+| Stage 9 Plan Review | QC3.5 release-integration cross-issue AC validation | Primary |
 | Stage 13 Close | QC4 post-deploy verification | Primary |
 
-**Canonical source.** [`schemas/gate-criteria-spec.md`](../schemas/gate-criteria-spec.md); QC1-QC4 checkpoints in [`release/governance/release-process.md § QA Checkpoint Framework`](../../release/governance/release-process.md).
+**Canonical source.** [`schemas/gate-criteria-spec.md`](../schemas/gate-criteria-spec.md); the five QA checkpoints (QC1, QC2, QC3, QC3.5, QC4) in [`release/governance/release-process.md § QA Checkpoint Framework`](../../release/governance/release-process.md).
 
 ### 4. Stakeholder Engagement Flow
 

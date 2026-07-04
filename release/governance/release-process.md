@@ -563,6 +563,28 @@ QA role: confirms gate criteria are applied structurally, not optionally. Core c
 | **Self-repair** | Agent runs regression check, identifies failing assertions, proposes targeted fixes. Engineering re-implements and returns to QA. |
 | **Escalation** | >3 QA→Engineering round-trips on same issue → flag to operator as potential design deficiency |
 
+### Checkpoint 3.5: Release-Integration QA (Stage 9)
+
+**Pipeline position:** Stage 9 (Plan Review), Phase A3.6 — after per-issue Stage 8 QA (Checkpoint 3), before the GO decision.
+**Purpose:** Confirm the release's Cross-Issue Acceptance Criteria (CIAC) — release-scoped cohesion predicates spanning ≥2 issues — are graded PASS on the merged PR, so integrated-artifact cohesion is gated rather than left to operator vigilance. The hub **reads the CIAC verdicts the release's verification-execution executor emitted** at Stage 6/7 (single-runner discipline — the executor runs each declared method once and emits the verdict; QC3.5 consumes the emitted verdict read-only, it does not re-run the method).
+**Distinct from:** Checkpoint 3 (Stage 8, per-issue AC); Stage 9 Phase A3.5 `INT-N` chain validation (dependency-linked pairs). QC3.5 is the release-scoped, any-≥2-issue layer.
+
+| ID | Check | Type | Automation |
+|---|---|---|---|
+| QC3.5-01 | Every CIAC-N declared in the Stage-4 plan has an emitted verdict read against the merged PR | judgment | recommend |
+| QC3.5-02 | Each CIAC-N verdict uses the Stage-8 per-criterion verdict enum (no new values) | structural | auto |
+| QC3.5-03 | Consumed CIAC verdicts are fresh — emitted against the final PR head SHA; a stale verdict (a later commit touched a CIAC-relevant file) re-triggers the verification-execution executor before the gate reads it (evidence-freshness guard, mirroring G-PR9 baseline-currency) | structural | auto |
+| QC3.5-04 | RELEASE-INCONSISTENT (≥1 CIAC NOT MET / unresolved PARTIAL) surfaces as a NO-GO recommendation input | judgment | recommend |
+
+| Aspect | Definition |
+|---|---|
+| **Pass** | All declared CIAC-N verdicts read PASS (RELEASE-CONSISTENT), OR the plan declares zero CIACs (N/A). |
+| **Fail** | RELEASE-INCONSISTENT — surface as NO-GO recommendation input; operator may override with recorded rationale (G-PR7 precedent). |
+| **Self-repair** | Hub compiles a per-CIAC finding (issues spanned, shared surface, predicate, observed vs. expected). A stale verdict re-triggers the verification-execution executor to re-emit against the final head SHA. A non-MET verdict routes to the finding-disposition framework; fix-now returns to Engineering. |
+| **Escalation** | ≥1 RELEASE-INCONSISTENT unresolved at GO → operator NO-GO or documented override. |
+
+**Cross-issue AC checkpoint — cutover discipline:** Applies to releases entering Stage 9 strictly AFTER this checkpoint's introducing-release merge SHA (**v3.65**, ADR-073); the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new checkpoint, so v3.65 grades its own dog-food CIAC under pre-QC3.5 discipline). This is the release-scoped cross-issue AC layer of the QA Checkpoint Framework.
+
 ### Checkpoint 4: Post-Deploy Verification (Stage 13)
 
 **Pipeline position:** Stage 13 (Close), after deployment execution.
@@ -574,7 +596,7 @@ QA role: confirms gate criteria are applied structurally, not optionally. Core c
 | QC4-02 | Skill invocation: each deployed skill responds without error | structural | auto |
 | QC4-03 | Tracker conformance: updated trackers match schema definitions | structural | auto |
 | QC4-04 | Regression: existing platform behavior preserved | structural | auto |
-| QC4-05 | Release-plan invariant re-verification: re-execute each AV-N assertion declared in the release plan against post-deploy main; per-AV verdict (PASS/FAIL) with affected files | structural (AV-1 grep mechanism) / extensible (future assertion types) | recommend |
+| QC4-05 | Release-plan invariant re-verification: re-execute each AV-N assertion declared in the release plan against post-deploy main; per-AV verdict (PASS/FAIL) with affected files | structural (region-scoped AV assertion — `release/tools/av-verify.py`; region ∈ {code,comment,any} × polarity ∈ {present,absent}) / extensible (future assertion types) | recommend |
 | QC4-06 | Goal-attainment verification: Stage 13 spoke reads the Outcome Statement from the Milestone description AND reads post-deploy state evidence (Change Description + QC4-01..04 results + Success Indicator field when present). Produces a 1-paragraph attainment narrative answering "does post-deploy main exhibit the AFTER state?" Verdict: ATTAINED / PARTIALLY-ATTAINED / NOT-ATTAINED. | structural (Outcome-presence grep) + judgment (attainment narrative) | recommend |
 | G-CL6-01 | Design artifacts refreshed when applicability fired during this release (cross-reference to [`gate-criteria-spec.md`](../../core/schemas/gate-criteria-spec.md) Gate 13 G-CL6) | structural | auto (warn → enforce) |
 | G-CL7-01 | Goal-attainment verification recorded (QC4-06 verdict + 1-paragraph narrative present in release plan Verification Evidence section; cross-reference to [`gate-criteria-spec.md`](../../core/schemas/gate-criteria-spec.md) Gate 13 G-CL7) | structural | auto (warn → enforce) |
@@ -587,7 +609,8 @@ QA role: confirms gate criteria are applied structurally, not optionally. Core c
 | **Escalation** | Any QC4 failure → automatic operator notification (post-deploy = production-impacting) |
 
 **QC4-05-specific criteria:**
-- **Pass:** All declared AV-N assertions return zero substantive matches (or `pass` per their declared mechanism).
+- **Mechanism (region-scoped AV assertion — `release/tools/av-verify.py`):** Each AV-N assertion declares a `region` (`code` | `comment` | `any`) and a `polarity` (`present` | `absent`). `av-verify.py` resolves the target's lexical class from its extension, builds a comment-stripped **code view** (for markdown, fenced code blocks are also excluded, isolated as their own region) and a **comment view**, and matches the pattern only against the declared region. A `code`-region assertion is therefore evaluated against the comment-stripped code view, so a token inside a comment (or, in markdown, inside a fenced block) cannot produce a verdict — the comment-vs-code / negation ambiguity is structurally excluded, not left to author diligence. `region: any` is byte-equivalent to a whole-file grep and is the default for prose/markdown targets with no code/comment split. An unknown lexer combined with a `code`/`comment` region is fail-loud (exit 3), never a silent whole-file fallback. Introducing release: v3.65 (ADR-072); the mechanism governs releases entering Stage 13 strictly after v3.65's merge SHA, and v3.65's own Stage-13 QC4-05 runs the prior whole-file mechanism (reflexive-pipeline-loop exemption).
+- **Pass:** All declared AV-N assertions return `PASS` per their declared region + polarity (a `present` assertion finds its pattern in the region; an `absent` assertion does not).
 - **Fail:** ≥1 AV-N assertion returns non-empty / non-pass result. **Non-blocking for milestone close** — surface diagnostic for routing.
 - **Routing options (operator choice per finding):**
   - (A) Immediate-hotfix Issue, P1/P2 label, bundled into next-immediate release (use when invariant violation is user-visible, security-relevant, or data-loss-adjacent)
