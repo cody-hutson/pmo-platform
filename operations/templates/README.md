@@ -1,7 +1,7 @@
 # operations/templates/ — Canonical Templates Registry
 
 **Purpose:** Canonical home for stakeholder-facing template files (typed-format specifications — column headers, section structure, placeholder semantics) used across the PMO platform.
-**Organization:** One file per template; the registry table below groups by domain (Project-domain PMBOK-7-anchored / Platform-internal). Canonical → mirror propagation is `deploy.sh` `TEMPLATE_SYNC_MAP`.
+**Organization:** One file per template; the registry table below groups by domain (Project-domain PMBOK-7-anchored / Software-domain canon-anchored / Platform-internal / Project-data architecture). Canonical → mirror propagation is `deploy.sh` `TEMPLATE_SYNC_MAP`.
 **Governance:** [core/governance/OPERATIONS.md](../../core/governance/OPERATIONS.md) § README-Per-Folder Convention; template-storage protocol in [core/standards/template-storage.md](../../core/standards/template-storage.md).
 **Layer:** 1 (Engineering, git-tracked)
 
@@ -41,6 +41,16 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 | `sprint-tracker-template.md` | Delivery | PMBOK 7 (Agile track) |
 | `project-md-template.md` (promoted from skill via D-CanonicalPromote) | Project Work | PMBOK 7 (PROJECT.md scaffolding) |
 | `requirements-template.md` (promoted from skill via D-CanonicalPromote) | Planning | PMBOK 7 (requirements decomposition) |
+
+### Software-domain (engineering best-practice canon anchored)
+
+Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–3. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+
+| Template | Artifact family | Canon source |
+|---|---|---|
+| `adr-template.md` | ADR (Architecture Decision Record) | Nygard, "Documenting Architecture Decisions" (2011) |
+| `runbook-template.md` | Runbook | Google SRE Workbook §Runbook Design |
+| `design-doc-template.md` | Design doc (FDD / TDD / HLD / LLD variants) | Google design-doc convention |
 
 ### Platform-internal (operational instance, not stakeholder-facing)
 
