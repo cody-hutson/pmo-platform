@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.65.1] - 2026-07-04
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+The release pipeline now ignores issue and PR comments from accounts outside the trusted set, so a stranger's comment can't be read as pipeline instructions.
 
 [Full notes](release/releases/notes/v3.65.1_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.65.1)
 

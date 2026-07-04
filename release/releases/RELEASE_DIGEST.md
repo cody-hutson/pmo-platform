@@ -5,7 +5,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
-### v3.65.1 (2026-07-04) — <headline — populated by operator at chore PR review>
+### v3.65.1 (2026-07-04) — The pipeline no longer trusts comments from people outside your repo
+
+Hardens the pipeline against prompt-injection through the comment channel. The pipeline reads issue/PR comment threads as its stage-I/O channel; this hotfix adds an author-association gate at the Inter-Stage Feedback Protocol so any comment from an account outside the trusted set (`OWNER`/`MEMBER`/`COLLABORATOR`) is surfaced to the operator and never read as stage content, instructions, or evidence — the check keys on repository relationship, never on how helpful the comment looks (#3261). Trusted-author feedback still flows normally; `CONTRIBUTOR` (merged-PR-only, no standing write) is deliberately excluded. Adds a non-blocking Stage-13 lock-at-close (Phase C5) for finished sub-task threads + the delivery card, and corrects a falsified "no review comments arrive" dormancy claim across 4 carriers. Release Class **hotfix** (operator override held at Stage 9; the cross-cutting mechanical trigger — 5 stage files — was weighed but the Deep-review substance was already met by an independent Phase-A6.5 adversarial review). ADR-076; single PR / single merge, clean at `814c9db`; A6.5 SURVIVES-WITH-FINDINGS (9 findings adopted), DT 11/11, QA 11/11. Issue-body ingestion gate routed to follow-up #3303. Outcome SUCCESS; MODERATE reversibility.
 
 ### v3.65 (2026-07-04) — The pipeline now tests what a release does, not just reads what it says
 
