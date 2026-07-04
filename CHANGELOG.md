@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.65] - 2026-07-04
+
+The release pipeline now exercises a release's deliverables — running verifications as acceptance evidence — instead of only reading their source.
+
+[Full notes](release/releases/notes/v3.65_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.65)
+
 ## [v3.64] - 2026-07-03
 
 QA can now grade a release against the acceptance criteria written on its GitHub issues — scoring each criterion and rolling it up into one acceptance verdict — and the skill auditor gained a check that catches a skill quietly losing its ask-the-user fallback.
