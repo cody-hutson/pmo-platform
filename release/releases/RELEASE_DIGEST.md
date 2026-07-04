@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.65.1 (2026-07-04) — <headline — populated by operator at chore PR review>
+
 ### v3.65 (2026-07-04) — The pipeline now tests what a release does, not just reads what it says
 
 Moves the pipeline's quality stages from reading a change's source to exercising it. Stage 8 now consumes a domain-selected verification run as acceptance evidence and behavioral acceptance criteria get a worked verification method (`stage-08-qa-testing.md`, #103 — the Stage-7 runtime half shipped earlier); cross-issue ACs are expressed as testable predicates and checked as one integrated artifact before the Stage-9 gate (#170); the QC4-05/AV-1 invariant re-verification behind every gate's verdict is made structurally sound, replacing the grep/string-match mechanism (proven false-FAIL, possible false-PASS) with region-scoped verification (#99); and a verification-automation script runs a plan's Verification Plan programmatically as the shared executor for #170/#103 (#227). Release Class **cross-cutting** (spans Stages 4/6/7/8/9/13 + shared verification infrastructure); single PR / single squash merge, clean at `b1a2152` (provisional v3.65 claimed clean, no re-version); sequence #99 → #170 → #103 → #227. A doc-only release still passes Stages 7/8/9 unchanged (new checks fire as no-ops). Outcome SUCCESS; MODERATE reversibility.
