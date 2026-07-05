@@ -44,13 +44,17 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 ### Software-domain (engineering best-practice canon anchored)
 
-Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–3. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + row 9. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
 
 | Template | Artifact family | Canon source |
 |---|---|---|
 | `adr-template.md` | ADR (Architecture Decision Record) | Nygard, "Documenting Architecture Decisions" (2011) |
 | `runbook-template.md` | Runbook | Google SRE Workbook §Runbook Design |
 | `design-doc-template.md` | Design doc (FDD / TDD / HLD / LLD variants) | Google design-doc convention |
+| `rfc-template.md` | RFC (Specification / Protocol) | IETF RFC 7322 + Rust RFC template |
+| `prd-template.md` | PRD / Feature spec | Anthropic `product-management:write-spec` plugin convention (secondary: Aha! / Lenny Rachitsky) |
+| `postmortem-template.md` | Postmortem | Google SRE Workbook §Postmortem Culture |
+| `test-plan-template.md` | Test plan / Test case | PMBOK 7 §Quality + `engineering:testing-strategy` plugin convention |
 
 ### Platform-internal (operational instance, not stakeholder-facing)
 
