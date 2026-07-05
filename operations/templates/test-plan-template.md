@@ -18,6 +18,7 @@ superseded_by: N/A
 <!-- reference-durability: allow-link -->
 <!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into rendered test-plan instances — an instance starts at the H1 below. -->
 <!-- canon_compat evidence (template-protocol.md §6 P5(a)): `plugin-aligned` records the ANTICIPATED alignment path at DRAFT — authoritative only at an APPROVED transition. Registry basis: dual-anchor family — PMBOK 7 §Quality (quality-management framing) + plugin `engineering:testing-strategy` (engineer-facing structure), the registered cross-ref for the Test plan / Test case family per template-taxonomy.md §6 row 9 + §7 localization audit trail (inventory dated 2026-05-10). Live-plugin check 2026-07-03/04: the engineering:*/operations:*/product-management:* plugin suites are NOT installed in this workspace and NOT present in the marketplace roster — alignment is registry-anticipated, not live-verified. P5 re-evaluates against the live plugin at any future APPROVED transition. -->
+
 # {{SCOPE_NAME}} Test Plan
 
 **Purpose:** Plan and record the verification that {{SCOPE_NAME}} meets its requirements — quality objectives, test approach, cases, and the evidence trail from requirement to verdict.

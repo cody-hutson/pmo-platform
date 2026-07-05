@@ -18,6 +18,7 @@ superseded_by: N/A
 <!-- reference-durability: allow-link -->
 <!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into rendered postmortem instances — an instance starts at the H1 below. -->
 <!-- canon_compat evidence (template-protocol.md §6 P5(a)): `plugin-aligned` records the ANTICIPATED alignment path at DRAFT — authoritative only at an APPROVED transition. Registry basis: plugin `engineering:incident-response` is the registered cross-ref for the Postmortem family per template-taxonomy.md §6 row 6 + §7 localization audit trail (inventory dated 2026-05-10); this template carries the Google SRE §Postmortem Culture structure. Live-plugin check 2026-07-03/04: the engineering:*/operations:*/product-management:* plugin suites are NOT installed in this workspace and NOT present in the marketplace roster — alignment is registry-anticipated, not live-verified. P5 re-evaluates against the live plugin at any future APPROVED transition. -->
+
 # Postmortem: {{INCIDENT_TITLE}}
 
 **Purpose:** Blameless record of an incident — impact, causes, and the actions that prevent recurrence — so the system improves and individuals are never the root cause.

@@ -18,6 +18,7 @@ superseded_by: N/A
 <!-- reference-durability: allow-link -->
 <!-- The YAML block above is this TEMPLATE FILE's provenance header (core/standards/template-protocol.md §4.1). Do NOT copy it into rendered PRD instances — an instance starts at the H1 below. -->
 <!-- canon_compat evidence (template-protocol.md §6 P5(a)): `plugin-aligned` records the ANTICIPATED alignment path at DRAFT — authoritative only at an APPROVED transition. Registry basis: plugin `product-management:write-spec` is the registered cross-ref for the PRD family per template-taxonomy.md §6 row 5 + §7 localization audit trail (inventory dated 2026-05-10); this template carries the industry-standard PRD section set (secondary field-shape reference Aha! / Lenny Rachitsky). Live-plugin check 2026-07-03/04: the engineering:*/operations:*/product-management:* plugin suites are NOT installed in this workspace and NOT present in the marketplace roster — alignment is registry-anticipated, not live-verified. P5 re-evaluates against the live plugin at any future APPROVED transition. -->
+
 # {{PRODUCT_OR_FEATURE}} — Product Requirements Document
 
 **Purpose:** Define WHAT to build and WHY — the problem, the users, the success measures, and the requirements — so engineering and design can decide HOW.
