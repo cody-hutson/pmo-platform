@@ -88,6 +88,7 @@ These composition rules are the grammar's operative clauses — they constrain *
    - `improvement.yml` → `status: proposed` only at template submission (no category at submission); operator picks category via required Category dropdown; Triage (Stage 2) applies the matching category label at CER Resolve
    - `observation.yml` → `observation` + `status: proposed`
    - `adr.yml` → `adr` + `status: proposed`
+   - Pack-projected kind forms (dedicated kind templates a deployment ships; basename = `kind_id`) → `type:<kind_id>` + `status: proposed`. The concrete `type:*` rows live in the selected packs' `[[labels]]` facets (§ Instance Model), never in this grammar; the form's `labels:` array realizes the pack's `applied_at: Intake (Stage 1)` declaration structurally.
 2. **One status label** per issue (updated as issue progresses; mutually exclusive). `status: proposed` is auto-applied at intake by every template's top-level `labels:` field — the mechanism is structural, not convention-only.
 3. **One domain cluster label** per issue, **plus optionally `cluster: cross-cutting`** (the orthogonal span-marker — see the Cluster orthogonality protocol under § Cluster Labels). Assigned during triage Run 1.
 4. **Triage flags** are temporary — removed after triage decisions are executed

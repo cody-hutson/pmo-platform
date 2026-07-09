@@ -12,7 +12,7 @@ description: >
   interactive path invoked programmatically, not by a conversational phrase. Use when the user
   says "help me file this idea as an issue", "turn this into a work item", "log this idea", "is
   this intake-ready", or "help me write up this bug/story/initiative".
-version: v2.28
+version: v2.29
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -264,6 +264,10 @@ of truth — never duplicated inline. The invariant tier's type set is `improvem
 the kind set derived at use time per `references/type-map.md` § Kind-derivation
 contract (the operator's own type-pack, else the selected methodology pack(s)
 under `core/packs/`, else the Layer-2 map fallback), typed via `type:*` labels.
+The landed type also selects the emission vehicle per the binding table in
+`references/type-map.md` (§ Kind ↔ label ↔ level binding): a resolved kind with a
+dedicated kind form emits there — the form itself stamps `type:<kind_id>` structurally —
+else on the interim `improvement.yml` vehicle with the kind carried as its `type:*` label.
 The desk does not elicit or emit ADRs: ADRs are an architecture act,
 not conversational intake (the durable rationale and the component boundary are in
 `references/type-map.md` and in the intake-front-door-architectural-boundary ADR;

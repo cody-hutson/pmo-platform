@@ -98,7 +98,7 @@ intake path stamps — derived per invocation from the resolved registry:
 | Label stamped at intake | `type:<kind_id>` for a resolved kind (the label the selected pack contributes via its `[[labels]]` facet, `projects_kind`-joined — one `type:*` label per issue per the label-taxonomy grammar); the template's `labels:` array for an invariant-tier type |
 | Hierarchy level | the kind's `methodology_projection.general_level` (every finest-execution kind is Work-Item level; grouping kinds are Work-Item-level grouping labels, never new levels) |
 | Relations the desk may propose | `BELONGS_TO` (placement) · `DEPENDS_ON` / `BLOCKS` (ordering) — intersected with the kind's declared `relationships.allowed_types` where the pack declares one; never an invented edge; never a grouping-of-groupings |
-| Emission template | the type→template routing in force (`.github/ISSUE_TEMPLATE/improvement.yml` is the interim vehicle for resolved kinds, with the kind carried as its `type:*` label per `references/output-contract.md` § Structured-field carriage; the invariant types keep their own templates) |
+| Emission template | the type→template routing in force (the intake-style-guide's type→template rule): a resolved kind with a **dedicated kind form** under `.github/ISSUE_TEMPLATE/` emits there — the form's basename equals the `kind_id` and its `labels:` array stamps `type:<kind_id>` + `status: proposed` structurally at submission (the same `projects_kind` join the pack's `[[labels]]` rows declare); a resolved kind with **no dedicated form** emits on the interim `.github/ISSUE_TEMPLATE/improvement.yml` vehicle, with the kind carried as its `type:*` label per `references/output-contract.md` § Structured-field carriage; the invariant types keep their own templates |
 
 > **Worked example (illustration of the derivation — not a shipped default; the
 > desk renders whichever archetype the config resolves).** A scope resolving the
@@ -108,6 +108,10 @@ intake path stamps — derived per invocation from the resolved registry:
 > not a nestable level) → a story-altitude item lands as `story`, a task-altitude
 > item as `task`, a defect as the invariant `bug`; an epic-to-epic containment is
 > never proposed.
+> Emission: the `epic` and `story` kinds carry dedicated forms (`epic.yml` / `story.yml` —
+> basename = kind_id; the forms stamp `type:epic` / `type:story`); `task` has no dedicated
+> form and emits on the interim `improvement.yml` vehicle with `type:task` carried by the
+> intake path.
 
 ## Why there is no `adr` type
 
