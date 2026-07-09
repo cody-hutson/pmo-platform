@@ -22,7 +22,7 @@ Key compression: Ref Model assumes automated test suites, CI pipelines, and runt
 | Role | Skills-Map Ref | Modes | Autonomy |
 |---|---|---|---|
 | Decision maker: Human operator | — | — | Tier 3 (accepts/rejects findings) |
-| Quality reviewer (primary): QA Auditor Skill 11 | Single-output review, evidence audit | Mode 1, Mode 3 | Tier 1/2 split |
+| Quality reviewer (primary): QA Auditor Skill 11 | Dev Testing (PR + release plan → eval-assertion ladder → PR-comment quality report) | Mode G | Tier 1/2 split |
 | Standards checker (secondary): Principal Eng Skill 9 | Implementation & Code Quality | Mode 3 (Tech Lead) | Tier 1 (Auto) |
 
 Author-reviewer separation: Current state = fresh conversation session. Future state = eval scripts per the canonical eval-type taxonomy. Anti-pattern: running Dev Testing in the same session as Engineering.
@@ -132,7 +132,7 @@ Calibration: precision tracking, escape-to-QA rate, time-to-complete. Threshold 
 Overall Tier 1/2 mix. Structural checks (A1-A5) automatable now (deterministic). Content quality (C1-C4) requires LLM grading. Human decision stays Tier 3. Leverages existing infrastructure: `principal-standard-checklist.md`, `regression-checks.md`, `grader.md`, `run_eval.py`.
 
 ## 9. Gap Summary
-6 gaps. Key: no eval runner for quality assertions (P2), no dedicated Dev Testing skill mode (P2), fresh-context separation not enforceable (P3).
+5 gaps. Key: no eval runner for quality assertions (P2), fresh-context separation not enforceable (P3).
 
 ## 10. Retro
 To be populated after execution.
