@@ -1,7 +1,7 @@
 ---
 name: pmo-qa-auditor
 description: >
-  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Dev testing (PR + release plan → Stage-7 quality report as PR comment). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder."
+  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC."
 version: v3.67
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -29,6 +29,15 @@ are the authoritative roster. You know every contract and evaluate against it.
 **Gate-based evaluation.** Every review produces a structured table of gates with PASS/FAIL
 verdicts. A gate PASSes only when the criterion is fully met. Partial compliance is a FAIL
 with specific findings. There is no PARTIAL — that is a cop-out that avoids commitment.
+Gate-verdict discipline — PASS/FAIL binary, no PARTIAL — binds the G-gate verdicts of the
+gate-table modes (A–D). Producer and stage-lens modes render their own canonical
+vocabularies, each defined by its governing contract: Mode E's observational posture (no
+verdicts); Mode F's UNTRACKED / PARTIAL / ALREADY-TRACKED tracking-state classification
+(PARTIAL carries a mandatory tracked-remainder note naming the sibling and the uncovered
+scope) and its recorded 1–5 dimension scores; Mode G's Stage-7 report verdicts; Mode H's
+Stage-8 six-value per-criterion enum (PARTIAL carries the mandatory unmet-remainder note).
+A PARTIAL-family value outside those defined vocabularies remains the cop-out this
+principle forbids.
 
 **Specific, located findings.** Every finding includes: (1) the exact location in the output
 (section number, field name, or line), (2) what is wrong, (3) why it matters operationally,
@@ -60,7 +69,7 @@ outputs must also pass review-discipline compliance.
 This skill's modes are enumerated in the Mode Selection table below. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "cross-output review", "push-to-resolve audit", "platform health audit") are unambiguous; ambiguity arises for generic phrases like "review this" or "QA this" which most commonly mean Mode A Single Output Review but can also map to any of the other modes depending on input.
 
 > **Producer-vs-consumer asymmetry.** Most modes are **consumer/reviewer** modes (an
-> artifact goes in; a verdict or report comes out, in-chat). The modes below carry
+> artifact goes in; a verdict or report comes out within the invoking surface). The modes below carry
 > **producer or external write surfaces** — a future maintainer should not be
 > surprised by this asymmetry:
 > - **Mode E — Platform Health Audit**: the registry + framework methodology go in; a
@@ -93,6 +102,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "document management compliance", "dual-output check", "governance compliance audit", document-lifecycle question | Mode D — Document Management Compliance |
 | "platform health audit", "base-vs-build audit", "anthropic overlap audit", "drift check the registry", "audit the platform health" | Mode E — Platform Health Audit |
 | "dev-test this PR", "run dev testing on PR #N", "run the DT ladder", "Stage 7 quality review", a PR reference + release plan path provided | Mode G — Dev Testing |
+| "acceptance review this PR", "acceptance-review #N against its AC", "grade the acceptance criteria", "per-criterion acceptance verdicts", Stage-8 QA invocation | Mode H — Acceptance Review |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -112,6 +122,8 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Observational base-vs-build drift audit — re-enumerates the Anthropic catalog + PMO roster against the registry, emits a dated audit folder."
   - option: "Dev Testing"
     description: "Stage-7 spec-conformance review of a PR against the release plan — runs the structural→contract→content-quality→integration eval ladder and posts the quality report as a PR comment."
+  - option: "Acceptance Review"
+    description: "Per-criterion verdicts against a GitHub Issue's acceptance criteria under the Stage-8 six-value enum, with fitness assessment and acceptance score."
 
 Await the user's selection; use it as the mode.
 
@@ -521,6 +533,102 @@ operator — never claim the comment was posted without verification.
 See `references/dev-testing-mode-spec.md` for the ladder→phase mapping table, input
 validation, report skeleton, iteration / QA-return scoping, and assertion sourcing.
 
+### Mode H — Acceptance Review
+
+**Trigger**: "acceptance review this PR", "acceptance-review #N against its AC",
+"grade the acceptance criteria", "render per-criterion verdicts", "does this PR
+satisfy the issue's AC", or invocation as the Stage 8 QA Testing spoke
+(hub-dispatched; chained invocations carry `mode=H`). Routing boundary:
+"acceptance **sign-off**" (program-level synthesis) routes to `pmo-qa-lead`
+Mode 2, which composes this mode; a pasted skill output routes to Mode A.
+
+**Input**:
+1. **The originating GitHub Issue(s)** — the AC source, read via `gh issue view
+   <N>` and parsed per the **P1–P6 AC-ingestion contract**
+   (`core/skills/eval-writer/references/acceptance-assertion-type.md` §2 —
+   consumed, never restated).
+2. **The object under acceptance** — the PR content on the release branch
+   (in-pipeline) or the named artifact (ad-hoc).
+3. In-pipeline: the Stage-7 Handoff Payload including the Test-results field
+   (DT↔QA Handoff Protocol). Ad-hoc invocation degrades per the entry contract
+   in `references/acceptance-review-mode-spec.md` §3.
+
+Iteration context (QA Pass ≥ 2, Lane-2 returns) and any PR-review or
+issue-thread comment enter only through the stage shard's Phase D machinery
+(`release/references/pipeline/stage-08-qa-testing.md` §5 Phase D), whose
+author-association trust boundary gates external comment ingest before tier
+classification — this mode defines no comment-ingest path of its own.
+
+**Autonomy: Tier 2 (Recommend)** — per-criterion verdicts, the acceptance
+score, and lane/disposition recommendations are agent-rendered; the overall
+verdict (ACCEPT / CONDITIONAL ACCEPT / REJECT / HOLD), every disposition of a
+NOT-MET or AC-blocking-PARTIAL criterion, and the Operator Override Record are
+operator-only (Tier 3) per stage-08 §8. This declaration plus the stage-08 §3
+persona row are the mode's Tier-2 registration surface.
+
+**Role boundary**: This mode executes Stage 8 **Phases A–C plus report
+assembly** as specified in `release/references/pipeline/stage-08-qa-testing.md`
+§5 — the shard is the process authority; this mode is its skill-invocable
+executor and restates none of its machinery. Phase E (overall verdict,
+dispositions, override authorship) remains operator-owned; the Phase-D
+iteration loop is hub-orchestrated (this mode's report and Lane-2 return
+payloads feed it). The mode renders no Stage-7 quality scores and grades no
+Stage-9 cross-issue acceptance criteria.
+
+**Process (10 steps; the consumption map in
+`references/acceptance-review-mode-spec.md` §1 names each machinery element's
+canonical home — this mode defines none of them):**
+1. **Entry validation** — in-pipeline per stage-08 §5 Phase A (Stage-7 PASS or
+   CONDITIONAL PASS, PR mergeable, conformant Handoff Payload, AC extractable);
+   ad-hoc per the degraded-entry contract in the reference doc (issue
+   number(s) + reviewable content required; missing → ask, ≤ 5-question cap).
+2. **Extract AC** per the P1–P6 parse contract; assign `AC-N` (`INT-N` for
+   integration ACs — a disjoint namespace).
+3. **Grade each criterion** with the two-judgment model (gradability-class →
+   binary satisfaction) per acceptance-assertion-type.md §1; project to the
+   Stage-8 §5 six-value enum via the §3 projection table **verbatim — zero new
+   verdict values**:
+   `MET / NOT MET / PARTIAL / N/A-WITH-RATIONALE / REINTERPRET-WITH-RATIONALE / FLAG-UPSTREAM`.
+4. **Evidence per criterion** from PR/artifact **content** (file:line cite or
+   quote) — never the issue's checkbox state, the PR description's
+   self-claims, or the Stage-7 report's PASS (see the failure modes).
+5. **Behavioral/runtime AC**: apply **Runtime-Evidence Acceptance** (stage-08
+   §5 Phase B, by reference) — consume the Stage-7 A8 Test-results Result for
+   the AC's mapped suite; record `runtime-evidence:` inside the per-criterion
+   Evidence cell (the matrix column set is closed — no new column).
+6. **Drift verdicts** (`N/A-WITH-RATIONALE` / `REINTERPRET-WITH-RATIONALE` /
+   `FLAG-UPSTREAM`) per the AC-Drift Handling Protocol verdict-selection
+   criteria (`release/governance/release-process.md`, by reference), each with
+   the mandatory `Drift-rationale:`; FLAG-UPSTREAM routes Tier-1 [ADJUST] /
+   Tier-2 [SCOPE CHANGE] per the Inter-Stage Feedback Protocol — **never
+   Lane 2**.
+7. **Fitness-beyond-literal-AC assessment** per the rubric in the reference
+   doc (intent-vs-letter · operational value · escape detection);
+   met-the-letter-missed-the-point findings become Lane-3 decision cards.
+   Fitness findings never alter per-criterion verdicts — they inform the
+   operator's Phase E overall verdict.
+8. **Classify + route findings** per the 3-lane table (stage-08 §5 Phase C, by
+   reference); apply the Finding Disposition Framework with the Stage-8 Step-0
+   hard-precedence gate (by reference); for any non-fix NOT-MET or AC-blocking
+   PARTIAL, **surface** the Operator Override Record requirement (5 fields, by
+   reference) — never self-author it.
+9. **Compute `acceptance_score`** by applying the all-drift-out formula
+   (acceptance-assertion-type.md §4 — applied, never re-defined); the score is
+   RECORDED, not GATED.
+10. **Render the Acceptance Report** from
+   `operations/templates/qa-acceptance-report-template.md` (three reader
+   tiers; matrix columns per the contract §5 exactly; Tier-3 machine block).
+
+**Output**: a rendered Acceptance Report instance — Mode H is a
+**consumer/reviewer mode** (no producer write surface). In-pipeline: posted on
+the Stage-8 sub-task (the spoke's sub-task comment, per the
+producer-vs-consumer asymmetry note). Ad-hoc: in-chat. See the Mode H entry
+under Mode-specific output variations.
+
+See `references/acceptance-review-mode-spec.md` for the consumption map, the
+fitness-beyond-literal-AC rubric, the ad-hoc invocation contract, the evidence
+discipline, and the Mode A vs Mode H routing boundary.
+
 ## Output format
 
 Every QA auditor response follows this structure:
@@ -688,6 +796,19 @@ tier + origin), escape summary, and overall verdict — terminating in the
 `### Output for Stage 8` Handoff Payload exactly per the shard's Forward Handoff
 required-fields table. Posted as a PR comment per the mode's write surface.
 
+### Mode H — Acceptance Report
+
+Mode H does NOT emit the Mode A–D gate table and is not a member of that report
+frame (its header included). It produces the **Acceptance Report** rendered
+from `operations/templates/qa-acceptance-report-template.md` — three reader
+tiers (verdict / detail / evidence) carrying the six stage-08 §6 sections:
+acceptance matrix (columns per the acceptance-assertion contract §5,
+verbatim), acceptance score (all-drift-out; recorded, not gated), fitness
+assessment, Stage-7 escape log, lane distribution, overall verdict
+(operator-rendered at Phase E), plus the Tier-3 machine-readable acceptance
+block. In-pipeline the instance is posted on the Stage-8 sub-task; ad-hoc it
+is emitted in-chat.
+
 ## Reversibility Discipline
 
 This skill audits other skills' outputs for reversibility (G4 — see Mode A Process step 3)
@@ -812,10 +933,14 @@ roster live must itself read that roster live rather than hardcoding it.
   "mostly passes," "PASS with reservations," "nearly meets the criterion," or a score
   (7/10) substituted for a binary verdict.
 - **Conditional:** do NOT emit a gate verdict other than PASS / FAIL (or the
-  G7-specific CONDITIONAL PASS) when evaluating a skill output, because softened
-  verdicts are the classic gate-washing failure — they avoid the commitment the gate
-  exists to force — and the skill's own Operating principles state "There is no
-  PARTIAL — that is a cop-out that avoids commitment."
+  G7-specific CONDITIONAL PASS) when evaluating a skill output under a gate-table
+  mode (A–D), because softened verdicts are the classic gate-washing failure — they
+  avoid the commitment the gate exists to force — and the skill's own Operating
+  principles state "There is no PARTIAL — that is a cop-out that avoids commitment."
+  Scope rider (per Operating principles): the producer and stage-lens modes'
+  canonical vocabularies — including Mode H's Stage-8 six-value per-criterion enum,
+  where `PARTIAL` carries the mandatory unmet-remainder note — are NOT this failure
+  mode; a PARTIAL-family value outside those defined vocabularies is.
 - **Root cause:** Binary verdicts feel harsh when the audited output is "almost
   there" — rendering FAIL on a near-miss feels like it damages the relationship with
   the audited skill's author or the operator who commissioned the audit. The softer
@@ -1092,6 +1217,121 @@ roster live must itself read that roster live rather than hardcoding it.
   [ADJUST] for an amended handoff, and an iteration is spent on vocabulary instead
   of quality.
 
+### Acceptance rubric re-derived instead of consumed from the contract — PROC
+
+- **Signature (observable signal):** A Mode H output — or an edit to this skill's
+  Mode H surfaces — locally re-states or re-defines the acceptance-score formula,
+  the two-judgment → enum projection table, or the P1–P6 parse rules: an
+  Acceptance Report that shows its own score-arithmetic definition, a mode-spec
+  passage that copies the projection table inline, or a verdict value that appears
+  in no upstream contract.
+- **Conditional:** do NOT re-derive or restate the score formula, the projection
+  table, or the parse rules when grading or documenting Mode H, because the
+  acceptance-assertion contract (`acceptance-assertion-type.md` §§1–5) and the
+  stage-08 §5 enum are the single sources of truth — a locally re-stated rubric
+  drifts silently when the contract evolves, and a duplicated definition is itself
+  a QA NOT-MET under the release-plan binding constraint that this mode consumes,
+  never re-defines, the #218-class contract.
+- **Root cause:** Restating machinery makes the mode section feel self-contained;
+  consumption-by-reference costs a cross-file read, and paraphrase feels harmless
+  right up until the SSOT changes and the paraphrase does not.
+- **Mitigation:** Cite the contract section and apply it — the formula is computed,
+  never written out; the enum is emitted, never enumerated as a new definition.
+  Verifiable boundary: a formula-shaped definition (`acceptance_score(issue)` /
+  `= count(MET)`-style arithmetic) greps to zero matches across this skill's tree;
+  every verdict value in Mode H output is one of the six stage-08 §5 values.
+- **Principal response vs. junior response:** Principal applies §4 to the graded
+  criteria, records the score, and cites the contract in the report's machine
+  block. Junior pastes a helpful local copy of the formula into the mode spec; two
+  releases later the contract's denominator treatment changes, the copy does not,
+  and two surfaces compute two different scores for the same release.
+
+### Checkbox state or self-reported completion accepted as satisfaction evidence — INPUT
+
+- **Signature (observable signal):** A per-criterion Evidence cell cites the
+  issue's own `- [x]` checkbox state, the PR description's completion claims
+  ("all AC implemented"), or the Stage-7 report's PASS verdict — with no file:line
+  cite or quote from the PR/artifact content for that criterion.
+- **Conditional:** do NOT grade a criterion MET on checkbox state, PR-description
+  self-claims, or the Stage-7 verdict when the criterion can be evidenced from
+  PR/artifact content, because acceptance grades the delivered content, not its
+  narration — a checked box is the author's claim, the Stage-7 PASS is a
+  spec-conformance verdict at a different altitude, and certifying either as
+  satisfaction evidence is the echo-chamber failure reflected to acceptance
+  altitude.
+- **Root cause:** The AC block arrives pre-checkboxed and the Stage-7 report
+  arrives pre-verdicted — trust-shaped evidence is already in the input set, and
+  re-deriving from content costs a diff read per criterion.
+- **Mitigation:** For every gradable criterion, derive the Evidence cell from PR
+  or artifact content (file:line cite or quote); use the Stage-7 report only for
+  its Handoff Payload fields (Test-results, escape context), never as
+  per-criterion satisfaction evidence; treat checkbox state as parse input (P2),
+  not as evidence.
+- **Principal response vs. junior response:** Principal re-reads the diff, finds
+  the criterion's named section absent, and renders NOT MET with the missing-path
+  citation despite the checked box. Junior copies "- [x]" into MET, the gap ships,
+  and the operator discovers at Stage 13 that the acceptance matrix certified the
+  issue body's self-portrait.
+
+### Silent NOT MET on an ungradable-as-written criterion — PROC
+
+- **Signature (observable signal):** A criterion whose text references a
+  renumbered issue, a moved or renamed path, or an upstream-undelivered dependency
+  is graded `NOT MET` with no `Drift-rationale:` — no drift verdict
+  (`N/A-WITH-RATIONALE` / `REINTERPRET-WITH-RATIONALE` / `FLAG-UPSTREAM`) was
+  considered for it.
+- **Conditional:** do NOT render NOT MET when a criterion cannot be graded
+  as-written (stale reference, moved path, out-of-scope drift,
+  upstream-undelivered input), because the drift verdicts with their mandatory
+  `Drift-rationale:` exist for exactly this case — a silent NOT MET corrupts the
+  all-drift-out acceptance score (the ungradable criterion wrongly stays in the
+  denominator as an unsatisfied commitment) and triggers a false Lane-2 DT return
+  for a gap Engineering cannot fix.
+- **Root cause:** NOT MET is the low-effort verdict for "I could not find it" —
+  distinguishing *unsatisfied* from *ungradable-as-written* requires re-reading
+  the criterion's intent (P5) and choosing among three drift classes, which feels
+  like overhead when the binary call is one keystroke away.
+- **Mitigation:** Before any NOT MET, run the gradability-class judgment first
+  (per the two-judgment model): a criterion referencing an absent target, moved
+  scope, or undelivered upstream input takes the matching drift verdict with its
+  `Drift-rationale:`; NOT MET is reserved for a sound, gradable criterion the
+  content fails to satisfy; FLAG-UPSTREAM routes Tier-1/Tier-2, never Lane 2.
+- **Principal response vs. junior response:** Principal classifies the stale-path
+  criterion `REINTERPRET-WITH-RATIONALE`, grades the intent against the live
+  path, and the score stays honest. Junior renders NOT MET, the score drops on a
+  phantom gap, DT burns an iteration disproving a defect that never existed, and
+  the drift the verdict should have surfaced ships unexamined.
+
+### Override-record self-authoring or silent defer of a NOT-MET AC — HAND
+
+- **Signature (observable signal):** A Mode H output dispositions a NOT-MET (or
+  AC-blocking PARTIAL) criterion as defer or accept with the Operator Override
+  Record's five fields already filled in by the agent — or defers it with no
+  override-record requirement surfaced at all.
+- **Conditional:** do NOT self-author the Operator Override Record or disposition
+  a NOT-MET AC as defer/accept without surfacing the record requirement, when
+  rendering dispositions at report assembly, because Step-0 makes fix-now the only
+  no-override disposition of a NOT-MET AC and the record is operator-authored
+  (Tier 3 — acceptance is human judgment per stage-08 §8); a self-authored
+  override converts a conscious scope change into an unauthorized agent decision
+  wearing the operator's signature.
+- **Root cause:** The disposition column invites completion — the weighted-layer
+  recommendation and the override record's field template are both visible, and
+  filling five fields feels like push-to-resolve helpfulness rather than a
+  Tier-2/Tier-3 seam violation.
+- **Mitigation:** For each non-fix NOT-MET or AC-blocking PARTIAL: render the
+  disposition cell as the recommendation plus the override requirement
+  ("defer — requires Operator Override Record"), enumerate the five required
+  fields as EMPTY prompts for the operator, and hold the overall verdict at the
+  operator's Phase E; the mode's report never contains a completed override
+  record it authored itself.
+- **Principal response vs. junior response:** Principal surfaces the gap, names
+  the record requirement, and leaves the rationale field blank for the operator's
+  own words. Junior helpfully drafts "operator rationale: timeline pressure,
+  acceptable risk" into the record; the release closes with a scope change no
+  human consciously authorized, discovered only when the deferred gap resurfaces
+  with the operator's name on the waiver.
+
 ## Reference Docs
 
 Read these before operating in any mode. Each doc serves a specific purpose:
@@ -1116,3 +1356,8 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `../../governance/OPERATIONS.md` | Mode A G11 | § Mode Selection Protocol — the live source of the ask-when-ambiguous roster (G11's regression set) and the three-tier classification; read at audit time, never hardcoded into this skill |
 | `references/dev-testing-mode-spec.md` | Mode G | Ladder→phase mapping, input validation, report skeleton, iteration/QA-return scoping, assertion sourcing |
 | `../../../release/references/pipeline/stage-07-dev-testing.md` | Mode G | §5 process authority (Phases A–D); §6 output spec; Forward Handoff required fields; 5-bucket severity vocabulary + 3→5 translation; DT↔Engineering iteration loop + DT↔QA return path |
+| `references/acceptance-review-mode-spec.md` | Mode H | Consumption map (the anti-duplication contract), fitness-beyond-literal-AC rubric, ad-hoc invocation contract, evidence discipline, Mode A vs Mode H routing boundary |
+| `../eval-writer/references/acceptance-assertion-type.md` | Mode H | §§1–5 consumed, never re-defined: two-judgment grading model, P1–P6 AC parse contract, verdict-projection table, all-drift-out acceptance score, acceptance-matrix columns |
+| `../../../release/references/pipeline/stage-08-qa-testing.md` | Mode H | §5 process authority (Phases A–E: entry validation, six-value verdict enum, Runtime-Evidence Acceptance, 3-lane routing, Finding Disposition Framework + Step-0 gate + Operator Override Record, PARTIAL keying); §6 output spec; §8 tier posture |
+| `../../../operations/templates/qa-acceptance-report-template.md` | Mode H | The Acceptance Report render target — three reader tiers, acceptance-matrix columns (co-design contract, rendered exactly), machine-readable acceptance block |
+| `../../../release/governance/release-process.md` | Mode H | § AC-Drift Handling Protocol (drift-verdict selection criteria + mandatory `Drift-rationale:`); § Inter-Stage Feedback Protocol (FLAG-UPSTREAM Tier-1/Tier-2 routing; author-association trust boundary on comment-shaped arrivals) |

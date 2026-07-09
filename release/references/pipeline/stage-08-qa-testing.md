@@ -23,7 +23,7 @@ Key compression: Part 6 Stages 8-9 compressed. No formal test execution environm
 | Role | Skills-Map Ref | Modes | Autonomy |
 |---|---|---|---|
 | Decision maker: Human operator | — | — | Tier 3 (renders acceptance verdict) |
-| Acceptance reviewer (primary): QA Auditor Skill 11 | Acceptance review | Mode 2 | Tier 2 (Recommend) |
+| Acceptance reviewer (primary): QA Auditor Skill 11 | Acceptance review | Mode 2 (= SKILL.md Mode H — acceptance review) | Tier 2 (Recommend) |
 | Delivery gate (secondary): Delivery Engine | DoD gate | — | Tier 1 (deterministic checks) |
 
 Stage 8 uses acceptance mode (vs. Stage 7 review mode). Principal Engineer lens replaced by Delivery Engine DoD gate lens. Author-reviewer separation maintained (fresh context).
@@ -225,7 +225,7 @@ Calibration: ambiguous AC rate, QA escapes to Stage 9, iteration count. Threshol
 Overall Tier 2 (Recommend). More human-dependent than Stage 7 — acceptance is inherently human judgment. Agent evaluates and recommends; operator decides. Tier 1 only for deterministic entry checks and report assembly.
 
 ## 9. Gap Summary
-8 gaps. Key: no QA Auditor acceptance review mode (P2), no acceptance assertion framework (P2). The Stage 7→8 handoff format and QA→DT return path resolved via [DT↔QA Handoff Protocol](stage-07-dev-testing.md#dtqa-handoff-protocol).
+6 gaps. The Stage 7→8 handoff format and QA→DT return path resolved via [DT↔QA Handoff Protocol](stage-07-dev-testing.md#dtqa-handoff-protocol).
 
 ## 10. Retro
 To be populated after execution. Incorporates patterns from the three-lane routing, iteration loop, decision-weighting, user engagement, and full re-review scope decisions.
