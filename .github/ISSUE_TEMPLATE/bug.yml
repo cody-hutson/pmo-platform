@@ -1,5 +1,6 @@
 name: Bug Report
-description: Report a bug or broken behavior. Use this instead of improvement.yml when the finding is "X is broken" rather than "we should add/change X".
+description: Report a bug or broken behavior — the finding is "X is broken" rather than "we should add/change X".
+# Template selection by work-item type (bug / improvement / observation / adr): see release/references/how-to/intake-style-guide.md §1b.
 # Title = an informative summary (no type/category prefix — the label carries type). See release/references/how-to/intake-style-guide.md §7.
 title: ""
 labels: ["bug", "status: proposed"]

@@ -32,6 +32,29 @@ This is the *where* that complements the 5-test rule's *whether*: when an idea f
 
 ---
 
+## 1b. Template Selection by Work-Item Type (the deterministic first step)
+
+Template selection is typed **before** it is tested: classify the work item's TYPE first — a deterministic fork — then apply the 5-test rule (§2) within the improvement/observation pair. The type fork is the first routing step every intake author (agent or human) executes; the 5 tests never re-litigate it.
+
+| Work-item type — the finding is… | Discriminator | Template |
+|---|---|---|
+| **Bug** — "X is broken": observed behavior diverges from expected or documented behavior | Broken behavior exists today and is statable as reproduce / expected / actual | `bug.yml` |
+| **Enhancement / change** — "we should add/change X" | A proposal with authorable substance (then apply the 5-test rule, §2) | `improvement.yml` |
+| **Under-specified finding** — a gap or drift observed, but a full proposal is not yet authorable | T3/T4/T5 cannot be satisfied at authoring time (§2 Failure routing) | `observation.yml` |
+| **Decision** — an architecture or design decision to record | The deliverable is the decision record itself | `adr.yml` |
+
+**Decided tool-blind.** A determinate type classification is DECIDED, not asked: when the discriminators above resolve the type, the author selects the template and proceeds — the classification is never escalated to the operator as a clarifying question (`AskUserQuestion` or otherwise). Whether any question is warranted at all is governed by the AskUserQuestion-is-a-mechanism-not-a-trigger rule (CLAUDE.md § Universal Preferences); a rule-resolved classification is exempt from decision-class treatment per [`decision-discipline.md` § 3](../../../core/disciplines/decision-discipline.md). Only a genuinely indeterminate classification — the discriminators do not resolve it after being applied — is a real question, and it is asked as such: name the two candidate readings and the evidence gap, never a template menu.
+
+**Relationship to the 5-test rule (§2).** Type is orthogonal to intake-readiness: the type fork picks the template; the 5-test rule then governs readiness within it — an enhancement that fails T3/T4/T5 demotes to `observation.yml` per §2 Failure routing, and Triage promotes it back when ready (§1 sanctioned-refinement surface).
+
+**Relationship to the template-addition policy (§5b).** This section routes among the templates that exist; §5b governs when a new type-specific template may be added. When a new intake arm ships — a new template, or a type selector on an existing template, entering per §5b's scope-of-trigger note — it registers here as a new row (or an amended discriminator on an existing row) at its release. Registration is routing bookkeeping, not a speculative split.
+
+**Single source.** This section is the one authoritative home for the type→template rule (per `core/standards/duplicate-source-discipline.md`): templates and governance files link here rather than restating the fork, and a template's chooser description carries at most a one-line discriminator.
+
+`[SOURCE: consolidation of the type fork previously scattered across .github/ISSUE_TEMPLATE/bug.yml's description and CLAUDE.md § Continuous Improvement — single-sourced here per core/standards/duplicate-source-discipline.md §1(2)]`
+
+---
+
 ## 2. The 5-Test Rule
 
 Apply these 5 tests in order at authoring time. Each has a binary answer.
@@ -197,6 +220,8 @@ The platform deliberately does NOT split `improvement.yml` into per-type templat
 
 **Rationale:** Don't add `enhancement.yml`, `documentation.yml`, `refactor.yml`, or `research.yml` now — the n<10 per-type sample is too small for the failure pattern to be evidence-backed rather than theoretically-predicted. Revisit when volume grows. This is an anti-overengineering guardrail.
 
+**Scope of this trigger:** this gate governs quality-failure-driven splits — adding a type-specific template because a category's intake quality is failing against the thresholds above. It does not bar a capability-driven intake arm that ships through the governed release process (issue → bundle → approved plan): such an arm is evidence-backed by its own release decision rather than by the re-audit thresholds. Either way, the arm registers in the §1b routing table on landing — registration is routing bookkeeping, not a speculative split.
+
 **How to apply the trigger:**
 
 1. Periodic intake-quality re-audits (cadence: 6-month default; see `<OPERATOR_INSTANCE_ANALYSIS_PATH>/` for prior audits) compute type-mean weighted total and type-D3 per category label.
@@ -280,6 +305,7 @@ This guide is the doctrine. The following docs are the enforcement surfaces:
 | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/intake-quality-review-2026-04-19/best-practices-rubric.md` | D4 (Intake/Design Boundary) | Rubric dimension that scores intake/design boundary respect; T2 maps to D4. |
 | `.github/ISSUE_TEMPLATE/improvement.yml` | Description, Proposed Change fields | Field descriptions point authors to this guide for the 5-test rule. |
 | `.github/ISSUE_TEMPLATE/observation.yml` | All fields | Lightweight intake form used when T3/T4/T5 fail and the author cannot fix at authoring time. |
+| `.github/ISSUE_TEMPLATE/bug.yml` | description + header comment | Bug-type intake arm. The chooser description carries the one-line discriminator only; the type→template rule lives at §1b (single-source per `core/standards/duplicate-source-discipline.md`). |
 | `CLAUDE.md` | Continuous Improvement § auto-logging rule (per the Continuous Improvement Protocol) | Quality-floor subclause directs agents to apply the tier-selection test before authoring. |
 | `core/governance/OPERATIONS.md` | § Continuous Improvement Protocol Path A | Path A intake-template selection is preceded by Anti-pattern D check: temporal-window AC content routes to Notes (or stays in AC with merge-time rewrite). |
 
