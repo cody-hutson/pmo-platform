@@ -19,7 +19,7 @@ only when the checklist passes; otherwise take the "if not met" action.
 | From → To | Gate name | Advance ONLY when (binary checklist) | If not met |
 |---|---|---|---|
 | Phase 1 → 2 | **Altitude gate** | (a) An altitude is named (run-the-business vs change-the-business, then the specific level); (b) it is recorded as confirmed-by-user OR flagged `[ASSUMPTION – CONFIRM]` (never silently assumed). | Ask one altitude-disambiguating question (not a battery), or record the assumption and proceed. |
-| Phase 2 → 3 | **Type-landing gate** | All of: (a) one type proposed from `references/type-map.md` with a one-line "why this type" rationale; (b) the type-landing criteria (in `references/type-map.md`) pass for that type; (c) the user has not contradicted it; (d) the type is held provisional (re-route allowed through Phase 3); (e) **for a container altitude only** — the container-altitude existing-owner scan (see § Phase 2) has run and any plausible existing owner has been surfaced to the user (leaf altitudes — story / task / bug: N/A, they advance directly). | Re-run type selection; if genuinely ambiguous, name the contenders and record the chosen one as `[ASSUMPTION – CONFIRM]` for triage. If a container's existing-owner scan surfaced a match and the user chose enrich, do not advance to Phase 3 — deliver the comment-ready enrichment block for the existing owner instead. |
+| Phase 2 → 3 | **Type-landing gate** | All of: (a) one type proposed from `references/type-map.md` with a one-line "why this type" rationale; (b) the type-landing criteria (in `references/type-map.md`) pass for that type; (c) the user has not contradicted it; (d) the type is held provisional (re-route allowed through Phase 3); (e) **for a container altitude only** — the container-altitude existing-owner scan (see § Phase 2) has run and any plausible existing owner has been surfaced to the user (leaf altitudes — story / task / bug: N/A, they advance directly); (f) the methodology-resolution step (§ Phase 2) has run for this invocation and the proposed type is a member of the derived kind registry — a resolved-methodology kind or an invariant-tier type; an unresolved methodology is carried as an explicit caveat, never a silent archetype default. | Re-run type selection; if genuinely ambiguous, name the contenders and record the chosen one as `[ASSUMPTION – CONFIRM]` for triage. If a container's existing-owner scan surfaced a match and the user chose enrich, do not advance to Phase 3 — deliver the comment-ready enrichment block for the existing owner instead. |
 | Phase 3 → 4 | **Clarity gate** (the stop condition) | The 5-test (T1–T5) passes for this type at this altitude AND every unresolved point is captured as either a deferred `[ASSUMPTION – CONFIRM]` or an owned handoff item — not left silent. | Continue eliciting the specific failing test only; do not open new lines past intake-ready (over-elicitation guard). |
 | Phase 4 → emit | **Confirm gate** | The user returns an explicit binary approval via AskUserQuestion on the rendered item. | Do not emit. Revise per the user's edit and re-present, or fall back to the copy/paste body. |
 
@@ -73,6 +73,64 @@ as a flagged `[ASSUMPTION – CONFIRM]` to triage; do not stall. Pass the altitu
 gate before advancing.
 
 ### Phase 2 — Identify type and place in the hierarchy (BABOK Conduct, classification step)
+
+**Methodology-resolution step (runs first, before the type proposal).** Resolve the
+active methodology for the intake scope and derive this invocation's kind registry:
+
+1. **Scope.** The intake scope is the active project context when one is loaded
+   (its `PROJECT.md` is the project-rung surface); otherwise the deployment scope
+   (the operator-config default). The Phase-1 domain cut has already routed away
+   project-operational items; this step fires for the work items the desk owns.
+2. **Resolve the value — cite the platform resolver, never re-implement it.** The
+   effective value of a methodology field for a scope resolves via the 5-rung
+   cascade in `core/governance/OPERATIONS.md` § Platform-Config Resolution Protocol
+   (Rule 1: global default → portfolio → program → project → individual,
+   most-specific wins; Rule 2 default-fallback). **Field order: read
+   `operational_methodology` first — the per-space operations field (intake is an
+   operations-space act; a value set at any rung wins over `delivery_approach` at
+   any rung). When no rung sets it, fall back to `delivery_approach`** (project-rung
+   value: the `PROJECT.md` field per the Methodology Awareness Protocol; rung-1
+   floor: `operator.toml [methodology].default_delivery_approach`).
+   `release_methodology` is never read at intake — it governs the release
+   pipeline's own delivery flow downstream, not work-item vocabulary at the desk.
+3. **Branch per the skill-consumption pattern** (`methodology-parameterization-v1.md`
+   § 5 — cited, not restated): CASE 1 single archetype · CASE 1-ARRAY Hybrid-Two
+   `[A, B]` (the union of both constituents' registries) · CASE 2 Custom-with-base
+   (the base archetype's registry as the default the block overrides) · CASE 3
+   Custom-null (the block directly; when it cannot supply a kind set, proceed
+   methodology-agnostic WITH an explicit caveat — never silently default to any
+   archetype).
+4. **Derive the kind registry** per the kind-derivation contract in
+   `references/type-map.md` (operator type-pack override → selected methodology
+   pack(s) → Layer-2 map fallback → the invariant tier; the derivation order lives
+   there, not here).
+5. **Resolve once per invocation; never cache across invocations** — the fields are
+   project-level mutable (Methodology Awareness Protocol Rule 1).
+6. **Unresolved is a caveat, not a default.** When neither field resolves at any
+   rung, use the documented consumer fallback: the methodology-neutral invariant
+   registry, logging `[platform-config: methodology unresolved; using the neutral
+   intake registry]` in the run output.
+
+This step is the interactive loop's resolution surface (Modes A and B consume it;
+the ambient path keeps its own narrower implied-type contract).
+
+**Place and relate per the mapping framework (the § 4.2 consumer contract).** With
+the registry derived, Phase 2 executes the place-and-relate procedure of
+`core/disciplines/work-organization-mapping-framework.md` § 4.2 (cited, not
+restated): resolve the proposed kind to its hierarchy level via its
+`methodology_projection` (pack kinds) or the Layer-2 row (map-derived kinds) —
+under every methodology the finest execution unit lands at the **Work Item level**;
+intermediate names (an Epic-equivalent, a WBS-summary) are **grouping kinds at the
+Work-Item level, never new hierarchy levels**. **Place** = the item attaches to its
+Milestone / Workstream parent via `BELONGS_TO` (the rollup edge). **Relate** =
+propose edges only from the built relationship vocabulary — `BELONGS_TO` for
+containment, `DEPENDS_ON` / `BLOCKS` for ordering — and, when the resolved kind
+declares `relationships.allowed_types`, only from that declared subset. Never
+invent an edge type; never propose a grouping-of-groupings (an Epic-equivalent
+contained by another Epic-equivalent). **Caveat-on-gap:** a kind that cannot be
+mapped and has no parent hint is placed at Work-Item level under the active
+Milestone and flagged as an inferred placement — never silently mis-leveled, never
+a fabricated parent (§ 4.2 step 5).
 
 Propose the work-item type from the registry in `references/type-map.md` and its
 place in the intake hierarchy. State the proposed type and why ("this is a `bug`
@@ -132,7 +190,12 @@ Ask for the field set THIS type at THIS altitude requires, per
 `references/type-map.md` (which derives the required fields, dropdown options, and
 default labels at use time from each type's `.github/ISSUE_TEMPLATE/<type>.yml` —
 never a duplicated inline list), using the domain-adaptive technique selector in
-`references/technique-library.md`. Apply the 5-test rule live (see below) so the
+`references/technique-library.md`. For a methodology-resolved kind, compose the
+field ask from the kind's declared field set (the inherited Work-Item core plus the
+kind's `kind_specific` fields, per the kind-derivation contract in
+`references/type-map.md`); the emission template's required structured fields still
+ride per the field-derivation contract, and the 5-test remains the invariant
+clarity gate either way. Apply the 5-test rule live (see below) so the
 emerging item is neither under- nor over-defined for its altitude.
 
 **Re-elicit any unclear item once, following the define process.** If a captured
@@ -216,6 +279,12 @@ as the clarity-gate stop condition. If all five pass for the type/altitude →
 intake-ready. If any fails → re-elicit that field, defer the relevant part to Stage 5,
 note a container split in the body, or route to `observation` per the failure routing
 below.
+
+**Registry conformance rides the 5-test when a methodology resolves.** Mode B's
+readiness check and Mode A's clarity gate also verify the item's type is a member
+of the derived kind registry; a well-formed draft carrying an off-registry type
+returns the re-type recommendation (the resolved kind at the draft's altitude)
+alongside the 5-test verdict.
 
 | # | Test | Pass if |
 |---|---|---|
