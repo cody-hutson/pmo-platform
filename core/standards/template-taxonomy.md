@@ -9,7 +9,7 @@ consumers: the 5-Layer Template Architecture (L1); template-storage and template
 <!-- reference-durability: allow-link -->
 # Template Taxonomy — PMO Platform
 
-**Last Refreshed:** 2026-05-10
+**Last Refreshed:** 2026-07-04
 **Authority:** L1 of the 5-Layer Template Architecture. Establishes the canonical artifact-family taxonomy across project + software + platform-internal domains and binds each family to a named best-practice canon.
 
 ## §1 Purpose
@@ -25,7 +25,7 @@ Every PMO template is classified into exactly one of three domains. The domain d
 | Domain | Description | Canon Family | Realized in PMO By |
 |---|---|---|---|
 | **Project** | Stakeholder-facing artifacts produced during project delivery. Audience: PMs / sponsors / SteerCo / external stakeholders. | PMBOK 7 Performance Domains | 12 canonical templates today (status reports, RAID, communications tracker, etc.) — see §3 |
-| **Software** | Engineering / technical-decision artifacts. Audience: developers / SREs / architects. | Per-family canon (Nygard / Google SRE / IETF / Rust / Anthropic plugin convention / etc.) | Currently absent from `operations/templates/` — 8 gaps surfaced (see §4 + §6) |
+| **Software** | Engineering / technical-decision artifacts. Audience: developers / SREs / architects. | Per-family canon (Nygard / Google SRE / IETF / Rust / Anthropic plugin convention / etc.) | 7 canonical templates — `adr` / `runbook` / `design-doc` / `rfc` / `prd` / `postmortem` / `test-plan` (see §4 + §6) |
 | **Platform-internal** | Skill-runtime guidance + skill-internal scaffolding. Audience: the skill itself at runtime, not stakeholders. | n/a (not stakeholder-facing artifacts) | 4 skill-embedded standalone templates (raid-templates, rubric-templates, pmo-platform-template, release-plan-template) |
 
 **Domain boundary rule.** Project-domain artifacts represent project state observable to stakeholders. Software-domain artifacts represent engineering decisions or operations procedures observable to engineers. Platform-internal templates represent skill-runtime authoring guidance — they are not produced as stakeholder-visible artifacts. When a template ambiguously straddles two domains, classify by the audience of the rendered output, not by the audience that consumes the template specification.
@@ -99,43 +99,43 @@ The software domain organizes around the documents engineers produce. Each artif
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| ADR | **Nygard, "Documenting Architecture Decisions" (2011)** — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin (described as "Create or evaluate an ADR") | (none) | YES — gap; closure path: future software-domain release |
+| ADR | **Nygard, "Documenting Architecture Decisions" (2011)** — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin (described as "Create or evaluate an ADR") | `operations/templates/adr-template.md` | No (shipped) |
 
 ### §4.2 Operations / Runbook
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| Runbook | **Google SRE Workbook §Runbook Design** — secondary: ITIL Service Operation §Operations Management | `operations:runbook` plugin (PMO operations role-skill) | (none) | YES — gap; closure path: future software-domain release |
+| Runbook | **Google SRE Workbook §Runbook Design** — secondary: ITIL Service Operation §Operations Management | `operations:runbook` plugin (PMO operations role-skill) | `operations/templates/runbook-template.md` | No (shipped) |
 
 ### §4.3 Design / System
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| Design doc | **Google design-doc convention** (Atwood / Henderson templates) — Context / Goals / Non-goals / Proposal / Alternatives / Risks | `engineering:system-design` plugin | (none) | YES — gap; closure path: future software-domain release |
+| Design doc | **Google design-doc convention** (Atwood / Henderson templates) — Context / Goals / Non-goals / Proposal / Alternatives / Risks | `engineering:system-design` plugin | `operations/templates/design-doc-template.md` | No (shipped) |
 
 ### §4.4 Specification / Protocol (RFC)
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| RFC | **IETF RFC 7322** + **Rust RFC template** (https://github.com/rust-lang/rfcs) | (no Anthropic plugin equivalent) | (none) | YES — gap; closure path: future software-domain release |
+| RFC | **IETF RFC 7322** + **Rust RFC template** (https://github.com/rust-lang/rfcs) | (no Anthropic plugin equivalent) | `operations/templates/rfc-template.md` | No |
 
 ### §4.5 Product / PRD
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| PRD / Feature spec | **Anthropic `product-management:write-spec` plugin convention** (per Anthropic offload routing) — secondary: industry practice (Aha! / Lenny Rachitsky template) | `product-management:write-spec` plugin (direct hit) | (none) | YES — gap; closure path: the canon IS the plugin |
+| PRD / Feature spec | **Anthropic `product-management:write-spec` plugin convention** (per Anthropic offload routing) — secondary: industry practice (Aha! / Lenny Rachitsky template) | `product-management:write-spec` plugin (direct hit) | `operations/templates/prd-template.md` | No |
 
 ### §4.6 Reliability / Postmortem
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| Postmortem | **Google SRE Workbook §Postmortem Culture** | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | (none) | YES — gap; closure path: future software-domain release |
+| Postmortem | **Google SRE Workbook §Postmortem Culture** | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | `operations/templates/postmortem-template.md` | No |
 
 ### §4.7 Quality / Testing
 
 | Artifact Family | Primary Canon | Anthropic Plugin Cross-Ref | Current PMO Template | Gap Status |
 |---|---|---|---|---|
-| Test plan / Test case | **PMBOK 7 §Quality** + **Anthropic `engineering:testing-strategy` plugin convention** | `engineering:testing-strategy` plugin | (none) | YES — gap; closure path: future software-domain release |
+| Test plan / Test case | **PMBOK 7 §Quality** + **Anthropic `engineering:testing-strategy` plugin convention** | `engineering:testing-strategy` plugin | `operations/templates/test-plan-template.md` | No |
 
 ## §5 Platform-Internal Domain
 
@@ -150,18 +150,19 @@ Skill-embedded templates whose audience is the skill at runtime (not project sta
 
 ## §6 Canon-per-Artifact-Family Mapping (REQUIRED — AC4)
 
-Single authoritative table — 8 rows binding each artifact family to its native canon plus Anthropic plugin cross-reference (per Foundation Stage 5 DD-2 + Stage 4 D4 operator-approved 2026-05-10 per the D-Gate Decision Record). Localization Notes per §7.
+Single authoritative table — 9 rows binding each artifact family to its native canon plus Anthropic plugin cross-reference (rows 1–8 per Foundation Stage 5 DD-2 + Stage 4 D4 operator-approved 2026-05-10 per the D-Gate Decision Record; row 9 — Test plan / Test case — added per the D-TaxonomyRowShape operator decision, 2026-07-03). Localization Notes per §7.
 
 | # | Family | Domain | Primary Canon | Anthropic Plugin Cross-Ref | Current Canonical PMO Template | Localization Note |
 |---|---|---|---|---|---|---|
-| 1 | ADR | software | Nygard, "Documenting Architecture Decisions" (2011) — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin | (none — gap) | Anthropic plugin implements Nygard convention; no CONFLICT |
-| 2 | Runbook | software | Google SRE Workbook §Runbook Design | `operations:runbook` plugin (PMO operations role-skill — covers SOPs + recurring task documentation) | (none — gap) | ITIL Service Operation §Operations Management referenced as secondary; align template fields with `operations:runbook` field shape |
-| 3 | Design doc | software | Google design-doc convention (Atwood/Henderson templates) — Context/Goals/Non-goals/Proposal/Alternatives/Risks | `engineering:system-design` plugin | (none — gap) | Anthropic plugin co-locates system-design output; PMO template aligns with Google convention referenced therein |
-| 4 | RFC | software | IETF RFC 7322 + Rust RFC template | (no Anthropic plugin equivalent) | (none — gap) | Generic heuristic stands without localization; canon coverage complete via upstream documents |
-| 5 | PRD / Feature spec | software | Anthropic `product-management:write-spec` plugin convention | `product-management:write-spec` plugin (direct hit per Stage 4 D4) | (none — gap) | Per Stage 4 D4 +  offload-routing: PMO PRD canon IS the Anthropic plugin convention; secondary reference Aha! / Lenny Rachitsky template fills any field-shape gap |
-| 6 | Postmortem | software | Google SRE Workbook §Postmortem Culture | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | (none — gap) | Anthropic plugin implements Google SRE postmortem convention; PRINCE2 lessons-learned cross-reference for project-domain instances |
+| 1 | ADR | software | Nygard, "Documenting Architecture Decisions" (2011) — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin | `adr-template.md` | Anthropic plugin implements Nygard convention; no CONFLICT |
+| 2 | Runbook | software | Google SRE Workbook §Runbook Design | `operations:runbook` plugin (PMO operations role-skill — covers SOPs + recurring task documentation) | `runbook-template.md` | ITIL Service Operation §Operations Management referenced as secondary; align template fields with `operations:runbook` field shape |
+| 3 | Design doc | software | Google design-doc convention (Atwood/Henderson templates) — Context/Goals/Non-goals/Proposal/Alternatives/Risks | `engineering:system-design` plugin | `design-doc-template.md` | Anthropic plugin co-locates system-design output; PMO template aligns with Google convention referenced therein |
+| 4 | RFC | software | IETF RFC 7322 + Rust RFC template | (no Anthropic plugin equivalent) | `rfc-template.md` | Generic heuristic stands without localization; canon coverage complete via upstream documents |
+| 5 | PRD / Feature spec | software | Anthropic `product-management:write-spec` plugin convention | `product-management:write-spec` plugin (direct hit per Stage 4 D4) | `prd-template.md` | Per Stage 4 D4 +  offload-routing: PMO PRD canon IS the Anthropic plugin convention; secondary reference Aha! / Lenny Rachitsky template fills any field-shape gap |
+| 6 | Postmortem | software | Google SRE Workbook §Postmortem Culture | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | `postmortem-template.md` | Anthropic plugin implements Google SRE postmortem convention; PRINCE2 lessons-learned cross-reference for project-domain instances |
 | 7 | Status report | project | PMBOK 7 §Measurement Performance Domain | (no direct plugin; weekly-status-rollup PMO skill consumes) | `executive-status-report-prompt-template.md`, `daily-status-log-template.md`, `daily-status-update-framework-template.md` | Existing canonical templates already PMBOK-aligned operationally; row documents existing convention |
 | 8 | Stakeholder Register / RACI | project | PMBOK 7 §Stakeholder Performance Domain +  composition | (no direct plugin; PMO operations role-skills indirectly consume) | `stakeholder-register-template.csv`, `raci-template.md` (schemas in tracker-schemas.md §§ Tracker 8-9) | RAEW / RAS variants noted as references for  authoring |
+| 9 | Test plan / Test case | software | PMBOK 7 §Quality + Anthropic `engineering:testing-strategy` plugin convention | `engineering:testing-strategy` plugin | `test-plan-template.md` | Dual-anchor family — PMBOK 7 §Quality (quality-management framing) + plugin convention (engineer-facing structure); plugin availability re-verified at promotion per L4 P5; registered per the D-TaxonomyRowShape operator decision (2026-07-03) |
 
 ## §7 Localization Notes (Mechanism 1 audit trail)
 
@@ -171,9 +172,11 @@ For each canon mapping in §6, this section records the Localization Check audit
 
 **What invalidates the generic heuristic:** PMO has Anthropic plugin skills installed that already implement most of these canons as authoring routes — a row that cites only the upstream canon misses the operational authoring path the PMO skill ecosystem actually uses (per the Anthropic offload-routing pattern). The Anthropic plugin inventory available to this workspace as of 2026-05-10 includes: `engineering:architecture`, `engineering:documentation`, `engineering:debug`, `engineering:incident-response`, `engineering:system-design`, `engineering:testing-strategy`, `product-management:write-spec`, `operations:runbook`, `operations:process-doc`, `customer-support:kb-article`, plus role-suite skills for sales / marketing / data / finance / hr / legal.
 
-**Reconciliation applied per row:** keep the upstream canon as PRIMARY; ADD an Anthropic plugin cross-reference for the 6 rows where a plugin exists. No row CHANGES the underlying canon. Rows 1-3, 5, 6, 7 carry plugin cross-references; row 4 (RFC) and row 8 (Stakeholder Register / RACI) have no Anthropic plugin equivalent and stand on the upstream canon alone.
+**Reconciliation applied per row:** keep the upstream canon as PRIMARY; ADD an Anthropic plugin cross-reference for the 6 rows where a plugin is named (rows 1–3, 5, 6 at the 2026-05-10 D-Gate; row 9 at its 2026-07-03 addition). No row CHANGES the underlying canon. Rows 1-3, 5, 6, and 9 carry plugin cross-references; row 4 (RFC), row 7 (Status report — consumed by a PMO skill, no Anthropic plugin), and row 8 (Stakeholder Register / RACI) have no Anthropic plugin equivalent and stand on the upstream canon alone.
 
-**Per-row Localization Check status:** load-bearing per `decision-discipline.md § 2.1` (cites specific evidence — system-reminder skills inventory 2026-05-10; articulates heuristic; produces reconciliation). Not optional check-the-box; reconciliation modified DD-2 mapping (added cross-ref column to 6 of 8 rows).
+**Per-row Localization Check status:** load-bearing per `decision-discipline.md § 2.1` (cites specific evidence — system-reminder skills inventory 2026-05-10; articulates heuristic; produces reconciliation). Not optional check-the-box; reconciliation modified DD-2 mapping (added cross-ref column to 6 of the then-8 rows).
+
+**Row 9 addendum (Test plan / Test case — registered 2026-07-04 per the D-TaxonomyRowShape operator decision, 2026-07-03):** Generic heuristic: cite PMBOK 7 §Quality plus the `engineering:testing-strategy` plugin convention and stop there. Localization: at registration the live plugin inventory was re-verified — the `engineering:*`, `product-management:*`, and `operations:*` plugin suites named in the 2026-05-10 inventory above are absent from the installed-plugin inventory and the current official-marketplace roster (survey 2026-07-03: `~/.claude/plugins/installed_plugins.json` + `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/`). Reconciliation: the canon bindings stand — each canon is the documented convention, not the plugin install; plugin cross-references remain the named authoring routes; live plugin availability is re-verified per template at the P5 promotion gate (`template-protocol.md` §6), which is where a persistent absence forces a canon_compat re-decision.
 
 ## §8 References
 
