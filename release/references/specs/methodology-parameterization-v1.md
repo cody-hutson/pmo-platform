@@ -6,7 +6,7 @@
 **Consumers:** role-skill wave (HARD handoff); `methodology-adapter` consumer (SOFT handoff); release-planner bundle (HARD handoff via `OPERATIONS.md § Methodology Awareness Protocol` + variation matrix)
 **Cross-references:**
 
-- [`schemas/project-schema.md`](../../../core/schemas/project-schema.md) — `delivery_approach` enum + `custom_methodology_definition` block + V1-V12 validation rules
+- [`schemas/project-schema.md`](../../../core/schemas/project-schema.md) — `delivery_approach` enum + `custom_methodology_definition` block + per-space `operational_methodology` / `release_methodology` fields + V1-V12 / V16-V17 validation rules
 - [`methodology-archetype-matrix.md`](methodology-archetype-matrix.md) — per-archetype variation table (lifecycle / ceremonies / artifacts / cadence / consumers / sample-types / distinguishing-constraint)
 - [`terminology-glossary.md`](../../../core/specs/terminology-glossary.md) — canonical definitions of Process / Methodology / Framework (owned by terminology-glossary.md)
 - [`OPERATIONS.md § Methodology Awareness Protocol`](../../../core/governance/OPERATIONS.md) — skill consumption rule
@@ -30,6 +30,7 @@ This document is the **normative vocabulary source** for methodology-aware skill
 - Semantic anchors for SAFe and Hybrid (disambiguation resolves the R8 semantic drift risk per the Stage-5 risk register).
 - Custom Extension Protocol — when to use `Custom`, how to populate `custom_methodology_definition`, governance-promotion rule.
 - Skill Consumption Pattern — the authoritative 3-branch logic methodology-aware role skills use to parameterize on `delivery_approach` + `custom_methodology_definition`.
+- Space-Scoped Resolution (Step 0) — the per-space `operational_methodology` / `release_methodology` resolution that precedes the 3-branch logic, and the per-space consumer audit.
 - Failure modes the parameterization creates (per `failure-mode-standard.md`).
 - Relationship to the orthogonal dual-framing co-management capability (the `dual_framing_enabled` trigger and its bridge artifact), which is independent of the `delivery_approach` methodology classification.
 
@@ -179,7 +180,17 @@ This section documents the **authoritative 3-branch logic** every methodology-aw
 Pseudocode:
 
 ```
-read PROJECT.md → parse delivery_approach field:
+read PROJECT.md →
+
+  STEP 0 (space-scoped consumers — see the Step 0 sub-branch below):
+    consumer serves the operational space AND operational_methodology present → resolve its value
+    consumer serves the release space AND release_methodology present → resolve its value
+    otherwise → resolve delivery_approach (unchanged)
+    (a per-space value is a single archetype from the 6-set or a 2-element [A, B] array —
+     never Hybrid-literal, never Custom — so STEP 0 output enters CASE 1 or CASE 1-ARRAY
+     only; CASE 2/3 arise only via the delivery_approach fallback)
+
+  parse the resolved value:
 
   CASE 1: delivery_approach IN {Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe, Hybrid}:
     → read matrix row for this archetype
@@ -211,6 +222,33 @@ read PROJECT.md → parse delivery_approach field:
       → DO NOT silently default to Scrum or any other archetype
 ```
 
+#### Step 0 — Space-scoped resolution (the per-space methodology split) {#space-scoped-resolution}
+
+When a project declares the optional per-space fields — `operational_methodology` / `release_methodology`, grammar + precedence contract in [`schemas/project-schema.md` §4](../../../core/schemas/project-schema.md) (V16/V17) — a consumer serving a single **space** resolves the space-effective methodology BEFORE taking a branch:
+
+1. A consumer serving the **operational space** (PMO / project-delivery work) resolves `operational_methodology` when present, else `delivery_approach`.
+2. A consumer serving the **release space** (release-pipeline / SDLC work) resolves `release_methodology` when present, else `delivery_approach`.
+3. A **project-wide** consumer (portfolio rollup, cross-space audit) resolves `delivery_approach` unchanged and MAY surface the per-space split as an annotation.
+
+**Space assignment follows the module boundary by default:** operations-module skills serve the operational space; release-module skills and pipeline gates serve the release space; core-module consumers are project-wide unless they declare a space. A consumer MUST NOT merge the two per-space values into a synthetic array, and MUST NOT read the other space's field in place of its own — both are the space-conflation counterpart of the §6 conflation failure modes.
+
+**The resolved value feeds the UNCHANGED branch set.** A per-space value is a single archetype from the 6 composable archetypes or a 2-element `[A, B]` array — never `Hybrid`-literal, never `Custom` — so Step 0 output enters **CASE 1 or CASE 1-ARRAY only**. CASE 2 / CASE 3 arise only via the `delivery_approach` fallback; a project running a Custom methodology in one space declares `delivery_approach: Custom` + the block and overrides the other space's field. Consumers log the resolution: `[methodology-branch: STEP-0 space=<operational|release|project-wide> source=<field resolved> → CASE …]`.
+
+**Dominance-rule interaction.** For a space-scoped consumer, an explicit per-space assignment REPLACES the CASE 1-ARRAY contested-surface dominance heuristic — the operator has assigned which constituent governs which space. Project-wide consumers reading a `delivery_approach` array keep the §2.5 union + dominance rendering unchanged.
+
+#### Per-space consumer audit {#per-space-consumer-audit}
+
+The durable rule is the module-boundary space assignment above; this table records the disposition of each live §5-consuming surface at the split's introduction:
+
+| Consumer (reads §5) | Space | Per-space read? |
+|---|---|---|
+| intake-desk methodology-resolution step (elicitation) | operational | **YES** — resolves `operational_methodology` first per the project-schema §4 precedence contract (the intake seam) |
+| `OPERATIONS.md § Methodology Awareness Protocol` Rules 1–4 (+ its operations mirror) | space-agnostic mandate | No edit — composes by reference; Rule 3's §5 citation carries Step 0 transitively |
+| `project-schema.md` §8 consumer-table skills | operational | No edit now — "future refit" rows; the refit reads §5 (now carrying Step 0) and lands on `operational_methodology` |
+| `pmo-release-train-engineer` (CASE 1-ARRAY implementer) | operational | No edit — fallback semantics identical while the fields are absent; Step 0 governs when present |
+| Gate criterion G3-18 (`gate-criteria-spec.md`, Bundle→Planning design conditioning) | release | Future refit — its resolution chain gains `release_methodology` ahead of the project's `delivery_approach`; behavior unchanged while the fields are absent |
+| Methodology-pack selection (pack lens per resolved archetype) | per space | Composes — the pack lens a space renders follows the Step-0 space-effective value |
+
 #### CASE 1-ARRAY — the Hybrid-Two array form {#case-1-array}
 
 When `delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two form — see the array worked example and its validation trace in [`schemas/project-schema.md` § 6.5](../../../core/schemas/project-schema.md)), the consumer reads the matrix row for **each** of A and B and produces **dual-framed output** — one native section per constituent (an A-framing and a B-framing), each parameterized from its own row's lifecycle / ceremonies / artifacts / cadence. The ceremonies and artifacts the consumer emits are the **union** of the two constituents' primitives, exactly the per-track mapping [`work-organization-mapping-framework.md` § 2.5](../../../core/disciplines/work-organization-mapping-framework.md) already defines for the Hybrid row (*"each track maps per its constituent archetype, union of both"*). This branch **references** §2.5; it does not re-found it. The consumer logs `[methodology-branch: CASE 1-ARRAY constituents=A,B]`.
@@ -221,7 +259,7 @@ The array form is **methodology classification only** — it does not imply co-m
 
 ### 5.1 Step-by-step for skill authors
 
-1. **Read `delivery_approach` first.** Treat it as the primary methodology signal. Skills MAY cache the value for the duration of the invocation but MUST NOT cache across invocations (the field is project-level mutable).
+1. **Read `delivery_approach` first.** Treat it as the primary methodology signal. Skills MAY cache the value for the duration of the invocation but MUST NOT cache across invocations (the field is project-level mutable). When the project declares a per-space field for the space your skill serves, resolve the space-effective value per [Step 0](#space-scoped-resolution) first — the value you branch on is the RESOLVED value; `delivery_approach` remains the fallback and the project-level classification.
 2. **Read the block when `Custom`.** Do NOT skip the block read — the enum value `Custom` is not self-describing. Skipping the block produces CASE 2 or CASE 3 treated as Scrum — the PROC-2 failure mode.
 3. **Consult the matrix for archetype-matched cases (CASE 1).** `methodology-archetype-matrix.md` is the canonical data contract. Use the row's lifecycle / ceremonies / artifacts / cadence to parameterize.
 4. **Inherit from base in CASE 2.** When `base_archetype` is populated in a Custom block, start from that archetype's matrix row as default; override only the fields the custom block specifies differently. This gives Custom-with-base variants coherent archetype framing with targeted deviation.
@@ -237,6 +275,7 @@ A methodology-aware role-skill author reading ONLY this document + [`schemas/pro
 - Given a project with `delivery_approach: Custom / name: Scrumban / base_archetype: Kanban`, skill produces Custom-tuned output starting from Kanban matrix row + overriding cadence per block.
 - Given a project with `delivery_approach: Custom / name: "Shape Up" / base_archetype: null`, skill produces output using the block's lifecycle/ceremonies/artifacts/cadence directly; if skill lacks Shape-Up-specific templates, skill emits methodology-agnostic output with caveat `"Custom methodology 'Shape Up' has no archetype fallback; output is methodology-agnostic"`.
 - Given a project with `delivery_approach: [Scrum, Kanban]` (the Hybrid-Two array — validates via the project-schema § 6.5 array branch: 2 distinct members, both in the 6-set), skill takes **CASE 1-ARRAY**: it reads the Scrum and Kanban matrix rows, emits a Scrum-native section (sprint cadence, sprint ceremonies) **and** a Kanban-native section (continuous flow, WIP-limited pull) as the union of both, applies the dominance rule on any contested surface (here neither constituent is phased, so milestone/gate framing is absent and both contribute iteration/flow framing rendered side-by-side), logs `[methodology-branch: CASE 1-ARRAY constituents=Scrum,Kanban]`, and reads `dual_framing_enabled` separately before deciding whether to additionally emit the Dual-Framing Bridge.
+- Given a project with `delivery_approach: [Kanban, Waterfall]` + `operational_methodology: Kanban` + `release_methodology: Waterfall` (the per-space split — validates per project-schema V16/V17), an operational-space consumer resolves `Kanban` at Step 0 and produces flow-native output (CASE 1); a release-space consumer resolves `Waterfall` and produces phase-gate output (CASE 1); a project-wide consumer reads the array unchanged (CASE 1-ARRAY union). Logs `[methodology-branch: STEP-0 space=operational source=operational_methodology → CASE 1 Kanban]` (and the release-space analog). With only `release_methodology: Waterfall` declared on a `delivery_approach: Scrum` project, the operational space falls back to `Scrum`.
 
 Stage 9 operator verifies pickup-readiness per AC-R3.
 
