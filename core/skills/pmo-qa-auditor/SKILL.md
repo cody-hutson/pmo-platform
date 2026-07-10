@@ -1,7 +1,7 @@
 ---
 name: pmo-qa-auditor
 description: >
-  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC."
+  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit (dated process-audit artifact) · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "fitness-audit the release pipeline."
 version: v3.67
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -75,6 +75,10 @@ This skill's modes are enumerated in the Mode Selection table below. **Trigger-m
 > - **Mode E — Platform Health Audit**: the registry + framework methodology go in; a
 >   dated on-disk audit folder comes out. Bound by audit-class observational output
 >   discipline rather than gate-verdict discipline.
+> - **Mode F — Release-Process Fitness Audit**: the release-process corpus + the
+>   improvement backlog go in; a dated on-disk audit folder comes out (Mode E's
+>   audit-class observational discipline). The folder's Deep-Dive Queue is data
+>   the process-fitness cadence dispatches on — this mode never self-dispatches.
 > - **Mode G — Dev Testing**: a PR + release plan go in; the Stage-7 quality report
 >   comes out **as a PR comment on the PR under review** (this mode's declared
 >   external write surface, bounded to that PR).
@@ -101,6 +105,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "push-to-resolve audit", "are we actually resolving", "did we close the loop", resolution-velocity question | Mode C — Push-to-Resolve Audit |
 | "document management compliance", "dual-output check", "governance compliance audit", document-lifecycle question | Mode D — Document Management Compliance |
 | "platform health audit", "base-vs-build audit", "anthropic overlap audit", "drift check the registry", "audit the platform health" | Mode E — Platform Health Audit |
+| "release-process fitness audit", "run the fitness audit", "fitness-audit the release pipeline", "classify these audit findings", "deep-dive finding <ID> from <audit-folder>", or the process-fitness cadence invocation (a §2 T1–T3 event or the 90-day sentinel) | Mode F — Release-Process Fitness Audit |
 | "dev-test this PR", "run dev testing on PR #N", "run the DT ladder", "Stage 7 quality review", a PR reference + release plan path provided | Mode G — Dev Testing |
 | "acceptance review this PR", "acceptance-review #N against its AC", "grade the acceptance criteria", "per-criterion acceptance verdicts", Stage-8 QA invocation | Mode H — Acceptance Review |
 
@@ -120,6 +125,8 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Audit dual-output compliance and document lifecycle adherence across skill outputs."
   - option: "Platform Health Audit"
     description: "Observational base-vs-build drift audit — re-enumerates the Anthropic catalog + PMO roster against the registry, emits a dated audit folder."
+  - option: "Release-Process Fitness Audit"
+    description: "Scores the release pipeline against the 13-dimension fitness rubric (1–5 with evidence), classifies findings UNTRACKED / PARTIAL / ALREADY-TRACKED against the backlog, and emits a dated audit folder with a deep-dive queue."
   - option: "Dev Testing"
     description: "Stage-7 spec-conformance review of a PR against the release plan — runs the structural→contract→content-quality→integration eval ladder and posts the quality report as a PR comment."
   - option: "Acceptance Review"
@@ -454,6 +461,69 @@ See [`platform-health-audit-framework.md`](../../../release/references/protocols
 §4 for the mode-integration spec and [OPERATIONS.md § Platform Health Audit Protocol](../../governance/OPERATIONS.md)
 for the operational cadence.
 
+### Mode F — Release-Process Fitness Audit
+
+**Trigger**: "release-process fitness audit", "run the fitness audit", "fitness-audit
+the release pipeline", "classify these audit findings", "deep-dive finding <ID> from
+<audit-folder>", or the process-fitness cadence invocation (a §2 T1–T3 event or the
+90-day sentinel) per `../../../release/references/protocols/process-fitness-cadence.md`
+— the when-to-run authority; this mode is the how-to-run. "Platform health audit"
+(registry corpus) → Mode E; deliverable fitness-beyond-literal-AC → Mode H; this
+mode audits the release PROCESS.
+
+**Scope forms**: (1) full audit run (default — no required inputs; optional
+prior folder for deltas); (2) deep-dive run (one Band-2 finding ID + source
+folder — cadence-dispatched per the Deep-Dive Queue); (3) ad-hoc classification
+(a supplied findings list).
+
+**Mutation posture — OBSERVE-only** (Mode E's discipline): writes ONLY the dated
+audit folder (operator-instance, git-ignored) + the in-chat echo; never mutates
+the backlog, registry, or any tracked file. Findings are observations until
+operator triage.
+
+**Process** (schemas + detail in `references/fitness-audit-mode-spec.md` — cited,
+not restated):
+1. Load the dimension rubric + banding table
+   (`references/fitness-audit-dimension-rubric.md` — the single source of the
+   dimension set, anchors, and band range strings) and the cadence contracts
+   (home §4; roster §5).
+2. Score the 13 dimensions (1–5, behavioral anchors); every score carries an
+   evidence citation passing the bar (mode-spec §4). Scores are RECORDED trend
+   data — never gate verdicts.
+3. Record the frame-conformance read — one line per cadence-§5 frame, consumed
+   verbatim.
+4. Classify each finding UNTRACKED / PARTIAL / ALREADY-TRACKED: run the backlog
+   search primitives (`scripts/fitness-audit-search-primitives.sh search` — 3
+   query variants, dataset-size-verified limits; inline equivalents per mode-spec
+   §3 when unreachable), render the scope-match % (topic/mechanism/outcome
+   judgment, quoted evidence) vs the best candidate sibling, look up the band
+   **range string** in the rubric's Banding table, and derive `deep_dive_required`
+   (true iff the band is the borderline 25–40% range string, consumed from that
+   table). PARTIAL carries the mandatory tracked-remainder note (sibling `#N` +
+   covered + uncovered); ALREADY-TRACKED cites its sibling. Exactly three values.
+5. Validate evidence citations (`validate-evidence`, seeded sample, mode-spec
+   §4); fix failures before emitting; record the aggregate rate.
+6. Emit the audit folder at
+   `<OPERATOR_INSTANCE_ANALYSIS_PATH>/release-process-audit-${AUDIT_DATE_UTC}/`
+   (operator-instance, git-ignored; `${AUDIT_DATE_UTC}` = `date -u +%Y-%m-%d` at
+   run time) — `SUMMARY.md`, `findings-register.md`,
+   `issue-drafts/NNN-kebab-name.md` in observation format; schemas: mode-spec §5.
+7. Observational-discipline self-check — scan for prescriptive verbs; rewrite
+   before emitting (Mode E step 7 parallel).
+
+Deep-dive runs execute mode-spec §6 only (topic / mechanism / outcome overlap vs
+the candidate sibling → an extend-sibling vs file-new disposition OBSERVATION into
+the same folder's `issue-drafts/`). This mode NEVER dispatches its own deep-dives —
+the cadence owns dispatch (search/judgment separation).
+
+**In-chat echo**: baseline anchor + audit date, frame-read summary, score
+headline (mean / min / deltas), classification counts (U / P / AT), deep-dive
+queue count, evidence-bar rate, folder pointer. No prescriptive verbs;
+observation drafts carry reversibility tiers; no gate verdict to tier.
+
+See `references/fitness-audit-mode-spec.md` (machinery) and
+`references/fitness-audit-dimension-rubric.md` (dimensions + banding SSOT).
+
 ### Mode G — Dev Testing
 
 **Trigger**: "dev-test this PR", "run dev testing on PR #N", "run the DT ladder",
@@ -786,6 +856,14 @@ It produces a **dated audit folder** plus an **in-chat SUMMARY echo**.
 audit folder. No prescriptive verbs — every line describes an observed state, not an action.
 Decision-class items (the observation issue-drafts) carry reversibility tiers; there is no
 gate verdict to tier.
+
+### Mode F — Release-Process Fitness Audit Output
+
+Mode F does NOT emit a gate table, a PASS/FAIL verdict, or the QA Audit Report
+header (observational audit-class, like Mode E). It produces the **dated audit
+folder** at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/release-process-audit-${AUDIT_DATE_UTC}/`
+(SUMMARY.md · findings-register.md · issue-drafts/, schemas: mode-spec §5) plus
+the **in-chat SUMMARY echo**.
 
 ### Mode G — Dev Testing Output
 
@@ -1332,6 +1410,80 @@ roster live must itself read that roster live rather than hardcoding it.
   human consciously authorized, discovered only when the deferred gap resurfaces
   with the operator's name on the waiver.
 
+### Deep-dive dispatched by the classifier instead of emitted as queue data — HAND
+
+- **Signature (observable signal):** A full audit run contains inline deep-dive
+  content (an overlap narrative for a Band-2 finding) or re-invokes itself; the
+  Deep-Dive Queue is empty while deep-dive analysis exists.
+- **Conditional:** do NOT execute a deep-dive when the classifier lands a finding
+  in the borderline band during a full audit run, because dispatch authority
+  belongs to the cadence (the classifier emits `deep_dive_required` as data) —
+  inlining collapses the search/judgment separation and unbounds the run's scope.
+- **Root cause:** The borderline finding is fresh in context; the seam's value
+  (bounded runs, auditable dispatch) is invisible until a run balloons.
+- **Mitigation:** On Band-2, write the queue row + `deep_dive_required: true` and
+  move on; deep-dive analysis runs ONLY in a dedicated invocation naming the
+  finding ID + source folder; pre-emit check — deep-dive content ⇒ deep-dive run.
+- **Principal response vs. junior response:** Principal emits the queue row; the
+  cadence dispatches a scoped follow-up. Junior inlines the narrative; the run
+  doubles and the dispatch record shows a deep-dive nothing dispatched.
+
+### Classification rendered without a verified-complete backlog search — INPUT
+
+- **Signature (observable signal):** A classification row cites no search
+  evidence (no query variants, no candidate set), or shows a result count equal
+  to a round `--limit` with no dataset-size verification — the truncation tell.
+- **Conditional:** do NOT classify a finding when the backlog search has not
+  returned a verified-complete candidate set (three query variants; `--limit` ≥
+  dataset size), because a truncated or remembered backlog misclassifies
+  ALREADY-TRACKED work as UNTRACKED — the audit drafts duplicate observations
+  and the enum's dedup value inverts.
+- **Root cause:** The agent "knows" the backlog from recent context; `gh`
+  defaults truncate silently; variants feel redundant after one plausible query.
+- **Mitigation:** Run the primitives fresh per finding; record the variant set +
+  dataset-size check in the finding's evidence; no search evidence ⇒
+  INDETERMINATE, never silently classified.
+- **Principal response vs. junior response:** Principal shows three variants +
+  the size check, classifies PARTIAL with sibling + remainder note. Junior
+  classifies from memory and files an UNTRACKED duplicate.
+
+### Dimension score emitted without a bar-passing evidence citation — PROC
+
+- **Signature (observable signal):** A SUMMARY.md dimension row carries a 1–5
+  score whose evidence cell is empty, cites "general observation", or fails all
+  four evidence-bar citation forms.
+- **Conditional:** do NOT assign a dimension score without a citation matching
+  ≥1 evidence-bar form, because an uncited score is fabrication-adjacent and —
+  scores being the cross-run trend surface — one vibes-scored run corrupts every
+  later delta.
+- **Root cause:** After hours in the corpus the state feels "known"; matching an
+  anchor from memory is faster than pinning a citable location.
+- **Mitigation:** Score anchor-plus-citation or not at all: an unpinnable
+  dimension reports INDETERMINATE with the missing input named; run
+  `validate-evidence` pre-emit and fix every sampled failure.
+- **Principal response vs. junior response:** Principal scores dim 13 a "3"
+  citing the gate IDs that exist and the rows lacking one. Junior scores on
+  gestalt; the next run differs on gestalt; the trend line measures noise.
+
+### Prescriptive voice in the observational audit artifact — OUT
+
+- **Signature (observable signal):** SUMMARY.md, findings-register.md, or an
+  issue-draft contains prescriptive verbs ("recommend", "should", "migrate",
+  "consolidate") or a remediation plan rather than observed state + drafts.
+- **Conditional:** do NOT emit prescriptive remediation language in the dated
+  audit artifact, because Mode F is audit-class observational: findings are
+  observations until the operator triages them; a prescriptive audit pre-empts
+  triage authority and evades the intake templates' field scaffolding.
+- **Root cause:** Push-to-resolve instincts bleed into audit output; a gap
+  suggests its fix.
+- **Mitigation:** Run the observational self-check (step 7) before emitting;
+  express every finding as observed state + evidence; route fix-shaped content
+  into `issue-drafts/` (3-field observation format).
+- **Principal response vs. junior response:** Principal writes "dim 9 scored 2:
+  the decomposition-review gate criterion exists; no per-issue predicate fires
+  in live runs (evidence: …)" plus an observation draft. Junior writes "we
+  should strengthen the gate" and the artifact becomes an untriaged to-do list.
+
 ## Reference Docs
 
 Read these before operating in any mode. Each doc serves a specific purpose:
@@ -1361,3 +1513,7 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | `../../../release/references/pipeline/stage-08-qa-testing.md` | Mode H | §5 process authority (Phases A–E: entry validation, six-value verdict enum, Runtime-Evidence Acceptance, 3-lane routing, Finding Disposition Framework + Step-0 gate + Operator Override Record, PARTIAL keying); §6 output spec; §8 tier posture |
 | `../../../operations/templates/qa-acceptance-report-template.md` | Mode H | The Acceptance Report render target — three reader tiers, acceptance-matrix columns (co-design contract, rendered exactly), machine-readable acceptance block |
 | `../../../release/governance/release-process.md` | Mode H | § AC-Drift Handling Protocol (drift-verdict selection criteria + mandatory `Drift-rationale:`); § Inter-Stage Feedback Protocol (FLAG-UPSTREAM Tier-1/Tier-2 routing; author-association trust boundary on comment-shaped arrivals) |
+| `references/fitness-audit-mode-spec.md` | Mode F | Machinery: process detail, classification protocol, evidence bar (4 citation forms + seeded sampling), deep-dive scoping, artifact schemas, runner-dispatch seam, consumption map |
+| `references/fitness-audit-dimension-rubric.md` | Mode F | Content SSOT: 13-dim × 5-level rubric (per-dim source cites + frame column), Banding table (range strings + classification mapping + borderline deep-dive band + interval-closure rule), reconciliation record, 1–5 deviation note |
+| `../../../release/references/protocols/process-fitness-cadence.md` | Mode F | When-to-run authority: §2 triggers · §3 90-day fallback · §4 output home · §5 continuity roster · §6 HYBRID dispatch |
+| `../../standards/analysis-workspace-standard.md` | Mode F, Mode E | Analysis-workspace conventions: folder + frontmatter + sunset rule for dated audit folders |

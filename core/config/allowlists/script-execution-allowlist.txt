@@ -113,3 +113,10 @@ release/tools/claim-version.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/extract-roster-needles.sh
 ./core/deploy/extract-roster-needles.sh
 core/deploy/extract-roster-needles.sh
+
+# pmo-qa-auditor Mode F search primitives (fitness-audit) — read-only backlog
+# search + evidence-bar validation + fixture self-test (mode-spec §3).
+[PMO_PLATFORM_ROOT]/core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
+./core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
+core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
