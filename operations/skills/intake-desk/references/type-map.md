@@ -30,15 +30,88 @@ the template's `labels:` array for the default label set. The dropdown carriage
 mechanics (how a freeform-body create carries a required dropdown value) live in
 `references/output-contract.md`.
 
-## The current work-item types
+## The two-tier type registry
 
-Three types. Keyed to the issue-form templates under `.github/ISSUE_TEMPLATE/`.
+The registry has two tiers. **Tier 1 — the methodology-resolved kind registry:**
+when the intake scope resolves a methodology (the elicitation loop's
+methodology-resolution step), the kind set is derived at use time per the
+kind-derivation contract below. **Tier 2 — the invariant intake tier:** the three
+template-keyed types below are always available — cross-cutting types (`bug`,
+`observation`) at every tier, and the whole registry when no methodology resolves.
+
+### The invariant tier
+
+Three template-keyed types, keyed to the issue-form templates under
+`.github/ISSUE_TEMPLATE/`.
 
 | Type | Template (field source) | When to choose it |
 |---|---|---|
 | `improvement` | `.github/ISSUE_TEMPLATE/improvement.yml` | A proposal with a specific change you can name. Spans story / feature / initiative altitudes via field emphasis until a first-class story/initiative type ships. |
 | `bug` | `.github/ISSUE_TEMPLATE/bug.yml` | A finding of the form "X is broken" rather than "we should add/change X". |
 | `observation` | `.github/ISSUE_TEMPLATE/observation.yml` | A gap or drift where "what good looks like" fits in one sentence and the next action is "look at it / investigate" rather than a specific change. The placeholder tier. |
+
+## Kind-derivation contract (the methodology-resolved tier)
+
+The kind set for a resolved methodology is **derived at use time — never
+transcribed here** (the same living-source discipline as the field-derivation
+contract above). Given the methodology `M` resolved at the loop's
+methodology-resolution step, source precedence per invocation:
+
+1. **The operator's/project's own type-pack (K4) wins.** When the deployment
+   declares kinds in a type-pack conforming to the meta-schema
+   (`core/schemas/work-item-type-schema.md`), the declared kinds ARE the registry
+   for their archetype — a field-level merge over the shipped defaults, per the
+   override model in `core/disciplines/work-organization-mapping-framework.md`
+   § 4.1.
+2. **Else the selected shipped methodology pack(s) (K1 defaults).** Read `kinds[]`
+   from the pack(s) under `core/packs/` whose `applies_to` equals `M`
+   (byte-identical archetype join): each kind's `kind_id`, `display_name`,
+   `fields` (core-inherit + `kind_specific`), `relationships.allowed_types`, and
+   `methodology_projection` (the hierarchy-level anchor). Hybrid-Two `[A, B]`
+   selects the **union** of both constituents' packs; Custom-with-base selects the
+   base archetype's pack as the default the custom block overrides. The shipped
+   pack set is **open** — never treat the present set as exhaustive.
+3. **Else the Layer-2 map fallback (catalogued, pack-less archetypes).** An
+   archetype catalogued in the work-organization-mapping-framework Layer-2 map
+   with no shipped pack derives its kind set from the map's Work-Item-level
+   name(s) facet, plus the Layer-3 best-practice default schema where one is
+   shipped — flagged `[methodology-pack: none shipped for <archetype>; kinds
+   derived from the Layer-2 map]`.
+4. **Else the invariant tier (the floor).** No methodology resolved (or a
+   Custom-null block that cannot supply a kind set): the invariant tier above,
+   with the explicit unresolved caveat. This is the pre-methodology behavior,
+   preserved.
+
+Derived **per invocation, never cached across calls** — kinds are project-level
+mutable. Cross-cutting intake types (`bug`, `observation`) remain reachable at
+every rung: a defect under any archetype may land as the invariant `bug` when the
+resolved pack(s) declare no defect kind.
+
+## Kind ↔ label ↔ level binding (the intake binding table)
+
+One binding table covers the kind set the desk types with and the labels the
+intake path stamps — derived per invocation from the resolved registry:
+
+| Binding column | Rule |
+|---|---|
+| Kind | a `kind_id` from the derivation above (or an invariant-tier type) |
+| Label stamped at intake | `type:<kind_id>` for a resolved kind (the label the selected pack contributes via its `[[labels]]` facet, `projects_kind`-joined — one `type:*` label per issue per the label-taxonomy grammar); the template's `labels:` array for an invariant-tier type |
+| Hierarchy level | the kind's `methodology_projection.general_level` (every finest-execution kind is Work-Item level; grouping kinds are Work-Item-level grouping labels, never new levels) |
+| Relations the desk may propose | `BELONGS_TO` (placement) · `DEPENDS_ON` / `BLOCKS` (ordering) — intersected with the kind's declared `relationships.allowed_types` where the pack declares one; never an invented edge; never a grouping-of-groupings |
+| Emission template | the type→template routing in force (the intake-style-guide's type→template rule): a resolved kind with a **dedicated kind form** under `.github/ISSUE_TEMPLATE/` emits there — the form's basename equals the `kind_id` and its `labels:` array stamps `type:<kind_id>` + `status: proposed` structurally at submission (the same `projects_kind` join the pack's `[[labels]]` rows declare); a resolved kind with **no dedicated form** emits on the interim `.github/ISSUE_TEMPLATE/improvement.yml` vehicle, with the kind carried as its `type:*` label per `references/output-contract.md` § Structured-field carriage; the invariant types keep their own templates |
+
+> **Worked example (illustration of the derivation — not a shipped default; the
+> desk renders whichever archetype the config resolves).** A scope resolving the
+> Scrum archetype selects `core/packs/scrum/pack.toml`: kinds `epic` / `story` /
+> `task` → labels `type:epic` / `type:story` / `type:task` → all Work-Item level
+> (`epic` is a grouping kind — it contains stories as a backlog grouping, it is
+> not a nestable level) → a story-altitude item lands as `story`, a task-altitude
+> item as `task`, a defect as the invariant `bug`; an epic-to-epic containment is
+> never proposed.
+> Emission: the `epic` and `story` kinds carry dedicated forms (`epic.yml` / `story.yml` —
+> basename = kind_id; the forms stamp `type:epic` / `type:story`); `task` has no dedicated
+> form and emits on the interim `improvement.yml` vehicle with `type:task` carried by the
+> intake path.
 
 ## Why there is no `adr` type
 
@@ -78,27 +151,29 @@ Story vs initiative differentiate by altitude-driven field emphasis within
 `improvement` (story → AC + value; initiative → outcomes + domain + child-callout)
 until a first-class type ships. The candidate child work of a container is a body
 decomposition callout for later slicing — never auto-created as child items.
+Under a resolved methodology, each altitude projects onto the derived registry's
+kind at that level (a container-altitude item lands as the resolved grouping
+kind; a story-altitude item as the resolved commit-unit kind; defects on the
+resolved defect kind or the invariant `bug`); the table above is the invariant
+floor that projection overlays.
 
-## Forward-coupling (the platform type registry)
+## The platform type registry (live coupling)
 
-The platform's declarative work-item type system is the registry this file's type
-portion couples to. Its grammar — the type-pack meta-schema — is the work-item
-type-pack meta-schema doc (`core/schemas/work-item-type-schema.md`), in which a
-work-item **kind** is declared as data (a `kind_id` + `display_name` +
+The declarative work-item type system this registry couples to is **shipped**: the
+type-pack meta-schema (`core/schemas/work-item-type-schema.md`) is the grammar —
+a work-item **kind** declared as data (`kind_id` + `display_name` +
 `methodology_projection` + `fields` + versioned `criteria` + `relationships` +
 `lifecycle_behavior`), projecting onto the general hierarchy via the
-work-organization mapping framework's Layer-2 map. When a deployment declares its
-kinds in a type-pack, the **type registry portion of this file** (the type set,
-their templates, the when-to-choose cues, and the landing criteria) is sourced from
-that pack rather than restated here — read **per invocation**, never cached across
-calls (kinds are project-level mutable). The meta-schema's grammar, EAD
-materialization, the custom-kind escape hatch, and the registry-read contract are
-the platform mechanism; this file is the prototyped intake consumer of it.
+work-organization mapping framework's Layer-2 map — and the shipped methodology
+packs under `core/packs/` are its first instances. The kind-derivation contract
+above IS the coupling in operation: a deployment's own type-pack (K4) overrides;
+the selected shipped pack(s) are the K1 defaults; the registry is read **per
+invocation**, never cached across calls (kinds are project-level mutable).
 
 The field-derivation contract is unaffected — it always derives the required-field
-set from whatever source is current (the issue-form `.yml` templates today; a
-declared kind's `fields.kind_specific[]` once a deployment's type-pack supplies
-them). The architectural boundary and the downstream handoff contract this skill
+set from whatever source is current (the issue-form `.yml` templates for the
+invariant tier; a resolved kind's `fields.kind_specific[]` when the registry
+derives from a pack or type-pack). The architectural boundary and the downstream handoff contract this skill
 establishes are governed by the intake-front-door-architectural-boundary ADR (see
 § Provenance) and are independent of the type-registry shape — the *registry* is
 repointed (an implementation detail), the front-door boundary is not.
@@ -109,4 +184,5 @@ This block is the single designated home for issue and ADR identifiers cited by 
 file.
 
 - Architectural boundary + downstream handoff decision record: ADR-016 (intake front door architectural boundary).
-- Forward-coupled work-item type system (later repoints the type registry): #409.
+- Declarative work-item type system (shipped; the meta-schema this registry derives from): #409.
+- Methodology-pack composing unit + selection seam (packs at `core/packs/`, selected per the resolved methodology): ADR-069. Pack composition grammar (the `[[labels]]` facet, `projects_kind` join): ADR-070.

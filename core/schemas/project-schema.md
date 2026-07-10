@@ -31,7 +31,7 @@ The schema is **methodology-aware**. Prior to this release, a co-management bool
 
 ## 2. Scope
 
-**In scope.** All fields in the `PROJECT.md` frontmatter YAML block. Values, types, presence rules, and the reconciliation rules between legacy and new fields. The additions — `delivery_approach` and `custom_methodology_definition` — with full validation rules (V1-V15) and worked examples.
+**In scope.** All fields in the `PROJECT.md` frontmatter YAML block. Values, types, presence rules, and the reconciliation rules between legacy and new fields. The additions — `delivery_approach` and `custom_methodology_definition` — with full validation rules (V1-V17) and worked examples.
 
 **Out of scope.** Per-skill consumption rules (those live in each skill's own output-contract and in `methodology-parameterization-v1.md § Skill Consumption Pattern`). The matrix of per-archetype variation columns (lifecycle / ceremonies / artifacts / cadence) lives in `methodology-archetype-matrix.md`. Canonical term definitions for Process / Methodology / Framework live in `terminology-glossary.md`.
 
@@ -65,6 +65,19 @@ custom_methodology_definition:
   artifacts: [string, ...]                 # REQUIRED — non-empty list of work-products
   cadence: string                          # REQUIRED — free-form cadence description
   notes: string                            # OPTIONAL — rationale + known trade-offs
+
+# Per-space methodology split — NEW — optional space-scoped refinements of delivery_approach
+operational_methodology: <archetype> | [A, B]
+                                           # OPTIONAL — methodology governing the OPERATIONAL space
+                                           # (PMO / project-delivery work). Single value from the 6
+                                           # composable archetypes OR a 2-element array per the V2
+                                           # array grammar (V16). Absent → the operational space
+                                           # falls back to delivery_approach. Never Hybrid-literal
+                                           # or Custom — see §4.
+release_methodology: <archetype> | [A, B]
+                                           # OPTIONAL — methodology governing the RELEASE space
+                                           # (release-pipeline / SDLC work). Same grammar (V17);
+                                           # absent → falls back to delivery_approach.
 
 # Deliverable-domain axis — NEW (keystone) — orthogonal to delivery_approach
 deliverable_type: software | governance | web | data | enterprise-platform | hardware | process | <lowercase-kebab>
@@ -101,6 +114,8 @@ Field presence rules summary:
 | `dual_framing_enabled` | ⚪ Optional | — |
 | `delivery_approach` | ✅ Always | — (new) |
 | `custom_methodology_definition` | Conditional | ✅ iff `delivery_approach: Custom`; ❌ otherwise |
+| `operational_methodology` | ⚪ Optional | when present: one of the 6 composable archetypes OR `[A, B]` per the V2 array sub-assertions (V16); absent → the operational space falls back to `delivery_approach` (new) |
+| `release_methodology` | ⚪ Optional | when present: same grammar (V17); absent → the release space falls back to `delivery_approach` (new) |
 | `deliverable_type` | ⚪ Optional (legacy) / ✅ Required (forward) | open enum: recognized class OR non-empty lowercase-kebab; additive on legacy files |
 | `org_structure_type` | ⚪ Optional | default `functional` when absent (new) |
 | `team_roster` | ⚪ Optional | when present, every entry is `{person_ref → Person.person_id, role_on_project}`; refs only (new) |
@@ -192,6 +207,24 @@ Required. Non-empty free-form string describing the cadence (e.g., `"2-week spri
 
 Optional. Free-form string. Rationale, known trade-offs, governance-promotion candidacy notes. Consumed as methodology-context hint by verbose-mode skill outputs.
 
+### `operational_methodology` / `release_methodology`
+
+Optional. The **per-space methodology split** — two space-scoped refinements of `delivery_approach` that let a project run different methodologies in different **spaces**: `operational_methodology` governs the **operational space** (PMO / project-delivery work — the operations-module consumer surface); `release_methodology` governs the **release space** (release-pipeline / SDLC work — the release-module consumer surface). Each is a one-line declaration (e.g., Kanban-flow ops + stage-gated releases) with no drop to `Custom`. Carried from the Hybrid-Two design (v2.18), whose per-space half was deferred to this field pair (operator decision 2026-06-21).
+
+**Value grammar (V16 / V17).** Each field, when present, is EITHER a single archetype from the 6 composable archetypes `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe}` OR a 2-element array `[A, B]` satisfying the V2 array sub-assertions (length == 2 · members distinct · each member ∈ the 6-set). The meta-archetypes are NOT valid per-space values: the bare `Hybrid` literal is a back-compat single-enum retained on `delivery_approach` only — a new field has no legacy files, so the explicit array is the only two-archetype declaration; `Custom` is excluded because `custom_methodology_definition` is a singular block keyed to `delivery_approach: Custom` (V3/V4) — a per-space Custom would require per-space definition blocks, a schema-level (v2) change per `methodology-parameterization-v1.md §8`. **A custom methodology still reaches a single space by composition:** declare `delivery_approach: Custom` + the block, and override the OTHER space's field (e.g., `release_methodology: Waterfall`) — the un-overridden space falls back to the Custom definition.
+
+**Precedence — the space-scoped resolution contract.** For a consumer serving space S ∈ {operational, release}:
+
+1. `<S>_methodology` present → the space-effective methodology is its value (a single archetype or `[A, B]`), consumed via `methodology-parameterization-v1.md §5` CASE 1 or CASE 1-ARRAY. A per-space value never resolves to CASE 2/3.
+2. Absent → fall back to the project's `delivery_approach` (the full §5 branch set, including Custom via CASE 2/3).
+3. `delivery_approach` itself resolves per the Config-Hierarchy Resolution Protocol (`default_delivery_approach`) where no project value applies — existing behavior, unchanged.
+
+A consumer's space follows the module boundary by default: operations-module skills read `operational_methodology`; release-module skills and pipeline gates read `release_methodology`; project-wide consumers (portfolio rollups, cross-space audits) stay on `delivery_approach` and MAY surface the split as an annotation. A consumer never merges the two per-space values into a synthetic array and never silently substitutes a space it does not serve — the authoritative resolution step is [`methodology-parameterization-v1.md §5 Step 0`](../../release/references/specs/methodology-parameterization-v1.md#space-scoped-resolution). The intake methodology-resolution step (intake-desk) is an operational-space consumer under this contract.
+
+**Composition with Hybrid-Two.** The fields compose with the array form: `delivery_approach: [Kanban, Waterfall]` classifies the project as running both archetypes; `operational_methodology: Kanban` + `release_methodology: Waterfall` assign which constituent governs which space — for space-scoped consumers this explicit assignment replaces the CASE 1-ARRAY contested-surface dominance heuristic (project-wide consumers keep the union rendering per `work-organization-mapping-framework.md §2.5`). The fields are deliberately NOT validated against `delivery_approach`'s constituents — a single-archetype project may override one space (e.g., `delivery_approach: Scrum` + `release_methodology: Waterfall`) without reclassifying as Hybrid; when both spaces diverge durably, the RECOMMENDED declaration is the explicit array plus both per-space fields (§6.7).
+
+**Orthogonal to `dual_framing_enabled`** — same posture as `delivery_approach` (§7 Collision Check): the split is methodology classification only; co-management dual-framing remains the separate trigger.
+
 ### `deliverable_type`
 
 Optional on legacy files, **required forward**. Names the **deliverable domain** — *what kind of work the project delivers* (a website build, an ERP customization, a code-review engagement, a governance corpus). **Open enum**, shape-validated (not a closed set): a recognized class — `software` | `governance` | `web` | `data` | `enterprise-platform` | `hardware` | `process` — OR a non-empty lowercase-kebab string for a domain not yet recognized, exactly mirroring `delivery_approach: Custom` openness. An unrecognized-but-well-formed value is itself the demand signal for authoring a domain guide (`core/standards/domain-best-practices/<x>.md`), per the Stage-4 expansion rule.
@@ -252,7 +285,7 @@ Optional. A list of project-team membership entries — the **project-record-lev
 
 ## 5. Validation Rules
 
-Fifteen rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
+Seventeen rules governing schema conformance. Enforcement level `structural (auto)` means the rule is machine-verifiable from the frontmatter alone — no human judgment required. `[AC-R2]` annotations indicate the rule operationalizes the Stage-5-locked AC-R2.
 
 | ID | Rule | Blocks | Level |
 |---|---|---|---|
@@ -271,8 +304,10 @@ Fifteen rules governing schema conformance. Enforcement level `structural (auto)
 | **V13** | `deliverable_type` is EITHER **absent** (legacy file — additive, the field is optional on pre-existing PROJECT.md), OR a non-empty string matching **one of** the recognized classes `{software, governance, web, data, enterprise-platform, hardware, process}` (lowercase, case-sensitive) **OR** the open-escape shape `^[a-z]+(-[a-z0-9]+)*$` (a non-empty lowercase-kebab string — mirrors `delivery_approach: Custom` openness; an unrecognized-but-well-formed value is valid and is the guide-authoring demand signal). The field is **required on forward (newly-scaffolded) PROJECT.md files** and **optional on legacy files**; absence on a legacy file is conformance, not a defect. | schema parse + skill branch | structural (auto) |
 | **V14** | `org_structure_type`, when present, is one of `{functional, matrix_weak, matrix_balanced, matrix_strong, projectized, virtual, hybrid}` (lowercase-kebab, case-sensitive) OR the literal `Custom`. Absent is valid (consumers default to `functional`). | skill branch | structural (auto) |
 | **V15** | `team_roster`, when present, is a list where **every** entry is an object with EXACTLY the keys `{person_ref, role_on_project}` and no others — `person_ref` is a `ref → Person.person_id` and `role_on_project` is a non-empty string. **(V15-a)** no entry carries any key outside `{person_ref, role_on_project}` (no inline `name`/`allocation_pct`/Person-or-Resource attribute — the no-inline-PII invariant). **(V15-b)** each `person_ref` resolves against the people-roster `person_id` anchor: an unresolved ref → **BLOCK-WRITE**; a ref flagged external (not in roster) → **WARN-HEALTH** (per ADR-040 L2 disposition). | schema parse + skill branch | structural (auto) for V15-a (closed key-set, frontmatter-only); ref-resolution (V15-b) is a write-time check |
+| **V16** | `operational_methodology`, when present, is EITHER (a) a single value in `{Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe}` (case-sensitive, title-case — the 6 composable archetypes; the meta-archetypes `Hybrid` and `Custom` are NOT valid per-space values), OR (b) a 2-element YAML sequence `[A, B]` satisfying the V2 array sub-assertions (V2-a length == 2 · V2-b members distinct · V2-c each member ∈ the 6-set). Absent is valid — the operational space falls back to `delivery_approach` (§4). | skill branch | structural (auto) |
+| **V17** | `release_methodology`, when present, follows the identical grammar as V16 (single value ∈ the 6-set OR a 2-element `[A, B]` per the V2 array sub-assertions; meta-archetypes excluded). Absent is valid — the release space falls back to `delivery_approach` (§4). | skill branch | structural (auto) |
 
-**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule. The `deliverable_type` deliverable-domain axis is defined by **V13** (appended to the V12 tail; no existing rule renumbered). The org-structure shape and the project-altitude people-graph index are defined by **V14 + V15** — `org_structure_type` (V14) and `team_roster` (V15) — appended to the post-V13 tail (see References). `delivery_model` is **not** a field — it resolves to the existing required `delivery_approach`, so no rule is added for it. No existing rule is renumbered.
+**V-table coordination note.** The `delivery_approach` array form (the Hybrid-Two `[A, B]` case) is validated by the **amended V2 (v2.18)** — it does NOT introduce a new V-rule. The `deliverable_type` deliverable-domain axis is defined by **V13** (appended to the V12 tail; no existing rule renumbered). The org-structure shape and the project-altitude people-graph index are defined by **V14 + V15** — `org_structure_type` (V14) and `team_roster` (V15) — appended to the post-V13 tail (see References). `delivery_model` is **not** a field — it resolves to the existing required `delivery_approach`, so no rule is added for it. The per-space methodology split is defined by **V16 + V17** — `operational_methodology` (V16) and `release_methodology` (V17) — appended to the post-V15 tail; their grammar reuses the V2 array sub-assertions by reference, and the meta-archetype exclusion keeps V3/V4 (Custom-block presence) keyed off `delivery_approach` only. No existing rule is renumbered.
 
 ### 5.1 Custom Block Completeness (operationalizes AC-R2)
 
@@ -289,7 +324,7 @@ This block-completeness assertion is the single-test AC-R2 gate. Stage 8 QA runs
 
 ### 5.2 Validation-failure handling
 
-A PROJECT.md that fails any V1-V15 assertion is **malformed** (V13/V14/V15 join the malformed-file set with the same surface-the-failing-rule-ID + route-to-`project-initiator` Mode C handling; absence of an optional field — `deliverable_type` on a legacy file, `org_structure_type`, or `team_roster` — is conformance per its rule, not a failure). Consumer skills encountering a malformed PROJECT.md MUST:
+A PROJECT.md that fails any V1-V17 assertion is **malformed** (V13/V14/V15/V16/V17 join the malformed-file set with the same surface-the-failing-rule-ID + route-to-`project-initiator` Mode C handling; absence of an optional field — `deliverable_type` on a legacy file, `org_structure_type`, `team_roster`, `operational_methodology`, or `release_methodology` — is conformance per its rule, not a failure). Consumer skills encountering a malformed PROJECT.md MUST:
 
 1. Refuse to produce methodology-parameterized output.
 2. Surface the specific failing rule ID to the operator.
@@ -301,10 +336,11 @@ Skills MUST NOT silently work around validation failures by defaulting to an arc
 
 - PROJECT.md-schema keystone: added the first-class `deliverable_type` deliverable-domain axis to the schema, defined by V13 (appended off the V12 tail). See ADR-050 for the placement + open-enum decision.
 - Org-structure + team-roster expansion — adds the `org_structure_type` and `team_roster` fields to the schema (the org-structure shape + the project-altitude people-graph index), defined by the two V-rules after the keystone (**V14 + V15**). `delivery_model` is NOT added — it resolves to the existing required `delivery_approach`.
+- Per-space methodology split — adds the optional `operational_methodology` + `release_methodology` space-scoped fields (the per-space half of the Hybrid-Two design, deferred from v2.18), defined by **V16 + V17** appended to the post-V15 tail. Value grammar reuses the V2 array sub-assertions by reference; the space-scoped resolution contract lives in §4 and `methodology-parameterization-v1.md §5 Step 0`. No existing rule is renumbered.
 
 ## 6. Examples
 
-Five worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V15 assertions applicable to its `delivery_approach` value.
+Six worked examples covering the representative cases. Each is a valid PROJECT.md frontmatter block that passes all V1-V17 assertions applicable to its `delivery_approach` value.
 
 ### 6.1 Scrum (minimal — enum-matched, no Custom block)
 
@@ -415,7 +451,7 @@ delivery_approach: [Scrum, Kanban]
 
 ### 6.6 `org_structure_type` + `team_roster` (the additive org-shape + people-graph-index fields)
 
-A balanced-matrix project declaring its org shape and a 3-member team by `person_id` ref. Both fields are additive — the example also passes all V1-V15 rules applicable to its `delivery_approach`.
+A balanced-matrix project declaring its org shape and a 3-member team by `person_id` ref. Both fields are additive — the example also passes all V1-V17 rules applicable to its `delivery_approach`.
 
 ```yaml
 ---
@@ -438,6 +474,25 @@ team_roster:
 **Validation trace:** V1 ✓ (`delivery_approach` present), V2 ✓ (`Scrum` in enum), V3 N/A (not Custom), V4 ✓ (no Custom block), V5-V12 N/A, **V13 ✓** (`deliverable_type: web` — recognized class), **V14 ✓** (`org_structure_type: matrix_balanced` in enum), **V15 ✓** — `team_roster` is a list of 3 objects, each with EXACTLY `{person_ref, role_on_project}` (V15-a closed key-set ✓ — no inline names/allocation), each `person_ref` resolves against the roster (V15-b ✓), each `role_on_project` non-empty ✓.
 
 **Compose-not-duplicate note.** The roster carries only refs + project-roles. `p_singh_a`'s full name, capability tags, allocation %, and coverage edges are **read through** the ref against Person / Resource / the people-roster (`people-coverage-graph.md` who-does-what query) — never copied into PROJECT.md. This is the no-inline-PII invariant V15-a enforces: the schema cannot hold a roster name, so an accidental commit cannot leak one.
+
+### 6.7 Per-space split — Kanban-flow ops + stage-gated releases
+
+A program running **two archetypes assigned to different spaces**: continuous Kanban flow in the operational space, gate-based Waterfall in the release space. The project-level classification is the Hybrid-Two array (both archetypes, per §6.5); the per-space fields assign which constituent governs which space.
+
+```yaml
+---
+project_name: Managed Services Modernization
+project_owner: p_patel_r
+status: ACTIVE
+delivery_approach: [Kanban, Waterfall]
+operational_methodology: Kanban
+release_methodology: Waterfall
+---
+```
+
+**Validation trace:** V1 ✓ (field present), V2 ✓ — array branch: 2 elements (V2-a ✓), `Kanban ≠ Waterfall` (V2-b ✓), both members ∈ the 6-set (V2-c ✓). V3 N/A (not Custom), V4 ✓ (no block), V5-V12 N/A, **V16 ✓** (`Kanban` — single value in the 6-set), **V17 ✓** (`Waterfall` — single value in the 6-set).
+
+**Space-resolution note.** An operational-space consumer resolves `Kanban` (WIP/flow primitives); a release-space consumer resolves `Waterfall` (phase-gate primitives); a project-wide consumer reads `[Kanban, Waterfall]` and renders the §6.5 union. The explicit per-space assignment replaces the CASE 1-ARRAY dominance heuristic for space-scoped consumers — the operator has declared which constituent governs which space. A fallback variant is equally valid: `delivery_approach: Scrum` + `release_methodology: Waterfall` alone leaves the operational space on `Scrum` (V16 N/A — absent) while the release space runs `Waterfall`.
 
 ## 7. Migration Notes — Field Rename
 

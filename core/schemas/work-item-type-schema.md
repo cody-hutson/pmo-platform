@@ -16,7 +16,7 @@ consumers: user-config work-item type-pack instances; intake-desk / delivery-eng
 **Type:** schema-spec doc (the K1 *grammar*; type-pack *instances* are K4 user config)
 **Derivation source (FROZEN):** [`../disciplines/project-entity-model.md`](../disciplines/project-entity-model.md) §18 (the thin generic `Work Item` entity) + [`entity-field-schemas.md`](entity-field-schemas.md) §3.18 (its field schema + V-rules) + §3.0 (the inherited Core 7 + the `FieldDecl` row shape).
 **Projection target:** [`../disciplines/work-organization-mapping-framework.md`](../disciplines/work-organization-mapping-framework.md) — Layer 2 (the hierarchy-by-methodology map a declared kind projects through) and Layer 3 (the best-practice default schemas this grammar *consumes/accepts*, never re-authors).
-**Architectural basis:** [`../ADRs/ADR-018-work-item-type-layer.md`](../ADRs/ADR-018-work-item-type-layer.md) (D1 hybrid — thin generic entity + declarative type layer; D2 methodology-projected; D4 Tier-2 scope change). The pack-composition layer (§1.1 `role`/`extends`, §1.1.1 `[[labels]]` facet, work-status projection) is [`../ADRs/ADR-070-methodology-pack-composition-grammar.md`](../ADRs/ADR-070-methodology-pack-composition-grammar.md) — a grammar-altitude sibling extension of ADR-018 (the same lineage as ADR-039's gate-condition extension), authored for the methodology-pack composing unit [`../ADRs/ADR-069-methodology-pack-composing-unit.md`](../ADRs/ADR-069-methodology-pack-composing-unit.md).
+**Architectural basis:** [`../ADRs/ADR-018-work-item-type-layer.md`](../ADRs/ADR-018-work-item-type-layer.md) (D1 hybrid — thin generic entity + declarative type layer; D2 methodology-projected; D4 Tier-2 scope change). The pack-composition layer (§1.1 `role`/`extends`, §1.1.1 `[[labels]]` facet, work-status projection) is [`../ADRs/ADR-070-methodology-pack-composition-grammar.md`](../ADRs/ADR-070-methodology-pack-composition-grammar.md) — a grammar-altitude sibling extension of ADR-018 (the same lineage as ADR-039's gate-condition extension), authored for the methodology-pack composing unit [`../ADRs/ADR-069-methodology-pack-composing-unit.md`](../ADRs/ADR-069-methodology-pack-composing-unit.md). The cross-cutting control layer (§1.1.2 + §1.2.1 Arm 3) is [`../ADRs/ADR-077-cross-cutting-control-field-layer.md`](../ADRs/ADR-077-cross-cutting-control-field-layer.md), filling the arm ADR-039 reserved.
 **Pattern precedents (mirrored by pattern, referenced by name — no path dependency):** the `custom_methodology_definition` escape hatch (CASE 1/2/3 skill-consumption + N=2 governance-promotion) and the EAD mechanism that derives `raid-log.schema.json` from the RAID Item entity field schema.
 **Consumers (downstream):** `tracker-manager` (the single schema-validation enforcement point), `intake-desk` (repoints its `references/type-map.md` registry portion here), `delivery-engine` / `ppm-agent` / `weekly-status-rollup` (read the registry for kind fields + the cross-kind rollup — the one-time read refit is a deferred propagation slice, not this doc).
 **Cross-references:** see the Cross-References section (§8) below.
@@ -72,6 +72,59 @@ A pack MAY carry a `[[labels]]` array (permitted on both `role` values). Each en
 | `projects_kind` | string (kind_id) | conditional | **REQUIRED for a `type:*` label row** (a category-group label naming a work-item kind) — the join key into this pack's `kinds[]`, keeping the `type:*` label family in lockstep with the pack's declared kinds (no independent drift). Omitted for non-`type:*` rows. |
 
 The instance rows for the shipped packs are populated by the label-cleave slice (which relocates the per-pack label content out of `label-taxonomy.md` into these `[[labels]]` facets); the meta-schema here defines only the **shape** of that landing zone.
+
+### 1.1.2 The `[[controls]]` declaration facet (pack-level) — cross-cutting controls
+
+A pack MAY carry a `[[controls]]` array (permitted on both `role` values — a `role = "base"` pack is the natural home for archetype-invariant controls, which `archetype` packs inherit via `extends`). Each entry declares one **cross-cutting control**: a named readiness/tracking dimension — declared ONCE at pack level — that **applies across kinds and across hierarchy levels**, carries a **filterable value domain**, and whose per-item value is **readable as a gate input** (§1.2.1 Arm 3) and by grooming/planning filters. A control declares a *dimension + value domain*, never a check and never firing: checks that consume a control live in `criteria.{readiness,done,gate}` unchanged, and firing stays `lifecycle_behavior`-keyed off the project `lifecycle` (§1.2, §7.4).
+
+| Field | Type | Req | Constraint / Semantics |
+|---|---|---|---|
+| `control_id` | string (slug) | ✅ | Lowercase-kebab, unique within a deployment (the `pack_id` uniqueness scope). The id that `condition.field_ref` (§1.2.1 Arm 3) and `limit_ref` (§1.2.1 Arm 2) resolve against. **Not** a display name. |
+| `display_name` | string | ✅ | Human label (e.g., `"Architecture Review Status"`). Practice vernacular lives here, mirroring `display_name` on a kind (§1.2). |
+| `description` | string | ⚪ | One-line purpose. |
+| `value_domain` | object | ✅ | The filterable value set. v1 type set = `{enum, integer}`: `{ type: enum, values: [...] (≥2) }` OR `{ type: integer, min?, max? }`. `integer` is the domain a `limit_ref` target MUST declare (§1.2.1 Arm 2 — the WIP cap as config; a `limit_ref` naming a non-integer control is a pack-validation error). Further types are RESERVED (the §1.2.1 reserve pattern — fail-loud, never silent). |
+| `default` | value ∈ `value_domain` | ⚪ | The value an unset control reads as. When absent AND an item carries no value, a consuming gate's `on_unresolved` fires (§1.2.1 Arm 3) and a filter treats the control as unset. |
+| `applies_to` | object | ✅ | The cross-cutting span. `levels[]` (✅, ≥1) — general-hierarchy levels from the work-organization mapping framework's Layer-1 taxonomy `{Portfolio, Program, Project, Milestone/Workstream, Work Item}` at which an instance of this control's value attaches. `kinds[]` (REQUIRED iff `Work Item` ∈ `levels[]`) — the kinds that project the control; `"*"` = every kind in the pack (and, on a `role = "base"` pack, every kind of every inheriting archetype pack). |
+
+**Value carriage (where a control's value lives).** At the `Work Item` level, each in-scope kind's EAD-materialized schema gains **one property per in-scope control** (name = `control_id`; enum = `value_domain.values` for enum-typed) carrying the `x-pmo-control-source` provenance annotation — §3.1 step 4. Because the property name and value domain are pack-declared ONCE, they are **identical across every in-scope kind by construction** — one filter predicate spans kinds (the cross-kind filter contract; the same composition move as the §4 rollup's shared `work_item_type` discriminator). At container levels (`Project` / `Milestone/Workstream` / …), the value attaches to the container entity; carrying it as a small stamp on the container instance is the natural home, and whether that stamp is a first-class entity field is an entity-layer consideration — flagged, not required by this grammar (the §6.3 criteria_version-stamp posture). Physical tracker carriage of control values is the tracker-schema layer's concern and ships on its own track; nothing in this facet blocks on it.
+
+**The value→gate/filter coupling contract.** A declared control's value is a first-class **input surface** with three consumer classes; the control layer defines the value, **never the firing** (§7.4 holds by construction — a control adds no cadence or gate-firing semantics):
+
+| Consumer class | Reads the control via | Contract |
+|---|---|---|
+| Kind transition gates | §1.2.1 **Arm 3 `control-field`** condition (`field_ref` → this facet) | Gate-layer read; permitted only inside `criteria.gate.checks[]`; firing stays `lifecycle_behavior`-keyed. |
+| Kind readiness/done checks (DoR/DoD) | A plain **self-evaluating check** over the item's projected control property — no `condition` (the §1.2.1 rule that a `condition` on readiness/done is a pack-validation error is UNCHANGED) | The DoR consumption path: because a control materializes as a field, a readiness check asserts control-value membership as an ordinary check. |
+| Design/architecture review gates + grooming/planning automations | Direct read / filter on the projected property or container stamp | The platform's own design-handoff **architecture / best-practice gate — the Stage-5 Structure-Review gate (SR-G1–SR-G4)** — is the first named external consumer (referenced **by name, no path dependency**, per this document's release-pipeline-neutrality posture): where a deployment declares a design & architecture control set, that gate and grooming/planning automations read the control values as review-state evidence and filter inputs. The dependency direction is consumer→grammar only; this grammar depends on no release-pipeline surface (the ADR-018 kernel discipline). |
+
+**Design rationale (shared-vs-per-kind).** A cross-cutting control is declared once at pack level and projected into every in-scope kind — NOT repeated per kind — because a per-kind re-declaration would fork one dimension's value domain N ways (a drift surface) and break the cross-kind filter/gate contract, which requires one `control_id` and one value domain spanning kinds and levels; per-kind `criteria` remain the home for kind-specific checks, so no parallel criteria path is created.
+
+**Worked instance (illustrative — a control-set instance is K4 user config per §1.4, never authored into this corpus).** The first proving instance is a **design & architecture control set**, declared operator-locally:
+
+```toml
+# K4 operator-local pack (or an override pack extending the shared base) — NOT committed to this corpus.
+[[controls]]
+control_id   = "design-readiness"
+display_name = "Design Readiness"
+description  = "Whether the item's design is ready for build."
+[controls.value_domain]
+type   = "enum"
+values = ["not-required", "pending", "in-review", "approved"]
+[controls.applies_to]
+levels = ["Work Item", "Milestone/Workstream"]
+kinds  = ["*"]
+
+[[controls]]
+control_id   = "architecture-review-status"
+display_name = "Architecture Review Status"
+description  = "Review state read by design/architecture gates and grooming filters."
+default      = "pending"
+[controls.value_domain]
+type   = "enum"
+values = ["not-required", "pending", "in-review", "approved", "waived"]
+[controls.applies_to]
+levels = ["Work Item", "Milestone/Workstream"]
+kinds  = ["*"]
+```
 
 ### 1.2 Per-kind meta-schema (exact fields, types, requiredness)
 
@@ -159,14 +212,30 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
     on_unresolved: BLOCK-TRANSITION             # REQUIRED — gate-disposition when the set/scope can't be resolved.
 ```
 
-**Arm 3 — `control-field` (slot RESERVED — NOT built here).** Documented as a reserved discriminator value so the cross-cutting control-**field** axis lands later without re-opening the criterion grammar; its body (`field_ref` / `value_in` / `scope`) is not specified by this construct.
+**Arm 3 — `control-field`.** Resolves a **cross-cutting control's value** (a `[[controls]]` declaration — §1.1.2) at a declared scope; the gate PASSES when the value is in the satisfying set. The field-axis sibling of Arm 1's status axis: Arm 1 reads a related item's *workflow state*; Arm 3 reads a declared *control value* (data, not an axis1 state).
 
 ```yaml
   condition:
-    kind: control-field        # RESERVED for the field-axis sibling. The discriminator value is registered;
-                               # the body is that work item's to specify. A pack using kind: control-field before
-                               # it is implemented is a pack-validation error ("reserved, not yet implemented") —
-                               # fail-loud, never silent.
+    kind: control-field
+    field_ref: <control_id>            # REQUIRED — MUST resolve to a [[controls]] declaration visible to this
+                                       #   pack (own, or inherited via extends); an unresolvable field_ref is a
+                                       #   pack-validation error (the Arm-1 "MUST ∈ allowed_types" posture).
+    value_in: [<value>, ...]           # REQUIRED (≥1) — the control values that SATISFY the gate. Each MUST ∈
+                                       #   the control's value_domain — validated at pack-load (the domain is
+                                       #   declared, so this IS statically checkable — unlike Arm 1's
+                                       #   target_status_in, whose target kind is unknown at pack-load).
+                                       #   v1 semantics = literal membership; comparator forms on integer
+                                       #   controls are RESERVED (the Arm-2 sum-of-<field> reserve pattern).
+    scope: self                        # OPTIONAL — where the value is read; DEFAULT self (the transitioning
+                                       #   item's own projected control property, §3.1 step 4). The values
+                                       #   {parent, project, board} are RESERVED — registered here, fail-loud
+                                       #   at pack-validation ("reserved, not yet implemented") — until
+                                       #   container-level value carriage ships; on widening they reuse Arm 2's
+                                       #   set.scope container vocabulary (+ scope_ref when board).
+    on_unresolved: BLOCK-TRANSITION    # REQUIRED — gate-disposition when the value cannot be resolved (control
+                                       #   unset with no declared default). The same gate-layer set
+                                       #   {BLOCK-TRANSITION, WARN-HEALTH} as Arms 1–2 (D-B) — the disposition
+                                       #   this arm was always specified to inherit.
 ```
 
 **Discriminator table (the one-screen contract):**
@@ -176,7 +245,7 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
 | (absent) | — (self-check) | L1/L2/L3 per existing §3.1 step 5 | local | no | none |
 | `related-item-status` | `edge` · `edge_direction` · `target_status_in[]` · `on_unresolved` | **L2** → `x-pmo-referential` (resolves STATE) | single edge → target state | yes | A↔B (refusable) |
 | `set-aggregate` | `set{scope, scope_ref?, kind_filter?, status_filter[], edge?}` · `aggregate` · `comparator` · `limit \| limit_ref` · `on_unresolved` | **L2** → `x-pmo-aggregate` (NEW; resolves a reduced value over a population) | set-enumerate (chain 17) + reduce + compare | optional (membership edge) | convergent self-edge (exempt) + mutual two-set (refusable) |
-| `control-field` | (reserved) | (reserved) | (reserved) | no | none |
+| `control-field` | `field_ref` · `value_in[]` · `scope?` · `on_unresolved` | **L2** → `x-pmo-control` (NEW; resolves a declared control's VALUE at a scope) | control-declaration lookup (§1.1.2) + scoped value read + membership compare | no | none (a control value is data, not a transition-produced state — it contributes no gating-graph edge; §7.6) |
 
 **Firing rule (the §7.4 hardcoded-sprint-presumption defense, by construction).** A `condition` is permitted **only inside a `criteria.gate` check**. Gate checks inherit `lifecycle_behavior`-keyed firing: the **kind declares the gate exists; the project's `lifecycle` (`{timeboxed, continuous, phased}`) selects whether it fires** (§1.2 + §7.4). The construct names only `axis1_state_machine` states + edges + generic container scopes — it adds **no** sprint/phase/cadence semantics to the kind, so §7.4 holds by construction. Set-aggregate is the **`continuous` lifecycle's signature gate** (Kanban WIP); a `timeboxed` (Scrum) project MAY declare the same check but its `lifecycle_behavior` need not fire it (Scrum bounds WIP by sprint commitment instead).
 
@@ -248,6 +317,22 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
 ```
 
 *(d) GitHub use case — the first plug-and-play adapter.* The three rules above are **methodology-pack base function** (abstract, archetype-neutral, in the K1 grammar). The **GitHub adapter is the K4 operator-local expression** that binds them to GitHub Issues/Projects state — it is **not** committed to this corpus (adapter config is K4 per §1.4 / knowledge-architecture). The adapter maps: the related item's `axis1_state_machine` state → a GitHub Projects **Status** field value (e.g., Epic Status = "Design Approved"); the `BELONGS_TO` / `DEPENDS_ON` edges → GitHub native **parent/sub-issue** links and **tracked-by / blocked-by** relations; the set-aggregate `scope: board` → a GitHub **Project (board)**, `status_filter: [in-progress]` → the board's **In Progress** column, `count < limit` → the column's WIP cap. **GitHub is the first adapter**; the operator-local type-pack example (K4) expresses the Epic→child and Spike→dependent rules; further adapters (Jira / Linear) ride the existing adapter epics, out of scope here.
+
+*(e) Control-field gate — the design & architecture control set (§1.1.2 worked instance) gating the leave-refinement transition.* Consumes a K4-declared control; the adapter expression maps the control value to a host field exactly as (d) maps states and edges (e.g., a single-select field on the host's project board — K4, per (d)).
+
+```yaml
+- id: gate-architecture-review-approved
+  statement: "Cannot advance to ready until this item's architecture review is approved, waived, or not required."
+  level: L2
+  automatable: true
+  guards_transition: "refinement -> ready"
+  condition:
+    kind: control-field
+    field_ref: architecture-review-status   # resolves to the §1.1.2 [[controls]] declaration
+    value_in: [approved, waived, not-required]
+    scope: self
+    on_unresolved: BLOCK-TRANSITION
+```
 
 ### 1.3 `methodology_projection` — projects onto the Layer-2 map
 
@@ -326,17 +411,19 @@ For each declared kind, EAD emits a JSON-Schema (draft-07) `work-item-<kind_id>.
 1. **Core 7 → 7 base properties** (inherited; identical to the V-CORE-01..07 floor): `id`; `entity_type` const = `Work Item`; `lifecycle_state` enum = the kind's `axis1_state_machine` states (default the generic six); `content_lifecycle_pattern`; `owning_agent`; `created_date` with the not-future temporal check; `relationships[]` constrained to `relationships.allowed_types`.
 2. **`work_item_type` → a `const` property** = `kind_id` (the discriminator that lets a cross-kind query filter / group by kind — load-bearing for the cross-kind rollup in §4).
 3. **`parent_ref` → a typed-ref property** with `x-pmo-referential: { target: "Milestone.id | Workstream.id", level: "L2", on-unresolved: "BLOCK-WRITE" }` (the rollup edge; the entity's V-WI-03 / X-28 contract — the polymorphic `BELONGS_TO` parent).
-4. **Each `fields.kind_specific[]` FieldDecl → one property**, classified by the **7-class `x-pmo-class` column crosswalk** observed in `raid-log.schema.json`: `exact-map` · `rename-map` · `type-lift` · `dialect-projection` (with `x-pmo-canonical-enum` + `x-pmo-legacy-crosswalk` when a value set projects to a legacy/display set) · plus the `x-pmo-referential`, `x-pmo-temporal`, and `allOf` conditional-required annotations for L2/L3.
+4. **Each `fields.kind_specific[]` FieldDecl → one property**, classified by the **7-class `x-pmo-class` column crosswalk** observed in `raid-log.schema.json`: `exact-map` · `rename-map` · `type-lift` · `dialect-projection` (with `x-pmo-canonical-enum` + `x-pmo-legacy-crosswalk` when a value set projects to a legacy/display set) · plus the `x-pmo-referential`, `x-pmo-temporal`, and `allOf` conditional-required annotations for L2/L3. Additionally, **each pack-level control in scope for the kind (§1.1.2 `applies_to`) → one property** (name = `control_id`; enum = `value_domain.values` for enum-typed; bounds for integer-typed), annotated `x-pmo-control-source: "<pack_id>#<control_id>"` — a control-projected property is pack-declared, not a `FieldDecl`, so it carries the provenance key instead of an `x-pmo-class` crosswalk class (the 7-class crosswalk is untouched).
 5. **Each `criteria.checks[]` projects by level:** `automatable: true` ∧ `level: L1` → a schema-expressible constraint (enum / pattern / required); `level: L2` → an `x-pmo-referential` entry; `level: L3` → an `x-pmo-criteria-judgment` annotation (recorded so a reviewer/skill can surface it, not machine-enforced). **When the L2 check carries a `condition` (§1.2.1), the annotation is selected by `condition.kind`:** `related-item-status` → an `x-pmo-referential` entry that resolves the target's *state* (not its existence), with the gate-layer `on-unresolved: BLOCK-TRANSITION`; `set-aggregate` → an `x-pmo-aggregate` annotation (the NEW class, §3.1a). A check with no `condition` keeps the existing behavior unchanged.
 6. **Negative tests generated 1:1 from the rules** (the `entity-field-schemas.md` §3.0b pattern + the `x-pmo-negative-tests` array `raid-log.schema.json` carries): each L1 enum → one out-of-enum NT; each L2 ref → one unresolvable-id NT. **A materialized kind ships ≥2 negative tests.** A `condition`'d gate check (§1.2.1) generates its negative tests 1:1 from the construct:
    - **NT-status-1** — a `related-item-status` gate: a transition write while the related item (across `edge`) is NOT in `target_status_in` → referential gate FAIL (transition blocked).
    - **NT-status-2** — a `related-item-status` gate: an unresolvable edge/target (related item missing) → `on-unresolved: BLOCK-TRANSITION` fires.
    - **NT-agg-1** — a `set-aggregate` gate: the `guards_transition` write while `count(set) >= limit` (for `comparator: "<"`) → aggregate gate FAIL (pull blocked).
    - **NT-agg-2** — a `set-aggregate` gate: an unresolvable `scope_ref` (board entity missing) → `on-unresolved: BLOCK-TRANSITION` fires.
+   - **NT-ctl-1** — a `control-field` gate: the `guards_transition` write while the scoped control value ∉ `value_in` → control gate FAIL (transition blocked).
+   - **NT-ctl-2** — a `control-field` gate: the control value unresolvable (unset, no `default` declared) → `on-unresolved: BLOCK-TRANSITION` fires.
 
-### 3.1a Condition'd-gate projection (the two annotation classes)
+### 3.1a Condition'd-gate projection (the three annotation classes)
 
-A `condition`'d gate check (§1.2.1) is **L2** (it resolves other entities), so step 5 routes it to a referential-class annotation — projecting via the **existing §3.1 step-5 by-level rule**, with **no new physicalization** (the §3 discipline). Two annotation shapes apply, selected by `condition.kind`.
+A `condition`'d gate check (§1.2.1) is **L2** (it resolves beyond the row's own self-check — another entity's state, a population, or a declared control), so step 5 routes it to a referential-class annotation — projecting via the **existing §3.1 step-5 by-level rule**, with **no new physicalization** (the §3 discipline). Three annotation shapes apply, selected by `condition.kind`.
 
 **`related-item-status` → `x-pmo-referential` resolving STATE (extends the existing precedent).** The existing step-3 `parent_ref` precedent materializes `x-pmo-referential: { target, level: L2, on-unresolved: BLOCK-WRITE }` (resolves another entity's *existence*). The status arm **extends — does not replace** — that shape: the resolved object is the target's *state* (not its existence), and the disposition is the gate-layer `BLOCK-TRANSITION` (guard a state move) rather than `BLOCK-WRITE` (guard a row write).
 
@@ -375,6 +462,20 @@ A `condition`'d gate check (§1.2.1) is **L2** (it resolves other entities), so 
 ```
 
 Both annotations bite where `parent_ref` (V-WI-03 / X-28) and the `BELONGS_TO` rollup (V-WI-06 / X-29) already bite — `tracker-manager`'s pre-write/transition validation pass (§5.2). **No new enforcer.** The cross-kind rollup (§4) is untouched — the construct adds a *check*, not a kind-specific *field*; the count groups by the same `work_item_type` discriminator the rollup already uses. The **only new evaluation surface** is the set-aggregate's **set-enumerate-and-reduce** contract (resolve `set.scope` → enumerate `BELONGS_TO` children via the chain-17 traversal → apply `status_filter` + optional `kind_filter` → `aggregate` → compare to `limit` / `limit_ref`), sited in the existing enforcer; the *physical* resolver (index scan / graph walk) is G3/G4 physicalization per the entity-model boundary axiom (`entity-field-schemas.md` §boundary-axiom), exactly as the single-referential resolver is.
+
+**`control-field` → a NEW `x-pmo-control` annotation class (L2 control-value sub-class).** A control-field gate resolves a *declared control's value at a scope* — not a target's existence/state (`x-pmo-referential`) and not a reduced population value (`x-pmo-aggregate`) — so it is the third sibling annotation, modeled on `x-pmo-referential` for level + disposition. It is stamped L2 per the §1.2.1 condition'd-check rule (uniform union-wide, even at `scope: self` where the resolution is a declaration lookup plus the item's own projected property rather than another entity). **No new physicalization** and **no new enforcer** — the read bites at `tracker-manager`'s existing pre-write/transition pass (§5.2); the only evaluation surface is the scoped value read + membership compare.
+
+```jsonc
+// On the derived work-item-<kind>.schema.json, for a control-field gate check — a NEW x-pmo-control:
+"x-pmo-control": {
+  "control_ref": "<control_id>",          // resolves against the pack's [[controls]] declarations (§1.1.2)
+  "satisfying_values": ["<value>", "..."],
+  "scope": "self",                         // v1; {parent, project, board} reserved (§1.2.1 Arm 3)
+  "level": "L2",
+  "on-unresolved": "BLOCK-TRANSITION",
+  "x-pmo-guards-transition": "<from> -> <to>"
+}
+```
 
 ### 3.2 Enforcement mode
 
@@ -442,6 +543,15 @@ The pack-composition layer (§1.1 `role` / `extends`, §1.1.1 `[[labels]]`, and 
 
 Because both additions are backward-compatible for every existing pack (all of which declare `kinds` and no `role`), **the meta-schema version stays v1**; no shim. A pack that *adopts* the new fields takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version. The architectural decision this records is [ADR-070](../ADRs/ADR-070-methodology-pack-composition-grammar.md) (sibling to [ADR-069](../ADRs/ADR-069-methodology-pack-composing-unit.md), extending [ADR-018](../ADRs/ADR-018-work-item-type-layer.md) at grammar altitude — the same lineage move ADR-039 made).
 
+### 6.2b The controls facet + Arm-3 body are additive — meta-schema version stays v1 (ADR-077)
+
+The cross-cutting control layer (§1.1.2 `[[controls]]`, the §1.2.1 Arm-3 `control-field` body, the `x-pmo-control` annotation class) extends the meta-schema **without** a version bump, by the same two-axis analysis as §6.2a:
+
+- **`[[controls]]` is an optional ADD** — a pack that declares none is byte-identical to a pre-widen pack (the ADR-039 optional-`condition` shape, symmetric on the data-backward and tooling-forward axes).
+- **Specifying the Arm-3 body converts a fail-loud reserved value into a defined one** — no existing valid pack changes meaning, because a pack using `kind: control-field` before this specification FAILED pack-validation by design ("reserved, not yet implemented"); reserve-then-specify is exactly the lifecycle the slot was registered for. Validator-forward: the widen ships ahead of any meta-schema validator (the §6.2a posture holds — the first validator is controls-aware from the start).
+
+Because both are backward-compatible for every existing pack (none declares `[[controls]]` or `kind: control-field`), **the meta-schema version stays v1**; no shim. A pack that *adopts* controls takes a `pack_version` minor bump per §6.1. The architectural decision this records is [ADR-077](../ADRs/ADR-077-cross-cutting-control-field-layer.md) — filling the slot ADR-039 reserved; extending ADR-018 at grammar altitude (the same lineage move as ADR-070).
+
 ### 6.3 Per-kind criteria versioning (the grandfather core)
 
 Each kind's `criteria.{readiness,done,gate}.criteria_version` is **independent of `pack_version`**. An in-flight item records the `criteria_version` it was judged against when it passes a DoR/DoD/gate check. When a kind's criteria are revised, **already-judged items keep their judged version** (grandfathered); only items entering the gate *after* the revision use the new version. (Carrying the judged version as a small stamp on the `Work Item` instance is the natural home; whether that stamp is a first-class entity field is an entity-layer consideration, flagged not required by this grammar.) This is the version-controlled-criteria remediation for criteria drift, made concrete.
@@ -494,7 +604,7 @@ A `test` **kind** is a Work Item — a tracked unit of work (the const `base` Wo
 - **Conditional.** Do NOT let a pack ship a gating cycle, because each gate then waits on the other forever — a deadlock that either freezes both transitions or, if silently broken, lets one item advance on a gate meant to hold (defeating the gate).
 - **Root cause.** Authoring two transition gates that each condition on the other's outcome, with no terminating state.
 - **Mitigation — detect-and-refuse, enforced at the existing single enforcement point (`tracker-manager`; no new enforcer):**
-  1. **Static gating-graph cycle detection (pack-validation — the primary defense).** At registry-load (§5.1/§5.2) build a directed gating graph: nodes = `(kind, transition)` pairs; a `related-item-status` check contributes an edge from its `guards_transition` to the `(target-kind, transition)` that moves the target into a `target_status_in` state; a `set-aggregate` check contributes an edge from its `guards_transition` to the transitions that move items INTO its `status_filter` set. Run DFS back-edge / topological-sort-failure detection. **A detected cycle is REFUSED** — the pack fails validation with the offending cycle path named (mirrors §5's "a pack naming a relationship type outside the 7 is invalid" posture).
+  1. **Static gating-graph cycle detection (pack-validation — the primary defense).** At registry-load (§5.1/§5.2) build a directed gating graph: nodes = `(kind, transition)` pairs; a `related-item-status` check contributes an edge from its `guards_transition` to the `(target-kind, transition)` that moves the target into a `target_status_in` state; a `set-aggregate` check contributes an edge from its `guards_transition` to the transitions that move items INTO its `status_filter` set. Run DFS back-edge / topological-sort-failure detection. **A detected cycle is REFUSED** — the pack fails validation with the offending cycle path named (mirrors §5's "a pack naming a relationship type outside the 7 is invalid" posture) (a `control-field` check contributes **no** edge — a control value is item/container data written by an ordinary field write, not an axis1 state produced by a guarded transition, so there is no transition node for the graph to point at).
   2. **Two special cases.** The **set-aggregate convergent self-edge is EXEMPT** — a WIP gate that guards the same transition that fills its own set is *self-limiting* (it converges to ≤ limit and stops admitting), not a deadlock; the detector special-cases a node whose only "cycle" is its own fill-transition as converging, not refusable. **Mutual cycles are REFUSED** — two *different* transitions in a mutual wait (the A↔B status standoff or the two-set / `limit_ref` aggregate cycle) are named-and-refused.
   3. **Runtime cut (write/transition time — the backstop).** `tracker-manager` evaluates the condition at transition time; `on_unresolved: BLOCK-TRANSITION` fires when the target/set/scope can't be resolved (deleted related item, missing board entity, a manual-edit standoff the static graph couldn't see at instance level). Two bounds prevent unbounded runtime evaluation: a **traversal-depth cap** on edge-following (status arm) and a **set-cardinality bound** (aggregate arm — refuse to evaluate a pathologically large/unbounded scope rather than enumerate unboundedly).
   4. **Refuse, not auto-break.** A genuine mutual cycle is an operator-resolvable modeling error (remove one gate) — refuse-and-name routes the decision to the operator (Tier 1), consistent with `entity-field-schemas.md` §7 ("never silently default a field, drop a reference, or substitute a kind").
@@ -514,6 +624,7 @@ This document **consumes** these sources by pointer (duplicate-source-discipline
 | [`../ADRs/ADR-018-work-item-type-layer.md`](../ADRs/ADR-018-work-item-type-layer.md) | The establishing decision — D1 hybrid (thin entity + this declarative layer), D2 methodology-projected (project onto the general hierarchy via the work-organization mapping framework, not a release-pipeline tool), D4 Tier-2. This grammar is the D1/D2 implementation; it opens no competing ADR. |
 | [`../ADRs/ADR-069-methodology-pack-composing-unit.md`](../ADRs/ADR-069-methodology-pack-composing-unit.md) | The founding decision that the methodology pack is the plug-and-play composing unit (placement `core/packs/<archetype>/`, `pack.toml` manifest, selection). The `role`/`extends` composition (§1.1) is the grammar those manifests conform to. |
 | [`../ADRs/ADR-070-methodology-pack-composition-grammar.md`](../ADRs/ADR-070-methodology-pack-composition-grammar.md) | The grammar-altitude sibling of ADR-069 that this widen implements — D1 pack `role`/`extends` (§1.1), D2 the `[[labels]]` contribution facet (§1.1.1), D3 the work-status projection over the entity base, D4 the role-conditional `kinds` relaxation. Additive extension of ADR-018 (the ADR-039 lineage); grounds why the meta-schema version stays v1 (§6.2a). |
+| [`../ADRs/ADR-077-cross-cutting-control-field-layer.md`](../ADRs/ADR-077-cross-cutting-control-field-layer.md) | The grammar-altitude decision for the cross-cutting control layer — the §1.1.2 `[[controls]]` facet (shared pack-level declaration over per-kind repetition), the §1.2.1 Arm-3 body (`scope: self` v1 + reserved container scopes), the `x-pmo-control` class, and the value→gate/filter coupling contract. Fills the slot ADR-039 reserved; extends ADR-018 in the ADR-039/ADR-070 lineage; grounds §6.2b. |
 | [`../specs/label-taxonomy.md`](../specs/label-taxonomy.md) | The label-group grammar the `[[labels]]` facet (§1.1.1) contributes *into* — it owns the group set (`category` / `status` / `cluster` / `initiative` / `triage-flag` / `disposition`) + the rules; a pack only populates the rows. The contract direction (grammar defines groups; packs populate) is the guardrail against label drift. |
 | [`frontmatter-schema.md`](frontmatter-schema.md) | §Category 4 — the built 7 MVP relationship types `relationships.allowed_types[]` references (no new vocabulary). |
 | [`raid-log.schema.json`](raid-log.schema.json) | The EAD precedent — the entity→artifact machine-schema DERIVED (not hand-authored) via the 7-class `x-pmo-class` crosswalk + `x-pmo-*` annotations + `x-pmo-negative-tests`; the exact mechanism §3 generalizes. |

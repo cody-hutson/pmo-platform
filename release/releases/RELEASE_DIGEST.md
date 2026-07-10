@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.67 (2026-07-10) — <headline — populated by operator at chore PR review>
+
 ### v3.66 (2026-07-09) — Engineering documents now start from a canonical template, not a blank page
 
 Authors the seven software-domain template files the shipped 5-Layer Template Architecture mapped to canons but left `(none — gap)`: ADR (Nygard 2011), Runbook (Google SRE §Runbook Design), Design doc (Google convention, FDD/TDD/HLD/LLD variant discriminator) in Wave 1 (#2149); RFC (IETF RFC 7322 + Rust RFC), PRD (`product-management:write-spec`), Postmortem (Google SRE §Postmortem Culture), Test plan (PMBOK 7 §Quality + `engineering:testing-strategy`) in Wave 2 (#2150). Each carries the 15-field L4 provenance header at `review_status: DRAFT` (never APPROVED/PROMOTED — proof-of-utility gate unmet), with `canon_compat` recorded as anticipated-path-at-DRAFT plus negative live-plugin evidence. Flips `template-taxonomy.md` §4.1–§4.7 + §6 rows 1–6 and adds a new §6 row 9 (Test plan) with an atomic count/§7-note/§2-gap-count sweep (§6 now 9 rows, 0 residual gaps). D-MirrorRegistration ruled canonical-only (zero `TEMPLATE_SYNC_MAP` entries; registration follows the first runtime consumer). Release Class **novel**; tracking umbrella #71 + two wave slices on a single PR / single merge, clean at `671e0bf` (provisional v3.66 claimed clean). Independent Phase-A6.5 adversarial review Major/0-Blocker (advisory); DT PASS both waves (3 Tier-1 fix-forwards cleared on re-review); QA ACCEPT ×3 at score 1.00. Six taxonomy-consumer `.skill` packages rebuild at close. Follow-ups #3289/#3290/#3291/#3299. Outcome SUCCESS; CHEAP reversibility.

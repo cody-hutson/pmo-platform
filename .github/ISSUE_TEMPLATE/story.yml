@@ -1,0 +1,60 @@
+name: User Story
+description: File a User Story — a user/operator-facing value increment under a resolved methodology.
+# Pack-projected kind form — renders the `story` kind a resolved methodology pack declares in its kinds[]
+# (source pack: core/packs/scrum/pack.toml; the optional Story points field mirrors the kind's
+# fields.kind_specific declaration). The labels array realizes the pack's projects_kind-joined
+# `type:story` row (applied_at: Intake) structurally at submission. A deployment whose resolved
+# methodology declares different kinds supplies its own kind forms per the kind-derivation contract in
+# operations/skills/intake-desk/references/type-map.md.
+# Template selection by work-item type: see release/references/how-to/intake-style-guide.md §1b.
+# Title = an informative summary (no type/category prefix — the label carries type). See release/references/how-to/intake-style-guide.md §7.
+title: ""
+labels: ["type:story", "status: proposed"]
+body:
+  - type: textarea
+    id: value
+    attributes:
+      label: Value
+      description: Who benefits and why — the user/operator-facing value this story delivers. A story with no namable beneficiary is not a story.
+      placeholder: "As <role>, I need <capability> so that <benefit>. (Any framing works — the beneficiary + benefit are the required content, not the sentence shape.)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        One testable predicate per bullet — verifiable by a fresh agent without clarifying questions.
+        Start each bullet with a verifiable verb (verify/check/confirm/assert/ensure/validate) OR name a
+        specific file/section/output AND a specific observable state.
+      placeholder: |
+        - [ ] Verify that <output/behavior> shows <observable state> (method: <how>)
+    validations:
+      required: true
+
+  - type: input
+    id: story-points
+    attributes:
+      label: Story points
+      description: Optional — the resolved pack's relative-estimate field (declared in the pack's kinds[] as story_points).
+      placeholder: "5"
+    validations:
+      required: false
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent epic
+      description: Optional — the containing epic as a #N reference (BELONGS_TO placement; the tracker's native sub-issue link carries the relationship).
+      placeholder: "#N"
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional — evidence labels, related items, links.
+    validations:
+      required: false
