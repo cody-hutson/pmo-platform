@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.68 (2026-07-10) — Release quality checks now run automatically and escalate only on failure
+
 ### v3.67 (2026-07-10) — <headline — populated by operator at chore PR review>
 
 ### v3.66 (2026-07-09) — Engineering documents now start from a canonical template, not a blank page

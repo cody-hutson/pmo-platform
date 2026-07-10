@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.68 | 79-qa-devtest-modes-and-automated-eval-execution | 2026-07-10 | — | #3314 | [notes/v3.68_RELEASE_NOTES.md](notes/v3.68_RELEASE_NOTES.md) |
 | v3.67 | 87-methodology-pack-catalog | 2026-07-10 | — | #3316 | [notes/v3.67_RELEASE_NOTES.md](notes/v3.67_RELEASE_NOTES.md) |
 | v3.66 | software-domain-templates | 2026-07-09 | Software-domain artifact templates (7 families) + taxonomy registry completion | #3308 | [notes/v3.66_RELEASE_NOTES.md](notes/v3.66_RELEASE_NOTES.md) |
 | v3.65.1 | 109-comment-trust-boundary | 2026-07-04 | Comment author-association trust boundary (prompt-injection hardening) + lock-at-close | #3304 | [notes/v3.65.1_RELEASE_NOTES.md](notes/v3.65.1_RELEASE_NOTES.md) |
