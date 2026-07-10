@@ -10,7 +10,10 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.67] - 2026-07-10
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Intake now adapts to your project's methodology — file Epics and Stories directly with the right type applied, and split methodology per space.
+
+- Added Epic and Story intake templates that stamp the correct work-item type at submission, and wired intake-desk to resolve the configured methodology and render its matching work breakdown and item kinds.
+- Added optional per-space `operational_methodology` / `release_methodology` fields, a determinate type-to-template routing rule, and the cross-cutting control-field mechanism in the work-item type schema (ADR-077) — all additive and backward-compatible.
 
 [Full notes](release/releases/notes/v3.67_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.67)
 
