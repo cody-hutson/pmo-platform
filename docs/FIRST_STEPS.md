@@ -42,7 +42,7 @@ Then ask, in plain language. Starter questions, grouped by what they teach:
 
 - "Explain the 13-stage release pipeline in plain English."
 - "What's the difference between the *hub* and a *spoke*?"
-- "How do I file a work item, and what are the four issue templates for?"
+- "How do I file a work item, and what are the issue templates for?"
 - "What's a Milestone here, and how does an issue end up in one?"
 
 **Going deeper**
@@ -150,7 +150,7 @@ gh auth status         # expect: logged in, with repo scope
 
 ### Step 1 — Fork and confirm your work-item templates
 
-You already cloned the repo. For the release pipeline you operate against a GitHub repo you own (your fork). The four intake templates ship in the clone at `.github/ISSUE_TEMPLATE/` — confirm they're on your fork:
+You already cloned the repo. For the release pipeline you operate against a GitHub repo you own (your fork). The intake templates ship in the clone at `.github/ISSUE_TEMPLATE/` — confirm they're on your fork:
 
 | Template | Use it for |
 |---|---|
@@ -158,6 +158,8 @@ You already cloned the repo. For the release pipeline you operate against a GitH
 | `bug.yml` | A defect to fix. |
 | `observation.yml` | A lightweight "something's off here" note that may later graduate to a proposal. |
 | `adr.yml` | An architectural decision to record. |
+| `epic.yml` | A large body of work decomposed into child items (pack-projected methodology kind; stamps `type:epic`). |
+| `story.yml` | A user/operator-facing value increment (pack-projected methodology kind; stamps `type:story`). |
 
 These typed templates are what make the pipeline's gates computable — every required field (priority, evidence, acceptance criteria, documentation impact) has a place to live.
 

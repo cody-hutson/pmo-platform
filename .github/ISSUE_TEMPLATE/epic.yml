@@ -1,0 +1,50 @@
+name: Epic
+description: File an Epic — a grouping container for a large body of work decomposed into child items, under a resolved methodology.
+# Pack-projected kind form — renders the `epic` kind a resolved methodology pack declares in its kinds[]
+# (source pack: core/packs/scrum/pack.toml). The labels array realizes the pack's projects_kind-joined
+# `type:epic` row (applied_at: Intake) structurally at submission. A deployment whose resolved methodology
+# declares different kinds supplies its own kind forms per the kind-derivation contract in
+# operations/skills/intake-desk/references/type-map.md.
+# Template selection by work-item type: see release/references/how-to/intake-style-guide.md §1b.
+# Title = an informative summary (no type/category prefix — the label carries type). See release/references/how-to/intake-style-guide.md §7.
+title: ""
+labels: ["type:epic", "status: proposed"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: The capability outcome this epic delivers — WHAT is true when it is done, stated observably. Not the mechanism.
+      placeholder: "AFTER — an operator can <capability>. TODAY — <the gap>."
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: The boundary — what is IN and what is explicitly OUT.
+      placeholder: |
+        In: ...
+        Out: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: children
+    attributes:
+      label: Candidate child items
+      description: Optional. Known candidate child items as a decomposition callout for later slicing — children are sliced later, never auto-created at intake.
+      placeholder: |
+        - <candidate child item>
+        - <candidate child item>
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Optional — evidence labels, related items, links.
+    validations:
+      required: false

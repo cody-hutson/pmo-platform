@@ -12,7 +12,7 @@ description: >
   interactive path invoked programmatically, not by a conversational phrase. Use when the user
   says "help me file this idea as an issue", "turn this into a work item", "log this idea", "is
   this intake-ready", or "help me write up this bug/story/initiative".
-version: v2.27
+version: v2.29
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -42,6 +42,17 @@ rule plus the WHAT/HOW boundary; the loop and the rule are in
   / task / bug), and state it back as an assumption for the user to confirm or
   correct. If the user genuinely cannot align, carry the altitude as a flagged
   `[ASSUMPTION – CONFIRM]` to a human reviewer at triage — do not stall the loop.
+- **Resolve the methodology; render by nature.** At type-landing the desk resolves
+  the scope's active methodology — `operational_methodology` when present, else
+  `delivery_approach`, through the platform's 5-rung config resolver
+  (`core/governance/OPERATIONS.md` § Platform-Config Resolution Protocol; the
+  loop's methodology-resolution step) — and types, places, and relates the item
+  per the work-organization-mapping-framework § 4.2 place-and-relate procedure
+  over the derived kind registry (`references/type-map.md` § Kind-derivation
+  contract). The skill body carries **no archetype default**: the methodology is
+  read from config and the resolved archetype's vocabulary is rendered by nature;
+  when nothing resolves, the desk proceeds on the invariant registry with an
+  explicit caveat — never a silent archetype assumption.
 - **One work item per request.** Capture the idea at its right altitude and create
   exactly one item. When the idea is a container (an initiative or epic-equivalent),
   note the candidate child work as a decomposition callout in the body for later
@@ -96,8 +107,10 @@ gate the loop reference defines (altitude gate → type-landing gate → clarity
 1. **Meet at altitude (assume + confirm)** — open with run-the-business vs
    change-the-business, propose an assumed specific altitude, state it back, and
    confirm. Unresolved → carry as a flagged `[ASSUMPTION – CONFIRM]` to triage.
-2. **Identify type and place (one item)** — propose the work-item type (from the
-   registry, `references/type-map.md`) and its place in the intake hierarchy;
+2. **Identify type and place (one item)** — resolve the scope's methodology (the
+   loop's methodology-resolution step), then propose the work-item type from the
+   derived registry (`references/type-map.md`) and its place in the intake
+   hierarchy per the mapping framework's place-and-relate procedure;
    re-route if the idea reclassifies as understanding develops. Create exactly one
    item; a container's child breakdown is a body callout for later slicing.
 3. **Elicit type/level fields** — ask for the fields THIS type at THIS altitude
@@ -246,13 +259,22 @@ required fields are governed by `references/type-map.md`. That file maps each ty
 to its issue-template path, its altitude-emphasis, and its landing criteria; the
 required field set, the dropdown options, and the default labels are **derived at
 use time from each type's `.github/ISSUE_TEMPLATE/<type>.yml`** — the living source
-of truth — never duplicated inline. The current type set is `improvement` / `bug` /
-`observation`. The desk does not elicit or emit ADRs: ADRs are an architecture act,
+of truth — never duplicated inline. The invariant tier's type set is `improvement`
+/ `bug` / `observation`; when the scope resolves a methodology, the registry is
+the kind set derived at use time per `references/type-map.md` § Kind-derivation
+contract (the operator's own type-pack, else the selected methodology pack(s)
+under `core/packs/`, else the Layer-2 map fallback), typed via `type:*` labels.
+The landed type also selects the emission vehicle per the binding table in
+`references/type-map.md` (§ Kind ↔ label ↔ level binding): a resolved kind with a
+dedicated kind form emits there — the form itself stamps `type:<kind_id>` structurally —
+else on the interim `improvement.yml` vehicle with the kind carried as its `type:*` label.
+The desk does not elicit or emit ADRs: ADRs are an architecture act,
 not conversational intake (the durable rationale and the component boundary are in
 `references/type-map.md` and in the intake-front-door-architectural-boundary ADR;
-see Reference files). When the work-item type system lands later, it repoints or
-extends the type registry portion of `references/type-map.md`; this skill's loop is
-table-driven and needs no rewrite.
+see Reference files). The declarative work-item type system this registry couples
+to has shipped (the type-pack meta-schema and the pack surface); the type registry
+portion of `references/type-map.md` now derives from it at use time — the loop is
+table-driven and reads whatever registry the config resolves.
 
 ## Output contract
 
@@ -543,7 +565,8 @@ handling.
 - **Conditional:** do NOT file a project-operational item (a RAID risk, a
   project action item, a carry-forward blocker) as a work-tracker issue when
   the item belongs to the active project's operational trackers, because the
-  desk's type registry covers platform work (improvement / bug / observation)
+  desk's type registry covers work-tracker items (the invariant improvement /
+  bug / observation tier plus any methodology-resolved kinds)
   while project risks and actions are owned by the RAID Log and the
   carry-forward trackers via ppm-agent and tracker-manager — a project risk
   coerced into an observation strands it where project processing never reads,
@@ -596,6 +619,44 @@ handling.
   for a decision that has no acceptance criteria, files it as an improvement,
   and the decision's rationale is now findable only by someone searching the
   wrong corpus.
+
+### Methodology-blind typing under a resolved methodology — OUT
+
+- **Signature (observable signal):** With the scope's methodology resolved, the
+  desk emits an item on the generic invariant type with no `type:*` kind (an
+  untyped child under a typed container), proposes a hierarchy the archetype
+  forbids (an Epic-equivalent contained by another Epic-equivalent — a
+  grouping-of-groupings), or relates items via an edge outside the built
+  vocabulary (an invented "epic-of-epics" / "parent-feature" edge).
+- **Conditional:** do NOT type, place, or relate an item from the generic default
+  when the scope resolves a methodology — and never propose a containment edge
+  between two grouping kinds or an edge type outside the built relationship
+  vocabulary (`BELONGS_TO` placement; `DEPENDS_ON` / `BLOCKS` ordering; a resolved
+  kind's declared `relationships.allowed_types` subset where one exists) — because
+  the work-organization-mapping-framework § 4.2 place-and-relate procedure is the
+  consumer contract this desk executes: every finest-execution kind lands at the
+  Work-Item level, grouping names (an Epic-equivalent, a WBS-summary) are grouping
+  kinds rather than nestable levels, relations come only from the built vocabulary,
+  and a methodology-blind emission produces items the resolved methodology's
+  downstream consumers (boards, rollups, readiness gates) cannot place.
+- **Root cause:** The loop's inputs were the user's idea and the generic template
+  registry; before the methodology-resolution step existed, nothing read the
+  resolved config — so the desk rendered the platform's generic vocabulary as if
+  it were the scope's vocabulary (a config-blind default standing in for a
+  resolved-by-nature read).
+- **Mitigation:** Run the methodology-resolution step unconditionally before
+  type-landing; verify the proposed type against the derived registry at the
+  type-landing gate (item f); propose placement and relations only per the
+  framework § 4.2 (BELONGS_TO to the Milestone/Workstream parent;
+  DEPENDS_ON/BLOCKS ordering; the declared allowed-types subset); flag an
+  unmappable kind as an inferred Work-Item-level placement (caveat-on-gap) rather
+  than inventing a level or an edge.
+- **Principal response vs. junior response:** Principal resolves the config,
+  renders the archetype's vocabulary by nature — the resolved kinds, stamped
+  `type:*`, legal edges only — and flags gaps as inferred placements. Junior
+  ships tidy generic items under a resolved methodology (untyped children, an
+  epic-to-epic grouping), and the backlog's hierarchy breaks in every downstream
+  consumer that reads the resolved archetype.
 
 ### Auto-creating a Tier-0-implied item under `bounded_auto` (Mode C) — OUT
 

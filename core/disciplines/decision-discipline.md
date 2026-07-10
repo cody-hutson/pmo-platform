@@ -38,7 +38,7 @@ Decision-class work produces a recommendation that the operator is expected to a
 - Iteration vs. escalate (Tier 1/2/3 feedback classification)
 - Spoke output evaluation (concurs/diverges)
 
-NOT decision-class work: routine orchestration (chip spawning, status reads, RELEASE_LOG appends), deterministic routing (Stage N+1 after N closes), pass-through relaying without evaluation.
+NOT decision-class work: routine orchestration (chip spawning, status reads, RELEASE_LOG appends), deterministic routing (Stage N+1 after N closes), determinate classification (a classification a governance rule fully resolves — see § 3), pass-through relaying without evaluation.
 
 ### 1.2 Consumer scope
 
@@ -313,9 +313,12 @@ Full taxonomy of which decision classes require which mechanisms. Consumer-agnos
 | **Exempt: Status reads** (`gh issue view`, RELEASE_LOG append) | ❌ | ❌ | ❌ | Not a decision |
 | **Exempt: Stage-gate applicability** from pre-approved matrix | ❌ | ❌ | ❌ | Plan-driven application |
 | **Exempt: Deterministic routing** (Stage N+1 after N closes) | ❌ | ❌ | ❌ | Procedure-driven |
+| **Exempt: Determinate classification** (a governance rule fully resolves the classification — e.g., work-item type → intake template per [`intake-style-guide.md` § 1b](../../release/references/how-to/intake-style-guide.md)) | ❌ | ❌ | ❌ | Rule-determined; decided tool-blind — never rendered as an operator question (see below) |
 | **Exempt: Downstream-output pass-through** (consumer reports without adding evaluation) | ❌ | ❌ | ❌ | Pass-through; separate evaluation is the subject |
 
 **Rule of thumb:** If the consumer is **recommending to operator** AND operator is **expected to act on it**, all 3 mechanisms apply (or are explicitly exempt per this table, not per consumer whim). If the consumer is **relaying information** or **executing a determined procedure**, mechanisms are exempt.
+
+**Determinate classification is decided tool-blind.** When a governance rule fully resolves a classification (the intake type→template fork per [`intake-style-guide.md` § 1b](../../release/references/how-to/intake-style-guide.md) is the worked case), applying it is procedure execution, not decision-class work: the consumer decides the classification tool-blind and proceeds — it does not escalate the classification to the operator as a clarifying question (`AskUserQuestion`, a Decision Briefing, or free-text). Rendering an operator gate for a rule-resolved classification is an unauthorized gate (§ 6 metric 5 — the FM-2 governance-theater pattern). The prior judgment of whether ANY question is warranted belongs to the AskUserQuestion-is-a-mechanism-not-a-trigger rule (CLAUDE.md § Universal Preferences) — cross-referenced, not restated here; skill-level mode disambiguation stays with the OPERATIONS.md Mode Selection Protocol. A classification rises to decision-class only when the governing rule's discriminators genuinely do not resolve it — then it enters the table above as a normal decision, and per G4 the honest escalation names the conflicting readings, never a template menu.
 
 ---
 
