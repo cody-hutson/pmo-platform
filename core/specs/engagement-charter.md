@@ -8,7 +8,7 @@ consumers: "All Claude Code skills + chips + spokes producing operator-directed 
 applies_to: All Claude Code skills + chips + spokes producing operator-directed outputs
 parallel_to: decision-discipline.md, reversibility-protocol.md, review-discipline-principles.md
 source: "2026-05-04 engagement research brief"
-companion_brief: pmo-platform/analysis/engagement-research-2026-05-04/SUMMARY.md
+companion_brief: <OPERATOR_INSTANCE_ANALYSIS_PATH>/engagement-research-2026-05-04/SUMMARY.md
 ---
 <!-- reference-durability: allow-link -->
 
@@ -341,4 +341,4 @@ The native surface is canonical — body content does NOT live in this appendix.
 
 ---
 
-*Charter authored 2026-05-04 in support of Stage 5 design. Companion research brief: `pmo-platform/analysis/engagement-research-2026-05-04/SUMMARY.md`.*
+*Charter authored 2026-05-04 in support of Stage 5 design. Companion research brief: `<OPERATOR_INSTANCE_ANALYSIS_PATH>/engagement-research-2026-05-04/SUMMARY.md`.*

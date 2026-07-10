@@ -402,13 +402,16 @@ build_scan_list() {
 # this table in sync with that array. Each entry is the repo-relative SOURCE
 # path; the second column is its canonical mirror partner.
 #
-# Reachability note: most mirrors deploy OUTWARD to $HOME/.claude/rules/, which
+# Reachability note: all mirrors deploy OUTWARD to $HOME/.claude/rules/, which
 # is OUTSIDE the scanned REPO_ROOT and therefore never appears as a referrer in
 # the scan list. We register those rows so --include-mirrors / filtered_mirrors
-# reflect the true topology and TSV rows always name two distinct paths; in-scan
-# suppression only ever bites the repo-internal pair (core/governance/OPERATIONS.md
-# <-> operations/OPERATIONS.md). A row is emitted only when its SOURCE exists in
-# REPO_ROOT, so deploy-target-only halves never fabricate rows.
+# reflect the true topology and TSV rows always name two distinct paths. A row is
+# emitted only when its SOURCE exists in REPO_ROOT, so deploy-target-only halves
+# never fabricate rows. (The former repo-internal core/governance/OPERATIONS.md
+# <-> operations/OPERATIONS.md pair was RETIRED per #2213 — operations/OPERATIONS.md
+# is now an SSOT pointer stub, not a byte-identical mirror; its link to the SSOT is
+# a REAL edge that must NOT be mirror-suppressed. So in-scan suppression now bites
+# nothing.)
 # ---------------------------------------------------------------------------
 detect_mirror_pairs() {
   MIRROR_MAP_FILE="$WORK_DIR/mirror-pairs.tsv"
@@ -425,7 +428,6 @@ detect_mirror_pairs() {
     "core/rules/git-workflow.md	.claude/rules/git-workflow.md"
     "core/rules/governance-files.md	.claude/rules/governance-files.md"
     "release/governance/release-process.md	.claude/rules/release-process.md"
-    "core/governance/OPERATIONS.md	operations/OPERATIONS.md"
   )
 
   local entry src mir

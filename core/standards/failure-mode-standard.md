@@ -643,7 +643,7 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
 ### utc-drift-spec-contradiction — PROC
 
 - **Signature (observable signal):** Stage 5 spec hardcodes a date in spec text
-  (e.g., `pmo-platform/analysis/<audit-name>-2026-05-01/`) that MUST match a
+  (e.g., `<OPERATOR_INSTANCE_ANALYSIS_PATH>/<audit-name>-2026-05-01/`) that MUST match a
   literal date in ≥1 downstream load-bearing artifact (folder path, AC verifier
   identifier, ADR source-observation reference). Stage 6 execution crosses a
   UTC day boundary relative to the operator-local date used at authoring;
@@ -675,7 +675,7 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   execution; spec ships with embedded contradictions waiting to fire at the
   next UTC day boundary.
 - **Originating evidence:** Stage 6 Engineering Pass 1
-  + `pmo-platform/analysis/file-overlap-audit-2026-05-01/SUMMARY.md` § 1
+  + `<OPERATOR_INSTANCE_ANALYSIS_PATH>/file-overlap-audit-2026-05-01/SUMMARY.md` § 1
   UTC drift note. Tier 1 [ADJUST] documented at Stage 6.
 
 ```markdown

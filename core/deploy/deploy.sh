@@ -2928,8 +2928,11 @@ cmd_check() {
   #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
   #            (becomes required when the operator flips deploy-check.mode to enforce)
   #   invariant: every workspace rules-mirror file (~/.claude/rules/<file>.md) is
-  #              byte-identical to its in-repo source (modulo the OPERATIONS.md
-  #              depth-adjusted-link normalization) — asserted by diff -q.
+  #              byte-identical to its in-repo source — asserted by diff -q.
+  #   NOTE (#2213): the former core/governance/OPERATIONS.md ↔ operations/OPERATIONS.md
+  #              byte-identical mirror-pair entry was RETIRED here — that dual-home
+  #              full copy silently drifted (#1346/#2213). It is replaced by the
+  #              SSOT + pointer duplicate-home check appended after this loop.
   #   falsification: edit a workspace mirror so it diverges from its core/rules/
   #                  source -> this check WARNs (advisory) / FAILS (post-flip).
   #
@@ -2953,7 +2956,6 @@ cmd_check() {
       "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md"
       "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md"
       "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
-      "core/governance/OPERATIONS.md:operations/OPERATIONS.md"
     )
     for pair in "${MIRROR_PAIRS[@]}"; do
       local c9_left="${pair%%:*}"
@@ -2969,22 +2971,6 @@ cmd_check() {
       fi
       if [[ ! -f "$c9_right" ]]; then
         log "  SKIP:  $c9_left ↔ $c9_right (workspace mirror absent — operator-instance)"
-        continue
-      fi
-      # The OPERATIONS.md dual-write pair lives at two repo depths
-      # (core/governance/ vs operations/), so its markdown link targets carry
-      # depth-adjusted relative prefixes that resolve correctly from each
-      # location. Compare that pair MODULO link-target paths — real content
-      # drift still flags; benign per-depth prefixes do not. All other
-      # (workspace-deployed) mirrors are copied verbatim and stay byte-for-byte.
-      if [[ "$c9_left" == *OPERATIONS.md ]]; then
-        local c9_norm='s#(\]\()[^)]*(\))#\1LINK\2#g'
-        if diff -q <(sed -E "$c9_norm" "$c9_left") <(sed -E "$c9_norm" "$c9_right") >/dev/null 2>&1; then
-          log "  OK:    $c9_left ↔ $c9_right (content-identical; links depth-adjusted per location)"
-        else
-          flag_warn_or_issue "mirror-sync" "$c9_left ↔ $c9_right content divergence (beyond link depth)"
-          diff -u <(sed -E "$c9_norm" "$c9_left") <(sed -E "$c9_norm" "$c9_right") 2>/dev/null | head -20 | sed 's/^/         /' || true
-        fi
         continue
       fi
       if diff -q "$c9_left" "$c9_right" >/dev/null 2>&1; then
@@ -3021,6 +3007,38 @@ cmd_check() {
           diff -u "$c9_hook_src" "$c9_hook_mir" 2>/dev/null | head -20 | sed 's/^/         /' || true
         fi
       done
+    fi
+
+    # OPERATIONS.md SSOT + pointer duplicate-home check (per #2213 — replaces the
+    # retired byte-identical mirror-pair enrollment above).
+    #   core/governance/OPERATIONS.md is the SINGLE SOURCE OF TRUTH (SSOT) for
+    #   program-level operations context — program-scoped governance is homed
+    #   under core/governance/ per the CLAUDE.md governance file map.
+    #   operations/OPERATIONS.md is retained ONLY as a path-stable POINTER STUB
+    #   (several archival release docs link to it) and MUST NOT carry a divergent
+    #   full copy. The former "keep both byte-identical" model (#183 A1) let the
+    #   two homes silently drift (~31.6 KB apart by #2213), so we assert
+    #   pointer-SHAPE (small + references the SSOT) instead of mirror-IDENTITY.
+    #   Falsification: re-fork operations/OPERATIONS.md as a full copy — it grows
+    #   past the stub ceiling and/or drops the SSOT reference -> WARN (advisory) /
+    #   FAIL (post-flip). Same warn-mode posture as the mirror loop above.
+    local c9_ssot="core/governance/OPERATIONS.md"
+    local c9_ptr="operations/OPERATIONS.md"
+    local c9_ptr_ceiling=8192  # a pointer stub is < 8 KB; the SSOT is > 100 KB
+    if [[ ! -f "$c9_ptr" ]]; then
+      log "  SKIP:  $c9_ptr (pointer absent)"
+    elif [[ ! -f "$c9_ssot" ]]; then
+      flag_warn_or_issue "operations-ssot" "$c9_ssot: SSOT missing — the $c9_ptr pointer resolves to nothing"
+    else
+      local c9_ptr_bytes
+      c9_ptr_bytes=$(wc -c < "$c9_ptr" | tr -d ' ')
+      if [[ "$c9_ptr_bytes" -gt "$c9_ptr_ceiling" ]]; then
+        flag_warn_or_issue "operations-ssot" "$c9_ptr is ${c9_ptr_bytes} B (> ${c9_ptr_ceiling} B pointer ceiling) — it looks like a divergent full copy, not a pointer to the SSOT ($c9_ssot). Reduce it to a pointer stub (#2213 SSOT model)."
+      elif ! grep -q 'core/governance/OPERATIONS.md' "$c9_ptr"; then
+        flag_warn_or_issue "operations-ssot" "$c9_ptr (${c9_ptr_bytes} B) does not reference the SSOT ($c9_ssot) — a pointer stub must link to the single source of truth."
+      else
+        log "  OK:    $c9_ptr is a pointer stub (${c9_ptr_bytes} B) referencing the SSOT $c9_ssot"
+      fi
     fi
   fi
 

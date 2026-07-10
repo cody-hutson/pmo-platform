@@ -201,6 +201,6 @@ For each canon mapping in §6, this section records the Localization Check audit
 - Stage 4 Operator Decision Record (2026-05-10) — D1/D2/D3/D4/D5 approval
 - D-CanonicalPromote scope expansion (2026-05-10) — Option A approval (project-md-template.md + requirements-template.md promotions)
 - R-NEW1 Collective Review Decision Record (2026-05-10) — TEMPLATE_SYNC_MAP scope extension
-- Foundation Audit (`pmo-platform/analysis/template-audit-2026-05-10/SUMMARY.md`) — L2 catalog + drift + dedup map
+- Foundation Audit (`<OPERATOR_INSTANCE_ANALYSIS_PATH>/template-audit-2026-05-10/SUMMARY.md`) — L2 catalog + drift + dedup map
 - [`document-ecosystem-design.md` §3 Three-Domain Architecture](../disciplines/document-ecosystem-design.md) — orthogonal `Domain A / B / C` instance-level model
 - [`decision-discipline.md` § 2.1 Mechanism 1](../disciplines/decision-discipline.md) — Localization Check load-bearing test
