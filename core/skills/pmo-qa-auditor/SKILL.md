@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit (dated process-audit artifact) · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "fitness-audit the release pipeline."
-version: v3.67
+version: v3.68
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---

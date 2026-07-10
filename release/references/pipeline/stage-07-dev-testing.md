@@ -498,7 +498,7 @@ When any cap fires, the enclosing loop escalates per the inter-stage feedback pr
 |---|---|---|
 | QA return trigger | Operator relays Lane 2 finding to DT session | Auto-trigger on Lane 2 finding in QA report |
 | Return payload | Markdown section drafted by QA skill | Structured payload emitted by QA skill chain |
-| DT scope enforcement | Mode G's QA-return input contract enforces full re-review scope (= target, v3.67) | Eval runner enforces full scope on QA-originated triggers |
+| DT scope enforcement | Mode G's QA-return input contract enforces full re-review scope (= target, v3.68) | Eval runner enforces full scope on QA-originated triggers |
 | Verified signal | Markdown comment | Structured payload consumed by QA skill chain |
 | Calibration detection | Operator notices recurring QA escapes | Auto-detect DT calibration drift from escape trend in calibration-data.md |
 
