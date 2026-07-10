@@ -1230,8 +1230,8 @@ roster live must itself read that roster live rather than hardcoding it.
   acceptance-assertion contract (`acceptance-assertion-type.md` §§1–5) and the
   stage-08 §5 enum are the single sources of truth — a locally re-stated rubric
   drifts silently when the contract evolves, and a duplicated definition is itself
-  a QA NOT-MET under the release-plan binding constraint that this mode consumes,
-  never re-defines, the #218-class contract.
+  a QA NOT-MET under the binding authoring constraint that this mode consumes the
+  acceptance-assertion contract, never re-defines it.
 - **Root cause:** Restating machinery makes the mode section feel self-contained;
   consumption-by-reference costs a cross-file read, and paraphrase feels harmless
   right up until the SSOT changes and the paraphrase does not.
