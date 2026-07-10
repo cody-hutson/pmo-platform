@@ -76,6 +76,7 @@ Autonomy Tier classifies an agent action by the operator-engagement signature re
 - tracker-manager Tier 2 tracker writes within `cascade_scope` — auto-writes operational trackers without per-update approval (per OPERATIONS.md C4 + `tracker-manager/SKILL.md` Allowlist trigger pair).
 - artifact-generator stages all output in `08-Generated/` (auto-write per CLAUDE.md File Management Protocol § 08-Generated/), promoted to target folder only on operator approval.
 - file-router auto-routes HIGH-confidence (≥90%) files to staging-class folders (`05-Transcripts/`, `06-Emails/`, `08-Generated/`); cross-folder routing into `01-Governance/` etc. drops to Tier 1.
+- Automated eval invocation at pipeline stage gates — the Stage-7/Stage-8 executor modes auto-execute the EI-registered stage-gate eval surfaces within the declared scope (read-only execution; results written only to the stage's declared report surface) per `release/references/pipeline/stage-07-dev-testing.md` § Automated Eval Invocation Protocol; a FAIL/EXCEPTION outcome descends the disposition to Tier 1 — drafted finding + routing recommendation, escalation per `release/governance/release-process.md` § Inter-Stage Feedback Protocol.
 
 **Boundary conditions:**
 - Elevates to Tier 1 when the action target is outside declared scope (e.g., tracker-manager attempting a Tier 1 RAID write — descends to approval gate).

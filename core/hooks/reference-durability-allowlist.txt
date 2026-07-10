@@ -94,3 +94,15 @@ release/references/pipeline/stage-02-triage.md
 # re-flagging pre-existing constructs surfaced incidentally by that edit.
 core/disciplines/five-function-spine-and-process-flows.md
 core/standards/subagent-security-posture.md
+
+# pmo-qa-auditor Mode F fitness-audit mode-spec (#2226) — reference-shaped regex
+# literals in the evidence-citation-quality (CF-1..CF-4) validation table. The
+# spec's CF-3 row documents the deterministic regex for a resolvable work-item ref
+# as `#[0-9]+` — which ISSUEREF_RE (`#\[?[0-9]+\]?`) matches as if it were a bare
+# GitHub issue reference. It is a validation regex, NOT a net-new fragile ref; the
+# per-file allow-link marker does not govern the issue-ref detector. Same class as
+# the stage-02-triage `#[0-9]+` grep-regex entry above (the file structurally
+# documents ref patterns). Bounded: the repo-integrity issue-reference-validity
+# gate still validates any real `#N` in this file, so allowlisting only the
+# durability-delta gate does not disable all ref checking here.
+core/skills/pmo-qa-auditor/references/fitness-audit-mode-spec.md

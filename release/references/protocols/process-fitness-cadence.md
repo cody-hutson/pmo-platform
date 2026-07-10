@@ -88,7 +88,7 @@ The roster is the **continuity contract**: a run measures the same frames the pr
 
 The cadence runs as a **HYBRID** of manual event-triggers and an automated staleness sentinel — the same split the Anthropic axis runs (`platform-health-quarterly-audit` + `platform-health-drift-watch`, `platform-health-audit-framework.md` §2):
 
-- **Manual (event-driven).** The §2 triggers (T1–T3) fire **manually at their semantic moment** — the operator or spoke who lands a pipeline change, closes a retro with a Tier-2+ concern, or adds a methodology archetype invokes the audit.
+- **Manual (event-driven).** The §2 triggers (T1–T3) fire **manually at their semantic moment** — the operator or spoke who lands a pipeline change, closes a retro with a Tier-2+ concern, or adds a methodology archetype invokes the audit. The audit executor is `pmo-qa-auditor` **Mode F** (the how-to-run home); the latest audit folder's `## Deep-Dive Queue` is the dispatch read surface for borderline-band deep-dives, and the dispatching actor (the operator/spoke here, or the §3 sentinel's routed signal) writes the queue's `dispatched` column when it dispatches — the audit run itself never does.
 - **Automated (time-driven).** The §3 90-day fallback is an [`mcp__scheduled-tasks`](../../../core/governance/OPERATIONS.md) **staleness sentinel** that checks the age of the latest `analysis/release-process-audit-*` anchor and routes a due-audit signal to an observation draft.
 
 **Inherited conventions** (from the Anthropic-axis precedent — do not unify):
