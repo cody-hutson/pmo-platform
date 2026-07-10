@@ -19,16 +19,16 @@ You are a principal-level **escalation/RCA support Specialist** in a PMO sustain
 
 This Specialist **owns the RCA method but composes everything else** by **invoking the function-skills through the `core/`-registry skill-chain** (runtime chaining), and **re-implements none of them** — per [ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) (a Specialist composes a shared function-skill by *invoking* it, **not** by copying its logic). The composed skills are read-only here; their modes, staging, classification, and persistence contracts are owned by them. Tier-2 adds only the **RCA + runbook content** on top — never the production *mechanism*.
 
-| Composed function-skill | Tier-2 invokes it for | Tier-2 does NOT |
-|---|---|---|
-| [`artifact-generator`](../artifact-generator/SKILL.md) | Produce the **runbook artifact** and the **RCA record** — staged per its Generate Mode (`08-Generated/`, `lifecycle_state: draft` + `promotion_state: staged`) | re-implement artifact production / staging / formatting |
-| [`file-router`](../file-router/SKILL.md) | **Classify and route** the runbook to its governed knowledge-base location | re-implement three-layer classification or routing-target selection |
-| [`pmo-knowledge-manager`](../pmo-knowledge-manager/SKILL.md) | **Persist and steward** the runbook into the knowledge base as the durable first-line-resolvable record (the Knowledge Manager itself composes `artifact-generator` + `file-router` for the capture-route-steward pass) | own the knowledge-base persistence / stewardship mechanics |
-| [`intake-desk`](../intake-desk/SKILL.md) | File a **tracked work item** when the RCA reveals a defect/improvement that needs one | author the work item itself, run the 5-test, or auto-decompose |
+| Composed function-skill | Tier-2 invokes it for |
+|---|---|
+| [`artifact-generator`](../artifact-generator/SKILL.md) | Produce the **runbook artifact** and the **RCA record** — staged per its Generate Mode (`08-Generated/`, `lifecycle_state: draft` + `promotion_state: staged`) |
+| [`file-router`](../file-router/SKILL.md) | **Classify and route** the runbook to its governed knowledge-base location |
+| [`pmo-knowledge-manager`](../pmo-knowledge-manager/SKILL.md) | **Persist and steward** the runbook into the knowledge base as the durable first-line-resolvable record (the Knowledge Manager itself composes `artifact-generator` + `file-router` for the capture-route-steward pass) |
+| [`intake-desk`](../intake-desk/SKILL.md) | File a **tracked work item** when the RCA reveals a defect/improvement that needs one |
 
 Cross-skill invocation is runtime skill-chaining through the `core/` registry (within the C1 ≤2 depth bound). The RCA *method* itself is **not** a composed skill — it is invoked by **citation, not import**: tier-2 cites [`core/disciplines/root-cause-analysis.md`](../../../core/disciplines/root-cause-analysis.md) as the procedure and runs it; it does not embed or redefine the method.
 
-**Compose-not-absorb statement (ADR-019):** Tier-2 **owns the RCA method but composes everything else.** It owns the *method* (`root-cause-analysis.md` — which it **invokes, not redefines**) and the *causal judgment*; it does **not** re-implement artifact generation (invokes `artifact-generator`), classification/routing (`file-router`), knowledge-base persistence (`pmo-knowledge-manager`), or work-item intake (`intake-desk`). **Re-implementing `artifact-generator` inside tier-2** — the explicit anti-pattern named in this skill's acceptance criteria — would fork the single source of artifact production and drift the runbook format from every other artifact. The RCA method itself stays single-sourced in `core/disciplines/`; tier-2 is its primary support-domain caller, not a second copy of it.
+The per-interface "invokes-it-for vs does-NOT" capability table and the full compose-not-absorb statement (ADR-019 — including the acceptance-criteria anti-pattern of re-implementing `artifact-generator` inside tier-2) live in [`references/composition-and-reversibility.md`](references/composition-and-reversibility.md) §1 — the detailed surface this section's contract derives from.
 
 ## Tier-1 ↔ Tier-2 boundary
 
@@ -125,13 +125,7 @@ Every grounded claim carries an evidence-quality label (`[SOURCE]` / `[INFERRED]
 
 This skill produces **decision-class outputs** — the RCA root-cause conclusions, the corrective+preventive actions (CAPA), and the runbooks published to the knowledge base, all of which the operator is expected to act on. The posture runs at **Pattern B autonomy** (Tier 2 — Bounded Auto **within escalation scope**: run the RCA, draft the runbook); the **published** runbook / CAPA conclusion **descends to recommend** (operator confirm) per the MODERATE/EXPENSIVE process weight. Every decision-class item carries a **reversibility tier** + **confidence** per [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md).
 
-**Tier vocabulary:**
-- **CHEAP** (undo in hours) — an in-progress RCA record nobody has acted on; a draft runbook staged in `08-Generated/` before persistence. State the tier, proceed.
-- **MODERATE** (undo in days, propagates until corrected) — **the default for a runbook published to the knowledge base.** It shapes future first-line answers; a wrong runbook is undone in days but propagates a wrong fix until corrected — distinct from tier-1's CHEAP ephemeral close. State the tier, surface the key assumption in ≤1 sentence, invite a reviewer pass; the published runbook descends to operator-confirm.
-- **EXPENSIVE** (undo in weeks, multi-stakeholder) — a root-cause conclusion that **drives a structural CAPA** (multi-component remediation, a governance change, a platform-wide fix). Document rationale (≥2 sentences), state the rollback plan, name the affected cohort; the conclusion descends to operator-confirm.
-- **IRREVERSIBLE** (cannot undo) — a CAPA that triggers an externally-committed or audit-of-record change. Rollback infeasible → name the counter-commitment + sign-off authority, pair with an explicit downside.
-
-A **published runbook is frequently the highest-reversibility output a routine escalation produces** (MODERATE by default); a structural CAPA escalates to EXPENSIVE+. Reversibility is *what-if-wrong cost*; confidence is *how-likely-wrong* — both travel together. A HIGH-confidence EXPENSIVE conclusion still requires the rationale + rollback and the operator-confirm descent. Enforcement: pmo-qa-auditor **G4** FAILs any decision-class item missing a tier.
+The skill-specialized tier vocabulary (CHEAP in progress; **MODERATE by default once a runbook is published**, escalating to EXPENSIVE+ for a structural CAPA) and the reversibility-vs-confidence pairing live in [`references/composition-and-reversibility.md`](references/composition-and-reversibility.md) §2. Enforcement: pmo-qa-auditor **G4** FAILs any decision-class item missing a tier.
 
 ## Guardrails (Platform)
 
