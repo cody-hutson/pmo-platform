@@ -4,9 +4,10 @@
 ```yaml
 labeled_by: Stage-6 Engineering session (candidate labels)
 label_date: 2026-07-10
-independence: pending — labels adjudicated by the operator or a session that
-  authored neither the rubric nor the mode text; Engineering drafts candidate
-  labels; the operator confirms/corrects at the Stage-7 DT gate — the confirmed
+independence: confirmed — the Stage-7 DT release-scoped session (which authored
+  neither the rubric nor the mode text) independently adjudicated the judgment
+  families and concurred 10/10 with Engineering's candidate labels; the operator
+  accepted on that concurrence at the Stage-9 gate (2026-07-10). The concurred
   set is ground truth
 ```
 

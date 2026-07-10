@@ -752,7 +752,7 @@ For each finding:
 ```
 ### Finding [N]: [Short title]
 
-**Gate**: [G1–G6]
+**Gate**: [G1–G11]
 **Location**: [Exact section, field, or line in the reviewed output]
 **What's wrong**: [Specific description of the issue]
 **Why it matters**: [Operational impact — what goes wrong if this isn't fixed]
