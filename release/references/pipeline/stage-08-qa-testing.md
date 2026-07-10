@@ -106,6 +106,25 @@ This is the deliverable-exercising acceptance path the runtime-mapped case gets 
 
 Governance/doc/pipeline-internal releases pass Stage 8 unchanged. The Runtime-Evidence Acceptance rule is *conditional on a behavioral/runtime AC that maps to a suite*. A doc/governance/spec release: (1) touches no runtime-mapped path → its Stage-7 A8 already emits `test-run/suite-skip` (row 6); (2) carries no runtime/behavioral AC (its ACs are file-path+state / content predicates) → the rule has **nothing to key on** and does not fire; (3) therefore grades exactly as today via the existing Phase B LLM-acceptance path — **byte-for-byte unchanged verdict**. This is the explicit Stage-8 mirror of the Stage-7 A8 suite-skip no-op row (where Stage 7 says "no path matches → `suite-skip`, no-op gate, no ceremony", Stage 8 says "no runtime evidence / no runtime AC → grade on content as today, record `runtime-evidence: none`"). This card is itself the proof: it is a governance/pipeline-internal deliverable, so its own Stage-8 run takes the no-op path — and, per the cutover exemption above, grades against pre-change Stage-8 semantics regardless.
 
+#### Automated Eval Invocation (Stage-8 registration — EI-S8)
+
+Registered per the
+[Automated Eval Invocation Protocol](stage-07-dev-testing.md#automated-eval-invocation-protocol)
+(the owning shard — record schema, result→gate projection, FAIL/EXCEPTION escalation
+mapping, and the Autonomy Tier 2 — Bounded Auto declaration with its Tier-1 descent
+are defined there, consumed here by reference):
+
+| ID | Stage event | Trigger criterion (fires when ALL hold) | Eval surface executed | Executor |
+|---|---|---|---|---|
+| EI-S8-01 | Phase B (entry-validated) | Phase A entry validation holds — Stage-7 verdict ∈ {PASS, CONDITIONAL PASS}; conformant Handoff Payload; AC extractable | The Stage-8 stage-gate eval set (`stage-08-qa-testing-gate`), executed as written — its `acceptance`-type assertions graded over the release's AC and its structural conformance assertions over the emitted Acceptance Report. Phase B grading is Mode H's §5 constitutive process, which the set's `acceptance`-type assertions exercise — this row registers its automated invocation + record, not new execution semantics | pmo-qa-auditor Mode H — Acceptance Review |
+
+`acceptance`-type results ARE the Phase B per-criterion verdicts (the §5 enum —
+NOT MET keys Step-0/Lane 2 exactly as above); report self-conformance FAILs are
+fixed before posting or routed [ADJUST]; a run EXCEPTION follows the protocol's
+escalation row. Re-entry (Pass M+1 on the Verified Signal) re-fires EI-S8-01 at full
+scope per Phase D. No new verdict values, no parallel grading path; operator
+engagement only on FAIL/EXCEPTION per the protocol's escalation table.
+
 **Design-Principle Conformance QA dimension** (applies when the release touches the D-Gate-rendering surface or the design-principle register): for each option-level `### Design-Principle Conformance` verdict produced in the release's Decision Briefings / D-Gate renderings, verify the conformance verdict CITES (a) the register entry id (`DP-N`) and (b) the entry's `governing_doc` path:line — a bare `ALIGNED` / `**CONFLICT.**` with no register-entry + `governing_doc` citation is a NOT MET finding (it fails the load-bearing evidence test per `decision-discipline.md` § 5 G1/G3, the same evidence-citation discipline the Upstream-compatibility verdict carries). Cross-check: every `**CONFLICT.**` verdict enumerates ≥1 named mitigation and, when the entry's `conflict_reversibility_default` is EXPENSIVE/IRREVERSIBLE, shows an operator HALT / sign-off (not a silent annotate). This dimension is the acceptance-side twin of `deploy.sh --check` Check 45's deploy-time structural assertion: Check 45 asserts the conformance mechanism EXISTS and the register resolves; this dimension asserts each rendered conformance verdict is EVIDENCE-GROUNDED.
 
 **Phase C — Three-Lane Routing:**
@@ -217,7 +236,7 @@ Stage 8 does NOT produce: quality scores (Stage 7), design decisions (Stage 5), 
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics: all AC checked, acceptance matrix complete, no unresolved Blocker findings, escape detection performed, iteration count logged, report posted; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
+Metrics: all AC checked, acceptance matrix complete, no unresolved Blocker findings, escape detection performed, iteration count logged, report posted; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals); registered eval invocations executed (or SKIP no-op recorded) per [Automated Eval Invocation Protocol](stage-07-dev-testing.md#automated-eval-invocation-protocol).
 Judgment (1-5): AC coverage thoroughness, evidence quality, fitness assessment, escape detection, report clarity.
 Calibration: ambiguous AC rate, QA escapes to Stage 9, iteration count. Threshold adjustment after 3+ releases.
 

@@ -629,7 +629,7 @@ issue-thread comment enter only through the stage shard's Phase D machinery
 author-association trust boundary gates external comment ingest before tier
 classification — this mode defines no comment-ingest path of its own.
 
-**Autonomy: Tier 2 (Recommend)** — per-criterion verdicts, the acceptance
+**Automation Tier 2 (Recommend)** — per-criterion verdicts, the acceptance
 score, and lane/disposition recommendations are agent-rendered; the overall
 verdict (ACCEPT / CONDITIONAL ACCEPT / REJECT / HOLD), every disposition of a
 NOT-MET or AC-blocking-PARTIAL criterion, and the Operator Override Record are

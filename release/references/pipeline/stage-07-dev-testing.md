@@ -124,7 +124,7 @@ Stage 7 does NOT produce: design decisions (Stage 5), acceptance verdicts (Stage
 
 ## 7. Stage-Transition Gate
 Transition orchestration: per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) (invokes [gate-evaluation-spec.md](../../../core/schemas/gate-evaluation-spec.md)). Criteria below.
-Metrics: all files reviewed, all AC checked, no unresolved Blockers, quality scores ≥ threshold (or override documented), escape rate logged, report posted; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals).
+Metrics: all files reviewed, all AC checked, no unresolved Blockers, quality scores ≥ threshold (or override documented), escape rate logged, report posted; incoming deferred items accounted (every item whose Target stage = this stage, per [deferred-item-tracking.md §13](../standards/deferred-item-tracking.md), is picked up or re-deferred with rationale — zero unaccounted incoming deferrals); registered eval invocations executed (or SKIP no-op recorded) per [§ Automated Eval Invocation Protocol](#automated-eval-invocation-protocol).
 Judgment (1-5): review thoroughness, finding quality, independence (escape count > 0 expected), report clarity.
 Calibration: precision tracking, escape-to-QA rate, time-to-complete. Threshold adjustment after 3+ releases.
 
@@ -132,7 +132,7 @@ Calibration: precision tracking, escape-to-QA rate, time-to-complete. Threshold 
 Overall Tier 1/2 mix. Structural checks (A1-A5) automatable now (deterministic). Content quality (C1-C4) requires LLM grading. Human decision stays Tier 3. Leverages existing infrastructure: `principal-standard-checklist.md`, `regression-checks.md`, `grader.md`, `run_eval.py`.
 
 ## 9. Gap Summary
-5 gaps. Key: no eval runner for quality assertions (P2), fresh-context separation not enforceable (P3).
+4 gaps. Key: fresh-context separation not enforceable (P3).
 
 ## 10. Retro
 To be populated after execution.
@@ -283,7 +283,7 @@ Engineering MAY batch multiple Tier 1 fixes into a single commit when they addre
 
 | Aspect | Current State | Target State |
 |---|---|---|
-| DT pass execution | Conversation-based, operator triggers DT session | Eval runner auto-executes (per the canonical eval-type taxonomy) |
+| DT pass execution | Auto-executed within the Stage-7 spoke — Mode G runs the registered eval sets per § Automated Eval Invocation Protocol; operator engagement only on FAIL/EXCEPTION | Extend registration as additional stage-gate eval sets are authored (per the stage-gates index) |
 | Finding classification | LLM-graded during report assembly | Rule-based for structural, LLM for content |
 | Engineering fix routing | Operator relays findings to Engineering session | Agent-to-agent handoff with structured finding payload |
 | Re-review trigger | Operator triggers DT re-review session | Auto-triggered on `fix(dt):` commit detection |
@@ -501,3 +501,160 @@ When any cap fires, the enclosing loop escalates per the inter-stage feedback pr
 | DT scope enforcement | Operator confirms full re-review scope | Eval runner enforces full scope on QA-originated triggers |
 | Verified signal | Markdown comment | Structured payload consumed by QA skill chain |
 | Calibration detection | Operator notices recurring QA escapes | Auto-detect DT calibration drift from escape trend in calibration-data.md |
+
+## Automated Eval Invocation Protocol
+
+This protocol registers **automated eval invocation** at pipeline stage gates:
+which stage events auto-execute which eval surfaces, through which executor mode,
+and how an eval result projects into the stage's existing gate machinery. Ownership
+split: the executor modes own eval EXECUTION (ladder mechanics, grading, report
+assembly — their own mode specs); this protocol owns automated INVOCATION — trigger
+registration, the result→gate contract, escalation wiring, the autonomy
+declaration. Eval AUTHORING remains eval-writer's (it authors; it does not run). It
+instantiates the general
+[Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol)
+for eval-result escalation, and extends the stage-gate evaluation surface the way
+[`gate-evaluation-spec.md`](../../../core/schemas/gate-evaluation-spec.md) itself
+anticipates — outcomes reach the evaluator through this shard's §7 Metrics line
+(Path B): no modification to that spec, no parallel gate, no new verdict values.
+Stage 8 registers its EI-S8 rows in its own shard (§5 Phase B), consuming the
+record schema, projection rule, escalation mapping, and autonomy declaration
+defined once, here. Per-stage EI rows live in the owning stage's shard; the shared
+machinery lives here.
+
+### Trigger registration (Stage-7 EI rows)
+
+| ID | Stage event | Trigger criterion (fires when ALL hold) | Eval surface executed | Executor |
+|---|---|---|---|---|
+| EI-S7-01 | Stage-7 spoke entry (Pass 1) | The release enters Stage 7 (DT spoke dispatched) AND ≥1 eval set exists under `core/skills/eval-writer/evals/stage-gates/stage-07-dev-testing/` | The Stage-7 stage-gate eval set(s), executed as written (assertion sourcing + binary judges per the executor mode's reference spec) | pmo-qa-auditor Mode G — Dev Testing |
+| EI-S7-02 | Stage-7 re-entry (Pass ≥ 2) | A post-`fix(dt):` targeted re-review OR a QA-return full re-review begins | Affected assertions (targeted) / full set (QA return) — scope per § Targeted Re-Review and § DT scope on QA returns | pmo-qa-auditor Mode G — Dev Testing |
+
+No registered set / no applicable surface → record **Result `SKIP`** (one-line
+no-op, no ceremony) — mirroring the A8 no-match row. New stage-gate eval sets (per
+the stage-gates index) append EI rows at their owning stage's shard; registration is
+append-pattern.
+
+### Eval-invocation record (the result schema)
+
+One record per suite/contract execution, emitted in the executing mode's stage
+report (Stage 7: the Quality Review Report on the PR; Stage 8: the Acceptance
+Report). Column vocabulary derives from the A8 **Test-results** table — the
+existing machine-readable run-outcome surface at this boundary:
+
+| Suite | Registered-by | Result | Assertions (pass/fail) | Executor | Evidence | Timestamp |
+|---|---|---|---|---|---|---|
+| `<suite_name from the set header>` | `EI-S<stage>-<NN>` | `PASS` / `FAIL` / `SKIP` / `EXCEPTION` | per assertion type, e.g. `structural 3/0 · judgment 1/0` | mode identifier + session class | command / run pointer (reproducible) | ISO-8601 |
+
+- **Result semantics:** `PASS` = every assertion passed · `FAIL` = ≥1 failed ·
+  `SKIP` = no registered/applicable surface (no-op) · `EXCEPTION` = the run could
+  not execute (tool error, missing fixture, unresolvable input) — carries a
+  `reason:` note, the registration analogue of A8's `reason:runner-error`.
+- Per-assertion results are binary PASS/FAIL for `structural` / `judgment` types;
+  `acceptance`-type results ARE the Stage-8 §5 per-criterion verdicts (consumed
+  verbatim — this record adds no verdict values).
+- The record lives in the report BODY. The DT→QA Handoff Payload is unchanged (10
+  required fields stand; eval-FAIL findings flow into its existing Findings table
+  via the projection below). No new pipeline-event type ships with this protocol —
+  the A8 `test-run` event remains runtime-suite-scoped; the record + the release
+  plan's Verification Evidence carry the audit trail.
+
+### Result → gate projection (the contract)
+
+Eval results project INTO the stage's existing finding/verdict machinery — never
+around it:
+
+| Eval outcome | Stage-7 projection | Stage-8 projection |
+|---|---|---|
+| Assertion PASS | No finding; record only | (`acceptance`) a verdict row under the Stage-8 §5 enum |
+| `structural` / `judgment` assertion FAIL | A finding at the severity the graded check declares (e.g., `stage-07-branch-freshness` FAIL = Blocker per S7-I04), entering Phase D verdict computation + the Finding Classification table (Tier 1/2/3) | A format/entry finding per the Phase A [ADJUST] machinery; report self-conformance failures fixed before posting |
+| `acceptance` NOT MET | — (Stage 8 owns) | NOT MET (Blocker) → Lane 2 + the Step-0 hard-precedence gate (existing, unchanged) |
+| Run EXCEPTION | **Warning** finding, infra class, per the A8-INFRA pattern — logged; operator/CI investigates; never a silent pass | same |
+
+The gate verdict is still rendered by the stage's own machinery (Stage 7 Phase D:
+PASS / CONDITIONAL PASS / FAIL; Stage 8 Phase B/E: the §5 enum + ACCEPT /
+CONDITIONAL ACCEPT / REJECT / HOLD). This contract adds no verdict values and no
+parallel gate path — it is the projection seam between an executed eval surface and
+the verdict machinery the stage already runs; the gate evaluator consumes the
+outcome through the §7 Metrics line as it consumes every other Phase-A/B check.
+
+#### Worked example (FAIL → Tier 1, end-to-end)
+
+`EI-S7-01` fires at a release's Stage-7 entry; the executor mode runs
+`stage-07-dev-testing-gate`; `assert_branch_fresh.py` exits 1 listing two
+unreachable base commits.
+
+| Suite | Registered-by | Result | Assertions (pass/fail) | Executor | Evidence | Timestamp |
+|---|---|---|---|---|---|---|
+| stage-07-dev-testing-gate | EI-S7-01 | FAIL | structural 2/1 · judgment 1/0 | Mode G (DT spoke) | `assert_branch_fresh.py` exit 1 — `<sha1>`, `<sha2>` unreachable | `<ts>` |
+
+Projection: the failed assertion grades S7-I04 → finding `F-NN` **Blocker** →
+Phase D verdict **FAIL** (any Blocker) → Finding Classification: fixable within
+scope → **Tier 1 [ADJUST]** → Engineering `fix(dt): rebase release branch onto base
+[ADJUST]` → `EI-S7-02` fires on the Pass-2 targeted re-review → PASS → record
+appended. Operator engagement occurred only at the existing Phase E review. Had the
+rebase invalidated a design premise → **Tier 2 [SCOPE CHANGE]**. EXCEPTION variant:
+the runner cannot resolve the base ref → Result `EXCEPTION (reason: runner-error)`
+→ Warning finding, infra class — operator/CI investigates; the invocation does not
+self-certify, and the §7 metric records the run as unresolved.
+
+### FAIL/EXCEPTION escalation (operator-engagement conditions)
+
+Wired to the
+[Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol)
+Tier classification — operator escalation only on FAIL/EXCEPTION:
+
+| Outcome | Operator engagement | Protocol tier |
+|---|---|---|
+| PASS / SKIP | None — results recorded; operator sees post-hoc in the stage report | — |
+| FAIL, fixable within scope | Via the stage's existing loop — the drafted finding routes to Engineering; operator reviews at Phase E | Tier 1 `[ADJUST]` |
+| FAIL, requires scope change | Operator decides | Tier 2 `[SCOPE CHANGE]` |
+| FAIL, plan unworkable | Operator returns upstream (RCA per that protocol's Tier-3 clause) | Tier 3 `[PLAN REJECTION]` |
+| EXCEPTION | Operator/CI investigates (infra class — not an Engineering code fix); Tier 1 `[ADJUST]` when the cause is a plan/artifact correction (e.g., a stale fixture path) | per the A8-INFRA pattern |
+| `acceptance` NOT MET / AC-blocking PARTIAL | Per the Stage-8 Step-0 gate — fix-now default; defer/accept only with the recorded Operator Override Record | Lane 2 (existing) |
+
+Escalation OUTPUTS (finding blocks, tier-signal comments) are engagement-class
+outputs — communication form per the operator engagement charter
+(`core/specs/engagement-charter.md`); ROUTING per this table.
+
+### Autonomy declaration (prefixed per `core/specs/autonomy-tiers.md` § Tier Disambiguation)
+
+- The invocation ACTION is **Autonomy Tier 2 — Bounded Auto** (registered as an
+  example in [`core/specs/autonomy-tiers.md`](../../../core/specs/autonomy-tiers.md)
+  § Tier 2). **Declared scope:** execute the EI-registered eval surfaces read-only
+  against PR/branch/issue state; write results ONLY to the executing mode's declared
+  report surface; draft findings per the projection table.
+- **Outside scope (descends to Autonomy Tier 1 — Recommend):** waiving or
+  suppressing any FAIL; modifying any eval set or fixture (authoring is
+  eval-writer's — execution never edits); committing fixes (Stage 7 classifies and
+  routes); rendering Phase-E verdicts; any other write.
+- **On FAIL/EXCEPTION the disposition descends to Autonomy Tier 1** — the invocation
+  surface stops at drafted-finding + routing recommendation; the stage machinery and
+  operator dispose per the escalation table above.
+- Stage-level **Automation Tier** labels are unchanged (this shard §8 "Tier 1/2
+  mix"; stage-08 §8 "Automation Tier 2 (Recommend)") — distinct, numerically
+  inverted conventions; always prefix.
+
+### Relationship to adjacent execution surfaces
+
+- **A8 Runtime-Suite Gate** — runtime test suites; its own dispatch map and
+  `test-run` events. Unchanged; this protocol borrows its record vocabulary and
+  INFRA pattern.
+- **Plan-verification re-execution (`verify-release-plan.sh`)** — the optional
+  Phase-A plan-check executor (plan rows + CIAC methods), a distinct check surface.
+  NOT registered here; future candidate if its optional status graduates.
+- **Skill-eval harness (`run_eval.py`, pmo-skill-refiner)** — skill-level evals
+  outside stage gates; out of scope.
+
+### Cutover + pilot
+
+Applies to releases entering Stage 7 / Stage 8 strictly AFTER this protocol's
+introducing-release merge SHA recorded in
+[`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). **The
+introducing release itself is exempt from the gate-binding clauses** (the §7 Metrics
+clause and the EI rows bind from the next release) — with one bounded exception:
+**the pilot.** The introducing release executes `EI-S7-01` during its own Stage-7 DT
+pass as the pilot-conformance run: results recorded in the record schema in the DT
+report, the pilot row mirrored into the release plan's Verification Evidence. The
+pilot is evidence-producing, not gate-binding — the introducing release's verdicts
+render under pre-protocol semantics, and a pilot FAIL routes through the ordinary
+pre-existing Stage-7 finding machinery the projection maps into anyway.
