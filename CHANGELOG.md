@@ -8,6 +8,13 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.66] - 2026-07-09
+
+Engineers now start architecture decisions, runbooks, design docs, RFCs, PRDs, postmortems, and test plans from canonical templates instead of a blank page, and the document catalog that lists them has no remaining gaps.
+
+- Added seven software-domain document templates under `operations/templates/` — ADR, Runbook, Design doc (FDD/TDD/HLD/LLD variants), RFC, PRD, Postmortem, Test plan — each anchored to its recognized industry standard and carrying a 15-field provenance header at `review_status: DRAFT`.
+- Completed the template catalog in `template-taxonomy.md`: flipped the seven `(none — gap)` entries to their new template files and added a ninth §6 canon-table row for the Test-plan family, with the table's counts and reconciliation prose swept to match.
+
 ## [v3.65.1] - 2026-07-04
 
 The release pipeline now ignores issue and PR comments from accounts outside the trusted set, so a stranger's comment can't be read as pipeline instructions.
