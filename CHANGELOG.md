@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.67] - 2026-07-10
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.67_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.67)
+
 ## [v3.66] - 2026-07-09
 
 Engineers now start architecture decisions, runbooks, design docs, RFCs, PRDs, postmortems, and test plans from canonical templates instead of a blank page, and the document catalog that lists them has no remaining gaps.
