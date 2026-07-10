@@ -42,7 +42,7 @@ Then ask, in plain language. Starter questions, grouped by what they teach:
 
 - "Explain the 13-stage release pipeline in plain English."
 - "What's the difference between the *hub* and a *spoke*?"
-- "How do I file a work item, and what are the four issue templates for?"
+- "How do I file a work item, and what are the issue templates for?"
 - "What's a Milestone here, and how does an issue end up in one?"
 
 **Going deeper**
