@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.68] - 2026-07-10
+
+Release quality checks now run as automated evals at the dev-test and acceptance stages, escalating to you only on failure.
+
+[Full notes](release/releases/notes/v3.68_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.68)
+
 ## [v3.67] - 2026-07-10
 
 Intake now adapts to your project's methodology — file Epics and Stories directly with the right type applied, and split methodology per space.
