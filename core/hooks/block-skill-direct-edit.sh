@@ -13,7 +13,8 @@
 # Rule ID range: BLOCK-SKILL-EDIT-001..099
 #
 # Pattern: mirrors .claude/hooks/block-destructive.sh architecture exactly
-# (PATH pinning, fail-open-on-missing-jq, fail-closed-on-malformed-input,
+# (PATH pinning, mode-coupled jq posture via lib/dep-resolve.sh [enforce → fail-closed
+# on missing jq, warn/off → degrade], fail-closed-on-malformed-input,
 # CLAUDE_HOOK_BYPASS escape hatch with audit, .mode file for warn/enforce/off).
 
 set -euo pipefail

@@ -18,7 +18,8 @@
 # Rule ID range: BLOCK-FRAGILE-REF-001..099
 #
 # Pattern: mirrors core/hooks/block-skill-direct-edit.sh architecture exactly
-# (PATH pinning, fail-open-on-missing-jq, fail-closed-on-malformed-input,
+# (PATH pinning, mode-coupled jq posture via lib/dep-resolve.sh [enforce → fail-closed
+# on missing jq, warn/off → degrade], fail-closed-on-malformed-input,
 # CLAUDE_HOOK_BYPASS escape hatch with audit, shared .mode file for warn/enforce/off).
 #
 # Detection scope rationale: the detector flags Class L + Class V wholesale and applies
