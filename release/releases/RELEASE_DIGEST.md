@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.69 (2026-07-11) — <headline — populated by operator at chore PR review>
+
 ### v3.68 (2026-07-10) — Release quality checks now run automatically and escalate only on failure
 
 ### v3.67 (2026-07-10) — <headline — populated by operator at chore PR review>

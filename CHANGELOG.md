@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.69] - 2026-07-11
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.69_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.69)
+
 ## [v3.68] - 2026-07-10
 
 Release quality checks now run as automated evals at the dev-test and acceptance stages, escalating to you only on failure.
