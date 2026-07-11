@@ -126,6 +126,18 @@ test_case "cp subshell unresolvable blocks" \
 test_case "tee backtick unresolvable blocks" \
   "$(bash_payload 'tee `echo /etc/hosts`')" 2 "BLOCK-FS-BOUNDARY-003"
 
+# ----- Path-traversal escape (GHSA-9cjm-v22x-4x33 V2) -----
+# A literal `..` component escapes an allowed root by prefix-matching BEFORE it
+# is collapsed (/tmp/../etc prefix-matches allowed /tmp/ yet resolves to /etc).
+# resolve_and_classify now rejects any `..` path-component up front (strict) —
+# independent of the python3 normalizer, which previously fell back to the
+# un-normalized path when python3 was absent (the second fail-open).
+test_case "cat traversal escape blocks (.. token → strict)" \
+  "$(bash_payload 'cat /tmp/../etc/passwd')" 2 "BLOCK-FS-BOUNDARY-003"
+
+test_case "tee traversal escape blocks (.. token → strict)" \
+  "$(bash_payload 'tee /tmp/aaa/../../../etc/passwd')" 2 "BLOCK-FS-BOUNDARY-003"
+
 # ----- Allowed roots — should pass (exit 0) -----
 
 test_case "cat inside Claude allowed" \
@@ -256,6 +268,60 @@ test_case "bare cat with no args allowed" \
 
 test_case "cat with all flags (no targets) allowed" \
   "$(bash_payload 'cat -n')" 0
+
+# ----- Missing-jq dependency gate (GHSA-9cjm-v22x-4x33 regression) -----
+# jq resolution now lives in the shared helper lib/dep-resolve.sh, so simulating
+# missing jq requires sandboxing BOTH files: a copy of the hook plus a copy of
+# the helper with all three jq candidate paths rewritten to nonexistent
+# locations. This hook is mode-gated: a control that cannot parse its input must
+# DENY in enforce mode (exit 2) and DEGRADE (exit 0, never block harder than a
+# rule match) in warn mode.
+_sb="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "$_sb/lib"
+/bin/cp "$HOOK" "$_sb/block-fs-boundary.sh"; /bin/chmod +x "$_sb/block-fs-boundary.sh"
+/usr/bin/sed \
+  -e 's#/usr/bin/jq#/nonexistent/jq-a#g' \
+  -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
+  -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
+  "${HOOK_DIR}/lib/dep-resolve.sh" > "$_sb/lib/dep-resolve.sh"
+_sb_hook="$_sb/block-fs-boundary.sh"
+_sb_payload='{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"/tmp"}'
+
+# enforce mode → fail CLOSED (exit 2 + DEPENDENCY-MISSING)
+/usr/bin/printf 'enforce' > "$_sb/.mode"
+_jqmiss_exit=0
+_jqmiss_err="$(/usr/bin/printf '%s' "$_sb_payload" | /bin/bash "$_sb_hook" 2>&1 >/dev/null)" || _jqmiss_exit="$?"
+if [ "$_jqmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_jqmiss_err" | /usr/bin/grep -qE 'DEPENDENCY-MISSING'; then
+  /usr/bin/printf 'PASS: jq missing (enforce) → fail CLOSED (exit 2 + DEPENDENCY-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing (enforce) → expected exit 2 + DEPENDENCY-MISSING, got exit=%s\n  stderr: %s\n' "$_jqmiss_exit" "$_jqmiss_err"; FAIL=$((FAIL + 1))
+fi
+
+# warn mode → DEGRADE (exit 0 + DEPENDENCY-DEGRADED); must not block harder than a match
+/usr/bin/printf 'warn' > "$_sb/.mode"
+_jqwarn_exit=0
+_jqwarn_err="$(/usr/bin/printf '%s' "$_sb_payload" | /bin/bash "$_sb_hook" 2>&1 >/dev/null)" || _jqwarn_exit="$?"
+if [ "$_jqwarn_exit" = 0 ] && /usr/bin/printf '%s' "$_jqwarn_err" | /usr/bin/grep -qE 'DEPENDENCY-DEGRADED'; then
+  /usr/bin/printf 'PASS: jq missing (warn) → degrade (exit 0 + DEPENDENCY-DEGRADED)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing (warn) → expected exit 0 + DEPENDENCY-DEGRADED, got exit=%s\n  stderr: %s\n' "$_jqwarn_exit" "$_jqwarn_err"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$_sb"
+
+# ----- Missing dependency helper → fail CLOSED (GHSA-9cjm-v22x-4x33) -----
+# If lib/dep-resolve.sh is unreadable, bash 3.2 exits 1 on the failed source
+# (non-blocking) — the readability guard converts that to a blocking exit 2.
+_sb2="$(/usr/bin/mktemp -d)"
+/bin/cp "$HOOK" "$_sb2/block-fs-boundary.sh"; /bin/chmod +x "$_sb2/block-fs-boundary.sh"
+/usr/bin/printf 'enforce' > "$_sb2/.mode"   # no $_sb2/lib/dep-resolve.sh created
+_libmiss_exit=0
+_libmiss_err="$(/usr/bin/printf '%s' '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/foo"},"cwd":"/tmp"}' | /bin/bash "$_sb2/block-fs-boundary.sh" 2>&1 >/dev/null)" || _libmiss_exit="$?"
+/bin/rm -rf "$_sb2"
+if [ "$_libmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_libmiss_err" | /usr/bin/grep -qE 'LIB-MISSING'; then
+  /usr/bin/printf 'PASS: dep helper missing → fail CLOSED (exit 2 + LIB-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: dep helper missing → expected exit 2 + LIB-MISSING, got exit=%s\n  stderr: %s\n' "$_libmiss_exit" "$_libmiss_err"; FAIL=$((FAIL + 1))
+fi
 
 # ----- Summary -----
 

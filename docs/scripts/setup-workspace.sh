@@ -365,12 +365,22 @@ finalize_paths() {
 }
 
 # --- Section 8: Prerequisite checks ---
+# jq must be at a hook-reachable ABSOLUTE path, not merely on $PATH: the security
+# hooks pin PATH and probe a fixed allowlist, so a jq on $PATH but outside that
+# allowlist (e.g. MacPorts) would satisfy `command -v` yet leave the hooks unable
+# to find it. Keep this list in sync with the hook resolver (GHSA-9cjm-v22x-4x33).
+hook_jq_present() {
+  for cand in /usr/bin/jq /opt/homebrew/bin/jq /usr/local/bin/jq; do
+    [ -x "$cand" ] && return 0
+  done
+  return 1
+}
 check_prereqs() {
   local missing=""
   command -v python3 >/dev/null 2>&1 || missing="${missing} python3"
   command -v shasum  >/dev/null 2>&1 || missing="${missing} shasum"
   command -v git     >/dev/null 2>&1 || missing="${missing} git"
-  command -v jq      >/dev/null 2>&1 || missing="${missing} jq"
+  hook_jq_present || missing="${missing} jq"
   if [ -n "${missing}" ]; then
     err "Missing required tools:${missing}"
     err ""
@@ -1127,6 +1137,24 @@ install_hooks() {
     cp "${primitive_src}" "${primitive_dst}"
     info "INSTALLED: path-leak primitive (block-gh-path-leak dependency)"
     printf 'rm-file:%s\n' "${primitive_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
+  # Co-deploy the shared jq/dependency resolver into .claude/hooks/lib/. Every security
+  # hook sources it from ${HOOK_DIR}/lib/dep-resolve.sh at runtime (GHSA-9cjm-v22x-4x33)
+  # and fails CLOSED without it — so a missing copy would make the deployed hooks block
+  # every tool call (and verify_hooks_invokable would roll back this install). HARD
+  # dependency; mirrors the source layout core/hooks/lib/.
+  local depresolve_src="${SOURCE_REPO}/core/hooks/lib/dep-resolve.sh"
+  local depresolve_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/dep-resolve.sh"
+  if [ ! -r "${depresolve_src}" ]; then
+    warn "dep-resolve.sh not found at ${depresolve_src}; deployed hooks will fail CLOSED"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy dep-resolve.sh → ${depresolve_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${depresolve_src}" "${depresolve_dst}"
+    info "INSTALLED: dep-resolve.sh (shared hook jq/dependency resolver)"
+    printf 'rm-file:%s\n' "${depresolve_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   install_mode_template_if_missing ".mode.template" ".mode"

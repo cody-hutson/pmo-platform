@@ -202,6 +202,57 @@ test_case "Test 11: migrated skill under operations/skills/ references/*.md → 
 test_case "Test 12: .claude/skills/ deploy target → pass-through (not a source root)" \
   "$(payload Edit "${SBX}/.claude/skills/test-migrated-ops/SKILL.md")" 0
 
+# --- GHSA-9cjm-v22x-4x33 regression: jq resolution now lives in lib/dep-resolve.sh.
+# To simulate missing jq we sandbox BOTH the hook and a copy of the helper whose three
+# jq candidate paths are rewritten to nonexistent locations. Warn posture: a missing jq
+# must degrade to exit 0 (never block harder than a rule match), while a missing HELPER
+# LIB fails CLOSED (exit 2). ---
+
+# Test 13: jq unresolvable (helper sandbox), MODE-GATED — enforce fails CLOSED
+# (exit 2 + DEPENDENCY-MISSING), warn degrades (exit 0 + DEPENDENCY-DEGRADED).
+JQSBX="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "${JQSBX}/lib"
+/bin/cp "$HOOK" "${JQSBX}/block-skill-direct-edit.sh"
+/usr/bin/sed -e 's#/usr/bin/jq#/nonexistent/usr/bin/jq#g' \
+             -e 's#/opt/homebrew/bin/jq#/nonexistent/opt/homebrew/bin/jq#g' \
+             -e 's#/usr/local/bin/jq#/nonexistent/usr/local/bin/jq#g' \
+             "${HOOK_DIR}/lib/dep-resolve.sh" > "${JQSBX}/lib/dep-resolve.sh"
+# 13a: enforce → fail CLOSED
+/usr/bin/printf 'enforce' > "${JQSBX}/.mode"
+tmp_stderr="$(/usr/bin/mktemp)"; actual_exit=0
+/usr/bin/printf '%s' "$(payload Edit "${MIGRATED_SKILL_DIR}/SKILL.md")" \
+  | /bin/bash "${JQSBX}/block-skill-direct-edit.sh" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"
+if [ "$actual_exit" = "2" ] && /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qE 'DEPENDENCY-MISSING'; then
+  echo "PASS: Test 13a: jq unresolvable + enforce → fail CLOSED (exit 2 + DEPENDENCY-MISSING)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: Test 13a: enforce (exit=%s expected=2 + DEPENDENCY-MISSING)\n  stderr: %s\n' "$actual_exit" "$actual_stderr"; FAIL=$((FAIL + 1))
+fi
+# 13b: warn → degrade to exit 0
+/usr/bin/printf 'warn' > "${JQSBX}/.mode"
+tmp_stderr="$(/usr/bin/mktemp)"; actual_exit=0
+/usr/bin/printf '%s' "$(payload Edit "${MIGRATED_SKILL_DIR}/SKILL.md")" \
+  | /bin/bash "${JQSBX}/block-skill-direct-edit.sh" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"; /bin/rm -rf "$JQSBX"
+if [ "$actual_exit" = "0" ] && /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qE 'DEPENDENCY-DEGRADED'; then
+  echo "PASS: Test 13b: jq unresolvable + warn → degrade (exit 0 + DEPENDENCY-DEGRADED)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: Test 13b: warn (exit=%s expected=0 + DEPENDENCY-DEGRADED)\n  stderr: %s\n' "$actual_exit" "$actual_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# Test 14: dependency-resolver helper missing entirely → fail CLOSED (exit 2 + LIB-MISSING)
+LIBSBX="$(/usr/bin/mktemp -d)"
+/bin/cp "$HOOK" "${LIBSBX}/block-skill-direct-edit.sh"  # deliberately NO lib/dep-resolve.sh
+tmp_stderr="$(/usr/bin/mktemp)"; actual_exit=0
+/usr/bin/printf '%s' "$(payload Edit "${MIGRATED_SKILL_DIR}/SKILL.md")" \
+  | /bin/bash "${LIBSBX}/block-skill-direct-edit.sh" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"; /bin/rm -rf "$LIBSBX"
+if [ "$actual_exit" = "2" ] && /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qE 'LIB-MISSING'; then
+  echo "PASS: Test 14: helper lib missing → fail-closed (exit 2 + LIB-MISSING)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: Test 14: helper lib missing → fail-closed (exit=%s expected=2 + LIB-MISSING)\n  stderr: %s\n' "$actual_exit" "$actual_stderr"; FAIL=$((FAIL + 1))
+fi
+
 # Summary
 echo ""
 echo "================================"

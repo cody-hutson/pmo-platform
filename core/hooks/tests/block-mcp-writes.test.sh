@@ -219,6 +219,57 @@ echo "off" > "$MODE_FILE"
 test_case "off-mode: non-allowlisted write tool allowed (no log, no block)" \
   "$(mcp_payload 'mcp__notion__createPage')" 0
 
+# ----- Missing jq is now mode-gated (GHSA-9cjm-v22x-4x33 regression) -----
+# jq resolution moved out of the hook and into lib/dep-resolve.sh, so simulating a
+# missing jq requires sandboxing BOTH files: a copy of the hook + a copy of the
+# helper whose three jq candidate paths are rewritten to nonexistent locations.
+# The gate is MODE-GATED: enforce must DENY (exit 2 + DEPENDENCY-MISSING — a control
+# that cannot parse its input must fail CLOSED), while warn/off must degrade to a
+# non-blocking note (exit 0 — missing jq must never block harder than a rule match,
+# and a warn-mode rule match never blocks).
+_sbx="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "$_sbx/lib"
+/bin/cp "$HOOK" "$_sbx/block-mcp-writes.sh"
+/usr/bin/sed \
+  -e 's#/usr/bin/jq#/nonexistent/jq-a#g' \
+  -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
+  -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
+  "${HOOK_DIR}/lib/dep-resolve.sh" > "$_sbx/lib/dep-resolve.sh"
+/bin/chmod +x "$_sbx/block-mcp-writes.sh"
+_sbx_hook="$_sbx/block-mcp-writes.sh"
+
+# (a) enforce mode → fail CLOSED
+echo "enforce" > "$_sbx/.mode"
+_jqmiss_exit=0
+_jqmiss_err="$(/usr/bin/printf '%s' '{"tool_name":"mcp__x__create_y","tool_input":{},"cwd":"/tmp"}' | /bin/bash "$_sbx_hook" 2>&1 >/dev/null)" || _jqmiss_exit="$?"
+if [ "$_jqmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_jqmiss_err" | /usr/bin/grep -qE 'DEPENDENCY-MISSING'; then
+  /usr/bin/printf 'PASS: jq missing + enforce → fail CLOSED (exit 2 + DEPENDENCY-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing + enforce → expected exit 2 + DEPENDENCY-MISSING, got exit=%s\n  stderr: %s\n' "$_jqmiss_exit" "$_jqmiss_err"; FAIL=$((FAIL + 1))
+fi
+
+# (b) warn mode → degrade, do NOT block
+echo "warn" > "$_sbx/.mode"
+_jqwarn_exit=0
+_jqwarn_err="$(/usr/bin/printf '%s' '{"tool_name":"mcp__x__create_y","tool_input":{},"cwd":"/tmp"}' | /bin/bash "$_sbx_hook" 2>&1 >/dev/null)" || _jqwarn_exit="$?"
+if [ "$_jqwarn_exit" = 0 ] && /usr/bin/printf '%s' "$_jqwarn_err" | /usr/bin/grep -qE 'DEPENDENCY-DEGRADED'; then
+  /usr/bin/printf 'PASS: jq missing + warn → degraded non-blocking (exit 0 + DEPENDENCY-DEGRADED)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing + warn → expected exit 0 + DEPENDENCY-DEGRADED, got exit=%s\n  stderr: %s\n' "$_jqwarn_exit" "$_jqwarn_err"; FAIL=$((FAIL + 1))
+fi
+
+# (c) helper missing entirely → fail CLOSED via the source guard (LIB-MISSING)
+/bin/rm -f "$_sbx/lib/dep-resolve.sh"
+echo "enforce" > "$_sbx/.mode"
+_libmiss_exit=0
+_libmiss_err="$(/usr/bin/printf '%s' '{"tool_name":"mcp__x__create_y","tool_input":{},"cwd":"/tmp"}' | /bin/bash "$_sbx_hook" 2>&1 >/dev/null)" || _libmiss_exit="$?"
+if [ "$_libmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_libmiss_err" | /usr/bin/grep -qE 'LIB-MISSING'; then
+  /usr/bin/printf 'PASS: helper missing → fail CLOSED (exit 2 + LIB-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: helper missing → expected exit 2 + LIB-MISSING, got exit=%s\n  stderr: %s\n' "$_libmiss_exit" "$_libmiss_err"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$_sbx"
+
 # ----- Summary -----
 
 echo ""

@@ -207,6 +207,40 @@ test_case "malformed JSON input blocks" \
 test_case "Read tool early exit" \
   "$(/usr/bin/jq -n '{tool_name: "Read", tool_input: {file_path: "/tmp/x"}, cwd: "/tmp"}')" 0
 
+# ----- DEPENDENCY GATE: missing jq must fail CLOSED (enforce posture) -----
+# jq resolution lives in lib/dep-resolve.sh, so to simulate a jq-less host we
+# sandbox BOTH the hook AND the helper: copy the hook to a temp dir and write a
+# COPY of dep-resolve.sh whose three jq candidate paths are rewritten to a
+# nonexistent path. A security control that cannot parse its input must DENY
+# (exit 2), never allow (GHSA-9cjm-v22x-4x33).
+dep_gate_case() {
+  local name="$1"; local payload="$2"; local expected_exit="$3"; local expected_pattern="$4"
+  local sbx; sbx="$(/usr/bin/mktemp -d)"
+  /bin/mkdir -p "${sbx}/lib"
+  /bin/cp "$HOOK" "${sbx}/block-rm-prefer-trash.sh"
+  # Rewrite every jq candidate path in the helper copy to a nonexistent path.
+  /usr/bin/sed -e 's#/usr/bin/jq#/nonexistent/jq#g' \
+               -e 's#/opt/homebrew/bin/jq#/nonexistent/jq#g' \
+               -e 's#/usr/local/bin/jq#/nonexistent/jq#g' \
+    "${HOOK_DIR}/lib/dep-resolve.sh" > "${sbx}/lib/dep-resolve.sh"
+  local tmp_stderr; tmp_stderr="$(/usr/bin/mktemp)"
+  local actual_exit=0
+  /usr/bin/printf '%s' "$payload" | /bin/bash "${sbx}/block-rm-prefer-trash.sh" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+  local actual_stderr; actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"; /bin/rm -rf "$sbx"
+  local ok=1
+  [ "$actual_exit" != "$expected_exit" ] && ok=0
+  if [ -n "$expected_pattern" ] && ! /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qE "$expected_pattern"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=%s)\n  stderr: %s\n' "$name" "$actual_exit" "$expected_exit" "$actual_stderr"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+dep_gate_case "missing jq fails CLOSED (enforce, exit 2)" \
+  "$(bash_payload 'rm /tmp/foo')" 2 "DEPENDENCY-MISSING"
+
 # Summary
 echo ""
 echo "================================"
