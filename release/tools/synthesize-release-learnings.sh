@@ -552,7 +552,32 @@ run_self_test() {
   ! is_na_sentinel "N/A" || die "self-test: N/A short-form should NOT match"
   ! is_na_sentinel "n/a — no novel learning this release" || die "self-test: case-insensitive should NOT match"
 
-  # Test 5: per-release block on a version with one event (v2.10)
+  # ─── Per-release source-events counting path — hermetic fixture (#1561) ─────
+  # Tests 5–6 assert a DETERMINISTIC per-release source-events count. They read
+  # the source events through query-pipeline-event.sh, which resolves the
+  # operator-instance pipeline-event-log.md — mutable, gitignored, append-only
+  # data that is also absent entirely in CI. That coupling is the #1561 defect:
+  # the counting LOGIC is correct, but as the live log rotated, v2.10's
+  # learnings-triple count drifted from 1 to 0 and Test 5's count assertion went
+  # red against live state. Fix at the fixture layer — point the reader at a
+  # controlled in-tmp log (query-pipeline-event.sh honors EVALS_RESULTS_PATH), so
+  # the count is fixture-defined (v2.10 = exactly one learnings-triple row), not
+  # live-data-defined. Production synthesis behavior is unchanged: the override is
+  # exported only inside this self-test, which exits before the CLI dispatch. The
+  # pattern-detect tests below read the same resolved log, so this fixture also
+  # keeps them deterministic (the live log no longer carries learnings-triple rows).
+  local st_fixture_dir
+  st_fixture_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed"
+  # Remove the fixture on ANY exit from the self-test (happy path or die).
+  trap '/bin/rm -rf "$st_fixture_dir"' EXIT
+  {
+    echo "| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+    echo "|---|---|---|---|---|---|---|---|---|---|"
+    echo "| 2026-03-01T12:00:00Z | v2.10 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v2.10 | CHEAP | resolved | surprise: fixture surprise; would-change: fixture would-change; watch-for: fixture watch-for |"
+  } > "$st_fixture_dir/pipeline-event-log.md" || die "self-test: could not write fixture log"
+  export EVALS_RESULTS_PATH="$st_fixture_dir"
+
+  # Test 5: per-release block on a version with exactly one event (fixture v2.10)
   local block
   block="$(emit_per_release_block v2.10)" || die "self-test: per-release v2.10 emit failed"
   echo "$block" | /usr/bin/grep -q "^#### Release Learnings v2.10$" || die "self-test: per-release header missing"
@@ -561,15 +586,16 @@ run_self_test() {
   echo "$block" | /usr/bin/grep -q "^\*\*Would-change:\*\*" || die "self-test: per-release Would-change field missing"
   echo "$block" | /usr/bin/grep -q "^\*\*Watch-for:\*\*" || die "self-test: per-release Watch-for field missing"
 
-  # Test 6: per-release block on a version with NO events (forward-compat fallback)
+  # Test 6: per-release block on a version with NO events (forward-compat fallback).
+  # v999.999 is absent from the fixture, exercising the zero-rows N/A path.
   block="$(emit_per_release_block v999.999)" || die "self-test: per-release v999.999 emit failed"
   echo "$block" | /usr/bin/grep -q "0 \`release-synthesis/learnings-triple\` row" || die "self-test: missing-version should emit 0-rows header"
   echo "$block" | /usr/bin/grep -q "Surprise:\*\* N/A — no novel learning this release" || die "self-test: missing-version should emit N/A surprise"
 
-  # Test 7: pattern-detect on real data — current 5 learnings-triple events,
-  # all distinct versions. With cluster-min=3 and the default window=5, the
-  # detector should run cleanly (whether it finds clusters depends on payload
-  # similarity; the test asserts the report renders without error).
+  # Test 7: pattern-detect over the hermetic fixture set up above (the same in-tmp
+  # log the per-release tests use). With cluster-min=3 and the default window=5
+  # the detector runs cleanly — the single fixture event yields no qualifying
+  # cluster; the test asserts the report renders without error.
   local report
   report="$(emit_pattern_detect_report 5 3 false false)" || die "self-test: pattern-detect emit failed"
   echo "$report" | /usr/bin/grep -q "^## Pattern-Detect Report" || die "self-test: pattern-detect header missing"
