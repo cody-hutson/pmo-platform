@@ -280,12 +280,13 @@ For each approved change:
 
 1. **Read** the current tracker file
 2. **Apply** the change:
-   - ADD: Insert new entry with auto-incremented ID, maintaining section order
-   - MODIFY: Update specific fields, preserving all other fields
+   - ADD: Insert new entry with an auto-incremented **stable namespaced ID** (`BLK-###` / `DEC-###` / `ACT-###` / `MTG-###`; RAID `R-[SKILL]-###`), maintaining section order. For an **extracted** entry, also write the reverse provenance back-link from the upstream `TRACKER_UPDATE` `fields` map — `source_inputs[]` on markdown-tracker entries, `source_ref` on RAID rows — evidence-gated (omit if the establishing source is not recoverable; never guess). See § Domain-B Frontmatter Maintenance.
+   - MODIFY: Update specific fields, preserving all other fields — **including the entry's stable namespaced ID, which a re-write NEVER reassigns** (the raw→tracked `GENERATES` edge and the reverse back-link both resolve against it).
    - CLOSE: Move entry to "Recently Closed" section (Daily Status Log) or update status field
    - REACTIVATE: Move entry back to active section, update status
 3. **Log** the change with timestamp and evidence source inline
 4. **Validate** the tracker file is still well-formed after the write
+5. **Refresh** the target file's Domain-B frontmatter block (see § Domain-B Frontmatter Maintenance) — recompute the volatile fields (`entry_count`, `last_evidence_date`) and transition `lifecycle_state` where warranted. `.md` trackers carry the block inline; a `.csv` RAID artifact carries it in the co-located `.meta.yml` sidecar.
 
 ### Step 6: Log Rejections
 
@@ -364,6 +365,111 @@ precondition (file-liveness) — all four run together; none is bypassed.
   approval-gated).
 - **Autonomy Tier 2** — scoped tracker-row writes inside `cascade_scope` (auto-write).
 - **Never Autonomy Tier 0** — no governance file is a lifecycle-write target.
+
+## Domain-B Frontmatter Maintenance
+
+This is the **file-level write complement** to the Step-5 Lifecycle-State Precondition (which
+*reads* the target file's liveness). Where that precondition reads one field, this section
+*writes and refreshes* the tracker's whole **Domain-B (Managed Knowledge)** frontmatter block on
+the tracker-write path — plus the per-entry reverse provenance link and the stable namespaced
+ids that the raw→tracked bridge resolves against. Operational trackers are Domain-B "Living
+Documents" (`core/schemas/frontmatter-schema.md` § Category 2 lifecycle-pattern mapping), so the
+block is *maintained continuously on write*, never baselined.
+
+### File-level Domain-B block (refresh on every write)
+
+On every write to a tracker, Tracker Manager writes/refreshes the target file's Domain-B block:
+
+```yaml
+type: tracker
+managed_by: tracker-manager
+domain: managed              # the LIVE value — NOT "B" (frontmatter-schema.md § Category 2
+                             #   deprecates the A/B/C aliases; writers emit the human-readable form)
+lifecycle_state: current     # created → current on first evidence; current → needs-review past
+                             #   staleness_threshold_days (per the Domain-B lifecycle enum)
+trust_category: controlled-truth
+last_evidence_date: <newest evidence date incorporated in this write>
+entry_count: <recomputed count of active entries>
+staleness_threshold_days: 14 # default per frontmatter-schema.md § Category 2
+```
+
+- **Volatile vs. identity fields.** `last_evidence_date`, `entry_count`, and `lifecycle_state`
+  are **recomputed/refreshed on every write**; the identity fields (`type`, `managed_by`,
+  `domain`, `trust_category`, `staleness_threshold_days`, plus the birth-stamped `file_format` /
+  `project` / `folder` / `created_date` that `project-initiator` writes into the born block) are
+  **written-if-absent and never churned** — so a re-write is a no-op on the static fields
+  (idempotent) and the full born field set is preserved verbatim, never stripped.
+- **Carrier by container.** A `.md` tracker carries the block **inline** as YAML frontmatter; a
+  `.csv` RAID artifact carries **no** YAML line, so its Domain-B block lives in the co-located
+  **`.meta.yml` sidecar** (the same sidecar `project-initiator` co-scaffolds at birth) — read/write
+  the sidecar, never inject YAML into the CSV.
+- **Born → maintained evolution (the scaffold seam).** This block is the *maintained* complement
+  of the *born* block that `project-initiator` stamps on the starter tracker templates. The field
+  names and the `domain: managed` vocabulary are **identical** on both sides; the only expected
+  divergence is *value*, not *field* — the born template ships `lifecycle_state: created` +
+  `entry_count: 0`, and Tracker Manager transitions those to `current` + the live count on the
+  first write. This is a coherent born→maintained progression, not a schema conflict.
+- Reversibility **CHEAP** · confidence **HIGH** (an over-written frontmatter field is reverted by
+  editing the block back; no downstream commitment).
+
+### Entry provenance — the reverse back-link (raw → tracked)
+
+Each **extracted** tracker entry (a decision, action, risk, or meeting derived from raw evidence)
+carries a reverse provenance back-link to the raw artifact it came from. Two carriers, scoped by
+the entry's container (do **not** unify the names — the split preserves the frozen RAID CSV
+dialect):
+
+- **Markdown-tracker entries** (Daily Status Log `DEC-###` / `ACT-###`, Meeting `MTG-###`, and any
+  extracted markdown entry) → the **`source_inputs[]`** entry field (array; value domain
+  `TR-###` | `MSG-###` | source-file path — identical to `frontmatter-schema.md` § Category 3
+  `source_inputs`), defined in `references/tracker-schemas.md` / `core/schemas/tracker-schemas.md`
+  § Raw→Tracked Provenance.
+- **RAID rows** → the SHIPPED **`source_ref`** dialect column (§ RAID Log Handling above) — the
+  `frontmatter-schema.md` "carrier exception" (a CSV row has no frontmatter, so its provenance is
+  the dedicated field, not a `relationships[]` edge).
+
+Both are populated on `ADD` from the upstream `TRACKER_UPDATE` `fields` map and are
+**evidence-gated**: if no establishing source is recoverable, omit the back-link rather than guess
+one (identical to the existing RAID `source_ref` rule).
+
+### The raw→tracked bridge is bidirectional — and Tracker Manager writes only the tracked half
+
+The raw→tracked relationship is **two coordinated half-edges** resolving against the entry's stable
+namespaced id:
+
+- **Forward (raw → entries):** a `relationships: [{type: GENERATES, target: <entry-id>, …}]` edge
+  on the **raw artifact's** frontmatter/sidecar (the transcript / message). Per
+  `frontmatter-schema.md` § Relationship Edge Population, this edge is emitted by the **upstream
+  extraction/processing agent** (ppm-agent; the transcript-intake sweep) — **NOT by Tracker
+  Manager**. Skill-boundary transparency: Tracker Manager is the write-side tracker engine; it does
+  **not** own or write the raw artifact's frontmatter.
+- **Reverse (entry → raw):** the entry's `source_inputs[]` / `source_ref` back-link (above),
+  written **here**.
+
+"Resolvable both directions" holds via the pair: *from a transcript* → read its `GENERATES`
+targets → the entry ids; *from an entry* → read its `source_inputs` / `source_ref` → the `TR-###`.
+`core/schemas/tracker-schemas.md` § Raw→Tracked Provenance defines this bidirectional contract in
+full; this skill writes the reverse half only.
+
+### Stable namespaced ids survive re-writes
+
+Extracted entries carry a **stable, namespaced, never-reused id** so the bridge edges have a fixed
+anchor: `DEC-###` (decisions), **`ACT-###`** (open actions — auto-incremented per tracker,
+consistent with `BLK-###` / `DEC-###`), `MTG-###` (meetings), and `R-[SKILL]-###` (RAID risks, per
+OPERATIONS.md RAID ID Namespacing). A refresh/re-write of a tracker **preserves every entry's id**
+(the Step-5 MODIFY rule) — renumbering would orphan every inbound `GENERATES` edge and reverse
+back-link. This formalizes the existing "preserving all other fields" MODIFY behavior for the id
+specifically.
+
+### Aggregation reads the tracked layer, not the raw
+
+Because the maintained Domain-B layer is now a complete, queryable, provenance-carrying
+source-of-truth (`entry_count` + `last_evidence_date` + `trust_category: controlled-truth`, with
+each entry carrying its `source_inputs` / `source_ref`), status and rollup aggregations read the
+**tracked layer** and cite tracker entries + their provenance — they do **not** re-scan the raw
+transcripts. The canonical declaration lives in `core/schemas/tracker-schemas.md`
+§ Raw→Tracked Provenance (Aggregation source-of-truth); the read-side enforcement is the
+consuming rollup skills' responsibility, not Tracker Manager's write path.
 
 ## Artifact Register Row Maintenance
 
