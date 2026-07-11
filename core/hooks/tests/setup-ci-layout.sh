@@ -111,6 +111,20 @@ else
   log "setup-ci-layout: WARNING path-leak primitive missing at ${PRIMITIVE_SRC}"
 fi
 
+# 1c) Co-locate the shared jq/dependency resolver at .claude/hooks/lib/, mirroring the
+#     deployed posture (setup-workspace.sh co-deploys it there). Every security hook
+#     sources it from ${HOOK_DIR}/lib/dep-resolve.sh and fails CLOSED without it
+#     (GHSA-9cjm-v22x-4x33); the source lives at core/hooks/lib/, a subdir the *.sh
+#     loop above does not copy.
+DEPRESOLVE_SRC="${HOOKS_SRC}/lib/dep-resolve.sh"
+if [ -f "${DEPRESOLVE_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${DEPRESOLVE_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located dep-resolve resolver -> ${HOOKS_DST}/lib/dep-resolve.sh"
+else
+  log "setup-ci-layout: WARNING dep-resolve resolver missing at ${DEPRESOLVE_SRC}"
+fi
+
 # 2) Copy tests + runner (skip this setup script — it is not a test file).
 log "setup-ci-layout: copying tests -> ${TESTS_DST}"
 for tf in "${TESTS_SRC}"/*.sh; do
