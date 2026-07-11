@@ -1,0 +1,23 @@
+# Bin manifest — orientation card for the 4-Evidence project bin.
+# Copied per-project into <Project>/4-Evidence/manifest.yml by project-initiator at scaffold time.
+# ORIENTATION ONLY: routing authority is operations/skills/file-router/SKILL.md
+# (+ references/routing-patterns.md). This manifest is a derived view — if it ever
+# disagrees with file-router, file-router wins.
+bin: 4-Evidence
+primary_domain: source
+trust_category: evidence     # original captured record — raw source evidence
+auto_write: true             # raw evidence is an auto-write target (active project only)
+accepts:
+  - Meeting transcripts
+  - Email forwards and communication digests
+  - Raw source exports (original captured records)
+types:
+  - transcript
+  - email
+  - export
+subfolders:
+  - Transcripts/     # AM-Testing, PM-Testing, Daily-Connects, Weekly-Status, Touch-Base, Topic-Sessions
+  - Emails/
+promotion_target: null       # terminal routing target; raw evidence is not promoted
+extraction: triggered        # raw evidence routed here triggers PPM Agent extraction (raw -> tracked)
+authority: operations/skills/file-router/SKILL.md

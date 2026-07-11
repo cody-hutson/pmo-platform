@@ -1,0 +1,22 @@
+# Bin manifest — orientation card for the 1-Governance project bin.
+# Copied per-project into <Project>/1-Governance/manifest.yml by project-initiator at scaffold time.
+# ORIENTATION ONLY: routing authority is operations/skills/file-router/SKILL.md
+# (+ references/routing-patterns.md). This manifest is a derived view — if it ever
+# disagrees with file-router, file-router wins.
+bin: 1-Governance
+primary_domain: source
+auto_write: false            # approval-required bin (not an auto-write target)
+accepts:
+  - Cutover and go-live plans
+  - Communication plans
+  - Change-management artifacts (impact assessments, readiness checklists, hypercare plans)
+  - Go / no-go decisions
+  - Phase gates, milestones, approval workflow
+types:
+  - plan
+  - reference
+subfolders:
+  - Change-Management/
+  - Cutover/
+promotion_target: null       # terminal routing target; receives approved promotions from _generated/
+authority: operations/skills/file-router/SKILL.md

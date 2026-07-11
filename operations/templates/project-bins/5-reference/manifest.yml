@@ -1,0 +1,23 @@
+# Bin manifest — orientation card for the 5-Reference project bin.
+# Copied per-project into <Project>/5-Reference/manifest.yml by project-initiator at scaffold time.
+# ORIENTATION ONLY: routing authority is operations/skills/file-router/SKILL.md
+# (+ references/routing-patterns.md). This manifest is a derived view — if it ever
+# disagrees with file-router, file-router wins.
+bin: 5-Reference
+primary_domain: source
+auto_write: false            # approval-required bin (not an auto-write target)
+accepts:
+  - Standard operating procedures (SOPs)
+  - Runbooks and operational guides
+  - Vendor documentation
+  - Glossaries and key-terms references
+types:
+  - reference
+  - sop
+  - runbook
+subfolders:
+  - SOPs/
+  - Runbooks/
+  - Vendor-Docs/
+promotion_target: null       # terminal routing target; receives approved promotions from _generated/
+authority: operations/skills/file-router/SKILL.md

@@ -1,0 +1,28 @@
+# Bin manifest — orientation card for the 2-Delivery project bin.
+# Copied per-project into <Project>/2-Delivery/manifest.yml by project-initiator at scaffold time.
+# ORIENTATION ONLY: routing authority is operations/skills/file-router/SKILL.md
+# (+ references/routing-patterns.md). This manifest is a derived view — if it ever
+# disagrees with file-router, file-router wins.
+bin: 2-Delivery
+primary_domain: source
+auto_write: false            # approval-required bin (not an auto-write target)
+accepts:
+  - Requirements (FRDs, requirements specs, traceability matrices)
+  - Functional design documents (FDDs)
+  - Process flows and swim-lane diagrams
+  - Project-authored training materials
+  - Test plans and test artifacts
+  - Jira CSV / XLSX exports
+types:
+  - fdd
+  - test-plan
+  - process-map
+  - training-material
+  - plan
+  - export
+subfolders:
+  - Requirements/
+  - Design/          # FDDs, Process Flows, Training
+  - Testing/         # test plans, test artifacts, Jira Export
+promotion_target: null       # terminal routing target; receives approved promotions from _generated/
+authority: operations/skills/file-router/SKILL.md
