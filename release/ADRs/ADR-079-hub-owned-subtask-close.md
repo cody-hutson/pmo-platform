@@ -1,5 +1,5 @@
 ---
-title: "ADR-078 — Hub-owned sub-task close (spoke posts output; hub closes)"
+title: "ADR-079 — Hub-owned sub-task close (spoke posts output; hub closes)"
 status: Proposed
 date: 2026-07-11
 release: 98-pipeline-freshness-and-spoke-safety (v3.70 provisional; bound at Stage 12)
@@ -12,7 +12,7 @@ source_observations:
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-078 — Hub-owned sub-task close (spoke posts output; hub closes)
+# ADR-079 — Hub-owned sub-task close (spoke posts output; hub closes)
 
 ## Status
 
