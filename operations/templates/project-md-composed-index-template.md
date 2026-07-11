@@ -1,6 +1,19 @@
+---
+type: project-page
+managed_by: project-initiator
+domain: managed
+lifecycle_state: emerging
+trust_category: controlled-truth
+created_date: {{CREATION_DATE}}
+---
+
 # PROJECT.md — {{PROJECT_NAME}}
 
 <!--
+Born entity frontmatter (above): the 6-field block per frontmatter-schema.md § Classification/Trust
++ agent-processing-contracts.md Skill-6 contract. `domain: managed` is the live value (A/B/C
+deprecated per frontmatter-schema.md § Category 6). Entity `lifecycle_state: emerging` is the
+ENTITY maturity axis — distinct from the project-lifecycle `Status` below (two-lifecycle model).
 Composed-index PROJECT.md (ADR-060): a thin dashboard, NOT the container. Methodology + Status
 are INLINE (consumer back-compat per project-schema.md §4); People / Systems / Milestones /
 Plans / Workstreams are [[wiki-link]] lists into the _pmo/ shared-entity pages and the
@@ -45,4 +58,4 @@ Variables in {{BRACKETS}} are filled at scaffold; {{IF ...}}...{{ENDIF}} blocks 
 ## Governance Links
 
 - **Confluence:** {{CONFLUENCE_SPACE}}{{IF GOVERNANCE_MODEL == Agile OR Hybrid}} · **Jira:** {{JIRA_PROJECT_KEY}}{{ENDIF}}
-- **Operational trackers:** `04-PMO-Operations/` (Tier-2 working copies)
+- **Operational trackers:** `3-Operations/` (Tier-2 working copies)

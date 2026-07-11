@@ -1,0 +1,11 @@
+# Sidecar metadata for: {{PROJECT_NAME}}_RAID_Log.csv (CSV cannot embed YAML frontmatter)
+type: tracker
+managed_by: tracker-manager
+domain: managed
+file_format: csv
+project: {{PROJECT_NAME}}
+folder: 3-Operations
+lifecycle_state: created
+trust_category: controlled-truth
+created_date: {{CREATION_DATE}}
+entry_count: 0

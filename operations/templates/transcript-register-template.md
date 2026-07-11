@@ -1,3 +1,16 @@
+---
+type: tracker
+managed_by: tracker-manager
+domain: managed
+file_format: md
+project: {{PROJECT_NAME}}
+folder: 3-Operations
+lifecycle_state: created
+trust_category: controlled-truth
+created_date: {{CREATION_DATE}}
+entry_count: 0
+---
+
 # {{PROJECT_NAME}} Transcript Register
 
 **Purpose:** Log of all transcripts processed for this project. Each entry records the source, classification, key outcomes, and which trackers were updated.

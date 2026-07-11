@@ -105,7 +105,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 
    Reject the proposed Project Name and **halt** (do not auto-rename, do not scaffold) when it falls into any of these classes:
 
-   - **R-a — leading `_` (infrastructure-reserved):** the name begins with `_`. The `_`-prefix is RESERVED by the standard for sanctioned infrastructure folders (`_pmo/`, `_config/`, and staging `_`-subfolders such as `08-Generated/_unclassified/`) — never for a *project* folder. The regex enforces this by construction (the leading `[A-Za-z0-9]+` anchor disallows a leading `_`).
+   - **R-a — leading `_` (infrastructure-reserved):** the name begins with `_`. The `_`-prefix is RESERVED by the standard for sanctioned infrastructure folders (`_pmo/`, `_config/`, and the project scaffold's transient `_`-areas `_inbox/` and `_generated/`) — never for a *project* folder. The regex enforces this by construction (the leading `[A-Za-z0-9]+` anchor disallows a leading `_`).
    - **R-b — special / shell-meta / non-portable character:** the name contains any character outside the alphanumeric + single-space-or-hyphen word-break charset — e.g. `& ( ) / : * ? " < > | $ ;`, a leading/trailing/double space, or a leading `-`. These are POSIX-hostile: they break globs, link validators, search indexes, and shell paths.
    - **R-c — empty or whitespace-only:** the name is empty or contains only whitespace (it fails the regex's `[A-Za-z0-9]+` requirement). A blank name produces `projects//` and is unscannable. *(Human-readability beyond this — e.g. an opaque code a teammate cannot interpret, like a bare UUID — is NOT regex-enforced; the charset regex structurally cannot encode a "human-readable" predicate. That semantic concern is caught by this item's own pre-Step-2 operator-confirmation re-prompt (the "On rejection" / "Re-prompt" sequence below), which surfaces the proposed name for the operator to accept or correct **before** the Step 2 scaffold write — never deferred to the post-scaffold Step 8 summary, which would be too late to prevent a partial scaffold under an opaque name. This is the Tier-3 semantic boundary: the charset regex owns the syntax layer; the operator owns the semantic layer.)*
 
@@ -120,71 +120,42 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 
 ### Step 2: Create Folder Structure
 
-Create the project folder under `projects/[Project]/` with standard structure:
+Create the project folder under `projects/[Project]/` with the **uniform closed-set structure** — the
+same five canonical bins + two transient underscore areas for **every** project, **identically regardless
+of `delivery_approach`** (per ADR-078). The set is **CLOSED**: route into these bins, never create new
+ones; a non-fitting item goes to the bin root or `_inbox/_unsorted/`, flagged. Methodology is carried by
+the `delivery_approach` frontmatter field + the coverage map (which trackers populate — Step 4), **NOT by
+folder shape**.
 
 ```
 [Project Name]/
 ├── PROJECT.md
-├── 01-Governance/
+├── _inbox/                              ← Single intake drop point (transient)
+│   └── _unsorted/                       ← Low-confidence / non-fitting items, flagged
+├── _generated/                          ← AI-generated staging (transient)
+│   └── _archived/                       ← Auto-Archive sweep target
+├── 1-Governance/                        ← Charters, plans, SOWs, approvals, comm plans
 │   ├── Change-Management/               ← Impact assessments, readiness, go/no-go, hypercare
-│   └── Communication Plans/             ← Stakeholder comm plans, escalation protocols
-├── 02-Design/
-│   ├── FDDs/
-│   ├── Process Flows/
-│   └── Training/                        ← Project-authored training plans and materials
-├── 03-Testing/
-│   └── Jira Export/        ← Only for Agile/Hybrid
-├── 04-PMO-Operations/
-├── 05-Transcripts/
-│   └── [Meeting cadence sub-folders — see Step 2a]
-├── 06-Emails/
-├── 07-Reference/
-│   ├── SOPs/
-│   ├── Runbooks/
-│   ├── Vendor Documentation/            ← Vendor guides, system manuals, external training
-│   └── Historical Artifacts/
-└── 08-Generated/
-    └── _unclassified/
+│   └── Cutover/                         ← Cutover/go-live plans and checklists
+├── 2-Delivery/                          ← Requirements, design, and testing artifacts
+│   ├── Requirements/
+│   ├── Design/                          ← FDDs, process flows, architecture
+│   └── Testing/                         ← Test plans, scripts, QA/UAT results, test exports
+├── 3-Operations/                        ← Operational trackers live at this bin's root
+│   └── Reports/                         ← Status reports, roll-ups
+├── 4-Evidence/                          ← Raw evidence archive (never modified after filing)
+│   ├── Transcripts/                     ← Meeting recordings and transcriptions
+│   ├── Emails/                          ← Forwarded emails, Teams exports, comms digests
+│   └── Exports/                         ← Jira/system exports, raw data pulls
+└── 5-Reference/                         ← External reference material not authored here
+    ├── SOPs/
+    ├── Runbooks/
+    └── Vendor-Docs/                     ← Vendor guides, system manuals, external training
 ```
 
-#### Step 2a: Transcript Sub-Folders
-
-Adapt to the project's likely meeting cadence based on governance model:
-
-**Agile:**
-```
-05-Transcripts/
-├── Daily-Standups/
-├── Sprint-Reviews/
-├── Sprint-Retros/
-├── Backlog-Refinement/
-├── Weekly-Status/
-└── Topic-Sessions/
-```
-
-**Waterfall:**
-```
-05-Transcripts/
-├── Weekly-Status/
-├── Phase-Gate-Reviews/
-├── SteerCo/
-├── Vendor-Calls/
-└── Topic-Sessions/
-```
-
-**Hybrid (union of both):**
-```
-05-Transcripts/
-├── Daily-Standups/
-├── Sprint-Reviews/
-├── Weekly-Status/
-├── Phase-Gate-Reviews/
-├── SteerCo/
-├── Vendor-Calls/
-└── Topic-Sessions/
-```
-
-If the user provides specific meeting cadence info, override these defaults.
+The scaffold is **branch-free** — there is no per-methodology folder variation and no speculative empty
+subfolders beyond the closed set. (Legacy projects scaffolded under the prior `01-08` taxonomy remain
+valid during the ADR-078 migration window; existing-project migration is out of scope.)
 
 #### Step 2b: Bootstrap the `_pmo/` shared-entity store + link existing entities (ADR-058)
 
@@ -214,9 +185,24 @@ toggles):
 
 Set `last_synced_with_confluence: [today's date]` and `status: ACTIVE`.
 
+**Born entity frontmatter (top of the composed-index template).** The template opens with the 6-field
+entity block — `type: project-page`, `managed_by: project-initiator`, `domain: managed`,
+`lifecycle_state: emerging`, `trust_category: controlled-truth`, `created_date` — per
+`frontmatter-schema.md` § Classification/Trust and the `agent-processing-contracts.md` Skill-6 contract.
+Five values are fixed (carried verbatim from the template); fill `created_date` with today's date. This
+is the born-aligned entity record; keep the project-lifecycle `**Status:**` line inline and distinct
+(the entity `lifecycle_state` is the entity-maturity axis, not the project `Status`).
+
 ### Step 4: Generate Starter Artifacts
 
-Create empty-but-properly-formatted operational artifacts in `04-PMO-Operations/`:
+Create empty-but-properly-formatted operational artifacts at the root of `3-Operations/`. Every starter
+tracker is born with **Domain-B entity frontmatter** (`type: tracker`, `managed_by: tracker-manager`,
+`domain: managed`, `lifecycle_state: created`, `trust_category: controlled-truth`, `created_date`,
+`entry_count: 0`) carried from its template per `frontmatter-schema.md` § Domain B. Markdown trackers
+embed the block inline; CSV trackers (`RAID_Log.csv`, `Key Terms Glossary.csv`) carry a co-scaffolded
+`<file>.csv.meta.yml` sidecar (CSV cannot embed YAML — per `frontmatter-schema.md` § Sidecar File
+Specification). The tracker-file *selection* below (Sprint vs Milestone) is file-level, not folder-level —
+methodology is carried by the field + coverage map, not the closed folder set.
 
 All governance models get:
 1. `[Project]_Daily_Status_Log.md` — From template. Empty carry-forward sections with correct headers.
@@ -719,7 +705,7 @@ structural conformance and content quality.
   placeholder R-PPM-001 risk row) rather than the contracted empty-but-properly-formatted
   shape — correct headers and lifecycle/policy text, zero entries.
 - **Conditional:** do NOT seed Step 4 starter artifacts with sample rows or demonstration
-  entries when scaffolding a new project, because every 04-PMO-Operations/ starter is
+  entries when scaffolding a new project, because every 3-Operations/ starter is
   contracted as empty-but-properly-formatted and downstream skills read these trackers as
   live operational state from day one — a sample blocker row surfaces in the first
   daily-status AM update as a real blocker, and a sample RAID row with Section = ACTIVE
@@ -746,7 +732,7 @@ structural conformance and content quality.
   or `projects/Q4 Plan & Review/` (shell-meta character) — or scaffolds under an empty /
   whitespace-only name producing `projects//` — because Step 1 item 7 was skipped or its
   rejection was bypassed. The malformed folder name then surfaces in PROJECT.md's project
-  field, the PORTFOLIO.md health-summary row, and every `04-PMO-Operations/` tracker
+  field, the PORTFOLIO.md health-summary row, and every `3-Operations/` tracker
   filename.
 - **Conditional:** do NOT proceed to Step 2 (Create Folder Structure) when the proposed
   project-root folder name begins with `_` (reserved for infrastructure folders
