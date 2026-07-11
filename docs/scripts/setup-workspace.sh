@@ -1139,6 +1139,24 @@ install_hooks() {
     printf 'rm-file:%s\n' "${primitive_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the shared jq/dependency resolver into .claude/hooks/lib/. Every security
+  # hook sources it from ${HOOK_DIR}/lib/dep-resolve.sh at runtime (GHSA-9cjm-v22x-4x33)
+  # and fails CLOSED without it — so a missing copy would make the deployed hooks block
+  # every tool call (and verify_hooks_invokable would roll back this install). HARD
+  # dependency; mirrors the source layout core/hooks/lib/.
+  local depresolve_src="${SOURCE_REPO}/core/hooks/lib/dep-resolve.sh"
+  local depresolve_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/dep-resolve.sh"
+  if [ ! -r "${depresolve_src}" ]; then
+    warn "dep-resolve.sh not found at ${depresolve_src}; deployed hooks will fail CLOSED"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy dep-resolve.sh → ${depresolve_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${depresolve_src}" "${depresolve_dst}"
+    info "INSTALLED: dep-resolve.sh (shared hook jq/dependency resolver)"
+    printf 'rm-file:%s\n' "${depresolve_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   install_mode_template_if_missing ".mode.template" ".mode"
   install_mode_template_if_missing "deploy-check.mode.template" "deploy-check.mode"
 
