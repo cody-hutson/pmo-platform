@@ -13,7 +13,7 @@ docs, success-metric definitions) are **out of scope**: route them per
 purpose-built Anthropic skills (`engineering/documentation`, `product-management/feature-spec`)
 produce those artifacts; the Wrapper Mode re-ingests their output under PMO metadata staging.
 
-### Project Governance → 01-Governance/
+### Project Governance → 1-Governance/
 
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|
@@ -23,7 +23,7 @@ produce those artifacts; the Wrapper Mode re-ingests their output under PMO meta
 | RAID Log | Consolidated Risks / Assumptions / Issues / Dependencies log | Delivery Engine |
 | Project Charter | Project authorization: objectives, scope, governance, sponsor | — (self-produced) |
 
-### Change Management → 01-Governance/Change-Management/
+### Change Management → 1-Governance/Change-Management/
 
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|
@@ -35,7 +35,7 @@ produce those artifacts; the Wrapper Mode re-ingests their output under PMO meta
 | Readiness Checklist | Pre-go-live readiness validation across all dimensions | Change Management |
 | Change Matrix | Cross-workstream change-event inventory: change, owner, status, target date | Change Management |
 
-### Cutover / Deployment → 01-Governance/
+### Cutover / Deployment → 1-Governance/
 
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|
@@ -43,7 +43,7 @@ produce those artifacts; the Wrapper Mode re-ingests their output under PMO meta
 | Go/No-Go Checklist | Pre-deployment readiness gate: criteria, status, owner, evidence | Delivery Engine |
 | Readiness Assessment | Stakeholder and system readiness evaluation across all workstreams | Change Management |
 
-### Operations / Status → 04-PMO-Operations/
+### Operations / Status → 3-Operations/
 
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|
@@ -62,7 +62,7 @@ produce those artifacts; the Wrapper Mode re-ingests their output under PMO meta
 | Deliverable Tracker | Deliverable inventory with completion status and ownership | Delivery Engine |
 | Gantt Update Narrative | Written narrative explaining timeline changes and impacts | — (self-produced) |
 
-### Comms-adjacent (routed through comms-writer) → 06-Emails/ or inline
+### Comms-adjacent (routed through comms-writer) → 4-Evidence/ or inline
 
 | Artifact | Description | Specialist Skill |
 |----------|-------------|-----------------|

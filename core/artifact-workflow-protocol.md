@@ -95,6 +95,19 @@ The genuinely-new field this protocol defines. It carves the promotion-location 
 
 **No `promoted → archived-in-place` transition.** A promoted file has left staging; its later retirement is a content-maturity event (`lifecycle_state: archived`), not a staging-location move.
 
+### §4.1.1 Frontmatter is preserved across the `staged → promoted` move (move-with-preserve)
+
+The promotion **executor** is the **`artifact-generator` Promotion Workflow** (§ Promotion Workflow in that skill; the operator-gated move is the authorization). On promotion it mutates **only** `promotion_state` → `promoted`, `folder` → the target bin, and the `lifecycle_changed` stamp; the rest of the frontmatter block — `domain`, `lifecycle_state`, `generated_by`, `source_inputs`, `trigger_source`, `id`, and every lineage field — is **retained, never stripped**. This realizes the #201 **move-with-preserve** semantic: promotion changes *where the file sits*, never *what it records about its origin*, so a promoted artifact stays queryable as `domain: generated`. Content-maturity (`lifecycle_state`) is not re-derived by the move — it advances only through its own governed transitions.
+
+### §4.1.2 Retirement cadence + archive-before-delete invariant (never-delete upheld)
+
+The generated-artifact lifecycle runs a regular **lint → promote → archive** cadence with **no hard-delete terminal**:
+- **lint** — `artifact-lint` (graph-integrity checks; recommend-only).
+- **promote** — the `artifact-generator` Promotion Workflow above (`staged → promoted`, provenance preserved).
+- **archive** — `artifact-generator` Auto-Archive (unreviewed `staged` > 10 business days → `_generated/_archived/`, `promotion_state: archived-in-place`) **plus** the `generated-cleanup` skill (Tier-1 recommend-only retirement proposals; `/schedule`-able, so the cadence "runs regularly").
+
+Every retirement terminal is **recoverable** — a file is moved to `_generated/_archived/` or flipped to `lifecycle_state: archived` **in place**, **never hard-deleted** (the platform never-delete guarantee). This upholds **archive-before-delete**: archive *is* the terminal. No autonomous **purge** (hard-delete) step is defined; a retention-windowed purge, if ever wanted, is a scope expansion under its own governed Issue — it is not self-authorized in this protocol.
+
 ### §4.2 Refusal / autonomy
 
 - `staged` is stamped at **Autonomy Tier 2** (the `08-Generated/` staging boundary auto-write per `core/specs/autonomy-tiers.md`).

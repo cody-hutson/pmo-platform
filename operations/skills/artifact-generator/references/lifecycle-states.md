@@ -16,7 +16,7 @@ object-typed naming convention for cross-machine prose lives at
 §3.2. This file does **not** restate those state machines; it documents only what the skill
 adds on top of them: how it stamps the entry states on emit, the zombie-detection pass, and
 the documentation-debt register. The skill body in `SKILL.md` names this doc from Step 5
-(Stage in 08-Generated/) and from the Artifact Health Check section; read this doc before
+(Stage in _generated/) and from the Artifact Health Check section; read this doc before
 stamping any non-default state or running a health-check zombie pass, and read
 `core/artifact-workflow-protocol.md` for the full two-concern model and transition rules.
 
@@ -41,9 +41,9 @@ onto one field, and those concerns are split across the two fields above (the ar
 The skill needs only two facts from these machines to do its job:
 
 - **`lifecycle_state: draft` + `promotion_state: staged` are the on-emit defaults** — a freshly
-  generated or freshly wrapped artifact is `Artifact-DRAFT` content, staged in `08-Generated/`.
+  generated or freshly wrapped artifact is `Artifact-DRAFT` content, staged in `_generated/`.
 - **`lifecycle_state: archived` is the content terminal** — a retired artifact is expected to be
-  unreferenced, and `archived` is reached only by a governed transition. (The `08-Generated/`
+  unreferenced, and `archived` is reached only by a governed transition. (The `_generated/`
   staging-sweep terminal is the separate `promotion_state: archived-in-place`.)
 
 For the complete state semantics, the per-state meanings, the two-concern model, and every
@@ -56,7 +56,7 @@ doc is the operational source of truth, and this doc must not diverge from it.
 The skill's responsibility in this machine is narrow and deliberate:
 
 1. **Stamp `lifecycle_state: draft` + `promotion_state: staged` on emit.** Every artifact the
-   skill generates (Generate Mode) or wraps (Wrapper Mode) is written to `08-Generated/` with
+   skill generates (Generate Mode) or wraps (Wrapper Mode) is written to `_generated/` with
    `lifecycle_state: draft` (content entry) + `promotion_state: staged` (location). This pair is
    the exact equivalent of the former `PENDING_REVIEW` staged state — re-specced onto the
    reconciled two-field model — and every consumer that keyed on a staged artifact (the
@@ -83,10 +83,10 @@ of each original state maps onto the reconciled model as follows:
 
 | Original state | Reconciled field/value | Mapping rationale |
 |---|---|---|
-| Draft | `lifecycle_state: draft` + `promotion_state: staged` (`Artifact-DRAFT`) | Direct equivalent — the on-emit content entry, staged in `08-Generated/`. |
+| Draft | `lifecycle_state: draft` + `promotion_state: staged` (`Artifact-DRAFT`) | Direct equivalent — the on-emit content entry, staged in `_generated/`. |
 | Review | `approval_state: under-review` (`Artifact-REVIEWED`) | Reviewed by an analytical skill / agent QA gate — the approval signal, on the existing `approval_state` field (no third maturity field minted). |
 | Approved | `approval_state: approved` (`Artifact-APPROVED`) | Human-approved as ready for downstream consumption — the approval signal on `approval_state`. |
-| Active | `promotion_state: promoted` (`Artifact-PROMOTED`) | **This row IS the carve made concrete.** An in-use artifact is one promoted from `08-Generated/` to its target project folder (01-07); promotion is a **location** fact, not a content state, so "Active = in use in its target folder" maps to `promotion_state: promoted`. Content-maturity (`lifecycle_state`) is independent — a promoted file is equally `published` before and after the move. |
+| Active | `promotion_state: promoted` (`Artifact-PROMOTED`) | **This row IS the carve made concrete.** An in-use artifact is one promoted from `_generated/` to its target project folder (1-5); promotion is a **location** fact, not a content state, so "Active = in use in its target folder" maps to `promotion_state: promoted`. Content-maturity (`lifecycle_state`) is independent — a promoted file is equally `published` before and after the move. |
 | Superseded | *(no state value — a debt signal)* | Neither machine carries a `Superseded` state. Supersession is represented not as a frontmatter value but as a **documentation-debt signal** — a no-longer-current artifact still in a live (non-archived) `lifecycle_state` is flagged for a `lifecycle_state: archived`-transition recommendation in the debt register (see below). |
 | Archived | `lifecycle_state: archived` (`Artifact-ARCHIVED`) | Content terminal — retired. (Distinct from the staging-sweep location terminal `promotion_state: archived-in-place`.) |
 
@@ -101,7 +101,7 @@ replaced artifact must not silently linger as governance debt).
 
 ## Promotion and the lifecycle
 
-Promotion — the move from `08-Generated/` to a target folder, per the Promotion Workflow in
+Promotion — the move from `_generated/` to a target folder, per the Promotion Workflow in
 `SKILL.md` — is the **`promotion_state: staged → promoted`** transition (the physical move).
 Content-maturity is independent: a `published` artifact may still be `staged`, and promotion
 sets `promotion_state: promoted` without changing `lifecycle_state`. The Auto-Archive Policy's
@@ -163,7 +163,7 @@ recommended action, and a reversibility tier paired with a confidence level:
 
 When the register is empty, report it explicitly as `none (no zombies, no
 no-longer-current-but-live artifacts)` — the honest no-debt signal — rather than omitting it.
-The register is itself a generated artifact: it stages in `08-Generated/` with
+The register is itself a generated artifact: it stages in `_generated/` with
 `lifecycle_state: draft` + `promotion_state: staged` like any other output, and it is the
 operator's worklist, not an automatic remediation. Every recommended-action row is a
 decision-class item and must carry its reversibility tier per the Reversibility Discipline
