@@ -1,7 +1,17 @@
 ---
 name: context-budget-auditor
 description: >
-  Measures token consumption across every loadable pmo-platform component in a Claude Code / Cowork session — the SKILL.md catalog, core/rules/, core/standards/schemas/specs/disciplines, agents, hooks, and the CLAUDE.md context-file chain — and reports total + per-component estimated token cost, a flagged-bloat section with the applied thresholds stated inline, and a K1/K2 load-vs-reference hint per component. Single Measure mode. Uses a word/char-count heuristic estimator (declared inline in every report; tiktoken is an optional opt-in refinement) so the number is interpretable-under-approximation and stable across model versions — trend-over-time is the deliverable, not a falsely-precise absolute. Sources its skill roster from the deploy.sh per-module arrays (never a hardcoded count) and reuses the canonical 25 KB single-file threshold from canonical-skill-structure.md §5 as the per-file bloat soft-ceiling. Read-and-report only — measures cost, changes nothing. Triggers: "audit the context budget", "measure token consumption", "how much context does the platform load", "what's the per-component token cost", "flag context bloat", "which components are bloated", "context budget report".
+  Measures token consumption across every loadable pmo-platform component in a Claude Code /
+  Cowork session — the SKILL.md catalog, core/rules/,
+  core/standards/schemas/specs/disciplines, agents, hooks, and the CLAUDE.md context-file
+  chain — and reports total + per-component estimated token cost, a flagged-bloat section
+  with the applied thresholds stated inline, and a K1/K2 load-vs-reference hint per
+  component. Single Measure mode. Estimates are a heuristic, trend-over-time signal (not
+  falsely-precise absolutes), and the skill roster is sourced live, never hardcoded.
+  Read-and-report only — measures cost, changes nothing. Triggers: "audit the context
+  budget", "measure token consumption", "how much context does the platform load", "what's
+  the per-component token cost", "flag context bloat", "which components are bloated",
+  "context budget report".
 version: v3.41
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
