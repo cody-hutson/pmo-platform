@@ -33,11 +33,12 @@ export PATH="/usr/bin:/bin"
 
 # Absolute tool paths (all in /usr/bin, root-owned on macOS)
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly DATE="/bin/date"
 readonly SHASUM="/usr/bin/shasum"
-readonly PYTHON3="/usr/bin/python3"
+# jq and python3 are resolved below via lib/dep-resolve.sh (once HOOK_DIR is
+# known), from a fixed absolute-path allowlist — never $PATH — so the anti-hijack
+# PATH pin above still holds (GHSA-9cjm-v22x-4x33).
 
 # --- METADATA ---
 readonly HOOK_NAME="block-fs-boundary"
@@ -51,6 +52,18 @@ readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/fs-boundary-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
 readonly ALLOWLIST_FILE="${CLAUDE_DIR}/fs-boundary-allowlist.txt"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
+PYTHON3="$(resolve_python3)"; readonly PYTHON3
 
 # --- ABSOLUTE-PATH-AWARE ANCHOR ---
 # Canonical anchor pattern that captures the 5 macOS/Linux absolute-path
@@ -80,44 +93,29 @@ log_error() {
 # shellcheck disable=SC2154
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
-# --- DEPENDENCY CHECK (jq required for JSON parsing) ---
-# Fail-OPEN on missing jq with loud warning (sibling-hook convention)
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (fail-open).\n' "$HOOK_NAME" >&2
-  exit 0
-fi
-
-# --- READ & VALIDATE INPUT ---
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
 INPUT="$(cat)"
-if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
-  log_error "INVALID-INPUT: malformed JSON"
-  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
-  exit 2
-fi
 
-TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
-CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
-
-# --- CLAUDE_HOOK_BYPASS escape hatch ---
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works
+# even when jq is unresolvable (GHSA-9cjm-v22x-4x33: the old ordering placed this
+# AFTER the exit-2 gate, making the escape hatch its own message advertised dead). ---
 if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
   ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  # shellcheck disable=SC2016  # jq filter — single quotes intentional
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    bcwd="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty' 2>/dev/null || echo unknown)"
+    # shellcheck disable=SC2016  # jq filter — single quotes intentional
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" --arg cwd "$bcwd" \
+      '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
   exit 0
 fi
-
-# --- EARLY EXIT: non-Bash tool calls ---
-if [ "$TOOL_NAME" != "Bash" ]; then
-  exit 0
-fi
-
-COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
-[ -z "$COMMAND" ] && exit 0
 
 # --- MODE GATING (shared .mode file with block-egress, block-mcp-writes) ---
+# Read BEFORE the dependency gate: .mode reading is jq-free, and the gate's
+# fail-closed severity is mode-dependent (enforce blocks, warn degrades).
 MODE="enforce"
 if [ -f "$MODE_FILE" ]; then
   MODE_RAW="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/head -n 1 | /usr/bin/tr -d '[:space:]')"
@@ -131,6 +129,39 @@ fi
 if [ "$MODE" = "off" ]; then
   exit 0
 fi
+
+# --- DEPENDENCY GATE (mode-aware fail-closed) — GHSA-9cjm-v22x-4x33. ---
+# jq resolution now lives in lib/dep-resolve.sh. A security control that cannot
+# evaluate its input must not silently allow. In enforce mode we fail CLOSED
+# (exit 2). In warn mode a rule match only warns (exit 0), so a missing dep must
+# not block harder than a match would — log a degraded note and exit 0. off has
+# already exited above.
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path (mode=$MODE)"
+  if [ "$MODE" = "enforce" ]; then
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-DEGRADED:WARN] jq not found on the pinned tool path; warn-mode hook cannot evaluate input and is allowing this call. Install jq (brew install jq) to restore enforcement.\n' "$HOOK_NAME" >&2
+  exit 0
+fi
+
+# --- VALIDATE INPUT ---
+if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
+  log_error "INVALID-INPUT: malformed JSON"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+
+TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
+CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+
+# --- EARLY EXIT: non-Bash tool calls ---
+if [ "$TOOL_NAME" != "Bash" ]; then
+  exit 0
+fi
+
+COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
+[ -z "$COMMAND" ] && exit 0
 
 # --- HELPERS ---
 log_block() {
@@ -256,16 +287,31 @@ resolve_and_classify() {
       ;;
   esac
 
-  # Step 5: normalize via Python os.path.realpath — collapses ../ and ./,
-  # does not require existence, follows symlinks (intentional for strict-
-  # boundary enforcement). Python 3.9+ is system-default on macOS 12+.
-  # Stage 5 spec referenced /usr/bin/realpath -m (GNU); macOS ships BSD
-  # realpath without -m, so Python 3 is the portable equivalent.
-  if [ -x "$PYTHON3" ]; then
-    resolved="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$resolved" 2>/dev/null || echo "$resolved")"
-  fi
+  # Step 5: reject any `..` path-component (directory traversal) independent of
+  # the python3 normalizer below. A literal `..` component escapes an allowed
+  # root by prefix-matching BEFORE it is collapsed (e.g.
+  # /allowed/../../../etc/passwd starts with /allowed/ yet resolves to /etc).
+  # This must fail closed even when python3 IS present (GHSA-9cjm-v22x-4x33 V2).
+  case "/$resolved/" in
+    */../*) return 2;;
+  esac
 
-  # Step 6: check resolved path against allowlist
+  # Step 6: normalize via python3 os.path.realpath — collapses ../ and ./,
+  # does not require existence, follows symlinks (intentional for strict-
+  # boundary enforcement). python3 is resolved from the pinned allowlist via
+  # lib/dep-resolve.sh. FAIL CLOSED if python3 is unresolvable OR realpath
+  # errors: the un-normalized path must NEVER be classified — the old
+  # `|| echo "$resolved"` fallback let an un-collapsed traversal prefix-match
+  # an allowed root (GHSA-9cjm-v22x-4x33 V2 second fail-open).
+  if [ -z "$PYTHON3" ]; then
+    return 2
+  fi
+  local normalized
+  normalized="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$resolved" 2>/dev/null)" || return 2
+  [ -z "$normalized" ] && return 2
+  resolved="$normalized"
+
+  # Step 7: check resolved path against allowlist
   if is_allowed_path "$resolved"; then
     "$PRINTF" '%s' "$resolved"
     return 0
@@ -354,8 +400,8 @@ check_verb() {
         ;;
       2)
         block_or_warn "$strict_rule" \
-          "${verb} target unresolvable under strict policy (variable/subshell/backtick token): $token" \
-          "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional" || true
+          "${verb} target unresolvable under strict policy (variable/subshell/backtick/traversal token, or path-normalizer unavailable): $token" \
+          "use explicit absolute paths without .. traversal instead of variables/subshells, ensure python3 is installed, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional" || true
         ;;
     esac
   done < <(extract_target_tokens "$verb")

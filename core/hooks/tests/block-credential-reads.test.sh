@@ -121,6 +121,39 @@ test_case "Read /etc/hostname allows" \
 test_case "CLAUDE_HOOK_BYPASS=1 bypasses credential deny" \
   "$(read_payload '/Users/testuser/.ssh/id_rsa')" 0 "" "CLAUDE_HOOK_BYPASS=1"
 
+# ----- Fail-CLOSED on missing jq (GHSA-9cjm-v22x-4x33 regression) -----
+# jq resolution now lives in lib/dep-resolve.sh, so simulate a jq-less host by
+# sandboxing BOTH the hook AND a copy of the helper with its three jq candidate paths
+# rewritten to nonexistent locations. A control that cannot parse its input must DENY
+# (exit 2 + DEPENDENCY-MISSING), never fail open.
+_sbox="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "$_sbox/lib"
+/bin/cp "$HOOK" "$_sbox/block-credential-reads.sh"
+/usr/bin/sed \
+  -e 's#/usr/bin/jq#/nonexistent/jq-a#g' \
+  -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
+  -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
+  "${HOOK_DIR}/lib/dep-resolve.sh" > "$_sbox/lib/dep-resolve.sh"
+_jqmiss_exit=0
+_jqmiss_err="$(/usr/bin/printf '%s' '{"tool_name":"Read","tool_input":{"file_path":"/tmp/x"},"cwd":"/tmp"}' | /bin/bash "$_sbox/block-credential-reads.sh" 2>&1 >/dev/null)" || _jqmiss_exit="$?"
+if [ "$_jqmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_jqmiss_err" | /usr/bin/grep -qE 'DEPENDENCY-MISSING'; then
+  /usr/bin/printf 'PASS: jq missing → fail CLOSED (exit 2 + DEPENDENCY-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing → expected exit 2 + DEPENDENCY-MISSING, got exit=%s\n  stderr: %s\n' "$_jqmiss_exit" "$_jqmiss_err"; FAIL=$((FAIL + 1))
+fi
+
+# ----- Escape hatch works even when jq is missing (GHSA-9cjm V1-F3 regression) -----
+# The old ordering evaluated CLAUDE_HOOK_BYPASS AFTER the exit-2 dependency gate, so the
+# escape hatch its own message advertised was dead in the missing-jq case. Assert it
+# now short-circuits to exit 0 before the gate.
+_byp_exit=0
+/usr/bin/printf '%s' "$(read_payload '/Users/testuser/.ssh/id_rsa')" | /usr/bin/env CLAUDE_HOOK_BYPASS=1 /bin/bash "$_sbox/block-credential-reads.sh" >/dev/null 2>&1 || _byp_exit="$?"
+/bin/rm -rf "$_sbox"
+if [ "$_byp_exit" = 0 ]; then
+  /usr/bin/printf 'PASS: CLAUDE_HOOK_BYPASS=1 works even when jq is unresolvable (V1-F3)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: bypass + jq-missing → expected exit 0, got exit=%s\n' "$_byp_exit"; FAIL=$((FAIL + 1))
+fi
+
 # Summary
 echo ""
 echo "================================"

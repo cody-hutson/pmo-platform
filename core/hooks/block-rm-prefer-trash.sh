@@ -23,11 +23,13 @@ export PATH="/usr/bin:/bin"
 
 # Absolute tool paths (all in /usr/bin, root-owned on macOS)
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly DATE="/bin/date"
 readonly SHASUM="/usr/bin/shasum"
 readonly PYTHON3="/usr/bin/python3"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 # --- METADATA ---
 readonly HOOK_NAME="block-rm-prefer-trash"
@@ -37,6 +39,17 @@ readonly ERROR_LOG="${HOOK_DIR}/hook-errors.log"
 readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
 
 # --- ABSOLUTE-PATH-AWARE ANCHOR ---
 # Canonical anchor pattern that captures the 5 macOS/Linux absolute-path
@@ -68,16 +81,34 @@ log_error() {
 # shellcheck disable=SC2154
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
-# --- DEPENDENCY CHECK (jq required for JSON parsing) ---
-# Fail-OPEN on missing jq with loud warning (sibling-hook convention)
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (fail-open).\n' "$HOOK_NAME" >&2
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works even
+# when jq is unresolvable (GHSA-9cjm-v22x-4x33 V1-F3: the old ordering placed this
+# AFTER the exit-2 gate, making the escape hatch its own message advertised dead). ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    bcwd="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty' 2>/dev/null || echo unknown)"
+    # shellcheck disable=SC2016  # jq filter — single quotes intentional
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" --arg cwd "$bcwd" \
+      '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
   exit 0
 fi
 
-# --- READ & VALIDATE INPUT ---
-INPUT="$(cat)"
+# --- DEPENDENCY GATE (fail CLOSED: a security control that cannot evaluate its input
+# must DENY, never allow — GHSA-9cjm-v22x-4x33). Runs AFTER the bypass short-circuit. ---
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
+  deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+fi
+
+# --- VALIDATE INPUT ---
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
   log_error "INVALID-INPUT: malformed JSON"
   "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
@@ -86,16 +117,6 @@ fi
 
 TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
-
-# --- CLAUDE_HOOK_BYPASS escape hatch ---
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  # shellcheck disable=SC2016  # jq filter — single quotes intentional
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
 
 # --- EARLY EXIT: non-Bash tool calls ---
 if [ "$TOOL_NAME" != "Bash" ]; then

@@ -1,7 +1,7 @@
 #!/bin/bash
 # block-destructive.sh — PreToolUse hook blocking destructive operations
 #
-# - correct shell semantics (printf, BSD-grep regex, payload cwd, fail-open on missing jq)
+# - correct shell semantics (printf, BSD-grep regex, payload cwd, fail-closed on missing jq)
 # - git plumbing coverage, primary-write guard, tamper resistance, subprocess script ban
 #
 # Matcher scope: Bash, Write, Edit (the single hook branches by tool_name)
@@ -17,9 +17,11 @@ export PATH="/usr/bin:/bin"
 
 # Absolute tool paths (all in /usr/bin, root-owned on macOS — not user-writable)
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly PYTHON3="/usr/bin/python3"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 # --- METADATA ---
 readonly HOOK_NAME="block-destructive"
@@ -29,6 +31,17 @@ readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
 readonly SCRIPT_ALLOWLIST="${HOOK_DIR}/../script-execution-allowlist.txt"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
 
 # --- ABSOLUTE-PATH-AWARE ANCHORS ---
 # Two anchor variants capture the 5 canonical macOS/Linux absolute-path
@@ -66,17 +79,34 @@ log_error() {
 # Fail-CLOSED on rule-evaluation error (exit 2 blocks the tool call)
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-evaluation error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
-# --- DEPENDENCY CHECK (jq required for JSON parsing) ---
-# Fail-OPEN on missing jq with loud warning (per D5 refinement: dep failure != rule error; SRE cascade-lockout concern)
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found (tried $JQ and PATH=$PATH)"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq not found. Security hook DEGRADED (fail-open). Install: brew install jq (or ensure /usr/bin/jq exists).\n' "$HOOK_NAME" >&2
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch (NEW-E D8) — evaluated BEFORE the jq gate so it
+# works even when jq is unresolvable (GHSA-9cjm-v22x-4x33). Operator-only override: set
+# the env var BEFORE launching claude (e.g., CLAUDE_HOOK_BYPASS=1 claude). Mid-session
+# Bash attempts to set this var are denied by BLOCK-DESTRUCTIVE-023 below (anti-injection). ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    bcwd="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty' 2>/dev/null || echo unknown)"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" --arg cwd "$bcwd" \
+      '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
   exit 0
 fi
 
-# --- READ & VALIDATE INPUT ---
-INPUT="$(cat)"
+# --- DEPENDENCY GATE (fail CLOSED: a security control that cannot evaluate its input
+# must DENY, never allow — GHSA-9cjm-v22x-4x33). Runs AFTER the bypass short-circuit. ---
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
+  deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+fi
 
+# --- VALIDATE INPUT ---
 # Validate JSON structure (fail-CLOSED if malformed — indicates hook/harness issue)
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
   log_error "INVALID-INPUT: malformed JSON on stdin"
@@ -86,17 +116,6 @@ fi
 
 TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
-
-# --- CLAUDE_HOOK_BYPASS escape hatch (NEW-E D8) ---
-# Operator-only override: set the env var BEFORE launching claude (e.g., CLAUDE_HOOK_BYPASS=1 claude).
-# Mid-session Bash attempts to set this var are denied by BLOCK-DESTRUCTIVE-023 below (anti-injection).
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
 
 # --- HELPERS ---
 

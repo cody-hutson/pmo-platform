@@ -35,11 +35,13 @@ set -euo pipefail
 export PATH="/usr/bin:/bin"
 
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly CAT="/bin/cat"
 readonly TR="/usr/bin/tr"
 readonly DATE="/bin/date"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 # --- METADATA ---
 readonly HOOK_NAME="block-shell-injection"
@@ -52,6 +54,17 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 
 readonly INJECTION_ALLOWLIST="${HOOK_DIR}/../shell-injection-allowlist.txt"
 
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
+
 # --- ERROR HANDLERS ---
 log_error() {
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
@@ -59,45 +72,6 @@ log_error() {
 }
 
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
-
-# --- DEPENDENCY CHECK (fail-OPEN on missing jq; fail-CLOSED on rule error) ---
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (fail-open).\n' "$HOOK_NAME" >&2
-  exit 0
-fi
-
-# --- READ & VALIDATE INPUT ---
-INPUT="$(cat)"
-if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
-  log_error "INVALID-INPUT: malformed JSON"
-  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
-  exit 2
-fi
-
-TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
-CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
-
-# --- CLAUDE_HOOK_BYPASS escape hatch ---
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
-
-# --- BLOCK LOG HELPER ---
-log_block() {
-  local rule_id="$1"
-  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
-  local input_digest; input_digest="$("$PRINTF" '%s' "$tool_input" | /usr/bin/shasum -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
-    --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
-    >> "$BLOCK_LOG" 2>/dev/null || true
-}
 
 # --- MODE DETECTION ---
 get_mode() {
@@ -109,6 +83,63 @@ get_mode() {
     warn|enforce|off) "$PRINTF" '%s' "$mode" ;;
     *) "$PRINTF" 'warn' ;;  # default on unrecognized value — conservative since this hook is new
   esac
+}
+
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works even
+# when jq is unresolvable (GHSA-9cjm-v22x-4x33 V1-F3: the old ordering placed this
+# AFTER the exit-2 gate, making the escape hatch its own message advertised dead). ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    bcwd="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty' 2>/dev/null || echo unknown)"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" --arg cwd "$bcwd" \
+      '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
+  exit 0
+fi
+
+# --- DEPENDENCY GATE (mode-gated: a security control that cannot evaluate its input
+# must not block HARDER than a rule match would — GHSA-9cjm-v22x-4x33). Runs AFTER the
+# bypass short-circuit. In enforce mode we fail CLOSED (deny); in warn/off we degrade
+# fail-open (a rule match in those modes never blocks either). .mode is read jq-free. ---
+if [ -z "$JQ" ]; then
+  mode="$(get_mode)"
+  if [ "$mode" = "enforce" ]; then
+    log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path (mode=enforce)"
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  else
+    log_error "DEPENDENCY-MISSING: jq not found — mode=$mode, DEGRADED (fail-open per warn/off posture)"
+    "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (mode=%s, fail-open).\n' "$HOOK_NAME" "$mode" >&2
+    exit 0
+  fi
+fi
+
+# --- VALIDATE INPUT ---
+if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
+  log_error "INVALID-INPUT: malformed JSON"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+
+TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
+CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+
+# --- BLOCK LOG HELPER ---
+log_block() {
+  local rule_id="$1"
+  local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
+  local input_digest; input_digest="$("$PRINTF" '%s' "$tool_input" | /usr/bin/shasum -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
+  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+    --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
+    >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
 # Append a JSONL entry to warn log with digest (no raw command in log)

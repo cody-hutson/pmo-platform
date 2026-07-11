@@ -51,7 +51,7 @@ xcode-select --install                  # If git --version fails
 git --version                           # Expect: a version string starting with `git version 2.`
 ```
 
-**jq.** Required for the hook layer's JSON parsing:
+**jq.** Required for the hook layer's JSON parsing. The PreToolUse security hooks resolve `jq` from a fixed absolute-path allowlist — `/usr/bin/jq`, `/opt/homebrew/bin/jq`, `/usr/local/bin/jq` (the locations `brew install jq` uses) — and **fail closed** (block the tool call) in enforce mode when it cannot be found, so `jq` is load-bearing for the security perimeter, not optional:
 
 ```bash
 brew install jq
