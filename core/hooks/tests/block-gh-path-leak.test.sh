@@ -82,5 +82,48 @@ set_mode off
 test_case "off: leak not flagged" \
   "gh issue create --title T --body-file ${WORK}/leak_machine.md" 0
 
+# --- MISSING JQ regression (GHSA-9cjm-v22x-4x33) ---
+# jq resolution now lives in the shared helper lib/dep-resolve.sh, so to simulate a
+# missing jq we sandbox BOTH files into a temp dir: the hook + a COPY of the helper
+# whose three jq candidate paths are sed'd to nonexistent. This hook is mode-gated
+# and ships warn, so missing-jq fails CLOSED (exit 2) ONLY in enforce; warn/off
+# degrade to exit 0. A missing helper is a deployment-integrity failure → exit 2
+# regardless of mode.
+SBOX="$(mktemp -d)"
+/bin/mkdir -p "${SBOX}/lib"
+/bin/cp "$HOOK" "${SBOX}/block-gh-path-leak.sh"
+/bin/cp "${HOOK_DIR}/../deploy/tools/path-leak-patterns.sh" "${SBOX}/path-leak-patterns.sh" 2>/dev/null || true
+/usr/bin/sed -e 's#/usr/bin/jq#/nonexistent/usr/bin/jq#' \
+             -e 's#/opt/homebrew/bin/jq#/nonexistent/opt/homebrew/bin/jq#' \
+             -e 's#/usr/local/bin/jq#/nonexistent/usr/local/bin/jq#' \
+             "${HOOK_DIR}/lib/dep-resolve.sh" > "${SBOX}/lib/dep-resolve.sh"
+
+# sbox_case <name> <mode> <extra-env> <expected_exit> [pattern]
+sbox_case() {
+  local name="$1" smode="$2" xenv="$3" expected_exit="$4" pattern="${5:-}"
+  /usr/bin/printf '%s' "$smode" > "${SBOX}/.mode"
+  local cmd="gh issue create --title T --body-file ${WORK}/leak_machine.md"
+  local payload; payload="$("$JQ" -n --arg c "$cmd" '{tool_name:"Bash",tool_input:{command:$c}}')"
+  local tmp; tmp="$(/usr/bin/mktemp)"; local rc=0
+  /usr/bin/printf '%s' "$payload" | /usr/bin/env $xenv /bin/bash "${SBOX}/block-gh-path-leak.sh" 2>"$tmp" >/dev/null || rc="$?"
+  local err; err="$(/bin/cat "$tmp")"; /bin/rm -f "$tmp"
+  local ok=1
+  [ "$rc" != "$expected_exit" ] && ok=0
+  [ -n "$pattern" ] && ! /usr/bin/printf '%s' "$err" | /usr/bin/grep -qE "$pattern" && ok=0
+  if [ "$ok" = 1 ]; then /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS+1));
+  else /usr/bin/printf 'FAIL: %s (expected_exit=%s actual=%s)\n  stderr: %s\n' "$name" "$expected_exit" "$rc" "$err"; FAIL=$((FAIL+1)); fi
+}
+
+sbox_case "missing-jq enforce: fail CLOSED (exit 2)" enforce "" 2 "DEPENDENCY-MISSING.*fail-closed"
+sbox_case "missing-jq warn: degrade (exit 0)"        warn    "" 0 "DEPENDENCY-MISSING.*degraded"
+sbox_case "missing-jq off: degrade (exit 0)"         off     "" 0 "DEPENDENCY-MISSING.*degraded"
+sbox_case "missing-jq + CLAUDE_HOOK_BYPASS: exit 0"  enforce "CLAUDE_HOOK_BYPASS=1" 0
+
+# Missing helper entirely → fail CLOSED (exit 2) regardless of mode.
+/bin/rm -f "${SBOX}/lib/dep-resolve.sh"
+sbox_case "missing-helper enforce: fail CLOSED (exit 2)" enforce "" 2 "LIB-MISSING.*fail-closed"
+sbox_case "missing-helper off: fail CLOSED (exit 2)"     off     "" 2 "LIB-MISSING.*fail-closed"
+/bin/rm -rf "$SBOX"
+
 /usr/bin/printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

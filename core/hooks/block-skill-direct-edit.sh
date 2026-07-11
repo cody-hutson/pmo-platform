@@ -22,9 +22,11 @@ set -euo pipefail
 export PATH="/usr/bin:/bin"
 
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly DATE="/bin/date"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 # --- METADATA ---
 readonly HOOK_NAME="block-skill-direct-edit"
@@ -42,6 +44,17 @@ readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
 readonly EXEMPTION_LIST="${HOOK_DIR}/../skill-editor-exemption-list.txt"
 readonly SENTINEL_TTL_SECONDS=1800  # 30 minutes
 
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
+
 # --- ERROR HANDLERS ---
 log_error() {
   local ts
@@ -51,16 +64,46 @@ log_error() {
 
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-evaluation error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
-# --- DEPENDENCY CHECK (jq required; fail-OPEN on missing, matching block-destructive.sh) ---
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found (tried $JQ and PATH=$PATH)"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq not found. Security hook DEGRADED (fail-open). Install: brew install jq (or ensure /usr/bin/jq exists).\n' "$HOOK_NAME" >&2
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works even
+# when jq is unresolvable (GHSA-9cjm-v22x-4x33: the escape hatch must not depend on
+# the very dependency whose absence it exists to work around). ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$($DATE -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" \
+      '{ts:$ts, hook:$hook, tool:$tool, action:"bypass"}' \
+      >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
   exit 0
 fi
 
-# --- READ & VALIDATE INPUT ---
-INPUT="$(cat)"
+# --- DEPENDENCY GATE (mode-gated: this hook reads the shared .mode with an enforce
+# default, so a missing jq must fail CLOSED in enforce mode (a control that cannot parse
+# its input must not ALLOW) and degrade to exit 0 in warn/off (never block harder than a
+# rule match would). GHSA-9cjm-v22x-4x33; the helper guard above still fails CLOSED when
+# the resolver LIB itself is missing. Runs AFTER the bypass. ---
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
+  _dep_mode="enforce"
+  if [ -f "$MODE_FILE" ]; then
+    case "$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]')" in
+      warn) _dep_mode="warn" ;; off) _dep_mode="off" ;; enforce) _dep_mode="enforce" ;;
+    esac
+  fi
+  if [ "$_dep_mode" = "enforce" ]; then
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-DEGRADED] jq not found; hook DEGRADED (exit 0) in %s mode.\n' "$HOOK_NAME" "$_dep_mode" >&2
+  exit 0
+fi
 
+# --- VALIDATE INPUT ---
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
   log_error "INVALID-INPUT: malformed JSON on stdin"
   "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
@@ -74,15 +117,6 @@ case "$TOOL_NAME" in
   Write|Edit) ;;
   *) exit 0 ;;
 esac
-
-# --- CLAUDE_HOOK_BYPASS escape hatch ---
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$($DATE -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" \
-    '{ts:$ts, hook:$hook, tool:$tool, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
 
 FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
 [ -z "$FILE_PATH" ] && exit 0

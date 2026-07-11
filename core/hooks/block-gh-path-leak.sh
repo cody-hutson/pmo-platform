@@ -26,11 +26,13 @@ set -euo pipefail
 export PATH="/usr/bin:/bin"
 
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly CAT="/bin/cat"
 readonly TR="/usr/bin/tr"
 readonly DATE="/bin/date"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 readonly HOOK_NAME="block-gh-path-leak"
 readonly HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -39,6 +41,18 @@ readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/gh-path-leak-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
+
 # Shared primitive resolves co-located FIRST (deployed layout: .claude/hooks/, where
 # setup-workspace.sh co-deploys it next to the hooks), then the repo/source layout
 # (core/hooks/../deploy/tools/, the DevTest + CI-check path). Both yield the same
@@ -54,28 +68,53 @@ log_error() {
 }
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] rule-eval error at line %s (exit %s).\n" "$HOOK_NAME" "$LINENO" "$rc" >&2; exit 0' ERR
 
-# Dependency: jq (fail-OPEN if missing) + the shared primitive (fail-OPEN if missing).
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq"; exit 0
+get_mode() {
+  local mode="warn"
+  [ -f "$MODE_FILE" ] && mode="$("$CAT" "$MODE_FILE" 2>/dev/null | "$TR" -d '[:space:]' || echo warn)"
+  case "$mode" in warn|enforce|off) "$PRINTF" '%s' "$mode" ;; *) "$PRINTF" 'warn' ;; esac
+}
+
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works even
+# when jq is unresolvable (GHSA-9cjm-v22x-4x33). ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" '{ts:$ts,hook:$hook,action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
+  exit 0
 fi
+
+# --- DEPENDENCY GATE (mode-gated posture — GHSA-9cjm-v22x-4x33). This hook ships
+# warn, so a missing jq must not block harder than a rule match would: only .mode=
+# enforce fails CLOSED (exit 2); warn/off degrade to a stderr note + exit 0. Runs
+# AFTER the bypass short-circuit. ---
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
+  _mode="$(get_mode)"
+  if [ "$_mode" = "enforce" ]; then
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-MISSING] WARN (degraded, .mode=%s): jq not found on the pinned tool path; gh path-leak scan skipped.\n' "$HOOK_NAME" "$_mode" >&2
+  exit 0
+fi
+
+# --- SHARED PRIMITIVE (fail-OPEN if missing — warn posture, separate concern from jq) ---
 if [ ! -f "$PRIMITIVE" ]; then
   log_error "PRIMITIVE-MISSING: $PRIMITIVE — fail-open"; exit 0
 fi
 # shellcheck source=/dev/null
 . "$PRIMITIVE"
 
-INPUT="$(cat)"
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
   log_error "INVALID-INPUT"; exit 0   # fail-open on malformed input (warn-posture)
 fi
 TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
 [ "$TOOL_NAME" = "Bash" ] || exit 0
-
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" '{ts:$ts,hook:$hook,action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
 
 COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 [ -z "$COMMAND" ] && exit 0
@@ -85,12 +124,6 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 if ! "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE 'gh[[:space:]]+(issue|pr)[[:space:]]+(create|edit|comment)|gh[[:space:]]+api[[:space:]]+[^|;&]*(issues|pulls)'; then
   exit 0
 fi
-
-get_mode() {
-  local mode="warn"
-  [ -f "$MODE_FILE" ] && mode="$("$CAT" "$MODE_FILE" 2>/dev/null | "$TR" -d '[:space:]' || echo warn)"
-  case "$mode" in warn|enforce|off) "$PRINTF" '%s' "$mode" ;; *) "$PRINTF" 'warn' ;; esac
-}
 
 # --- Body extraction (this hook's per-surface job) ---
 # Collect the authored body text from the three gh forms:

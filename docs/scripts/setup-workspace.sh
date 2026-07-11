@@ -365,12 +365,22 @@ finalize_paths() {
 }
 
 # --- Section 8: Prerequisite checks ---
+# jq must be at a hook-reachable ABSOLUTE path, not merely on $PATH: the security
+# hooks pin PATH and probe a fixed allowlist, so a jq on $PATH but outside that
+# allowlist (e.g. MacPorts) would satisfy `command -v` yet leave the hooks unable
+# to find it. Keep this list in sync with the hook resolver (GHSA-9cjm-v22x-4x33).
+hook_jq_present() {
+  for cand in /usr/bin/jq /opt/homebrew/bin/jq /usr/local/bin/jq; do
+    [ -x "$cand" ] && return 0
+  done
+  return 1
+}
 check_prereqs() {
   local missing=""
   command -v python3 >/dev/null 2>&1 || missing="${missing} python3"
   command -v shasum  >/dev/null 2>&1 || missing="${missing} shasum"
   command -v git     >/dev/null 2>&1 || missing="${missing} git"
-  command -v jq      >/dev/null 2>&1 || missing="${missing} jq"
+  hook_jq_present || missing="${missing} jq"
   if [ -n "${missing}" ]; then
     err "Missing required tools:${missing}"
     err ""

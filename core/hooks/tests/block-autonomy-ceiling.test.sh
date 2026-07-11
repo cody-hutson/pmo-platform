@@ -303,6 +303,61 @@ test_case "malformed JSON → exit 2" \
   2 "INPUT-INVALID"
 
 # =====================================================================
+# DEPENDENCY GATE — jq resolution now lives in lib/dep-resolve.sh
+# (GHSA-9cjm-v22x-4x33). Because resolution is in the HELPER, simulating
+# missing jq requires sandboxing BOTH files: a copy of the hook + a copy of
+# dep-resolve.sh with all three jq candidate paths sed'd to nonexistent.
+# WARN posture: a missing jq must DEGRADE to exit 0, never block — even in
+# .autonomy-mode=enforce with a would-block payload. A MISSING helper, by
+# contrast, is fail-CLOSED (exit 2): the hook cannot resolve its dependencies.
+# =====================================================================
+echo ""
+echo "dependency gate (jq via helper; warn-degrade vs fail-closed)"
+echo "---"
+
+DEP_SANDBOX="$(/usr/bin/mktemp -d)"
+/bin/mkdir -p "${DEP_SANDBOX}/lib"
+/bin/cp "$HOOK" "${DEP_SANDBOX}/block-autonomy-ceiling.sh"
+# Broken helper: point every jq candidate at a nonexistent path.
+/usr/bin/sed -e 's#/usr/bin/jq#/nonexistent/jq#g' \
+             -e 's#/opt/homebrew/bin/jq#/nonexistent/opt/jq#g' \
+             -e 's#/usr/local/bin/jq#/nonexistent/local/jq#g' \
+             "${HOOK_DIR}/lib/dep-resolve.sh" > "${DEP_SANDBOX}/lib/dep-resolve.sh"
+/bin/chmod +x "${DEP_SANDBOX}/block-autonomy-ceiling.sh"
+
+# A would-block Tier-0 governance write + enforce mode: proves the DEGRADE is
+# not merely a warn-mode side effect — even the always-block floor yields exit 0
+# when jq cannot be resolved (warn posture; do NOT fail closed).
+/usr/bin/printf 'enforce' > "${DEP_SANDBOX}/.autonomy-mode"
+dep_payload="$(write_payload "${TEST_WS}/CLAUDE.md" "${TEST_WS}/pmo-platform")"
+dep_err="$(/usr/bin/mktemp)"; dep_exit=0
+/usr/bin/printf '%s' "$dep_payload" \
+  | HOME="$TEST_HOME" /bin/bash "${DEP_SANDBOX}/block-autonomy-ceiling.sh" 2>"$dep_err" >/dev/null || dep_exit="$?"
+dep_stderr="$(/bin/cat "$dep_err")"; /bin/rm -f "$dep_err"
+if [ "$dep_exit" = 0 ] && /usr/bin/printf '%s' "$dep_stderr" | /usr/bin/grep -qE "DEPENDENCY-WARN"; then
+  echo "PASS: jq missing (helper sandboxed) → warn-DEGRADE exit 0 even for a Tier-0 write in enforce mode"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq-missing warn-degrade (exit=%s expected=0, want DEPENDENCY-WARN)\n  stderr: %s\n' "$dep_exit" "$dep_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# Missing helper entirely → fail CLOSED (exit 2). The exact readable-before-source
+# guard exists precisely so bash 3.2's exit-1-on-failed-source cannot fail OPEN.
+NOHELPER_SANDBOX="$(/usr/bin/mktemp -d)"
+/bin/cp "$HOOK" "${NOHELPER_SANDBOX}/block-autonomy-ceiling.sh"
+/bin/chmod +x "${NOHELPER_SANDBOX}/block-autonomy-ceiling.sh"
+nohelper_err="$(/usr/bin/mktemp)"; nohelper_exit=0
+/usr/bin/printf '%s' "$dep_payload" \
+  | HOME="$TEST_HOME" /bin/bash "${NOHELPER_SANDBOX}/block-autonomy-ceiling.sh" 2>"$nohelper_err" >/dev/null || nohelper_exit="$?"
+nohelper_stderr="$(/bin/cat "$nohelper_err")"; /bin/rm -f "$nohelper_err"
+if [ "$nohelper_exit" = 2 ] && /usr/bin/printf '%s' "$nohelper_stderr" | /usr/bin/grep -qE "LIB-MISSING"; then
+  echo "PASS: dep-resolve.sh missing → fail-CLOSED exit 2 (LIB-MISSING)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: helper-missing fail-closed (exit=%s expected=2, want LIB-MISSING)\n  stderr: %s\n' "$nohelper_exit" "$nohelper_stderr"; FAIL=$((FAIL + 1))
+fi
+
+/bin/rm -rf "$DEP_SANDBOX" "$NOHELPER_SANDBOX"
+
+# =====================================================================
 # Summary
 # =====================================================================
 echo ""
