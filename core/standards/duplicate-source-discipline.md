@@ -70,7 +70,7 @@ Together these three guardrails ARE the platform's anti-duplication enforcement 
 Operator review for emergent duplicate content occurs at:
 
 1. **Stage 3 Bundle gate.** When bundling release scope, the Stage 3 Pre-creation governance check ([CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) line 134) covers duplicate-source-as-emergent-pattern. Newly proposed files are checked for canonical-home existence before authoring.
-2. **Stage 4 Planning.** When contention maps surface during release planning, file-overlap-audit per `pmo-platform/analysis/file-overlap-audit-<date>/` may incidentally surface content duplication along with file-edit contention.
+2. **Stage 4 Planning.** When contention maps surface during release planning, file-overlap-audit per `<OPERATOR_INSTANCE_ANALYSIS_PATH>/file-overlap-audit-<date>/` may incidentally surface content duplication along with file-edit contention.
 3. **Opportunistic discovery.** Content drift discovered during normal operation (e.g., during `pmo-skill-editor` audits, `pmo-qa-auditor` reviews, governance file edits) is reported as a GitHub Issue per the [CLAUDE.md auto-logging rule](<OPERATOR_INSTANCE_CLAUDE_MD>).
 
 No scheduled scan runs. The cadence is event-driven, not periodic.

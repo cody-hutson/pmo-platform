@@ -173,7 +173,7 @@ Compose, do not restate. Each row names a doc this standard touches and the acti
 
 ## §9 Audit register convention & D8 citation contract
 
-The complete audit is produced under the CLAUDE.md analysis-folder convention at `pmo-platform/analysis/universal-vs-localized-context-audit-YYYY-MM-DD/` — `SUMMARY.md` + 9-column register + `issue-drafts/NNN-*.md`. The register's row schema and sizing discipline are specified in that folder's `SUMMARY.md`; it reuses this standard's §6 rubric and threshold and **acknowledges [knowledge-architecture §4](../disciplines/knowledge-architecture.md#local-context-leakage-register) as the bounded precursor it supersedes** (relationship declared; the §4 *edit itself* is deferred G-5).
+The complete audit is produced under the CLAUDE.md analysis-folder convention at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/universal-vs-localized-context-audit-YYYY-MM-DD/` — `SUMMARY.md` + 9-column register + `issue-drafts/NNN-*.md`. The register's row schema and sizing discipline are specified in that folder's `SUMMARY.md`; it reuses this standard's §6 rubric and threshold and **acknowledges [knowledge-architecture §4](../disciplines/knowledge-architecture.md#local-context-leakage-register) as the bounded precursor it supersedes** (relationship declared; the §4 *edit itself* is deferred G-5).
 
 **D8 citation contract (the register's citation law):** the audit executes **strictly at or after the reorg merge SHA on `main`** — no pre-reorg SHA pin (a pre-reorg pin would make every register citation point at paths that no longer exist post-reorg). All register `file:line` citations use **post-reorg paths**. The audit's `SUMMARY.md` frontmatter records the post-reorg merge-base SHA it ran against. This closes citation-staleness by sequencing, not by pinning, and is satisfied by the serialize topology.
 
@@ -228,7 +228,7 @@ flowchart TD
 
 ### §10.3 The 4 replacement patterns
 
-The 4 replacement patterns codified here cover all observed legitimate use cases at the audit substrate (verified 2026-05-27 against `pmo-platform/analysis/self-containment-audit-2026-05-15/`). A 5th pattern is not needed; cases that escape these branches route to ESCALATE per §10.2.
+The 4 replacement patterns codified here cover all observed legitimate use cases at the audit substrate (verified 2026-05-27 against `<OPERATOR_INSTANCE_ANALYSIS_PATH>/self-containment-audit-2026-05-15/`). A 5th pattern is not needed; cases that escape these branches route to ESCALATE per §10.2.
 
 | Pattern | When to apply | Example (in-corpus) |
 |---|---|---|
@@ -251,7 +251,7 @@ Carve-outs apply rubric-wide; they are NOT per-file allowlist entries. Operator 
 
 ### §10.5 Audit register restatement (per BUNDLE AMENDMENT D-AuditRetention)
 
-The 2026-05-15 audit at `pmo-platform/analysis/self-containment-audit-2026-05-15/` produced the 3-class taxonomy + 5-row findings table restated here verbatim. The audit folder itself may be extracted (per D-Taxonomy class C3 — operator decision at Collective Review) or preserved in-repo; this §10.5 makes the discipline self-contained regardless of outcome.
+The 2026-05-15 audit at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/self-containment-audit-2026-05-15/` produced the 3-class taxonomy + 5-row findings table restated here verbatim. The audit folder itself may be extracted (per D-Taxonomy class C3 — operator decision at Collective Review) or preserved in-repo; this §10.5 makes the discipline self-contained regardless of outcome.
 
 #### §10.5.1 3-class taxonomy
 

@@ -29,7 +29,7 @@ date variable eliminates the contradiction class.
 encountered exactly this drift — `date -u +%Y-%m-%d` returned `2026-05-02`;
 operator-local + verbatim Stage 5 spec references all used `2026-05-01`.
 Spoke chose `2026-05-01` for consistency; documented as Tier 1 [ADJUST] in
-`pmo-platform/analysis/file-overlap-audit-2026-05-01/SUMMARY.md` § 1 UTC drift note.
+`<OPERATOR_INSTANCE_ANALYSIS_PATH>/file-overlap-audit-2026-05-01/SUMMARY.md` § 1 UTC drift note.
 
 ## When the convention fires (trigger predicate)
 
@@ -39,9 +39,9 @@ The convention applies to a Stage 5 spec iff ALL hold:
    authoring time).
 2. The same literal date appears in ≥1 downstream load-bearing artifact:
    - File or folder path created/named by the spec (e.g.,
-     `pmo-platform/analysis/<audit-name>-YYYY-MM-DD/`)
+     `<OPERATOR_INSTANCE_ANALYSIS_PATH>/<audit-name>-YYYY-MM-DD/`)
    - Acceptance Criterion verifier identifier (e.g., `AC-15: File present at
-     pmo-platform/analysis/<audit-name>-YYYY-MM-DD/SUMMARY.md`)
+     <OPERATOR_INSTANCE_ANALYSIS_PATH>/<audit-name>-YYYY-MM-DD/SUMMARY.md`)
    - ADR source-observation reference (e.g., ADR `source_observation:` field
      citing a date-baked path)
    - Release-plan Deviation Log entry citing a date-baked path
@@ -58,7 +58,7 @@ The convention applies to a Stage 5 spec iff ALL hold:
   existing governance file).
 
 **Predominant trigger today:** audit-class Stage 5 specs creating
-`pmo-platform/analysis/<audit-name>-YYYY-MM-DD/` folders (24 existing audit
+`<OPERATOR_INSTANCE_ANALYSIS_PATH>/<audit-name>-YYYY-MM-DD/` folders (24 existing audit
 folders demonstrate the pattern). The trigger generalizes — applies to any
 future date-baked load-bearing identifier surface.
 
@@ -135,7 +135,7 @@ This convention applies to any Stage 5 spec meeting the trigger predicate. Cutov
 | Stage 5 protocol | [`pipeline/stage-05-solutioning.md` § 6 Outputs](../../release/references/pipeline/stage-05-solutioning.md) | Thin cross-reference at output enumeration |
 | Stage 5 spoke prompt template | [`hub-spoke-bridge.md` Procedure 3](../../release/references/how-to/hub-spoke-bridge.md) | Inject convention reference alongside R1 Evidence-Grounding block |
 | Failure-mode catalog | [`failure-mode-standard.md`](../standards/failure-mode-standard.md) | Anti-pattern `utc-drift-spec-contradiction` (added by Engineering at Stage 6) |
-| Originating evidence | `pmo-platform/analysis/file-overlap-audit-2026-05-01/SUMMARY.md` § 1 | UTC drift incident |
+| Originating evidence | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/file-overlap-audit-2026-05-01/SUMMARY.md` § 1 | UTC drift incident |
 
 ## Version History
 

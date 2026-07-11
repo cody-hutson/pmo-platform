@@ -17,7 +17,7 @@ consumers: OPERATIONS.md (efficacy review cadence); km-governance-framework.md; 
 **Version anchor:** per [`version-field-semantics.md`](version-field-semantics.md) release-tag-at-last-material-edit.
 **Primary consumer:** Workspace owner / release-orchestration spokes that surface practice review-due lists at Stage 13 Close.
 **Hard downstream consumer:** the downstream KM Governance work (retirement triggers source from this framework's efficacy signals). Schema-stability commitment in §10 is the contract.
-**Soft downstream consumers:** `pmo-qa-auditor` KM scanning (may consume SIG-G3 as complementary signal); records-management (may consume efficacy signals as disposition-decision input); periodic `pmo-platform/analysis/` efficacy reports (future).
+**Soft downstream consumers:** `pmo-qa-auditor` KM scanning (may consume SIG-G3 as complementary signal); records-management (may consume efficacy signals as disposition-decision input); periodic `<OPERATOR_INSTANCE_ANALYSIS_PATH>/` efficacy reports (future).
 **Status:** Canonical.
 **Introduced:** km-governance-and-efficacy release.
 
@@ -398,7 +398,7 @@ The **practice-efficacy-ledger** at [`<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pra
 - All 10 columns are required per row. `N/A` is a permitted value for `measured_value` when the signal's `Measurable Today?` flag is NO or PARTIAL and a placeholder row is being recorded for audit-trail integrity.
 - `signal_id` and `signal_class` MUST match the §3 catalog mapping. The denormalization is forward-compatible (additive enum); inconsistent rows fail the framework's structural lint.
 - `threshold_band` MUST be derived from `measured_value` against §3 thresholds — no operator override at the band level (override is captured at the disposition level via Stage 13 release-readiness checklist, NOT by mutating the band).
-- Rows are written by efficacy-review sessions; readers include  (retirement-trigger sourcing), framework's own §11 review-due lookup, and periodic `pmo-platform/analysis/` efficacy reports (future).
+- Rows are written by efficacy-review sessions; readers include  (retirement-trigger sourcing), framework's own §11 review-due lookup, and periodic `<OPERATOR_INSTANCE_ANALYSIS_PATH>/` efficacy reports (future).
 
 ### Data-flow producer/consumer model (data-flow — Tier-A activated artifact #3)
 
@@ -462,7 +462,7 @@ This section enumerates the platform artifacts that this framework cross-referen
 | the downstream KM Governance work (retirement triggers) | Signal IDs + ledger row schema + `retirement_trigger_eligible` flag + trigger semantics | HARD (the downstream Stage 5 escalates Tier 2 [SCOPE CHANGE] back to this framework if schema gap surfaces) |
 | `pmo-qa-auditor` KM scanning | SIG-G3 (operator-correction frequency) as complementary signal alongside staleness | SOFT (forward-state; integration is downstream work) |
 | records-management | Efficacy signals as disposition-decision input for retention | SOFT (forward-state) |
-| Periodic `pmo-platform/analysis/` efficacy reports (future) | Ledger rows as data source for aggregated reporting | SOFT (no current consumer; reserved) |
+| Periodic `<OPERATOR_INSTANCE_ANALYSIS_PATH>/` efficacy reports (future) | Ledger rows as data source for aggregated reporting | SOFT (no current consumer; reserved) |
 
 **Forward-state integration with `pmo-qa-auditor`:** When `pmo-qa-auditor` gains KM scanning, the scanning mode MAY consume this framework's SIG-G3 as a complementary signal. The integration is downstream work tracked by a future Stage 5 plan. This release ships the framework only; no `pmo-qa-auditor` SKILL.md edits at ship.
 
@@ -552,7 +552,7 @@ The demo row records: practice `decision-discipline-framework`, signal `SIG-G3`,
 |---|---|---|---|
 | F1 | `pipeline-event-log-schema.md` extension for `event_type: practice-efficacy` and `event_subtype: practice-failure` (SIG-G4 + T-CI evidence source) | DEFER to a later release | First actual incident attributed to a practice fires; at that point the operator co-decides whether to extend the schema or use manual annotation in payload field |
 | F2 | Automated `check-practice-efficacy.sh` tool (computes per-practice signal values per release, batch-appends ledger rows) | DEFER (no scheduled release) | Operator decides automated efficacy reporting warrants tool implementation |
-| F3 | Periodic `pmo-platform/analysis/` efficacy reports (aggregated reporting consumer per §7 data-flow) | DEFER (no scheduled release) | Operator decides periodic reporting cadence is needed |
+| F3 | Periodic `<OPERATOR_INSTANCE_ANALYSIS_PATH>/` efficacy reports (aggregated reporting consumer per §7 data-flow) | DEFER (no scheduled release) | Operator decides periodic reporting cadence is needed |
 | F4 | `pmo-qa-auditor` reciprocal SKILL.md integration (KM scanning consumes SIG-G3) | DEFER (downstream) | a future Stage 5 decides integration scope |
 | F5 | Calibration GitHub Issue auto-spawn (T-OP / T-RW / T-CI threshold validity) | TRIGGER at 3rd post-cutover release applying framework | Stage 13 Close auto-spawns per `[CALIBRATE-AFTER-3]` discipline |
 

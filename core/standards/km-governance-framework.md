@@ -382,7 +382,7 @@ The framework's [`framework-catalog.md`](../specs/framework-catalog.md) entry se
 
 ## §9 Schema-Stability Commitments
 
-Downstream consumers — records-management, the DRAFT→APPROVED workflow, `pmo-qa-auditor` KM scanning, the future ownership-map peer spec, periodic `pmo-platform/analysis/` KM-corpus health reports (future) — hard-depend on this framework's schema. The following commitments are **STABLE** from ship onward; consumers may rely on them across releases.
+Downstream consumers — records-management, the DRAFT→APPROVED workflow, `pmo-qa-auditor` KM scanning, the future ownership-map peer spec, periodic `<OPERATOR_INSTANCE_ANALYSIS_PATH>/` KM-corpus health reports (future) — hard-depend on this framework's schema. The following commitments are **STABLE** from ship onward; consumers may rely on them across releases.
 
 The schema-stability commitment is **10 points** total: 4 inherited from the practice-efficacy-framework (consumed VERBATIM at §4.1 efficacy trigger source) + 6 forward by this framework. The 10 STABLE markers below are the forward contract.
 

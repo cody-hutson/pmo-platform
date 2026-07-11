@@ -1,7 +1,18 @@
 ---
 name: skill-compliance-auditor
 description: >
-  Measures skill trigger-compliance — whether the RIGHT skill actually fires for the requests it should serve — across the pmo-platform skill catalog, closing the coverage gap upstream of output-quality and structural audits. For a target skill it generates scenarios at three strictness levels (explicit — names the skill's trigger phrases; neutral — describes the domain task without trigger phrases; competing — a task where the target and ≥1 sibling both plausibly apply), runs the agent against each in a measurement harness, classifies each tool-call trace deterministic-first (a structural grep for the target skill's Skill-tool invocation; an LLM judge is reserved only for the "was firing appropriate?" nuance on competing scenarios), and reports a per-strictness compliance rate plus a tool-call-timeline classification. Single Measure mode (run the compliance pass on a named skill or catalog), with a read-only re-render variant that re-renders a prior run without spending. A cost governor is mandatory: operator-gated invocation, a per-run scenario-count cap with a documented default, and a --dry-run that prints the scenario plan and estimated call count before any spend. Extends the shared calibration-data surface with a new trigger-rate metric class rather than forking a parallel results store; distinct from eval-writer (which authors eval suites) and pmo-qa-auditor (which grades output quality) and gate-evaluation-spec (which measures gate-decision judgment). Triggers: "measure skill trigger-rate", "audit skill compliance", "does the right skill fire", "is this skill's description drifting", "run the trigger-compliance pass", "check skill firing rate", "skill compliance report".
+  Measures skill trigger-compliance — whether the RIGHT skill actually fires for the
+  requests it should serve — across the pmo-platform skill catalog, closing the coverage gap
+  upstream of output-quality and structural audits. It runs template-seeded scenarios at
+  three strictness levels (explicit / neutral / competing), classifies each tool-call trace
+  deterministic-first, and reports a per-strictness compliance rate. Single Measure mode,
+  plus a read-only re-render variant. A mandatory cost governor makes every run
+  operator-gated, scenario-capped, and --dry-run-first. Distinct from eval-writer (which
+  authors eval suites), pmo-qa-auditor (which grades output quality), and
+  gate-evaluation-spec (which measures gate-decision judgment). Triggers: "measure skill
+  trigger-rate", "audit skill compliance", "does the right skill fire", "is this skill's
+  description drifting", "run the trigger-compliance pass", "check skill firing rate",
+  "skill compliance report".
 version: v3.41
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
