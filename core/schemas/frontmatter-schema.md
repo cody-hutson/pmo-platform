@@ -194,7 +194,7 @@ The horizontal-lineage scalar fields (`parent_artifact`, `sibling_topic`, `super
 | `domain` | String | Yes | `source`, `managed`, `generated` | Three-domain classification (Brief §9). **`A`/`B`/`C` are DEPRECATED aliases** of `source`/`managed`/`generated` (mirrors the `synthesis_scope → source_inputs` deprecation-alias pattern). During the migration window, readers MAY find either vocabulary; writers SHOULD emit the human-readable value. Migration tail (emit sites in `agent-processing-contracts.md` + the `sqlite-index-schema.md` domain CHECK/queries + the `entity-field-schemas.md` V-ART-04 enum) is sequenced in the build; on completion, exactly **one live vocabulary** (`source`/`managed`/`generated`) carries the concept (duplicate-source-discipline §1). Enum-validating consumers accept the union `{source, managed, generated, A, B, C}` during the window. |
 | `file_format` | String | Yes | `md`, `txt`, `csv`, `xlsx`, `pdf`, `docx`, `html` | File format for index queries |
 | `project` | String | Yes | Project name | Project this file belongs to |
-| `folder` | String | Yes | `01-governance`, `02-design`, `03-testing`, `04-operations`, `05-transcripts`, `06-emails`, `07-reference`, `08-generated` | Originating folder in the project structure |
+| `folder` | String | Yes | **Legacy 8** (DEPRECATED): `01-governance`, `02-design`, `03-testing`, `04-operations`, `05-transcripts`, `06-emails`, `07-reference`, `08-generated` · **New closed 5-bin set** (ADR-078): `1-Governance`, `2-Delivery`, `3-Operations`, `4-Evidence`, `5-Reference` + transient `_inbox`, `_generated` | Originating folder in the project structure. **The legacy 8-folder taxonomy is being reshaped to the closed 5-bin set (ADR-078)** via the additive-union deprecation-window pattern (mirrors the `domain` A/B/C→source/managed/generated migration above). During the migration window, enum-validating consumers accept the **union** `{01-governance, 02-design, 03-testing, 04-operations, 05-transcripts, 06-emails, 07-reference, 08-generated, 1-Governance, 2-Delivery, 3-Operations, 4-Evidence, 5-Reference, _inbox, _generated}`; writers scaffolding new projects SHOULD emit the new closed-set value. Migration tail (`sqlite-index-schema.md` folder queries, `entity-field-schemas.md` V-ART folder rule, `agent-processing-contracts.md` emit sites, `artifact-workflow-protocol.md` promotion rule) is sequenced in the build; on convergence, exactly **one live taxonomy** (the 5-bin set) carries the concept (duplicate-source-discipline §1). Existing-project migration is deferred. 8→5 mapping: `01-governance`→`1-Governance`; `02-design`+`03-testing`→`2-Delivery`; `04-operations`→`3-Operations`; `05-transcripts`+`06-emails`→`4-Evidence`; `07-reference`→`5-Reference`; `08-generated`→`_generated`. |
 
 ### Category 7: Tags
 
@@ -223,7 +223,7 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 
 ## Domain-Specific Fields
 
-### Domain A — Source Artifacts (01-07 folders)
+### Domain A — Source Artifacts (source bins: legacy `01-07` · new `1-Governance` / `2-Delivery` / `4-Evidence` / `5-Reference` per ADR-078)
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
@@ -234,7 +234,7 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | `parent_artifact` | String | No | Path/filename of the upstream generated artifact | The upstream generated artifact in the lineage graph that this artifact derives from. Horizontal lineage within AI/agent outputs (distinct from `source_inputs` upstream human evidence — see Lineage Fields vs. Provenance Fields). |
 | `sibling_topic` | String | No | Scope descriptor string | Topic/scope descriptor that groups strict siblings for dedup matching. Lateral disambiguator within a sibling set. Verbatim-aligned with `lifecycle-states-canonical.md §3.2`. |
 
-### Domain B — Managed Knowledge (04-Operations trackers)
+### Domain B — Managed Knowledge (trackers: legacy `04-operations` · new `3-Operations` per ADR-078)
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
@@ -242,7 +242,7 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | `staleness_threshold_days` | Integer | No | Default: `14` | Days without new evidence before `needs-review` transition |
 | `entry_count` | Integer | No | Positive integer | Number of active entries (for trackers) |
 
-### Domain C — Synthesized Intelligence (08-Generated)
+### Domain C — Synthesized Intelligence (generated staging: legacy `08-generated` · new `_generated` per ADR-078)
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
@@ -256,7 +256,7 @@ Tags serve dual purpose: graph cluster anchors in Obsidian (green nodes that vis
 | `supersedes` | String | No | Filename of the artifact this one replaces | Backward inverse of `superseded_by` — points to the prior artifact this one supersedes in a dedup/version chain. Distinct from the `SUPERSEDES` relationship verb (a per-artifact scalar carrier, not a `relationships[]` entry). |
 
 **Promotion-location consistency rules:**
-- `promotion_state: promoted` requires `folder ≠ 08-generated` (a promoted file has physically left the staging area; this is the rule artifact-lint Check 4 enforces, now schema-declared on the dedicated `promotion_state` field rather than inferred from the deprecated `artifact_state: PROMOTED`).
+- `promotion_state: promoted` requires `folder ∉ {08-generated, _generated}` (a promoted file has physically left the staging area — both the legacy `08-generated` and the new ADR-078 `_generated` staging bin; this is the rule artifact-lint Check 4 enforces, now schema-declared on the dedicated `promotion_state` field rather than inferred from the deprecated `artifact_state: PROMOTED`).
 - `promotion_state` (location) and `lifecycle_state` (content-maturity) are **orthogonal** — neither value constrains the other. Full transition rules: [`artifact-workflow-protocol.md`](../artifact-workflow-protocol.md) §4.
 
 **`trigger_source` vs `source_inputs` (distinct concerns — both live).** `trigger_source` records **what triggered** the synthesis (the event/file that prompted generation — e.g., a SteerCo meeting, a user request); `source_inputs` (Category 3) records **what evidence** the synthesis drew from. A synthesis may be *triggered by* one transcript while *drawing on* several. These are orthogonal and both remain live fields; only `synthesis_scope` (the "what evidence" duplicate) is deprecated.

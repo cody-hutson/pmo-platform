@@ -171,7 +171,7 @@ Each skill contract specifies:
 | **Relationships Created** | `BELONGS_TO` (project → program → portfolio), `BELONGS_TO` (PROJECT.md → project) |
 | **Lifecycle Transitions** | Sets initial states only |
 | **Ecosystem Tag** | `[ECOSYSTEM_UPDATE: {project}/PROJECT.md | FRONTMATTER_CREATED | project-initiator | scaffold: {folder_count} folders]` |
-| **Validation** | New project has PROJECT.md with frontmatter. Navigation scaffold includes at minimum: project hub page + one folder index per 01-08 folder. |
+| **Validation** | New project has PROJECT.md with frontmatter. Navigation scaffold includes at minimum: project hub page + one folder index per canonical bin (the ADR-078 closed set `1-Governance`…`5-Reference`; legacy `01-08` during the migration window). |
 
 ---
 
