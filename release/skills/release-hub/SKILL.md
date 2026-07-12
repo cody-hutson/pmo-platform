@@ -89,7 +89,7 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 5. **Bundle coherence** — apply `bundle-composition-doctrine` (Outcome Statement present · coherent theme · size band 15–25 pts).
 6. **Roll up** — bind the per-issue findings into a milestone **GO / NO-GO** with a per-finding **disposition** from the closed set {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE}. Source every finding to its composed skill/spec. Recommend dispositions; **mutate nothing**.
 
-**Output:** a **Milestone Readiness Briefing** — (a) the **GO / NO-GO** verdict; (b) a per-requirement table in the **C1 / C2 / C3 + PT-1..4 schema** (Phase-A0-consumable — see `## Output Contract`); (c) per-finding dispositions with rationale, each sourced to its composed skill/spec; (d) a reversibility tier (**CHEAP**) + confidence. **Autonomy Tier 1 — Recommend** (read-only; the operator acts on the dispositions). Audience-framed per `## Output Contract`.
+**Output:** a **Milestone Readiness Briefing** — (a) the **GO / NO-GO** verdict; (b) a per-requirement table in the **C1 / C2 / C3 + PT-1..4 schema** (Phase-A0-consumable — see `## Output Contract`); (c) per-finding dispositions with rationale, each sourced to its composed skill/spec; (d) a reversibility tier (**CHEAP**) + confidence; (e) a **terminal next-action route** — on **GO**, the explicit `release-hub Mode O on <milestone>` recommendation to orchestrate the release; on **NO-GO**, the per-finding dispositions framed as the gating cleanup checklist that must clear before the milestone re-runs Mode R and then Mode O (the **R → cleanup → re-run R → Mode O** loop). **Autonomy Tier 1 — Recommend** (read-only; the operator acts on the dispositions). Audience-framed per `## Output Contract`.
 
 ### Mode O — Orchestrate Release
 
@@ -116,12 +116,13 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 
 ## Output Contract
 
-Every output declares its **audience** and frames accordingly: **operator/exec** leads with the GO/NO-GO and the so-what; **engineering** leads with the per-finding evidence (the composed verdict, the specific issue, the PT type). Five requirements hold on every Mode R emission:
+Every output declares its **audience** and frames accordingly: **operator/exec** leads with the GO/NO-GO and the so-what; **engineering** leads with the per-finding evidence (the composed verdict, the specific issue, the PT type). Six requirements hold on every Mode R emission:
 1. the audience is named and the framing matches it;
 2. every finding is sourced to its composed skill/spec — no free-floating readiness assertions;
 3. the per-requirement output uses the **C1 / C2 / C3 + PT-1..4 schema** (so Stage-4 Phase A0 can consume it as a cache-read — the "replaces Phase A0" contract);
 4. each finding carries a **disposition** from {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE} — **recommendations only** (read-only mode): Mode R names the fix, it never executes it;
-5. the milestone verdict carries a **reversibility tier + confidence** (`## Reversibility Discipline`).
+5. the milestone verdict carries a **reversibility tier + confidence** (`## Reversibility Discipline`);
+6. the emission carries a **terminal next-action route** (Readiness Disposition → Next Action) — on **GO**, the explicit `release-hub Mode O on <milestone>` invocation that orchestrates the release; on **NO-GO**, the per-finding dispositions framed AS the gating cleanup checklist plus the named **R → cleanup → re-run R → Mode O** loop. An emission that ends at the bare verdict is incomplete.
 
 **Recommend-only boundary (the read-only contract).** Mode R's dispositions are recommendations, not authorizations to act. The disposition labels (FIX-FIRST, RE-BUNDLE, …) name fix *types*, not commands Mode R executes — Mode R mutates no state: it creates no issue or milestone, rewrites no description, sizes nothing, files nothing, posts no comment. Any transition from *recommending* a disposition to *acting* on it requires, in order: (1) the CLAUDE.md **Skill-boundary-transparency** notice (name the mode/contract being exceeded + the authorization basis), (2) **explicit operator authorization** for the specific action, and (3) **descent to the base agent** — Mode R itself never crosses into execution. This is the contract the `## Domain-Specific Failure Modes` entry "Mode R mutates state despite its read-only contract" guards.
 
@@ -226,3 +227,11 @@ These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide)
 - **Root cause:** push-to-resolve pulls toward executing the remediation the check surfaced; the imperative-sounding disposition labels (FIX-FIRST, RE-BUNDLE) read as commands, and the read-only contract is not mechanically gated — so under resolution pressure the mode slides from recommending into acting.
 - **Mitigation:** treat every disposition as recommend-only; before ANY state change run the recommend→act transition — the CLAUDE.md Skill-boundary-transparency notice + explicit operator authorization + descent to the base agent (`## Output Contract` recommend-only boundary). Keep validating + reporting across the whole milestone; never abandon the readiness scan mid-check to plan or execute remediation.
 - **Principal response vs. junior response:** Principal emits the GO/NO-GO with FIX-FIRST recommendations and stops — "recommend adding AC to issue X; that is an operator action, not mine". Junior reads FIX-FIRST as a to-do and starts creating the issues, abandoning the readiness scan at the moment it hit its most important signal.
+
+### Mode R emits a verdict without routing to the next workflow action — OUT
+
+- **Signature (observable signal):** a Mode R emission ends at the GO/NO-GO verdict + per-finding dispositions and stops — it neither recommends the concrete `release-hub Mode O on <milestone>` invocation on GO, nor frames the NO-GO dispositions as the cleanup checklist gating the re-run → Mode O.
+- **Conditional:** do NOT terminate a Mode R emission at the verdict when the operator's actual workflow is R → cleanup → re-run R → Mode O, because R and O are modeled as independent trigger-selected modes with no owned transition — so a verdict-terminal emission leaves the operator to reconstruct the next step every run, and the readiness check answers "is it ready?" but never "so what do I do now?".
+- **Root cause:** Mode R's Output Contract was specified verdict-terminal — a design flaw (the R→O bridge element was omitted from the contract, not forgotten at runtime); the disposition vocabulary names fix-types, never next-actions.
+- **Mitigation:** carry the terminal next-action route as a contracted Output requirement (the 6th) — GO routes to the explicit Mode O invocation; NO-GO reframes the dispositions as the gating cleanup checklist and names the R → cleanup → re-run R → Mode O loop; verify every emission ends on a next-action, not a bare verdict.
+- **Principal response vs. junior response:** Principal closes with "GO → run `release-hub Mode O on <milestone>`", or "NO-GO → clear these 3 FIX-FIRST items, re-run Mode R, then Mode O". Junior emits "NO-GO, 3 findings" and stops, leaving the operator to guess the loop.
