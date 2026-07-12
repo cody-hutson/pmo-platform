@@ -846,14 +846,25 @@
 
           const htmlStr = XLSX.utils.sheet_to_html(ws, { editable: false });
           const wrapper = document.createElement("div");
-          wrapper.innerHTML = htmlStr;
-          // Neutralize dangerous hyperlink schemes SheetJS emits verbatim from cell
-          // Targets (GHSA-rw36-5pf9-w2vc): a javascript:/data:/vbscript: href is a
-          // click-triggered XSS from an attacker-supplied .xlsx in run*/outputs/.
-          wrapper.querySelectorAll("a[href]").forEach(function (a) {
-            if (/^\s*(?:javascript|data|vbscript):/i.test(a.getAttribute("href") || "")) {
-              a.removeAttribute("href");
-            }
+          wrapper.innerHTML = htmlStr; // nosemgrep: dom-htmlinjection-sink-unreviewed -- xss-sink-reviewed: the detached wrapper is sanitized in place below (scripts/styles dropped, on* handlers stripped, javascript:/data:/vbscript: neutralized on href/src) BEFORE it is connected, so verbatim markup from an attacker-supplied .xlsx cell (GHSA-rw36-5pf9-w2vc) stays inert; innerHTML retained because the sheet table markup must render
+          // Harden (GHSA-rw36-5pf9-w2vc): SheetJS emits cell contents verbatim, so an
+          // attacker-supplied .xlsx can carry <img onerror=...>, <a href="javascript:...">,
+          // <script>, or other active markup. A scheme denylist alone is not a general
+          // sanitizer, so sweep the DETACHED wrapper before it is connected to the document:
+          // (1) drop <script>/<style>, (2) strip every on* event-handler attribute,
+          // (3) neutralize javascript:/data:/vbscript: on href/src. Per
+          // core/standards/domain-best-practices/software.md Security -> Output encoding.
+          wrapper.querySelectorAll("script, style").forEach(function (el) { el.remove(); });
+          wrapper.querySelectorAll("*").forEach(function (el) {
+            Array.prototype.slice.call(el.attributes).forEach(function (attr) {
+              const name = attr.name.toLowerCase();
+              if (name.indexOf("on") === 0) {
+                el.removeAttribute(attr.name);
+              } else if ((name === "href" || name === "src" || name === "xlink:href")
+                  && /^\s*(?:javascript|data|vbscript):/i.test(attr.value || "")) {
+                el.removeAttribute(attr.name);
+              }
+            });
           });
           container.appendChild(wrapper);
         }
@@ -909,7 +920,7 @@
       html += '</ul>';
 
       html += '</div>';
-      content.innerHTML = html;
+      content.innerHTML = html; // nosemgrep: dom-htmlinjection-sink-unreviewed -- xss-sink-reviewed: renderGrades body context; every interpolation is escapeHtml(exp.text/exp.evidence) or Number()/string-literal; no attribute interpolation
     }
 
     function toggleGrades() {
@@ -1110,6 +1121,18 @@
       return div.innerHTML;
     }
 
+    function escapeAttr(text) {
+      // Attribute-context encoder: escapeHtml's textContent idiom does NOT escape the
+      // quote, so it is a BODY encoder only. A value in a quoted attribute needs & < > "
+      // (and ' for single-quoted attrs) encoded, per software.md Security -> Output encoding.
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     // ---- View switching ----
     function switchView(view) {
       document.querySelectorAll(".view-tab").forEach(t => t.classList.remove("active"));
@@ -1297,7 +1320,7 @@
                   if (exp) {
                     const cls = exp.passed ? "benchmark-delta-positive" : "benchmark-delta-negative";
                     const icon = exp.passed ? "\u2713" : "\u2717";
-                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeHtml(exp.evidence || "") + '">' + icon + "</span> ";
+                    html += '<span class="' + cls + '" title="Run ' + escapeAttr(run.run_number) + ': ' + escapeAttr(exp.evidence || "") + '">' + icon + "</span> ";
                   } else {
                     html += "— ";
                   }
@@ -1322,7 +1345,7 @@
         html += "</ul></div>";
       }
 
-      container.innerHTML = html;
+      container.innerHTML = html; // nosemgrep: dom-htmlinjection-sink-unreviewed -- xss-sink-reviewed: renderBenchmark; body interpolations escapeHtml()-encoded and the title-attribute interpolations (run_number + evidence) escapeAttr()-encoded; cls is a trusted literal ternary
     }
 
     // ---- Start ----

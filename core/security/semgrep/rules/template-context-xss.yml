@@ -1,0 +1,101 @@
+# Custom template-context-XSS ruleset (GHSA-rw36-5pf9-w2vc + latent siblings).
+#
+# Models the cross-file, cross-language flow that defeated CodeQL and is invisible
+# to bandit: Python json.dumps / string-built HTML -> template.replace() into an
+# inline-<script> placeholder -> JS raw-HTML DOM sink. Stock p/xss and njsscan
+# target Node server-taint and do NOT follow this bespoke Python-writes-HTML flow.
+#
+# The three rules KEY ON THE MISSING CONTEXT-AWARE ENCODER, not on json.dumps or
+# innerHTML outright -- so the FIXED generate_review.py (which still calls json.dumps
+# but chains the < > & neutralization) passes with NO annotation, and a blunt ban
+# that would false-positive the fix (and invite a blanket suppression that reopens
+# the hole) is deliberately avoided. Sinks that are safe by construction carry a
+# per-sink  # nosemgrep: xss-sink-reviewed -- <why-safe>  annotation (the reviewed
+# baseline); a NEW or un-annotated sink fails. Blanket file/rule suppression is
+# prohibited. The enforced standard is
+# core/standards/domain-best-practices/software.md, Security -> Output encoding.
+rules:
+  # -- R1: transport -- serialized data flows into an inline <script> template
+  #        placeholder WITHOUT context-aware encoding (the script-closing break-out
+  #        vector). taint mode models the encoder-in-the-pipe as a sanitizer, so the
+  #        fixed emitter passes clean while the pre-fix emitter goes RED.
+  - id: template-context-xss-transport
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Serialized/untrusted data flows into an inline <script> template placeholder
+      without context-aware encoding. json.dumps() escapes the double-quote but NOT
+      < > & -- a value containing a script-closing sequence breaks out of the script
+      element (GHSA-rw36-5pf9-w2vc). Neutralize < > & (chained .replace, mapping each
+      to its uXXXX escape) or html.escape() before the template substitution, per
+      core/standards/domain-best-practices/software.md Security -> Output encoding.
+      Reviewed-safe? annotate:  # nosemgrep: xss-sink-reviewed -- <one-line why-safe>
+    pattern-sources:
+      - pattern: json.dumps(...)
+    pattern-sanitizers:
+      # any flow that neutralizes < (or >), or html/markupsafe escaping, defeats the
+      # script-closing break-out and clears taint.
+      - pattern: (...).replace("<", ...)
+      - pattern: (...).replace(">", ...)
+      - pattern: html.escape(...)
+      - pattern: markupsafe.escape(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $TPL.replace($PH, ...)
+          - metavariable-regex:
+              metavariable: $PH
+              regex: '.*(/\*__[A-Za-z0-9_]+__\*/|__[A-Za-z0-9_]+__).*'
+
+  # -- R2: a raw-HTML DOM injection sink assigned / passed a NON-LITERAL value.
+  #        generic mode over *.html: JS-in-HTML taint is unreliable, so this keys on
+  #        the sink shape and defers the per-branch "is every interpolation encoded?"
+  #        judgement to the reviewed-baseline annotation. A pure string / empty /
+  #        non-interpolated-template RHS is safe by construction and is NOT matched
+  #        (the RHS does not start with an identifier/call char and carries no ${ }).
+  - id: dom-htmlinjection-sink-unreviewed
+    languages: [generic]
+    severity: ERROR
+    paths:
+      include:
+        - '*.html'
+    message: >-
+      Raw-HTML DOM sink assigned a non-literal value. Prefer textContent /
+      createElement / Number(); if a raw-HTML sink is unavoidable EVERY interpolation
+      must be context-encoded (escapeHtml for body, an attribute-encoder that also
+      escapes the quote for attributes) and the node sanitized (drop <script>, strip
+      on* handlers, neutralize javascript:/data:/vbscript:) -- a scheme denylist alone
+      is not a general sanitizer. Per core/standards/domain-best-practices/software.md
+      Security -> Output encoding. Reviewed-safe? annotate:
+      // nosemgrep: xss-sink-reviewed -- <one-line why-safe>
+    patterns:
+      - pattern-either:
+          # assignment whose RHS is an identifier / member / call / expression
+          - pattern-regex: '\.(innerHTML|outerHTML)\s*=\s*[A-Za-z_$(]'
+          # assignment whose RHS is a template literal WITH interpolation
+          - pattern-regex: '\.(innerHTML|outerHTML)\s*=\s*`[^`]*\$\{'
+          # insertAdjacentHTML(pos, <non-literal>) call
+          - pattern-regex: '\.insertAdjacentHTML\s*\(\s*[^),]*,\s*[A-Za-z_$(]'
+          # legacy document.write / .writeln with a non-literal argument
+          - pattern-regex: '\.(write|writeln)\s*\(\s*[A-Za-z_$(]'
+
+  # -- R3: an inline-<script> template placeholder assigned into executable script
+  #        context with no committed encoder (the agent-filled templates R1's Python
+  #        taint cannot reach). The hardened form -- moving the payload into an inert
+  #        <script type="application/json"> block read via JSON.parse(el.textContent)
+  #        -- carries no  = __PLACEHOLDER__;  assignment and is GREEN by construction.
+  - id: script-context-template-placeholder-unencoded
+    languages: [generic]
+    severity: ERROR
+    paths:
+      include:
+        - '*.html'
+    message: >-
+      A <script>-context template placeholder is substituted into executable script
+      context with no committed context-aware encoder. The filler MUST neutralize
+      < > & (uXXXX escapes), or the payload MUST be embedded in an inert
+      <script type="application/json"> block read via JSON.parse(el.textContent), per
+      core/standards/domain-best-practices/software.md Security -> Output encoding.
+      Reviewed-safe? annotate: // nosemgrep: xss-sink-reviewed -- <one-line why-safe>
+    patterns:
+      - pattern-regex: '=\s*(/\*__[A-Za-z0-9_]+__\*/|__[A-Za-z0-9_]+_PLACEHOLDER__)\s*;'

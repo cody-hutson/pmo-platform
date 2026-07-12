@@ -77,7 +77,7 @@ Cowork / headless environments: use `--static <output_path>` to write a standalo
 `assets/eval_review.html` — description-optimization HTML review template. Used during description-trigger optimization to let the user review the 20 candidate trigger queries before running `run_loop.py`.
 
 Placeholders:
-- `__EVAL_DATA_PLACEHOLDER__` → JSON array of eval items
+- `__EVAL_DATA_PLACEHOLDER__` → JSON array of eval items, substituted into the inert `<script type="application/json" id="eval-data">` block and read via `JSON.parse(el.textContent)` (data context, not executable script). The filler MUST neutralize `<` in the emitted JSON so a `</script>` sequence cannot terminate the block early, per `core/standards/domain-best-practices/software.md` §Security → Output encoding.
 - `__SKILL_NAME_PLACEHOLDER__` → skill's name
 - `__SKILL_DESCRIPTION_PLACEHOLDER__` → current description
 

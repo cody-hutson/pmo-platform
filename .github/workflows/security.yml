@@ -56,6 +56,41 @@ jobs:
           # Scan all directories containing Python files; bandit -r walks recursively.
           bandit -r core/ release/ --severity-level high --confidence-level medium
 
+  semgrep:
+    name: Custom SAST (semgrep template-context-XSS)
+    # gate-efficacy: posture=required  enforcement-surface=branch-protection:"Custom SAST (semgrep template-context-XSS)"  always-reports=yes
+    #   invariant: no serialized/untrusted data reaches an inline-<script> template placeholder
+    #              or a raw-HTML DOM sink without context-aware encoding or a reviewed
+    #              nosemgrep: <rule-id> -- xss-sink-reviewed annotation -- asserted by running the
+    #              custom template-context-XSS ruleset (R1 transport-taint / R2 raw-HTML DOM sink /
+    #              R3 script-context placeholder) over the HTML-emitting surface.
+    #   falsification: revert generate_review.py's < > & escape chain, OR add a new un-annotated
+    #                  raw-HTML sink assignment / script-context placeholder -> the semgrep job fails.
+    #   posture note: posture=required records intent per gate-efficacy-standard.md Requirement (b);
+    #                 the branch-protection required-set registration + the file-level header list
+    #                 above are an operator repo-settings action (Stage 12), reconciled by audit.
+    # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+    runs-on: ubuntu-latest
+    env:
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install semgrep==1.136.0
+      - name: Rule self-test (positive control -- rules fire RED on the vulnerable fixtures)
+        run: semgrep --test --config core/security/semgrep/rules/ core/security/semgrep/tests/
+      - name: Run custom template-context-XSS ruleset (blocking)
+        # Scan scope = the HTML-emitting surface (all five generate_* / *.html emitters).
+        # The tests/ fixtures live under core/security/semgrep/tests/ (outside this scope) so
+        # the deliberately-vulnerable fixture never reddens the blocking scan; it is exercised
+        # only by the --test positive control above.
+        run: >-
+          semgrep scan --error --strict
+          --config core/security/semgrep/rules/
+          release/skills/pmo-skill-refiner/ core/deploy/tools/
+
   pip-audit:
     name: Python deps (pip-audit)
     runs-on: ubuntu-latest

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>template-context-xss fixtures</title></head>
+<body>
+<div id="out"></div>
+<script>
+  // ---- R2: dom-htmlinjection-sink-unreviewed ----
+
+  // A non-literal RHS (identifier) is the unreviewed sink -> RED.
+  // ruleid: dom-htmlinjection-sink-unreviewed
+  el.innerHTML = untrustedVar;
+
+  // An empty / pure string literal is safe by construction -> GREEN.
+  // ok: dom-htmlinjection-sink-unreviewed
+  el.innerHTML = "";
+  // ok: dom-htmlinjection-sink-unreviewed
+  el.innerHTML = '<div class="empty-state">No output</div>';
+
+  // A template literal WITH interpolation is a sink (encoding is per-branch, so it
+  // is flagged and certified by a reviewed annotation) -> RED.
+  // ruleid: dom-htmlinjection-sink-unreviewed
+  row.innerHTML = `<td>${escapeHtml(item.query)}</td>`;
+
+  // A template literal with NO interpolation is a static literal -> GREEN.
+  // ok: dom-htmlinjection-sink-unreviewed
+  row.innerHTML = `<td>static header</td>`;
+
+  // ---- R3: script-context-template-placeholder-unencoded ----
+
+  // A placeholder substituted into executable script context, no committed encoder -> RED.
+  // ruleid: script-context-template-placeholder-unencoded
+  const EVAL_DATA = __EVAL_DATA_PLACEHOLDER__;
+
+  // The hardened form -- inert application/json block read via textContent -> GREEN.
+  // ok: script-context-template-placeholder-unencoded
+  const SAFE_DATA = JSON.parse(document.getElementById("eval-data").textContent);
+</script>
+</body>
+</html>
