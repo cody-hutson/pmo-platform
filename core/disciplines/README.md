@@ -26,7 +26,7 @@ reversibility: CHEAP / Confidence HIGH
 | [operating-model.md](operating-model.md) | Composition view: per-skill ownership manifest, per-stage governance composition, execution blueprint across the 13 pipeline stages. |
 | [five-function-spine-and-process-flows.md](five-function-spine-and-process-flows.md) | Maps the 13 stages to the 5 PMBUK process groups (Initiating / Planning / Executing / Monitoring & Controlling / Closing) + the 10 cross-cutting flows that thread through them. |
 | [execution-framework.md](execution-framework.md) | The 5 tool-agnostic execution dimensions (Work Breakdown / Assignment / Tracking / Handoff / State Persistence). Sits between the Process layer and the Tool layer. |
-| [build-philosophy.md](build-philosophy.md) | The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability + the read-before-edit / track-all-edits disciplines) and the philosophy × surface coverage matrix mapping each value to the artifact enforcing it across skills / agents / hub-spokes / hooks / slash-commands. Names and routes; cites, never restates. |
+| [build-philosophy.md](build-philosophy.md) | The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability, Security + the read-before-edit / track-all-edits disciplines) and the philosophy × surface coverage matrix mapping each value to the artifact enforcing it across skills / agents / hub-spokes / hooks / slash-commands. Names and routes; cites, never restates. |
 
 ## Knowledge & corpus
 

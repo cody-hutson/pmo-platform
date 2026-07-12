@@ -303,16 +303,21 @@ test_case "malformed JSON → exit 2" \
   2 "INPUT-INVALID"
 
 # =====================================================================
-# DEPENDENCY GATE — jq resolution now lives in lib/dep-resolve.sh
+# DEPENDENCY GATE — jq resolution lives in lib/dep-resolve.sh
 # (GHSA-9cjm-v22x-4x33). Because resolution is in the HELPER, simulating
 # missing jq requires sandboxing BOTH files: a copy of the hook + a copy of
 # dep-resolve.sh with all three jq candidate paths sed'd to nonexistent.
-# WARN posture: a missing jq must DEGRADE to exit 0, never block — even in
-# .autonomy-mode=enforce with a would-block payload. A MISSING helper, by
-# contrast, is fail-CLOSED (exit 2): the hook cannot resolve its dependencies.
+# MODE-AWARE fail-closed posture (v3.73 build-security-hardening, S2 first
+# conformance case): the dependency gate now runs AFTER mode detection.
+#   - enforce (and the no-mode-file default): fail CLOSED (exit 2 +
+#     DEPENDENCY-MISSING) — the always-enforce Tier-0 floor must not be silently
+#     disabled by an unresolvable jq (the ADR-078 §Consequences residual).
+#   - warn / off: DEGRADE (exit 0 + DEPENDENCY-DEGRADED:WARN) — no harder than a
+#     rule match would block.
+# A MISSING helper, by contrast, is fail-CLOSED (exit 2) in every mode.
 # =====================================================================
 echo ""
-echo "dependency gate (jq via helper; warn-degrade vs fail-closed)"
+echo "dependency gate (jq via helper; mode-aware fail-closed vs warn-degrade)"
 echo "---"
 
 DEP_SANDBOX="$(/usr/bin/mktemp -d)"
@@ -325,19 +330,36 @@ DEP_SANDBOX="$(/usr/bin/mktemp -d)"
              "${HOOK_DIR}/lib/dep-resolve.sh" > "${DEP_SANDBOX}/lib/dep-resolve.sh"
 /bin/chmod +x "${DEP_SANDBOX}/block-autonomy-ceiling.sh"
 
-# A would-block Tier-0 governance write + enforce mode: proves the DEGRADE is
-# not merely a warn-mode side effect — even the always-block floor yields exit 0
-# when jq cannot be resolved (warn posture; do NOT fail closed).
-/usr/bin/printf 'enforce' > "${DEP_SANDBOX}/.autonomy-mode"
 dep_payload="$(write_payload "${TEST_WS}/CLAUDE.md" "${TEST_WS}/pmo-platform")"
+
+# enforce mode + a would-block Tier-0 governance write: jq unresolvable → the
+# always-enforce floor cannot be evaluated → FAIL CLOSED (exit 2 +
+# DEPENDENCY-MISSING). This is the fix for the ADR-078 §Consequences residual:
+# the old code exited 0 (fail-open) here even under enforce.
+/usr/bin/printf 'enforce' > "${DEP_SANDBOX}/.autonomy-mode"
 dep_err="$(/usr/bin/mktemp)"; dep_exit=0
 /usr/bin/printf '%s' "$dep_payload" \
   | HOME="$TEST_HOME" /bin/bash "${DEP_SANDBOX}/block-autonomy-ceiling.sh" 2>"$dep_err" >/dev/null || dep_exit="$?"
 dep_stderr="$(/bin/cat "$dep_err")"; /bin/rm -f "$dep_err"
-if [ "$dep_exit" = 0 ] && /usr/bin/printf '%s' "$dep_stderr" | /usr/bin/grep -qE "DEPENDENCY-WARN"; then
-  echo "PASS: jq missing (helper sandboxed) → warn-DEGRADE exit 0 even for a Tier-0 write in enforce mode"; PASS=$((PASS + 1))
+if [ "$dep_exit" = 2 ] \
+   && /usr/bin/printf '%s' "$dep_stderr" | /usr/bin/grep -qE "DEPENDENCY-MISSING" \
+   && ! /usr/bin/printf '%s' "$dep_stderr" | /usr/bin/grep -qE "DEPENDENCY-WARN|DEGRADED \(fail-open\)"; then
+  echo "PASS: jq missing + enforce → FAIL CLOSED (exit 2 + DEPENDENCY-MISSING) even for a Tier-0 write"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: jq-missing warn-degrade (exit=%s expected=0, want DEPENDENCY-WARN)\n  stderr: %s\n' "$dep_exit" "$dep_stderr"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: jq-missing enforce fail-closed (exit=%s expected=2, want DEPENDENCY-MISSING, no fail-open string)\n  stderr: %s\n' "$dep_exit" "$dep_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# warn mode + jq missing: DEGRADE to exit 0 (DEPENDENCY-DEGRADED:WARN) — a warn
+# hook must not block harder than a rule match would when the dependency is gone.
+/usr/bin/printf 'warn' > "${DEP_SANDBOX}/.autonomy-mode"
+depw_err="$(/usr/bin/mktemp)"; depw_exit=0
+/usr/bin/printf '%s' "$dep_payload" \
+  | HOME="$TEST_HOME" /bin/bash "${DEP_SANDBOX}/block-autonomy-ceiling.sh" 2>"$depw_err" >/dev/null || depw_exit="$?"
+depw_stderr="$(/bin/cat "$depw_err")"; /bin/rm -f "$depw_err"
+if [ "$depw_exit" = 0 ] && /usr/bin/printf '%s' "$depw_stderr" | /usr/bin/grep -qE "DEPENDENCY-DEGRADED:WARN"; then
+  echo "PASS: jq missing + warn → DEGRADE (exit 0 + DEPENDENCY-DEGRADED:WARN)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq-missing warn-degrade (exit=%s expected=0, want DEPENDENCY-DEGRADED:WARN)\n  stderr: %s\n' "$depw_exit" "$depw_stderr"; FAIL=$((FAIL + 1))
 fi
 
 # Missing helper entirely → fail CLOSED (exit 2). The exact readable-before-source

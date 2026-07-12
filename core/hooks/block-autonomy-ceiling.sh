@@ -148,15 +148,32 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
   exit 0
 fi
 
-# --- DEPENDENCY GATE (WARN posture: this hook ships in WARN mode — a missing jq must
-# DEGRADE to exit 0, never block harder than a rule match would. Runs AFTER the bypass
-# short-circuit. The old code hard-coded JQ=/usr/bin/jq and failed OPEN when jq lived
-# at a brew path; jq now resolves from lib/dep-resolve.sh's fixed absolute-path
-# allowlist, and the DEGRADED exit here is a deliberate warn-mode choice, not a
-# hard-coded-path accident. GHSA-9cjm-v22x-4x33.) ---
+# --- MODE DETECTION (own .autonomy-mode; jq-free) — read BEFORE the dependency
+# gate so the gate's fail-closed severity is mode-aware. Inline here (mirroring
+# block-fs-boundary's inline mode read) using the same logic as get_mode() below.
+# This governs ONLY the jq-MISSING branch: the always-enforce Tier-0 floor (STEP 1)
+# still fires mode-independently via always_block when jq IS present, so this read
+# does NOT relax the floor — it hardens the case where jq cannot be resolved. ---
+MODE="enforce"
+if [ -f "$MODE_FILE" ]; then
+  MODE="$("$CAT" "$MODE_FILE" 2>/dev/null | "$TR" -d '[:space:]' || echo enforce)"
+  case "$MODE" in warn|enforce|off) ;; *) MODE="enforce" ;; esac
+fi
+
+# --- DEPENDENCY GATE (mode-aware fail-closed) — GHSA-9cjm-v22x-4x33. The old code
+# exited 0 (DEPENDENCY-WARN) on missing jq REGARDLESS of mode, so the always-enforce
+# Tier-0 floor was silently disabled even under .autonomy-mode=enforce — the exact
+# residual ADR-078 §Consequences flagged for the warn→enforce promotion. Now the gate
+# is mode-aware, mirroring block-fs-boundary: enforce (and the default when no mode
+# file exists) → fail CLOSED (exit 2) so the floor cannot be evaluated-away; warn/off
+# → degrade (exit 0), no harder than a rule match would. Runs AFTER the bypass
+# short-circuit and the mode read. ---
 if [ -z "$JQ" ]; then
-  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path (hook DEGRADED, warn fail-open)"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (warn posture, exit 0).\n' "$HOOK_NAME" >&2
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path (mode=$MODE)"
+  if [ "$MODE" = "enforce" ]; then
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-DEGRADED:WARN] jq not found on the pinned tool path; %s-mode hook cannot evaluate input and is allowing this call. Install jq (brew install jq) to restore enforcement.\n' "$HOOK_NAME" "$MODE" >&2
   exit 0
 fi
 
