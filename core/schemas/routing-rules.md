@@ -36,13 +36,15 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 
 | Confidence | Threshold | Action |
 |-----------|-----------|--------|
-| High | ≥90% | Auto-route. No approval for 05/06/08 folders. Approval required for 01-04, 07. |
+| High | ≥90% | Auto-route. No approval for the transient/evidence bins (`_inbox/`, `_generated/`, `4-Evidence/`). Approval required for `1-Governance`, `2-Delivery`, `3-Operations`, `5-Reference`. |
 | Medium | 60-89% | Propose route with reasoning. User confirms or corrects. |
-| Low | <60% | Route to 08-Generated/_unclassified/. Add to unclassified queue. |
+| Low | <60% | Route to `_inbox/_unsorted/`. Add to unclassified queue. |
+
+> **ADR-080 taxonomy note (union-aware migration window).** Routing targets below are the **new closed 5-bin set** (`1-Governance`, `2-Delivery`, `3-Operations`, `4-Evidence`, `5-Reference` + transient `_inbox`/`_generated`). Legacy `01-08`-taxonomy projects remain valid during the migration window; the file-router wave (single-inbox intake) reconciles the sub-folder cadence and unclassified-queue mechanics against the closed set (transcript cadence sub-folders flatten to `4-Evidence/Transcripts/` — the closed set has no per-cadence transcript sub-folders).
 
 ## File Classification Rules
 
-### Transcripts (→ 05-Transcripts/)
+### Transcripts (→ 4-Evidence/Transcripts/)
 
 | Pattern | Sub-folder | Confidence Boost | Content Indicators |
 |---------|-----------|-----------------|-------------------|
@@ -56,16 +58,16 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 | Content: "Transcription Export" suffix | (determine from content) | +25% | Sembly export format |
 | Default transcript (no pattern match) | Topic-Sessions/ | — | Fallback for transcripts |
 
-### Emails (→ 06-Emails/ or 06-Comms-Digests/)
+### Emails (→ 4-Evidence/Emails/)
 
 | Pattern | Target | Confidence | Content Indicators |
 |---------|--------|-----------|-------------------|
-| Filename: `FW_*` or `RE_*` | 06-Emails/ | High | Forwarded/replied email |
-| Filename: `QA*UAT*status*` (PDF) | 06-Emails/ | High | QA/UAT status report email |
-| Content: From:/To:/Subject: headers | 06-Emails/ | +25% | Email format |
-| Content: Daily digest format | 06-Comms-Digests/ | +25% | End-of-day summary |
+| Filename: `FW_*` or `RE_*` | 4-Evidence/Emails/ | High | Forwarded/replied email |
+| Filename: `QA*UAT*status*` (PDF) | 4-Evidence/Emails/ | High | QA/UAT status report email |
+| Content: From:/To:/Subject: headers | 4-Evidence/Emails/ | +25% | Email format |
+| Content: Daily digest format | 4-Evidence/Emails/ | +25% | End-of-day summary (comms digest) |
 
-### Design Documents (→ 02-Design/)
+### Design Documents (→ 2-Delivery/Design/)
 
 | Pattern | Sub-folder | Confidence | Content Indicators |
 |---------|-----------|-----------|-------------------|
@@ -74,7 +76,7 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 | Filename: `*Process Flow*` | Process Flows/ | High | Flow diagrams, swim lanes |
 | Content: Training objectives, learning | Training/ | +20% | Training material |
 
-### Governance (→ 01-Governance/)
+### Governance (→ 1-Governance/)
 
 | Pattern | Confidence | Content Indicators |
 |---------|-----------|-------------------|
@@ -83,15 +85,15 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 | Filename: `*Decision Deck*` | High | Decision log or deck |
 | Content: Phase gates, milestones, approval workflow | +20% | Governance document |
 
-### Testing (→ 03-Testing/)
+### Testing (→ 2-Delivery/Testing/)
 
 | Pattern | Sub-folder | Confidence | Content Indicators |
 |---------|-----------|-----------|-------------------|
-| Jira export (CSV with Key, Summary, Status columns) | Jira Export/ | High | Jira data structure |
+| Jira export (CSV with Key, Summary, Status columns) | (root; raw data pulls → `4-Evidence/Exports/`) | High | Jira data structure |
 | Filename: `*Test Plan*` or `*Test Exit*` | (root) | High | Test documentation |
 | Content: Test case IDs, steps, expected/actual | (root) | +20% | Test artifact |
 
-### Reference (→ 07-Reference/)
+### Reference (→ 5-Reference/)
 
 | Pattern | Confidence | Content Indicators |
 |---------|-----------|-------------------|
@@ -99,12 +101,12 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 | Content: Step-by-step procedure, operational guide | +15% | Reference material |
 | Filename: `*Glossary*` or `*Key Terms*` | High | Terminology reference |
 
-### Change Management (→ 02-Design/Training/ or 01-Governance/)
+### Change Management (→ 2-Delivery/Design/ or 1-Governance/)
 
 | Pattern | Target | Confidence | Content Indicators |
 |---------|--------|-----------|-------------------|
-| Content: Impact assessment, role impact matrix | 02-Design/ | +20% | Change management artifact |
-| Content: Training plan, hypercare | 02-Design/Training/ | +20% | Training/readiness |
+| Content: Impact assessment, role impact matrix | 1-Governance/Change-Management/ | +20% | Change management artifact |
+| Content: Training plan, hypercare | 2-Delivery/Design/ | +20% | Training/readiness |
 
 ## Special Rules
 
@@ -112,7 +114,7 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 When a transcript shows only one speaker but content references multiple viewpoints, decisions by different people, or uses "we discussed" / "the team agreed" → Flag as [SINGLE-SOURCE RECORDING]. Extract participants from content mentions, not speaker attribution.
 
 ### Unclassified Queue Management
-Files in 08-Generated/_unclassified/:
+Files in `_inbox/_unsorted/`:
 - Queue file lists each item with: filename, attempted classification, why confidence was low
 - User reviews periodically (prompted during daily processing)
 - Each correction → proposed routing rule update

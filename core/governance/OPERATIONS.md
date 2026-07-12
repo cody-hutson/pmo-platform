@@ -43,7 +43,7 @@ The PMO skill suite consists of 16 production skills. Each skill has a defined s
 | **Skill Editor** (Meta) | Suite Maintenance | — (direct invoke) | Edit, audit, regression-test skills. Maintains skill definitions and cross-skill protocols. Does NOT process project artifacts. |
 | **Project Initiator** (Automation) | Project Lifecycle | — (direct invoke) | Scaffolds new projects from template. Closes completed projects. Updates PORTFOLIO.md. Does NOT process project artifacts. |
 | **File Router** (Automation) | File Classification | — (on file intake) | Classifies and routes files to correct project folder. Does NOT process file content. |
-| **Tracker Manager** (Automation) | Update Engine | — (on Document Tier 2 approval) | Generic update engine for operational artifacts in 04-PMO-Operations/. Validates against schemas. Does NOT generate new artifacts. |
+| **Tracker Manager** (Automation) | Update Engine | — (on Document Tier 2 approval) | Generic update engine for operational artifacts in 3-Operations/. Validates against schemas. Does NOT generate new artifacts. |
 | **Artifact Generator** (Automation) | Production Engine | — (on demand or gap detection) | Produces/stages missing artifacts in 08-Generated/. Does NOT promote files to target folders or update trackers. |
 | **Release Planner** (Automation) | Release Planning Engine | — (direct invoke) | Analyzes IMP backlog, maps dependencies, suggests release bundles, generates release plan files, produces dry-run diffs. Read-only — never modifies governance files. Handles RELEASE_PROTOCOL.md Steps 1-5. |
 | **Release Executor** (Automation) | Release Execution Engine | — (direct invoke) | Executes approved release plans: snapshots, file changes, IMP closure, RELEASE_LOG updates, post-release verification, rollback. Requires approved plan with Dry-Run Record. Handles RELEASE_PROTOCOL.md Steps 6-9. |
@@ -211,7 +211,7 @@ Same as CLAUDE.md, plus PMO-specific:
 - **Day-of-week validation:** Always validate: "March 18 (Tuesday)" not "March 18."
 - **No generalized dates:** All project dates in communications and status outputs must be specific and verified. Never substitute a vague range ("week of April 6") for a specific date ("April 2, Thursday"). When sources conflict, surface the conflict — don't paper over it with generalization.
 - **Write-first-speak-second:** All file changes follow: plan → user approves → write → confirm. Never report "tracker updated" or "file written" until the write has succeeded. If a write fails, report the failure. No file is modified without prior user approval; no completion is reported without prior file modification. Write sequences follow the Document Tier defined in CLAUDE.md File Management Protocol. Operational trackers (Document Tier 2) are auto-written after processing — do not wait for explicit write instructions. Stakeholder-facing documents (Document Tier 1) require user approval before writing.
-- **Project-scoped output:** All generated artifacts must route to the active project's 01-08 folder structure or its 08-Generated/ staging area. Active project = the project whose PROJECT.md is loaded. If ambiguous, ask the user. Governance files at projects/ root are exempt.
+- **Project-scoped output:** All generated artifacts must route to the active project's closed 5-bin structure (`1-Governance`…`5-Reference`; legacy `01-08` during the ADR-080 migration window) or its `_generated/` staging area. Active project = the project whose PROJECT.md is loaded. If ambiguous, ask the user. Governance files at projects/ root are exempt.
 - **No ungoverned changes:** Any modification to governance files, skills, folder structure, or protocols requires a GitHub Issue via `improvement.yml` template (any category label per `label-taxonomy.md`) + implementation plan + user approval before execution. Self-generated improvements are logged only — do not attempt to resolve unless the user requests it. See "Continuous Improvement Protocol" below.
 
 ### Continuous Improvement Protocol
@@ -797,50 +797,40 @@ All projects follow this structure. Do NOT create project-specific subfolders ou
 All PMO operational skills operate within Layer 2 (Operations domain — `projects/` and its subfolders). Skills that write operational data — trackers, status logs, transcripts, generated artifacts — must target Layer 2 paths exclusively. No operational skill may modify Layer 1 files (`CLAUDE.md`, `core/`/`operations/`/`release/`, `.claude/settings.json`, `.claude/rules/`) without an approved IMP entry and a release executed through RELEASE_PROTOCOL.md. Bridge files (Layer 3) follow their dual-ownership rules defined in CLAUDE.md "Platform vs. Working Content Boundary."
 
 ```
-[Project Name]/
-├── PROJECT.md                              ← Transient state: phase, people, dates
-├── 01-Governance/
-│   ├── Charter
-│   ├── Kickoff Notes
-│   ├── Stakeholder Map
-│   ├── Cutover Plans
-│   ├── Communication Plans/                    ← Stakeholder comm plans, escalation protocols
-│   └── Change-Management/                     ← Impact assessments, readiness, go/no-go, hypercare
-├── 02-Design/
-│   ├── FDDs/                               ← Functional Design Documents
-│   ├── Process Flows/
-│   ├── Training/                              ← Project-authored training plans and materials
-│   └── Architectures/
-├── 03-Testing/
-│   ├── Jira Export/                        ← test exports, ticket snapshots
-│   ├── Test Plans/
-│   └── Test Results/
-├── 04-PMO-Operations/                      ← Operational artifacts live here
+[Project Name]/                             ← Uniform closed 5-bin set (ADR-080) — identical for every project
+├── PROJECT.md                              ← Born entity frontmatter + composed-index dashboard
+├── _inbox/                                 ← Single intake drop point (transient)
+│   └── _unsorted/                          ← Low-confidence / non-fitting items, flagged
+├── _generated/                             ← AI-generated staging (transient)
+│   └── _archived/                          ← Auto-Archive sweep target
+├── 1-Governance/                           ← Charters, plans, SOWs, approvals, comm plans
+│   ├── Change-Management/                  ← Impact assessments, readiness, go/no-go, hypercare
+│   └── Cutover/                            ← Cutover/go-live plans and checklists
+├── 2-Delivery/
+│   ├── Requirements/
+│   ├── Design/                             ← FDDs, process flows, architecture, training materials
+│   └── Testing/                            ← Test plans, scripts, QA/UAT results, test exports
+├── 3-Operations/                          ← Operational artifacts live at this bin's root
+│   ├── Reports/                            ← Status reports, roll-ups
 │   ├── [Project]_Daily_Status_Log.md
 │   ├── [Project]_Communications_Tracker.md
 │   ├── [Project]_Open_Meetings_Tracker.md
 │   ├── [Project]_Transcript_Register.md
 │   ├── [Project]_Daily_Status_Update_Framework.md
 │   ├── Executive_Status_Report_Prompt.md
-│   ├── [Project]_RAID_Log.csv
-│   └── Key Terms Glossary.csv
-├── 05-Transcripts/
-│   ├── Daily-Connects/                     ← YYYY-MM-DD.txt
-│   ├── AM-Testing/                         ← YYYY-MM-DD.txt
-│   ├── PM-Testing/                         ← YYYY-MM-DD.txt
-│   ├── Weekly-Status/                      ← Weekly reports
-│   ├── Touch-Base/                         ← Ad-hoc sync notes
-│   └── Topic-Sessions/                     ← Focused deep-dives
-├── 06-Emails/                              ← Raw emails, Teams messages, provided comms (reference archive)
-│   └── (Raw files: forwarded emails, Teams messages, QA status PDFs, comms digests)
-├── 07-Reference/
-│   ├── SOPs/
-│   ├── Runbooks/
-│   ├── Vendor Documentation/                  ← Vendor guides, system manuals, external training
-│   └── Historical Artifacts/
-└── 08-Generated/
-    └── _unclassified/                      ← Staging area for auto-generated artifacts
+│   ├── [Project]_RAID_Log.csv  (+ .csv.meta.yml sidecar)
+│   └── Key Terms Glossary.csv  (+ .csv.meta.yml sidecar)
+├── 4-Evidence/                            ← Raw evidence archive — never modified after filing
+│   ├── Transcripts/                        ← Meeting recordings and transcriptions
+│   ├── Emails/                             ← Forwarded emails, Teams exports, comms digests, QA status PDFs
+│   └── Exports/                            ← Jira/system exports, raw data pulls
+└── 5-Reference/                           ← External reference material not authored here
+    ├── SOPs/
+    ├── Runbooks/
+    └── Vendor-Docs/                        ← Vendor guides, system manuals, external training
 ```
+
+**ADR-080 taxonomy note (union-aware migration window).** The tree above is the **uniform closed 5-bin set** scaffolded for every new project (`project-initiator` Mode A), identical regardless of `delivery_approach`. The set is **CLOSED**: agents route into these bins, never create new ones; a non-fitting item goes to the bin root or `_inbox/_unsorted/`, flagged. During the migration window the legacy `01-08` taxonomy remains **valid** (existing projects are not migrated — deferred); enum-validating consumers accept the union `{legacy 01-08, new 1-Governance…5-Reference + _inbox/_generated}` per [`../schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 6. The `08-Generated/`→`_generated/` staging behavioral migration (artifact-generator promotion + generated-cleanup) lands with the artifact-generator wave; references to `08-Generated/` in the promotion/cleanup sections below are legacy-valid until that wave converges them.
 
 **Naming:** Folder and file names follow [`../standards/artifact-naming-standard.md`](../standards/artifact-naming-standard.md) — the single canonical naming home (POSIX-safe charset, `_` segment separator, `-`-joined one-segment type slug, optional trailing ISO-8601 date, lowercase extension; the `_`-prefix is RESERVED for sanctioned infrastructure folders such as `_config/` / `_pmo/` and staging `_`-subfolders). `project-initiator` enforces folder names against that standard at scaffold time.
 
@@ -850,22 +840,23 @@ Route files by **content function**, not by format or keyword match. When a file
 
 **Routing authority:** File Router (`file-router/references/routing-patterns.md`) is the single source of truth for classification patterns and routing rules. This section defines folder purpose — what belongs where and why. File Router implements the mechanics — how files get there.
 
+Folder purposes for the closed 5-bin set (ADR-080). Legacy `01-08` bins map per the tree note above and remain valid during the migration window.
+
 | Folder | Purpose |
 |--------|---------|
-| **01-Governance/** | Project-level governance and change control: charters, project plans, SOWs, approval records, cutover/go-live plans, communication plans, stakeholder maps, change management artifacts (impact assessments, readiness checklists, go/no-go criteria, hypercare plans, adoption tracking) |
-| **02-Design/** | Functional and technical design: FDDs, process flows, architecture docs, project-authored training plans and materials |
-| **03-Testing/** | Test execution and quality assurance: test plans, test scripts, defect exports, QA/UAT results, test-related Jira exports |
-| **04-PMO-Operations/** | Skill-managed operational artifacts (see Operational Artifacts table for authoritative list). Document Tier classification governs approval requirements regardless of folder placement |
-| **05-Transcripts/** | Meeting recordings and transcriptions, organized by meeting type subfolder. Raw evidence — never modified after filing |
-| **06-Emails/** | Communication evidence archive: forwarded emails, Teams message exports, comms digests. Raw evidence — decision records extracted from emails belong in Governance |
-| **07-Reference/** | External reference material not authored by this project: vendor documentation, SOPs, standards, glossaries |
-| **08-Generated/** | Claude-generated artifacts staged for promotion. Temporary — promoted to target folder on user approval, auto-archived after 10 business days. Staged artifact filenames conform to [`../standards/artifact-naming-standard.md`](../standards/artifact-naming-standard.md) (charset, `_` separator, `-`-joined one-segment type slug, ISO-8601 date, lowercase extension) |
+| **1-Governance/** | Project-level governance and change control: charters, project plans, SOWs, approval records, cutover/go-live plans (Cutover/), communication plans, stakeholder maps, change management artifacts (Change-Management/ — impact assessments, readiness checklists, go/no-go criteria, hypercare plans, adoption tracking) |
+| **2-Delivery/** | Requirements, functional/technical design, and testing: FDDs, process flows, architecture docs, project-authored training materials (Design/); test plans, test scripts, defect exports, QA/UAT results, test-related Jira exports (Testing/); requirements (Requirements/) |
+| **3-Operations/** | Skill-managed operational artifacts at the bin root (see Operational Artifacts table for authoritative list) plus Reports/. Document Tier classification governs approval requirements regardless of folder placement |
+| **4-Evidence/** | Raw evidence archive — never modified after filing: meeting transcriptions (Transcripts/); communication evidence — forwarded emails, Teams exports, comms digests, QA status PDFs (Emails/); system/Jira exports and raw data pulls (Exports/). Decision records extracted from evidence belong in Governance |
+| **5-Reference/** | External reference material not authored by this project: vendor documentation (Vendor-Docs/), SOPs, runbooks, standards, glossaries |
+| **`_inbox/`** | Single intake drop point (transient). Low-confidence / non-fitting items land in `_unsorted/`, flagged for the operator |
+| **`_generated/`** | Claude-generated artifacts staged for promotion (transient). Promoted to target bin on user approval, auto-archived after 10 business days to `_archived/`. Staged artifact filenames conform to [`../standards/artifact-naming-standard.md`](../standards/artifact-naming-standard.md) (charset, `_` separator, `-`-joined one-segment type slug, ISO-8601 date, lowercase extension). Legacy `08-Generated/` during the migration window (behavioral migration lands with the artifact-generator wave) |
 
-**Records management:** Retention period, classification class (vital / important / reference / transient), disposition rule, and authenticity markers for every folder above are governed by the records-management policy — [`RECORDS_POLICY.md`](RECORDS_POLICY.md) (disposition moves are logged to [`RECORDS_ARCHIVE_LOG.md`](RECORDS_ARCHIVE_LOG.md)). The `08-Generated/` 10-business-day auto-archive named here is that policy's Transient-class disposition trigger.
+**Records management:** Retention period, classification class (vital / important / reference / transient), disposition rule, and authenticity markers for every folder above are governed by the records-management policy — [`RECORDS_POLICY.md`](RECORDS_POLICY.md) (disposition moves are logged to [`RECORDS_ARCHIVE_LOG.md`](RECORDS_ARCHIVE_LOG.md)). The `_generated/` (legacy `08-Generated/`) 10-business-day auto-archive named here is that policy's Transient-class disposition trigger.
 
-**Operational override principle:** Documents listed in the Operational Artifacts table reside in 04-PMO-Operations/ regardless of where standard PMO taxonomy would place them. Their Document Tier classification (Document Tier 1 or Document Tier 2) maintains the appropriate governance oversight. The Operational Artifacts table is the authoritative list — this section does not enumerate its contents.
+**Operational override principle:** Documents listed in the Operational Artifacts table reside in `3-Operations/` regardless of where standard PMO taxonomy would place them. Their Document Tier classification (Document Tier 1 or Document Tier 2) maintains the appropriate governance oversight. The Operational Artifacts table is the authoritative list — this section does not enumerate its contents.
 
-**Ambiguity rule:** When a file's content serves multiple purposes (e.g., a Jira export that contains both project plan milestones and test case data), route by primary function. A project plan exported from Jira routes to 01-Governance/ even though it's a Jira CSV. A test-specific export routes to 03-Testing/. When genuinely ambiguous, File Router presents both options to the user.
+**Ambiguity rule:** When a file's content serves multiple purposes (e.g., a Jira export that contains both project plan milestones and test case data), route by primary function. A project plan exported from Jira routes to `1-Governance/` even though it's a Jira CSV. A test-specific export routes to `2-Delivery/Testing/`. When genuinely ambiguous, File Router presents both options to the user.
 
 ---
 
@@ -944,7 +935,7 @@ Every major folder carries a `README.md` so contributors and agents get cold-sta
 
 ---
 
-## Operational Artifacts (04-PMO-Operations/)
+## Operational Artifacts (3-Operations/)
 
 These are living documents. Update cadence and ownership are defined below.
 
@@ -988,9 +979,9 @@ Per-project artifact configuration management is held in the **Artifact Register
 
 The workspace follows a two-layer model for all incoming content:
 
-**Layer 1 — Raw archive:** Source material stored in its original form (05-Transcripts/ for recordings, 06-Emails/ for correspondence). The archive is the evidence store — never deleted, never modified.
+**Layer 1 — Raw archive:** Source material stored in its original form (`4-Evidence/Transcripts/` for recordings, `4-Evidence/Emails/` for correspondence). The archive is the evidence store — never deleted, never modified.
 
-**Layer 2 — Summary tracker:** Operational trackers in 04-PMO-Operations/ extract, structure, and lifecycle-manage the actionable content from raw archives. The tracker is the operational view.
+**Layer 2 — Summary tracker:** Operational trackers in `3-Operations/` extract, structure, and lifecycle-manage the actionable content from raw archives. The tracker is the operational view.
 
 **Rule for new content types:** When a new content type enters the workspace, it must have either: (a) a dedicated summary tracker with a defined schema in tracker-schemas.md, or (b) an explicit exemption. Content types are exempt from dedicated tracking when a live external system (Jira MCP, Confluence MCP) provides real-time access to the same data — the raw file serves as a point-in-time offline reference only.
 
@@ -1126,34 +1117,34 @@ The Transcript Processing Protocol is a registered consumer of the [Context Life
 
 **Note:** These are simplified filename patterns. For authoritative content-based classification, see `file-router/references/routing-patterns.md` (the routing authority per Folder Routing Guidelines).
 
-Classify incoming files by pattern and route to correct folder. If pattern doesn't match, route to `05-Transcripts/Topic-Sessions/` or `07-Reference/` as fallback.
+Classify incoming files by pattern and route to correct folder (the ADR-080 closed 5-bin set). If pattern doesn't match, route to `_inbox/_unsorted/` as fallback. Transcript cadence sub-folders flatten to `4-Evidence/Transcripts/` under the closed set; the file-router wave finalizes the intake-classification mechanics.
 
 | Pattern | Route To | Owner |
 |---------|----------|-------|
-| `AM Testing YYYY-MM-DD.txt` | `05-Transcripts/AM-Testing/` | File Router |
-| `PM Testing YYYY-MM-DD.txt` | `05-Transcripts/PM-Testing/` | File Router |
-| `Daily Connect YYYY-MM-DD.txt` | `05-Transcripts/Daily-Connects/` | File Router |
-| `*Weekly status Report*` | `05-Transcripts/Weekly-Status/` | File Router |
-| `*monday touch base*` (case-insensitive) | `05-Transcripts/Touch-Base/` | File Router |
-| `FW_*` or `RE:*` (email forwards) | `06-Emails/` | File Router |
-| `QA*UAT*status*` (PDF, case-insensitive) | `06-Emails/` | File Router |
-| `*Teams*` or `*teams message*` (case-insensitive) | `06-Emails/` | File Router |
-| User-provided email digests, screenshots, or comms | `06-Emails/` | File Router |
-| `FDD*` or `*Functional Design*` | `02-Design/FDDs/` | File Router |
-| `*Cutover*` or `*Go-Live*` | `01-Governance/` | File Router |
-| Jira export (`.csv` with test-case columns) | `03-Testing/Jira Export/` | File Router |
-| Other `.txt` transcripts | `05-Transcripts/Topic-Sessions/` | File Router |
-| `SOP`, `runbook` | `07-Reference/` | File Router |
-| `training*` (project-authored) | `02-Design/Training/` | File Router |
-| `training*` (vendor/external) | `07-Reference/Vendor Documentation/` | File Router |
+| `AM Testing YYYY-MM-DD.txt` | `4-Evidence/Transcripts/` | File Router |
+| `PM Testing YYYY-MM-DD.txt` | `4-Evidence/Transcripts/` | File Router |
+| `Daily Connect YYYY-MM-DD.txt` | `4-Evidence/Transcripts/` | File Router |
+| `*Weekly status Report*` | `4-Evidence/Transcripts/` | File Router |
+| `*monday touch base*` (case-insensitive) | `4-Evidence/Transcripts/` | File Router |
+| `FW_*` or `RE:*` (email forwards) | `4-Evidence/Emails/` | File Router |
+| `QA*UAT*status*` (PDF, case-insensitive) | `4-Evidence/Emails/` | File Router |
+| `*Teams*` or `*teams message*` (case-insensitive) | `4-Evidence/Emails/` | File Router |
+| User-provided email digests, screenshots, or comms | `4-Evidence/Emails/` | File Router |
+| `FDD*` or `*Functional Design*` | `2-Delivery/Design/` | File Router |
+| `*Cutover*` or `*Go-Live*` | `1-Governance/Cutover/` | File Router |
+| Jira export (`.csv` with test-case columns) | `2-Delivery/Testing/` | File Router |
+| Other `.txt` transcripts | `4-Evidence/Transcripts/` | File Router |
+| `SOP`, `runbook` | `5-Reference/` | File Router |
+| `training*` (project-authored) | `2-Delivery/Design/` | File Router |
+| `training*` (vendor/external) | `5-Reference/Vendor-Docs/` | File Router |
 
 **Post-routing action:** "This file may trigger operational updates. Process through PPM Agent?"
 
-**Raw archive pattern:** 06-Emails/ stores raw source material (forwarded emails, Teams message exports, QA status PDFs) as a reference archive — the same pattern as 05-Transcripts/ for meeting recordings. Summary tracking and lifecycle management happens in 04-PMO-Operations/ via the Communications Tracker (MSG-## entries). When processing content from 06-Emails/, extract actionable items into the appropriate tracker — do not treat raw files as the tracking mechanism.
+**Raw archive pattern:** `4-Evidence/Emails/` stores raw source material (forwarded emails, Teams message exports, QA status PDFs) as a reference archive — the same pattern as `4-Evidence/Transcripts/` for meeting recordings. Summary tracking and lifecycle management happens in `3-Operations/` via the Communications Tracker (MSG-## entries). When processing content from `4-Evidence/Emails/`, extract actionable items into the appropriate tracker — do not treat raw files as the tracking mechanism.
 
-**Jira export routing note:** Project plan exports from Jira route to `01-Governance/` per Folder Routing Guidelines — route by content function, not file format. Only test-related Jira exports (test case data) route to `03-Testing/Jira Export/`.
+**Jira export routing note:** Project plan exports from Jira route to `1-Governance/` per Folder Routing Guidelines — route by content function, not file format. Only test-related Jira exports (test case data) route to `2-Delivery/Testing/`; raw data pulls route to `4-Evidence/Exports/`.
 
-**Training routing note:** Training material authorship determines routing: project-authored → `02-Design/Training/`, vendor/external → `07-Reference/Vendor Documentation/`. File Router determines authorship by content analysis.
+**Training routing note:** Training material authorship determines routing: project-authored → `2-Delivery/Design/`, vendor/external → `5-Reference/Vendor-Docs/`. File Router determines authorship by content analysis.
 
 ---
 

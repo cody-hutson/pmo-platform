@@ -47,6 +47,13 @@ The Daily Status Log is a carry-forward tracker organized by category. It is the
    - Deadline: When decision is needed
    - Status: PENDING / DEFERRED / MADE
    - Evidence: Source of the decision need
+   - `source_inputs`: (Optional; Array) Structured provenance back-link — the raw evidence this
+     decision was **extracted from**, as a list of `TR-###` / `MSG-###` / source-file-path tokens
+     (same token domain as [`frontmatter-schema.md`](frontmatter-schema.md) Category 3
+     `source_inputs`; see § Raw→Tracked Provenance). Written by tracker-manager on ADD, evidence-gated
+     (omit when no establishing source is recoverable — never guessed). Distinct from the free-text
+     `Evidence` field: `Evidence` narrates *why* the decision is needed; `source_inputs` is the
+     machine-resolvable reverse link to the raw artifact that the forward `GENERATES` edge points at.
    - Blocking: `true` / `false` (optional; default `false` when absent). Marks a **gating-class**
      decision (go/no-go, launch-sequence, and similar decisions that block project progress).
      Only `blocking: true` entries are subject to the Overdue-Decision Escalation Protocol
@@ -64,8 +71,18 @@ The Daily Status Log is a carry-forward tracker organized by category. It is the
 
 4. **Open Actions by Person** — Grouped by person. Each entry:
    - Person name (group header)
+   - ID: ACT-### (auto-incremented per tracker, consistent with BLK-###/DEC-###; **namespaced and
+     never reused**). This id is the stable anchor the raw→tracked `GENERATES` edge and the reverse
+     back-link resolve against — added so an extracted action is edge-addressable (a re-write never
+     reassigns it; see § Raw→Tracked Provenance).
    - Action: What they need to do
    - Source: Where the action was identified (transcript, meeting, email)
+   - `source_inputs`: (Optional; Array) Structured provenance back-link — the raw evidence this
+     action was **extracted from**, as a list of `TR-###` / `MSG-###` / source-file-path tokens
+     (same token domain as [`frontmatter-schema.md`](frontmatter-schema.md) Category 3
+     `source_inputs`; see § Raw→Tracked Provenance). Written by tracker-manager on ADD, evidence-gated
+     (omit when no establishing source is recoverable). The machine-resolvable reverse-link complement
+     to the free-text `Source` field.
    - Due: Date
    - Status: OPEN / IN PROGRESS / BLOCKED
    - Notes: Additional context
@@ -234,7 +251,7 @@ If any sentence has no content, use "None identified."
 
 ### Structure
 **Format:** CSV with two logical sections — Active Register and Archive.
-**Agent-native surface:** the machine-schema [`raid-log.schema.json`](raid-log.schema.json) — EAD-derived from the RAID Item entity — is the agent-native validation surface; the CSV above is its persistence *dialect*. The agent read/write path is native structured-instruction (no `csv` module on the agent path); `csv.DictReader` is the validator harness, not the agent path. The stakeholder-facing view (CSV export / Confluence) is produced on demand by **artifact-generator** via the [`dual-format-document-model.md`](../standards/dual-format-document-model.md) `raid-log--stakeholder-csv` translation map (per ADR-064) — not a bespoke export path. The 14-column schema below is unchanged.
+**Agent-native surface:** the machine-schema [`raid-log.schema.json`](raid-log.schema.json) — EAD-derived from the RAID Item entity — is the agent-native validation surface; the CSV above is its persistence *dialect*. The agent read/write path is native structured-instruction (no `csv` module on the agent path); `csv.DictReader` is the validator harness, not the agent path. The stakeholder-facing view (CSV export / Confluence) is produced on demand by **artifact-generator** via the [`dual-format-document-model.md`](../standards/dual-format-document-model.md) `raid-log--stakeholder-csv` translation map (per ADR-064) — not a bespoke export path. The **15-column** schema below (14 entity/legacy columns + the optional `source_ref` provenance **dialect** column) matches the schema-of-record [`raid-log.schema.json`](raid-log.schema.json); the entity surface is unchanged.
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
@@ -251,6 +268,7 @@ If any sentence has no content, use "None identified."
 | Date Closed | Date | No (required when Status = Closed) | YYYY-MM-DD | When the entry was resolved |
 | Closure Comments | String | No (required when Status = Closed) | Free text | How it was resolved, lessons learned |
 | Tags | String | No | Free text | Additional classification tags |
+| source_ref | String | No | `TR-###` \| `MSG-###` \| artifact `id`-slug \| source-file path | Structured provenance back-link — which transcript / message / artifact **established** this row (the reverse half of the raw→tracked bridge; see § Raw→Tracked Provenance). Same token domain as `source_inputs` in [`frontmatter-schema.md`](frontmatter-schema.md) Category 3. A schema **dialect** column (per [`raid-log.schema.json`](raid-log.schema.json)), NOT an EAD entity-projected column — the frozen RAID Item entity surface is not reopened. Optional: a row whose establishing source is unrecoverable carries **no** `source_ref` rather than a guessed one (never stuffed into `Tags`). |
 | Section | Enum | Yes | ACTIVE, ARCHIVE | Logical partition. ACTIVE = open items. ARCHIVE = closed items. |
 
 ### Active/Archive Rules
@@ -267,8 +285,8 @@ If any sentence has no content, use "None identified."
 
 ### Confluence Dual-Format Model
 The RAID Log maintains two representations:
-- **Local CSV (source of truth):** Full 14-column schema including RAID_ID, Date_Opened, Date_Closed, and Section. This is the operational version used by all skills for processing, querying, and lifecycle management.
-- **Confluence (stakeholder-facing):** Manually uploaded by the workspace owner. Excludes internal operational fields (RAID_ID, Date_Opened, Date_Closed, Section). Matches the stakeholder-visible format used before this schema overhaul.
+- **Local CSV (source of truth):** Full 15-column schema including RAID_ID, Date_Opened, Date_Closed, source_ref, and Section. This is the operational version used by all skills for processing, querying, and lifecycle management.
+- **Confluence (stakeholder-facing):** Manually uploaded by the workspace owner. Excludes internal operational fields (RAID_ID, Date_Opened, Date_Closed, source_ref, Section). Matches the stakeholder-visible format used before this schema overhaul.
 
 **Rules:**
 - All agent processing reads and writes the local CSV. Never reference RAID_IDs in stakeholder-facing output (chat summaries, status updates, meeting packages). Use descriptive references instead (e.g., "the ERP freeze window dependency" not "R-PPM-003").
@@ -392,6 +410,71 @@ The per-project **responsibility-assignment matrix** for the PMBOK 7 Stakeholder
 
 ### Accountability Rule (exactly one A)
 PMBOK/RACI discipline requires exactly one Accountable per workstream row. This is a documented convention checked at review (the platform has no RACI-specific machine validator — identical posture to the milestone-tracker gate rules, which are prose-enforced). A row violating it is flagged in review, not auto-rejected.
+
+---
+
+## Raw→Tracked Provenance
+
+Every **extracted** tracker entry (a decision, action, risk, or meeting derived from raw evidence)
+is linked back to the raw artifact it came from, and every raw artifact is linked forward to the
+entries it produced. This makes the raw→tracked relationship a **first-class, bidirectional,
+queryable bridge** rather than provenance that dies with the session. The bridge is **two
+coordinated half-edges** resolving against the entry's stable namespaced id.
+
+### The two half-edges
+
+| Direction | Carrier | Where it lives | Written by |
+|---|---|---|---|
+| **Forward** (raw → entries) | `relationships: [{type: GENERATES, target: <entry-id>, …}]` | the **raw artifact's** frontmatter / sidecar (the transcript / message) | the upstream extraction / processing agent (ppm-agent; the transcript-intake sweep) — per [`frontmatter-schema.md`](frontmatter-schema.md) § Relationship Edge Population |
+| **Reverse** (entry → raw) | `source_inputs[]` (markdown-tracker entries) · `source_ref` (RAID rows) | the **tracked entry** (a Daily Status Log `DEC-###`/`ACT-###` row; a RAID `source_ref` column) | **tracker-manager** on `ADD` |
+
+`GENERATES` is the SHIPPED Source→Product verb ([`frontmatter-schema.md`](frontmatter-schema.md)
+Relationship-Type table); its `target` resolves to the entry's stable id. This section **defines
+the contract**; the forward-edge emit shape and the corpus-wide edge-population rules are owned by
+`frontmatter-schema.md` § Relationship Edge Population and are **referenced, not restated** here.
+
+### Resolvable both directions
+
+- *From a raw artifact* → read its `relationships[] GENERATES` targets → the entry ids it produced.
+- *From a tracked entry* → read its `source_inputs` / `source_ref` → the `TR-###` / `MSG-###` /
+  source-file it was extracted from.
+
+Both resolve against the entry's **stable namespaced id** (`DEC-###` / `ACT-###` / `MTG-###`;
+RAID `R-[SKILL]-###`), which a tracker re-write never reassigns — renumbering would orphan every
+inbound edge and back-link.
+
+### Carrier split (do not unify the names)
+
+The reverse link uses **two carriers scoped by the entry's container**, and they are deliberately
+**not** unified into one field name:
+
+- **Markdown-tracker entries → `source_inputs[]`** — Array; value domain `TR-###` | `MSG-###` |
+  source-file path (identical to [`frontmatter-schema.md`](frontmatter-schema.md) Category 3
+  `source_inputs`). The new entry-schema field defined on Tracker 1 (Daily Status Log) above and
+  applicable to any extracted markdown entry.
+- **RAID rows → `source_ref`** — the SHIPPED scalar dialect column (Tracker 5 above). A CSV row has
+  no frontmatter, so its provenance is the dedicated `source_ref` field, **not** a `relationships[]`
+  edge — the [`frontmatter-schema.md`](frontmatter-schema.md) § Relationship Edge Population
+  **carrier exception**. Renaming `source_ref` → `source_inputs` would churn the frozen
+  [`raid-log.schema.json`](raid-log.schema.json) schema-of-record and the dual-format render path
+  for zero semantic gain; the carrier-scoped name is retained (same concept, container-scoped
+  carrier).
+
+Both are **evidence-gated**: an entry whose establishing source is not recoverable carries **no**
+back-link rather than a guessed one (unrecoverable provenance is logged as an orphan-candidate, per
+`frontmatter-schema.md` § Relationship Edge Population — never invented).
+
+### Aggregation source-of-truth
+
+The maintained **tracked (Domain-B) layer is the canonical input for status / rollup
+aggregations** — it is `trust_category: controlled-truth`, carries `entry_count` +
+`last_evidence_date`, and each entry carries its `source_inputs` / `source_ref`. Aggregations
+(daily status, weekly rollup) therefore **read the tracked layer and cite tracker entries + their
+provenance — they do NOT re-scan the raw transcripts**. Re-deriving a rollup from raw evidence
+would bypass the controlled-truth layer and re-introduce the un-cited, un-provenance'd aggregation
+this bridge exists to eliminate. (The write-side maintenance of this layer is
+`tracker-manager` § Domain-B Frontmatter Maintenance; the read-side enforcement is the consuming
+rollup skills' responsibility.)
 
 ---
 

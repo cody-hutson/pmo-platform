@@ -1,0 +1,22 @@
+# Bin manifest — orientation card for the 3-Operations project bin.
+# Copied per-project into <Project>/3-Operations/manifest.yml by project-initiator at scaffold time.
+# ORIENTATION ONLY: routing authority is operations/skills/file-router/SKILL.md
+# (+ references/routing-patterns.md). This manifest is a derived view — if it ever
+# disagrees with file-router, file-router wins.
+bin: 3-Operations
+primary_domain: managed
+auto_write: false            # approval-required bin (not an auto-write target)
+accepts:
+  - Operational trackers (daily status log, communications tracker, meetings tracker)
+  - Carry-forward and blocker tracking
+  - Status reports and rollups
+types:
+  - tracker
+  - status-log
+  - communications-log
+  - meetings-log
+  - report
+subfolders:
+  - Reports/         # status reports and rollups
+promotion_target: null       # terminal routing target; receives approved promotions from _generated/
+authority: operations/skills/file-router/SKILL.md

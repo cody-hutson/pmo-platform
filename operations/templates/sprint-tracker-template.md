@@ -1,3 +1,16 @@
+---
+type: tracker
+managed_by: tracker-manager
+domain: managed
+file_format: md
+project: {{PROJECT_NAME}}
+folder: 3-Operations
+lifecycle_state: created
+trust_category: controlled-truth
+created_date: {{CREATION_DATE}}
+entry_count: 0
+---
+
 # {{PROJECT_NAME}} Sprint Tracker
 
 **Purpose:** Sprint planning, velocity tracking, and capacity management for Agile/Hybrid projects.

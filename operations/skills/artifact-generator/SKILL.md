@@ -1,7 +1,7 @@
 ---
 name: artifact-generator
 description: >
-  Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in 08-Generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
+  Produces new or updated project artifacts — triggered by user request, PPM Agent gap detection, or phase gate requirements. Stages all output in _generated/ with metadata for user review before promotion. Triggers: "draft a", "create a", "generate a", "I need a", "prepare a", "what artifacts do I need", "spin up a", "I need the [artifact]."
 version: v2.29
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -19,7 +19,7 @@ so the TPM reviews finished work — not blank templates.
 
 You do three things:
 1. **Produce** artifacts that meet the principal contributor standard
-2. **Stage** them in 08-Generated/ with metadata so the user can review and promote
+2. **Stage** them in _generated/ with metadata so the user can review and promote
 3. **Integrate** with the skill suite — consuming PPM Agent gap detections, Tracker Manager
    state, and project context to produce artifacts grounded in evidence
 
@@ -44,7 +44,7 @@ Cowork `Skill` tool without an intervening user prompt.
 **Upstream invokers.** ppm-agent. No other skill invokes this skill as part of auto-cascade.
 
 **Allowlist trigger pair (C7).** PPM `[ARTIFACT_GAP]` + complete context → artifact-generator
-(08-Generated/ staging only). All generated artifacts stage in 08-Generated/ with
+(_generated/ staging only). All generated artifacts stage in _generated/ with
 `lifecycle_state: draft` (content-maturity, the `Artifact-DRAFT` entry state) + `promotion_state: staged`
 (promotion-location) on emit — promotion to the target folder still requires explicit user approval.
 The auto-cascade produces the staged draft; it does not promote.
@@ -60,7 +60,7 @@ schema):
 | `target_skill` | Self-identification — verify it matches `artifact-generator` |
 | `what` | Artifact type + target folder + reason for generation |
 | `evidence_quality` | Upstream confidence label — sets metadata `confidence: HIGH/MEDIUM/LOW` |
-| `cascade_scope` | Authorization scope (always `08-Generated/` for auto-cascade) |
+| `cascade_scope` | Authorization scope (always `_generated/` for auto-cascade) |
 | `cascade_depth_remaining` | Depth budget (C1); decrement on invocation |
 | `deadline` | Phase-gate deadline or required-by date |
 
@@ -74,7 +74,7 @@ schema):
 3. **Flag, don't ask** — if the artifact type is ambiguous between catalog entries, select
    the closest match and flag the selection in the metadata header (`confidence: MEDIUM` with
    a note). Do not ask the user to disambiguate.
-4. **Respect `cascade_scope`** — auto-cascade always stages in 08-Generated/. Do not promote
+4. **Respect `cascade_scope`** — auto-cascade always stages in _generated/. Do not promote
    to the target folder regardless of chain context — promotion is a user-approval action (C4).
 5. **Specialist routing preserved** — when the catalog lists a specialist skill for the
    artifact type, the chained invocation still routes through that specialist's output
@@ -119,7 +119,7 @@ Flow) produces an artifact *from scratch* from a trigger. **Wrapper Mode** inges
 *already-produced external* artifact — an Anthropic-skill output (per the
 [artifact-skill routing decision tree](../../../core/standards/artifact-skill-routing.md)),
 or a user upload — and runs only the PMO orchestration tail: prepend a metadata header,
-stage in 08-Generated/, present for review. **Wrapper Mode makes no runtime Anthropic
+stage in _generated/, present for review. **Wrapper Mode makes no runtime Anthropic
 call** — the Anthropic skill ran separately, before; the wrapper touches inert content.
 This is categorically distinct from a runtime `extends` coupling; the sourcing posture
 stays `independent` per [ADR-023](../../../core/ADRs/ADR-023-skill-sourcing-coupling-posture.md).
@@ -156,7 +156,7 @@ source_origin: <e.g. "Anthropic engineering/documentation" | "user upload: runbo
 dependencies: <source artifact + related project artifacts>   # SAME field; carries the external source ref (non-empty)
 reversibility: CHEAP | MODERATE | EXPENSIVE | IRREVERSIBLE     # SAME field (already required by SG-3)
 lifecycle_state: draft                         # content-maturity (Domain C); Wrapper Mode stamps the Artifact-DRAFT entry state
-promotion_state: staged                        # promotion-location; Wrapper Mode stages in 08-Generated/ and is NEVER promoted on ingest
+promotion_state: staged                        # promotion-location; Wrapper Mode stages in _generated/ and is NEVER promoted on ingest
 ---
 ```
 
@@ -191,7 +191,7 @@ if it recurs.
 
 Before producing anything, read:
 1. **PROJECT.md** — Current phase, governance model, stakeholders, systems, dates
-2. **Relevant operational trackers** in 04-PMO-Operations/ — Current state of carry-forward,
+2. **Relevant operational trackers** in 3-Operations/ — Current state of carry-forward,
    open actions, pending decisions
 3. **Source artifacts** — Whatever triggered the need (transcript, Jira export, previous
    processing output)
@@ -217,7 +217,7 @@ No template language. If information is missing, use `ASSUMPTION – CONFIRM: [p
 with a basis for the assumption.
 
 **Dual output**: Produce both:
-1. A markdown file for the workspace (saved to 08-Generated/)
+1. A markdown file for the workspace (saved to _generated/)
 2. A copy/paste block formatted for the target system (Confluence, Teams, email) if applicable
 
 **Dual-Framing Bridge** (conditional): If PROJECT.md shows `dual_framing_enabled: true`, produce dual
@@ -226,9 +226,9 @@ framing where relevant — agile language for the PMO view, waterfall language f
 **Guardrails**: All OPERATIONS.md guardrails apply. No status theater, no invention, no task
 dumping, no passive risk voice, validate day-of-week on all dates.
 
-### Step 5: Stage in 08-Generated/
+### Step 5: Stage in _generated/
 
-Save the artifact to the project's `08-Generated/` folder with a metadata header. A generated
+Save the artifact to the project's `_generated/` folder with a metadata header. A generated
 artifact carries **two orthogonal state fields**: `lifecycle_state:` carries the artifact's
 **content-maturity** on the canonical Domain-C machine (`draft → validated → published → stale
 → archived`, defined at `core/schemas/frontmatter-schema.md` § Category 2), and `promotion_state:`
@@ -236,7 +236,7 @@ carries the artifact's **promotion-location** — where the file physically sits
 → archived-in-place`, defined at `core/schemas/frontmatter-schema.md` § Domain C). The two vary
 independently (a `published` artifact may still be `staged`). Both **default to their entry values
 on every freshly generated artifact**: `lifecycle_state: draft` (the `Artifact-DRAFT` content
-entry) + `promotion_state: staged` — consistent with the 08-Generated staging convention where a
+entry) + `promotion_state: staged` — consistent with the _generated staging convention where a
 generated artifact is a draft on emit and is promoted only on approval. The operational protocol
 (the two-concern model, the `promotion_state` field, the legal transitions, and the deprecation of
 the legacy single-field Artifact Workflow machine in favor of this `lifecycle_state` + `promotion_state`
@@ -251,11 +251,15 @@ states are reached only through the governed transitions a human or a downstream
 ```markdown
 ---
 artifact_type: [catalog entry name]
-target_folder: [destination path, e.g., 01-Governance/]
+target_folder: [destination path, e.g., 1-Governance/]
 confidence: HIGH | MEDIUM | LOW
 created: [YYYY-MM-DD]
 source: [what triggered this — user request, ARTIFACT_GAP tag, transcript processing, etc.]
 dependencies: [other artifacts this relates to, if any]
+domain: generated
+generated_by: artifact-generator v<semver>
+source_inputs: [TR-### / MSG-### / source-file paths this synthesis drew from]
+trigger_source: [the event or file that prompted generation]
 lifecycle_state: draft
 promotion_state: staged
 ---
@@ -280,13 +284,15 @@ this skill generates carries the two Category-3 provenance markers defined at
   `synthesis_scope` alias.** Where a prior run would have written `synthesis_scope`, write
   `source_inputs` (the alias keeps old reads valid during the migration window). `trigger_source`
   (what *triggered* the run) stays distinct and is still emitted.
-- **Missing-header → regenerate-with-header.** If an artifact is found in `08-Generated/`
+- **Missing-header → regenerate-with-header.** If an artifact is found in `_generated/`
   **without** the provenance markers (a pre-policy artifact, or one another path emitted without
   them), do not silently hand it back: **regenerate it with the full provenance header**
   (`generated_by` + `source_inputs` alongside the existing `lifecycle_state`/`promotion_state`
   block) rather than promoting a header-less artifact. This is the forward-only enforcement edge
   — the policy never back-fills historical artifacts in place, but any artifact this skill touches
   on a fresh write gets the markers.
+
+**Domain-C origin + trigger stamp (`domain: generated` + `trigger_source`) — the rest of the live stamp set.** Beyond the two Category-3 provenance markers above, every generated artifact also carries the two Domain-C identity fields shown in the Step-5 template: `domain: generated` (the origin classification — emit the live value `generated`, never the deprecated alias `C`; per `core/schemas/frontmatter-schema.md` § Category 6) records that the artifact is agent-synthesized, and **it survives promotion** (see Promotion Workflow — a promoted artifact stays queryable as `domain: generated`); `trigger_source` (per § Domain C) records *what triggered* the run (the event/file that prompted generation), distinct from `source_inputs` (*what evidence* it drew from). These four — `domain: generated`, `generated_by`, `source_inputs`, `trigger_source` — are the complete Domain-C provenance stamp; the Step-5 emit template shows all four so the header the skill writes matches what the schema mandates.
 
 **File naming convention**: generated-artifact filenames conform to [`../../../core/standards/artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md) — the single canonical home for charset, the `_` segment separator, the `-`-joined one-segment type slug drawn from the controlled type vocabulary, the optional trailing ISO-8601 date, and the lowercase extension. The shape is `[ProjectCode]_[Type]_[…]_[YYYY-MM-DD].ext`.
 - Example: `ABC_FDD-Review_FDD002_2026-03-18.md`
@@ -317,7 +323,7 @@ here):
 | B (Managed Knowledge) | `created` (emerging once first updated) | `Artifact-created` |
 | C (Synthesized Intelligence) | `draft` | `Artifact-draft` |
 
-Generated artifacts staged in `08-Generated/` are **Domain C**, so the canonical entry is
+Generated artifacts staged in `_generated/` are **Domain C**, so the canonical entry is
 `lifecycle_state: draft` (`Artifact-draft`) + `promotion_state: staged` — exactly the stamp
 emitted in Step 5 above. The two fields stay orthogonal: `lifecycle_state` carries
 content-maturity, `promotion_state` carries location.
@@ -356,9 +362,9 @@ lifecycle-emission-on-create using the canonical `lifecycle_state` + Domain spli
 revive or re-stamp the deprecated single-field machine.
 
 **Autonomy Tier.** Setting the entry state is **Autonomy Tier 2** — it rides the existing
-auto-write authorization for staging output in `08-Generated/` within that declared directory
+auto-write authorization for staging output in `_generated/` within that declared directory
 boundary (`core/specs/autonomy-tiers.md` § Tier 2: "artifact-generator stages all output in
-08-Generated/"). The entry-state stamp is part of that same Tier-2 staging write — **never
+_generated/"). The entry-state stamp is part of that same Tier-2 staging write — **never
 Autonomy Tier 0** (no governance file is touched).
 
 ### Step 6: Present for Review
@@ -369,7 +375,7 @@ After staging, present a summary to the user:
 ARTIFACT STAGED: [artifact name]
   Mode: WRAPPER (external artifact ingested) | GENERATE (produced from [trigger])
   Type: [catalog entry]
-  Location: 08-Generated/[filename]
+  Location: _generated/[filename]
   Target: [destination folder]
   Confidence: [HIGH/MEDIUM/LOW]
   Source: [trigger]
@@ -377,9 +383,9 @@ ARTIFACT STAGED: [artifact name]
   Summary: [2-3 sentence description of what was produced and key findings]
 
   Actions available:
-  - PROMOTE: Move to target folder (removes metadata header)
+  - PROMOTE: Move to target folder (preserves the metadata header; sets promotion_state: promoted, updates folder)
   - REVISE: Provide feedback for revision
-  - REJECT: Delete from 08-Generated/
+  - REJECT: Delete from _generated/
 ```
 
 ## Dual-Format Rendering (translation-map execution)
@@ -388,7 +394,7 @@ You are the executor for the [Dual-Format Document Model](../../../core/standard
 when an artifact is dual-format (an agent-native source plus a stakeholder-facing rendering), you render
 the stakeholder view **from the source by applying its translation map** — never a bespoke, hand-written
 export path. This is the ADR-064 executor decision (artifact-generator, not comms-writer — you are the
-owning-agent creator of the Artifact entity and stage to 08-Generated/ for Tier-1 approval).
+owning-agent creator of the Artifact entity and stage to _generated/ for Tier-1 approval).
 
 To render a dual-format target:
 1. **Resolve the source.** Read the source-definition (`source.artifact`, `source.container`,
@@ -401,7 +407,7 @@ To render a dual-format target:
    Register row) onto the produced target — a metadata header for a staged file, or a recorded render date
    for an external target (e.g. Confluence). This is the drift key.
 4. **Stage for review.** A stakeholder view of a Tier-1 artifact (e.g. the RAID Log) stages to
-   `08-Generated/` and follows the Promotion Workflow — you propose, the user promotes; you do not modify a
+   `_generated/` and follows the Promotion Workflow — you propose, the user promotes; you do not modify a
    Tier-1 artifact directly.
 5. **Drift surfacing.** Drift is detected when the source's Artifact-Register `Last Updated` is newer than
    the target's render stamp (source changed, target not re-rendered) OR a target field violates the map's
@@ -415,19 +421,19 @@ on-demand stakeholder export via the map.
 ## Promotion Workflow
 
 When the user approves promotion:
-1. Remove the metadata header from the file
-2. Move the file from `08-Generated/` to the target folder
+1. **Preserve the metadata header** — do NOT remove it. Mutate ONLY: `promotion_state` → `promoted`; `folder` → the target bin; `lifecycle_changed` → today. Every provenance/lineage field (`domain`, `lifecycle_state`, `generated_by`, `source_inputs`, `trigger_source`, `id`, …) is retained, so the promoted artifact stays queryable as `domain: generated` (AC-3).
+2. Move the file from `_generated/` to the target folder
 3. If the artifact updates an existing file, present a diff summary
 4. Log the promotion in the change summary
 
 When the user rejects:
 1. If feedback provided → revise and re-stage
-2. If no feedback → delete from 08-Generated/
+2. If no feedback → delete from _generated/
 
 ## Auto-Archive Policy
 
-Files in 08-Generated/ that remain in `promotion_state: staged` (`Artifact-DRAFT` content) for
-more than 10 business days are automatically moved to `08-Generated/_archived/` (setting
+Files in _generated/ that remain in `promotion_state: staged` (`Artifact-DRAFT` content) for
+more than 10 business days are automatically moved to `_generated/_archived/` (setting
 `promotion_state: archived-in-place`, the location terminal) with a note. They can be recovered
 but are no longer surfaced in artifact health checks. This 10-business-day staging timeout is a
 *location* sweep — keyed on `promotion_state: staged` because the timeout concerns files sitting
@@ -444,7 +450,7 @@ When invoked for a health check (weekly scan or on demand), review:
 1. **Missing artifacts**: Required artifacts per governance model that don't exist
 2. **Stale artifacts**: Last-updated date more than 2 sprints (Agile) or 1 phase (Waterfall) old
 3. **Phase gate gaps**: Artifacts required for the next milestone that aren't started
-4. **Pending reviews**: Items in 08-Generated/ awaiting user action
+4. **Pending reviews**: Items in _generated/ awaiting user action
 5. **Zombie artifacts**: Artifacts unreferenced for more than 30 days — see the
    Zombie Detection step below
 6. **Lifecycle-debt artifacts**: Artifacts that are no longer current but still sit in a live
@@ -513,7 +519,7 @@ action, and the reversibility tier paired with a confidence level:
 
 When the register is empty, report it explicitly as `Documentation-debt register: none
 (no zombies, no no-longer-current-but-live artifacts)` — the honest no-debt signal — rather
-than omitting the section. The register is staged in 08-Generated/ like any other
+than omitting the section. The register is staged in _generated/ like any other
 generated artifact (`lifecycle_state: draft` + `promotion_state: staged`); it is the operator's
 worklist, not an automatic remediation.
 
@@ -534,7 +540,7 @@ worklist, not an automatic remediation.
 
 ## What This Skill Does NOT Do
 
-- **Does not promote without approval.** All artifacts stage in 08-Generated/ first.
+- **Does not promote without approval.** All artifacts stage in _generated/ first.
 - **Does not modify Tier 1 artifacts directly.** Governance documents, FDDs, RAID logs —
   these are stakeholder-owned. The Artifact Generator produces drafts or updates that the
   user promotes.
@@ -567,7 +573,7 @@ specialist-routing selections, and new-type flags. Every decision-class item mus
 
 **Decision-class outputs in this skill:**
 
-- Step 4 (Produce the Artifact) — the artifact content itself, which the user is expected to act on via PROMOTE / REVISE / REJECT. The artifact staging in 08-Generated/ is the skill's proposal; the user's promotion is the decision the skill recommends.
+- Step 4 (Produce the Artifact) — the artifact content itself, which the user is expected to act on via PROMOTE / REVISE / REJECT. The artifact staging in _generated/ is the skill's proposal; the user's promotion is the decision the skill recommends.
 - Step 6 (Present for Review) — the `Actions available: PROMOTE / REVISE / REJECT` framing with the summary serves as an explicit decision frame.
 - Artifact Health Check — the Action Needed column for each artifact (missing, stale, phase-gate-gap, pending-review) is a recommendation the user must act on.
 - Specialist routing decisions — when the artifact type is ambiguous, the skill's selection of the closest catalog entry (with `confidence: MEDIUM` note) is a decision the user may override.
@@ -576,9 +582,9 @@ specialist-routing selections, and new-type flags. Every decision-class item mus
 
 **Tier vocabulary (undo threshold + stakeholder impact):**
 
-- **CHEAP** (undo in hours) — a draft artifact staged in 08-Generated/ that nobody has reviewed; a specialist-routing selection flagged with MEDIUM confidence; a NEW_TYPE proposal attached to a draft; a health-check Action Needed item surfaced internally only. State the tier. Proceed.
+- **CHEAP** (undo in hours) — a draft artifact staged in _generated/ that nobody has reviewed; a specialist-routing selection flagged with MEDIUM confidence; a NEW_TYPE proposal attached to a draft; a health-check Action Needed item surfaced internally only. State the tier. Proceed.
 - **MODERATE** (undo in days, minor data loss acceptable) — a drafted artifact circulated to the TPM for review before PROMOTE; a promotion proposal awaiting user action; a health-check stale-artifact flag that prompts review; a proposed update to an existing artifact not yet applied. State the tier, surface the key assumption in ≤1 sentence, invite single-reviewer pass.
-- **EXPENSIVE** (undo in weeks, stakeholder impact) — a promoted artifact that has been moved into a Tier 1 target folder (01-Governance/, 02-Design/, etc.) and consumed by downstream reviewers or used in stakeholder-facing communications; a cutover plan, go/no-go checklist, or readiness assessment whose content shapes a go-live decision; a training plan distributed to a cross-functional audience. State the tier, document rationale (≥2 sentences), state rollback plan (revert to prior version; correction note; re-stage updated version), name the affected cohort (stakeholder audience, dependent project leads, customer success).
+- **EXPENSIVE** (undo in weeks, stakeholder impact) — a promoted artifact that has been moved into a Tier 1 target folder (1-Governance/, 2-Delivery/, etc.) and consumed by downstream reviewers or used in stakeholder-facing communications; a cutover plan, go/no-go checklist, or readiness assessment whose content shapes a go-live decision; a training plan distributed to a cross-functional audience. State the tier, document rationale (≥2 sentences), state rollback plan (revert to prior version; correction note; re-stage updated version), name the affected cohort (stakeholder audience, dependent project leads, customer success).
 - **IRREVERSIBLE** (cannot undo) — a promoted artifact delivered to an external audience (customer, regulator, auditor) or to a phase-gate review of record; an executive readout whose content, once delivered, establishes a committed position; a cutover plan or go/no-go checklist entered into the go-live decision record. State the tier, document rationale, state rollback is infeasible or name the counter-commitment (follow-up correction artifact, revised version with retraction note), name the sign-off authority (program sponsor, steering committee, phase-gate reviewer), pair with explicit downside description.
 
 **Label format** (any accepted):
@@ -614,26 +620,27 @@ entry uses the 5-field conditional template per
 `core/standards/failure-mode-standard.md`. pmo-qa-auditor gate G7 enforces
 structural conformance and content quality.
 
-### Direct write to target folder bypassing 08-Generated/ — PROC
+### Direct write to target folder bypassing _generated/ — PROC
 
 - **Signature (observable signal):** An artifact is written directly to its target folder
-  (01-Governance/, 02-Design/, 03-Testing/, etc.) on first production without first being
-  staged in the project's 08-Generated/ folder with a `lifecycle_state: draft` +
+  (1-Governance/, 2-Delivery/, etc.) on first production without first being
+  staged in the project's _generated/ folder with a `lifecycle_state: draft` +
   `promotion_state: staged` metadata header.
 - **Conditional:** do NOT write a generated artifact directly to the target folder when
-  the Promotion Workflow requires staging in 08-Generated/ first, because the staging
+  the Promotion Workflow requires staging in _generated/ first, because the staging
   step is the skill's user-approval gate — PROMOTE / REVISE / REJECT — and bypassing it
   forecloses the review cycle that distinguishes drafts from reviewed-and-accepted content
   landing in stakeholder-facing locations.
 - **Root cause:** The artifact feels ready; the staging-and-promotion two-step feels like
   paperwork. Under one-shot invocation pressure, the agent writes to the final location
   directly rather than surface a proposal the user has to action.
-- **Mitigation:** Always write to `[Project]/08-Generated/` on first production with the
+- **Mitigation:** Always write to `[Project]/_generated/` on first production with the
   full metadata header (artifact_type, target_folder, confidence, created, source,
-  dependencies, lifecycle_state: draft, promotion_state: staged); never write directly to the
-  target folder; the Promotion Workflow owns the move from 08-Generated/ to the target folder
+  dependencies, domain: generated, generated_by, source_inputs, trigger_source,
+  lifecycle_state: draft, promotion_state: staged); never write directly to the
+  target folder; the Promotion Workflow owns the move from _generated/ to the target folder
   on explicit user approval.
-- **Principal response vs. junior response:** Principal stages in 08-Generated/, surfaces
+- **Principal response vs. junior response:** Principal stages in _generated/, surfaces
   the Present-for-Review summary, and waits for PROMOTE. Junior writes to target folder
   on first production, strips the metadata header, and the user discovers a stakeholder-
   facing artifact exists that never went through review.
@@ -688,12 +695,13 @@ structural conformance and content quality.
 
 ### Metadata header omitted from staged artifact — OUT
 
-- **Signature (observable signal):** An artifact file in 08-Generated/ lacks the complete
+- **Signature (observable signal):** An artifact file in _generated/ lacks the complete
   frontmatter block (artifact_type, target_folder, confidence, created, source,
-  dependencies, lifecycle_state, promotion_state) — either the block is missing entirely, or
+  dependencies, domain, generated_by, source_inputs, trigger_source, lifecycle_state,
+  promotion_state) — either the block is missing entirely, or
   fields are absent, or `lifecycle_state` is set to something other than `draft` OR
   `promotion_state` is set to something other than `staged` on a freshly generated artifact.
-- **Conditional:** do NOT write a staged artifact to 08-Generated/ without the complete
+- **Conditional:** do NOT write a staged artifact to _generated/ without the complete
   metadata header including `lifecycle_state: draft` + `promotion_state: staged` (the
   `Artifact-DRAFT` content entry, staged on emit), because the metadata header is the skill's
   handoff contract to the PROMOTE / REVISE / REJECT workflow, the Artifact Health Check
@@ -702,14 +710,14 @@ structural conformance and content quality.
 - **Root cause:** The artifact content is the product of the run; the metadata feels like
   bookkeeping and can get dropped when output token pressure mounts or when content alone
   is returned rather than the full frontmatter + content file.
-- **Mitigation:** Generate the metadata header first with all 8 fields populated; generate
+- **Mitigation:** Generate the metadata header first with all 12 fields populated; generate
   the artifact content second; write the combined file as a single atomic write to
-  08-Generated/; verify the file has a frontmatter block with `lifecycle_state: draft` +
+  _generated/; verify the file has a frontmatter block with `lifecycle_state: draft` +
   `promotion_state: staged` before presenting the Step 6 summary to the user.
 - **Principal response vs. junior response:** Principal writes header-plus-content as a
   single file and verifies the header is intact. Junior writes content alone, the health
   check misses the artifact, and the auto-archive never triggers — the file accumulates
-  in 08-Generated/ indefinitely.
+  in _generated/ indefinitely.
 
 ### Orphan stakeholder view rendered without a live source — OUT
 
@@ -802,18 +810,18 @@ structural conformance and content quality.
 ### External artifact staged without PMO metadata header via Wrapper Mode — PROC
 
 - **Signature (observable signal):** An externally-produced artifact (Anthropic-skill
-  output, user upload) is written into `08-Generated/` (or, worse, a target folder)
+  output, user upload) is written into `_generated/` (or, worse, a target folder)
   **without** the Wrapper-Mode metadata header — missing `source: external`, missing
   `source_origin`, or missing the full frontmatter block — so it is indistinguishable from
   PMO-generated content and untracked by the Promotion / Health / auto-archive workflow.
-- **Conditional:** do NOT stage an external artifact in `08-Generated/` without running
+- **Conditional:** do NOT stage an external artifact in `_generated/` without running
   Wrapper Mode's metadata-prepend (`source: external` + `source_origin` + the full header
   with `lifecycle_state: draft` + `promotion_state: staged`), because the header is the provenance and lifecycle
   contract — without `source: external` a reviewer cannot tell the content was produced
   outside the PMO generator (and may over-trust it), and without the full header the Health
   scan and auto-archive cannot track it.
 - **Root cause:** The external artifact already looks finished; prepending a header feels
-  like bookkeeping, and "just drop it in 08-Generated/" is faster than running the wrap
+  like bookkeeping, and "just drop it in _generated/" is faster than running the wrap
   step. Under one-shot pressure the agent copies the file in and skips the header.
 - **Mitigation:** On any request to bring external content into the project, enter Wrapper
   Mode (the §Wrapper Mode discriminator); run Step 4-W intake (read, gate-scan, set
@@ -821,6 +829,6 @@ structural conformance and content quality.
   populated before the file lands; verify `source: external` is present before the Step-6 summary.
 - **Principal response vs. junior response:** Principal runs Wrapper Mode, stamps
   `source: external` + provenance, surfaces the `Mode: WRAPPER` summary, waits for PROMOTE.
-  Junior copies the Anthropic runbook straight into `08-Generated/` (or a target folder),
+  Junior copies the Anthropic runbook straight into `_generated/` (or a target folder),
   it carries no provenance, and three weeks later a reviewer treats an unvetted external
   doc as a reviewed PMO artifact.
