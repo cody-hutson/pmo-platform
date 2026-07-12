@@ -47,7 +47,13 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 # `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
 # NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
 readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
-if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+# Precheck syntax with `bash -n` BEFORE sourcing: a truncated/corrupt lib (interrupted
+# cp, disk-full) is a parse error, and sourcing a parse-error file is FATAL to this
+# parent — with partial top-level execution the process can exit 1 (NON-blocking =
+# fail-OPEN) instead of blocking. `bash -n` detects that non-fatally so we fail CLOSED
+# (GHSA-g9g6-28c9-vrx5). Also require deny_missing_primitive so a valid-but-stale lib
+# (pre-fix, no helper) fails closed here rather than fail-open at a later ERR trap.
+if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1 || ! command -v deny_missing_primitive >/dev/null 2>&1; then
   "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
   exit 2
 fi
@@ -98,17 +104,11 @@ if [ -z "$JQ" ]; then
   _mode="$(get_mode)"
   if [ "$_mode" = "enforce" ]; then
     deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+    exit 2   # caller owns the fail-closed exit — never trust the callee to terminate (GHSA-g9g6)
   fi
   "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-MISSING] WARN (degraded, .mode=%s): jq not found on the pinned tool path; gh path-leak scan skipped.\n' "$HOOK_NAME" "$_mode" >&2
   exit 0
 fi
-
-# --- SHARED PRIMITIVE (fail-OPEN if missing — warn posture, separate concern from jq) ---
-if [ ! -f "$PRIMITIVE" ]; then
-  log_error "PRIMITIVE-MISSING: $PRIMITIVE — fail-open"; exit 0
-fi
-# shellcheck source=/dev/null
-. "$PRIMITIVE"
 
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
   log_error "INVALID-INPUT"; exit 0   # fail-open on malformed input (warn-posture)
@@ -122,6 +122,32 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 # Only act on gh issue/PR WRITES (create / edit / comment) or gh api writes to
 # issues/pulls. Reads (view/list) carry no authored body → skip.
 if ! "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE 'gh[[:space:]]+(issue|pr)[[:space:]]+(create|edit|comment)|gh[[:space:]]+api[[:space:]]+[^|;&]*(issues|pulls)'; then
+  exit 0
+fi
+
+# --- SHARED PRIMITIVE gate (mode-gated posture — GHSA-g9g6-28c9-vrx5). We are now
+# committed to scanning a gh issue/PR body, which REQUIRES the co-shipped primitive's API
+# (path_leak_scan_line). Missing, syntactically broken (bash -n), OR present-but-empty/
+# truncated (sources cleanly yet defines nothing) all mean the scan cannot run — treat
+# exactly like a missing jq (GHSA-9cjm posture): enforce fails CLOSED (deny the gh write),
+# warn/off degrade to a note + exit 0. Verifying the API (command -v), not mere file
+# existence, closes the partial-install fail-open where an empty primitive let the
+# `if path_leak_scan_line` condition swallow a 127 "command not found" as a no-match.
+# Placed AFTER the non-gh short-circuits so an absent primitive never blocks unrelated Bash. ---
+_primitive_ok=0
+if [ -f "$PRIMITIVE" ] && "${BASH:-/bin/bash}" -n "$PRIMITIVE" 2>/dev/null; then
+  # shellcheck source=/dev/null
+  . "$PRIMITIVE" 2>/dev/null || true
+  command -v path_leak_scan_line >/dev/null 2>&1 && _primitive_ok=1
+fi
+if [ "$_primitive_ok" -ne 1 ]; then
+  log_error "PRIMITIVE-MISSING-OR-INVALID: $PRIMITIVE did not provide path_leak_scan_line"
+  _pmode="$(get_mode)"
+  if [ "$_pmode" = "enforce" ]; then
+    deny_missing_primitive "path-leak-patterns.sh" "$HOOK_NAME" "$PRINTF"
+    exit 2   # caller owns the fail-closed exit — never trust the callee to terminate (GHSA-g9g6)
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:PRIMITIVE-MISSING] WARN (degraded, .mode=%s): co-shipped primitive path-leak-patterns.sh absent or invalid; gh path-leak scan skipped.\n' "$HOOK_NAME" "$_pmode" >&2
   exit 0
 fi
 

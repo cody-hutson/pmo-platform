@@ -1157,6 +1157,27 @@ install_hooks() {
     printf 'rm-file:%s\n' "${depresolve_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
+  # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/positional-issueref.awk at
+  # runtime; the source lib lives at core/hooks/lib/ (shared with the fixture-runner and
+  # the reference-durability CI), which the deployed .claude/hooks/ cannot reach. Without
+  # this copy the deployed hook cannot run its positional detector (BLOCK-FRAGILE-REF-003)
+  # and — post GHSA-g9g6-28c9-vrx5 — fails CLOSED in enforce (or degrades in warn). It is
+  # a sourced lib, not a registered hook (no block-* name), so hook-registry checks ignore
+  # it. HARD dependency; mirrors the dep-resolve.sh co-deploy above.
+  local posawk_src="${SOURCE_REPO}/core/hooks/lib/positional-issueref.awk"
+  local posawk_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/positional-issueref.awk"
+  if [ ! -r "${posawk_src}" ]; then
+    warn "positional-issueref.awk not found at ${posawk_src}; block-fragile-refs positional detector will fail closed in enforce"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy positional-issueref.awk → ${posawk_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${posawk_src}" "${posawk_dst}"
+    info "INSTALLED: positional-issueref.awk (block-fragile-refs positional classifier)"
+    printf 'rm-file:%s\n' "${posawk_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   install_mode_template_if_missing ".mode.template" ".mode"
   install_mode_template_if_missing "deploy-check.mode.template" "deploy-check.mode"
 

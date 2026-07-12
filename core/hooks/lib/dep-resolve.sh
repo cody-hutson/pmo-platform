@@ -65,3 +65,19 @@ deny_missing_dep() {
   "$_dr_printf" '[CLAUDE-HOOK:%s:DEPENDENCY-MISSING] BLOCKED (fail-closed): %s not found on the pinned tool path. Install it in your terminal (brew install %s), then retry. To stand this hook down, set its .mode to off (mode-gated hooks) or export CLAUDE_HOOK_BYPASS=1.\n' "$_dr_hook" "$_dr_dep" "$_dr_dep" >&2
   exit 2
 }
+
+# deny_missing_primitive PRIMITIVE HOOK_NAME [PRINTF_BIN] — the internal-dependency
+# twin of deny_missing_dep (GHSA-g9g6-28c9-vrx5). Where deny_missing_dep covers an
+# EXTERNAL tool (jq/python3) resolved from $PATH, this covers a co-shipped INTERNAL
+# primitive (path-leak-patterns.sh, positional-issueref.awk) that ships beside the hook
+# and is placed there by docs/scripts/setup-workspace.sh. A missing primitive in a
+# correct install cannot happen; when it does, the install is tampered or partial, and a
+# security control that cannot run its check must DENY in enforce, never fall through to
+# exit 0. Remediation is a REINSTALL of the hook bundle — not `brew install` — so the
+# message differs from deny_missing_dep. Callers gate this on .mode = enforce; warn/off
+# degrade to a note + exit 0, mirroring the jq posture.
+deny_missing_primitive() {
+  _dr_prim="$1"; _dr_hook="$2"; _dr_printf="${3:-/usr/bin/printf}"
+  "$_dr_printf" '[CLAUDE-HOOK:%s:PRIMITIVE-MISSING] BLOCKED (fail-closed): co-shipped primitive %s is absent from this hook'"'"'s directory. Reinstall the hook bundle (re-run docs/scripts/setup-workspace.sh) to restore it. To stand this hook down, set its .mode to off or export CLAUDE_HOOK_BYPASS=1.\n' "$_dr_hook" "$_dr_prim" >&2
+  exit 2
+}

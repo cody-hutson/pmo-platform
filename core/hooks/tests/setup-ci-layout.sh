@@ -125,6 +125,22 @@ else
   log "setup-ci-layout: WARNING dep-resolve resolver missing at ${DEPRESOLVE_SRC}"
 fi
 
+# 1d) Co-locate the positional-issue-ref classifier at .claude/hooks/lib/, mirroring the
+#     deployed posture (setup-workspace.sh co-deploys it there). block-fragile-refs.sh
+#     sources it from ${HOOK_DIR}/lib/positional-issueref.awk and — post
+#     GHSA-g9g6-28c9-vrx5 — fails CLOSED in enforce without it; the source lives at
+#     core/hooks/lib/, a subdir the *.sh loop above does not copy. Without this the CI
+#     deployed-layout would diverge from a correct install and read the positional
+#     detector as absent.
+POSAWK_SRC="${HOOKS_SRC}/lib/positional-issueref.awk"
+if [ -f "${POSAWK_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${POSAWK_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located positional classifier -> ${HOOKS_DST}/lib/positional-issueref.awk"
+else
+  log "setup-ci-layout: WARNING positional classifier missing at ${POSAWK_SRC}"
+fi
+
 # 2) Copy tests + runner (skip this setup script — it is not a test file).
 log "setup-ci-layout: copying tests -> ${TESTS_DST}"
 for tf in "${TESTS_SRC}"/*.sh; do
