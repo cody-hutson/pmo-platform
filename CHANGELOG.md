@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.73.1] - 2026-07-12
+
+Hotfix so `update.sh` refreshes deployed security hooks — hook and helper fixes (like the v3.73 hardening) now reach workspaces you already installed.
+
+[Full notes](release/releases/notes/v3.73.1_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.73.1)
+
 ## [v3.73] - 2026-07-12
 
 Security patch fixing a hook fail-open and three eval-review-tool issues (out-of-workspace file read, secret embedding, unauthenticated write).
