@@ -32,6 +32,14 @@ A spawned spoke can land in the **primary checkout** instead of an isolated work
 - If already in an isolated session worktree → operate in it directly; do **not** nest a worktree-inside-a-worktree.
 - On orphaned worktrees, `git worktree prune` from the primary before the next launch.
 
+## Concurrent-PR collision check (pre-spawn, per wave)
+
+Before spawning a **build spoke** for issue #N, check whether an open PR already references it — a concurrent process may have built the same issue on another branch. Observed: a mid-run collision produced two divergent, both-mergeable builds of the same issues and a release-integrity fork, caught only at the Stage 7/8 coherence review (~40 min of double build cost later).
+
+- **Query:** `gh pr list --state open --search "#N"` (or equivalent; N = the target issue number).
+- **If an open PR already references #N → surface to the operator (proceed / adopt / skip) BEFORE spawning** — never defer the collision to a later coherence review.
+- **Re-run every wave**, not once at Stage 4: the open-PR population changes mid-run (a clean planning-time scan does not carry). This is the third standing pre-spawn guard, composing with the quota-budget gate + the worktree detect-first guard above.
+
 ## Stage-Conditional Launch Policy (when to spawn vs gate)
 
 Auto-launch is bound to the stage's Autonomy Tier: spawn autonomously for Tier-2/3 stages; **preserve the operator gate at Tier-0 — Stage 9 (Plan Review) and Stage 12 (Execute) are NEVER auto-launched.** (Stage-to-Autonomy-Tier table: `hub-spoke-bridge.md` § Stage-Conditional Launch Policy.)

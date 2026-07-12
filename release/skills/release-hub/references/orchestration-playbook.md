@@ -44,7 +44,8 @@ The control-flow core. The hub:
 2. Runs the **Collective Review check** before any Stage-6 routing (fires when ≥2 issues have Solutioning active and all Stage-5 sub-tasks are closed → operator scope-lock GATE).
 3. Runs the action-item scan ([`hub-action-tracking.md`](../../../../core/standards/hub-action-tracking.md)).
 4. For a parallel wave (Stage 5/7/8): runs the **quota-budget gate** + honors the **parallelism class** before spawning ([`spoke-launch.md`](spoke-launch.md)).
-5. Spawns the wave.
+5. **Per-wave concurrent-PR check (pre-spawn):** before spawning a build spoke for issue #N, query open PRs referencing that issue (`gh pr list --state open --search "#N"` or equivalent; N = the target issue number). If an open PR already references it, **surface to the operator — proceed / adopt / skip — BEFORE spawning**, never deferred to the Stage 7/8 coherence review. **Re-run every wave** (not once at Stage 4): the open-PR population changes mid-run, so a clean planning-time scan does not carry ([`spoke-launch.md`](spoke-launch.md)).
+6. Spawns the wave.
 
 ## Procedure 3 — Spoke prompt construction
 
@@ -58,7 +59,7 @@ After a spoke (or batch) returns: read the return value + output comment; verify
 
 **Do NOT spawn a spoke — gates are operator decisions.** The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the 13-dimension Release Readiness Scan + the goal-conformance check, and presents:
 - **Stage 9 — Plan Review (GO / NO-GO):** the release-authorization decision. The hub assembles the evidence; the operator renders GO/NO-GO. **NEVER auto-crossed.**
-- **Stage 12 — Execute:** merge + deploy authorization. **NEVER auto-crossed.**
+- **Stage 12 — Execute:** merge + deploy authorization. **NEVER auto-crossed** — the operator renders the Execute decision (not a spoke). **Once authorized, the hub routes the Stage-12 *mechanics* through the spawned `pmo-release-manager` tail** — **B1** (merge) + **B3** (atomic version-claim / signed-tag via `claim-version.sh`) + **B5** (the DEPLOYED RELEASE_LOG-row chore PR), run via `release-executor` — **never a bare `gh pr merge` by the hub** (the orchestrator running stage mechanics directly is the ADR-019 fat-orchestrator anti-pattern; "No stage mechanics" per SKILL.md `## What This Skill Does NOT Do`). **Guard:** a merged release left with no DEPLOYED RELEASE_LOG row + no version tag **blocks / flags before close-out with a remediation prompt** (not a bare preflight FAIL) — this catches a Stage-12 that landed merge-only.
 
 Strict ordering at the close steps: post the gate-passage proof → close the sub-task → route.
 

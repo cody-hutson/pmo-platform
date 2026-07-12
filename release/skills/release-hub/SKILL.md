@@ -2,7 +2,7 @@
 name: release-hub
 description: >
   Release orchestrator — the whole-release control plane. Takes a milestone and drives it through the pipeline by composing the stage skills; owns sequencing and readiness-gating, never the stage work itself. Mode R (Milestone Readiness) is a pre-flight that confirms a bundled milestone is ready to START before a run is committed — composing triage/dup, staleness/architecture, dependency, and bundle-coherence checks into one GO / NO-GO with per-finding dispositions. Invoke by name with a milestone; never auto-fires on a bare "release" mention. Modes: Milestone Readiness · Orchestrate Release. Triggers: "run the release hub on [milestone]", "is [milestone] ready to start", "check milestone readiness for [milestone]", "orchestrate the release for [milestone]".
-version: v3.24
+version: v3.25
 license: BUSL-1.1
 delivery_approach: Scrum
 skill_discipline_migrated_v10_2: true
@@ -23,7 +23,7 @@ Every decision you make resolves to one of three sinks — an **operator gate**,
 
 ## Composition
 
-This orchestrator **composes** the readiness and stage skills by invoking them through the `core/`-registry skill-chain, and **re-implements none of them** ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)). For **Mode R (Milestone Readiness)** — the mode built first — it sequences four existing/planned capabilities and **owns no check logic**:
+This orchestrator **composes** the readiness and stage skills by invoking them through the `core/`-registry skill-chain, and **re-implements none of them** ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)). For **Mode R (Milestone Readiness)** — the mode built first — it sequences five existing/planned capabilities and **owns no check logic**:
 
 | Mode R check (→ checklist group) | Composes → owning skill / spec (INVOKED, not re-implemented) | What the hub adds (the orchestration layer) | Autonomy / Reversibility |
 |---|---|---|---|
@@ -31,8 +31,9 @@ This orchestrator **composes** the readiness and stage skills by invoking them t
 | **Staleness + Architecture** (groups 3, 4) | [`triage-design-rereview`](../../references/standards/triage-design-rereview.md) PT-1..4 (stale-assumption / subsumption / best-practices / learnings) | runs the per-issue premise re-review at milestone scope + emits the C1/C2/C3 + PT schema | Tier 1 — Recommend · **CHEAP** |
 | **Dependencies** (group 2) | [`release-planner`](../release-planner/SKILL.md) (Mode A/B dep-graph / cross-milestone validation — read-only) | extracts the milestone's dep-readiness (cross-milestone leaks, cycles, incompatible-state blockers) | Tier 1 — Recommend · **CHEAP** |
 | **Bundle coherence** (group 6) | [`bundle-composition-doctrine`](../../references/standards/bundle-composition-doctrine.md) (Outcome Statement · theme · size band) | confirms the milestone is a coherent unit, not a bin-packed grab-bag | Tier 1 — Recommend · **CHEAP** |
+| **Methodology-neutrality + structural-cascade** (group 7) | [`bundle-composition-doctrine`](../../references/standards/bundle-composition-doctrine.md) **frame-pluggability** + [ADR-033](../../../core/ADRs/ADR-033-methodology-conditional-skill-activation.md) (methodology-conditional activation) | flags work that hardcodes a methodology archetype into the neutral toolkit (vs. a config-selected pack), and reconciles a proposed rename/restructure's blast radius against the operational-taxonomy direction | Tier 1 — Recommend · **CHEAP** |
 
-The hub holds **no standalone readiness mechanics** — it adds only the **sequencing + roll-up + disposition synthesis** on the composed outputs. Each composed skill/spec is the single source of its check; the hub invokes it and consumes the verdict. The worked 6-group checklist, composition map, disposition table, and output schema live in [`references/milestone-readiness-checklist.md`](references/milestone-readiness-checklist.md) — this SKILL.md is the authoritative contract; that file elaborates it.
+The hub holds **no standalone readiness mechanics** — it adds only the **sequencing + roll-up + disposition synthesis** on the composed outputs. Each composed skill/spec is the single source of its check; the hub invokes it and consumes the verdict. The worked 7-group checklist, composition map, disposition table, and output schema live in [`references/milestone-readiness-checklist.md`](references/milestone-readiness-checklist.md) — this SKILL.md is the authoritative contract; that file elaborates it.
 
 **Depth bound (C1) — and Mode O's spawn-exemption.** ADR-019 cascade rule C1 (depth ≤ 2): `operator → release-hub → [composed skill]` is depth 2, the maximum. The hub must **not** chain a composed skill onward into a third skill. This bounds **Mode R's** skill-chained checks. **Mode O composes by *spawning* spokes (the `Agent` tool), not by Skill-tool invocation** — spawns are depth-exempt (each spoke is a fresh depth-0 session), which is how Mode O drives all 13 stages, and why it spawns the `pmo-release-manager` tail (itself a composer of `release-executor`) rather than Skill-invoking it into a depth-3 chain.
 
@@ -77,9 +78,9 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 **Status:** built (first value increment).
 **Trigger:** "is [milestone] ready to start", "check milestone readiness for [milestone]", "pre-flight [milestone]".
 
-**Purpose:** confirm a bundled milestone is ready to **ENTER** the pipeline before a run is committed — sequence the four composed checks across the milestone and emit a single **GO / NO-GO** with per-finding dispositions. This is the consolidated pre-flight the operator runs by hand today; it shifts the Stage-4 Phase-A0 premise re-review **left** to milestone scope and adds the milestone-level checks Phase A0 never did (cross-milestone leaks, bundle currency, coherence).
+**Purpose:** confirm a bundled milestone is ready to **ENTER** the pipeline before a run is committed — sequence the five composed checks across the milestone and emit a single **GO / NO-GO** with per-finding dispositions. This is the consolidated pre-flight the operator runs by hand today; it shifts the Stage-4 Phase-A0 premise re-review **left** to milestone scope and adds the milestone-level checks Phase A0 never did (cross-milestone leaks, bundle currency, coherence).
 
-**Composition:** composes the four targets in `## Composition` — owns no check logic.
+**Composition:** composes the five targets in `## Composition` — owns no check logic.
 
 **Process:**
 1. **Resolve the milestone** — assert it exists (one matching title); read all issues + bundle metadata. **Read-only throughout.**
@@ -87,9 +88,10 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 3. **Staleness + Architecture** — chain `triage-design-rereview` PT-1..4 per issue; collect the C1 / C2 / C3 classifications with PT typing.
 4. **Dependencies** — chain `release-planner` for the dep-graph / cross-milestone validation; collect cross-milestone leaks, cycles, and incompatible-state blockers.
 5. **Bundle coherence** — apply `bundle-composition-doctrine` (Outcome Statement present · coherent theme · size band 15–25 pts).
-6. **Roll up** — bind the per-issue findings into a milestone **GO / NO-GO** with a per-finding **disposition** from the closed set {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE}. Source every finding to its composed skill/spec. Recommend dispositions; **mutate nothing**.
+6. **Methodology-neutrality + structural-cascade** — compose `bundle-composition-doctrine` frame-pluggability + `ADR-033`: flag work that hardcodes a methodology archetype into the neutral toolkit (vs. a config-selected pack), and reconcile any proposed rename/restructure's blast radius against the operational-taxonomy direction. Compose-only — zero inline logic (`references/milestone-readiness-checklist.md` group 7).
+7. **Roll up** — bind the per-issue findings into a milestone **GO / NO-GO** with a per-finding **disposition** from the closed set {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE}. Source every finding to its composed skill/spec. Recommend dispositions; **mutate nothing**.
 
-**Output:** a **Milestone Readiness Briefing** — (a) the **GO / NO-GO** verdict; (b) a per-requirement table in the **C1 / C2 / C3 + PT-1..4 schema** (Phase-A0-consumable — see `## Output Contract`); (c) per-finding dispositions with rationale, each sourced to its composed skill/spec; (d) a reversibility tier (**CHEAP**) + confidence. **Autonomy Tier 1 — Recommend** (read-only; the operator acts on the dispositions). Audience-framed per `## Output Contract`.
+**Output:** a **Milestone Readiness Briefing** — (a) the **GO / NO-GO** verdict; (b) a per-requirement table in the **C1 / C2 / C3 + PT-1..4 schema** (Phase-A0-consumable — see `## Output Contract`); (c) per-finding dispositions with rationale, each sourced to its composed skill/spec; (d) a reversibility tier (**CHEAP**) + confidence; (e) a **terminal next-action route** — on **GO**, the explicit `release-hub Mode O on <milestone>` recommendation to orchestrate the release; on **NO-GO**, the per-finding dispositions framed as the gating cleanup checklist that must clear before the milestone re-runs Mode R and then Mode O (the **R → cleanup → re-run R → Mode O** loop). **Autonomy Tier 1 — Recommend** (read-only; the operator acts on the dispositions). Audience-framed per `## Output Contract`.
 
 ### Mode O — Orchestrate Release
 
@@ -106,7 +108,7 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 3. **Procedure 1 — Scaffolding:** create one sub-task per stage per issue; close skips with the Skip Closure Format → **GATE: scaffold reviewed.**
 4. **Procedure 2 — Routing:** select the dependency-met actionable set; before each parallel wave run the **quota-budget gate** (Step 5.5) and honor the **stage parallelism class** (5/7/8 parallel-safe; 6/13 write-serialized); spawn the wave.
 5. **Procedure 4 — Completion:** read each spoke's return + output comment; verify closure; produce a **Decision Briefing**; route only after the operator renders every decision in it.
-6. **Procedure 5 — Gates:** at **Stage 9 (GO/NO-GO)** and **Stage 12 (Execute)**, present the decision and **STOP** — these are NEVER auto-launched / auto-crossed.
+6. **Procedure 5 — Gates:** at **Stage 9 (GO/NO-GO)** and **Stage 12 (Execute)**, present the decision and **STOP** — these are NEVER auto-launched / auto-crossed. Once **Stage 12** is authorized, route the Stage-12 mechanics through the spawned `pmo-release-manager` tail — **B1 merge + B3 atomic version-claim/signed-tag + B5 DEPLOYED-row chore PR** — never a bare `gh pr merge`; a merge left without the DEPLOYED RELEASE_LOG row + version tag is guarded (remediation prompt) before close-out.
 7. **Procedure 6 — Early merge** when a downstream issue blocks on an upstream's merge to main.
 8. **Procedure 7 — Close** when all sub-tasks are closed; the action-item resolution gate (7a, per `hub-action-tracking.md`) is a HARD gate before Milestone close.
 
@@ -116,16 +118,19 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 
 ## Output Contract
 
-Every output declares its **audience** and frames accordingly: **operator/exec** leads with the GO/NO-GO and the so-what; **engineering** leads with the per-finding evidence (the composed verdict, the specific issue, the PT type). Five requirements hold on every Mode R emission:
+Every output declares its **audience** and frames accordingly: **operator/exec** leads with the GO/NO-GO and the so-what; **engineering** leads with the per-finding evidence (the composed verdict, the specific issue, the PT type). Six requirements hold on every Mode R emission:
 1. the audience is named and the framing matches it;
 2. every finding is sourced to its composed skill/spec — no free-floating readiness assertions;
 3. the per-requirement output uses the **C1 / C2 / C3 + PT-1..4 schema** (so Stage-4 Phase A0 can consume it as a cache-read — the "replaces Phase A0" contract);
-4. each finding carries a **disposition** from {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE};
-5. the milestone verdict carries a **reversibility tier + confidence** (`## Reversibility Discipline`).
+4. each finding carries a **disposition** from {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE} — **recommendations only** (read-only mode): Mode R names the fix, it never executes it;
+5. the milestone verdict carries a **reversibility tier + confidence** (`## Reversibility Discipline`);
+6. the emission carries a **terminal next-action route** (Readiness Disposition → Next Action) — on **GO**, the explicit `release-hub Mode O on <milestone>` invocation that orchestrates the release; on **NO-GO**, the per-finding dispositions framed AS the gating cleanup checklist plus the named **R → cleanup → re-run R → Mode O** loop. An emission that ends at the bare verdict is incomplete.
+
+**Recommend-only boundary (the read-only contract).** Mode R's dispositions are recommendations, not authorizations to act. The disposition labels (FIX-FIRST, RE-BUNDLE, …) name fix *types*, not commands Mode R executes — Mode R mutates no state: it creates no issue or milestone, rewrites no description, sizes nothing, files nothing, posts no comment. Any transition from *recommending* a disposition to *acting* on it requires, in order: (1) the CLAUDE.md **Skill-boundary-transparency** notice (name the mode/contract being exceeded + the authorization basis), (2) **explicit operator authorization** for the specific action, and (3) **descent to the base agent** — Mode R itself never crosses into execution. This is the contract the `## Domain-Specific Failure Modes` entry "Mode R mutates state despite its read-only contract" guards.
 
 ## Dependency Graph Node
 
-- **Composes (Mode R — invokes via skill-chain, never absorbs):** the triage-analysis capability / `intake-desk` + `delivery-engine` (triage + dup); `triage-design-rereview` (staleness + architecture); `release-planner` (dependencies); `bundle-composition-doctrine` (coherence).
+- **Composes (Mode R — invokes via skill-chain, never absorbs):** the triage-analysis capability / `intake-desk` + `delivery-engine` (triage + dup); `triage-design-rereview` (staleness + architecture); `release-planner` (dependencies); `bundle-composition-doctrine` (coherence + frame-pluggability for neutrality); `ADR-033` (methodology-neutrality + structural-cascade).
 - **Spawns (Mode O — Agent-tool spokes, not skill-chain):** the `release-planner` planning spoke (St 4), the stage spokes (St 5–8), the `pmo-release-manager` tail spoke (St 9→13).
 - **Coordinates with:** `pmo-release-manager` (the tail hand-off — the hub orchestrates the front pipeline and hands the tail to the manager).
 - **Upstream invokers:** the operator directly (by name + milestone argument).
@@ -152,6 +157,7 @@ Hard rejections — the suite-wide standard plus the role's own:
 - **Absorption** — re-implementing any composed check (the 5-test, DoR, PT-1..4, dep-graph/CPM, bundle-composition) inside this skill. Compose by invocation only (ADR-019); the SKILL.md body carries zero inline check logic.
 - **Auto-firing** — surfacing/executing orchestration on a bare "release" mention. Invoke by name + explicit milestone only (FM-4).
 - **Self-authorized deploy / close-out** — Mode O never bypasses the human gate; the deploy/close-out tail is `pmo-release-manager`'s behind the operator's Stage-9/12 gate.
+- **Mode R state mutation** — Mode R is read-only and mutates nothing; creating or editing an issue / milestone / comment / size (or any state) from within a Mode R run is a hard rejection. Dispositions are recommend-only; the recommend→act transition requires the Skill-boundary-transparency notice + explicit operator authorization + descent to base agent (`## Output Contract`; FM "Mode R mutates state despite its read-only contract").
 - **Question flooding** — more than 5 clarifying questions. Use `[ASSUMPTION – CONFIRM]`.
 - **Unmarked recommended dates** — any agent-recommended date carries `[RECOMMENDED]`; day-of-week labels validated.
 - **Missing reversibility tier on decision-class items** — every readiness verdict carries a reversibility tier + confidence. Outputs missing tiers fail pmo-qa-auditor G4.
@@ -215,3 +221,19 @@ These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide)
 - **Root cause:** "ask before acting" over-generalizes; the rule-vs-judgment line is invisible under flow pressure, so every step looks like a gate.
 - **Mitigation:** gate ONLY the framework's named human checkpoints (Stage 9, Stage 12) and genuine judgment calls (scope changes, premise rejections, accepted risks); render a rule-determined value as a *recorded determination*, and execute a standing-GO mechanical step as Tier-1 without a fresh gate.
 - **Principal response vs. junior response:** Principal records "version = next-free (rule-determined)" and moves on. Junior opens an `AskUserQuestion` for the version and waits.
+
+### Mode R mutates state despite its read-only contract — PROC
+
+- **Signature (observable signal):** a Mode R run executes a state mutation — creates a milestone or issue, rewrites a milestone description, sizes an issue, files an observation, de-bundles a card, or posts a comment — after presenting a state-mutating disposition (FIX-FIRST / RE-BUNDLE) as the natural next step of the readiness check.
+- **Conditional:** do NOT act on a disposition (create / edit / close an issue, milestone, comment, or size) from within a Mode R run, because Mode R is contracted read-only ("Autonomy Tier 1 — Recommend; mutate nothing") — the general push-to-resolve directive does NOT override the mode-specific read-only constraint (CLAUDE.md "more-specific overrides less-specific"), and a readiness gate that mutates the thing it is assessing corrupts the state it was invoked to certify.
+- **Root cause:** push-to-resolve pulls toward executing the remediation the check surfaced; the imperative-sounding disposition labels (FIX-FIRST, RE-BUNDLE) read as commands, and the read-only contract is not mechanically gated — so under resolution pressure the mode slides from recommending into acting.
+- **Mitigation:** treat every disposition as recommend-only; before ANY state change run the recommend→act transition — the CLAUDE.md Skill-boundary-transparency notice + explicit operator authorization + descent to the base agent (`## Output Contract` recommend-only boundary). Keep validating + reporting across the whole milestone; never abandon the readiness scan mid-check to plan or execute remediation.
+- **Principal response vs. junior response:** Principal emits the GO/NO-GO with FIX-FIRST recommendations and stops — "recommend adding AC to issue X; that is an operator action, not mine". Junior reads FIX-FIRST as a to-do and starts creating the issues, abandoning the readiness scan at the moment it hit its most important signal.
+
+### Mode R emits a verdict without routing to the next workflow action — OUT
+
+- **Signature (observable signal):** a Mode R emission ends at the GO/NO-GO verdict + per-finding dispositions and stops — it neither recommends the concrete `release-hub Mode O on <milestone>` invocation on GO, nor frames the NO-GO dispositions as the cleanup checklist gating the re-run → Mode O.
+- **Conditional:** do NOT terminate a Mode R emission at the verdict when the operator's actual workflow is R → cleanup → re-run R → Mode O, because R and O are modeled as independent trigger-selected modes with no owned transition — so a verdict-terminal emission leaves the operator to reconstruct the next step every run, and the readiness check answers "is it ready?" but never "so what do I do now?".
+- **Root cause:** Mode R's Output Contract was specified verdict-terminal — a design flaw (the R→O bridge element was omitted from the contract, not forgotten at runtime); the disposition vocabulary names fix-types, never next-actions.
+- **Mitigation:** carry the terminal next-action route as a contracted Output requirement (the 6th) — GO routes to the explicit Mode O invocation; NO-GO reframes the dispositions as the gating cleanup checklist and names the R → cleanup → re-run R → Mode O loop; verify every emission ends on a next-action, not a bare verdict.
+- **Principal response vs. junior response:** Principal closes with "GO → run `release-hub Mode O on <milestone>`", or "NO-GO → clear these 3 FIX-FIRST items, re-run Mode R, then Mode O". Junior emits "NO-GO, 3 findings" and stops, leaving the operator to guess the loop.
