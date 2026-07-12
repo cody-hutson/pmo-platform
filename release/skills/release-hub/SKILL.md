@@ -2,7 +2,7 @@
 name: release-hub
 description: >
   Release orchestrator — the whole-release control plane. Takes a milestone and drives it through the pipeline by composing the stage skills; owns sequencing and readiness-gating, never the stage work itself. Mode R (Milestone Readiness) is a pre-flight that confirms a bundled milestone is ready to START before a run is committed — composing triage/dup, staleness/architecture, dependency, and bundle-coherence checks into one GO / NO-GO with per-finding dispositions. Invoke by name with a milestone; never auto-fires on a bare "release" mention. Modes: Milestone Readiness · Orchestrate Release. Triggers: "run the release hub on [milestone]", "is [milestone] ready to start", "check milestone readiness for [milestone]", "orchestrate the release for [milestone]".
-version: v3.24
+version: v3.25
 license: BUSL-1.1
 delivery_approach: Scrum
 skill_discipline_migrated_v10_2: true
@@ -120,8 +120,10 @@ Every output declares its **audience** and frames accordingly: **operator/exec**
 1. the audience is named and the framing matches it;
 2. every finding is sourced to its composed skill/spec — no free-floating readiness assertions;
 3. the per-requirement output uses the **C1 / C2 / C3 + PT-1..4 schema** (so Stage-4 Phase A0 can consume it as a cache-read — the "replaces Phase A0" contract);
-4. each finding carries a **disposition** from {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE};
+4. each finding carries a **disposition** from {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE} — **recommendations only** (read-only mode): Mode R names the fix, it never executes it;
 5. the milestone verdict carries a **reversibility tier + confidence** (`## Reversibility Discipline`).
+
+**Recommend-only boundary (the read-only contract).** Mode R's dispositions are recommendations, not authorizations to act. The disposition labels (FIX-FIRST, RE-BUNDLE, …) name fix *types*, not commands Mode R executes — Mode R mutates no state: it creates no issue or milestone, rewrites no description, sizes nothing, files nothing, posts no comment. Any transition from *recommending* a disposition to *acting* on it requires, in order: (1) the CLAUDE.md **Skill-boundary-transparency** notice (name the mode/contract being exceeded + the authorization basis), (2) **explicit operator authorization** for the specific action, and (3) **descent to the base agent** — Mode R itself never crosses into execution. This is the contract the `## Domain-Specific Failure Modes` entry "Mode R mutates state despite its read-only contract" guards.
 
 ## Dependency Graph Node
 
@@ -152,6 +154,7 @@ Hard rejections — the suite-wide standard plus the role's own:
 - **Absorption** — re-implementing any composed check (the 5-test, DoR, PT-1..4, dep-graph/CPM, bundle-composition) inside this skill. Compose by invocation only (ADR-019); the SKILL.md body carries zero inline check logic.
 - **Auto-firing** — surfacing/executing orchestration on a bare "release" mention. Invoke by name + explicit milestone only (FM-4).
 - **Self-authorized deploy / close-out** — Mode O never bypasses the human gate; the deploy/close-out tail is `pmo-release-manager`'s behind the operator's Stage-9/12 gate.
+- **Mode R state mutation** — Mode R is read-only and mutates nothing; creating or editing an issue / milestone / comment / size (or any state) from within a Mode R run is a hard rejection. Dispositions are recommend-only; the recommend→act transition requires the Skill-boundary-transparency notice + explicit operator authorization + descent to base agent (`## Output Contract`; FM "Mode R mutates state despite its read-only contract").
 - **Question flooding** — more than 5 clarifying questions. Use `[ASSUMPTION – CONFIRM]`.
 - **Unmarked recommended dates** — any agent-recommended date carries `[RECOMMENDED]`; day-of-week labels validated.
 - **Missing reversibility tier on decision-class items** — every readiness verdict carries a reversibility tier + confidence. Outputs missing tiers fail pmo-qa-auditor G4.
@@ -215,3 +218,11 @@ These domain-specific anti-patterns coexist with `## Guardrails` (platform-wide)
 - **Root cause:** "ask before acting" over-generalizes; the rule-vs-judgment line is invisible under flow pressure, so every step looks like a gate.
 - **Mitigation:** gate ONLY the framework's named human checkpoints (Stage 9, Stage 12) and genuine judgment calls (scope changes, premise rejections, accepted risks); render a rule-determined value as a *recorded determination*, and execute a standing-GO mechanical step as Tier-1 without a fresh gate.
 - **Principal response vs. junior response:** Principal records "version = next-free (rule-determined)" and moves on. Junior opens an `AskUserQuestion` for the version and waits.
+
+### Mode R mutates state despite its read-only contract — PROC
+
+- **Signature (observable signal):** a Mode R run executes a state mutation — creates a milestone or issue, rewrites a milestone description, sizes an issue, files an observation, de-bundles a card, or posts a comment — after presenting a state-mutating disposition (FIX-FIRST / RE-BUNDLE) as the natural next step of the readiness check.
+- **Conditional:** do NOT act on a disposition (create / edit / close an issue, milestone, comment, or size) from within a Mode R run, because Mode R is contracted read-only ("Autonomy Tier 1 — Recommend; mutate nothing") — the general push-to-resolve directive does NOT override the mode-specific read-only constraint (CLAUDE.md "more-specific overrides less-specific"), and a readiness gate that mutates the thing it is assessing corrupts the state it was invoked to certify.
+- **Root cause:** push-to-resolve pulls toward executing the remediation the check surfaced; the imperative-sounding disposition labels (FIX-FIRST, RE-BUNDLE) read as commands, and the read-only contract is not mechanically gated — so under resolution pressure the mode slides from recommending into acting.
+- **Mitigation:** treat every disposition as recommend-only; before ANY state change run the recommend→act transition — the CLAUDE.md Skill-boundary-transparency notice + explicit operator authorization + descent to the base agent (`## Output Contract` recommend-only boundary). Keep validating + reporting across the whole milestone; never abandon the readiness scan mid-check to plan or execute remediation.
+- **Principal response vs. junior response:** Principal emits the GO/NO-GO with FIX-FIRST recommendations and stops — "recommend adding AC to issue X; that is an operator action, not mine". Junior reads FIX-FIRST as a to-do and starts creating the issues, abandoning the readiness scan at the moment it hit its most important signal.
