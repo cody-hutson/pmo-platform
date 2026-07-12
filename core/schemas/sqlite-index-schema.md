@@ -48,7 +48,7 @@ CREATE TABLE files (
     domain          TEXT NOT NULL CHECK (domain IN ('source', 'managed', 'generated', 'A', 'B', 'C')),  -- 'A'/'B'/'C' are DEPRECATED aliases of 'source'/'managed'/'generated' (migration window; frontmatter-schema.md Category 6). Union collapses to the 3 human-readable values at tail.
     type            TEXT NOT NULL,                   -- From frontmatter type taxonomy
     project         TEXT NOT NULL,                   -- Project name
-    folder          TEXT NOT NULL,                   -- ADR-078 union: legacy 01-governance…08-generated ∪ new 1-Governance…5-Reference + _inbox/_generated (migration window; frontmatter-schema.md § Category 6). No CHECK — folder cardinality left unconstrained at the DB layer; enum validated upstream at write.
+    folder          TEXT NOT NULL,                   -- ADR-079 union: legacy 01-governance…08-generated ∪ new 1-Governance…5-Reference + _inbox/_generated (migration window; frontmatter-schema.md § Category 6). No CHECK — folder cardinality left unconstrained at the DB layer; enum validated upstream at write.
 
     managed_by      TEXT NOT NULL,                   -- Skill name
     parent          TEXT,                            -- Hierarchical parent
@@ -446,7 +446,7 @@ This schema is **materialized** by `core/deploy/tools/build-doc-index.py` — a 
 | Query | `build-doc-index.py --query <name> --db <path> [--param k=v]` | Runs a named reference query (`blast-radius`, `orphan`, `staleness`, `portfolio-rollup`, `cross-project-deps`, `domain-c-staleness`, `frontmatter-completeness`). |
 | Self-test | `build-doc-index.py --self-test` | Fixture-based AC1–AC4 + FMF-2/FMF-3 assertions (see the tool README). |
 
-**Edge / project resolution note.** A `relationships[]` `target` resolves to `files.file_id` by exact `filename`. A `BELONGS_TO` edge whose `target` is a **project name** (the shape the relationship-edge population emits) resolves to that project's governance-root representative node (`folder IN ('01-governance', '1-Governance')` — the legacy or the ADR-078 governance bin, union-aware for the migration window) — because `relationships.target_file_id` must reference a real file, a project name cannot be stored directly. A target resolving to neither a file nor a project representative is a dangling **WARN** (row skipped, never fabricated).
+**Edge / project resolution note.** A `relationships[]` `target` resolves to `files.file_id` by exact `filename`. A `BELONGS_TO` edge whose `target` is a **project name** (the shape the relationship-edge population emits) resolves to that project's governance-root representative node (`folder IN ('01-governance', '1-Governance')` — the legacy or the ADR-079 governance bin, union-aware for the migration window) — because `relationships.target_file_id` must reference a real file, a project name cannot be stored directly. A target resolving to neither a file nor a project representative is a dangling **WARN** (row skipped, never fabricated).
 
 **`domain` enum.** The builder reads/inserts the migrated human-readable `{source, managed, generated}` values; the `{A, B, C}` aliases in the `files` CHECK + the union-enum queries remain for the migration window (see the `domain` CHECK note above).
 

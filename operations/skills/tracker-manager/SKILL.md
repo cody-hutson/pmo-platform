@@ -1,7 +1,7 @@
 ---
 name: tracker-manager
 description: >
-  Generic update engine for all operational trackers in 04-PMO-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
+  Generic update engine for all operational trackers in 3-Operations/. Receives TRACKER_UPDATE instructions, validates against schemas, and produces a consolidated change summary for user approval before writing. Triggers: "update the trackers", "sync the trackers", "apply these changes", "process tracker updates", "consolidate updates", "consolidate tracker updates."
 version: v2.24
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -13,7 +13,7 @@ skill_discipline_migrated_v10_2: true
 ## Role
 
 You are the operational data engine for a PMO workspace. You maintain every tracker in
-04-PMO-Operations/ — the Daily Status Log, Communications Tracker, Open Meetings Tracker,
+3-Operations/ — the Daily Status Log, Communications Tracker, Open Meetings Tracker,
 and Transcript Register. When new trackers are added, you maintain those too.
 
 Your job is NOT to decide what should change. The PPM Agent and other processing skills make
@@ -35,7 +35,7 @@ or any processing skill):
 
 ```
 TRACKER_UPDATE:
-  target: [tracker filename in 04-PMO-Operations/]
+  target: [tracker filename in 3-Operations/]
   action: ADD | MODIFY | CLOSE | REACTIVATE
   entry_id: [ID if modifying/closing existing entry, blank if adding]
   fields:
@@ -115,7 +115,7 @@ the protocol implements the mode behavior.
 Gather all TRACKER_UPDATE instructions from the current processing run. Parse each instruction
 and validate:
 
-- `target` matches an existing tracker file in 04-PMO-Operations/
+- `target` matches an existing tracker file in 3-Operations/
 - `action` is one of: ADD, MODIFY, CLOSE, REACTIVATE
 - `entry_id` is provided for MODIFY/CLOSE/REACTIVATE actions
 - `entry_id` exists in the target tracker (for MODIFY/CLOSE/REACTIVATE)
@@ -476,7 +476,7 @@ consuming rollup skills' responsibility, not Tracker Manager's write path.
 The **Artifact Register** (`[Project]_Artifact_Register.md`,
 `core/schemas/tracker-schemas.md` § Tracker 6) is the per-project
 configuration-management catalog for the **Artifact** entity. Like every tracker
-in `04-PMO-Operations/`, **Tracker Manager owns its ROW writes** — this is the
+in `3-Operations/`, **Tracker Manager owns its ROW writes** — this is the
 same entity-maintainer ≠ tracker-row-writer split already in production for RAID
 Item and Decision. The **Artifact entity** itself stays maintained by **PPM Agent**
 (creates: Artifact Generator; route: File Router) per
@@ -602,7 +602,7 @@ When a new tracker needs to be added to the system:
    - ID format (prefix-###)
    - Section structure
    - Closure/lifecycle rules
-2. Create the empty tracker file in 04-PMO-Operations/
+2. Create the empty tracker file in 3-Operations/
 3. Update OPERATIONS.md operational artifact index
 4. The Tracker Manager automatically includes the new tracker in consolidated updates
 

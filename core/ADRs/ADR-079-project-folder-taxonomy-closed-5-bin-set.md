@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-078 — Project folder taxonomy is a uniform closed 5-bin set (reshape from the legacy 8-folder structure)
+title: ADR-079 — Project folder taxonomy is a uniform closed 5-bin set (reshape from the legacy 8-folder structure)
 status: Accepted
 date: 2026-07-10
 release: v3.70-pda-folder-intake-and-provenance (provisional — v3.69 claimed by a concurrent release; re-versioned up per the forward-only rule; binds at Stage 12)
@@ -12,11 +12,13 @@ source_observations:
   - "The platform already migrated `domain` (A/B/C→source/managed/generated) and `synthesis_scope→source_inputs` via an additive-union deprecation-alias migration-window pattern (frontmatter-schema.md:194,250) — proven rails for exactly this class of enum migration."
 ---
 
-# ADR-078 — Project folder taxonomy is a uniform closed 5-bin set (reshape from the legacy 8-folder structure)
+# ADR-079 — Project folder taxonomy is a uniform closed 5-bin set (reshape from the legacy 8-folder structure)
 
 ## Status
 
 Accepted — operator-ratified at the Stage-5 Collective Review scope-lock checkpoint on Friday 2026-07-10, for the PDA folder/intake milestone (provisional v3.70). The founding-ADR content is committed by Engineering Wave 0 on the release branch; this record is immutable below `## Status` per the ADR supersession + immutability policy.
+
+Renumbered from ADR-078 to ADR-079 at merge time — ADR-078 was claimed on main by `ADR-078-security-hook-dependency-resolution-posture`; per the immutable-numbering collision-resolution rule the later claimant takes the next free slot.
 
 ## Context
 

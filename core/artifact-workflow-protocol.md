@@ -83,7 +83,7 @@ The genuinely-new field this protocol defines. It carves the promotion-location 
 | **Schema home** | [`core/schemas/frontmatter-schema.md`](schemas/frontmatter-schema.md) § Domain C — Synthesized Intelligence (alongside the existing `promoted_from`) |
 | **Semantics** | `staged` = file lives in `08-Generated/` (the staging area). `promoted` = file has been physically moved to its `01-07` target folder. `archived-in-place` = file moved to `08-Generated/_archived/` (the Auto-Archive sweep target) — a *location* terminal, distinct from the content-maturity `lifecycle_state: archived`. |
 | **Relationship to `lifecycle_state`** | **Orthogonal** (see §2). Content-maturity ≠ file-location. |
-| **Relationship to existing fields** | Composes with `folder` (§ Category 6 — the current folder) and `promoted_from` (§ Domain C — promotion provenance). Consistency rule: `promotion_state: promoted ⇒ folder ∉ {08-generated, _generated}` (a promoted file has left the staging area — both the legacy `08-generated` and the new ADR-078 `_generated` staging bin; the rule artifact-lint Check 4 already enforces, now expressed on a dedicated field instead of inferred from `artifact_state: PROMOTED`). |
+| **Relationship to existing fields** | Composes with `folder` (§ Category 6 — the current folder) and `promoted_from` (§ Domain C — promotion provenance). Consistency rule: `promotion_state: promoted ⇒ folder ∉ {08-generated, _generated}` (a promoted file has left the staging area — both the legacy `08-generated` and the new ADR-079 `_generated` staging bin; the rule artifact-lint Check 4 already enforces, now expressed on a dedicated field instead of inferred from `artifact_state: PROMOTED`). |
 
 ### §4.1 Transitions
 
