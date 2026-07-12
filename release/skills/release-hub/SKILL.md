@@ -108,7 +108,7 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 3. **Procedure 1 — Scaffolding:** create one sub-task per stage per issue; close skips with the Skip Closure Format → **GATE: scaffold reviewed.**
 4. **Procedure 2 — Routing:** select the dependency-met actionable set; before each parallel wave run the **quota-budget gate** (Step 5.5) and honor the **stage parallelism class** (5/7/8 parallel-safe; 6/13 write-serialized); spawn the wave.
 5. **Procedure 4 — Completion:** read each spoke's return + output comment; verify closure; produce a **Decision Briefing**; route only after the operator renders every decision in it.
-6. **Procedure 5 — Gates:** at **Stage 9 (GO/NO-GO)** and **Stage 12 (Execute)**, present the decision and **STOP** — these are NEVER auto-launched / auto-crossed.
+6. **Procedure 5 — Gates:** at **Stage 9 (GO/NO-GO)** and **Stage 12 (Execute)**, present the decision and **STOP** — these are NEVER auto-launched / auto-crossed. Once **Stage 12** is authorized, route the Stage-12 mechanics through the spawned `pmo-release-manager` tail — **B1 merge + B3 atomic version-claim/signed-tag + B5 DEPLOYED-row chore PR** — never a bare `gh pr merge`; a merge left without the DEPLOYED RELEASE_LOG row + version tag is guarded (remediation prompt) before close-out.
 7. **Procedure 6 — Early merge** when a downstream issue blocks on an upstream's merge to main.
 8. **Procedure 7 — Close** when all sub-tasks are closed; the action-item resolution gate (7a, per `hub-action-tracking.md`) is a HARD gate before Milestone close.
 
