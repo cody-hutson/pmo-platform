@@ -4,7 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
-| v3.71 | v3.71 | 2026-07-12 | — | #3391 | [notes/v3.71_RELEASE_NOTES.md](notes/v3.71_RELEASE_NOTES.md) |
+| v3.71 | pda-folder-intake-and-provenance | 2026-07-12 | — | #3391 | [notes/v3.71_RELEASE_NOTES.md](notes/v3.71_RELEASE_NOTES.md) |
 | v3.70 | 98-pipeline-freshness-and-spoke-safety | 2026-07-12 | — | #3379 | [notes/v3.70_RELEASE_NOTES.md](notes/v3.70_RELEASE_NOTES.md) |
 | v3.69 | 94-deploy-check-drift-remediation | 2026-07-11 | — | #3376 | [notes/v3.69_RELEASE_NOTES.md](notes/v3.69_RELEASE_NOTES.md) |
 | v3.68 | 79-qa-devtest-modes-and-automated-eval-execution | 2026-07-10 | — | #3314 | [notes/v3.68_RELEASE_NOTES.md](notes/v3.68_RELEASE_NOTES.md) |
