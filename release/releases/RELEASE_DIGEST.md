@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.71 (2026-07-12) — New projects use one simpler folder set and a single inbox
+
 ### v3.70 (2026-07-12) — <headline — populated by operator at chore PR review>
 
 ### v3.69 (2026-07-11) — <headline — populated by operator at chore PR review>
