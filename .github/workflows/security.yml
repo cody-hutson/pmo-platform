@@ -78,7 +78,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install semgrep==1.136.0
+      # setuptools pinned so pkg_resources resolves: semgrep 1.136.0 imports it (via
+      # opentelemetry.instrumentation), and GitHub's py3.12 runner image no longer
+      # pre-installs setuptools; 75.8.2 still ships pkg_resources (removed in 81+).
+      - run: pip install semgrep==1.136.0 setuptools==75.8.2
       - name: Rule self-test (positive control -- rules fire RED on the vulnerable fixtures)
         run: semgrep --test --config core/security/semgrep/rules/ core/security/semgrep/tests/
       - name: Run custom template-context-XSS ruleset (blocking)
