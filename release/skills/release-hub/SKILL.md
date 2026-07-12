@@ -23,7 +23,7 @@ Every decision you make resolves to one of three sinks — an **operator gate**,
 
 ## Composition
 
-This orchestrator **composes** the readiness and stage skills by invoking them through the `core/`-registry skill-chain, and **re-implements none of them** ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)). For **Mode R (Milestone Readiness)** — the mode built first — it sequences four existing/planned capabilities and **owns no check logic**:
+This orchestrator **composes** the readiness and stage skills by invoking them through the `core/`-registry skill-chain, and **re-implements none of them** ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)). For **Mode R (Milestone Readiness)** — the mode built first — it sequences five existing/planned capabilities and **owns no check logic**:
 
 | Mode R check (→ checklist group) | Composes → owning skill / spec (INVOKED, not re-implemented) | What the hub adds (the orchestration layer) | Autonomy / Reversibility |
 |---|---|---|---|
@@ -31,8 +31,9 @@ This orchestrator **composes** the readiness and stage skills by invoking them t
 | **Staleness + Architecture** (groups 3, 4) | [`triage-design-rereview`](../../references/standards/triage-design-rereview.md) PT-1..4 (stale-assumption / subsumption / best-practices / learnings) | runs the per-issue premise re-review at milestone scope + emits the C1/C2/C3 + PT schema | Tier 1 — Recommend · **CHEAP** |
 | **Dependencies** (group 2) | [`release-planner`](../release-planner/SKILL.md) (Mode A/B dep-graph / cross-milestone validation — read-only) | extracts the milestone's dep-readiness (cross-milestone leaks, cycles, incompatible-state blockers) | Tier 1 — Recommend · **CHEAP** |
 | **Bundle coherence** (group 6) | [`bundle-composition-doctrine`](../../references/standards/bundle-composition-doctrine.md) (Outcome Statement · theme · size band) | confirms the milestone is a coherent unit, not a bin-packed grab-bag | Tier 1 — Recommend · **CHEAP** |
+| **Methodology-neutrality + structural-cascade** (group 7) | [`bundle-composition-doctrine`](../../references/standards/bundle-composition-doctrine.md) **frame-pluggability** + [ADR-033](../../../core/ADRs/ADR-033-methodology-conditional-skill-activation.md) (methodology-conditional activation) | flags work that hardcodes a methodology archetype into the neutral toolkit (vs. a config-selected pack), and reconciles a proposed rename/restructure's blast radius against the operational-taxonomy direction | Tier 1 — Recommend · **CHEAP** |
 
-The hub holds **no standalone readiness mechanics** — it adds only the **sequencing + roll-up + disposition synthesis** on the composed outputs. Each composed skill/spec is the single source of its check; the hub invokes it and consumes the verdict. The worked 6-group checklist, composition map, disposition table, and output schema live in [`references/milestone-readiness-checklist.md`](references/milestone-readiness-checklist.md) — this SKILL.md is the authoritative contract; that file elaborates it.
+The hub holds **no standalone readiness mechanics** — it adds only the **sequencing + roll-up + disposition synthesis** on the composed outputs. Each composed skill/spec is the single source of its check; the hub invokes it and consumes the verdict. The worked 7-group checklist, composition map, disposition table, and output schema live in [`references/milestone-readiness-checklist.md`](references/milestone-readiness-checklist.md) — this SKILL.md is the authoritative contract; that file elaborates it.
 
 **Depth bound (C1) — and Mode O's spawn-exemption.** ADR-019 cascade rule C1 (depth ≤ 2): `operator → release-hub → [composed skill]` is depth 2, the maximum. The hub must **not** chain a composed skill onward into a third skill. This bounds **Mode R's** skill-chained checks. **Mode O composes by *spawning* spokes (the `Agent` tool), not by Skill-tool invocation** — spawns are depth-exempt (each spoke is a fresh depth-0 session), which is how Mode O drives all 13 stages, and why it spawns the `pmo-release-manager` tail (itself a composer of `release-executor`) rather than Skill-invoking it into a depth-3 chain.
 
@@ -87,7 +88,8 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 3. **Staleness + Architecture** — chain `triage-design-rereview` PT-1..4 per issue; collect the C1 / C2 / C3 classifications with PT typing.
 4. **Dependencies** — chain `release-planner` for the dep-graph / cross-milestone validation; collect cross-milestone leaks, cycles, and incompatible-state blockers.
 5. **Bundle coherence** — apply `bundle-composition-doctrine` (Outcome Statement present · coherent theme · size band 15–25 pts).
-6. **Roll up** — bind the per-issue findings into a milestone **GO / NO-GO** with a per-finding **disposition** from the closed set {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE}. Source every finding to its composed skill/spec. Recommend dispositions; **mutate nothing**.
+6. **Methodology-neutrality + structural-cascade** — compose `bundle-composition-doctrine` frame-pluggability + `ADR-033`: flag work that hardcodes a methodology archetype into the neutral toolkit (vs. a config-selected pack), and reconcile any proposed rename/restructure's blast radius against the operational-taxonomy direction. Compose-only — zero inline logic (`references/milestone-readiness-checklist.md` group 7).
+7. **Roll up** — bind the per-issue findings into a milestone **GO / NO-GO** with a per-finding **disposition** from the closed set {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE}. Source every finding to its composed skill/spec. Recommend dispositions; **mutate nothing**.
 
 **Output:** a **Milestone Readiness Briefing** — (a) the **GO / NO-GO** verdict; (b) a per-requirement table in the **C1 / C2 / C3 + PT-1..4 schema** (Phase-A0-consumable — see `## Output Contract`); (c) per-finding dispositions with rationale, each sourced to its composed skill/spec; (d) a reversibility tier (**CHEAP**) + confidence; (e) a **terminal next-action route** — on **GO**, the explicit `release-hub Mode O on <milestone>` recommendation to orchestrate the release; on **NO-GO**, the per-finding dispositions framed as the gating cleanup checklist that must clear before the milestone re-runs Mode R and then Mode O (the **R → cleanup → re-run R → Mode O** loop). **Autonomy Tier 1 — Recommend** (read-only; the operator acts on the dispositions). Audience-framed per `## Output Contract`.
 
@@ -128,7 +130,7 @@ Every output declares its **audience** and frames accordingly: **operator/exec**
 
 ## Dependency Graph Node
 
-- **Composes (Mode R — invokes via skill-chain, never absorbs):** the triage-analysis capability / `intake-desk` + `delivery-engine` (triage + dup); `triage-design-rereview` (staleness + architecture); `release-planner` (dependencies); `bundle-composition-doctrine` (coherence).
+- **Composes (Mode R — invokes via skill-chain, never absorbs):** the triage-analysis capability / `intake-desk` + `delivery-engine` (triage + dup); `triage-design-rereview` (staleness + architecture); `release-planner` (dependencies); `bundle-composition-doctrine` (coherence + frame-pluggability for neutrality); `ADR-033` (methodology-neutrality + structural-cascade).
 - **Spawns (Mode O — Agent-tool spokes, not skill-chain):** the `release-planner` planning spoke (St 4), the stage spokes (St 5–8), the `pmo-release-manager` tail spoke (St 9→13).
 - **Coordinates with:** `pmo-release-manager` (the tail hand-off — the hub orchestrates the front pipeline and hands the tail to the manager).
 - **Upstream invokers:** the operator directly (by name + milestone argument).
