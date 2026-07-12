@@ -78,9 +78,9 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 **Status:** built (first value increment).
 **Trigger:** "is [milestone] ready to start", "check milestone readiness for [milestone]", "pre-flight [milestone]".
 
-**Purpose:** confirm a bundled milestone is ready to **ENTER** the pipeline before a run is committed — sequence the four composed checks across the milestone and emit a single **GO / NO-GO** with per-finding dispositions. This is the consolidated pre-flight the operator runs by hand today; it shifts the Stage-4 Phase-A0 premise re-review **left** to milestone scope and adds the milestone-level checks Phase A0 never did (cross-milestone leaks, bundle currency, coherence).
+**Purpose:** confirm a bundled milestone is ready to **ENTER** the pipeline before a run is committed — sequence the five composed checks across the milestone and emit a single **GO / NO-GO** with per-finding dispositions. This is the consolidated pre-flight the operator runs by hand today; it shifts the Stage-4 Phase-A0 premise re-review **left** to milestone scope and adds the milestone-level checks Phase A0 never did (cross-milestone leaks, bundle currency, coherence).
 
-**Composition:** composes the four targets in `## Composition` — owns no check logic.
+**Composition:** composes the five targets in `## Composition` — owns no check logic.
 
 **Process:**
 1. **Resolve the milestone** — assert it exists (one matching title); read all issues + bundle metadata. **Read-only throughout.**
