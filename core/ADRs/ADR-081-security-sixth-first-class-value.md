@@ -26,7 +26,7 @@ The upstream root cause is a charter gap, not only the two code defects. `build-
 
 ## Decision
 
-Elevate **Security** to a **first-class engineering value (#6)** in `build-philosophy.md`, alongside Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, and Stability. Concretely:
+Elevate **Security** to the **sixth first-class engineering value** in `build-philosophy.md`, alongside Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, and Stability. Concretely:
 
 **D1 — A first-class value row + a full coverage-matrix row.** Security gains a value-table entry (fail-closed controls · validated input · context-encoded output · injection denied by construction) and a philosophy × surface matrix row, so a missing security enforcer on any surface now surfaces as a **named GAP** the charter's gap-finder can see. The matrix row lands with honest GAP markings: **Hooks** populated (the real enforcers), **Agents** + **Hub / Spokes** GAP, **Skills** design-time with the output-encoding enforcer in flight, **Slash-commands** `n/a`.
 
