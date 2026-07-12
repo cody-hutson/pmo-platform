@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.73] - 2026-07-12
+
+Security patch fixing a hook fail-open and three eval-review-tool issues (out-of-workspace file read, secret embedding, unauthenticated write).
+
+[Full notes](release/releases/notes/v3.73_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.73)
+
 ## [v3.71] - 2026-07-12
 
 New projects use one simpler five-folder set and a single inbox that auto-files dropped documents; existing projects keep working.
