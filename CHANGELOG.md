@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.71] - 2026-07-12
+
+New projects use one simpler five-folder set and a single inbox that auto-files dropped documents; existing projects keep working.
+
+[Full notes](release/releases/notes/v3.71_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.71)
+
 ## [v3.70] - 2026-07-12
 
 <one-sentence ≤140 chars; plain language; agent-search target>
