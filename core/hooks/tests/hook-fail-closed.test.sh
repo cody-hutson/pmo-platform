@@ -1,6 +1,6 @@
 #!/bin/bash
 # hook-fail-closed.test.sh — glob-derived fail-closed meta-test for the PreToolUse
-# security hooks (GHSA-9cjm-v22x-4x33 regression lock; v3.73 build-security-hardening).
+# security hooks (GHSA-9cjm-v22x-4x33 regression lock; v3.74 build-security-hardening).
 #
 # WHY THIS EXISTS (the gap the shipped fix 586b968 left)
 # ------------------------------------------------------

@@ -521,6 +521,50 @@ redeploy_skills() {
   fi
 }
 
+# --- Phase 5c: Refresh the security-hook bundle (#3430) ---
+# deploy.sh (Phase 5) deploys skills + packages but NOT hooks — its harness-artifact path
+# reads harness/<name>/, which does not exist at the v2 repo root. So the deployed
+# .claude/hooks bundle (hook scripts + co-shipped primitives + lib/dep-resolve.sh) is
+# otherwise refreshed only by a full setup-workspace.sh run, and a hook/helper SECURITY fix
+# never reaches an already-installed workspace via update.sh. Delegate to
+# `setup-workspace.sh --refresh-hooks`, which reuses the SINGLE-SOURCED install_hooks
+# co-deploy list (no third copy of the list to drift) with checksum-aware, non-interactive
+# drift handling: an unedited platform hook is updated; an operator-edited hook is preserved.
+refresh_hooks() {
+  info "Phase 5c: Refresh security-hook bundle via setup-workspace.sh --refresh-hooks"
+  local setup="${REPO_ROOT}/docs/scripts/setup-workspace.sh"
+  if [ ! -f "${setup}" ]; then
+    warn "setup-workspace.sh not found at ${setup}; skipping hook refresh"
+    return 0
+  fi
+  if [ ! -d "${WORKSPACE_ROOT}/.claude/hooks" ]; then
+    info "No deployed hooks at ${WORKSPACE_ROOT}/.claude/hooks; skipping hook refresh"
+    return 0
+  fi
+  local dry_flag=""
+  if [ "${DRY_RUN}" -eq 1 ]; then dry_flag="--dry-run"; fi
+  local refresh_out; refresh_out="$(mktemp -t update-phase5c.XXXXXX)"
+  local rc=0
+  # shellcheck disable=SC2086  # dry_flag is a single controlled token (empty or --dry-run)
+  bash "${setup}" --refresh-hooks --workspace-root "${WORKSPACE_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} \
+    >"${refresh_out}" 2>&1 || rc=$?
+  cat "${refresh_out}" >&2
+  if [ "${rc}" -ne 0 ]; then
+    rm -f "${refresh_out}"
+    warn "Hook refresh returned non-zero (${rc}); continuing update."
+    return 0
+  fi
+  # Flip the "did something" flag only on a REFRESHED hook — a hook whose deployed content
+  # actually differed from source. The co-shipped primitives are re-copied by install_hooks'
+  # plain `cp` on EVERY run (they log INSTALLED even when byte-identical), so keying off their
+  # log lines would make every real update non-no-op and break the EX_NOCHANGE contract
+  # (test_upgrade_config_durability Suite F). A genuine hook security fix always REFRESHES.
+  if grep -qE 'REFRESHED:' "${refresh_out}"; then
+    PHASE5_DEPLOYED=1
+  fi
+  rm -f "${refresh_out}"
+}
+
 # --- Phase 5b: Refresh .version snapshot ---
 # Keep <ws>/.claude/.version in sync with the clone so the SessionStart
 # version-skew hook (core/hooks/notify-version-skew.sh) compares against the
@@ -553,6 +597,7 @@ scaffold_needles
 scaffold_roster
 regenerate_managed_sections
 redeploy_skills
+refresh_hooks
 refresh_version_snapshot
 write_last_update
 

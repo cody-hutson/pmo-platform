@@ -307,7 +307,7 @@ test_case "malformed JSON → exit 2" \
 # (GHSA-9cjm-v22x-4x33). Because resolution is in the HELPER, simulating
 # missing jq requires sandboxing BOTH files: a copy of the hook + a copy of
 # dep-resolve.sh with all three jq candidate paths sed'd to nonexistent.
-# MODE-AWARE fail-closed posture (v3.73 build-security-hardening, S2 first
+# MODE-AWARE fail-closed posture (v3.74 build-security-hardening, S2 first
 # conformance case): the dependency gate now runs AFTER mode detection.
 #   - enforce (and the no-mode-file default): fail CLOSED (exit 2 +
 #     DEPENDENCY-MISSING) — the always-enforce Tier-0 floor must not be silently

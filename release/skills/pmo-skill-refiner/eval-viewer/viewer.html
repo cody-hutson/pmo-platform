@@ -1030,7 +1030,7 @@
 
       fetch("/api/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": (EMBEDDED_DATA.csrf_token || "") },
         body: JSON.stringify({ reviews, status: "in_progress" }),
       }).then(() => {
         document.getElementById("feedback-status").textContent = "Saved";
@@ -1062,7 +1062,7 @@
       const payload = JSON.stringify({ reviews, status: "complete" }, null, 2);
       fetch("/api/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": (EMBEDDED_DATA.csrf_token || "") },
         body: payload,
       }).then(() => {
         document.getElementById("done-overlay").classList.add("visible");

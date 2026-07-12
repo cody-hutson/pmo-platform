@@ -114,6 +114,11 @@ jobs:
       - name: Run end-to-end install test (test_install_end_to_end.sh)
         run: bash core/deploy/tests/test_install_end_to_end.sh
 
+      - name: Run refresh-hooks regression (test_refresh_hooks.sh)
+        # #3430: setup-workspace.sh --refresh-hooks + update.sh Phase 5c — a hook/helper
+        # security fix must reach an already-installed workspace, preserving operator edits.
+        run: bash core/deploy/tests/test_refresh_hooks.sh
+
       - name: Run composition-lib regression (test_lib_composition.sh)
         run: bash core/deploy/tests/test_lib_composition.sh
 

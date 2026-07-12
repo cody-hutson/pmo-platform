@@ -3,7 +3,7 @@
 title: "ADR-081 — Security as the sixth first-class build-philosophy value"
 status: Accepted
 date: 2026-07-12
-release: v3.73 build-security-hardening
+release: v3.74 build-security-hardening
 deciders: "operator (S2 charter-amendment approval at Stage-4 Plan Review + Collective Review scope-lock, this release) + adversarial design review (GHSA-9cjm / GHSA-rw36 retro)"
 tags: [build-philosophy, first-class-value, security, coverage-matrix, charter-amendment, GHSA-9cjm, GHSA-rw36, fail-closed]
 source_observations:
@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-**Accepted.** Ratified by the operator's approval of the S2 governance amendment at the v3.73 Stage-4 Plan Review ("S2 governance amendment — APPROVED + ADR authored in-slice") and re-confirmed at the Collective Review scope-lock (Security = 6th first-class value, ADR-081 → `core/ADRs/`, batch-ratified). Recorded at authoring because the deciding gate — operator approval of the value-elevation — already ran; the Deep Stage-9 review verifies implementation conformance, it does not re-decide the elevation. This ADR is the durable record of the charter amendment the approvals fixed.
+**Accepted.** Ratified by the operator's approval of the S2 governance amendment at the v3.74 Stage-4 Plan Review ("S2 governance amendment — APPROVED + ADR authored in-slice") and re-confirmed at the Collective Review scope-lock (Security = 6th first-class value, ADR-081 → `core/ADRs/`, batch-ratified). Recorded at authoring because the deciding gate — operator approval of the value-elevation — already ran; the Deep Stage-9 review verifies implementation conformance, it does not re-decide the elevation. This ADR is the durable record of the charter amendment the approvals fixed.
 
 ## Context
 

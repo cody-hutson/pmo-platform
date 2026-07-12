@@ -150,3 +150,18 @@ jobs:
         # legacy blanket fail-open — jq is resolved via lib/dep-resolve.sh and a
         # missing jq fails closed (enforce) or degrades per mode.
         run: bash core/hooks/tests/check-hook-dep-hardening.sh
+
+  eval-viewer-security:
+    name: Eval-viewer security (GHSA-fxcr)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Symlink-read / PII-redaction / CSRF regression
+        # Guards GHSA-fxcr-7x63-3g94: the eval-viewer generator must confine file reads
+        # to the workspace root, cap + redact embedded output, and gate POST
+        # /api/feedback behind a loopback Host + same-origin Origin + per-run CSRF token.
+        # #3408 (milestone #271) extends eval-viewer CI with the GHSA-rw36 XSS tests.
+        run: python3 release/skills/pmo-skill-refiner/eval-viewer/test_generate_review.py

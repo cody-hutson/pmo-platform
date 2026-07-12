@@ -99,6 +99,7 @@ OPERATOR_TOML=""            # derived from CONFIG_ROOT
 WORKSPACE_ROOT=""
 SOURCE_REPO=""
 INIT_ONLY_STATE=0
+REFRESH_HOOKS=0
 DRY_RUN=0
 INSTALL_COMPLETE=0
 SUPPRESS_VALIDATE_HINT=0    # set when guided-recovery exits without doing work
@@ -133,6 +134,12 @@ Options:
                           state.
   --init-only-state       Bootstrap only the .workspace-setup.state marker;
                           empirically verify artifacts but perform no install operations
+  --refresh-hooks         Re-deploy ONLY the security-hook bundle (hooks +
+                          co-shipped primitives + lib/) into an EXISTING workspace,
+                          reusing the same drift-preserving install path as a full
+                          run. Skips the scaffold/token/skill phases. This is the
+                          path update.sh uses so a hook/helper security fix reaches
+                          an already-installed workspace (#3430).
   --dry-run               Preview planned actions; perform no state mutation
   --help                  Show this help
 
@@ -342,6 +349,8 @@ parse_argv() {
         CONFIG_ROOT="$2"; shift 2 ;;
       --init-only-state)
         INIT_ONLY_STATE=1; shift ;;
+      --refresh-hooks)
+        REFRESH_HOOKS=1; shift ;;
       --dry-run)
         DRY_RUN=1; shift ;;
       --help|-h)
@@ -1016,6 +1025,32 @@ install_hook_with_checksum() {
     return 0
   fi
 
+  # --- Refresh-hooks mode (#3430): non-interactive, checksum-aware drift handling.
+  # A deployed hook that still matches its recorded baseline (or has no baseline) is an
+  # UNEDITED platform copy → overwrite to APPLY the update, so a hook security fix actually
+  # reaches an already-installed workspace through update.sh (the whole point of #3430). A
+  # hook that DIVERGED from its baseline was operator-edited → preserve + warn (never
+  # silently clobber). Confined to refresh mode; the interactive prompt path below (used by
+  # the fresh / rebootstrap flows) is unchanged, so a full re-run keeps its exact semantics.
+  if [ "${REFRESH_HOOKS}" -eq 1 ]; then
+    local recorded_sha
+    recorded_sha=$(json_get "${CHECKSUMS_FILE}" "${basename}")
+    if [ -z "${recorded_sha}" ] || [ "${recorded_sha}" = "${target_sha}" ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would REFRESH: ${basename} (${target_sha:0:8} → ${source_sha:0:8})"
+        return 0
+      fi
+      cp "${source_hook}" "${target}"
+      chmod +x "${target}"
+      json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
+      info "REFRESHED: ${basename} (${target_sha:0:8} → ${source_sha:0:8})"
+      return 0
+    fi
+    warn "PRESERVED (operator-edited): ${basename} diverged from its recorded baseline; not overwritten. Re-run docs/scripts/setup-workspace.sh to reconcile."
+    json_set "${CHECKSUMS_FILE}" "${basename}" "${target_sha}"
+    return 0
+  fi
+
   # Drift — check cached decision first (FM-2 absorption)
   local cached_sha cached_action
   cached_sha=$(json_get_obj_field "${DRIFT_DECISIONS_FILE}" "${basename}" "source_sha_seen")
@@ -1155,6 +1190,27 @@ install_hooks() {
     cp "${depresolve_src}" "${depresolve_dst}"
     info "INSTALLED: dep-resolve.sh (shared hook jq/dependency resolver)"
     printf 'rm-file:%s\n' "${depresolve_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
+  # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
+  # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/positional-issueref.awk at
+  # runtime; the source lib lives at core/hooks/lib/ (shared with the fixture-runner and
+  # the reference-durability CI), which the deployed .claude/hooks/ cannot reach. Without
+  # this copy the deployed hook cannot run its positional detector (BLOCK-FRAGILE-REF-003)
+  # and — post GHSA-g9g6-28c9-vrx5 — fails CLOSED in enforce (or degrades in warn). It is
+  # a sourced lib, not a registered hook (no block-* name), so hook-registry checks ignore
+  # it. HARD dependency; mirrors the dep-resolve.sh co-deploy above.
+  local posawk_src="${SOURCE_REPO}/core/hooks/lib/positional-issueref.awk"
+  local posawk_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/positional-issueref.awk"
+  if [ ! -r "${posawk_src}" ]; then
+    warn "positional-issueref.awk not found at ${posawk_src}; block-fragile-refs positional detector will fail closed in enforce"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy positional-issueref.awk → ${posawk_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${posawk_src}" "${posawk_dst}"
+    info "INSTALLED: positional-issueref.awk (block-fragile-refs positional classifier)"
+    printf 'rm-file:%s\n' "${posawk_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   install_mode_template_if_missing ".mode.template" ".mode"
@@ -1623,6 +1679,35 @@ rebootstrap() {
   fi
 }
 
+# --- Section 22b: Refresh-hooks flow (#3430) ---
+# Re-deploy ONLY the security-hook bundle into an EXISTING workspace: the hook scripts
+# (via install_hook_with_checksum in checksum-aware REFRESH mode — unedited platform hooks
+# are updated, operator edits preserved), the co-shipped primitives (path-leak-patterns.sh,
+# positional-issueref.awk), lib/dep-resolve.sh, and the .version snapshot. It reuses
+# install_hooks so the co-deploy list stays single-sourced (the drift trap that hid the
+# awk in GHSA-g9g6 does not get a third copy). It does NOT scaffold dirs, resolve tokens,
+# substitute templates, or redeploy skills. The hook-tier allowlists are composition-surface
+# files refreshed by update.sh's regenerate_managed_sections, not here. This is the path
+# update.sh delegates to so a hook/helper security fix reaches an already-installed workspace.
+refresh_hooks_flow() {
+  INSTALL_MODE="refresh-hooks"
+  info "REFRESH-HOOKS flow — re-deploy the security-hook bundle only"
+  if [ ! -d "${WORKSPACE_ROOT}/.claude/hooks" ]; then
+    err "No deployed hooks at ${WORKSPACE_ROOT}/.claude/hooks — run a full setup-workspace.sh first."
+    exit 1
+  fi
+  # Load the recorded hook_checksums baseline so REFRESH mode can distinguish an unedited
+  # platform hook (safe to update) from an operator edit (preserve). Best-effort: a missing
+  # or unreadable state leaves the baseline empty, which REFRESH mode treats as "no baseline
+  # -> apply the platform version" (the security-priority default).
+  read_existing_state || warn "Could not read existing state; refreshing all hooks from source."
+  install_hooks
+  # Mark success so the EXIT-trap cleanup does NOT roll back the co-deployed primitives
+  # (they record rm-file rollback ops). If install_hooks aborts under set -e, this is not
+  # reached and the partial co-deploy rolls back, as intended.
+  INSTALL_COMPLETE=1
+}
+
 # --- Section 23: Init-only-state flow (FM-4 absorption) ---
 # Empirically verifies each artifact rather than asserting completion.
 init_only_state_flow() {
@@ -1799,6 +1884,11 @@ main() {
 
   if [ "${INIT_ONLY_STATE}" -eq 1 ]; then
     init_only_state_flow
+    return 0
+  fi
+
+  if [ "${REFRESH_HOOKS}" -eq 1 ]; then
+    refresh_hooks_flow
     return 0
   fi
 

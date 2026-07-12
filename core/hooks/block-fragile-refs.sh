@@ -64,7 +64,13 @@ readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
 # `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
 # NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
 readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
-if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+# Precheck syntax with `bash -n` BEFORE sourcing: a truncated/corrupt lib (interrupted
+# cp, disk-full) is a parse error, and sourcing a parse-error file is FATAL to this
+# parent — with partial top-level execution the process can exit 1 (NON-blocking =
+# fail-OPEN) instead of blocking. `bash -n` detects that non-fatally so we fail CLOSED
+# (GHSA-g9g6-28c9-vrx5). Also require deny_missing_primitive so a valid-but-stale lib
+# (pre-fix, no helper) fails closed here rather than fail-open at a later ERR trap.
+if [ ! -r "$DEP_LIB" ] || ! "${BASH:-/bin/bash}" -n "$DEP_LIB" 2>/dev/null || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1 || ! command -v deny_missing_primitive >/dev/null 2>&1; then
   "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
   exit 2
 fi
@@ -152,6 +158,7 @@ if [ -z "$JQ" ]; then
   log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
   if [ "$MODE" = "enforce" ]; then
     deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+    exit 2   # caller owns the fail-closed exit — never trust the callee to terminate (GHSA-g9g6)
   fi
   "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq not found. Reference-durability hook DEGRADED (fail-open in warn-mode). Install: brew install jq (or ensure /usr/bin/jq exists).\n' "$HOOK_NAME" >&2
   exit 0
@@ -288,7 +295,22 @@ refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /us
 # feeds the classifier "<NR>\t<line>" records and passes its own ISSUEREF_RE in so the
 # byte-identical-regex invariant is preserved. Output shape ("<lineno>:VERDICT:<line>") is
 # identical to the previous inline awk, so the downstream report wiring is unchanged.
+# Verify the classifier actually WORKS before trusting its (possibly empty) output — a
+# present-but-empty/truncated/corrupt awk otherwise runs to nothing and silently yields no
+# findings, re-opening the fail-OPEN this advisory closes (GHSA-g9g6-28c9-vrx5). Canary: a
+# bare positional #N with NO reference block, which the real classifier MUST verdict
+# OUTSIDE-BLOCK. A non-zero awk exit (syntax error) or a missing OUTSIDE-BLOCK verdict
+# (empty/broken awk) both fail the canary. Evaluated inside an `if` so set -e / the ERR
+# trap never fire on a canary miss.
+_classifier_ok=0
 if [ -f "$POSITIONAL_LIB" ]; then
+  if _canary="$("$PRINTF" '1\tThis references #99 in prose.\n' | "$AWK" -f "$POSITIONAL_LIB" \
+        -v refline=0 -v issuere="$ISSUEREF_RE" -v hexcolor="$HEXCOLOR_RE" -v minwords="$MIN_SELFDESCRIBE_WORDS" 2>/dev/null)" \
+     && "$PRINTF" '%s' "$_canary" | "$GREP" -q 'OUTSIDE-BLOCK'; then
+    _classifier_ok=1
+  fi
+fi
+if [ "$_classifier_ok" -eq 1 ]; then
   issueref_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$AWK" '{ printf "%d\t%s\n", NR, $0 }' \
     | "$AWK" -f "$POSITIONAL_LIB" \
         -v refline="$refblock_line" \
@@ -296,11 +318,19 @@ if [ -f "$POSITIONAL_LIB" ]; then
         -v hexcolor="$HEXCOLOR_RE" \
         -v minwords="$MIN_SELFDESCRIBE_WORDS" || true)"
 else
-  # Fail-open for THIS detector only if the shared classifier is missing (a deployment
-  # defect — the lib ships in the same commit). Mirrors the hook's jq fail-open posture:
-  # a degraded positional check must not block all durable-corpus writes. The Class L and
-  # Class V detectors above are unaffected. Logged so the gap is visible.
-  log_error "DEPENDENCY-MISSING: positional classifier not found at $POSITIONAL_LIB (positional issue-ref check skipped this run)"
+  # Classifier missing OR present-but-unusable (empty/truncated/corrupt) — a deploy defect
+  # (setup-workspace.sh co-deploys it beside dep-resolve.sh) or tamper. Mode-gated posture
+  # (GHSA-g9g6-28c9-vrx5), mirroring the jq gate above: in ENFORCE, a durable-corpus write
+  # whose positional check cannot run fails CLOSED (we cannot verify the reference-placement
+  # rule, so we DENY); in warn/off it degrades to a note. The Class L / V / U detectors
+  # already ran and are unaffected either way. This closes the former fail-OPEN where a
+  # missing OR broken classifier silently skipped BLOCK-FRAGILE-REF-003 even in enforce.
+  log_error "PRIMITIVE-MISSING-OR-INVALID: positional classifier $POSITIONAL_LIB unusable"
+  if [ "$MODE" = "enforce" ]; then
+    deny_missing_primitive "positional-issueref.awk" "$HOOK_NAME" "$PRINTF"
+    exit 2   # caller owns the fail-closed exit — never trust the callee to terminate (GHSA-g9g6)
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:PRIMITIVE-MISSING] WARN (degraded, .mode=%s): co-shipped classifier positional-issueref.awk absent or invalid; positional issue-ref check (BLOCK-FRAGILE-REF-003) skipped this run (Class L/V/U still enforced).\n' "$HOOK_NAME" "$MODE" >&2
   issueref_matches=""
 fi
 
