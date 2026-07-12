@@ -5,6 +5,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.72 (2026-07-12) — The release orchestrator is safer and finishes cleaner
+Hardens `release-hub` Mode R (readiness) + Mode O (orchestration). The readiness pre-flight is now strictly recommend-only (a new read-only guardrail + PROC failure-mode entry) and always routes to the next action (GO → Mode O; NO-GO → cleanup loop), and gains a methodology-neutrality + structural-cascade conformance check (checklist group 7, composing `bundle-composition-doctrine` + ADR-033 with zero inline logic). Mode O now routes Stage 12 through the release-manager tail (merge + atomic version-claim + DEPLOYED row, never a bare merge) and runs a per-wave pre-spawn concurrent-PR collision check. Five slices on one PR (#3405), Release Class routine; #2574/#2575 deferred at the Stage-5 scope-lock (owner-extension gap — require extending `release-planner` + `triage-design-rereview`). Self-executed via release-hub Mode O; DT/QA 15/16 AC MET with one count-cascade regression self-repaired; v3.72 claimed next-free above the concurrent v3.71 release.
+
 ### v3.71 (2026-07-12) — New projects use one simpler folder set and a single inbox
 
 ### v3.70 (2026-07-12) — <headline — populated by operator at chore PR review>
