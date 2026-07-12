@@ -14,10 +14,28 @@
 set -euo pipefail
 
 export PATH="/usr/bin:/bin"
-readonly JQ="/usr/bin/jq"
 readonly GREP="/usr/bin/grep"
 readonly FIND="/usr/bin/find"
 readonly SORT="/usr/bin/sort"
+# jq is resolved below via lib/dep-resolve.sh from a fixed absolute-path allowlist —
+# never $PATH — so the anti-hijack PATH pin still holds (GHSA-9cjm-v22x-4x33).
+
+readonly HOOK_NAME="audit-mcp-usage"
+readonly HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition. This is a manually-run CLI
+# seeding tool, not a PreToolUse perimeter hook, so exit codes carry no fail-open
+# semantics — but the guard keeps jq resolution in the ONE shared place (never
+# re-inlined), which is the whole point of GHSA-9cjm-v22x-4x33.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  /usr/bin/printf '[CLAUDE-HOOK:%s:LIB-MISSING] dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
+
 # Claude Code encodes the project dir as the workspace path with '/'→'-'.
 # Derive from $HOME + the (optionally configured) workspace root, so no operator
 # home path is embedded in the tracked hook.
@@ -40,6 +58,14 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown arg: $1" >&2; exit 1;;
   esac
 done
+
+# --- DEPENDENCY GATE (audit is NON-BLOCKING: a one-shot seeding tool, not a
+# security perimeter, so a degraded run that produces no output is acceptable —
+# exit 0 rather than block. --help above still works without jq). ---
+if [ -z "$JQ" ]; then
+  /usr/bin/printf '[CLAUDE-HOOK:%s:DEPENDENCY-MISSING] jq not found on the pinned tool path; audit skipped (non-blocking). Install it (brew install jq) to enable MCP-usage auditing.\n' "$HOOK_NAME" >&2
+  exit 0
+fi
 
 # Build find command for session logs
 find_args=("$SESSIONS_DIR" -type f -name '*.jsonl')

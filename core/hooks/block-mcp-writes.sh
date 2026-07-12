@@ -23,12 +23,14 @@ set -euo pipefail
 export PATH="/usr/bin:/bin"
 
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly CAT="/bin/cat"
 readonly TR="/usr/bin/tr"
 readonly DATE="/bin/date"
 readonly SHASUM="/usr/bin/shasum"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 readonly HOOK_NAME="block-mcp-writes"
 readonly HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -38,6 +40,17 @@ readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/mcp-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
 readonly ALLOWLIST="${HOOK_DIR}/../mcp-write-allowlist.txt"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
 
 # Write-verb pattern (MUST stay in sync with audit-mcp-usage.sh WRITE_VERBS)
 readonly WRITE_VERB_RE='^mcp__[^_]+__(create|edit|update|delete|add|transition|share|attach|permission|publish|invite|grant|export|copy|move|comment|post|send|email|upload|import|replace|insert|remove|archive)(_|[A-Z]|$)'
@@ -50,40 +63,8 @@ log_error() {
 
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-eval error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
-# --- DEPENDENCY CHECK ---
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq missing — hook DEGRADED (fail-open).\n' "$HOOK_NAME" >&2
-  exit 0
-fi
-
-# --- READ & VALIDATE INPUT ---
-INPUT="$(cat)"
-if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
-  log_error "INVALID-INPUT: malformed JSON"
-  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
-  exit 2
-fi
-
-TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
-CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
-
-# --- CLAUDE_HOOK_BYPASS escape hatch (NEW-E D8) ---
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
-
-# --- EARLY EXIT: non-MCP tool calls ---
-case "$TOOL_NAME" in
-  mcp__*) ;;  # fall through to rule check
-  *) exit 0 ;;
-esac
-
-# --- MODE DETECTION ---
+# --- MODE DETECTION (defined before the dependency gate so a missing-jq decision
+# can be mode-aware: enforce fails CLOSED, warn/off degrade to non-blocking). ---
 get_mode() {
   local mode="enforce"
   if [ -f "$MODE_FILE" ]; then
@@ -94,6 +75,56 @@ get_mode() {
     *) "$PRINTF" 'enforce' ;;
   esac
 }
+
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works even
+# when jq is unresolvable (GHSA-9cjm-v22x-4x33: the escape hatch must not sit behind
+# the very dependency gate it is meant to let you past). jq-OPTIONAL. ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    bcwd="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty' 2>/dev/null || echo unknown)"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" --arg cwd "$bcwd" \
+      '{ts:$ts, hook:$hook, tool:$tool, cwd:$cwd, action:"bypass"}' >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
+  exit 0
+fi
+
+# --- DEPENDENCY GATE (mode-gated). A security control that cannot evaluate its input
+# must not block SOFTER than a rule match would: in enforce it fails CLOSED (exit 2);
+# in warn/off it degrades to a non-blocking stderr note + exit 0 — because a warn-mode
+# rule match itself never blocks (GHSA-9cjm-v22x-4x33). Runs AFTER the bypass short-
+# circuit. ---
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
+  _jqmiss_mode="$(get_mode)"
+  if [ "$_jqmiss_mode" = "enforce" ]; then
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-DEGRADED] jq not found; .mode=%s so not blocking (degraded — MCP write checks skipped for this call).\n' "$HOOK_NAME" "$_jqmiss_mode" >&2
+  exit 0
+fi
+
+# --- VALIDATE INPUT ---
+if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
+  log_error "INVALID-INPUT: malformed JSON"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+
+TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
+CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+
+# --- EARLY EXIT: non-MCP tool calls ---
+case "$TOOL_NAME" in
+  mcp__*) ;;  # fall through to rule check
+  *) exit 0 ;;
+esac
 
 # sha256 digest for log evidence
 digest() {

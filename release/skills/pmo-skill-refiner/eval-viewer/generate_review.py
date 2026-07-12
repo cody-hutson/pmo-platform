@@ -276,7 +276,19 @@ def generate_html(
     if benchmark:
         embedded["benchmark"] = benchmark
 
-    data_json = json.dumps(embedded)
+    # Defense-in-depth transport escaping (GHSA-rw36-5pf9-w2vc): the placeholder sits
+    # INSIDE an inline <script> block, and json.dumps does not escape &, <, or > — so a
+    # value containing </script> would break out of the script context. Escaping them to
+    # \\u00XX keeps the JSON inert at the parser boundary. (U+2028/U+2029 need no handling
+    # here: json.dumps defaults to ensure_ascii=True, which already escapes them.) The
+    # load-bearing XSS defense is per-sink escaping at render time in viewer.html; this is
+    # the belt-and-suspenders transport layer.
+    data_json = (
+        json.dumps(embedded)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
 
     return template.replace("/*__EMBEDDED_DATA__*/", f"const EMBEDDED_DATA = {data_json};")
 

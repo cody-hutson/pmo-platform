@@ -596,6 +596,74 @@ test_case "AC-AP-022a: /bin/bash /tmp/evil.sh blocks (BLOCK-DESTRUCTIVE-022 scri
 test_case "AC-AP-022b: /bin/. /tmp/evil.sh blocks (BLOCK-DESTRUCTIVE-022 source form)" \
   "$(bash_payload '/bin/. /tmp/evil.sh')" 2 "BLOCK-DESTRUCTIVE-022"
 
+# ==========================================================================
+# GHSA-9cjm-v22x-4x33: jq fail-CLOSED regression (missing-dependency gate)
+# ==========================================================================
+#
+# jq resolution now lives in lib/dep-resolve.sh. To simulate a host with no jq
+# we sandbox BOTH files: a copy of the hook plus a copy of the helper whose
+# THREE jq candidate paths (/usr/bin/jq /opt/homebrew/bin/jq /usr/local/bin/jq)
+# are sed'd to nonexistent paths. POSTURE = enforce: a SHOULD-BLOCK payload
+# under missing jq must fail CLOSED (exit 2), never fail open (exit 0). A second
+# case proves the helper being absent ENTIRELY also fails closed (bash 3.2 exits
+# 1 on a failed source, which is non-blocking — the readability pre-test + exit 2
+# is what keeps it closed).
+
+echo ""
+echo "GHSA-9cjm-v22x-4x33: jq fail-closed regression"
+echo "---"
+
+DESTRUCTIVE_SANDBOX="$(/usr/bin/mktemp -d)"
+DEP_LIB_SRC="$(cd "$(dirname "$0")/.." && pwd -P)/lib/dep-resolve.sh"
+/bin/mkdir -p "$DESTRUCTIVE_SANDBOX/lib"
+/bin/cp "$HOOK" "$DESTRUCTIVE_SANDBOX/block-destructive.sh"
+/usr/bin/sed \
+  -e 's#/usr/bin/jq#/nonexistent/jq#g' \
+  -e 's#/opt/homebrew/bin/jq#/nonexistent/hb/jq#g' \
+  -e 's#/usr/local/bin/jq#/nonexistent/ul/jq#g' \
+  "$DEP_LIB_SRC" > "$DESTRUCTIVE_SANDBOX/lib/dep-resolve.sh"
+
+sandbox_case() {
+  local name="$1" hook_path="$2" payload="$3" expected_exit="$4" expected_pattern="${5:-}"
+  local tmp_stderr actual_exit=0 actual_stderr ok=1
+  tmp_stderr="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$payload" | /bin/bash "$hook_path" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+  actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"
+  [ "$actual_exit" != "$expected_exit" ] && ok=0
+  if [ -n "$expected_pattern" ] && ! /usr/bin/printf '%s' "$actual_stderr" | /usr/bin/grep -qE "$expected_pattern"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  expected_exit=%s actual_exit=%s\n  stderr: %s\n' "$name" "$expected_exit" "$actual_exit" "$actual_stderr"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# jq unresolvable (helper present, all candidates missing) + should-block payload → exit 2 (fail-closed)
+sandbox_case "jq-missing: rm -rf / fails CLOSED (exit 2, DEPENDENCY-MISSING)" \
+  "$DESTRUCTIVE_SANDBOX/block-destructive.sh" \
+  "$(bash_payload 'rm -rf /')" \
+  2 "DEPENDENCY-MISSING"
+
+# CLAUDE_HOOK_BYPASS=1 short-circuits BEFORE the gate even with jq unresolvable → exit 0
+sandbox_bypass_exit=0
+CLAUDE_HOOK_BYPASS=1 /usr/bin/printf '%s' "$(bash_payload 'rm -rf /')" \
+  | CLAUDE_HOOK_BYPASS=1 /bin/bash "$DESTRUCTIVE_SANDBOX/block-destructive.sh" >/dev/null 2>&1 || sandbox_bypass_exit="$?"
+if [ "$sandbox_bypass_exit" = 0 ]; then
+  /usr/bin/printf 'PASS: jq-missing + CLAUDE_HOOK_BYPASS=1 short-circuits (exit 0)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: jq-missing + CLAUDE_HOOK_BYPASS=1\n  expected_exit=0 actual_exit=%s\n' "$sandbox_bypass_exit"; FAIL=$((FAIL + 1))
+fi
+
+# Helper absent entirely (no lib/dep-resolve.sh) → fails CLOSED (exit 2, LIB-MISSING)
+DESTRUCTIVE_NOLIB="$(/usr/bin/mktemp -d)"
+/bin/cp "$HOOK" "$DESTRUCTIVE_NOLIB/block-destructive.sh"
+sandbox_case "helper-missing: fails CLOSED (exit 2, LIB-MISSING)" \
+  "$DESTRUCTIVE_NOLIB/block-destructive.sh" \
+  "$(bash_payload 'rm -rf /')" \
+  2 "LIB-MISSING"
+
+/bin/rm -rf "$DESTRUCTIVE_SANDBOX" "$DESTRUCTIVE_NOLIB"
+
 # --- Summary ---
 echo ""
 echo "================================"

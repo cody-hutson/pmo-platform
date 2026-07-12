@@ -18,7 +18,8 @@
 # Rule ID range: BLOCK-FRAGILE-REF-001..099
 #
 # Pattern: mirrors core/hooks/block-skill-direct-edit.sh architecture exactly
-# (PATH pinning, fail-open-on-missing-jq, fail-closed-on-malformed-input,
+# (PATH pinning, mode-coupled jq posture via lib/dep-resolve.sh [enforce → fail-closed
+# on missing jq, warn/off → degrade], fail-closed-on-malformed-input,
 # CLAUDE_HOOK_BYPASS escape hatch with audit, shared .mode file for warn/enforce/off).
 #
 # Detection scope rationale: the detector flags Class L + Class V wholesale and applies
@@ -33,11 +34,13 @@ set -euo pipefail
 export PATH="/usr/bin:/bin"
 
 readonly GREP="/usr/bin/grep"
-readonly JQ="/usr/bin/jq"
 readonly PRINTF="/usr/bin/printf"
 readonly DATE="/bin/date"
 readonly AWK="/usr/bin/awk"
 readonly SED="/usr/bin/sed"
+# jq is resolved below via lib/dep-resolve.sh (once HOOK_DIR is known), from a fixed
+# absolute-path allowlist — never $PATH — so the anti-hijack PATH pin still holds
+# (GHSA-9cjm-v22x-4x33).
 
 # --- METADATA ---
 readonly HOOK_NAME="block-fragile-refs"
@@ -55,6 +58,17 @@ readonly ALLOWLIST="${HOOK_DIR}/reference-durability-allowlist.txt"
 # fixture-runner and the reference-durability CI invoke this same file via `awk -f`, so
 # the positional logic cannot drift across the three surfaces). Resolves beside the hook.
 readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
+
+# --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
+# Test readability BEFORE sourcing: bash 3.2 (macOS system bash) exits 1 on a failed
+# `.` of a missing file even inside an `if !` condition, and exit 1 (unlike exit 2) is
+# NON-blocking in the PreToolUse contract — i.e. a missing helper would fail OPEN.
+readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
+if [ ! -r "$DEP_LIB" ] || ! . "$DEP_LIB" 2>/dev/null || ! command -v resolve_jq >/dev/null 2>&1; then
+  "$PRINTF" '[CLAUDE-HOOK:%s:LIB-MISSING] BLOCKED (fail-closed): dependency helper lib/dep-resolve.sh unavailable or invalid.\n' "$HOOK_NAME" >&2
+  exit 2
+fi
+JQ="$(resolve_jq)"; readonly JQ
 
 # --- THE FLAGGED-CLASS PATTERNS (validated against core/hooks/testdata/cutover-fixtures.txt) ---
 # Class L — markdown link sequence (fenced code blocks are stripped before scanning).
@@ -100,16 +114,50 @@ log_error() {
 
 trap 'rc=$?; log_error "RULE-EVAL-ERROR at line $LINENO (exit $rc)"; "$PRINTF" "[CLAUDE-HOOK:%s:HOOK-ERROR] BLOCKED: rule-evaluation error at line %s (exit %s). See %s.\n" "$HOOK_NAME" "$LINENO" "$rc" "$ERROR_LOG" >&2; exit 2' ERR
 
-# --- DEPENDENCY CHECK (jq required; fail-OPEN on missing, matching the sibling hook) ---
-if [ ! -x "$JQ" ] && ! command -v jq >/dev/null 2>&1; then
-  log_error "DEPENDENCY-MISSING: jq not found (tried $JQ and PATH=$PATH)"
-  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq not found. Reference-durability hook DEGRADED (fail-open). Install: brew install jq (or ensure /usr/bin/jq exists).\n' "$HOOK_NAME" >&2
+# --- READ INPUT (jq-free; stdin is consumed exactly once) ---
+INPUT="$(cat)"
+
+# --- CLAUDE_HOOK_BYPASS escape hatch — evaluated BEFORE the jq gate so it works even when
+# jq is unresolvable (GHSA-9cjm-v22x-4x33: an escape hatch advertised in a fail-closed
+# message must actually be reachable without jq). ---
+if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
+  ts="$($DATE -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$JQ" ]; then
+    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" \
+      '{ts:$ts, hook:$hook, tool:$tool, action:"bypass"}' \
+      >> "$BYPASS_LOG" 2>/dev/null || true
+  else
+    "$PRINTF" '{"ts":"%s","hook":"%s","action":"bypass","note":"jq-unresolved"}\n' "$ts" "$HOOK_NAME" >> "$BYPASS_LOG" 2>/dev/null || true
+  fi
   exit 0
 fi
 
-# --- READ & VALIDATE INPUT ---
-INPUT="$(cat)"
+# --- MODE check (shared harness .mode; warn|enforce|off) — read BEFORE the jq gate so a
+# mode-gated hook fails CLOSED only in enforce and stands down in off/warn. Uses /bin/cat,
+# not jq, so it is safe to evaluate ahead of the dependency gate. ---
+MODE="warn"
+if [ -f "$MODE_FILE" ]; then
+  mode_raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
+  case "$mode_raw" in
+    warn|enforce|off) MODE="$mode_raw" ;;
+  esac
+fi
+[ "$MODE" = "off" ] && exit 0
 
+# --- DEPENDENCY GATE (mode-gated fail-closed: a security control that cannot evaluate its
+# input must DENY in enforce — GHSA-9cjm-v22x-4x33. In warn-mode a rule match only warns, so
+# a missing dependency must not block harder than a match would: degrade non-blocking. ---
+if [ -z "$JQ" ]; then
+  log_error "DEPENDENCY-MISSING: jq not found on the pinned tool path"
+  if [ "$MODE" = "enforce" ]; then
+    deny_missing_dep jq "$HOOK_NAME" "$PRINTF"
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:DEPENDENCY-WARN] jq not found. Reference-durability hook DEGRADED (fail-open in warn-mode). Install: brew install jq (or ensure /usr/bin/jq exists).\n' "$HOOK_NAME" >&2
+  exit 0
+fi
+
+# --- VALIDATE INPUT ---
 if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
   log_error "INVALID-INPUT: malformed JSON on stdin"
   "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
@@ -123,15 +171,6 @@ case "$TOOL_NAME" in
   Write|Edit) ;;
   *) exit 0 ;;
 esac
-
-# --- CLAUDE_HOOK_BYPASS escape hatch ---
-if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
-  ts="$($DATE -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" \
-    '{ts:$ts, hook:$hook, tool:$tool, action:"bypass"}' \
-    >> "$BYPASS_LOG" 2>/dev/null || true
-  exit 0
-fi
 
 FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
 [ -z "$FILE_PATH" ] && exit 0
@@ -211,16 +250,6 @@ case "$FILE_PATH" in
   */release/releases/*|release/releases/*) LEDGER_EXEMPT=1 ;;
   */CHANGELOG.md|CHANGELOG.md) LEDGER_EXEMPT=1 ;;
 esac
-
-# --- MODE check (shared harness .mode; warn|enforce|off) ---
-MODE="warn"
-if [ -f "$MODE_FILE" ]; then
-  mode_raw="$(/bin/cat "$MODE_FILE" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
-  case "$mode_raw" in
-    warn|enforce|off) MODE="$mode_raw" ;;
-  esac
-fi
-[ "$MODE" = "off" ] && exit 0
 
 # --- FENCE STRIP — remove fenced code blocks (``` delimited) before scanning ---
 # Detectors must not fire on illustrative content inside code fences.
