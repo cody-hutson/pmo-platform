@@ -44,7 +44,8 @@ The control-flow core. The hub:
 2. Runs the **Collective Review check** before any Stage-6 routing (fires when ≥2 issues have Solutioning active and all Stage-5 sub-tasks are closed → operator scope-lock GATE).
 3. Runs the action-item scan ([`hub-action-tracking.md`](../../../../core/standards/hub-action-tracking.md)).
 4. For a parallel wave (Stage 5/7/8): runs the **quota-budget gate** + honors the **parallelism class** before spawning ([`spoke-launch.md`](spoke-launch.md)).
-5. Spawns the wave.
+5. **Per-wave concurrent-PR check (pre-spawn):** before spawning a build spoke for issue #N, query open PRs referencing that issue (`gh pr list --state open --search "#N"` or equivalent; N = the target issue number). If an open PR already references it, **surface to the operator — proceed / adopt / skip — BEFORE spawning**, never deferred to the Stage 7/8 coherence review. **Re-run every wave** (not once at Stage 4): the open-PR population changes mid-run, so a clean planning-time scan does not carry ([`spoke-launch.md`](spoke-launch.md)).
+6. Spawns the wave.
 
 ## Procedure 3 — Spoke prompt construction
 
