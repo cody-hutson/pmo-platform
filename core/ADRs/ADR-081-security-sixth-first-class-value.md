@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-**Accepted.** Ratified by the operator's approval of the S2 governance amendment at the v3.73 Stage-4 Plan Review ("S2 governance amendment — APPROVED + ADR in #3407") and re-confirmed at the Collective Review scope-lock (Security = 6th first-class value, ADR-081 → `core/ADRs/`, batch-ratified). Recorded at authoring because the deciding gate — operator approval of the value-elevation — already ran; the Deep Stage-9 review verifies implementation conformance, it does not re-decide the elevation. This ADR is the durable record of the charter amendment the approvals fixed.
+**Accepted.** Ratified by the operator's approval of the S2 governance amendment at the v3.73 Stage-4 Plan Review ("S2 governance amendment — APPROVED + ADR authored in-slice") and re-confirmed at the Collective Review scope-lock (Security = 6th first-class value, ADR-081 → `core/ADRs/`, batch-ratified). Recorded at authoring because the deciding gate — operator approval of the value-elevation — already ran; the Deep Stage-9 review verifies implementation conformance, it does not re-decide the elevation. This ADR is the durable record of the charter amendment the approvals fixed.
 
 ## Context
 
