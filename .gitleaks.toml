@@ -1,0 +1,19 @@
+title = "pmo-platform gitleaks configuration"
+
+# Extend gitleaks' FULL default ruleset and only ADD an allowlist below. Every path is
+# scanned with the complete default rules; the allowlist narrows nothing except the single
+# test-fixture file named below. The CI job (.github/workflows/security.yml) runs
+# `gitleaks detect --source .`, which auto-loads this file from the repo root.
+[extend]
+useDefault = true
+
+# The eval-viewer security-regression test embeds INTENTIONALLY-FAKE tokens — fake AWS,
+# GitHub (classic + fine-grained), GitLab, OpenAI, Google, and PEM strings — that must
+# resemble real token formats to exercise the GHSA-fxcr-7x63-3g94 redaction pass. They are
+# not real secrets; real secrets never belong in a test file. Allowlisting this one path
+# keeps the secret-scanning gate fully effective on every other file.
+[allowlist]
+description = "eval-viewer security-regression test fixtures (fake tokens for redaction tests)"
+paths = [
+  '''release/skills/pmo-skill-refiner/eval-viewer/test_generate_review\.py''',
+]
