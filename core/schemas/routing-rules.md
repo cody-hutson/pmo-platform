@@ -40,7 +40,7 @@ Never use as sole classifier. Supports Layer 1/2 findings.
 | Medium | 60-89% | Propose route with reasoning. User confirms or corrects. |
 | Low | <60% | Route to `_inbox/_unsorted/`. Add to unclassified queue. |
 
-> **ADR-079 taxonomy note (union-aware migration window).** Routing targets below are the **new closed 5-bin set** (`1-Governance`, `2-Delivery`, `3-Operations`, `4-Evidence`, `5-Reference` + transient `_inbox`/`_generated`). Legacy `01-08`-taxonomy projects remain valid during the migration window; the file-router wave (single-inbox intake) reconciles the sub-folder cadence and unclassified-queue mechanics against the closed set (transcript cadence sub-folders flatten to `4-Evidence/Transcripts/` — the closed set has no per-cadence transcript sub-folders).
+> **ADR-080 taxonomy note (union-aware migration window).** Routing targets below are the **new closed 5-bin set** (`1-Governance`, `2-Delivery`, `3-Operations`, `4-Evidence`, `5-Reference` + transient `_inbox`/`_generated`). Legacy `01-08`-taxonomy projects remain valid during the migration window; the file-router wave (single-inbox intake) reconciles the sub-folder cadence and unclassified-queue mechanics against the closed set (transcript cadence sub-folders flatten to `4-Evidence/Transcripts/` — the closed set has no per-cadence transcript sub-folders).
 
 ## File Classification Rules
 

@@ -122,7 +122,7 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 
 Create the project folder under `projects/[Project]/` with the **uniform closed-set structure** — the
 same five canonical bins + two transient underscore areas for **every** project, **identically regardless
-of `delivery_approach`** (per ADR-079). The set is **CLOSED**: route into these bins, never create new
+of `delivery_approach`** (per ADR-080). The set is **CLOSED**: route into these bins, never create new
 ones; a non-fitting item goes to the bin root or `_inbox/_unsorted/`, flagged. Methodology is carried by
 the `delivery_approach` frontmatter field + the coverage map (which trackers populate — Step 4), **NOT by
 folder shape**.
@@ -155,7 +155,7 @@ folder shape**.
 
 The scaffold is **branch-free** — there is no per-methodology folder variation and no speculative empty
 subfolders beyond the closed set. (Legacy projects scaffolded under the prior `01-08` taxonomy remain
-valid during the ADR-079 migration window; existing-project migration is out of scope.)
+valid during the ADR-080 migration window; existing-project migration is out of scope.)
 
 #### Step 2b: Bootstrap the `_pmo/` shared-entity store + link existing entities (ADR-058)
 

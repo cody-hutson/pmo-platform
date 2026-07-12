@@ -211,7 +211,7 @@ Same as CLAUDE.md, plus PMO-specific:
 - **Day-of-week validation:** Always validate: "March 18 (Tuesday)" not "March 18."
 - **No generalized dates:** All project dates in communications and status outputs must be specific and verified. Never substitute a vague range ("week of April 6") for a specific date ("April 2, Thursday"). When sources conflict, surface the conflict — don't paper over it with generalization.
 - **Write-first-speak-second:** All file changes follow: plan → user approves → write → confirm. Never report "tracker updated" or "file written" until the write has succeeded. If a write fails, report the failure. No file is modified without prior user approval; no completion is reported without prior file modification. Write sequences follow the Document Tier defined in CLAUDE.md File Management Protocol. Operational trackers (Document Tier 2) are auto-written after processing — do not wait for explicit write instructions. Stakeholder-facing documents (Document Tier 1) require user approval before writing.
-- **Project-scoped output:** All generated artifacts must route to the active project's closed 5-bin structure (`1-Governance`…`5-Reference`; legacy `01-08` during the ADR-079 migration window) or its `_generated/` staging area. Active project = the project whose PROJECT.md is loaded. If ambiguous, ask the user. Governance files at projects/ root are exempt.
+- **Project-scoped output:** All generated artifacts must route to the active project's closed 5-bin structure (`1-Governance`…`5-Reference`; legacy `01-08` during the ADR-080 migration window) or its `_generated/` staging area. Active project = the project whose PROJECT.md is loaded. If ambiguous, ask the user. Governance files at projects/ root are exempt.
 - **No ungoverned changes:** Any modification to governance files, skills, folder structure, or protocols requires a GitHub Issue via `improvement.yml` template (any category label per `label-taxonomy.md`) + implementation plan + user approval before execution. Self-generated improvements are logged only — do not attempt to resolve unless the user requests it. See "Continuous Improvement Protocol" below.
 
 ### Continuous Improvement Protocol
@@ -797,7 +797,7 @@ All projects follow this structure. Do NOT create project-specific subfolders ou
 All PMO operational skills operate within Layer 2 (Operations domain — `projects/` and its subfolders). Skills that write operational data — trackers, status logs, transcripts, generated artifacts — must target Layer 2 paths exclusively. No operational skill may modify Layer 1 files (`CLAUDE.md`, `core/`/`operations/`/`release/`, `.claude/settings.json`, `.claude/rules/`) without an approved IMP entry and a release executed through RELEASE_PROTOCOL.md. Bridge files (Layer 3) follow their dual-ownership rules defined in CLAUDE.md "Platform vs. Working Content Boundary."
 
 ```
-[Project Name]/                             ← Uniform closed 5-bin set (ADR-079) — identical for every project
+[Project Name]/                             ← Uniform closed 5-bin set (ADR-080) — identical for every project
 ├── PROJECT.md                              ← Born entity frontmatter + composed-index dashboard
 ├── _inbox/                                 ← Single intake drop point (transient)
 │   └── _unsorted/                          ← Low-confidence / non-fitting items, flagged
@@ -830,7 +830,7 @@ All PMO operational skills operate within Layer 2 (Operations domain — `projec
     └── Vendor-Docs/                        ← Vendor guides, system manuals, external training
 ```
 
-**ADR-079 taxonomy note (union-aware migration window).** The tree above is the **uniform closed 5-bin set** scaffolded for every new project (`project-initiator` Mode A), identical regardless of `delivery_approach`. The set is **CLOSED**: agents route into these bins, never create new ones; a non-fitting item goes to the bin root or `_inbox/_unsorted/`, flagged. During the migration window the legacy `01-08` taxonomy remains **valid** (existing projects are not migrated — deferred); enum-validating consumers accept the union `{legacy 01-08, new 1-Governance…5-Reference + _inbox/_generated}` per [`../schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 6. The `08-Generated/`→`_generated/` staging behavioral migration (artifact-generator promotion + generated-cleanup) lands with the artifact-generator wave; references to `08-Generated/` in the promotion/cleanup sections below are legacy-valid until that wave converges them.
+**ADR-080 taxonomy note (union-aware migration window).** The tree above is the **uniform closed 5-bin set** scaffolded for every new project (`project-initiator` Mode A), identical regardless of `delivery_approach`. The set is **CLOSED**: agents route into these bins, never create new ones; a non-fitting item goes to the bin root or `_inbox/_unsorted/`, flagged. During the migration window the legacy `01-08` taxonomy remains **valid** (existing projects are not migrated — deferred); enum-validating consumers accept the union `{legacy 01-08, new 1-Governance…5-Reference + _inbox/_generated}` per [`../schemas/frontmatter-schema.md`](../schemas/frontmatter-schema.md) § Category 6. The `08-Generated/`→`_generated/` staging behavioral migration (artifact-generator promotion + generated-cleanup) lands with the artifact-generator wave; references to `08-Generated/` in the promotion/cleanup sections below are legacy-valid until that wave converges them.
 
 **Naming:** Folder and file names follow [`../standards/artifact-naming-standard.md`](../standards/artifact-naming-standard.md) — the single canonical naming home (POSIX-safe charset, `_` segment separator, `-`-joined one-segment type slug, optional trailing ISO-8601 date, lowercase extension; the `_`-prefix is RESERVED for sanctioned infrastructure folders such as `_config/` / `_pmo/` and staging `_`-subfolders). `project-initiator` enforces folder names against that standard at scaffold time.
 
@@ -840,7 +840,7 @@ Route files by **content function**, not by format or keyword match. When a file
 
 **Routing authority:** File Router (`file-router/references/routing-patterns.md`) is the single source of truth for classification patterns and routing rules. This section defines folder purpose — what belongs where and why. File Router implements the mechanics — how files get there.
 
-Folder purposes for the closed 5-bin set (ADR-079). Legacy `01-08` bins map per the tree note above and remain valid during the migration window.
+Folder purposes for the closed 5-bin set (ADR-080). Legacy `01-08` bins map per the tree note above and remain valid during the migration window.
 
 | Folder | Purpose |
 |--------|---------|
@@ -1117,7 +1117,7 @@ The Transcript Processing Protocol is a registered consumer of the [Context Life
 
 **Note:** These are simplified filename patterns. For authoritative content-based classification, see `file-router/references/routing-patterns.md` (the routing authority per Folder Routing Guidelines).
 
-Classify incoming files by pattern and route to correct folder (the ADR-079 closed 5-bin set). If pattern doesn't match, route to `_inbox/_unsorted/` as fallback. Transcript cadence sub-folders flatten to `4-Evidence/Transcripts/` under the closed set; the file-router wave finalizes the intake-classification mechanics.
+Classify incoming files by pattern and route to correct folder (the ADR-080 closed 5-bin set). If pattern doesn't match, route to `_inbox/_unsorted/` as fallback. Transcript cadence sub-folders flatten to `4-Evidence/Transcripts/` under the closed set; the file-router wave finalizes the intake-classification mechanics.
 
 | Pattern | Route To | Owner |
 |---------|----------|-------|
