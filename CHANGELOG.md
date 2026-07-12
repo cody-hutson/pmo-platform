@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.70] - 2026-07-12
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.70_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.70)
+
 ## [v3.69] - 2026-07-11
 
 <one-sentence ≤140 chars; plain language; agent-search target>
