@@ -6882,6 +6882,56 @@ cmd_check() {
     fi
   fi
 
+  # Check 54 — Ownership-collision reconciliation (ADR-044 I1+I3+I4; warn-mode initial)
+  #
+  # Reconciles the §6 owning-agent matrix (project-entity-model.md) against the
+  # per-skill output declarations (per-skill-output-contracts.md) + the rendering
+  # set (operational-artifact-inventory.md), and ESCALATES a would-be SECOND
+  # maintainer — never a producer (ADR-044's "many producers, one maintainer" is
+  # the governed pattern). Creates no ownership store; reconciles existing SSOTs.
+  # Offline-safe: pure local corpus parse — no `gh`, so no SKIP leg (unlike Check
+  # 53). Read-only; reversibility CHEAP (new primitive + revertible block;
+  # `ownership-collision.mode`=off disables). Sibling deploy-primitive per ADR-068
+  # (run_eval_audit.py untouched). Warn-mode initial per
+  # core/rules/bypass-mode-readiness.md (the 14/18/42/43/50/51/53 precedent): the
+  # exit-1 "collision" finding is a non-blocking WARN during calibration. The
+  # current suite has zero duplicate maintainers -> 0 collisions by construction,
+  # so this check is silent-PASS on first run; warn-mode keeps a future finding
+  # non-blocking until the >=3-day review flips ownership-collision.mode to
+  # enforce (enforce = the finding increments ISSUES; the count of what is checked
+  # is unchanged). Primitive: core/deploy/tools/check-ownership-collision.py.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 54: Ownership-collision reconciliation (ADR-044 I1+I3+I4; warn-mode initial; enforce-flip deferred)"
+    local c54_script="core/deploy/tools/check-ownership-collision.py"
+    if [[ ! -f "$c54_script" ]]; then
+      flag_warn_or_issue "ownership-collision" "primitive script missing: $c54_script"
+    else
+      local c54_mode
+      c54_mode=$(resolve_check_mode "ownership-collision")
+      local c54_out c54_exit=0
+      c54_out=$(/usr/bin/python3 "$c54_script" --output-format tsv 2>&1) || c54_exit=$?
+      if [[ $c54_exit -eq 3 ]]; then
+        flag_warn_or_issue "ownership-collision" "input failure (exit 3): $(echo "$c54_out" | head -1) — a required corpus surface (§6 matrix / output-contracts / inventory) was missing or unparseable; fix the surface/parser"
+      elif [[ $c54_exit -eq 0 ]]; then
+        local c54_ent
+        c54_ent=$(echo "$c54_out" | awk -F'\t' '$1=="ENTITIES_CHECKED"{print $2}')
+        log "  OK:    ownership-collision — 0 collisions across ${c54_ent:-0} entities (producers reconciled as producers vs single maintainers)"
+      elif [[ $c54_exit -eq 1 ]]; then
+        local c54_count c54_detail
+        c54_count=$(echo "$c54_out"  | awk -F'\t' '$1=="COLLISIONS"{print $2}')
+        c54_detail=$(echo "$c54_out" | awk -F'\t' '$1=="DETAIL"{print $2}' | paste -sd';' - | sed 's/;/; /g')
+        if [[ "$c54_mode" == "enforce" ]]; then
+          log "  FAIL:  ownership-collision — $c54_count second-maintainer/contradiction collision(s): ${c54_detail:-(see detail)}"
+          ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s) (warn-mode; flip ownership-collision.mode to enforce after shakedown): ${c54_detail:-(see detail)}"
+        fi
+      else
+        flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(echo "$c54_out" | head -1)"
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
