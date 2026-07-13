@@ -59,8 +59,14 @@
 
   <p class="summary" id="summary"></p>
 
+  <!-- Eval data as inert JSON: application/json scripts are NOT executed, so markup in a
+       candidate query stays inert; read via textContent + JSON.parse. The filler MUST still
+       neutralize < (per software.md Security -> Output encoding) so a </script> sequence
+       cannot terminate the block early. -->
+  <script type="application/json" id="eval-data">__EVAL_DATA_PLACEHOLDER__</script>
+
   <script>
-    const EVAL_DATA = __EVAL_DATA_PLACEHOLDER__;
+    const EVAL_DATA = JSON.parse(document.getElementById('eval-data').textContent);
 
     let evalItems = [...EVAL_DATA];
 
@@ -79,14 +85,14 @@
         if (group !== lastGroup) {
           const headerRow = document.createElement('tr');
           headerRow.className = 'section-header';
-          headerRow.innerHTML = `<td colspan="3">${item.should_trigger ? 'Should Trigger' : 'Should NOT Trigger'}</td>`;
+          headerRow.innerHTML = `<td colspan="3">${item.should_trigger ? 'Should Trigger' : 'Should NOT Trigger'}</td>`; // nosemgrep: dom-htmlinjection-sink-unreviewed -- xss-sink-reviewed: sole interpolation is a boolean->string-literal ternary (no untrusted data)
           tbody.appendChild(headerRow);
           lastGroup = group;
         }
 
         const idx = item.origIdx;
         const tr = document.createElement('tr');
-        tr.innerHTML = `
+        const rowHtml = `
           <td><textarea class="query-input" onchange="updateQuery(${idx}, this.value)">${escapeHtml(item.query)}</textarea></td>
           <td>
             <label class="toggle">
@@ -97,6 +103,7 @@
           </td>
           <td><button class="btn-delete" onclick="deleteRow(${idx})">Delete</button></td>
         `;
+        tr.innerHTML = rowHtml; // nosemgrep: dom-htmlinjection-sink-unreviewed -- xss-sink-reviewed: only untrusted field is item.query, escapeHtml()-wrapped in the <textarea> body; the idx interpolation is a numeric array index; the should_trigger interpolations are boolean->string-literal ternaries
         tbody.appendChild(tr);
       });
       updateSummary();

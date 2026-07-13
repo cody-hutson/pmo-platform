@@ -1,6 +1,6 @@
 ---
 title: Build-Philosophy Charter
-purpose: The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability) plus two cross-cutting disciplines (read-before-edit, track-all-edits), and a philosophy × surface coverage matrix that maps each value to the artifact already enforcing it across every toolkit surface (skills, agents, hub/spokes, hooks, slash-commands). Names and routes; does not restate. An empty matrix cell is a named gap, not a silent omission.
+purpose: The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability, Security) plus two cross-cutting disciplines (read-before-edit, track-all-edits), and a philosophy × surface coverage matrix that maps each value to the artifact already enforcing it across every toolkit surface (skills, agents, hub/spokes, hooks, slash-commands). Names and routes; does not restate. An empty matrix cell is a named gap, not a silent omission.
 type: reference
 kind: disciplines
 status: Canonical
@@ -39,7 +39,7 @@ the act that surfaces the toolkit's governance gaps.
 
 ## §The build philosophies
 
-Five first-class values, plus two cross-cutting disciplines. (The disciplines are listed
+Six first-class values, plus two cross-cutting disciplines. (The disciplines are listed
 separately because they apply to *every* domain and surface, rather than being a
 best-practice of one domain.)
 
@@ -50,6 +50,7 @@ best-practice of one domain.)
 | 3 | **Maintainability** | One source per fact; cite-don't-duplicate; minimal addition. A change should not create a second place that must be kept in sync. |
 | 4 | **Simplicity** | Smallest change that achieves the goal; surgical edits; no presumptive feature build (YAGNI, with malleability work exempted). |
 | 5 | **Stability** | Reversibility-tiered decisions; drift guards and canaries; version-skew + tamper detection; no silent failure. |
+| 6 | **Security** | Controls fail closed when they cannot evaluate their rule; untrusted input is validated and output is context-encoded at its sink; injection surfaces are denied by construction. |
 | D1 | **Read-before-edit** *(cross-cutting discipline)* | Read the target artifact fully before editing it; the specifier vouches, not just the executor. |
 | D2 | **Track-all-edits** *(cross-cutting discipline)* | No ungoverned changes — every change to a governed surface routes through issue → plan → PR, with the diff/history as the audit trail. |
 
@@ -63,13 +64,14 @@ the value does not apply to that surface.
 | Value \ Surface | Skills | Agents | Hub / Spokes | Hooks | Slash-commands |
 |---|---|---|---|---|---|
 | **Scalability** | `knowledge-architecture` · `universal-vs-localized-context` · ADR-006/007 | **GAP** | `methodology-parameterization-v1` | `composition-surface` boundary | **GAP** |
-| **BP — coding** | `domain-best-practices/software` *(skill-wired)* | thin | (Stage-5/7 review) | n/a | n/a |
+| **BP — coding** | `domain-best-practices/software` *(skill-wired)* | thin | (Stage-5/7 review) | `software §Security` · `dep-resolve` · `hook-fail-closed.test` | n/a |
 | **BP — governance** | `domain-best-practices/governance` *(skill-wiring pending)* · `decision-discipline` | thin | `release-process` | n/a | n/a |
 | **BP — process** | `domain-best-practices/process` *(skill-wiring pending)* · (`discovery`/`decision`/`review` disciplines · `ticket-architecture-reconciliation`) | thin | pipeline `stage-*` · `release-process` | n/a | n/a |
 | **BP — change** | `framework-catalog` + `change-management/references` suite *(skill-self-bundled — no shared guide; ADR-057)* | thin | (Stage-5 design-consume) | n/a | n/a |
 | **Maintainability** | `duplicate-source-discipline` · `reference-durability-standard` · `framework-corpus-discipline` | **GAP** | cite-not-duplicate (ADR-003) | Check 9/11/13 · `doc-link-maintenance-protocol` | rules-mirror (Check 9) |
 | **Simplicity** | `software.md` §YAGNI · `principal-standard-checklist` | thin (ADR-020) | `release-process` Tier-1 `[ADJUST]` | minimal by design | **GAP** |
 | **Stability** | `reversibility-protocol` · `version-field-semantics` · `failure-mode-standard` · `canonical-skill-structure` | **GAP** | reversibility in stage outputs | ADR-014 tamper · `bypass-mode-readiness` · version-skew | Check 30 quoting (partial) |
+| **Security** | `domain-best-practices/software §Security` *(design-time)* · `semgrep/rules/template-context-xss` (R1/R2/R3) · `security.yml` semgrep job | **GAP** | **GAP** *(secure-SDLC checklist not yet codified)* | `lib/dep-resolve` · `check-hook-dep-hardening` (static) · `hook-fail-closed.test` (behavioral) · ADR-078 / ADR-081 | n/a *(runtime security enforced at the Hooks perimeter, not per prompt-file command)* |
 | **D1 — read-before-edit** | `review-discipline-principles` (anti-laziness 1/3/6/10) · `principal-standard-checklist` §C3 | **GAP** | review discipline | `block-skill-direct-edit` (narrow) | **GAP** |
 | **D2 — track-all-edits** | `skill-deployment` dual-gate · `version-field-semantics` | thin | `release-process` self-governance | `bypass-mode-readiness` audit · Check 9/11/13 | rules-mirror (partial) |
 
@@ -92,6 +94,8 @@ completing the three best-practice domain guides. The Agents-column gaps
 are logged for sequencing, not silently dropped (per the auto-logging rule in
 [`OPERATIONS.md`](../governance/OPERATIONS.md)).
 
+The newly-added **Security** row (value 6, per [ADR-081](../ADRs/ADR-081-security-sixth-first-class-value.md)) extends this backlog: its **Agents** and **Hub / Spokes** cells are GAP (no agent-level enforcement, and the secure-SDLC checklist is not yet codified), while its **Hooks** cell is the **first populated Security enforcer** — `lib/dep-resolve` + the static `check-hook-dep-hardening` guard + the behavioral `hook-fail-closed.test`, governed by ADR-078 / ADR-081. Security is therefore introduced *with* a proven enforcer, not as a naming-only row — the root-cause fix for a charter that was structurally blind to the security class (a matrix with no Security row can never surface a missing security enforcer as an empty cell).
+
 The three **BP-domain-guide × Skills** cells are a distinct case from the empty cells
 above: they named an enforcer (`domain-best-practices/{software,governance,process}.md`)
 that no skill consumed. The **software** guide is now skill-wired — the five
@@ -111,6 +115,7 @@ terse):
 - **Maintainability** — [`duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md), [`reference-durability-standard.md`](../standards/reference-durability-standard.md), [`doc-link-maintenance-protocol.md`](../standards/doc-link-maintenance-protocol.md), [`framework-corpus-discipline.md`](../standards/framework-corpus-discipline.md), [ADR-003](../ADRs/ADR-003-operating-model-composition.md).
 - **Simplicity** — [`domain-best-practices/software.md`](../standards/domain-best-practices/software.md) §YAGNI, [`principal-standard-checklist.md`](../standards/principal-standard-checklist.md), [`release-process.md`](../../release/governance/release-process.md) (Tier-1 adjust), [ADR-020](../ADRs/ADR-020-agent-script-promotion-ladder.md).
 - **Stability** — [`reversibility-protocol.md`](../specs/reversibility-protocol.md), [`version-field-semantics.md`](../standards/version-field-semantics.md), [`failure-mode-standard.md`](../standards/failure-mode-standard.md), [`canonical-skill-structure.md`](../standards/canonical-skill-structure.md), [ADR-014](../ADRs/ADR-014-managed-section-two-hash-tamper-detection.md), [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md). Skill↔Anthropic sourcing posture: [`anthropic-base-vs-build-registry.md`](../specs/anthropic-base-vs-build-registry.md) (ledger) governed by [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md) (skill sourcing-coupling posture).
+- **Security** — [`domain-best-practices/software §Security`](../standards/domain-best-practices/software.md), [`dep-resolve.sh`](../hooks/lib/dep-resolve.sh), [`check-hook-dep-hardening.sh`](../hooks/tests/check-hook-dep-hardening.sh) (static grep guard) / [`hook-fail-closed.test.sh`](../hooks/tests/hook-fail-closed.test.sh) (behavioral, glob-derived), [ADR-078](../ADRs/ADR-078-security-hook-dependency-resolution-posture.md) / [ADR-081](../ADRs/ADR-081-security-sixth-first-class-value.md). The context-aware output-encoding enforcer is the `§Security` **Output encoding** standard plus the custom [`template-context-xss.yml`](../security/semgrep/rules/template-context-xss.yml) ruleset (R1 transport-taint · R2 raw-HTML DOM sink · R3 script-context placeholder) wired as the [`security.yml`](../../.github/workflows/security.yml) `semgrep` job — it populates the Security × Skills cell; Agents + Hub/Spokes stay GAP (no agent-level or secure-SDLC-checklist security enforcer yet).
 - **D1 — read-before-edit** — [`review-discipline-principles.md`](review-discipline-principles.md), [`principal-standard-checklist.md`](../standards/principal-standard-checklist.md), [`block-skill-direct-edit.sh`](../hooks/block-skill-direct-edit.sh) (skill-edit-path only; general enforcement is a GAP, in flight).
 - **D2 — track-all-edits** — [`skill-deployment.md`](../rules/skill-deployment.md), [`release-process.md`](../../release/governance/release-process.md), [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md), [`duplicate-source-discipline.md`](../standards/duplicate-source-discipline.md) (Check 9/11/13).
 

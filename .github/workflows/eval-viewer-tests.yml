@@ -1,0 +1,87 @@
+name: Eval Viewer Tests
+
+# gate-efficacy: posture=required  enforcement-surface=branch-protection:"Eval-viewer Python tests","Eval-viewer headless-DOM tests"  always-reports=yes
+#   invariant: the eval-viewer generator neutralizes untrusted eval data at BOTH the
+#              json-into-inline-script transport boundary AND the viewer.html render sinks
+#              (renderGrades/renderBenchmark) — asserted by running the transport test
+#              (test_transport_xss.py) and the headless-DOM regression (dom_xss_test.js,
+#              jsdom) that renders the real viewer.html with attacker-controlled EMBEDDED_DATA.
+#   falsification: revert generate_review.py's < > & transport escape chain, OR remove an
+#                  escapeHtml()/escapeAttr()/Number() render-sink encoder in viewer.html ->
+#                  the transport job (raw metachar survives) or the DOM job (an injected
+#                  element node appears in a sink) fails RED. A self-contained positive
+#                  control (positive_control.html) proves the DOM detector is non-vacuous.
+#   posture note: posture=required records intent per gate-efficacy-standard.md Requirement (b);
+#                 the branch-protection required-set registration is an operator repo-settings
+#                 action (Stage 12), reconciled by audit.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+#
+# This workflow brings the eval-viewer test surface under CI. It ADDS the GHSA-rw36 XSS
+# regression (transport + headless-DOM) and rescues two previously-orphaned pmo-skill-refiner
+# script tests. The GHSA-fxcr regression (test_generate_review.py) is run by the focused
+# eval-viewer-security job in security.yml; it is intentionally NOT re-run here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python-tests:
+    name: Eval-viewer Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install PyYAML (pinned)
+        # test_scaffolder_drift_guard.py imports scripts/quick_validate.py, which imports
+        # PyYAML — the one non-stdlib dependency in the pmo-skill-refiner script tooling.
+        # The transport test and test_eval_scripts.py are stdlib-only and do not need it.
+        run: pip install pyyaml==6.0.2
+      - name: Run eval-viewer transport test + rescued pmo-skill-refiner script tests
+        run: |
+          set -euo pipefail
+          fail=0
+          # test_generate_review.py (GHSA-fxcr) is run by the eval-viewer-security job in
+          # .github/workflows/security.yml; skip it here to avoid a duplicate run. This job
+          # adds the GHSA-rw36 transport test (test_transport_xss.py, which imports and
+          # exercises generate_review.generate_html) and rescues the two previously-orphaned
+          # scripts/test_*.py that no workflow ran.
+          for t in release/skills/pmo-skill-refiner/eval-viewer/test_*.py \
+                   release/skills/pmo-skill-refiner/scripts/test_*.py; do
+            case "$t" in
+              */test_generate_review.py)
+                echo "skip (run by security.yml eval-viewer-security job): $t"
+                continue
+                ;;
+            esac
+            echo "::group::$t"
+            python3 "$t" || fail=1
+            echo "::endgroup::"
+          done
+          exit "$fail"
+
+  dom-tests:
+    name: Eval-viewer headless-DOM tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          # jsdom 29.1.1 engines: ^20.19.0 || ^22.13.0 || >=24.0.0 -- '22' clears the floor.
+          node-version: '22'
+      - name: Install jsdom (pinned via package-lock.json, test-only)
+        working-directory: release/skills/pmo-skill-refiner/eval-viewer/tests
+        run: npm ci --no-audit --no-fund
+      - name: Run DOM XSS regression (renderGrades + renderBenchmark, jsdom)
+        working-directory: release/skills/pmo-skill-refiner/eval-viewer/tests
+        run: node dom_xss_test.js

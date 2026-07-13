@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>positive control — MUST fire</title></head>
+<body>
+  <!--
+    Self-contained non-vacuity control. Independent of generate_review.py / viewer.html,
+    so it fires the SAME sentinels on ANY tree (including the fully-hardened current tree).
+    If either detector is silently broken, this fixture stops firing and dom_xss_test.js
+    fails loud. It exercises BOTH detectors the generated-fixture assertions rely on:
+      (a) parser-created <script> breakout  -> the execution sentinel (B2)
+      (b) raw markup assigned into a sink    -> the structural detector (B1)
+  -->
+  <div id="pc-sink"></div>
+
+  <!-- (a) parser-created breakout: runs under jsdom runScripts:"dangerously" -> B2 sentinel -->
+  <script>window.__xssFired && window.__xssFired('pc-parser-breakout');</script>
+
+  <!-- (b) raw markup into an innerHTML sink materializes a real <img> element -> B1 structural -->
+  <script>
+    document.getElementById('pc-sink').innerHTML =
+      '<img src=x onerror="window.__xssFired && window.__xssFired(\'pc-img-structural\')">';
+  </script>
+</body>
+</html>

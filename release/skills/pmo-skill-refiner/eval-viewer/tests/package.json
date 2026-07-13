@@ -1,0 +1,13 @@
+{
+  "name": "eval-viewer-dom-xss-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless-DOM (jsdom) XSS regression tests for the eval-viewer render sinks (GHSA-rw36-5pf9-w2vc). Test-only; not part of the shipped skill payload.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node dom_xss_test.js"
+  },
+  "devDependencies": {
+    "jsdom": "29.1.1"
+  }
+}

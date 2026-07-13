@@ -153,7 +153,7 @@ jobs:
 
   hook-tests:
     name: Hook test harness (macOS)
-    # The 8 core/hooks/tests/*.test.sh files + their test-runner.sh exercise the
+    # The core/hooks/tests/*.test.sh files + their test-runner.sh exercise the
     # bypass-mode PreToolUse hooks against the DEPLOYED runtime layout — the hooks
     # resolve their allowlist + .mode from ${HOOK_DIR}/.. (co-located, token-
     # resolved). A bare source checkout has no such layout, so this job
