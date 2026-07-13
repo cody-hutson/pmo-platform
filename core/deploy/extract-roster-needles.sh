@@ -24,13 +24,16 @@
 
 set -euo pipefail
 
-# Resolve the instance + needle paths via the single resolver — never inline the
-# `${PMO_INSTANCE_PATH:-...}` literal (lib-instance-path.sh is the one resolution site).
+# Resolve the roster + needle paths via the single resolver — never inline the
+# instance-path-plus-leaf composition (lib-instance-path.sh is the one resolution
+# site). Use the `pmo_people_roster()` accessor (v2.26/#2040) so this extractor
+# honors the same overrides the seed sites do — including the `PMO_PEOPLE_ROSTER`
+# override that a bare instance-path composition would have silently missed (#2074).
 _lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-instance-path.sh"
 # shellcheck source=/dev/null
 . "$_lib"
 
-ROSTER="$(pmo_instance_path)/people-roster.yaml"
+ROSTER="$(pmo_people_roster)"
 NEEDLES="$(pmo_localized_needles)"
 
 if [ ! -f "$ROSTER" ]; then
