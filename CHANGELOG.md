@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.74] - 2026-07-12
+
+Automated regression checks now lock in two recent build-security fixes (a fail-open safety hook and the eval-viewer XSS hole), and Security becomes a first-class value in the platform's engineering charter.
+
+[Full notes](release/releases/notes/v3.74_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.74)
+
 ## [v3.73.1] - 2026-07-12
 
 Hotfix so `update.sh` refreshes deployed security hooks — hook and helper fixes (like the v3.73 hardening) now reach workspaces you already installed.

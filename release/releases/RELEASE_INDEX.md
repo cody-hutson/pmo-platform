@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.74 | build-security-hardening | 2026-07-12 | Durable CI regression-prevention gates for the two build-security advisory classes (hook fail-open + eval-viewer stored XSS) + Security elevated to build-philosophy's 6th first-class value (ADR-081) | #3428 | [notes/v3.74_RELEASE_NOTES.md](notes/v3.74_RELEASE_NOTES.md) |
 | v3.73.1 | update-refresh-deployed-hooks | 2026-07-12 | `update.sh` now refreshes the deployed security-hook bundle, so hook/helper fixes reach already-installed workspaces | #3431 | [notes/v3.73.1_RELEASE_NOTES.md](notes/v3.73.1_RELEASE_NOTES.md) |
 | v3.73 | security-advisories-g9g6-fxcr | 2026-07-12 | — | #3426 | [notes/v3.73_RELEASE_NOTES.md](notes/v3.73_RELEASE_NOTES.md) |
 | v3.72 | release-hub-mode-r-and-o | 2026-07-12 | — | #3405 | [notes/v3.72_RELEASE_NOTES.md](notes/v3.72_RELEASE_NOTES.md) |
