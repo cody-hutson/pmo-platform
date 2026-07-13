@@ -19,7 +19,7 @@ source_observations:
 Accepted (2026-06-07). This decision was ratified at the declarative-workitem-type-model
 Stage 9 GO — that operator GO rendered the **Tier-2 SCOPE CHANGE** authorization
 required by the FROZEN-roster clause of
-[`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-18)
+[`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-19)
 ("any change requires reopening the establishing issue via a Tier-2 SCOPE CHANGE").
 Per the core-ADR convention, this decision is captured as a committed ADR document
 authored alongside the entity-model and field-schema edits in the same release.

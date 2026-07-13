@@ -13,7 +13,7 @@ reversibility: CHEAP / Confidence HIGH
 **Status:** Canonical
 **Owner:** `../disciplines/project-entity-model.md`
 **Introduced:** project-data-foundation (2026-05-16) — initiative project-data-architecture, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
-**Establishing issue:** G1 — 17-entity canonical model (roster re-frozen at 18 via ADR-018, 2026-06-07)
+**Establishing issue:** G1 — 17-entity canonical model (roster re-frozen at 18 via ADR-018, 2026-06-07; re-frozen at 19 via ADR-044, 2026-07-12 — Finding entity)
 **Architectural basis:** the Two-Axis Entity Lifecycle ADR (**RATIFIED** at Collective Review, 2026-05-16)
 **Consumers (downstream G2–G10):** G2 (per-entity field schemas), G3-pilot (RAID-Log machine-schema pilot), G4 (operational-artifact inventory), G5 (template standard), G6 (templatization harness), G3–G10 (later milestones)
 **Cross-references:** see [§9](#9-cross-references).
@@ -26,10 +26,10 @@ This doc satisfies the seven acceptance criteria of the establishing issue. Each
 
 | AC | Requirement | Satisfied by | Frozen source |
 |---|---|---|---|
-| **AC-1** | All 17 entities defined with single-paragraph rationale + first-class justification | [§4](#4-entity-definitions-18) — per-entity *Rationale & first-class justification* | Frozen Artifact 1 (roster + tier; +Work Item entity 18 via ADR-018) |
-| **AC-2** | Field list per entity (≥3 required fields each) | [§3](#3-entity-core-schema) (6 required core) + [§4](#4-entity-definitions-18) per-entity (≥3 required entity-specific) | Frozen Artifacts 2, 3 |
-| **AC-3** | Relationship matrix (entity-pair × MVP type) for ≥10 common chains | [§5](#5-relationship-matrix) — 17 directed chains + adjacency grid | Frozen Artifact 4 (16 chains + the ADR-018 rollup edge) |
-| **AC-4** | Lifecycle state machine per entity (DOMAIN A/B/C inheritance from `frontmatter-schema.md`) | [§3](#3-entity-core-schema) two-axis model + [§4](#4-entity-definitions-18) per-entity Axis-1 machines + Axis-2 pattern | the Two-Axis Entity Lifecycle ADR + Frozen Artifacts 1, 3 |
+| **AC-1** | All 19 entities defined with single-paragraph rationale + first-class justification | [§4](#4-entity-definitions-19) — per-entity *Rationale & first-class justification* | Frozen Artifact 1 (roster + tier; +Work Item entity 18 via ADR-018; +Finding entity 19 via ADR-044) |
+| **AC-2** | Field list per entity (≥3 required fields each) | [§3](#3-entity-core-schema) (6 required core) + [§4](#4-entity-definitions-19) per-entity (≥3 required entity-specific) | Frozen Artifacts 2, 3 |
+| **AC-3** | Relationship matrix (entity-pair × MVP type) for ≥10 common chains | [§5](#5-relationship-matrix) — 21 directed chains + adjacency grid | Frozen Artifact 4 (16 chains + the ADR-018 rollup edge + 4 ADR-044 Finding chains) |
+| **AC-4** | Lifecycle state machine per entity (DOMAIN A/B/C inheritance from `frontmatter-schema.md`) | [§3](#3-entity-core-schema) two-axis model + [§4](#4-entity-definitions-19) per-entity Axis-1 machines + Axis-2 pattern | the Two-Axis Entity Lifecycle ADR + Frozen Artifacts 1, 3 |
 | **AC-5** | Owning-agent matrix — which skills read/write per entity | [§6](#6-owning-agent-matrix) | Frozen Artifact 5 |
 | **AC-6** | Cross-references to project-schema, frontmatter-schema, document-ecosystem-design, methodology-parameterization, Deep Research C06/C07/C12/C17 | [§9](#9-cross-references) | §9 targets |
 | **AC-7** | 3+ worked examples — Milestone, Person, Plan | [§8](#8-worked-examples) | Worked Examples (verbatim) |
@@ -38,7 +38,7 @@ This doc satisfies the seven acceptance criteria of the establishing issue. Each
 
 ## 1. Purpose
 
-This document is the **canonical specification of the 18 logical entities** the PMO platform tracks across the project, cross-project, and portfolio tiers. It defines, per entity: what it represents, why it is first-class, its field schema (type + cardinality + requiredness), its two-axis lifecycle, its storage tier and persistence mode, and its owning-agent triplet (creates / maintains / reads).
+This document is the **canonical specification of the 19 logical entities** the PMO platform tracks across the project, cross-project, and portfolio tiers. It defines, per entity: what it represents, why it is first-class, its field schema (type + cardinality + requiredness), its two-axis lifecycle, its storage tier and persistence mode, and its owning-agent triplet (creates / maintains / reads).
 
 It exists because the project-data-architecture initiative's 5-layer architecture (Schema / Storage / Automation / Interface / Governance) hangs off an entity model that does not yet exist in formalized form. Three adjacent schemas each cover a slice but none the whole:
 
@@ -50,7 +50,7 @@ This doc fills that gap. It is **DATA-centric**: it defines the records the PMO 
 
 ## 2. Scope & Boundary Axiom
 
-**In scope.** The 18-entity roster (frozen); per-entity rationale + first-class justification; the inherited Entity Core schema (6 required + 1 optional field); per-entity entity-specific field lists (type + cardinality + requiredness — frozen); the two-axis lifecycle model; per-entity Axis-1 operational state machines (frozen); per-entity Axis-2 content-lifecycle pattern (referenced from `frontmatter-schema.md`); the directed relationship matrix (17 chains, consuming the 7 canonical MVP types); the owning-agent matrix; the logical storage map (`storage_tier` + `persistence_mode`).
+**In scope.** The 19-entity roster (frozen); per-entity rationale + first-class justification; the inherited Entity Core schema (6 required + 1 optional field); per-entity entity-specific field lists (type + cardinality + requiredness — frozen); the two-axis lifecycle model; per-entity Axis-1 operational state machines (frozen); per-entity Axis-2 content-lifecycle pattern (referenced from `frontmatter-schema.md`); the directed relationship matrix (21 chains, consuming the 7 canonical MVP types); the owning-agent matrix; the logical storage map (`storage_tier` + `persistence_mode`).
 
 **Out of scope (deferred — boundary axiom).** Field-validation rules → **G2**. Physical file layout, filenames, frontmatter serialization → **G3 (PROJECT.md redesign) / G4 (`_pmo/` layout)**. Registration of the entity Axis-1 state-machine family into `standards/lifecycle-states-canonical.md §3` → **G8 / G10**, later milestones — this doc only *declares* the forward-binding `<Entity>-<state>` convention (see [§4 note](#axis-1-naming-convention-forward-binding)).
 
@@ -64,7 +64,7 @@ This axiom forces the two-axis lifecycle model ([§3](#two-axis-lifecycle-model)
 
 | Layer | Doc | Unit | This model's relationship |
 |---|---|---|---|
-| Conceptual (this doc) | `project-entity-model.md` | logical **entity** (record the PMO tracks) | **defines** the 18 entities, fields, relationships, lifecycle |
+| Conceptual (this doc) | `project-entity-model.md` | logical **entity** (record the PMO tracks) | **defines** the 19 entities, fields, relationships, lifecycle |
 | Persistence dialect | `schemas/frontmatter-schema.md` | **file** with YAML metadata | **referenced, not duplicated** — entities persisted as Domain A/B/C files inherit its Category-2 lifecycle + Category-4 relationship-edge schema |
 | Narrower instance | `schemas/project-schema.md` | `PROJECT.md` frontmatter | the **Project** entity (#1) ⊇ `PROJECT.md`; project-schema.md's V1–V12 + worked-example-with-trace pattern is the template G2 extends per-entity |
 | Sketch (superseded by this) | `document-ecosystem-design.md §6` | Schema / Storage / Presentation layers | this doc **formalizes** §6's entity sketch at entity granularity; preserves the 3-layer governance boundary (we own Schema only) |
@@ -77,22 +77,22 @@ This axiom forces the two-axis lifecycle model ([§3](#two-axis-lifecycle-model)
 
 Per the **Two-Axis Entity Lifecycle ADR** (RATIFIED). Every entity declares **two orthogonal lifecycle axes**:
 
-- **Axis 1 — `lifecycle_state`**: an entity-specific **operational** state machine. *Net-new vocabulary* this model originates (e.g., RAID Item `open→in-progress→mitigating→resolved→closed`). Defined per-entity in [§4](#4-entity-definitions-18).
+- **Axis 1 — `lifecycle_state`**: an entity-specific **operational** state machine. *Net-new vocabulary* this model originates (e.g., RAID Item `open→in-progress→mitigating→resolved→closed`). Defined per-entity in [§4](#4-entity-definitions-19).
 - **Axis 2 — `content_lifecycle_pattern ∈ {Baselined, Living, Hybrid}`**: *referenced* from `frontmatter-schema.md` Category-2 Domain A/B/C (Domain A = Baselined; Domain B = Living; Domain C = Hybrid). Governs the lifecycle of the file(s) that persist the entity. **This is the literal AC-4 "DOMAIN A/B/C inheritance from `frontmatter-schema.md`".**
 
 The two axes are independent: an entity's operational state (Axis 1) says where the *record* is in its workflow; its content pattern (Axis 2) says how the *file* persisting it evolves. The boundary axiom makes any single-axis reading internally contradictory (rejected alternatives are recorded in the Two-Axis Entity Lifecycle ADR).
 
 <a id="axis-1-naming-convention-forward-binding"></a>**Axis-1 naming convention (forward-binding; NOT a governance edit here).** Axis-1 operational states are cross-machine vocabulary that will eventually collide with the independent state-vocabulary spaces in `standards/lifecycle-states-canonical.md §5` (e.g., entity `archived` vs. existing `archived` senses). This model **declares** the object-typed convention `<Entity>-<state>` for cross-machine prose (e.g., `Milestone-completed`, `RAIDItem-closed`), consistent with `lifecycle-states-canonical.md §2`. **Registration of the entity state-machine family into `lifecycle-states-canonical.md §3` is a downstream governed change owned by G8 / G10** — flagged here, NOT executed (respects "No governance file modifications without operator approval").
 
-### Entity Core fields (inherited by ALL 18 — FROZEN Artifact 2)
+### Entity Core fields (inherited by ALL 19 — FROZEN Artifact 2)
 
-Every entity carries these core fields **plus** its entity-specific fields ([§4](#4-entity-definitions-18)). Six are required; `relationships` is optional. This floor alone satisfies AC-2's ≥3-required minimum before any entity-specific field is added.
+Every entity carries these core fields **plus** its entity-specific fields ([§4](#4-entity-definitions-19)). Six are required; `relationships` is optional. This floor alone satisfies AC-2's ≥3-required minimum before any entity-specific field is added.
 
 | Field | Type | Req | Card | Notes |
 |---|---|---|---|---|
 | `id` | string (slug) | ✅ | 1 | stable identifier, unique within `storage_tier` |
-| `entity_type` | enum (18 roster names) | ✅ | 1 | discriminator |
-| `lifecycle_state` | string | ✅ | 1 | **Axis 1** — value ∈ this entity's operational machine ([§4](#4-entity-definitions-18)) |
+| `entity_type` | enum (19 roster names) | ✅ | 1 | discriminator |
+| `lifecycle_state` | string | ✅ | 1 | **Axis 1** — value ∈ this entity's operational machine ([§4](#4-entity-definitions-19)) |
 | `content_lifecycle_pattern` | enum {Baselined, Living, Hybrid} | ✅ | 1 | **Axis 2** — inherits `frontmatter-schema.md §Cat-2` Domain A/B/C |
 | `owning_agent` | string (skill name) | ✅ | 1 | the skill that maintains this record ([§6](#6-owning-agent-matrix)) |
 | `created_date` | ISO `YYYY-MM-DD` | ✅ | 1 | not in future |
@@ -100,11 +100,13 @@ Every entity carries these core fields **plus** its entity-specific fields ([§4
 
 > **Field-validation deferral.** Type / requiredness / cardinality are frozen here. Regex / range / cross-field validation rules are **G2** — it writes V-style rules (per `project-schema.md` V1–V12) against exactly this surface.
 
-## 4. Entity Definitions (×18)
+## 4. Entity Definitions (×19)
 
 Per-entity record: **Rationale & first-class justification** · **Entity-specific fields** (on top of the 7 Core; `✅`=required `⚪`=optional · type · cardinality) · **Axis-1 operational state machine** · **Axis-2 content pattern** · **storage_tier** · **persistence_mode** · **owning-agent triplet**. Field lists + Axis-1 machines transcribe FROZEN Artifact 3; tier / persistence / Axis-2 transcribe FROZEN Artifact 1; owning-agent transcribes FROZEN Artifact 5. **The roster and field lists are FROZEN — any change requires reopening the establishing issue via a Tier-2 SCOPE CHANGE.**
 
-> **Amended per [SCOPE CHANGE — RESOLVED via ADR-018] (declarative-workitem-type-model, Tier-2):** the roster is extended from 17 to **18** by the addition of the generic `Work Item` entity ([#18](#18-work-item), [§4](#4-entity-definitions-18)) — a thin entity-graph member whose type variability is externalized to the declarative type layer (the C2 type layer of the same release) per D1 hybrid. Precedented by the 2026-05-16 RAID Item Tier-2 amendment (scoped addition + re-freeze). Roster + field lists **RE-FROZEN at 18 entities** as of 2026-06-07. Authorization: this milestone's Stage 9 GO.
+> **Amended per [SCOPE CHANGE — RESOLVED via ADR-018] (declarative-workitem-type-model, Tier-2):** the roster is extended from 17 to **18** by the addition of the generic `Work Item` entity ([#18](#18-work-item), [§4](#4-entity-definitions-19)) — a thin entity-graph member whose type variability is externalized to the declarative type layer (the C2 type layer of the same release) per D1 hybrid. Precedented by the 2026-05-16 RAID Item Tier-2 amendment (scoped addition + re-freeze). Roster + field lists **RE-FROZEN at 18 entities** as of 2026-06-07. Authorization: this milestone's Stage 9 GO.
+
+> **Amended per [SCOPE CHANGE — RESOLVED via ADR-044] (skill-output-ownership, Tier-2):** the roster is extended from 18 to **19** by the addition of the `Finding` entity ([#19](#19-finding), [§4](#4-entity-definitions-19)) — the findings-register promoted to a first-class entity so the [§6](#6-owning-agent-matrix) owning-agent matrix governs it (ADR-044 §Decision.2 *missing-entity* class; the two remaining no-entity-home outputs — status update / executive brief / communications draft — are classified as ownerless *renderings* in `../specs/operational-artifact-inventory.md`, not added as entities). Precedented by the ADR-018 Work Item #18 whole-new-entity Tier-2 amendment (17→18 + re-freeze + §6 row + §7 row) and the 2026-05-16 RAID Item amendment. `Finding.severity`'s enum is `{CRITICAL, HIGH, MEDIUM, LOW}` (operator Collective-Review resolution reconciling ADR-044's draft `{Critical,Major,Minor}` against the shared `review-discipline-principles.md` severity model). Roster + field lists **RE-FROZEN at 19 entities** as of 2026-07-12. Authorization: this milestone's Stage 9 GO.
 
 ### Project-scoped entities (live in `[Project]/`)
 
@@ -288,9 +290,20 @@ Per-entity record: **Rationale & first-class justification** · **Entity-specifi
 - **Axis-2:** Living (B) · **storage_tier:** project-scoped → `[Project]/` · **persistence_mode:** embedded-in-parent
 - **Owning agents:** creates `intake-desk` · maintains `delivery-engine` · readers: `ppm-agent`, `daily-status`, `weekly-status-rollup`
 
+### Findings-tier entity (added by Tier-2 SCOPE CHANGE — skill-output-ownership, ADR-044)
+
+#### 19. Finding
+
+**Rationale & first-class justification.** A review/QA/analysis finding — an observation with severity, evidence, and a remediation path — produced by the review-class skills. First-class because ADR-044 classifies it as the **missing-entity** case: the findings register is produced by many skills (build-reviewer, pmo-qa-auditor, pmo-technical-analyst) with no single owner, so promoting it to an entity gives the [§6](#6-owning-agent-matrix) owning-agent matrix (one Maintainer) the single home under which a cross-skill output is governed — the "many producers, one maintainer" shape already in production for RAID Item and Decision. It `BLOCKS` Milestones/Work Items and `GENERATES` a remediation Work Item, so it carries its own operational lifecycle (`open→…→closed | accepted-residual`) distinct from the artifact that renders it. The multi-creator / single-maintainer (`pmo-qa-lead`) triplet satisfies ADR-044 invariant I1 (exactly one Maintainer).
+
+- **Fields:** `finding_title`✅ str·1 · `project_id`✅ ref·1 → `Project.id` · `severity`✅ enum{CRITICAL,HIGH,MEDIUM,LOW}·1 *(operator Collective-Review resolution — reconciles ADR-044's draft `{Critical,Major,Minor}` against the shared `review-discipline-principles.md` severity model)* · `source_skill`✅ enum{build-reviewer,pmo-qa-auditor,pmo-technical-analyst}·1 · `root_cause`⚪ str·1 · `evidence`⚪ str·1 · `resolution`⚪ str·1 · `reversibility`⚪ enum{CHEAP,MODERATE,EXPENSIVE,IRREVERSIBLE}·1 · `source_artifact_id`⚪ ref·1 → `Artifact.id` · `dimension`⚪ str·1
+- **Axis-1:** `open → triaged → remediating → verified → closed | accepted-residual`
+- **Axis-2:** Living (B) · **storage_tier:** project-scoped → `[Project]/` · **persistence_mode:** embedded-in-parent
+- **Owning agents:** creates `build-reviewer` / `pmo-qa-auditor` / `pmo-technical-analyst` · maintains `pmo-qa-lead` · readers: `implementation-planner`, `pmo-software-engineer`, `ppm-agent`
+
 ## 5. Relationship Matrix
 
-Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` to Target". The 7 MVP relationship types — `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO` — and their cardinalities are **canonical in `frontmatter-schema.md §Category 4`** (and `document-ecosystem-design.md §4`); they are **referenced here, not redefined**. The 17 chains below instantiate `document-ecosystem-design.md §4`'s delivery-methodology chains at *entity* granularity (AC-3 requires ≥10); chains 1–16 are FROZEN Artifact 4, chain 17 (the Work Item rollup edge) was added by ADR-018.
+Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` to Target". The 7 MVP relationship types — `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO` — and their cardinalities are **canonical in `frontmatter-schema.md §Category 4`** (and `document-ecosystem-design.md §4`); they are **referenced here, not redefined**. The 21 chains below instantiate `document-ecosystem-design.md §4`'s delivery-methodology chains at *entity* granularity (AC-3 requires ≥10); chains 1–16 are FROZEN Artifact 4, chain 17 (the Work Item rollup edge) was added by ADR-018, chains 18–21 (the Finding entity's edges) by ADR-044.
 
 ### 5.1 Directed chains (FROZEN Artifact 4 — verbatim)
 
@@ -313,10 +326,14 @@ Directed adjacency. `Source → Target` reads "Source has an edge of `MVP type` 
 | 15 | Program → Portfolio | `BELONGS_TO` | many:1 |
 | 16 | Strategic Initiative → Program | `GENERATES` | 1:many |
 | 17 | Work Item → Milestone | `BELONGS_TO` | many:1 |
+| 18 | Finding → Project | `BELONGS_TO` | many:1 |
+| 19 | Finding → Milestone | `BLOCKS` | many:many |
+| 20 | Finding → Work Item | `GENERATES` | 1:many |
+| 21 | Finding → Artifact | `RELATES_TO` | many:1 |
 
-### 5.2 Adjacency grid (expanded N×N view of the 17 directed chains)
+### 5.2 Adjacency grid (expanded N×N view of the 21 directed chains)
 
-Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities with no frozen outbound/inbound edge omitted for compactness; the 17 chains above are authoritative — chains 1–16 are FROZEN Artifact 4, chain 17 is the ADR-018 Work Item rollup edge — this grid is a navigational view, not an expansion of scope.)
+Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities with no frozen outbound/inbound edge omitted for compactness; the 21 chains above are authoritative — chains 1–16 are FROZEN Artifact 4, chain 17 is the ADR-018 Work Item rollup edge, chains 18–21 are the ADR-044 Finding edges — this grid is a navigational view, not an expansion of scope.)
 
 | Source ↓ \ Target → | Portfolio | Program | Project | Milestone | Plan | Decision | RAID Item | Artifact | Person |
 |---|---|---|---|---|---|---|---|---|---|
@@ -333,12 +350,15 @@ Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities
 | **Cross-Project Resource Conflict** | | | | | | | | | RELATES_TO |
 | **Strategic Initiative** | | GENERATES | | | | | | | |
 | **Work Item** | | | | BELONGS_TO | | | | | |
+| **Finding** | | | BELONGS_TO | BLOCKS | | | | RELATES_TO | |
+
+> **Finding edges (chains 18–21, added by ADR-044, 2026-07-12).** `Finding → Project BELONGS_TO`, `Finding → Milestone BLOCKS`, `Finding → Artifact RELATES_TO` are shown in the grid. `Finding → Work Item GENERATES many:1` (chain 20 — the remediation edge) is authoritative in §5.1 but not gridded here (the grid carries no Work Item column, consistent with the compactness convention). Finding also `BLOCKS` a Work Item (same edge type as chain 19 against the alternate target), covered by the polymorphic-target convention and not enumerated as a separate frozen chain — mirroring the chain-17 Work-Item-Workstream note below.
 
 > **Work Item rollup edge (chain 17, added by ADR-018, 2026-06-07).** `Work Item → Milestone BELONGS_TO many:1` is the directed rollup chain — status/progress aggregates *up* from work-item children to the container. It is the entity-graph realization of the entity's `parent_ref`. `parent_ref` is **polymorphic**: it also admits a Workstream parent. The Milestone rollup is the canonical/required frozen chain (the F3 rollup target); `Work Item → Workstream BELONGS_TO` is the *same edge type against the alternate polymorphic target*, covered by the field-level polymorphism and the cross-entity X-rule in `entity-field-schemas.md §4` (not enumerated as a second frozen chain — the frozen chains are illustrative common chains per AC-3 ≥10, not exhaustive).
 
 ## 6. Owning-Agent Matrix
 
-Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifact 5 — verbatim; skills verified present 2026-05-15). This is the authority that downstream automation (G8) and the interface layer (G9) consume to route entity reads/writes.
+Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifact 5 — verbatim; skills verified present 2026-05-15; **+Work Item row reconciled 2026-07-12** — the matrix was frozen before ADR-018 landed Work Item #18, so the row was absent (D3); **+Finding row added per ADR-044**). This is the authority that downstream automation (G8) and the interface layer (G9) consume to route entity reads/writes.
 
 | Entity | Creates | Maintains | Primary Readers |
 |---|---|---|---|
@@ -359,13 +379,15 @@ Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifa
 | Cross-Project Dependency | ppm-agent | ppm-agent | weekly-status-rollup |
 | Cross-Project Resource Conflict | delivery-engine | delivery-engine | weekly-status-rollup |
 | Strategic Initiative | ppm-agent | weekly-status-rollup | comms-writer |
+| Work Item | intake-desk | delivery-engine | ppm-agent, daily-status, weekly-status-rollup |
+| Finding | build-reviewer / pmo-qa-auditor / pmo-technical-analyst | pmo-qa-lead | implementation-planner, pmo-software-engineer, ppm-agent |
 
 ## 7. Storage-Location Map
 
 **Logical only.** `storage_tier` (3 tiers, frozen from the roster's own tiering) + `persistence_mode` (the conceptual hook G3/G4 physicalize). **No filename, file format, or frontmatter serialization is specified here** — physical layout is **G3 (PROJECT.md redesign) / G4 (`_pmo/` layout)** per the [boundary axiom](#boundary-axiom--project-data--file-ecosystem-548).
 
 - `storage_tier ∈ { project-scoped → [Project]/ , cross-project-shared → _pmo/ , portfolio-level → projects/_config/ }`
-- `persistence_mode ∈ { file-backed, embedded-in-parent, computed }` — the seam G3/G4 physicalize. `document-ecosystem-design.md §6` already proved entities split into source-file-backed (Project), embedded rows (RAID Item in a RAID Log), and computed (Workstream). No 18-roster entity is purely computed-only except Workstream's derivation posture; consistent with §6 placing Accountability *outside* the maintained set.
+- `persistence_mode ∈ { file-backed, embedded-in-parent, computed }` — the seam G3/G4 physicalize. `document-ecosystem-design.md §6` already proved entities split into source-file-backed (Project), embedded rows (RAID Item in a RAID Log), and computed (Workstream). No 19-roster entity is purely computed-only except Workstream's derivation posture; consistent with §6 placing Accountability *outside* the maintained set.
 
 | # | Entity | storage_tier | persistence_mode | Axis-2 pattern |
 |---|---|---|---|---|
@@ -387,6 +409,7 @@ Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifa
 | 16 | Cross-Project Resource Conflict | portfolio-level → `projects/_config/` | embedded-in-parent | Living (B) |
 | 17 | Strategic Initiative | portfolio-level → `projects/_config/` | file-backed | Hybrid (C) |
 | 18 | Work Item | project-scoped → `[Project]/` | embedded-in-parent | Living (B) |
+| 19 | Finding | project-scoped → `[Project]/` | embedded-in-parent | Living (B) |
 
 ## 8. Worked Examples
 
@@ -461,4 +484,4 @@ Per AC-6. This model **consumes** these sources by pointer (duplicate-source-dis
 
 ### Handoff to downstream (G2–G10)
 
-The roster ([§7](#7-storage-location-map) / Frozen Artifact 1), Entity Core ([§3](#3-entity-core-schema) / Frozen Artifact 2), and per-entity field lists ([§4](#4-entity-definitions-18) / Frozen Artifact 3, RAID Item Option-A-amended) are the **frozen derivation surface**. G2 writes V-style validation rules against exactly these fields (per the `project-schema.md` V1–V12 pattern); the G3-pilot derives `raid-log.schema.json` from the RAID Item field list (including `impact`/`action_plan`); G4/G5/G6 derive the inventory, template standard, and enforcement harness downstream. **The freeze is in effect — changes require reopening the establishing issue via a Tier-2 SCOPE CHANGE per the Inter-Stage Feedback Protocol.**
+The roster ([§7](#7-storage-location-map) / Frozen Artifact 1), Entity Core ([§3](#3-entity-core-schema) / Frozen Artifact 2), and per-entity field lists ([§4](#4-entity-definitions-19) / Frozen Artifact 3, RAID Item Option-A-amended) are the **frozen derivation surface**. G2 writes V-style validation rules against exactly these fields (per the `project-schema.md` V1–V12 pattern); the G3-pilot derives `raid-log.schema.json` from the RAID Item field list (including `impact`/`action_plan`); G4/G5/G6 derive the inventory, template standard, and enforcement harness downstream. **The freeze is in effect — changes require reopening the establishing issue via a Tier-2 SCOPE CHANGE per the Inter-Stage Feedback Protocol.**

@@ -14,7 +14,7 @@ consumers: the project-data-architecture cross-surface memory contract; operatio
 **Introduced:** project-data-foundation initiative (2026-05-16) — project-data-architecture initiative, roadmap `<OPERATOR_INSTANCE_ROADMAPS_PATH>/project-data-architecture.md` (operator-local)
 **Establishing scope:** N1 — first-pass operational-artifact inventory, W1 work-stream
 **Architectural basis:** the Two-Axis Entity Lifecycle ADR (**RATIFIED** at Collective Review, 2026-05-16)
-**Source-entity authority:** [`project-entity-model.md`](../disciplines/project-entity-model.md) (18-entity roster + owning-agent matrix, FROZEN)
+**Source-entity authority:** [`project-entity-model.md`](../disciplines/project-entity-model.md) (19-entity roster + owning-agent matrix, FROZEN)
 **Consumers (downstream):** N2 (template standard — consumes this inventory to scope entity-derived templatization) · N3 (templatization harness — consumes the `⚠ FINDING-3` set as its known-exception register)
 **Cross-references:** see [§7](#7-cross-references).
 
@@ -27,7 +27,7 @@ This doc satisfies the five acceptance criteria plus the task-mandated Finding-3
 | AC | Discharged by | Verification |
 |---|---|---|
 | AC-1 (≥40 artifacts × 5 classes) | [§5](#5-the-inventory) via the D7 recipe (~48 rows) | `grep -c` §5 data rows ≥ 40; all 5 `class` values present |
-| AC-2 (every row →  source-entity or `[ASSUMPTION – CONFIRM]`) | [§2](#2-column-schema) col 3 + [§4](#4-source-entity-derivation-rule); mandatory | no blank `source_entity`; values ∈ {#1..17, `[ASSUMPTION – CONFIRM]`, `⚠ NO-ENTITY-HOME (FINDING-3)`} |
+| AC-2 (every row →  source-entity or `[ASSUMPTION – CONFIRM]`) | [§2](#2-column-schema) col 3 + [§4](#4-source-entity-derivation-rule); mandatory | no blank `source_entity`; values ∈ {#1..19, `RENDERING (ownerless — ADR-044)`, `[ASSUMPTION – CONFIRM]`, `⚠ NO-ENTITY-HOME (FINDING-3)`} |
 | AC-3 (template-status + schema-status + owning-skill populated or explicit) | [§2](#2-column-schema) cols 5,6,7; mandatory | no blank in cols 5/6/7; `absent`/`unknown` explicit |
 | AC-4 (`tracker-schemas.md` pointer) | additive line in `tracker-schemas.md` §Purpose | pointer link resolves; distinct from prior line |
 | AC-5 (first-pass header string) | [§1](#1-purpose) verbatim disclaimer | exact-string grep |
@@ -49,12 +49,12 @@ The inventory uses an **8-column FROZEN schema** (transcribed verbatim from  D2)
 |---|---|---|---|---|
 | 1 | `artifact` | string | canonical filename pattern or artifact name | Verbatim from the seed source (file-pattern for trackers; artifact name for generated/typed) |
 | 2 | `class` | enum(5) | `core-tracker` · `methodology-variant-tracker` · `structural-file` · `generated-artifact` · `typed-plan` | §3 ordered discriminator decision tree (top-down, first match wins) |
-| 3 | `source_entity` | ref \| flag | `#N <EntityName>` (1..17 per project-entity-model §4 roster) · `[ASSUMPTION – CONFIRM]` · `⚠ NO-ENTITY-HOME (FINDING-3)` | §4 primary-entity rule |
+| 3 | `source_entity` | ref \| flag | `#N <EntityName>` (1..19 per project-entity-model §4 roster) · `RENDERING (ownerless — ADR-044)` · `[ASSUMPTION – CONFIRM]` · `⚠ NO-ENTITY-HOME (FINDING-3)` | §4 primary-entity rule (a **rendering** is a read-time projection of owned entities — ADR-044 §Decision.2 — that holds no data of its own, so it is ownerless: `source_entity = RENDERING`, `owning_skill = none`) |
 | 4 | `format` | enum | `.csv` · `.md` · `.json` · `.csv (+Confluence dual)` | From file pattern in seed source; RAID Log = dual per `tracker-schemas.md` §Confluence Dual-Format |
 | 5 | `template_status` | path \| enum | `operations/templates/<file>` · `absent` · `[ASSUMPTION – CONFIRM]` | Match artifact against the `templates/README.md` Registered-Templates table + `deploy.sh TEMPLATE_SYNC_MAP`; populate path if registered, else `absent` |
 | 6 | `schema_status` | enum(EAD-aligned) | `entity-derived` · `prose-only` · `absent` · `[ASSUMPTION – CONFIRM]` | `entity-derived` iff an `EAD(E,C,D,mode)` machine-schema file exists; else `prose-only` iff a prose schema exists in `tracker-schemas.md`/a `schemas/` doc; else `absent` |
 | 7 | `owning_skill` | string \| enum | skill name · `unknown` | The **Maintains** agent of `source_entity` from  §6 (owning-agent matrix), cross-checked against `per-skill-output-contracts.md`; `unknown` if `source_entity` is a FINDING-3 flag |
-| 8 | `reconciliation_flag` | enum | `clean` · `context-implicit` · `composite-multi-entity` · `⚠ FINDING-3 (artifact-element-no-entity-home)` · `[ASSUMPTION – CONFIRM]` | §4 / §6 — EAD-crosswalk completeness, **both directions**. **Mandatory on every row.** |
+| 8 | `reconciliation_flag` | enum | `clean` · `context-implicit` · `composite-multi-entity` · `rendering-ownerless (ADR-044)` · `⚠ FINDING-3 (artifact-element-no-entity-home)` · `[ASSUMPTION – CONFIRM]` | §4 / §6 — EAD-crosswalk completeness, **both directions**. **Mandatory on every row.** (`rendering-ownerless` = an ADR-044 read-time projection, ownerless by design — the I4-exempt set the ownership-collision check reads.) |
 
 **Why 8 and not more (anti-gold-plating, first-pass discipline):** an `ead_readiness` 9th column was considered and **rejected** — EAD-derivability is a *pure function* of columns 3+6+8 (`source_entity` resolves ∧ `schema_status`≠absent-blocked ∧ `reconciliation_flag`∈{clean,context-implicit}). It is specified as a derived **rule** in [§6](#6-derived-signals), not a stored column, to keep the first pass lean and avoid a denormalized column that drifts. The free-text `Notes` annotation in §5 is not a 9th controlled column — it carries the D4a secondary-entity enumeration and the D4b OOS-3 content-lifecycle seam, exactly as the frozen anchor table format prescribes.
 
@@ -74,15 +74,15 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 
 ## 4. Source-Entity Derivation Rule
 
-**Primary rule:** `source_entity` = the entity (per [`project-entity-model.md`](../disciplines/project-entity-model.md) §4, 18-roster) whose **record the artifact primarily persists or aggregates**, cross-validated by the owning-agent matrix (the artifact's owning skill should be that entity's Create/Maintain agent — per project-entity-model §6).
+**Primary rule:** `source_entity` = the entity (per [`project-entity-model.md`](../disciplines/project-entity-model.md) §4, 19-roster) whose **record the artifact primarily persists or aggregates**, cross-validated by the owning-agent matrix (the artifact's owning skill should be that entity's Create/Maintain agent — per project-entity-model §6). A **rendering** (ADR-044 §Decision.2 — a read-time projection of owned entities that holds no data of its own) resolves to no persisting entity: `source_entity = RENDERING (ownerless — ADR-044)`.
 
 **Three sub-rules (all FROZEN):**
 
 - **(a) Aggregator/composite artifacts** (e.g., Daily Status Log carries Blockers≈RAID Item + Decisions≈Decision + Actions + Meetings): `source_entity` = the dominant record-type entity; `reconciliation_flag = composite-multi-entity`; the row Notes enumerate the secondary entities. Do **not** force a single clean entity onto a genuinely multi-entity aggregator.
 - **(b) OOS-3 Artifact-seam** (per §4 entity #9): generated artifacts that are *themselves* "Artifacts" (reports, packages, transcripts-as-files) → `source_entity = #9 Artifact`; the row Notes record `content_lifecycle = inherits-per-file (A/B/C)` — the reconciliation seam to `frontmatter-schema.md`. G3/G4 physicalizes; **noted, not resolved here**.
-- **(c) No-entity-home** (the Finding-3 macro case): if no roster entity primarily persists the artifact's records (the artifact tracks a concept absent from the frozen 18-roster), `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)`. Do **NOT** add an entity (redefining the frozen surface is forbidden — Tier-2 SCOPE CHANGE territory, not a spoke action). Flag the row; downstream triage (N2/N3 or a future roster reopen) decides disposition.
+- **(c) No-entity-home** (the Finding-3 macro case): if no roster entity primarily persists the artifact's records (the artifact tracks a concept absent from the frozen 19-roster), `source_entity = ⚠ NO-ENTITY-HOME (FINDING-3)`. Do **NOT** add an entity (redefining the frozen surface is forbidden — Tier-2 SCOPE CHANGE territory, not a spoke action). Flag the row; downstream triage (N2/N3 or a future roster reopen) decides disposition.
 
-**Ratified Communications-Tracker policy (Collective Review 2026-05-16, decision item 4):** the Communications Tracker has no entity home in the frozen 17-roster [18-roster since ADR-018, 2026-06-07 — no Communication entity added] — recorded as `source_entity: ⚠ NO-ENTITY-HOME (FINDING-3)`, `reconciliation_flag: ⚠ FINDING-3`, **flag + carry as `out-of-standard-until-reconciled` known-exception**. Entity-roster expansion (adding a Communication entity) is a SEPARATE downstream decision (future roster reopen / later milestone) — **NOT in scope**. The flagged row *is* the deliverable; it routes the gap to downstream triage.
+**Ratified Communications-Tracker policy (Collective Review 2026-05-16, decision item 4):** the Communications Tracker has no entity home in the frozen 17-roster [18-roster since ADR-018, 2026-06-07; 19-roster since ADR-044, 2026-07-12 — no Communication entity added at either] — recorded as `source_entity: ⚠ NO-ENTITY-HOME (FINDING-3)`, `reconciliation_flag: ⚠ FINDING-3`, **flag + carry as `out-of-standard-until-reconciled` known-exception**. Entity-roster expansion (adding a Communication entity) is a SEPARATE downstream decision (future roster reopen / later milestone) — **NOT in scope**. The flagged row *is* the deliverable; it routes the gap to downstream triage.
 
 ## 5. The Inventory
 
@@ -93,7 +93,7 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
 | `[Project]_Daily_Status_Log.md` | core-tracker | entity 6 RAID Item | .md | `operations/templates/daily-status-log-template.md` | prose-only | tracker-manager | composite-multi-entity | Aggregator (D4a): dominant=entity 6 RAID Item; secondaries entity 5 Decision, entity 7 Meeting, entity 10 Person. Operational producer cross-check: `daily-status` |
-| `[Project]_Communications_Tracker.md` | core-tracker | ⚠ NO-ENTITY-HOME (FINDING-3) | .md | `operations/templates/communications-tracker-template.md` | prose-only | unknown | ⚠ FINDING-3 (artifact-element-no-entity-home) | **RATIFIED decision item 4** — no Communication entity in frozen 18-roster; out-of-standard-until-reconciled known-exception; flag + carry; entity-roster expansion NOT in scope; do **NOT** add an entity |
+| `[Project]_Communications_Tracker.md` | core-tracker | ⚠ NO-ENTITY-HOME (FINDING-3) | .md | `operations/templates/communications-tracker-template.md` | prose-only | unknown | ⚠ FINDING-3 (artifact-element-no-entity-home) | **RATIFIED decision item 4** — no Communication entity in frozen 19-roster (unchanged by ADR-044, which added Finding not Communication); out-of-standard-until-reconciled known-exception; flag + carry; entity-roster expansion NOT in scope; do **NOT** add an entity |
 | `[Project]_Open_Meetings_Tracker.md` | core-tracker | entity 7 Meeting | .md | `operations/templates/open-meetings-tracker-template.md` | prose-only | ppm-agent | clean | Owning-agent cross-check: file-router creates, ppm-agent maintains ( §6) |
 | `[Project]_Transcript_Register.md` | core-tracker | #9 Artifact `[ASSUMPTION – CONFIRM]` | .md | `operations/templates/transcript-register-template.md` | prose-only | ppm-agent (route: file-router) | context-implicit | Passive search/reference index of transcript-Artifacts; `project_id` filename-implicit; "index not tracker" behavioral nuance (tracker-schemas.md Tracker 4 note) flagged, not forced |
 | `[Project]_RAID_Log.csv` | core-tracker | entity 6 RAID Item | .csv (+Confluence dual) | `operations/templates/raid-log-template.csv` | entity-derived | tracker-manager | clean | **EAD pilot proven** ([`raid-log.schema.json`](../schemas/raid-log.schema.json)) — the **only** first-pass `entity-derived` artifact; `impact`/`action_plan` re-frozen first-class per the Stage 5 Option-A spec |
@@ -137,20 +137,20 @@ The 5 class definitions are **mutually exclusive by construction** — classific
 
 ### 5.4 generated-artifact (10) — from `per-skill-output-contracts.md` Skill-N Output Contracts
 
-All map to `source_entity = #9 Artifact` (OOS-3 Artifact-seam); `reconciliation_flag = context-implicit` (the #9-Artifact mapping resolves via the OOS-3 seam; `content_lifecycle = inherits-per-file (A/B/C)` recorded in Notes — the seam to `frontmatter-schema.md`, physicalized at G3/G4). `owning_skill` = Maintains(#9 Artifact) = `ppm-agent (route: file-router)` per §2 col 7; the producing skill is the per-skill-output-contracts.md cross-check (Notes).
+**ADR-044 reconciliation applied (2026-07-12).** These 10 skill-produced deliverables split three ways per ADR-044's output classification: **(a) 5 renderings** — read-time projections of owned entities that hold no data of their own (executive status report, weekly status roll-up, decision briefing, daily-status Teams update, comms drafts) → `source_entity = RENDERING (ownerless — ADR-044)`, `owning_skill = none (ownerless by design)`, `reconciliation_flag = rendering-ownerless`; **(b) 1 missing-entity** — the build-reviewer findings register, whose records ARE `Finding` entities now that ADR-044 promoted the findings register (#19) → `source_entity = #19 Finding`, `owning_skill = pmo-qa-lead` (the §6 Maintainer), `reconciliation_flag = clean`; **(c) 4 genuine Artifacts** — deliverables that hold their own analytical content (change-impact assessment, technical-analysis report, requirements/FRD, traceability matrix) → `source_entity = #9 Artifact` (OOS-3 Artifact-seam), `owning_skill = ppm-agent (route: file-router)`, `reconciliation_flag = context-implicit`, `content_lifecycle = inherits-per-file (A/B/C)`. The producing skill is the per-skill-output-contracts.md cross-check (Notes). The **rendering set is the I4-exempt input** the ownership-collision check (deploy.sh Check 54) reads.
 
 | artifact | class | source_entity | format | template_status | schema_status | owning_skill | reconciliation_flag | Notes |
 |---|---|---|---|---|---|---|---|---|
-| executive status report | generated-artifact | #9 Artifact | .md | `operations/templates/executive-status-report-prompt-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: ppm-agent / comms-writer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| weekly status roll-up | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: weekly-status-rollup. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| decision briefing | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: ppm-agent. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
+| executive status report | generated-artifact | RENDERING (ownerless — ADR-044) | .md | `operations/templates/executive-status-report-prompt-template.md` | absent | none (ownerless by design) | rendering-ownerless | **ADR-044 rendering** (executive brief — read-time projection of owned status). Producer: ppm-agent / comms-writer |
+| weekly status roll-up | generated-artifact | RENDERING (ownerless — ADR-044) | .md | absent | absent | none (ownerless by design) | rendering-ownerless | **ADR-044 rendering** (status update — read-time projection of owned entities). Producer: weekly-status-rollup |
+| decision briefing | generated-artifact | RENDERING (ownerless — ADR-044) | .md | absent | absent | none (ownerless by design) | rendering-ownerless | **ADR-044 rendering** (read-time projection of owned Decision entities). Producer: ppm-agent |
 | change-impact assessment | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: change-management. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | technical-analysis report | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-technical-analyst. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | requirements / FRD | generated-artifact | #9 Artifact | .md | `operations/templates/requirements-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-process-designer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
 | traceability matrix | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: pmo-process-designer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| build-reviewer findings register | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: build-reviewer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| daily-status Teams update | generated-artifact | #9 Artifact | .md | `operations/templates/daily-status-update-framework-template.md` | absent | ppm-agent (route: file-router) | context-implicit | Producer: daily-status. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
-| comms drafts | generated-artifact | #9 Artifact | .md | absent | absent | ppm-agent (route: file-router) | context-implicit | Producer: comms-writer. `content_lifecycle = inherits-per-file (A/B/C)` — OOS-3 seam |
+| build-reviewer findings register | generated-artifact | #19 Finding | .md | absent | prose-only | pmo-qa-lead | clean | **ADR-044 missing-entity → Finding (#19)**: the findings-register records ARE Finding entities; field schema = `entity-field-schemas.md` §3.19 (prose-only, no EAD JSON yet); Maintains(#19 Finding)=pmo-qa-lead (§6). Producers: build-reviewer / pmo-qa-auditor / pmo-technical-analyst |
+| daily-status Teams update | generated-artifact | RENDERING (ownerless — ADR-044) | .md | `operations/templates/daily-status-update-framework-template.md` | absent | none (ownerless by design) | rendering-ownerless | **ADR-044 rendering** (status update — read-time projection). Producer: daily-status |
+| comms drafts | generated-artifact | RENDERING (ownerless — ADR-044) | .md | absent | absent | none (ownerless by design) | rendering-ownerless | **ADR-044 rendering** (communications draft — read-time projection). Producer: comms-writer |
 
 ### 5.5 typed-plan (6) — `source_entity == #4 Plan`
 
@@ -171,7 +171,7 @@ All `source_entity = #4 Plan`; `owning_skill` = Maintains(#4 Plan) = `ppm-agent`
 
 **(a) EAD-readiness rule (derived — not a stored column).** An artifact is **EAD-derivable** iff:
 
-> `source_entity` resolves to #1..17 **∧** `schema_status` ≠ absent-without-entity **∧** `reconciliation_flag` ∈ {`clean`, `context-implicit`}
+> `source_entity` resolves to #1..19 **∧** `schema_status` ≠ absent-without-entity **∧** `reconciliation_flag` ∈ {`clean`, `context-implicit`}
 
 At first pass exactly **one** artifact satisfies this with a live machine-schema: `[Project]_RAID_Log.csv` (`entity 6 RAID Item` ∧ `entity-derived` ∧ `clean`). This is the precise signal N2 ( template standard) and N3 ( harness) consume to know which artifacts are ready for entity-derived templatization versus which are reconciliation-blocked.
 
@@ -189,7 +189,7 @@ This returns every artifact whose `source_entity`/`reconciliation_flag` is `⚠ 
 
 | Reference | Role relative to this inventory |
 |---|---|
-| [`project-entity-model.md`](../disciplines/project-entity-model.md) | **Source-entity + owning-skill authority.** §4 18-entity roster → `source_entity` col 3; §6 owning-agent matrix (Maintains) → `owning_skill` col 7. FROZEN derivation surface. |
+| [`project-entity-model.md`](../disciplines/project-entity-model.md) | **Source-entity + owning-skill authority.** §4 19-entity roster → `source_entity` col 3; §6 owning-agent matrix (Maintains) → `owning_skill` col 7. FROZEN derivation surface. |
 | [`schemas/entity-field-schemas.md`](../schemas/entity-field-schemas.md) | Per-entity field/validation schemas — the `schema_status` tri-state alignment authority (entity-derived vs prose-only). |
 | [`schemas/raid-log.schema.json`](../schemas/raid-log.schema.json) | The one first-pass `entity-derived` exemplar — EAD machine-schema for the RAID Log, derived from the RAID Item entity. |
 | [`schemas/tracker-schemas.md`](../schemas/tracker-schemas.md) | Seed for the 5 `core-tracker` rows (Trackers 1–5) + the 21 `methodology-variant-tracker` rows (§Methodology Variation matrix). Carries the additive §Purpose pointer back to this inventory (AC-4). |
