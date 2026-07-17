@@ -1,3 +1,10 @@
+---
+title: "Playbook: Stage-Gate Evals"
+purpose: The playbook for authoring pipeline stage-gate eval content — the Judgment layer that slots into the three-layer gate assessment protocol at gate-evaluation-spec.md.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Playbook: Stage-Gate Evals
 
 **Invoked by:** "Write the judge for Stage X→Y", "author the calibration content for Gate N", "write the judgment layer for G3-04", or any reference to `gate-evaluation-spec.md`, `gate-criteria-spec.md`, or `pipeline/`.

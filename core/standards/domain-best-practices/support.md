@@ -4,6 +4,7 @@ purpose: A K1 universal reference that carries an Applicability Profile and inde
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
+framework_version_anchor: domain-aware-stage5-design
 domain: support
 consumers: "release/references/pipeline/stage-05-solutioning.md §5.7 (domain-guide index — the design spoke consults this guide when the deliverable's domain is support); the domain-best-practice review criterion (a Stage-5/7 reviewer checks a support deliverable against this guide's concepts and the contraindications its Applicability Profile names); release/references/pipeline/stage-04-planning.md §5.7 (the domain: class field points here when domain==support); and the support-domain specialist skills operations/skills/pmo-tier-1-support and operations/skills/pmo-tier-2-support (each cites this guide as its design-time best-practice anchor)"
 frameworks_cited: "ITIL 4 (2019); service-management practice; SRE (Google SRE, Beyer et al. 2016) / on-call practice — all registered in core/specs/framework-catalog.md"

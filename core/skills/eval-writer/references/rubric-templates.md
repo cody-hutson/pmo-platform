@@ -1,3 +1,10 @@
+---
+title: Rubric Template Library
+purpose: A library of seven ready-to-adapt binary or low-precision eval rubric templates with double-brace placeholders, to validate against a calibration set of at least 30 items before production use.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Rubric Template Library
 
 Seven ready-to-adapt templates from Module 6 §4. Placeholders for substitution are in `{{DOUBLE_BRACES}}`. All templates are designed for binary or low-precision (1–4) scoring. **Validate each template against a calibration set ≥30 items per use case before production use.**

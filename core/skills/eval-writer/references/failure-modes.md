@@ -1,3 +1,10 @@
+---
+title: Failure Mode Catalog
+purpose: A catalog of 47 unified eval failure modes across Foundations, Agentic, Multi-Agent, and Operational classes (stable IDs, cite as F-XX) for mapping observed failures when authoring a failure taxonomy.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Failure Mode Catalog
 
 Condensed from Module 6 §5. 47 unified failure modes across Foundations (FND), Agentic (AGT), Multi-Agent (MAS), and Operational (OPS). IDs stable; cite as F-XX.

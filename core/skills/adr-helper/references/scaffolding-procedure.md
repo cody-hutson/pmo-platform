@@ -1,3 +1,10 @@
+---
+title: ADR Helper — Scaffolding Procedure
+purpose: Reference detail for adr-helper's Scaffold mode — the worked number-allocation walkthrough and immutable-numbering mechanics behind the SKILL.md contract.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # ADR Helper — Scaffolding Procedure (reference)
 

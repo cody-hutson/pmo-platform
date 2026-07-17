@@ -1,3 +1,10 @@
+---
+title: L4 Suite-Integration Harness — pmo-skill-router
+purpose: Methodology specification for the pmo-skill-router L4 suite-integration test — how the whole role-Specialist suite is exercised at once as the router's acceptance evidence.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # L4 Suite-Integration Harness — `pmo-skill-router`
 

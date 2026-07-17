@@ -1,3 +1,10 @@
+---
+title: The `acceptance` Assertion Type
+purpose: Reference for the eval-schema acceptance assertion type — the sixth value of the evals[].assertions[].type open enum and how it is authored.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # The `acceptance` assertion type

@@ -1,3 +1,10 @@
+---
+title: Push-to-Resolve Rubric — PMO Reference
+purpose: The reference defining the push-to-resolve scoring rubric pmo-qa-auditor uses to evaluate whether an output drives items to resolution rather than dumping status.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Push-to-Resolve Rubric — PMO Reference
 
 ## Purpose

@@ -1,3 +1,10 @@
+---
+title: Release-Process Fitness Audit — Dimension Rubric
+purpose: The content SSOT for pmo-qa-auditor Mode F (release-process fitness audit) — the scored dimension rubric the audit grades the pipeline against.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Release-Process Fitness Audit — Dimension Rubric (Mode F content SSOT)
 

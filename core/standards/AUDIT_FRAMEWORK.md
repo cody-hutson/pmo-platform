@@ -29,15 +29,14 @@ Session 3: Operational Readiness Score    → AUDIT_READINESS.md (reads both pri
 ```
 Run Phase 1 of the PMO Platform Operational Readiness Audit.
 
-Read the audit framework at Projects/Reference/AUDIT_FRAMEWORK.md first, then read
+Read the audit framework at core/standards/AUDIT_FRAMEWORK.md first, then read
 these files in order:
 1. Claude/CLAUDE.md
-2. Projects/OPERATIONS.md
-3. Projects/PORTFOLIO.md
-4. Projects/SESSION_STATE.md
+2. core/governance/OPERATIONS.md
+3. projects/_config/PORTFOLIO.md
+4. projects/_config/SESSION_STATE.md
 5. GitHub Issues (improvement backlog — `gh issue list --label improvement`)
-6. Projects/[PROJECT_KEY] Implementation/PROJECT.md
-7. Projects/Reference/operational-runbook.md
+6. projects/[Project]/PROJECT.md
 
 Invoke the pmo-qa-auditor skill, then audit across these 7 dimensions. For each
 dimension: state what SHOULD exist (from context files), state what ACTUALLY exists
@@ -49,14 +48,15 @@ DIMENSION 1: Context File Integrity & Coherence
 - Are lifecycle states consistent across files?
 - Are dates consistent? Do day-of-week labels validate?
 - Does OPERATIONS.md reference skills that are actually installed? Check every skill name
-  against .skills/skills/ directory.
+  against ~/.claude/skills/ directory.
 - Does CLAUDE.md workspace structure match the actual folder layout?
 - BEHAVIORAL TEST: Simulate a cold-start session — read SESSION_STATE.md, follow its
   instructions. Do you arrive at a coherent, complete understanding of the workspace?
 
 DIMENSION 2: Skill Installation & Reference Integrity
-- Are all 14 PMO skills installed? Verify version numbers match expected (8 at v5,
-  4 at v2, project-initiator v3, weekly-status-rollup v3).
+- Are all PMO skills installed? Derive the expected set by enumerating the live
+  source-of-truth skill trees (`core/skills/`, `operations/skills/`, `release/skills/`) —
+  do not assume a fixed count or per-skill version; the live trees are authoritative.
 - For each skill that references references/*.md files, do those files exist in the
   skill's installed references/ directory?
 - Are there skills referenced in OPERATIONS.md that aren't installed?
@@ -65,18 +65,18 @@ DIMENSION 2: Skill Installation & Reference Integrity
   references/ path it mentions. Report any broken references.
 
 DIMENSION 3: Folder Structure & Document Location
-- Does the [PROJECT_KEY] project folder match the standard structure defined in OPERATIONS.md?
+- Does the [Project] project folder match the standard structure defined in OPERATIONS.md?
 - Are all 8 numbered folders present (01-08)?
-- Does Projects/Reference/ contain the expected portfolio-level shared docs and templates?
+- Do the expected portfolio-level shared docs and templates exist in their current homes (governance → `core/`, operational config → `projects/_config/`, templates → `operations/templates/`)?
 - Are there orphan files (files in unexpected locations, stale artifacts)?
-- Is Projects/Archive/ properly separated from operational files?
+- Is projects/Archive/ properly separated from operational files?
 - BEHAVIORAL TEST: Take a sample filename (e.g., "AM Testing 2026-03-19.txt") and
   trace the routing rules in OPERATIONS.md. Does the File Router skill's routing-patterns.md
   agree? Would the file land in the right folder?
 
 DIMENSION 4: Operational Tracker Health
 - Do all expected trackers exist in 04-PMO-Operations/ per OPERATIONS.md's artifact table?
-- Are tracker schemas (from Reference/tracker-schemas.md) consistent with actual
+- Are tracker schemas (from core/schemas/tracker-schemas.md) consistent with actual
   tracker file headers?
 - Are there trackers defined in the schema that don't exist as files?
 - Are there tracker files that don't appear in the schema?
@@ -158,7 +158,7 @@ test this handoff with real data."]
 [Any findings that should become IMP-### entries, drafted in IMP format]
 ```
 
-Save to Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_STRUCTURAL.md
+Save to projects/[Project]/08-Generated/AUDIT_STRUCTURAL.md
 ```
 
 ---
@@ -173,13 +173,13 @@ Save to Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_STRUCTURAL.md
 Run Phase 2 of the PMO Platform Operational Readiness Audit.
 
 Read these files in order:
-1. Projects/Reference/AUDIT_FRAMEWORK.md (this framework)
-2. Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_STRUCTURAL.md (Phase 1 findings)
-3. Projects/SESSION_STATE.md
-4. Projects/OPERATIONS.md
+1. core/standards/AUDIT_FRAMEWORK.md (this framework)
+2. projects/[Project]/08-Generated/AUDIT_STRUCTURAL.md (Phase 1 findings)
+3. projects/_config/SESSION_STATE.md
+4. core/governance/OPERATIONS.md
 
 Phase 1 identified structural findings. This session tests whether the platform
-works end-to-end with real project data. Use the [PROJECT_KEY] Implementation project as the
+works end-to-end with real project data. Use the [Project] project as the
 test bed.
 
 Read the "Inputs for Phase 2" section from AUDIT_STRUCTURAL.md — those are targeted
@@ -190,7 +190,7 @@ Map OPERATIONS.md's 15-step daily processing cycle. For each step:
 - Which skill handles it?
 - Is it automated (scheduled task) or manual trigger?
 - Is it defined but unimplemented?
-Execute the cycle against [PROJECT_KEY] data:
+Execute the cycle against [Project] data:
 a. Pick an unprocessed transcript from 05-Transcripts/ (or the most recent one)
 b. Route it through the File Router — record classification result
 c. Process through PPM Agent — record all 7 output sections, follow-up tags emitted
@@ -202,13 +202,13 @@ Identify where the pipeline pauses for human input vs. runs autonomously.
 Score each stage: PASS / PARTIAL / FAIL.
 
 DIMENSION 9: Weekly Synthesis & Portfolio Management
-- Simulate the weekly roll-up: read all [PROJECT_KEY] inputs the skill would consume
+- Simulate the weekly roll-up: read all [Project] inputs the skill would consume
 - Can the weekly-status-rollup produce all 6 sections from available data?
 - Does the portfolio write-back correctly target PORTFOLIO.md fields?
 - Walk through the human-in-the-loop checkpoint — what would the approval prompt
-  look like with current [PROJECT_KEY] data?
+  look like with current [Project] data?
 - Is the Friday 5PM scheduled task correctly configured?
-- BEHAVIORAL TEST: Generate the weekly roll-up for [PROJECT_KEY]. Evaluate whether it's
+- BEHAVIORAL TEST: Generate the weekly roll-up for [Project]. Evaluate whether it's
   executive-ready without editing.
 
 DIMENSION 10: Project Lifecycle Pipeline
@@ -218,7 +218,7 @@ a. INITIATION: Simulate creating a new project "Warehouse Optimization" (Waterfa
    project-initiator step. Would it produce a complete, operational project folder?
    Does it correctly update PORTFOLIO.md? Does the User Setup Checklist cover all
    systems?
-b. CLOSURE: Simulate closing the [PROJECT_KEY] project (don't actually close it). Walk through
+b. CLOSURE: Simulate closing the [Project] project (don't actually close it). Walk through
    every Mode B step. Would it finalize all trackers? Produce a closure summary?
    Move to Archive? Update PORTFOLIO.md? Produce the teardown checklist?
 c. GAP CHECK: Is there anything the lifecycle doesn't cover? What about the CLOSING
@@ -279,7 +279,7 @@ autonomous daily processing."]
 [IMP-### entries discovered during testing]
 ```
 
-Save to Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_PIPELINE.md
+Save to projects/[Project]/08-Generated/AUDIT_PIPELINE.md
 ```
 
 ---
@@ -294,11 +294,11 @@ Save to Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_PIPELINE.md
 Run Phase 3 of the PMO Platform Operational Readiness Audit.
 
 Read these files in order:
-1. Projects/Reference/AUDIT_FRAMEWORK.md (this framework)
-2. Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_STRUCTURAL.md (Phase 1)
-3. Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_PIPELINE.md (Phase 2)
+1. core/standards/AUDIT_FRAMEWORK.md (this framework)
+2. projects/[Project]/08-Generated/AUDIT_STRUCTURAL.md (Phase 1)
+3. projects/[Project]/08-Generated/AUDIT_PIPELINE.md (Phase 2)
 4. GitHub Issues — improvement label (`gh issue list --label improvement --state all`)
-5. Projects/SESSION_STATE.md
+5. projects/_config/SESSION_STATE.md
 
 This session synthesizes Phases 1 and 2 into an operational readiness score. No new
 testing — this is judgment and scoring based on evidence from the prior two phases.
@@ -309,7 +309,7 @@ Using findings from Phases 1 and 2, assess:
 - Does PORTFOLIO.md support multiple projects in its schema?
 - Do daily-status and weekly-rollup handle multiple projects?
 - Does the File Router distinguish between projects correctly?
-- Are there hardcoded [PROJECT_KEY]-specific assumptions in any skill or context file?
+- Are there hardcoded [Project]-specific assumptions in any skill or context file?
 - Would the daily processing cycle handle 2 projects without doubling effort?
 
 ## Operational Readiness Scoring
@@ -408,7 +408,7 @@ Include: readiness verdict, key findings summary, next action items.
 [Ordered list of what to do after this audit]
 ```
 
-Save to Projects/[PROJECT_KEY] Implementation/08-Generated/AUDIT_READINESS.md
+Save to projects/[Project]/08-Generated/AUDIT_READINESS.md
 Create GitHub Issues for any new improvement findings.
 Update SESSION_STATE.md with audit results.
 ```
@@ -420,7 +420,7 @@ Update SESSION_STATE.md with audit results.
 | Session | Focus | Reads | Produces | Duration |
 |---------|-------|-------|----------|----------|
 | 1 | Structure + Behavior (7 dimensions) | Context files, skills, references | AUDIT_STRUCTURAL.md | ~30 min |
-| 2 | Pipeline + Integration (4 dimensions) | Phase 1 output + real [PROJECT_KEY] data | AUDIT_PIPELINE.md | ~45 min |
+| 2 | Pipeline + Integration (4 dimensions) | Phase 1 output + real [Project] data | AUDIT_PIPELINE.md | ~45 min |
 | 3 | Readiness Score (1 dimension + synthesis) | Phase 1 + Phase 2 outputs | AUDIT_READINESS.md | ~20 min |
 
 **Total:** 12 dimensions, ~1.5 hours across 3 sessions.

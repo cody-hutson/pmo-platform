@@ -1,3 +1,10 @@
+---
+title: Conditional-AUQ-Presence Detection (G11) — PMO QA Auditor Reference
+purpose: The detection reference for pmo-qa-auditor gate G11 — flagging a manufactured or a missing conditional AskUserQuestion operator-decision gate.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 # Conditional-AUQ-Presence Detection (G11) — PMO QA Auditor Reference

@@ -1,12 +1,13 @@
-<!-- reference-durability: allow-link -->
 ---
 title: Toolchain Operational Reference
 purpose: Factual lookup for non-obvious operational behaviors of the toolchain the platform's cross-cutting work runs on — the GitHub CLI, zsh, GitHub's repository/Projects surfaces, and a known third-party Claude plugin. Each entry is the general mechanic an agent consults mid-task to avoid a silent failure.
 type: reference
+status: ACTIVE
 layer: 1
 reversibility: CHEAP / Confidence HIGH
 consumers: Any agent performing gh-CLI, git, GitHub-Projects, or workflow-file work (release-pipeline spokes, hub orchestration, repo-maintenance sessions).
 ---
+<!-- reference-durability: allow-link -->
 
 # Toolchain Operational Reference
 

@@ -1,3 +1,10 @@
+---
+title: Cascade-Completeness Detection (G8) — PMO QA Auditor Reference
+purpose: The detection reference for pmo-qa-auditor gate G8 — how to detect an incomplete Document-Tier-1 to Tier-2 cascade in a skill output.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Cascade-Completeness Detection (G8) — PMO QA Auditor Reference
 

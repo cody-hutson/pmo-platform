@@ -1,3 +1,10 @@
+---
+title: Dual Output Compliance — PMO Reference
+purpose: The reference defining the dual-output rule and the compliance checklists pmo-qa-auditor applies to skill outputs.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Dual Output Compliance — PMO Reference
 
 ## Purpose

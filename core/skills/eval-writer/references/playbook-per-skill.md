@@ -1,3 +1,10 @@
+---
+title: "Playbook: Per-Skill Evals"
+purpose: The playbook for authoring per-skill eval suites — the artifacts that slot into a skill's evals/ directory and feed the skill-creator harness (evals.json to grading.json to benchmark.json).
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Playbook: Per-Skill Evals
 
 **Invoked by:** "Write evals for <skill>", "audit my evals for <skill>", "what evals does <skill> need", or any reference to a specific pmo-platform skill path (`<module>/skills/<name>/`).

@@ -1,3 +1,10 @@
+---
+title: Artifact Workflow Protocol
+purpose: Operational-protocol home for the Artifact entity's workflow — binds the Artifact's two lifecycle axes to their canonical homes and defines the one genuinely-new promotion_state field.
+type: protocol
+status: ACTIVE
+reversibility: MODERATE / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Artifact Workflow Protocol
 

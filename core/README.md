@@ -1,3 +1,10 @@
+---
+title: Core Module
+purpose: Module README for the Core module — the shared kernel consumed by both operations and release; enumerates the module's public API of skills, disciplines, schemas, deploy infrastructure, and ADRs.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Core Module
 
 The Core module hosts the shared kernel — capability consumed by BOTH operations AND release. Includes shared skills, security hooks, disciplines (decision/discovery/review), schemas, configuration templates, deploy infrastructure, and platform-architecture ADRs. Consumer audience: BOTH PMO practitioners AND platform builders.

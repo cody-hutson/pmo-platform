@@ -1,3 +1,10 @@
+---
+title: Master Decision Tree
+purpose: The master decision tree mapping the Stage-0 five-tuple to the recommended eval portfolio; every rule (stable IDs) is checkable from the system's characterization.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Master Decision Tree
 
 Condensed from Module 6 §3 and §8 "Skill-Ready Decision Logic." Every rule is checkable from the Stage 0 five-tuple (single vs multi-agent, tool use, HITL, dev vs prod, safety-criticality). Multiple rules may apply — union the recommended eval portfolios.
