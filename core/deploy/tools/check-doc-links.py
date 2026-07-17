@@ -483,8 +483,9 @@ def run_self_test() -> int:
          while the leading-`/` form of the same target resolves.
       3. NEW: rewrite-map TSV output mode.
       4. AC-3 five-form parity (doc-links side): the five link forms in #1471's
-         AC-3 table return the canonical verdicts; the shared repro cross-checks
-         these against check-release-links.py.
+         AC-3 table return the canonical verdicts. Parity is pinned on this side
+         only — check-release-links.py has no self-test and no committed fixture
+         exercises both resolvers against one case set.
       5. NEW: anchor preservation in rewrite-map mode.
       6. NEW: EMIT-ONLY structural enforcement (mtime + content-hash unchanged
               after scan_file_for_rewrite_map invocation) — per Stage 5 spec
@@ -571,8 +572,9 @@ def run_self_test() -> int:
     # ─── Fixture 4: AC-3 five-form parity (doc-links side) ────────────────────
     # The canonical rule (ADR-085) makes this checker agree with
     # check-release-links.py on all five link forms in #1471's AC-3 table. This
-    # fixture pins the doc-links verdicts; the shared repro cross-checks them
-    # against check-release-links.py. Hermetic sandbox root.
+    # fixture pins the doc-links verdicts only — check-release-links.py has no
+    # self-test, and no committed fixture exercises both resolvers against one
+    # case set, so its side of the parity is unpinned. Hermetic sandbox root.
     with tempfile.TemporaryDirectory() as td:
         sandbox = Path(td).resolve()
         (sandbox / "core" / "disciplines").mkdir(parents=True)
