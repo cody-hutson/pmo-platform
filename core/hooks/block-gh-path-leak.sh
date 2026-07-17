@@ -1,6 +1,7 @@
 #!/bin/bash
 # block-gh-path-leak.sh — PreToolUse hook: catch operator-local path leaks in
 # gh issue/PR bodies before they post to a PUBLIC repo (#1137).
+# hook-owner: core/rules/git-workflow.md
 #
 # Extends the path-portability guard (#529) to the gh-issue-ops surface. The #529
 # deploy-check covers tracked FILES; this hook covers the OTHER public surface —

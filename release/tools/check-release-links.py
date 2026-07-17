@@ -11,6 +11,12 @@ reports any link target that:
 - (when --check-anchors) carries a `#fragment` that names no heading in the
   target file, where the fragment is resolved by a faithful github-slugger port
 
+Path resolution (canonical rule, ADR-085 — identical to check-doc-links.py, see
+core/standards/doc-link-maintenance-protocol.md § Path resolution): a link
+resolves relative to the source file's directory; a leading `/` denotes the
+workspace (repo) root; there is NO bare module-prefix fallback (a bare `core/…`
+from a non-root file is an ordinary relative path, so it is broken).
+
 Skips (treated as intentional non-links):
 
 - External URLs (`http://`, `https://`, `mailto:`, `tel:`)
@@ -49,7 +55,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Whether an image target is *checked* is governed by --images.
 LINK_RE = re.compile(r'(!?)\[[^\]]*\]\(([^)]+)\)')
 
-SKIP_PREFIXES = ("http://", "https://", "mailto:", "tel:", "#", "/")
+# Note: a leading `/` is deliberately NOT skipped — per the canonical rule
+# (ADR-085; core/standards/doc-link-maintenance-protocol.md § Path resolution) it
+# denotes the workspace (repo) root and is resolved in check_file, matching
+# check-doc-links.py. Only genuinely off-repo / non-path schemes are skipped here.
+SKIP_PREFIXES = ("http://", "https://", "mailto:", "tel:", "#")
 
 PLACEHOLDER_TARGETS = {
     "URL", "PATH", "FILE", "TARGET", "...", "path", "URI", "<URL>",
@@ -183,7 +193,15 @@ def check_file(md: Path, *, check_anchors: bool, images: bool,
                         f"  missing-anchor (in-file): {target} "
                         f"-> #{unquote(frag)} not a heading in {md.name}")
             continue
-        resolved = (md.parent / target_path).resolve()
+        if target_path.startswith("/"):
+            # Canonical rule clause 2 (ADR-085): a leading `/` denotes the
+            # workspace (repo) root, matching GitHub's rendered-blob behavior and
+            # check-doc-links.py. Anchor explicitly on REPO_ROOT — joining an
+            # absolute path via `md.parent / target_path` would reset to the
+            # filesystem root and then read as "escapes repo root".
+            resolved = (REPO_ROOT / target_path.lstrip("/")).resolve()
+        else:
+            resolved = (md.parent / target_path).resolve()
         try:
             resolved.relative_to(REPO_ROOT)
         except ValueError:

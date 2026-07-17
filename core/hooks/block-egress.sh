@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-egress.sh — PreToolUse hook blocking network egress / data-exfiltration channels
+# hook-owner: core/rules/bypass-mode-readiness/block-egress.md
 #
 # Closes Red Team C2 (Critical): the credential-read deny only covers Claude's Read tool;
 # Bash subprocesses (cat, curl, gh gist, nc, scp) bypass it entirely.

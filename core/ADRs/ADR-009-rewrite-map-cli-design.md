@@ -1,6 +1,6 @@
 ---
 title: ADR-009 — Rewrite-map CLI design (--from-path/--to-path mode for check-doc-links.py)
-status: Accepted (architectural intent at the module restructure; implementation followed)
+status: Accepted (architectural intent at the module restructure; implementation followed). Rule 2 (V1/V2 workspace-rooted prefix tables driving the resolver's bare-prefix workspace-root fallback) superseded-in-part by ADR-085 — that fallback is retired; the rewrite-map CLI (Rules 1/3/4/5) remains in force.
 date: 2026-05-27
 deciders: "operator + Stage 5 Solutioning spoke + adversarial review"
 tags: [architecture, tooling, doc-link-maintenance, check-14-15, emit-only, fail-safe]
@@ -15,6 +15,8 @@ source_observations:
 ## Status
 
 Accepted as architectural intent at P2-T5 (this ticket commits `check-doc-links.py` byte-identical to source at `core/deploy/tools/`); ADR-009 codifies the Wave E extension strategy. Implementation owned by P2-T8 spoke. Spec authored at Stage 5 sub-task; ADR substance ratified at adversarial review + Collective Review APPROVE WITH OVERRIDES 2026-05-27.
+
+**Superseded in part by [ADR-085](ADR-085-canonical-link-resolution-rule.md)** (canonical markdown link-resolution rule). Rule 2's V1/V2 workspace-rooted prefix tables and the resolver bare-prefix **workspace-root fallback** they drove are **retired**: a bare `core/…` link from a non-root file now reads broken (matching GitHub's rendered-blob behavior), and the leading-`/` form is the sanctioned workspace-rooted anchor. The rewrite-map CLI (Rules 1, 3, 4, 5) is unaffected and remains in force. This record stays unchanged for audit trail; the historical decision follows.
 
 ## Context
 

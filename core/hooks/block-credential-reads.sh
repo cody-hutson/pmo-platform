@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-credential-reads.sh — PreToolUse hook blocking Claude Read-tool access to credential-like files.
+# hook-owner: core/rules/bypass-mode-readiness/block-credential-reads.md
 #
 # Defense-in-depth companion to block-egress.sh BLOCK-EGRESS-001/002/003 (which handles Bash
 # subprocess reads). Together they ensure credentials can't leak via either the Read tool or

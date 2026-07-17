@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-destructive.sh — PreToolUse hook blocking destructive operations
+# hook-owner: core/rules/bypass-mode-readiness/block-destructive.md
 #
 # - correct shell semantics (printf, BSD-grep regex, payload cwd, fail-closed on missing jq)
 # - git plumbing coverage, primary-write guard, tamper resistance, subprocess script ban

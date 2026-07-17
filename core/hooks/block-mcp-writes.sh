@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-mcp-writes.sh — PreToolUse hook blocking unallowlisted MCP write-tool invocations.
+# hook-owner: core/rules/bypass-mode-readiness/block-mcp-writes.md
 #
 # Addresses Red Team H3 (MCP write exfil), SRE H4 (verb over-match), UX H7/H8
 # (default-deny without pre-seed + self-mod guard conflict).

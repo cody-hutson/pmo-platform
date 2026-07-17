@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-skill-direct-edit.sh — PreToolUse hook enforcing pmo-skill-editor invocation
+# hook-owner: core/standards/canonical-skill-structure.md
 #
 # Gate 2 of the dual-gate skill-discipline enforcement.
 # Rejects direct Write/Edit to pmo-platform/skills/<skill>/SKILL.md, reference/*.md,

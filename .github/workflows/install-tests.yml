@@ -31,6 +31,12 @@ name: Install tests
 #                                  conformance) scan logic: ≥2 findings on a bad
 #                                  agents-dir fixture (missing tools: + recursion
 #                                  surface), 0 on a good fixture (#189)
+#   - test_resolve_canonical_source.sh  single-sourced template-sync resolver
+#                                  (#2158): sources lib-template-sync-source.sh +
+#                                  pins the 3-arm fixture table (incl. the #94
+#                                  regression-checks.md case) + drift-guards that
+#                                  both consumers source the fragment and neither
+#                                  re-inlines a canonical-source resolver
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -150,6 +156,14 @@ jobs:
         # drift-guards them against the live deploy.sh predicate. Never touches a
         # real operator memory store (none exists in CI; the test self-contains).
         run: bash core/deploy/tests/test_check36_drift_classes.sh
+
+      - name: Run template-sync resolver regression (test_resolve_canonical_source.sh)
+        # #2158: the canonical-source resolver is single-sourced in
+        # core/deploy/lib-template-sync-source.sh and sourced by BOTH deploy.sh and
+        # build-skill-packages.sh. This test sources the real fragment, pins the
+        # 3-arm fixture table (incl. the #94 regression-checks.md case that broke the
+        # rebuild), and drift-guards that neither consumer re-inlines a divergent copy.
+        run: bash core/deploy/tests/test_resolve_canonical_source.sh
 
   hook-tests:
     name: Hook test harness (macOS)

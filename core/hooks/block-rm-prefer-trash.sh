@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # block-rm-prefer-trash.sh — PreToolUse hook enforcing workspace deletion containment
 # and Trash-redirect convention.
+# hook-owner: core/rules/bypass-mode-readiness/block-rm-prefer-trash.md
 #
 # Outside ${WORKSPACE_ROOT}/, file deletion via rm/rmdir/unlink/trash/osascript
 # Trash-verb is BLOCKED unconditionally. Inside the workspace, rm/rmdir/unlink is
