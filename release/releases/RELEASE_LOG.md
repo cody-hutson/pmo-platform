@@ -138,7 +138,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v3.73.1 | update-refresh-deployed-hooks | #3430 | #3431 | `421658d395a207d6525f596cbf71440d115127ac` | `v3.73.1` | VERIFIED | 2026-07-12 |
 | v3.74 | build-security-hardening | #3407, #3409, #3408 | #3428 | `6d70303c246b006616aea78c56cc7062f811758a` | `v3.74` | VERIFIED | 2026-07-12 |
 | v3.75 | 101-skill-and-data-entity-hygiene | #2074, #2166, #2168, #2066 | #3544 | `1975d42afdfeb934ab6b2a7f73653f7681a45a6e` | `v3.75` | VERIFIED | 2026-07-16 |
-| v3.76 | knowledge-corpus-hygiene | #2221, #2702, #2701, #2917, #380 | #3545 | `da4c116249cebf6df694cad2be33ab2f40f399f5` | `v3.76` | DEPLOYED | 2026-07-17 |
+| v3.76 | knowledge-corpus-hygiene | #2221, #2702, #2701, #2917, #380 | #3545 | `da4c116249cebf6df694cad2be33ab2f40f399f5` | `v3.76` | VERIFIED | 2026-07-17 |
 | v3.77 | skill-hardening | #155, #2699, #3114 | #3540 | `b885d7361e524cab0c2da2edfcace6a05e8a6984` | `v3.77` | VERIFIED | 2026-07-17 |
 
 #### Deployment Log v3.77
@@ -147,6 +147,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Outcome:** SUCCESS — all three slices delivered as accepted; no rollback, no post-deploy defect.
 
 #### Deployment Log v3.76
+**Outcome:** SUCCESS
 **Files deployed:** Knowledge-corpus hygiene bundle — one release PR #3545 (`release/knowledge-corpus-hygiene → main`, squash-merge `da4c116`), 5 issues. **#2221** — frontmatter backfill on 38 non-Tier-A `core/` docs + `deploy.sh` Check 50 flipped to global committed-default enforce (Approach D: `c50_mode="enforce"` hardcoded, `DEPLOY_CHECK_MODE=off` kill-switch retained, tier partition collapsed, precise authored-doc globs, `core/ADRs/` routed out to a separate effort). **#2702** — `[PROJECT_KEY]` classified as example-data (`depersonalization-spec.md §1.3`, citing `universal-vs-localized-context.md` DC3). **#2701** — `AUDIT_FRAMEWORK.md` REFRESHED, not retired (Collective Review reversed the initial retire lean on adversarial evidence): 19 stale `Projects/…` read-list paths → current split-arch homes, `[PROJECT_KEY]`→`[Project]` (bracketed), stale skill-count parameterized; the 12-dimension methodology retained. **#2917** — `estimation-standards.md §7` SPI RAG bands single-sourced by reference to the canonical owner (`channel-formats.md`). **#380** — vision / role model / build surfaces codified as 3 new `architecture-overview.md` H2 sections + ADR-083 (Canonical install model, extends ADR-017) + a `bundle-composition-doctrine.md §3` cross-reference. 7 `.skill` packages rebuilt.
 **Mechanism:** squash-merge (PR #3545 → main, `gh pr merge --admin --squash` at `da4c116`; branch protection required admin override, CI 35/35 green). Provisional `v3.75` was contested by concurrent release #264 (`skill-and-data-entity-hygiene`), which merged first (#3544, tag `v3.75` at `1975d42`); the atomic version claim recomputed next-free = **`v3.76`** and pushed a signed tag at the merge SHA — no collision. Three independent adversarial reviews preceded the Collective Review scope-lock; #2701 reversed RETIRE→REFRESH on that evidence.
 
