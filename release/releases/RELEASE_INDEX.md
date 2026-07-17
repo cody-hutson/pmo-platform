@@ -4,7 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
-| v3.78 | pda-rollup-and-portfolio | 2026-07-17 | — | #3549 | [notes/v3.78_RELEASE_NOTES.md](notes/v3.78_RELEASE_NOTES.md) |
+| v3.78 | pda-rollup-and-portfolio | 2026-07-17 | PORTFOLIO.md composed deterministically from per-project rollups — freshness-gated three-layer health scoring, cross-component risk aggregation, and a portfolio/program/project tier taxonomy | #3549 | [notes/v3.78_RELEASE_NOTES.md](notes/v3.78_RELEASE_NOTES.md) |
 | v3.77 | skill-hardening | 2026-07-17 | Skill-suite hardening — on-demand health-check rollups, semantic routing-conflict detection, and a clarified SKILL.md sizing rule | #3540 | [notes/v3.77_RELEASE_NOTES.md](notes/v3.77_RELEASE_NOTES.md) |
 | v3.76 | knowledge-corpus-hygiene | 2026-07-17 | Corpus-wide frontmatter enforce + AUDIT_FRAMEWORK refreshed + SPI bands single-sourced + `[PROJECT_KEY]` classified + vision/install codified (ADR-083) | #3545 | [notes/v3.76_RELEASE_NOTES.md](notes/v3.76_RELEASE_NOTES.md) |
 | v3.75 | 101-skill-and-data-entity-hygiene | 2026-07-17 | — | #3544 | [notes/v3.75_RELEASE_NOTES.md](notes/v3.75_RELEASE_NOTES.md) |
