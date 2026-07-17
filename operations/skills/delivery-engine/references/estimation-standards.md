@@ -138,13 +138,13 @@ Milestone variance (SPI) = earned schedule value (work completed, in baseline un
 
 An SPI of 1.00 is exactly on schedule; below 1.00 is behind; above 1.00 is ahead.
 
-| Band | SPI | Reading | `WHEN…THEN…` decision rule |
-|---|---|---|---|
-| **🟢 GREEN** | **≥ 0.95** | On or ahead of schedule (within tolerance) | WHEN SPI ≥ 0.95 THEN report on-track — no milestone escalation |
-| **🟡 YELLOW** | **0.85 – 0.94** | Slipping; recoverable but eroding | WHEN SPI is 0.85–0.94 THEN flag the milestone at the next status; watch the critical path and name the recovery lever |
-| **🔴 RED** | **< 0.85** | Materially behind; baseline at risk | WHEN SPI < 0.85 THEN escalate — replan the critical path and surface the re-baseline / de-scope decision; do not report the milestone merely "behind" |
+**Band adoption (normative — single-sourced by reference, not restated here).** The 🟢 / 🟡 / 🔴 SPI band thresholds are **defined canonically** in the comms-writer reference doc's [`channel-formats.md`](../../comms-writer/references/channel-formats.md) § RAG Threshold Standards (row **Schedule (SPI)**), which the weekly-status-rollup metric-registry already consumes by reference for SPI. §7 **adopts that single platform schedule-RAG convention by reference** and does not restate the band values here — there is exactly one owner for the thresholds, and this doc reuses it rather than forking a parallel band.
 
-**Band anchoring (normative — adopted by reference, not restated as a divergent value).** These bands are **adopted by reference from the platform-canonical Schedule-RAG standard** in the comms-writer reference doc's RAG Threshold Standards (Schedule/SPI: Green ≥0.95 / Amber 0.85–0.94 / Red <0.85), which the weekly-status-rollup metric-registry already consumes by reference for SPI. This doc reuses the **one** platform schedule-RAG convention rather than inventing a parallel band.
+**Milestone application of the band (normative).** Band the milestone's SPI against that canonical Schedule (SPI) standard, then apply the milestone-specific decision rule:
+
+- **🟢 GREEN** — on or ahead of schedule (within tolerance): report on-track; no milestone escalation.
+- **🟡 YELLOW** — slipping, recoverable but eroding: flag the milestone at the next status; watch the critical path and name the recovery lever.
+- **🔴 RED** — materially behind, baseline at risk: escalate — replan the critical path and surface the re-baseline / de-scope decision; do not report the milestone merely "behind."
 
 **Naming guard (normative).** Name this metric **"milestone variance (SPI)"** or **"milestone slip"** — **NEVER "Schedule Variance."** The "Schedule Variance" label is reserved against to avoid collision with the EVM Schedule Variance (SV = earned − planned, a *cost*-denominated figure), per the metric-registry naming rule. The milestone-variance signal here is the *index* (SPI ratio), not the EVM SV difference.
 
