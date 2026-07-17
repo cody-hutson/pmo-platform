@@ -129,54 +129,27 @@ This worked example demonstrates all three steps end-to-end on a real decision, 
 
 ## 7. Process-flow artifact (Tier-A)
 
-This protocol defines an agent-process flow with a gate (the elimination step) and a clear sequence, and it is cited as canonical by the Stage-5 Phase A4 spec — so it activates the Tier-A process-flow artifact requirement. The flow, as an ASCII flow-block (the source-of-truth format for an agent-process flow per the design-artifact standard):
+This protocol defines an agent-process flow with a gate (the elimination step) and a clear sequence, and it is cited as canonical by the Stage-5 Phase A4 spec — so it activates the Tier-A process-flow artifact requirement. The flow, as a Mermaid flowchart (required for a gated, cited-as-canonical process-flow per [`process-flow-diagram-standards.md`](../../../core/standards/process-flow-diagram-standards.md) § Scope & Diagram-Form Decision Rule):
 
-```
-                 ┌─────────────────────────────────────────────┐
-                 │  Phase A4 entry: design choice in scope      │
-                 └───────────────────────┬─────────────────────┘
-                                         │
-                          ┌──────────────▼──────────────┐
-                          │  GATE: ≥2 candidate          │
-                          │  approaches exist?           │
-                          └───────┬──────────────┬───────┘
-                              NO  │              │ YES
-                  ┌───────────────▼──┐      ┌────▼───────────────────────┐
-                  │ OMIT protocol     │      │ Step 1 — Divergent          │
-                  │ (record one-line  │      │ generation (mind-map):      │
-                  │  omission         │      │ ≥3 distinct candidates;     │
-                  │  rationale) →     │      │ distinctness test on        │
-                  │  specify the      │      │ {mechanism, blast radius,   │
-                  │  forced approach  │      │  reversibility, placement}  │
-                  └───────────────────┘      └────────────┬───────────────┘
-                                                          │
-                                            ┌─────────────▼───────────────┐
-                                            │ Step 2 — Convergent narrowing │
-                                            │ (elimination): kill on a HARD │
-                                            │ constraint breach, one-line   │
-                                            │ kill-reason each; NOT scoring  │
-                                            └─────────────┬───────────────┘
-                                                          │
-                                       ┌──────────────────▼──────────────────┐
-                                       │ GATE: ≥2 survivors?                   │
-                                       └──────┬──────────────────────┬────────┘
-                                          NO  │                      │ YES
-                          ┌─────────────────▼──┐        ┌────────────▼────────────────┐
-                          │ forced single after │        │ Step 3 — Trade-off matrix    │
-                          │ constraints →        │        │ (canonical axes: Reversibility│
-                          │ record finding;      │        │ × Confidence × Blast radius  │
-                          │ specify; no matrix   │        │ × Upstream-compat)           │
-                          └──────────────────────┘        └────────────┬────────────────┘
-                                                                       │
-                                                       ┌───────────────▼───────────────┐
-                                                       │ Output → A5 ADR opposing view  │
-                                                       │ + design-review 4.3 (satisfied │
-                                                       │ by construction) → specify the │
-                                                       │ surviving approach out (A4)    │
-                                                       └────────────────────────────────┘
+```mermaid
+flowchart TD
+    entry["Phase A4 entry: design choice in scope"] --> g1{"GATE: ≥2 candidate approaches exist?"}
+    g1 -->|NO| omit(["OMIT protocol — record one-line omission rationale, then specify the forced approach"])
+    g1 -->|YES| s1["Step 1 — Divergent generation (mind-map): ≥3 distinct candidates; distinctness test on {mechanism, blast radius, reversibility, placement}"]
+    s1 --> s2["Step 2 — Convergent narrowing (elimination): kill on a HARD constraint breach, one-line kill-reason each; NOT scoring"]
+    s2 --> g2{"GATE: ≥2 survivors?"}
+    g2 -->|NO| forced(["Forced single after constraints — record finding; specify; no matrix"])
+    g2 -->|YES| s3["Step 3 — Trade-off matrix (canonical axes: Reversibility × Confidence × Blast radius × Upstream-compat)"]
+    s3 --> out(["Output → A5 ADR opposing view + design-review 4.3 (satisfied by construction), then specify the surviving approach out (A4)"])
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef external fill:#E2E3E5,stroke:#6C757D,color:#383D41;
+    class entry,s1,s2,s3 automated;
+    class g1,g2 gate;
+    class omit,forced,out external;
 ```
 
-*Diagram note: the Step-1 box abbreviates the distinctness axes for width; per §2 the test now spans five — `{mechanism, blast radius, reversibility, placement, altitude}` — with the ≥2-altitude-band rule when a design introduces a new mechanism.*
+*Diagram note: the Step-1 node lists four distinctness axes; per §2 the test now spans five — `{mechanism, blast radius, reversibility, placement, altitude}` — with the ≥2-altitude-band rule when a design introduces a new mechanism.*
 
 This artifact is declared in the release plan's "Tier-A activated design artifacts" section, where the Stage 13 close-out reads it to scope artifact-refresh detection.
 
