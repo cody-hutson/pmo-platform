@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v2.22
+version: v2.23
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -211,18 +211,58 @@ staleness mechanism lives in the contract; the health-score layer supplies only 
 values. `cross_project_conflicts[]` makes the Cross-Project RAID (S6) and Resource Conflicts (S8)
 sections render deterministically from fields, not agent-synthesized prose.
 
+**Portfolio Health Hard-Gate (Rules 1-3) — the right-sized health-scoring layer.** The portfolio
+`Health` summary is governed by a three-rule hard gate applied to the composed output at the
+Section-6 human checkpoint (below) — NOT by a parallel numeric scorer. The gate is right-sized
+deliberately: it KEEPS the pain-sourced freshness-validation + hard-gate core and TRIMS the
+article-sourced elaboration. An A–F letter grade, a multi-layer category-score rubric, and an
+integrity multiplier are **not** introduced — the worst-component dominance rule (Rule 1) already
+delivers "cannot show Green over a failing component," so a parallel numeric multiplier would fork
+the RAG health SSOT. The `WHEN…THEN` scoring logic **is** these three rules; the deterministic
+composer's `SECTION_REGISTRY` renders the sections, so this layer supplies the gate logic + the
+section schemas below, never a second renderer.
+
+- **Rule 1 — worst-component dominance (live; cite, do not re-derive).** A project's `Health`
+  cell is driven by its worst component and CANNOT read 🟢 GREEN while any component RAG is worse
+  than green. This is the existing watermelon-prevention dominance rule — §7.1 W2 plus the
+  Section 7 ↔ Section 1 worst-component feedback below, owned by
+  [`channel-formats.md`](../comms-writer/references/channel-formats.md)
+  § RAG Threshold Standards and registered in
+  [`metric-registry.md`](references/metric-registry.md) § Project-Level RAG Composition ("does
+  not define a divergent composition algorithm"). Rule 1 binds that OUTCOME at the summary cell;
+  it authors no new algorithm.
+- **Rule 2 — freshness auto-degrade arm.** The per-project `Last-Validated` stamp (the
+  `last_published` field consumed above) drives the ONE staleness mechanism owned by the portfolio
+  write-back contract ([`portfolio-writeback-contract.md`](../../../core/standards/portfolio-writeback-contract.md)
+  §3; age = `today − last_published`, business days). This layer supplies only the two threshold
+  **values** that parameterize it — no second freshness field is authored: age `> 3 bd` renders
+  `[STALE]` inline on `Last-Validated`; age `> 5 bd` **auto-degrades** — the field is treated as
+  not-Green and the `Health` cell CANNOT read 🟢 GREEN, annotated `[STALE:DEGRADED]` (the
+  composer's degrade marker). Rationale for `> 5 bd`: a report one full weekly-rollup cycle plus a
+  grace day unrefreshed is no longer trustworthy as green.
+- **Rule 3 — non-override-to-Green.** A 🟢 GREEN that contradicts Rule 1 or Rule 2 is REJECTED at
+  the Section-6 human checkpoint — a silent hand-edit to green is not accepted. To change a derived
+  color the operator fixes the component SSOT (which re-derives the summary) OR attaches an
+  evidence-tagged **Override Record** — `rationale · owner · date` — surfaced alongside the
+  write-back proposal, never a silent recolor. This preserves the existing posture that a flag is
+  an evidence-integrity finding, not a unilateral re-coloring. An Override Record is a
+  decision-class action and carries its reversibility tier per § Reversibility Discipline.
+
 **What gets written back:**
 
 For each active project in PORTFOLIO.md:
 
-1. **Portfolio Health Summary table** — Update the row:
+1. **Portfolio Health Summary table (S1)** — Update the row:
    - `Phase`: Current phase from this week's analysis
-   - `Health`: 🟢/🟡/🔴 as determined in Section 1
+   - `Health`: 🟢/🟡/🔴 as determined in Section 1, **subject to the Portfolio Health Hard-Gate
+     above** — Rule 1 (worst-component dominance) and Rule 2 (freshness auto-degrade on a
+     `[STALE:DEGRADED]` `Last-Validated`) can each block a 🟢 GREEN, and Rule 3 rejects a
+     non-derived green at the checkpoint.
    - `Critical Path Item`: Top blocker or next milestone from Section 2
    - `Go-Live`: Updated if date changed during the week (evidence-tagged)
    - `Last-Validated`: The rollup's `last_published` (ISO date) — the per-project freshness
-     stamp that drives the `[STALE]` marker. Distinct from the portfolio-level `Last Updated`
-     meta line (item 4), which stays.
+     stamp that drives the `[STALE]` / `[STALE:DEGRADED]` marker (Rule 2). Distinct from the
+     portfolio-level `Last Updated` meta line (item 4), which stays.
 
 2. **Health Indicators table** — Update each dimension:
    - `Schedule`: Status + 1-line evidence from this week
@@ -234,6 +274,42 @@ For each active project in PORTFOLIO.md:
 3. **Top Risks** — Replace with current top risks from RAID Log (max 5), citing source
 
 4. **Last Updated** — Set to today's date
+
+**Portfolio-level health-score sections (S3 / S4 / S6 — composed + staged).** Beyond the
+per-project row above, the health-score layer stages three portfolio-level sections. Each is
+rendered by the deterministic composer's `SECTION_REGISTRY` from the contract fields — this layer
+owns the SCHEMA (columns + degrade rules), never a parallel renderer, and stages the result at the
+Section-6 checkpoint (never a Claude-side `projects/` write):
+
+- **S3 — `## Capacity Dashboard`** (absorbed capacity-view scope). Per-project rows
+  `Project | Utilization | Demand-Supply Gap (RAG) | Over-committed?` plus a portfolio roll-up
+  line, reading `capacity_signal {utilization, gap_rag}` from the contract. This STAGES the
+  existing §7.5 Capacity Dashboard synthesis — which already applies
+  [`capacity-model.md`](../delivery-engine/references/capacity-model.md) §1 (effective-capacity)
+  and §9 (Demand-Supply-Gap RAG bands: `≤ 0.85` GREEN … `> 1.00` RED over-committed) by
+  reference — it does not re-derive the formula or bands. **Graceful degrade:** a project with no
+  tracked managed-delivery-team allocation renders `capacity: n/a — no managed-team allocation`;
+  never fabricate a utilization (the capacity model applies to a managed delivery team, not to the
+  single-operator platform).
+- **S4 — `## Portfolio R-G-T Allocation`** (absorbed investment-mix scope). Run / Grow / Transform
+  counts (or effort-weighted shares where effort is available) plus an explicit `Unclassified`
+  coverage-gap line. This STAGES the existing §7.3 R-G-T synthesis, reading each active project's
+  optional `investment_class: Run|Grow|Transform`. **No-invention (already codified §7.3):** a
+  project with no `investment_class` is `Unclassified` and surfaced as a coverage gap — never
+  heuristically auto-classified from phase or type. (R-G-T investment classification is not the
+  `capacity-model.md §5` 60/20/20 capacity effort-split.)
+- **S6 — `## Cross-Project RAID` (shell only).** Placed immediately after
+  `## Cross-Project Dependencies` (both are portfolio-tier cross-project surfaces). Shell columns:
+  `Type (R/A/I/D) | Item | Owner | Mitigation | Source-Tier | Projects-Affected`. Each populated
+  row is a passive-voice-free `risk · owner · mitigation` triple; **Source-Tier** enumerates the
+  existing escalation ladder ([`escalation-thresholds.md`](../ppm-agent/references/escalation-thresholds.md)
+  §2: Team → Project → Program → Program-Critical/Sponsor → Portfolio). **Empty-state:**
+  `No cross-project RAID items — [N] per-project risks tracked in project details` (an honest empty
+  state, not a blank section). This section defines the SHELL — columns, placement, and
+  empty-state — ONLY; the cross-project risk-aggregation work item populates the rows (from
+  `top_risks[]` + `key_dependencies[]` + `cross_project_conflicts[]`) into this exact shell. S5
+  (per-project `### Top Risks`) and S6 (cross-project aggregated) are distinct scopes of ONE risk
+  model — composed, never a parallel section.
 
 **Write-back rules:**
 - Only update fields where the weekly analysis produced new evidence

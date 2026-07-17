@@ -368,6 +368,30 @@ Non-blocking decisions are not escalated by this protocol.
 
 ---
 
+### Portfolio Health-Scoring & Freshness Protocol
+
+The portfolio `## Portfolio Health Summary` can read Green over a failing subsystem or over stale data — the watermelon failure this protocol backstops. It defines the **hard gate** that makes a portfolio `Health` color non-overridable to Green when a component is worse or the data is stale, and pins the freshness threshold **values** the health-score layer supplies. It is the portfolio-dashboard sibling of the Stale-RAID and Overdue-Decision escalation protocols above; `weekly-status-rollup` Section 6 applies it at its human-in-the-loop checkpoint on the composed portfolio output.
+
+**Doc-of-record.** The "cannot show Green over a failing component" OUTCOME is the existing worst-component **dominance** rule — owned by `channel-formats.md` § RAG Threshold Standards and registered in `weekly-status-rollup/references/metric-registry.md` § Project-Level RAG Composition ("does not define a divergent composition algorithm"). The freshness apparatus — the single `last_published` field, the `[STALE]` render marker, and the anchor (`age = today − last_published`, in **business days**) — is owned by `core/standards/portfolio-writeback-contract.md` §3. This protocol authors NEITHER a divergent scoring algorithm NOR a second freshness field: it binds the dominance outcome at the summary cell and supplies the two threshold values that parameterize the one contract mechanism.
+
+**The hard gate (Rules 1-3).**
+
+| Rule | Binds | Effect on the `Health` cell |
+|---|---|---|
+| **R1 — worst-component dominance** (cite; live) | the S1 `Health` cell = the worst component color | cannot read 🟢 GREEN while any component RAG is worse than green |
+| **R2 — freshness auto-degrade** (threshold values) | `Last-Validated` age = `today − last_published`, business days | `> 3 bd` → `[STALE]` inline; `> 5 bd` → auto-degrade, `Health` cannot read 🟢 GREEN, annotated `[STALE:DEGRADED]` |
+| **R3 — non-override-to-Green** | the Section-6 human checkpoint | a Green contradicting R1/R2 is rejected; a recolor requires fixing the component SSOT OR an evidence-tagged **Override Record** (`rationale · owner · date`) — never a silent hand-edit |
+
+**Freshness threshold values.** `> 3 business days` → `[STALE]`; `> 5 business days` → auto-degrade (treated as not-Green). These two values parameterize the single contract mechanism (§3); the business-day unit matches the Stale-RAID / Overdue-Decision age precedent above. No second freshness field is introduced.
+
+**Not adopted (right-sized for the single-operator dashboard).** The article-sourced elaboration is deliberately NOT adopted: an **A–F letter grade**, a **multi-layer category-score rubric**, and an **integrity multiplier** are omitted — the worst-component dominance rule (R1) already delivers the degrade-on-gate-failure behavior a multiplier would re-implement, so a parallel numeric score would fork the RAG health SSOT. This follows the codified single-operator right-sizing precedent (`capacity-model.md` Applicability CI-5 — do not apply heavy managed-team machinery to the single-operator case; `decision-discipline.md` M1 contextual localization). **Narrowed, not dropped (the freshness signal is kept):** the article's per-indicator / per-category timestamp is narrowed to a single per-project `Last-Validated` stamp — one freshness field per project driving R2, not an N-timestamp-per-category proliferation. Freshness validation is retained in full; only its per-category granularity is narrowed to per-project.
+
+**Cross-skill ownership + reversibility.** `weekly-status-rollup` Section 6 applies the gate on staged content at its checkpoint; the deterministic composer renders the sections; the Cowork writer performs the `PORTFOLIO.md` write (Claude Code never writes a Layer-2 file). Each gate outcome that shifts a `Health` color shared with leadership is a decision-class output and carries a reversibility tier per § Reversibility Discipline (an internal pre-confirmation flag is CHEAP; a leadership-shared transition is EXPENSIVE/IRREVERSIBLE).
+
+**Evidence labels.** Freshness-age computations carry `[INFERRED: today − last_published]`; a degrade or override claim cites the rollup field `[SOURCE: <Project>_Rollup.md, last_published]`. See § Evidence Quality Labeling above.
+
+---
+
 ## Methodology Awareness Protocol
 
 Skills that consume `PROJECT.md` MUST read the `delivery_approach` field at invocation and parameterize their behavior per the methodology archetype — not hardcode sprint-centric Agile assumptions. This protocol is load-bearing for the release-planner-bundle work (HARD handoff) and future role-skills work (HARD handoff).
