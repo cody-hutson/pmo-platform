@@ -137,7 +137,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v3.73 | security-advisories-g9g6-fxcr | GHSA-g9g6, GHSA-fxcr | #3426 | `874f59abee96965a4561a032bb186d7d2377715f` | `v3.73` | VERIFIED | 2026-07-12 |
 | v3.73.1 | update-refresh-deployed-hooks | #3430 | #3431 | `421658d395a207d6525f596cbf71440d115127ac` | `v3.73.1` | VERIFIED | 2026-07-12 |
 | v3.74 | build-security-hardening | #3407, #3409, #3408 | #3428 | `6d70303c246b006616aea78c56cc7062f811758a` | `v3.74` | VERIFIED | 2026-07-12 |
-| v3.75 | 101-skill-and-data-entity-hygiene | #2074, #2166, #2168, #2066 | #3544 | `1975d42afdfeb934ab6b2a7f73653f7681a45a6e` | `v3.75` | DEPLOYED | 2026-07-16 |
+| v3.75 | 101-skill-and-data-entity-hygiene | #2074, #2166, #2168, #2066 | #3544 | `1975d42afdfeb934ab6b2a7f73653f7681a45a6e` | `v3.75` | VERIFIED | 2026-07-16 |
 | v3.76 | knowledge-corpus-hygiene | #2221, #2702, #2701, #2917, #380 | #3545 | `da4c116249cebf6df694cad2be33ab2f40f399f5` | `v3.76` | DEPLOYED | 2026-07-17 |
 
 #### Deployment Log v3.76
