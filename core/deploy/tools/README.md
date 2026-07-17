@@ -246,21 +246,25 @@ cross-project-deps both non-empty and all 7 queries execute (AC4); `update_file`
 round-trip equals a full rebuild of the mutated tree (FMF-2); Query-6's temporal
 condition discriminates via a deterministic `os.utime` mtime push (FMF-3).
 
-## Module-Aware Prefix Table
+## Link-Resolution Rule (canonical)
 
-`check-doc-links.py` recognizes two prefix namespaces as workspace-rooted
-(triggers workspace-root fallback that matches GitHub web rendering):
+`check-doc-links.py` resolves a markdown link target by one canonical rule
+(ADR-085), implemented identically by `release/tools/check-release-links.py`:
 
-| Prefix family | Entries | Origin |
-|---|---|---|
-| `V1_PREFIXES` | `pmo-platform/`, `.claude/`, `projects/`, `memory/` | Legacy pmo-platform (source) repo — preserved for backward-compat during the migration window per Don't-break discipline (plan § 4.6) |
-| `V2_PREFIXES` | `core/`, `release/`, `operations/`, `docs/` | pmo-platform-v2 modular monolith — bare module names because WORKSPACE_ROOT == v2 repo root in deployed layout |
+1. A link resolves **relative to the source file's directory**.
+2. A **leading `/`** denotes the **workspace (repo) root** — the GitHub-faithful
+   workspace-rooted form (resolved against `--workspace-root` > `$CLAUDE_WORKSPACE_ROOT`
+   > the in-repo default, in that precedence).
+3. There is **no bare module-prefix fallback**: a bare `core/…` / `release/…`
+   from a non-root file is an ordinary relative path, so it reads **broken**
+   (exactly as GitHub renders it).
 
-The two tuples are intentionally separated for repo-boundary audit
-traceability per adversarial-review PR-1 at Stage 5.
-
-**Future cleanup path:** Once the legacy prefix family retires, remove `V1_PREFIXES`
-from the table. The dual structure forward-compats this — single-tuple edit.
+The earlier V1/V2 workspace-rooted prefix tables (ADR-009 Rule 2), which drove a
+bare-prefix workspace-root fallback, were retired here — the fallback masked
+links GitHub renders as 404s from non-root files. `core/CLAUDE.md.template`
+(which deploys to the repo root) uses the leading-`/` form for its root-anchored
+references, so it resolves correctly under the canonical rule both as a template
+and as the deployed `CLAUDE.md`.
 
 ## Self-Test
 
@@ -268,19 +272,22 @@ from the table. The dual structure forward-compats this — single-tuple edit.
 python3 core/deploy/tools/check-doc-links.py --self-test
 ```
 
-Runs 6 fixtures sequentially. Each fixture uses its own tmpdir scope;
+Runs 9 fixtures sequentially. Each fixture uses its own tmpdir scope;
 failure on any → exit 1 with explicit assertion message.
 
 | # | Fixture | Verifies |
 |---|---|---|
 | 1 | code-block exclusion + single broken ref | Original code-block-exclusion behavior |
-| 2 | module-prefix-resolution | V2_PREFIXES entries trigger workspace-root fallback |
+| 2 | anti-fallback regression guard | a bare module-prefixed link from a non-root file reads BROKEN even when the path exists at the workspace root (ADR-009 Rule-2 fallback retired per ADR-085), while the leading-`/` form of the same target resolves |
 | 3 | rewrite-map TSV + JSON + markdown output | All 3 output formats; column counts; header shape |
-| 4 | dual-prefix backward-compat | V1_PREFIXES + V2_PREFIXES both resolve identically |
+| 4 | AC-3 five-form parity (doc-links side) | the five link forms return the canonical verdicts: relative-ok / relative-broken / `../`-ok / bare-prefix-broken / `/`-rooted-ok |
 | 5 | anchor preservation in rewrite-map | `#section` survives substitution |
 | 6 | EMIT-ONLY structural enforcement | mtime + content-hash unchanged after rewrite-map scan (PR-3/FM-1) |
+| 7 | `--require-targets` fail-loud | a `--target-paths` glob resolving to zero files is flagged (exit 3); a populated scan-root is not (#459) |
+| 8 | placeholder / meta-doc-literal exclusion precision | `<…>` tokens, barewords, `...`, and blockquoted worked-example links are skipped while a genuine broken ref still fires (#169) |
+| 9 | relocatable workspace-root + precedence | a `/`-rooted link re-roots under a sandbox root; CLI > `$CLAUDE_WORKSPACE_ROOT` > default (#760) |
 
-Expected output: `self-test OK (6 fixtures passed)`.
+Expected output: `self-test OK (9 fixtures passed)`.
 
 ## Check 14 (deploy.sh) Invocation
 

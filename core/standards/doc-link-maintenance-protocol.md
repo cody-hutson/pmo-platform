@@ -1,6 +1,6 @@
 ---
 title: Doc-Link Maintenance Protocol
-purpose: The protocol for detecting and remediating stale documentation cross-references, enforced via deploy.sh --check Check 14, with the check-doc-links.py primitive and its workspace-root fallback.
+purpose: The protocol for detecting and remediating stale documentation cross-references, enforced via deploy.sh --check Check 14, with the check-doc-links.py primitive and one canonical link-resolution rule shared with release/tools/check-release-links.py.
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
@@ -77,18 +77,26 @@ Exit codes: 0 = no broken refs, 1 = broken refs found
 
 **Deployed-tree validation:** `--workspace-root <path>` resolves workspace-rooted links and globs against a relocated root instead of the in-repo default, so a sandboxed/deployed install tree can be validated. Precedence: `--workspace-root` > `$CLAUDE_WORKSPACE_ROOT` (the canonical workspace-root variable) > the in-repo default; with neither override set the behavior is unchanged. Pair with `--require-targets` so a relocated/missing surface fails loud (exit 3) rather than reading GREEN.
 
-**Path resolution:** Inline `[text](path)` and reference-style `[text][label]` are both parsed. Relative paths anchor on the source file's directory and normalize via `os.path.realpath`. Workspace-rooted-style paths (starting with `pmo-platform/`, `.claude/`, `projects/`, `memory/`) get a fallback resolution against workspace root — matches GitHub web rendering semantics. Fenced code blocks (` ``` ` and `~~~`) are excluded from link extraction.
+**Path resolution (the canonical rule — both checkers implement it identically):** Inline `[text](path)` and reference-style `[text][label]` are both parsed. Three clauses, matching GitHub's rendered-blob behavior:
+
+1. A link resolves **relative to the source file's directory** (normalized via `os.path.realpath`).
+2. A **leading `/`** denotes the **workspace (repo) root** — this is the GitHub-faithful workspace-rooted form.
+3. There is **no bare module-prefix fallback**: a path like `core/…` or `release/…` with no leading slash is an ordinary relative path, so from any non-root file it reads **broken** (exactly as GitHub renders it).
+
+The `#anchor` / `?query` are stripped before path resolution; fenced code blocks (` ``` ` and `~~~`) are excluded from link extraction. The same three-clause rule is implemented by [`release/tools/check-release-links.py`](../../release/tools/check-release-links.py) — the checker the `repo-integrity.yml` Dead-file-reference gate delegates to — so a workspace-rooted link and a relative link each receive an **identical verdict from both checkers**. (Historical note: an earlier bare module-prefix workspace-root fallback was retired per ADR-085 — it masked links that GitHub renders as 404s from non-root files, which is the exact split-verdict this protocol now precludes.)
 
 **Self-test:** `python3 core/deploy/tools/check-doc-links.py --self-test` runs an internal smoke test (parser + resolver + code-block exclusion) and exits 0 on pass.
 
 ### 4.2 Enforcement-surface integration
 
-| Check | Scope | Source |
-|---|---|---|
-| **Check 14** | Layer 1 governance (`core/governance/`, `release/governance/`, `core/standards|specs|schemas|disciplines/`, `.claude/rules/`) + skill SKILL.md (`<module>/skills/*/SKILL.md`) | This protocol |
-| **Check 15** | Release corpus (`release/releases/RELEASE_LOG.md`, `release/releases/plans/*.md`, `release/releases/notes/*.md`) | This protocol |
+| Check / gate | Checker | Scope | Source |
+|---|---|---|---|
+| **Check 14** (deploy-time) + **`link-check.yml`** (PR-time) | `check-doc-links.py` | Layer 1 governance (`core/governance/`, `release/governance/`, `core/standards|specs|schemas|disciplines/`, `.claude/rules/`) + skill SKILL.md (`<module>/skills/*/SKILL.md`) + `core/CLAUDE.md.template` | This protocol |
+| **Check 15** | `check-doc-links.py` | Release corpus (`release/releases/RELEASE_LOG.md`, `release/releases/plans/*.md`, `release/releases/notes/*.md`) — retired in v2 deploy.sh (see the tools README) | This protocol |
+| **Dead-file-reference gate** (`repo-integrity.yml`, **required**) | `check-release-links.py` | `core release docs .github` + top-level `*.md`, changed-delta only | This protocol (shared canonical rule) |
+| **`release-link-check.yml`** (advisory) | `check-release-links.py` | `release/` full walk (bare invocation) | This protocol (shared canonical rule) |
 
-Both checks invoke the same primitive script with disjoint `--target-paths` arguments. Disjoint scopes per Collective Review CR-D2.
+The `check-doc-links.py` checks invoke one primitive with disjoint `--target-paths` arguments (disjoint scopes per Collective Review CR-D2). `check-release-links.py` — the checker the Dead-file-reference gate delegates to — implements the **same canonical resolution rule** (§4.1), so the two checker families cannot return opposite verdicts on a given link form.
 
 Layer 2 (Operations) is intentionally excluded per CLAUDE.md domain boundary — Claude Code cannot remediate Layer 2 drift, and Cowork is the appropriate agent for that surface.
 

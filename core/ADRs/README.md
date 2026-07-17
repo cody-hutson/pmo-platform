@@ -73,6 +73,7 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Status:** Accepted as architectural intent; implementation followed.
 **Decision:** `check-doc-links.py` extended with `--from-path X --to-path Y` two-flag CLI; V1/V2 prefix split; EMIT-ONLY enforced via Fixture 6 mtime/content-hash assertion; asymmetric-flag error emits dual stderr/stdout; asymmetry warning when from/to segment counts differ.
 **Reversibility:** CHEAP.
+**Superseded in part:** Rule 2 (the V1/V2 workspace-rooted prefix tables → resolver bare-prefix workspace-root fallback) is superseded by ADR-085 — the fallback is retired in favor of one canonical link-resolution rule; the rewrite-map CLI (Rules 1/3/4/5) stands.
 **File:** [ADR-009-rewrite-map-cli-design.md](ADR-009-rewrite-map-cli-design.md)
 
 ### ADR-012 — Roadmap-instance de-scope (amends ADR-006 + ADR-007)

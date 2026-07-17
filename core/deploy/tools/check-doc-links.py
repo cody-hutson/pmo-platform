@@ -71,30 +71,14 @@ def resolve_workspace_root(cli_value: str | None = None) -> Path:
 # cross_module_audit_helper.py importer (binds _cdl.WORKSPACE_ROOT).
 WORKSPACE_ROOT = resolve_workspace_root()
 
-# Module-aware prefix tables (per Stage 5 spec Surface 5.2 +
-# adversarial-review PR-1 — split into V1 / V2 for repo-boundary
-# audit traceability).
-#
-# V1_PREFIXES — legacy pmo-platform (source) repo prefixes. Preserved for
-# backward-compat invocations against the source repo during the migration
-# window (Don't-break discipline per plan § 4.6).
-V1_PREFIXES = (
-    "pmo-platform/",
-    ".claude/",
-    "projects/",
-    "memory/",
-)
-# V2_PREFIXES — pmo-platform-v2 modular monolith. v2 docs use bare
-# module-relative paths from the v2 repo root (NOT the spec's
-# `pmo-platform-v2/<module>/` prefix form — WORKSPACE_ROOT == v2 repo root
-# in deployed layout per the module migration).
-V2_PREFIXES = (
-    "core/",
-    "release/",
-    "operations/",
-    "docs/",
-)
-WORKSPACE_ROOTED_PREFIXES = V1_PREFIXES + V2_PREFIXES
+# Canonical link-resolution rule (ADR-085): a markdown link resolves relative to
+# the source file's directory; a leading `/` denotes the workspace (repo) root;
+# there is NO bare module-prefix fallback — a bare `core/…` / `release/…` from a
+# non-root file is an ordinary relative path (and therefore usually broken). The
+# former V1/V2 workspace-rooted prefix tables (ADR-009 Rule 2), which drove the
+# now-retired fallback, are removed. Both link checkers (this one and
+# release/tools/check-release-links.py) implement the one rule identically — see
+# core/standards/doc-link-maintenance-protocol.md § Path resolution.
 
 INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 REF_LINK_RE = re.compile(r"\[([^\]]+)\]\[([^\]]*)\]")
@@ -199,9 +183,18 @@ def is_internal(target: str) -> bool:
 def resolve_target(
     source_file: Path, target: str, workspace_root: Path = WORKSPACE_ROOT
 ) -> tuple[Path, str | None]:
-    """Resolve target. Try relative-to-source first; fall back to workspace-rooted if it looks repo-rooted (matches GitHub web rendering).
+    """Resolve a markdown link target to a filesystem path (canonical rule, ADR-085).
 
-    Return (resolved_path, anchor_or_None). Resolved path is the first variant that exists, or the relative-to-source variant if neither resolves.
+    Three clauses, matching GitHub's rendered-blob behavior and identical to
+    release/tools/check-release-links.py:
+      1. A link resolves relative to the source file's directory.
+      2. A leading `/` denotes the workspace (repo) root.
+      3. There is NO bare module-prefix fallback — a bare `core/…` / `release/…`
+         from a non-root file is an ordinary relative path (clause 1), so it is
+         broken unless it happens to resolve relative to the source.
+
+    Return (resolved_path, anchor_or_None). The `#anchor` / `?query` are stripped
+    before path resolution.
 
     workspace_root defaults to the module-level WORKSPACE_ROOT (env→parents[3]);
     main() passes the --workspace-root CLI value for deployed-tree validation (#760).
@@ -213,17 +206,13 @@ def resolve_target(
         path_part, anchor = target, None
     if not path_part:
         return source_file, anchor
+    # Clause 2: a leading `/` anchors on the workspace (repo) root.
     if path_part.startswith("/"):
         return Path(os.path.realpath(workspace_root / path_part.lstrip("/"))), anchor
-    relative_candidate = Path(os.path.realpath(source_file.parent / path_part))
-    if relative_candidate.exists():
-        return relative_candidate, anchor
-    if path_part.startswith(WORKSPACE_ROOTED_PREFIXES):
-        workspace_candidate = Path(os.path.realpath(workspace_root / path_part))
-        if workspace_candidate.exists():
-            return workspace_candidate, anchor
-        return workspace_candidate, anchor
-    return relative_candidate, anchor
+    # Clauses 1 + 3: everything else resolves relative to the source directory.
+    # No bare module-prefix fallback — a bare `core/…` from a non-root file simply
+    # resolves (and usually breaks) as a relative path, matching GitHub.
+    return Path(os.path.realpath(source_file.parent / path_part)), anchor
 
 
 def classify_severity(source_file: Path) -> str:
@@ -488,9 +477,14 @@ def run_self_test() -> int:
 
     9 fixtures:
       1. Existing: code-block exclusion + single broken ref.
-      2. NEW: module-prefix-resolution (v2 prefix recognized via dual-prefix table).
+      2. Anti-fallback regression guard (ADR-085): a bare module-prefixed link
+         from a non-root file reads BROKEN even when the same path EXISTS at the
+         workspace root (the ADR-009 Rule-2 workspace-root fallback is retired),
+         while the leading-`/` form of the same target resolves.
       3. NEW: rewrite-map TSV output mode.
-      4. NEW: dual-prefix backward-compat (v1 + v2 both resolve identically).
+      4. AC-3 five-form parity (doc-links side): the five link forms in #1471's
+         AC-3 table return the canonical verdicts; the shared repro cross-checks
+         these against check-release-links.py.
       5. NEW: anchor preservation in rewrite-map mode.
       6. NEW: EMIT-ONLY structural enforcement (mtime + content-hash unchanged
               after scan_file_for_rewrite_map invocation) — per Stage 5 spec
@@ -524,24 +518,31 @@ def run_self_test() -> int:
         # Code-block exclusion check (target inside fence should not appear)
         assert all(f["target"] != "also.md" for f in findings), "fixture 1: code-block exclusion failed"
 
-    # ─── Fixture 2: module-prefix-resolution (v2 prefix → workspace-root fallback)
-    # The v2 module name `core/` is in V2_PREFIXES; reference resolves via
-    # workspace-root fallback to a non-existent target → 1 broken-ref finding.
+    # ─── Fixture 2: anti-fallback regression guard (ADR-085) ──────────────────
+    # A bare module-prefixed link (`core/…`) from a NON-root source file must read
+    # BROKEN even when that exact path EXISTS at the workspace root — proving the
+    # ADR-009 Rule-2 workspace-root fallback is retired and bare prefixes are
+    # ordinary relative paths (canonical clause 3). Hermetic: resolve_target is
+    # exercised directly against a sandbox root that holds the real target.
     with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        # Use Path object; doc lives at td/core/rules/test.md; target uses bare
-        # v2-rooted form `core/disciplines/missing.md` which would resolve
-        # relative to source dir (td/core/rules/) as td/core/rules/core/... which
-        # does not exist; THEN fall back to workspace-rooted (td/core/...) which
-        # also does not exist. Either way returns a non-existent target.
-        v2_doc = td_path / "core" / "rules" / "test.md"
-        v2_doc.parent.mkdir(parents=True)
-        v2_doc.write_text("See [target](core/disciplines/missing.md)")
-        # NOTE: scan_file uses WORKSPACE_ROOT (the actual install location) for
-        # is_allowlisted; this is fine here because we pass empty allowlist.
-        findings = scan_file(v2_doc, [])
-        assert len(findings) == 1, f"fixture 2: expected 1 finding, got {len(findings)}: {findings}"
-        assert findings[0]["target"] == "core/disciplines/missing.md", "fixture 2: target mismatch"
+        sandbox = Path(td).resolve()
+        (sandbox / "core" / "disciplines").mkdir(parents=True)
+        (sandbox / "core" / "disciplines" / "real.md").write_text("# real target at repo root\n")
+        src = sandbox / "core" / "rules" / "test.md"
+        src.parent.mkdir(parents=True)
+        src.write_text("See [x](core/disciplines/real.md)\n")
+        # Bare prefix → relative to source dir (sandbox/core/rules/core/…) → missing.
+        resolved_bare, _ = resolve_target(src, "core/disciplines/real.md", sandbox)
+        assert not resolved_bare.exists(), (
+            f"fixture 2: bare module-prefixed link resolved via a workspace-root "
+            f"fallback that ADR-085 retires (resolved to {resolved_bare})"
+        )
+        # Contrast: the leading-`/` form of the SAME target resolves at the root.
+        resolved_rooted, _ = resolve_target(src, "/core/disciplines/real.md", sandbox)
+        assert resolved_rooted.exists(), (
+            f"fixture 2: leading-`/` link did not resolve at the workspace root "
+            f"(resolved to {resolved_rooted})"
+        )
 
     # ─── Fixture 3: rewrite-map TSV mode ──────────────────────────────────
     with tempfile.TemporaryDirectory() as td:
@@ -567,21 +568,33 @@ def run_self_test() -> int:
         assert md.startswith("| source_file | line | old_path | new_path |"), "fixture 3: markdown header mismatch"
         assert md.count("|") == 15, f"fixture 3: markdown pipe count wrong (got {md.count(chr(124))}, expected 15: 5/row × 3 rows)"
 
-    # ─── Fixture 4: dual-prefix backward-compat (v1 + v2 both resolve) ────
-    # Both v1 and v2 prefixes recognized by the dual-prefix table; both targets
-    # non-existent → 2 broken-ref findings.
+    # ─── Fixture 4: AC-3 five-form parity (doc-links side) ────────────────────
+    # The canonical rule (ADR-085) makes this checker agree with
+    # check-release-links.py on all five link forms in #1471's AC-3 table. This
+    # fixture pins the doc-links verdicts; the shared repro cross-checks them
+    # against check-release-links.py. Hermetic sandbox root.
     with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        doc = td_path / "v1_v2_mixed.md"
-        doc.write_text(
-            "v1 ref: [v1](pmo-platform/governance/foo.md)\n"
-            "v2 ref: [v2](core/governance/bar.md)\n"
-        )
-        findings = scan_file(doc, [])
-        assert len(findings) == 2, f"fixture 4: expected 2 findings, got {len(findings)}"
-        targets = {f["target"] for f in findings}
-        assert "pmo-platform/governance/foo.md" in targets, "fixture 4: v1 target missing"
-        assert "core/governance/bar.md" in targets, "fixture 4: v2 target missing"
+        sandbox = Path(td).resolve()
+        (sandbox / "core" / "disciplines").mkdir(parents=True)
+        (sandbox / "core" / "disciplines" / "real.md").write_text("# target\n")
+        (sandbox / "core" / "rules").mkdir(parents=True)
+        (sandbox / "core" / "rules" / "sib.md").write_text("# sibling target\n")
+        src = sandbox / "core" / "rules" / "test.md"
+        src.write_text("probe\n")
+        ac3_forms = [
+            # (target, expected_exists)
+            ("sib.md", True),                     # relative, resolves
+            ("missing.md", False),                # relative, broken
+            ("../disciplines/real.md", True),     # relative via ../, resolves
+            ("core/disciplines/real.md", False),  # bare workspace-rooted → broken (no fallback)
+            ("/core/disciplines/real.md", True),  # leading-`/` → repo root, resolves
+        ]
+        for target, expected in ac3_forms:
+            resolved, _ = resolve_target(src, target, sandbox)
+            assert resolved.exists() == expected, (
+                f"fixture 4: form {target!r} expected exists={expected}, "
+                f"got {resolved.exists()} (resolved {resolved})"
+            )
 
     # ─── Fixture 5: anchor preservation in rewrite-map mode ───────────────
     with tempfile.TemporaryDirectory() as td:
