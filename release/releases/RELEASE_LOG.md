@@ -140,7 +140,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v3.75 | 101-skill-and-data-entity-hygiene | #2074, #2166, #2168, #2066 | #3544 | `1975d42afdfeb934ab6b2a7f73653f7681a45a6e` | `v3.75` | VERIFIED | 2026-07-16 |
 | v3.76 | knowledge-corpus-hygiene | #2221, #2702, #2701, #2917, #380 | #3545 | `da4c116249cebf6df694cad2be33ab2f40f399f5` | `v3.76` | VERIFIED | 2026-07-17 |
 | v3.77 | skill-hardening | #155, #2699, #3114 | #3540 | `b885d7361e524cab0c2da2edfcace6a05e8a6984` | `v3.77` | VERIFIED | 2026-07-17 |
-| v3.78 | pda-rollup-and-portfolio | #2578, #157, #1771, #276, #1169 | #3549 | `399450827f07ace9e1f11e2f3ec76fc8a3d68a81` | `v3.78` | DEPLOYED | 2026-07-17 |
+| v3.78 | pda-rollup-and-portfolio | #2578, #157, #1771, #276, #1169 | #3549 | `399450827f07ace9e1f11e2f3ec76fc8a3d68a81` | `v3.78` | VERIFIED | 2026-07-17 |
 | v3.79 | 95-deploy-tooling-resolver-and-test-parity | #2158, #1476, #1471, #1477 | #3543 | `53c28fbe05107f41b3be8e8f0bfebde7c2124a96` | `v3.79` | DEPLOYED | 2026-07-17 |
 
 #### Deployment Log v3.79
@@ -156,6 +156,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Timestamp:** 2026-07-17 08:29 CDT (release merge 2026-07-17T10:02:05Z UTC; tag at merge SHA)
 **Cycle-Time:** N/A — (mechanism: compute-cycle-time.sh; returned N/A — no `deployment-status/deploy-skill` event carried a `v3.78` version tag at deploy time)
 **Result:** SUCCESS
+**Outcome:** SUCCESS
 
 #### Deployment Log v3.77
 **Files deployed:** Skill-suite hardening bundle — one release PR #3540 (`release/v3.75-skill-hardening → main`, merge-commit `b885d736`), 3 slices. **#155** — `health-check` gains Mode 8 `rollup` (`--scope portfolio|project`, `--depth full|status`): compose-not-absorb (invokes `weekly-status-rollup` Section 6 for PORTFOLIO.md composition, stages the proposal to `08-Generated/_health-check/`, never writes the bridge file); new `references/rollup-mode.md` + 3 sub-mode evals; the 7 existing modes + the 5-section output contract byte-identically preserved. **#2699** — semantic routing-conflict harness `run_routing_audit.py` (three-tier Jaccard pre-filter → embed+cosine → optional agent judge; lazily-imported optional embedding backend + stub fallback preserving the zero-dep offline CI contract) + **ADR-084** (first optional-heavy-dependency precedent); `run_eval_audit.py` imported read-only. **#3114** — `canonical-skill-structure.md §5` re-baseline (a multi-mode skill carrying a non-empty `references/` may exceed the soft ~500-line guideline; the hard Check-6 gate is the `references/` requirement at `C6_LINE_THRESHOLD=400`); additive, no file splits. 2 `.skill` packages rebuilt (`pmo-skill-refiner`, `health-check`).
