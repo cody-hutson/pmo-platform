@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.79] - 2026-07-17
+
+Both doc-link checkers now follow one rule and give the same verdict, and the deploy tooling keeps one copy of its logic instead of two.
+
+[Full notes](release/releases/notes/v3.79_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.79)
+
 ## [v3.78] - 2026-07-17
 
 The portfolio view is now assembled from each project's published rollup, with freshness and risk checks so Green cannot mask a failing project.
