@@ -283,9 +283,9 @@ failure on any → exit 1 with explicit assertion message.
 | 4 | AC-3 five-form parity (doc-links side) | the five link forms return the canonical verdicts: relative-ok / relative-broken / `../`-ok / bare-prefix-broken / `/`-rooted-ok |
 | 5 | anchor preservation in rewrite-map | `#section` survives substitution |
 | 6 | EMIT-ONLY structural enforcement | mtime + content-hash unchanged after rewrite-map scan (PR-3/FM-1) |
-| 7 | `--require-targets` fail-loud | a `--target-paths` glob resolving to zero files is flagged (exit 3); a populated scan-root is not (#459) |
-| 8 | placeholder / meta-doc-literal exclusion precision | `<…>` tokens, barewords, `...`, and blockquoted worked-example links are skipped while a genuine broken ref still fires (#169) |
-| 9 | relocatable workspace-root + precedence | a `/`-rooted link re-roots under a sandbox root; CLI > `$CLAUDE_WORKSPACE_ROOT` > default (#760) |
+| 7 | `--require-targets` fail-loud | a `--target-paths` glob resolving to zero files is flagged (exit 3); a populated scan-root is not |
+| 8 | placeholder / meta-doc-literal exclusion precision | `<…>` tokens, barewords, `...`, and blockquoted worked-example links are skipped while a genuine broken ref still fires |
+| 9 | relocatable workspace-root + precedence | a `/`-rooted link re-roots under a sandbox root; CLI > `$CLAUDE_WORKSPACE_ROOT` > default |
 
 Expected output: `self-test OK (9 fixtures passed)`.
 
