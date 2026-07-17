@@ -1,3 +1,10 @@
+---
+title: Watermelon Detection — PMO QA Auditor Reference
+purpose: The detection reference for pmo-qa-auditor — spotting watermelon status (green on the outside, red inside) in a skill output or status report.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Watermelon Detection — PMO QA Auditor Reference
 

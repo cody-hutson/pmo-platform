@@ -1,3 +1,10 @@
+---
+title: Skill Compliance Auditor — Scenario Template + Calibration-Row Schema
+purpose: Reference detail for skill-compliance-auditor — the three-strictness scenario template (Stage 1) and the trigger-rate calibration-row schema (Stage 4 output) a run consumes.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Skill Compliance Auditor — scenario template + calibration-row schema
 
 Reference detail for `skill-compliance-auditor`. The SKILL.md body carries the

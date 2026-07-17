@@ -1,3 +1,10 @@
+---
+title: core/references/how-to/
+purpose: README for the how-to folder — the step-by-step procedures (directions toward a result) consumed by both operations and release.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # core/references/how-to/
 

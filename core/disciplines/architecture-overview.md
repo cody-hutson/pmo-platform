@@ -20,6 +20,17 @@ Think of it like building an application: `pmo-platform/` is the source code, `p
 
 ---
 
+## Who This Serves — Product & Role Model
+
+The platform serves a specific set of **human** roles and models every **other** PMO role as an AI agent contributor.
+
+- **Served humans (the orchestrators).** The platform is built for **Portfolio leads, Program Managers (PgMs), and Project Managers (PMs)** — the humans who own the portfolio, program, and project altitude. The human directs the work, renders the irreducible decisions (approvals, GO/NO-GO, deploy authorization), and stays accountable for delivery.
+- **Agent-as-adjacent-role contributor.** Across the *other* PMO-adjacent roles — Business Analyst, Product Owner, Engineering, Design, Finance, Legal, HR, Sales, Marketing, Data, Customer Support — the platform's skills and agents act as a **principal-level contributor**: they produce the analysis, artifacts, and recommendations those roles would produce, at the quality bar a principal in that discipline would meet, and hand a decision (not a to-do list) back to the orchestrating human.
+
+**Quality bar.** "Principal-level" is not a figure of speech — it is the measurable bar defined by the [`Principal Contributor Standard`](../standards/principal-standard-checklist.md). Every agent output is evaluated against that standard's competencies and PASS/FAIL behaviors; this document does not restate them (the checklist is the single source). When an output would fall short of that bar, the discipline is to surface the gap and its resolution path, not to ship briefing-grade work.
+
+---
+
 ## One Agent, One Workspace
 
 Claude Code is the single agent that operates the platform. It works across two areas without role separation — the same agent both builds the platform and runs the PMO:
@@ -43,6 +54,18 @@ Claude Code is the single agent that operates the platform. It works across two 
 ### Domain isolation
 
 The two areas share an agent but never share files. Platform changes always go through git (branch → PR → merge). Project state lives in `projects/` and is git-ignored. A change in one area never accidentally modifies the other because each lives in a distinct part of the file tree with distinct read/write rules in `core/rules/`.
+
+---
+
+## Capability Surfaces & Extraction Posture
+
+The platform serves **two audiences** — PMO practitioners (day-to-day program work) and platform builders (shipping releases). That split is realized as **two capability modules — `operations/` and `release/` — inside a three-module modular monolith** (`core/` shared kernel + the two consumer modules), **not** as two separate software packages.
+
+- **The modular monolith is the durable packaging form** (decision D-02, 2026-06-10). One repository, three capability modules, each with a documented public API in its module README; modules talk only through declared public surfaces.
+- **Extraction-readiness is preserved, but extraction is trigger-gated.** A module that proves genuinely independent *can* be lifted into its own repository without rewriting consumer references — but a package split **executes only if a named extraction trigger fires**: independent consumer demand, divergent release cadence, or an independent-versioning need. Absent a trigger, the monolith stands.
+- **What is NOT codified:** any intended end-state where the platform "splits into two separate packages." That framing was **superseded as a packaging end-state on 2026-06-10 (D-02)**; the two-package idea survives only as the extraction *triggers* above, never as a committed destination.
+
+The module partition, per-module public APIs, and the extraction-readiness clause are maintained in the canonical structural map — [`core/diagrams/architecture-platform-structure.md`](../diagrams/architecture-platform-structure.md) (§"What this depicts"). This section states the audience-decomposition + extraction posture in prose; that artifact is the maintained module tree. Summarize here; do not duplicate the module descriptions.
 
 ---
 
@@ -125,6 +148,31 @@ Claude Code first-party skills (not version-controlled in this repo, managed by 
 
 ---
 
+## Build Surfaces (Claude Code Component Types)
+
+When extending the platform, the first design question is *which Claude Code component type* to build. Claude Code exposes **five** component types; each has a distinct invocation trigger, on-disk shape, and best-fit use.
+
+| Component type | Invocation trigger | File shape | Best for |
+|---|---|---|---|
+| **Slash command** | Explicit operator invocation (`/name`) — deterministic, human-started | A prompt file under `.claude/commands/` (or a plugin's `commands/`) | A repeatable, operator-initiated workflow the human starts on demand |
+| **Skill** | Model-decided — auto-invoked when the task matches the skill's description | A `SKILL.md` + bundled `references/` | A reusable domain capability the agent should reach for automatically when the work matches |
+| **Agent (subagent)** | Delegated dispatch — spawned for a scoped sub-task, runs in its own context | An agent definition (`.claude/agents/*.md` frontmatter or SDK `agents`) | An isolated multi-step sub-task handled in a separate context and summarized back |
+| **Hook** | Lifecycle event — fires on `PreToolUse` / `PostToolUse` / etc., every time, regardless of model judgment | A command/script wired into `settings.json` `hooks` | Enforcing an invariant or automation that must run deterministically on an event |
+| **Plugin** | Distribution unit — bundles commands / skills / agents / hooks / MCP servers as one installable package | A plugin package installed from a marketplace | Sharing or consuming a bundle of components as a single installable unit |
+
+### Selection decision tree
+
+1. **Must it run deterministically on an event, every time, regardless of the model's judgment?** → **Hook**.
+2. **Does the operator start it explicitly, on demand, as a repeatable workflow?** → **Slash command**.
+3. **Should the agent reach for it automatically when the task matches?** → **Skill** — unless the work is an isolated multi-step sub-task that needs its own context, in which case → **Agent (subagent)**.
+4. **Are you packaging several of the above to distribute or consume as one unit?** → **Plugin**.
+
+**What this platform builds vs consumes.** This platform **builds** skills, agents, hooks, and slash-commands — the four surfaces it authors and version-controls. It **consumes** plugins (installed from marketplaces) rather than authoring them; plugins are a distribution wrapper, not a native build target here.
+
+**Reconciliation with `build-philosophy.md`.** [`build-philosophy.md`](build-philosophy.md) presents a different five-surface cut — **Skills / Agents / Hub-Spokes / Hooks / Slash-commands** — which is the platform's *governance-enforcement* view, not the raw component taxonomy. The two are complementary cuts of the same space: **"Hub-Spokes" is a platform *composition* of the agent + skill primitives** (a multi-session execution pattern), **not a sixth raw component type**; and **"plugin" is a raw Claude Code surface this platform consumes but does not build**, which is why it appears here (build-*selection*) but not there (build-*enforcement*). Use this section to choose a surface; use `build-philosophy.md` to see which discipline enforces each surface.
+
+---
+
 ## Deployment Model
 
 Changes flow from git to Claude Code's user skills folder via `deploy.sh`:
@@ -165,6 +213,10 @@ Claude Code loads updated skills + references at next session start
 | Templates | No | Skills read directly from `operations/templates/` |
 | Standards | No | Skills read directly from `core/standards/` |
 | core/rules/ | No | Claude Code auto-loads at session start |
+
+### Acquisition — canonical install
+
+The deploy flow above propagates changes *within* a checkout; acquiring the platform in the first place follows the **canonical install** model: the public clones the canonical upstream repository directly and runs it as-is, rather than forking and self-hosting a divergent copy. Preserve the distinction — *where you install from* is canonical (the upstream repo, hardcoded in the install docs, which are identity-exempt); *which repo you drive releases against* is per-operator (the `REPO=` target stays tokenized). The sourcing decision (canonical-clone vs fork-and-self-host) is recorded in [`ADR-083 — Canonical install model`](../ADRs/ADR-083-canonical-install-model.md), which composes with [`ADR-017`](../ADRs/ADR-017-distribution-architecture.md) on the distribution surfaces + version-pinning posture.
 
 ---
 

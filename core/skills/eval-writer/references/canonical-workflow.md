@@ -1,3 +1,10 @@
+---
+title: Canonical Eval Authoring Workflow
+purpose: The 10-stage canonical eval-authoring workflow from having a system to having an eval suite in production; eval-writer owns Stages 0–4 and downstream harnesses own 5–10.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Canonical Eval Authoring Workflow
 
 Condensed from Module 6 §2. The 10-stage end-to-end process from "I have a system" to "I have an eval suite in production." **eval-writer covers Stages 0–4 (authoring / validation). Stages 5–10 are execution / monitoring and belong to downstream harnesses** (`anthropic-skills:skill-creator`, CI, observability stack).

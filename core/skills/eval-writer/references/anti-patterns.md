@@ -1,3 +1,10 @@
+---
+title: Anti-Pattern Catalog
+purpose: A catalog of 23 recurring eval-design anti-patterns (stable IDs, cite as A-XX) that eval-writer Review mode audits every finding against.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Anti-Pattern Catalog
 
 Condensed from Module 6 §6. 23 anti-patterns that recur in eval design. **In Review mode, audit every finding against this list** — unflagged anti-patterns are the most common failure of eval suites written without a framework.

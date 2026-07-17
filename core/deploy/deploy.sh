@@ -6587,7 +6587,7 @@ cmd_check() {
   fi
 
 
-  # Check 50 — Platform-doc frontmatter standard (warn-mode across core/) [#2220]
+  # Check 50 — Platform-doc frontmatter standard (global committed-default enforce) [#2220 gate; #2221 flip]
   #
   # Enforces core/standards/platform-doc-frontmatter-standard.md (#295) over the
   # authored K1 core/ corpus: Tier-1 required fields (title/purpose/type/status/
@@ -6598,36 +6598,46 @@ cmd_check() {
   # _frontmatter helper and the cataloged-doc set via check-version-anchors.py's
   # own parse_catalog_table, so Check 50 and Check 18b agree by construction (F1).
   #
-  # SHIP POSTURE — WARN-MODE ACROSS ALL OF core/, TIER A INCLUDED (D-4 scope-lock,
-  # 2026-06-29 Collective Review on #2220): every finding routes through the warn
-  # dispatcher at ship; the gate reports non-compliance but does NOT fail the build
-  # red. This de-risks the merge — the gate cannot break CI if #109's Tier-A
-  # backfill is incomplete on the branch.
-  #
-  # ENFORCE-FLIP MECHANISM (built now, graduation DEFERRED to #2221): the tool tags
-  # each finding with tier (A|other), and this block resolves a per-check mode via
-  # resolve_check_mode "doc-frontmatter" (a dedicated doc-frontmatter.mode file,
-  # operator-instance runtime state, NOT committed — absent → falls back to the
-  # shared warn). When that mode flips to "enforce", the Tier-A leg graduates to a
-  # hard FAIL (the dormant enforce branch below) while the rest of core/ keeps
-  # warning. The global flip (route Tier-other to FAIL as well) is the second,
-  # final graduation, also #2221's — at which point the tier partition collapses.
-  # The two-branch structure here IS the one-edit-graduation the design specified.
-  # Warn-mode initial per bypass-mode-readiness.md §Shakedown (the 14/18/42/43
+  # SHIP POSTURE — GLOBAL COMMITTED-DEFAULT ENFORCE (#2221 scope-lock, Approach D):
+  # #2220 shipped warn-mode across core/ with a split partition (Tier-A enforce leg
+  # dormant, tier-other warn-only) and the enforce-flip deferred to #2221. #2221
+  # backfilled the remaining non-ADR core/ docs to 0 findings and flips this gate
+  # ON: the tier partition COLLAPSES — every finding (Tier A and other alike)
+  # routes to a hard FAIL in enforce. Activation is the COMMITTED DEFAULT (c50_mode
+  # is hardcoded "enforce" below, NOT resolved from an un-committed
+  # doc-frontmatter.mode file), so any clone enforces — a fresh non-conformant
+  # core/ doc FAILs deploy.sh --check. The global DEPLOY_CHECK_MODE=off kill-switch
+  # (the outer guard on this block) is deliberately RETAINED so the gate stays
+  # disable-able in an emergency, not un-disableable.
+  # SCAN SURFACE — the precise authored-doc subtree globs (c50_targets below):
+  # core/ADRs/ (disjoint ADR schema, routed to #1488) and **/tests/fixtures/** are
+  # excluded BY CONSTRUCTION (the tool has no glob-exclude, so we enumerate authored
+  # subtrees rather than recursive core/**, which would drag in ~17 fixtures).
+  # enforce-graduation per bypass-mode-readiness.md §Shakedown (the 14/18/42/43
   # precedent); the introducing release is itself exempt (reflexive-pipeline loop).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 50: Platform-doc frontmatter standard (warn-mode across core/; enforce-flip deferred to #2221)"
+    log "Check 50: Platform-doc frontmatter standard (global enforce; committed-default per #2221, DEPLOY_CHECK_MODE=off kill-switch retained)"
     local c50_script="core/deploy/tools/check-doc-frontmatter.py"
     local c50_allowlist="core/deploy/allowlists/skip-doc-frontmatter-check.txt"
     if [[ ! -f "$c50_script" ]]; then
       flag_warn_or_issue "doc-frontmatter" "primitive script missing: $c50_script"
     else
-      local c50_mode
-      c50_mode=$(resolve_check_mode "doc-frontmatter")
-      # The six Tier-A governance-class dirs (enforce target post-flip) + the
-      # warn-only remainder (core/skills/**/references). The tool tags the split;
-      # this glob list is just the scan surface.
-      local c50_targets="core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/skills/**/references/*.md"
+      # APPROACH D (#2221 scope-lock): committed-default enforce. c50_mode is
+      # hardcoded "enforce" — the gate does NOT depend on an un-committable
+      # doc-frontmatter.mode file to activate, so any clone enforces the flipped
+      # gate. The global DEPLOY_CHECK_MODE=off kill-switch (the outer guard on this
+      # whole block) is deliberately RETAINED so the gate is not un-disableable;
+      # setting DEPLOY_CHECK_MODE=off skips Check 50 entirely.
+      local c50_mode="enforce"
+      # Scan surface = the precise authored-doc subtree globs (#2221 Edit 1): the
+      # six Tier-A governance-class dirs + core/skills/**/references + the added
+      # non-Tier-A authored subtrees (core/*.md, core/deploy/tools/*.md,
+      # core/diagrams/*.md, core/packs/*.md, core/references/**/*.md). NOT added:
+      # core/ADRs/ (disjoint ADR schema, routed to #1488) or any recursive core/**
+      # glob — the tool has NO glob-exclude, so a recursive glob would drag in ~17
+      # test-fixture .md under **/tests/fixtures/** that all flag against the
+      # standard. Enumerate authored subtrees, not core/** (validated: 0 fixtures).
+      local c50_targets="core/standards/**/*.md,core/schemas/**/*.md,core/specs/**/*.md,core/disciplines/**/*.md,core/rules/**/*.md,core/governance/**/*.md,core/*.md,core/deploy/tools/*.md,core/diagrams/*.md,core/packs/*.md,core/references/**/*.md,core/skills/**/references/*.md"
       local c50_out c50_exit=0
       c50_out=$(/usr/bin/python3 "$c50_script" --target-paths "$c50_targets" --allowlist "$c50_allowlist" --output-format tsv 2>&1) || c50_exit=$?
       if [[ $c50_exit -eq 3 ]]; then
@@ -6635,31 +6645,27 @@ cmd_check() {
       elif [[ $c50_exit -eq 0 || $c50_exit -eq 1 ]]; then
         # Partition findings on the tier column (TSV row 2 is the header;
         # data rows: file<TAB>tier<TAB>field<TAB>violation<TAB>severity).
-        local c50_a c50_o
+        local c50_a c50_o c50_total
         c50_a=$(echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"'     | grep -c . || true)
         c50_o=$(echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="other"' | grep -c . || true)
         c50_a=${c50_a:-0}; c50_o=${c50_o:-0}
-        if [[ "$c50_a" -eq 0 && "$c50_o" -eq 0 ]]; then
+        c50_total=$((c50_a + c50_o))
+        if [[ "$c50_total" -eq 0 ]]; then
           log "  OK:    all scanned core/ docs carry conformant frontmatter"
+        elif [[ "$c50_mode" == "enforce" ]]; then
+          # #2221 PARTITION COLLAPSE: in enforce mode BOTH tiers (A and other)
+          # route to one hard FAIL. The split Tier-A-enforce / tier-other-warn
+          # partition #2220 shipped has collapsed to a single global-enforce verdict.
+          log "  FAIL:  doc-frontmatter — $c50_total frontmatter violation(s) (global enforce, #2221). Fix per core/standards/platform-doc-frontmatter-standard.md."
+          echo "$c50_out" | awk -F'\t' 'NR>2' | head -20 | sed 's/^/         /'
+          ISSUES=$((ISSUES + 1))
         else
-          if [[ "$c50_a" -gt 0 ]]; then
-            if [[ "$c50_mode" == "enforce" ]]; then
-              # DORMANT until doc-frontmatter.mode flips to enforce (#2221). The
-              # graduated Tier-A leg: a missing/invalid required field on a Tier-A
-              # doc fails the build.
-              log "  FAIL:  doc-frontmatter — $c50_a Tier-A frontmatter violation(s) (enforce). Fix per core/standards/platform-doc-frontmatter-standard.md."
-              echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
-              ISSUES=$((ISSUES + 1))
-            else
-              # SHIP DEFAULT (D-4): Tier A warns, same as the rest of core/.
-              flag_warn_or_issue "doc-frontmatter" "$c50_a Tier-A frontmatter violation(s) (warn-mode across core/ per D-4; flips to enforce with #2221). Fix per core/standards/platform-doc-frontmatter-standard.md."
-              echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"' | head -15 | sed 's/^/         /'
-            fi
-          fi
-          if [[ "$c50_o" -gt 0 ]]; then
-            flag_warn_or_issue "doc-frontmatter" "$c50_o non-Tier-A frontmatter violation(s) (warn-mode; flips to enforce with #2221 Tier B/C backfill)"
-            echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="other"' | head -10 | sed 's/^/         /'
-          fi
+          # Retained warn dispatcher (the #2220 shakedown shape). Unreached while
+          # c50_mode is the committed-default "enforce" above; preserved so a future
+          # soften-to-warn is a one-line mode change, not a structural re-add.
+          (( c50_a > 0 )) && flag_warn_or_issue "doc-frontmatter" "$c50_a Tier-A frontmatter violation(s) (warn-mode)"
+          (( c50_o > 0 )) && flag_warn_or_issue "doc-frontmatter" "$c50_o non-Tier-A frontmatter violation(s) (warn-mode)"
+          echo "$c50_out" | awk -F'\t' 'NR>2' | head -20 | sed 's/^/         /'
         fi
       else
         flag_warn_or_issue "doc-frontmatter" "check errored (exit $c50_exit): $(echo "$c50_out" | head -1)"
@@ -6856,6 +6862,56 @@ cmd_check() {
         fi
       else
         flag_warn_or_issue "approved-queue-depth" "check errored (exit $c53_exit): $(echo "$c53_out" | head -1)"
+      fi
+    fi
+  fi
+
+  # Check 54 — Ownership-collision reconciliation (ADR-044 I1+I3+I4; warn-mode initial)
+  #
+  # Reconciles the §6 owning-agent matrix (project-entity-model.md) against the
+  # per-skill output declarations (per-skill-output-contracts.md) + the rendering
+  # set (operational-artifact-inventory.md), and ESCALATES a would-be SECOND
+  # maintainer — never a producer (ADR-044's "many producers, one maintainer" is
+  # the governed pattern). Creates no ownership store; reconciles existing SSOTs.
+  # Offline-safe: pure local corpus parse — no `gh`, so no SKIP leg (unlike Check
+  # 53). Read-only; reversibility CHEAP (new primitive + revertible block;
+  # `ownership-collision.mode`=off disables). Sibling deploy-primitive per ADR-068
+  # (run_eval_audit.py untouched). Warn-mode initial per
+  # core/rules/bypass-mode-readiness.md (the 14/18/42/43/50/51/53 precedent): the
+  # exit-1 "collision" finding is a non-blocking WARN during calibration. The
+  # current suite has zero duplicate maintainers -> 0 collisions by construction,
+  # so this check is silent-PASS on first run; warn-mode keeps a future finding
+  # non-blocking until the >=3-day review flips ownership-collision.mode to
+  # enforce (enforce = the finding increments ISSUES; the count of what is checked
+  # is unchanged). Primitive: core/deploy/tools/check-ownership-collision.py.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 54: Ownership-collision reconciliation (ADR-044 I1+I3+I4; warn-mode initial; enforce-flip deferred)"
+    local c54_script="core/deploy/tools/check-ownership-collision.py"
+    if [[ ! -f "$c54_script" ]]; then
+      flag_warn_or_issue "ownership-collision" "primitive script missing: $c54_script"
+    else
+      local c54_mode
+      c54_mode=$(resolve_check_mode "ownership-collision")
+      local c54_out c54_exit=0
+      c54_out=$(/usr/bin/python3 "$c54_script" --output-format tsv 2>&1) || c54_exit=$?
+      if [[ $c54_exit -eq 3 ]]; then
+        flag_warn_or_issue "ownership-collision" "input failure (exit 3): $(echo "$c54_out" | head -1) — a required corpus surface (§6 matrix / output-contracts / inventory) was missing or unparseable; fix the surface/parser"
+      elif [[ $c54_exit -eq 0 ]]; then
+        local c54_ent
+        c54_ent=$(echo "$c54_out" | awk -F'\t' '$1=="ENTITIES_CHECKED"{print $2}')
+        log "  OK:    ownership-collision — 0 collisions across ${c54_ent:-0} entities (producers reconciled as producers vs single maintainers)"
+      elif [[ $c54_exit -eq 1 ]]; then
+        local c54_count c54_detail
+        c54_count=$(echo "$c54_out"  | awk -F'\t' '$1=="COLLISIONS"{print $2}')
+        c54_detail=$(echo "$c54_out" | awk -F'\t' '$1=="DETAIL"{print $2}' | paste -sd';' - | sed 's/;/; /g')
+        if [[ "$c54_mode" == "enforce" ]]; then
+          log "  FAIL:  ownership-collision — $c54_count second-maintainer/contradiction collision(s): ${c54_detail:-(see detail)}"
+          ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s) (warn-mode; flip ownership-collision.mode to enforce after shakedown): ${c54_detail:-(see detail)}"
+        fi
+      else
+        flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(echo "$c54_out" | head -1)"
       fi
     fi
   fi

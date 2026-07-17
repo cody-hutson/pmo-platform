@@ -1,7 +1,11 @@
 ---
 name: release-notes-eval-rubric
 description: Binary pass/fail rubric for user-facing release notes, covering the 13 lint checks from release-notes-standard.md § 3.2. Used by eval-writer as a worked playbook and consumed by Stage 13 Close lint, release-executor Mode E, and pmo-qa-auditor.
-type: rubric
+title: Release Notes Eval Rubric — Binary PASS/FAIL
+purpose: The binary pass/fail rubric for user-facing release notes, covering the 13 lint checks from release-notes-standard.md § 3.2, owned by eval-writer and consumed by Stage 13 Close lint, release-executor Mode E, and pmo-qa-auditor.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
 source_standard: release/references/standards/release-notes-standard.md § 3.2
 ---
 <!-- reference-durability: allow-link -->

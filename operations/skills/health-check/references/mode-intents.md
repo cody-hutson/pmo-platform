@@ -3,7 +3,7 @@
 
 The queryable 4-intent declarations for every health-check mode. Each mode declares exactly four intent dimensions: `trigger_intent` (the operator situation that should fire it), `decision_intent` (the question it answers), `output_intent` (what the operator does with the result), and `confidence_intent` (where it is assertive vs. cautious). The SKILL.md `## Modes` section is the authority for which modes are implemented; this doc carries the full declarations once.
 
-**All seven modes are implemented.** Modes 1–3 are the foundation drift-core (the v1 slice); modes 4–7 are the extended set (the v2 slice) filled into the same locked contract. The slice labels record provenance, not implementation status.
+**All eight modes are implemented.** Modes 1–3 are the foundation drift-core (the v1 slice); modes 4–7 are the extended set (the v2 slice); mode 8 (`rollup`) is the on-demand rollup-invocation mode (the v3 slice) — all filled into the same locked contract. The slice labels record provenance, not implementation status.
 
 ## Mode 1 — `full` (v1)
 
@@ -84,4 +84,16 @@ mode_sources:
   confidence_intent: "Assertive on staleness; cautious on conflict resolution."
 audits: "The canonical-source set. Emits the source-of-truth inventory and explicitly flags missing-but-expected sources (the graceful-degradation surface, e.g. SharePoint has no MCP)."
 status: "Implemented (v2 slice)."
+```
+
+## Mode 8 — `rollup` (v3)
+
+```yaml
+mode_rollup:
+  trigger_intent:    "I need to refresh a rollup on demand — up-to-portfolio or down-through one project — rather than wait for the scheduled cadence."
+  decision_intent:   "Is the rollup surface current — does PORTFOLIO.md match the composed per-project rollup entities (portfolio), or does one project's rollup entity match its sub-entities (project)?"
+  output_intent:     "A 5-section punch list; portfolio composition is routed to weekly-status-rollup and staged in 08-Generated/_health-check/; project refresh emits TRACKER_UPDATES for the rollup entity."
+  confidence_intent: "Assertive on rollup-entity freshness drift; cautious on composed portfolio health (routes the write to weekly-status-rollup)."
+audits: "The project↔portfolio rollup contract on demand. `--scope portfolio` audits per-project rollup-entity freshness vs PORTFOLIO.md and composes the PORTFOLIO.md proposal via weekly-status-rollup Section 6 (compose-not-absorb), staged in 08-Generated/_health-check/. `--scope project --depth full|status` refreshes one project's rollup entity from a Milestones/RAID/Plans/Resources sub-entity scan, routed via TRACKER_UPDATES. Arg-required and excluded from the full sweep. Contract-tolerant when the rollup entity / portfolio-writeback contract is absent (surfaces a ## Unknowns coverage-gap). See references/rollup-mode.md."
+status: "Implemented (v3 slice)."
 ```

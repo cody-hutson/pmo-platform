@@ -35,7 +35,7 @@ PMBOK Process Group definition: those activities that authorize a new project, p
 
 ### Planning
 
-PMBOK Process Group definition: those activities that establish the scope, refine objectives, and define the course of action required to deliver the work. On the PMO platform, Planning corresponds to release-scope construction, dependency-ordered implementation planning, and design-decision resolution.
+PMBOK Process Group definition: those activities that establish the scope, refine objectives, and define the course of action required to deliver the work. On the PMO platform, Planning corresponds to release-scope construction, dependency-ordered implementation planning, and design-decision resolution. Release-scope construction at Stage 3 Bundle / Stage 4 Planning applies **the 7-step vertical-capability-slice method** — the canonical bundle-composition method whose steps are defined in [`bundle-composition-doctrine.md §3`](../../release/references/standards/bundle-composition-doctrine.md); this spine names the method and points to that single source rather than restating its steps.
 
 - **Primary stages:** Stage 3 Bundle, Stage 4 Planning, Stage 5 Solutioning.
 - **Secondary footprint:** Stage 2 Triage carries Planning work (priority and dependency assessment); Stage 7 Dev Testing carries Planning work on return-to-Engineering (re-plans the change).
@@ -275,6 +275,7 @@ Stages run continuously per work item — there is no batch boundary. Stage 12 E
 - **Archetype normative definitions (8 archetypes):** [`methodology-parameterization-v1.md`](../../release/references/specs/methodology-parameterization-v1.md).
 - **Release-cadence variation (8 archetypes):** [`release/governance/release-process.md § Methodology Variation — Release Cadence`](../../release/governance/release-process.md).
 - **13-stage pipeline reference directory:** [`pipeline/README.md`](../../release/references/pipeline/README.md).
+- **Bundle-composition method (the 7-step vertical-capability-slice method):** [`bundle-composition-doctrine.md §3`](../../release/references/standards/bundle-composition-doctrine.md) — the canonical definition of the 7-step slice method that constructs release bundles at Stage 3 Bundle / Stage 4 Planning (named in the Planning function block above). This file names the method; that doctrine owns its steps.
 - **Canonical term definitions:** [`terminology-glossary.md`](../specs/terminology-glossary.md) (Function, Process, Methodology, Framework).
 - **Design rationale for this file:** [`../ADRs/ADR-004-five-function-spine.md`](../ADRs/ADR-004-five-function-spine.md) records the rationale for the Primary+Secondary function-mapping scheme, the 10-flow cross-cutting taxonomy, and the 13×3 archetype × stage variants matrix. Future authors revisiting any of these decisions should consult ADR-004 before re-designing.
 - **Process-flow diagram standards:** [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) — canonical authority for Mermaid syntax, swimlane notation, and the color/shape grammar of any process-flow diagram. Forward-only scope; retroactive retrofit tracked separately.

@@ -1,3 +1,10 @@
+---
+title: core/deploy/tools/
+purpose: Inventory and usage reference for the stdlib-only Python primitives invoked by deploy.sh checks and available for ad-hoc operator invocation.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # core/deploy/tools/
 
 Stdlib-only Python primitives invoked by `core/deploy/deploy.sh` checks AND
@@ -148,16 +155,20 @@ disciplines|rules|governance/`), `other` for the rest of the scanned surface
   resolved to zero/missing files (unverifiable, not clean — the fail-loud
   contract that 18b and Check 42 also honor).
 
-**Split-mode + warn-mode posture (v3.25 frontmatter gate).** Per the D-4 scope-lock the
-gate **ships warn-mode across all of `core/`, Tier A included** — every finding
-routes through the warn dispatcher; the gate reports non-compliance but does not
-fail the build red, so an incomplete Tier-A backfill on the branch cannot break
-CI. The **enforce-flip mechanism** is built: `deploy.sh` resolves a per-check
-mode via `resolve_check_mode "doc-frontmatter"` (a dedicated, un-committed
-`doc-frontmatter.mode` file). When that flips to `enforce`, the Tier-A leg
-graduates to a hard `FAIL` (the dormant enforce branch) while the rest of `core/`
-keeps warning; the global flip (route `tier == other` to `FAIL` as well) is the
-final graduation. **Both flips are deferred to the Tier-B/C backfill.**
+**Global committed-default enforce posture (frontmatter gate).** The gate
+ships **committed-default enforce across the authored-doc surface**: every finding
+— Tier A and `other` alike — routes to a hard `FAIL` (the split Tier-A-enforce /
+tier-other-warn partition the earlier warn-mode posture shipped has collapsed to one global-enforce
+verdict). Activation is the committed default in `deploy.sh` (`c50_mode` is
+hardcoded `enforce`) and does **not** depend on an un-committed
+`doc-frontmatter.mode` file, so any clone enforces — a fresh non-conformant
+`core/` doc `FAIL`s `deploy.sh --check`. The scan surface is the precise
+authored-doc subtree globs (the six Tier-A governance-class dirs plus `core/*.md`,
+`core/deploy/tools/*.md`, `core/diagrams/*.md`, `core/packs/*.md`,
+`core/references/**/*.md`, and `core/skills/**/references/*.md`); `core/ADRs/`
+(disjoint ADR schema, owned by a separate ADR-frontmatter effort) and `**/tests/fixtures/**` are excluded by
+construction. The global `DEPLOY_CHECK_MODE=off` kill-switch is retained so the
+gate stays disable-able in an emergency, not un-disableable.
 
 **F1 consistency (shared with Check 18b).** Check 50 reads each doc's frontmatter
 via the shared `_frontmatter.read_frontmatter` and builds the cataloged-doc set

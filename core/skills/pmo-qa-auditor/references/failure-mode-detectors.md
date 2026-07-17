@@ -1,3 +1,10 @@
+---
+title: Failure-Mode Detector Battery — PMO QA Auditor Reference
+purpose: The failure-mode detector battery pmo-qa-auditor runs against a skill output — the domain-specific anti-pattern detectors and their signatures.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Failure-Mode Detector Battery — PMO QA Auditor Reference
 

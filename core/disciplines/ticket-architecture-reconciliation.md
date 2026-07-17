@@ -1,5 +1,6 @@
 ---
 title: Ticket-Architecture Reconciliation Discipline
+purpose: The pre-build step that reconciles a tracked ticket's premise against the live architecture before design begins, so a ticket authored against an architecture that has since moved is caught at stage-entry rather than built stale.
 type: discipline
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH

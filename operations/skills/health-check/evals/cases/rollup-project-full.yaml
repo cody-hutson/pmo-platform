@@ -1,0 +1,24 @@
+# Case: rollup mode, --scope project --depth full (down-through-project sub-entity scan) against the hypercare-window fixture
+case_id: rollup-project-full
+mode: rollup
+sub_mode: "--scope project --depth full"
+fixture: fixtures/hypercare-window.md
+judge: judges/rollup.md
+prompt: "/health-check rollup --scope project --depth full"   # active project = Synthetic-Hypercare (the fixture)
+active_project: Synthetic-Hypercare
+scans_sub_entities:                    # the four project-entity classes per project-entity-model.md
+  - "Milestones (Go-Live April 13, Hypercare exit April 24)"
+  - "RAID Items (R-PROJ-040 / R-PROJ-041 / R-PROJ-038)"
+  - "Plans (Hypercare Plan)"
+  - "Resources (war-room / capacity signal)"
+expected_section_membership:
+  Auto-Actionable:
+    - "Refreshed rollup-entity fields for Synthetic-Hypercare (status/top_risks/milestone_delta from the sub-entity scan) — TRACKER_UPDATES: block routed to /tracker-manager"
+  tracker_updates_block: required      # the rollup entity is a Document-Tier-2 tracker -> TRACKER_UPDATES, never ## Rollup-Diffs
+  Unknowns:
+    - "Portfolio-writeback rollup-contract schema not yet shipped; refreshed fields mapped best-effort to the documented field set — coverage note, not a fabrication"
+rollup_entity_update_not_in_rollup_diffs: required   # ## Rollup-Diffs is reserved for PROJECT.md/PORTFOLIO.md, not the tracker
+never_auto_applied: required                          # emitted for approval; the skill never writes the tracker
+contract_tolerant_no_crash_no_fabrication: required  # absent contract -> coverage note, not a crash and not an invented entity
+depth_is_full_sub_entity_scan: required              # distinct from --depth status: scans all four sub-entity classes
+pass_rule: "Full sub-entity scan (Milestones/RAID/Plans/Resources) proposes a refreshed rollup entity via a TRACKER_UPDATES: block in ## Auto-Actionable (never ## Rollup-Diffs, never auto-applied); the absent portfolio-writeback contract degrades to a ## Unknowns coverage note (no crash, no fabricated entity); five sections in order."

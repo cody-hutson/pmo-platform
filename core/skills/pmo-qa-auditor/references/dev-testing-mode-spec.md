@@ -1,3 +1,10 @@
+---
+title: Dev Testing Mode Spec — pmo-qa-auditor Mode G
+purpose: The detail spec for pmo-qa-auditor Mode G (Dev Testing) — maps the Stage-7 dev-testing process into the auditor's DT-ladder machinery.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Dev Testing Mode Spec — pmo-qa-auditor Mode G
 

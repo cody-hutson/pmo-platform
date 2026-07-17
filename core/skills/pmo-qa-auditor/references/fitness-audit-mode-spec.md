@@ -1,3 +1,10 @@
+---
+title: Release-Process Fitness Audit Mode Spec — pmo-qa-auditor Mode F
+purpose: The machinery spec for pmo-qa-auditor Mode F (release-process fitness audit) — the run mechanics; when-to-run authority and content SSOT live at their cited homes.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Release-Process Fitness Audit Mode Spec — pmo-qa-auditor Mode F
 

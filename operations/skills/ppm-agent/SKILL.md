@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v2.28
+version: v2.29
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -596,6 +596,31 @@ flag — `delivery-engine` maintains Milestone (§6) and `weekly-status-rollup` 
 PPM Agent surfaces the block as a Section-8.6 SECONDARY row **and** a Section-4 "Items
 Requiring Your Action". The flag is a **read-derived surfacing** (no governance write, never
 Tier 0); it clears when the RAID transitions to `resolved`/`closed` with evidence.
+
+### 8.8. Portfolio rollup entity emission
+
+On the scheduled processing cadence (daily processing cycle; published weekly), emit / refresh
+the per-project **rollup entity** (`[Project]_Rollup.md`) per the **portfolio write-back
+contract** (`../../../core/standards/portfolio-writeback-contract.md`). The rollup is a
+**COMPOSED read-surface, not a roster entity** (ADR-019 compose-not-absorb; the entity roster is
+frozen at 19). **READ each source entity and stage its value into the rollup's contract field —
+never re-derive an authoritative value the source entity owns:**
+
+| Contract field | READS source entity (`project-entity-model.md` §4) |
+|---|---|
+| `status` | Project (entity 1) `status` |
+| `top_risks[]` | RAID Item (entity 6) `impact` / `owner_person_id` / `action_plan` (≤ 5) |
+| `key_dependencies[]` | Cross-Project Dependency / XPD (entity 15) |
+| `capacity_signal` | Resource (entity 8) — **cite** the `weekly-status-rollup` §7.5 + `capacity-model.md` synthesis, do not re-derive it |
+| `milestone_delta` | Milestone (entity 2) |
+| `cross_project_conflicts[]` | Cross-Project Resource Conflict / XRC (entity 16) |
+| `last_published` | rollup meta — ISO datetime; drives `[STALE]` (age = `today − last_published`, business days) |
+
+The emission rides the existing § 8.7 `TRACKER_UPDATE` carrier — no new mechanism. PPM Agent
+**emits** the rollup; the composed `PORTFOLIO.md` write-back is staged by `weekly-status-rollup`
+Section 6 (human-in-the-loop) — PPM Agent **never** writes into `projects/`. The evidence gate
+binds unchanged: a source value that is `[ASSUMPTION – CONFIRM]` is surfaced as a Section-5
+"Decisions needed" line, not emitted.
 
 ### 9. Proactive next steps
 

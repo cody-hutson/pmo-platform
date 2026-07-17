@@ -67,6 +67,12 @@ The operator's **literal name** is permitted in the `deciders:` frontmatter fiel
 
 **Explicitly still blocked** (the carve-out does NOT loosen these): the operator email and any PII-adjacent value; home/workspace paths; the GitHub handle **on any non-`deciders` line or non-ADR file**; the operator name in any ADR **body** line (only the frontmatter `deciders:` field is exempt); the operator name in **any non-ADR file** under `core/`/`release/`/`operations/`/`packages/`; and the entire **collaborator** dimension. Enforced by the field-scoped skip in the `repo-integrity.yml` depersonalization gate — the skip fires iff the changed file is an ADR (`core/ADRs/*.md` or `release/ADRs/*.md`) **AND** the added line matches `^deciders:` (both ANDed). Exempted lines are reported in the run summary (via the same `SUPPRESSED` channel as the line-scoped override), so the exemption is auditable, not silent.
 
+### §1.3 Non-registered square-bracket placeholders are example-data
+
+The §1 and §1.1 tables are the **closed registered set** of operator-identity / operator-instance tokens that resolve to operator values at workspace-setup time. A square-bracket placeholder that is **not** in those tables is **example-data**, not a registered token: it does not resolve, is not an operator-identity value, and is outside the depersonalization mechanism.
+
+The canonical example is **`[PROJECT_KEY]`** — the Jira project-key config placeholder (`core/governance/OPERATIONS.md` `jira_project_key: "[PROJECT_KEY]"`) and illustrative schema field-values (e.g. `project_name: [PROJECT_KEY] Implementation`). It is an illustrative **project identifier**, classified and dispositioned under [`universal-vs-localized-context.md`](universal-vs-localized-context.md) **DC3** (mostly ILLUSTRATIVE → accept-as-example; parameterize only where a literal is operative) — **not** an `[OPERATOR_*]` token, so it is neither swept into `projects/[Project]/` placeholder unification nor registered here. The `core/deploy/deploy.sh` "[PROJECT_KEY] localization diff" comment describes a historical duplicate-file diff, not a registered localization token.
+
 ---
 
 ## §2 Parameterization seam location

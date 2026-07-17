@@ -115,6 +115,17 @@ A skill MUST have a non-empty `reference/` subdirectory (≥1 `*.md` file) when 
 2. `wc -c SKILL.md` > **25600** (25 KB)
 3. The `## Domain-Specific Failure Modes` section has **≥ 4** entries (regex `^### .+ — (TRIG|INPUT|PROC|OUT|HAND)`, per [failure-mode-standard.md](../standards/failure-mode-standard.md)) **AND** the skill had `references/*.md` files in its baseline `.skill` package tarball
 
+### Threshold semantics — soft authoring guideline vs. hard references/ gate
+
+Two distinct size conventions govern a SKILL.md, and they must not be conflated:
+
+- **Hard `references/` gate (this §5) — REQUIRED, gate-enforced.** The size-based `references/`-requirement triggers above (`> 400` lines / `> 25600` bytes) are **triggers, not size caps.** When either is crossed, a non-empty `references/` subtree is REQUIRED — and *that* requirement, not any line ceiling, is what `deploy.sh --check` Check 6 and `core/deploy/tools/check-canonical-structure.sh` enforce (the script's `C6_LINE_THRESHOLD=400` / `C6_BYTE_THRESHOLD=25600`). A skill that crosses a trigger **and carries a non-empty `references/` subtree is compliant**, however far it exceeds the trigger.
+- **Soft ~500-line authoring guideline (`pmo-skill-editor`) — ADVISORY.** The "keep SKILL.md under 500 lines; refactor detail to reference docs if exceeded" heuristic in `pmo-skill-editor` is an authoring aid, not a gate. It expresses a default preference for compact bodies; it caps nothing, and its line-count regression surface (`pmo-skill-editor` RC-26) is a warning, not a hard fail.
+
+**Re-baseline (recorded rationale).** A **multi-mode skill** — one whose body must carry several modes' worth of decision logic, mode-selection routing, and per-mode failure modes — legitimately exceeds **both** the soft ~500-line guideline **and** the size-based §5 `references/`-requirement triggers. For such a skill the correct structural response is a **non-empty `references/` subtree that offloads extractable detail** (which the hard gate already requires and verifies), **not** a forced trim of the body under a line ceiling. Exceeding the soft ~500-line guideline while the `references/` requirement is satisfied is therefore **soft authoring-guideline debt, not a structural gate failure**, and does not by itself warrant a size-reduction pass.
+
+**Boundary — what this re-baseline does NOT do.** This clause re-scopes the **soft ~500-line authoring guideline only.** It does **not** change the §5 `references/`-requirement triggers (`> 400` lines / `> 25600` bytes), does **not** weaken the `references/` requirement, and does **not** exempt any skill from providing a non-empty `references/` subtree once a trigger is crossed. A skill that crosses a trigger with **no** `references/` subtree remains a hard Check-6 FAIL.
+
 ### Exemption
 
 Skills listed in `.claude/skill-editor-exemption-list.txt` are exempt from the threshold. Initial list contains `pmo-skill-refiner-selftest-canary` (canary-by-design; deliberately minimal). Operator additions follow the "No ungoverned changes" protocol (CLAUDE.md Guardrails) via a tracked GitHub Issue.

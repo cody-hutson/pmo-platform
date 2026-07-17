@@ -1,3 +1,10 @@
+---
+title: Critique Rubric
+purpose: The critique rubric for prompt-builder — how to find the 3–6 highest-leverage issues in a draft prompt rather than mechanically grading every dimension.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Critique Rubric
 
 Use this rubric to find the highest-leverage issues in a draft prompt. Don't

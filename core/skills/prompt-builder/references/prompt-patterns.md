@@ -1,3 +1,10 @@
+---
+title: Prompt Patterns — Baseline Reference
+purpose: A baseline reference of Anthropic prompting best-practice patterns for prompt-builder — the fallback when live WebFetch fails and the cross-check when live guidance conflicts.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Prompt Patterns — Baseline Reference
 
 **Last reviewed**: 2026-04-18
