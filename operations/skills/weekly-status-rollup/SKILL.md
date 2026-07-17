@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v2.21
+version: v2.22
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -198,6 +198,19 @@ no-op (no ≥2-project span possible) — omission is the correct signal, not a 
 After producing the executive summary (Sections 1-5), update PORTFOLIO.md with the
 synthesized data. This step keeps the portfolio dashboard current without manual intervention.
 
+**Consume the per-project rollup entity (do not re-derive).** For each active project,
+`ppm-agent` emits a `[Project]_Rollup.md` composed rollup entity per the **portfolio write-back
+contract** ([`../../../core/standards/portfolio-writeback-contract.md`](../../../core/standards/portfolio-writeback-contract.md)) — a 7-field
+per-project publishing schema (`status`, `top_risks[]`, `key_dependencies[]`, `capacity_signal`,
+`milestone_delta`, `cross_project_conflicts[]`, `last_published`). This section CONSUMES those
+fields and composes the PORTFOLIO.md sections (the contract's S1–S8 section-schema map) from
+them **rather than re-deriving each field**. In production the deterministic composer is invoked
+with `--as-of=today`; it honors the `[STALE]` marker — a field whose age (`today − last_published`,
+**business days**) exceeds `3 bd` renders `[STALE]` inline, and `> 5 bd` auto-degrades. The one
+staleness mechanism lives in the contract; the health-score layer supplies only the threshold
+values. `cross_project_conflicts[]` makes the Cross-Project RAID (S6) and Resource Conflicts (S8)
+sections render deterministically from fields, not agent-synthesized prose.
+
 **What gets written back:**
 
 For each active project in PORTFOLIO.md:
@@ -207,6 +220,9 @@ For each active project in PORTFOLIO.md:
    - `Health`: 🟢/🟡/🔴 as determined in Section 1
    - `Critical Path Item`: Top blocker or next milestone from Section 2
    - `Go-Live`: Updated if date changed during the week (evidence-tagged)
+   - `Last-Validated`: The rollup's `last_published` (ISO date) — the per-project freshness
+     stamp that drives the `[STALE]` marker. Distinct from the portfolio-level `Last Updated`
+     meta line (item 4), which stays.
 
 2. **Health Indicators table** — Update each dimension:
    - `Schedule`: Status + 1-line evidence from this week

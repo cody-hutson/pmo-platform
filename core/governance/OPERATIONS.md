@@ -957,6 +957,7 @@ These are living documents. Update cadence and ownership are defined below.
 | `[Project]_RACI.md` | Responsibility-assignment matrix (workstream × role → R/A/C/I; exactly one A per row) for the Stakeholder domain. Schema in tracker-schemas.md § Tracker 9. | Document Tier 1 | Process Designer | At planning; reviewed on org/scope change. |
 | `[Project]_Change_Log.md` | Change-control log: one row per change request with type, scope/schedule/cost impact, status, decision owner. Baseline change history. | Document Tier 2 | Delivery Engine | On change-request raise + decision. |
 | `[Project]_Lessons_Learned.md` | Lessons register: one row per lesson (category, what happened, root cause, recommendation, adoption owner) + went-well / improve / future-recommendations (PRINCE2 lessons log). | Document Tier 2 | PPM Agent | At retro/phase-gate + closure. |
+| `[Project]_Rollup.md` | Per-project portfolio publishing rollup — the 7-field write-back contract (status, top_risks, key_dependencies, capacity_signal, milestone_delta, cross_project_conflicts, last_published). A COMPOSED read-surface over the Project/Milestone/RAID/Resource/XPD/XRC entities (ADR-019 compose-not-absorb; no roster entity) — staged for the PORTFOLIO.md writer via weekly-status-rollup Section 6, never auto-written into projects/. Contract: `core/standards/portfolio-writeback-contract.md`. | Document Tier 2 | PPM Agent | Weekly (published); refreshed per-field cadence |
 
 #### People Capability/Coverage Graph (operator-instance, cross-cutting)
 
