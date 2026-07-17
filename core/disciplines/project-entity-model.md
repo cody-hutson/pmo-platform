@@ -411,6 +411,8 @@ Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifa
 | 18 | Work Item | project-scoped → `[Project]/` | embedded-in-parent | Living (B) |
 | 19 | Finding | project-scoped → `[Project]/` | embedded-in-parent | Living (B) |
 
+**Program physicalization note (entity 14 — additive; frozen fields UNCHANGED).** The Program entity's frozen `storage_tier: portfolio-level → projects/_config/` and `persistence_mode: embedded-in-parent` (row 14 above) physicalize as **frontmatter-primary**: a Program is classified by its `program_id` frontmatter field, not by folder location, and its record is embedded in the portfolio-level config per `embedded-in-parent` — there is **no dedicated program folder**. This is a physicalization clarification only: it changes **no** frozen field and adds **no** new storage tier (the map has three frozen storage tiers — project-scoped, cross-project-shared, portfolio-level — and Program stays a portfolio-level entity within them; `storage_tier`/`persistence_mode` values are UNCHANGED). Filename / format serialization stays deferred to G3/G4 per the §2 boundary axiom. The portfolio/program/project naming conventions that consume this classifier live in the `### Operational Tier Taxonomy & Naming Conventions` block in `CLAUDE.md` (canonical) — referenced here, not restated.
+
 ## 8. Worked Examples
 
 Three worked instances (AC-7) — Milestone, Person, Plan — transcribed verbatim from the FROZEN Stage-5 spec. Each shows the 7 Core fields + entity-specific fields + the two lifecycle axes + a relationship edge using a referenced MVP type.

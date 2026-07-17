@@ -75,6 +75,7 @@ The entity-page and typed-plan templates from the project-data-architecture init
 | `workstream-entity-template.md` | `_pmo/workstreams/` Workstream entity | §3.3 / ADR-058 |
 | `decision-entity-template.md` | `_pmo/decisions/` Decision entity | §3.5 / ADR-058 |
 | `dependency-entity-template.md` | `_pmo/dependencies/` Cross-Project Dependency (`storage_tier: portfolio-level` view) | §3.15 / §6.3 / ADR-058 |
+| `project-rollup-template.md` | `[Project]/` **composed** per-project portfolio rollup (`entity_type: Project Rollup (composed)`; 7-field write-back contract; reads 6 source entities, owns none — NOT a roster entity) | portfolio-writeback-contract.md / ADR-019 |
 | `plan-templates/comms.md` | Plan — `plan_type: comms` | §3.4a / ADR-059 |
 | `plan-templates/training.md` | Plan — `plan_type: training` (terminal `delivered`) | §3.4a / ADR-059 |
 | `plan-templates/hypercare.md` | Plan — `plan_type: hypercare` (terminal `closed`) | §3.4a / ADR-059 |
