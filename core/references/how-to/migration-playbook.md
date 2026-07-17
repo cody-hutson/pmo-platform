@@ -1,3 +1,10 @@
+---
+title: Migration Playbook
+purpose: The proven steps, sequencing, verification, and rollback for a corpus or structural migration in this repository — a path restructure, directory rename, module move, re-versioning, or single-source consolidation.
+type: how-to
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Migration Playbook
 

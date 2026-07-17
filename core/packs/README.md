@@ -1,3 +1,10 @@
+---
+title: Methodology Packs (core/packs/)
+purpose: README for core/packs/ — defines the methodology-pack unit (per-archetype work-item kinds, label contributions, and gates) and the pack layout and inheritance model.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Methodology Packs (`core/packs/`)
 
 A **methodology pack** is the plug-and-play unit that bundles, per delivery-approach

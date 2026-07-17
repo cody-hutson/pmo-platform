@@ -1,3 +1,10 @@
+---
+title: core/references/reference/
+purpose: README for the reference folder — factual technical descriptions of platform machinery, consulted mid-task by both operations and release.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # core/references/reference/
 

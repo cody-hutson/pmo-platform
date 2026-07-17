@@ -1,3 +1,10 @@
+---
+title: KM Scanning — PMO QA Auditor Mode E Reference
+purpose: The reference for pmo-qa-auditor Mode E (knowledge-management scanning) — how the auditor scans an output for KM signals and codification candidates.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # KM Scanning — PMO QA Auditor Mode E Reference
 

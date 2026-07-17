@@ -1,3 +1,10 @@
+---
+title: Domain Guides
+purpose: Target-type-specific prompt-shape guidance for prompt-builder — the differing anatomy of a good SKILL.md body, everyday Claude ask, agent or system prompt, and skill description.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 # Domain Guides
 
 The shape of a "good prompt" depends entirely on what kind of prompt it is.

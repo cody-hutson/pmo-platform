@@ -1,3 +1,10 @@
+---
+title: Acceptance-Review Mode Spec — pmo-qa-auditor Mode H
+purpose: The detail spec for pmo-qa-auditor Mode H (Acceptance Review) — the per-criterion AC-verdict machinery, consumed from its canonical homes.
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
 <!-- reference-durability: allow-link -->
 # Acceptance-Review Mode Spec — pmo-qa-auditor Mode H
 

@@ -1,13 +1,14 @@
-<!-- reference-durability: allow-link -->
-<!-- repo-integrity: allow-issue-ref -->
 ---
 title: Claude Code Runtime State Reference
 purpose: Factual lookup for the known runtime-state surfaces Claude Code maintains on the host — config auto-snapshot backups, session storage, OS-keychain entries, and env-var precedence — so harness work relies on them intentionally rather than rediscovering them by home-directory inspection.
 type: reference
+status: ACTIVE
 layer: 1
 reversibility: CHEAP / Confidence HIGH
 consumers: Any agent performing harness, account-switcher, deploy, or runtime-state-dependent work (release-pipeline spokes, harness sessions, repo-maintenance sessions).
 ---
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
 
 # Claude Code Runtime State Reference
 
