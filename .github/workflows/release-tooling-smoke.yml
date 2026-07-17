@@ -139,9 +139,11 @@ jobs:
 
   node-graph-tools-selftest:
     name: Node-graph stdlib tools self-test (Ubuntu)
-    # The three v3.55 node-graph tools ship a committed --self-test; without this job
+    # The doc-warehouse stdlib tools ship a committed --self-test; without this job
     # those self-tests rot unexercised (Stage-8 QA finding F2). Pure-stdlib and
     # OS-agnostic, so ubuntu-latest — no pip install, no network, no gh/credentials.
+    # Roster: the three v3.55 node-graph tools + compose-portfolio (the v3.75
+    # PORTFOLIO.md composer, same doc-warehouse FK-chain family).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -158,7 +160,7 @@ jobs:
         run: |
           set -uo pipefail
           rc=0
-          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index; do
+          for t in stamp-node-frontmatter backfill-relationship-edges build-doc-index compose-portfolio; do
             echo "::group::${t}.py --self-test"
             if python3 "core/deploy/tools/${t}.py" --self-test; then
               echo "OK: ${t}"
