@@ -29,8 +29,9 @@ contract. So the 7 fields do NOT live in the index. This composer therefore:
     from "discovered files sorted by relative POSIX path"; it needs no pre-built
     binary index, so the composer is self-contained and self-testable.
 The SQLite index's SUPPLEMENTARY doc-health strip (orphan/domain counts, OQ-1) is
-DEFERRED per the Collective-Review scope-lock (v3.75 is kept to the 7-field
-project-health scope); it is the documented seam where the index would wire in.
+DEFERRED per the Collective-Review scope-lock (this release — `pda-rollup-and-portfolio`
+— is kept to the 7-field project-health scope); it is the documented seam where the
+index would wire in.
 
 STALENESS ANCHOR (pinned by the contract §3, XC-1 reconciliation). Age is
 `--as-of - last_published` in BUSINESS days. Production is invoked with
@@ -124,10 +125,19 @@ RAG_VALUES = ("green", "yellow", "red")
 RAG_GLYPH = {"green": "\U0001F7E2", "yellow": "\U0001F7E1", "red": "\U0001F534"}
 
 # Per-structured-field required sub-keys (shape validation for drift detection).
+# HARD-required = the item-identity keys below (a missing one is structural drift ->
+# exit 1 halt). `owner` / `mitigation` on the two risk-bearing legs (top_risks,
+# cross_project_conflicts) are DELIBERATELY NOT hard-required: a row missing one
+# renders the S6 `[DRIFT: incomplete risk record — <field> missing]` repair flag
+# inline (contract §2 "flagged for repair"; weekly-status-rollup §3.6/§6) and STILL
+# composes (exit 0) — a soft render-flag, NOT the exit-1 halt reserved for TYPE /
+# structural violations. This is the reconciliation that makes the composer's S6
+# render consistent with the SKILL.md S6 shell (which renders — never halts — the
+# incomplete-risk repair flag).
 LIST_ITEM_KEYS = {
-    "top_risks": ("risk", "owner", "mitigation"),
+    "top_risks": ("risk",),
     "key_dependencies": ("from", "to", "state"),
-    "cross_project_conflicts": ("conflict", "projects_affected", "owner", "mitigation"),
+    "cross_project_conflicts": ("conflict", "projects_affected"),
 }
 OBJECT_KEYS = {
     "capacity_signal": ("utilization", "gap_rag"),
@@ -509,6 +519,22 @@ def _get(mapping, key, default="—"):
     return _md_escape(v) if v not in ("", None) else default
 
 
+def _incomplete_risk_flag(item) -> str:
+    """The S6 repair flag (weekly-status-rollup §3.6; contract §2 "flagged for
+    repair"): a risk-bearing row (RAID / XRC leg) missing an `owner` or a
+    `mitigation` renders `[DRIFT: incomplete risk record — <field> missing]` inline
+    — the drift is VISIBLE in the composed output rather than silently dropped, and
+    the row still composes (exit 0). Returns "" when both are present. The XPD
+    (dependency) leg carries no owner/mitigation in the contract and never routes
+    through here (it renders `—` by design, never a drift flag)."""
+    if not isinstance(item, dict):
+        return ""
+    missing = [f for f in ("owner", "mitigation") if not str(item.get(f, "")).strip()]
+    if not missing:
+        return ""
+    return f" [DRIFT: incomplete risk record — {' + '.join(missing)} missing]"
+
+
 # --------------------------------------------------------------------------- #
 # Section renderers. Each returns a list of markdown lines (blank-line-terminated).
 # The compose() core loop calls these blind — no section shape is hard-coded there.
@@ -600,24 +626,42 @@ def render_s5(sec, ctx) -> list:
 
 def render_s6(sec, ctx) -> list:
     # Cross-Project RAID — aggregated across projects from THREE contract fields:
-    # top_risks[] (RAID), key_dependencies[] (XPD), cross_project_conflicts[] (XRC).
-    # cross_project_conflicts[] is what makes S6 fully contract-driven (scope-lock
-    # XC-2, PATH 1). #1169 injects additional risk fill via this same registry slot.
+    # top_risks[] (RAID · Risk), key_dependencies[] (XPD · Dependency),
+    # cross_project_conflicts[] (XRC · Conflict). cross_project_conflicts[] is what
+    # makes S6 fully contract-driven (scope-lock XC-2, PATH 1); #1169 fills the risk
+    # aggregation via this same registry slot.
+    #
+    # The 6-column shell is the ONE shared shape across this composer, the contract
+    # §4 S6 spec, and weekly-status-rollup §3.6/§6:
+    #   Type | Item | Owner | Mitigation | Source-Tier | Projects-Affected
+    #   * Type          = the source leg (Risk / Dependency / Conflict).
+    #   * Source-Tier   = `Project` for the project-scoped RAID leg; `Portfolio` for
+    #                     the already-portfolio-tier XPD / XRC legs (the escalation
+    #                     ladder the shell enumerates: Team → Project → … → Portfolio).
+    #   * Projects-Affected = the owning project (RAID) / the linked {from},{to}
+    #                     projects (XPD) / projects_affected[] (XRC).
+    # A risk-bearing row (RAID / XRC) missing its owner or mitigation renders the
+    # SKILL.md `[DRIFT: incomplete risk record]` repair flag inline (contract §2
+    # "flagged for repair") — visible drift, not a silent drop. The XPD leg has no
+    # owner/mitigation in the contract, so it renders `—` (never a drift flag).
     out = [f"## {sec.title}", "",
-           "| Item | Owner | Mitigation | Source |",
-           "|---|---|---|---|"]
+           "| Type | Item | Owner | Mitigation | Source-Tier | Projects-Affected |",
+           "|---|---|---|---|---|---|"]
     for r in ctx.rollups:
         for item in r.top_risks:
-            out.append(f"| {_get(item, 'risk')} | {_get(item, 'owner')} | "
-                       f"{_get(item, 'mitigation')} | RAID · {r.project_id} |")
+            flag = _incomplete_risk_flag(item)
+            out.append(f"| Risk | {_get(item, 'risk')}{flag} | {_get(item, 'owner')} | "
+                       f"{_get(item, 'mitigation')} | Project | {r.project_id} |")
         for dep in r.key_dependencies:
             desc = f"{_get(dep, 'from')} → {_get(dep, 'to')} ({_get(dep, 'state')})"
-            out.append(f"| {desc} | — | — | XPD · {r.project_id} |")
+            linked = f"{_get(dep, 'from')}, {_get(dep, 'to')}"
+            out.append(f"| Dependency | {desc} | — | — | Portfolio | {linked} |")
         for cf in r.cross_project_conflicts:
             affected = cf.get("projects_affected") if isinstance(cf, dict) else None
             aff = ", ".join(affected) if isinstance(affected, list) else _get(cf, "projects_affected")
-            out.append(f"| {_get(cf, 'conflict')} ({aff}) | {_get(cf, 'owner')} | "
-                       f"{_get(cf, 'mitigation')} | XRC · {r.project_id} |")
+            flag = _incomplete_risk_flag(cf)
+            out.append(f"| Conflict | {_get(cf, 'conflict')}{flag} | {_get(cf, 'owner')} | "
+                       f"{_get(cf, 'mitigation')} | Portfolio | {aff} |")
     out.append("")
     return out
 
@@ -749,13 +793,19 @@ def _selftest_as_of(root: Path) -> date:
 
 def run_self_test() -> int:
     """Assert the composer's contract against the committed fixture:
-      (idempotency) two runs on unchanged input are byte-identical (SHA-256).
-      (render)      all 8 section headers (S1-S8) + the meta line are present.
-      (staleness)   the aged fixture rollup renders [STALE]/degrade; the fresh one
-                    does not — proving the anchor discriminates.
-      (exit-sep)    a clean compose with [STALE] present is exit 0 (NOT a finding).
-      (drift)       a type-violating field raises ContractDrift (-> exit 1 halt).
-      (guard)       an --out path under projects/ is rejected.
+      (idempotency)  two runs on unchanged input are byte-identical (SHA-256).
+      (render)       all 8 section headers (S1-S8) + the meta line are present.
+      (s6-shell)     S6 renders the 6-column shell (Type|Item|Owner|Mitigation|
+                     Source-Tier|Projects-Affected) shared with contract §4 + the
+                     weekly-status-rollup S6 shell.
+      (staleness)    the aged fixture rollup renders [STALE]/degrade; the fresh one
+                     does not — proving the anchor discriminates.
+      (exit-sep)     a clean compose with [STALE] present is exit 0 (NOT a finding).
+      (drift)        a type-violating field raises ContractDrift (-> exit 1 halt).
+      ([DRIFT] render) a risk-bearing row missing an owner/mitigation renders the
+                     inline `[DRIFT: incomplete risk record]` repair flag and STILL
+                     composes (exit 0) — the soft path, distinct from the hard halt.
+      (guard)        an --out path under projects/ is rejected.
     """
     import contextlib
     import io
@@ -794,6 +844,14 @@ def run_self_test() -> int:
         if "Last Updated:" not in out1:
             failures.append("(render) meta 'Last Updated' line missing")
 
+        # (s6-shell) S6 renders the 6-column shell shared with contract §4 + the
+        # weekly-status-rollup S6 shell (Type|Item|Owner|Mitigation|Source-Tier|
+        # Projects-Affected) — the F-02 reconciliation.
+        s6_header = ("| Type | Item | Owner | Mitigation | Source-Tier | "
+                     "Projects-Affected |")
+        if s6_header not in out1:
+            failures.append("(s6-shell) S6 6-column shell header not rendered")
+
         # (staleness) the aged rollup marks [STALE]; at least one degrade fires.
         if STALE_MARKER not in out1 and DEGRADE_MARKER not in out1:
             failures.append("(staleness) no [STALE]/degrade marker rendered on the aged fixture")
@@ -818,6 +876,23 @@ def run_self_test() -> int:
         rc_drift = _quiet_main(["--root", str(drift_root), "--as-of", as_of.isoformat()])
         if rc_drift != 1:
             failures.append(f"(drift) type violation returned exit {rc_drift}, expected 1")
+
+        # ([DRIFT] render) a risk-bearing row (RAID / XRC) missing an owner is a SOFT
+        # incompleteness — it renders the S6 `[DRIFT: incomplete risk record]` repair
+        # flag INLINE and STILL composes (exit 0), distinct from the hard type-drift
+        # halt above. This is the SKILL.md-consistent path (§3.6): visible drift, not
+        # a silent drop and not an abort.
+        incomplete_root = Path(td) / "incomplete"
+        shutil.copytree(fixture, incomplete_root)
+        victim2 = discover_rollups(incomplete_root)[0]   # proj-alpha (sorted first)
+        txt2 = victim2.read_text(encoding="utf-8").replace('    owner: "PM-Alpha"\n', "", 1)
+        victim2.write_text(txt2, encoding="utf-8")
+        incomplete_out = compose(incomplete_root, as_of)
+        if "[DRIFT: incomplete risk record" not in incomplete_out:
+            failures.append("([DRIFT] render) an incomplete risk row did NOT render the repair flag")
+        rc_incomplete = _quiet_main(["--root", str(incomplete_root), "--as-of", as_of.isoformat()])
+        if rc_incomplete != 0:
+            failures.append(f"([DRIFT] render) incomplete-risk compose returned exit {rc_incomplete}, expected 0")
 
         # (guard) an --out path under projects/ is rejected.
         if not out_path_rejected(str(Path(td) / "projects" / "_config" / "PORTFOLIO.md")):

@@ -142,8 +142,8 @@ jobs:
     # The doc-warehouse stdlib tools ship a committed --self-test; without this job
     # those self-tests rot unexercised (Stage-8 QA finding F2). Pure-stdlib and
     # OS-agnostic, so ubuntu-latest — no pip install, no network, no gh/credentials.
-    # Roster: the three v3.55 node-graph tools + compose-portfolio (the v3.75
-    # PORTFOLIO.md composer, same doc-warehouse FK-chain family).
+    # Roster: the three v3.55 node-graph tools + compose-portfolio (the
+    # pda-rollup-and-portfolio PORTFOLIO.md composer, same doc-warehouse FK-chain family).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

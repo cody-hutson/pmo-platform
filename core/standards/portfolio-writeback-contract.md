@@ -73,7 +73,7 @@ The deterministic composer renders these `PORTFOLIO.md` sections from the §2 fi
 | **S3** | `## Capacity Dashboard` (per-project utilization + portfolio demand-supply gap RAG) | NEW | `capacity_signal` | Resource (8) |
 | **S4** | `## Portfolio R-G-T Allocation` (Run / Grow / Transform shares; `Unclassified` coverage gap) | NEW | — (reads `PROJECT.md` `investment_class`) | Project (1) |
 | **S5** | per-project `### Top Risks` (≤ 5 rows: risk · owner · mitigation) | EXISTING → extend | `top_risks[]` | RAID Item (6) |
-| **S6** | `## Cross-Project RAID` (aggregated: risk · owner · mitigation · source) | NEW | `top_risks[]` + `key_dependencies[]` + `cross_project_conflicts[]` | RAID Item (6) + XPD (15) + XRC (16) |
+| **S6** | `## Cross-Project RAID` (aggregated 6-column shell: `Type · Item · Owner · Mitigation · Source-Tier · Projects-Affected`; `Type` = source leg {Risk, Dependency, Conflict}, `Source-Tier` = `Project` for the RAID leg · `Portfolio` for XPD/XRC; a risk-bearing row missing an owner/mitigation renders an inline `[DRIFT: incomplete risk record]` repair flag) | NEW | `top_risks[]` + `key_dependencies[]` + `cross_project_conflicts[]` | RAID Item (6) + XPD (15) + XRC (16) |
 | **S7** | `## Cross-Project Dependencies` | EXISTING | `key_dependencies[]` | XPD (15) |
 | **S8** | per-project `### Resource Conflicts` | EXISTING | `cross_project_conflicts[]` | XRC (16) |
 | **meta** | `Last Updated` (portfolio-level) + inline `[STALE]` markers | mechanism | `last_published` + per-field cadence | — |
