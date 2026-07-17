@@ -310,14 +310,22 @@ find_log_row() {
 # Fallback (defensive): if no field matches (a pure-version row with no slug column),
 # return field 1 stripped — preserving the prior behavior.
 #
-# #667 Finding 2 (slug mis-derivation) is RESOLVED on HEAD by this position-
-# independent resolver: regex branch 1 handles version-prefixed slugs (vX.Y-name,
-# older rows) and branch 2 handles bare theme-named slugs (NN-name, current rows,
-# e.g. 69-triage-and-bundling-signals). The downstream `gh pr create --milestone`
-# / `gh issue list --milestone` consume the milestone TITLE, and the milestone
-# title IS the bare slug — so a theme-named row resolves to the exact milestone
-# title. The defect Finding 2 described is no longer live; the self-test below
-# carries a bare-slug-theme-named case asserting title resolution.
+# Three regex branches cover the milestone-title shapes that appear in RELEASE_LOG:
+#   1. version-prefixed slugs   — vX.Y-name (older rows, e.g. v3.18-corpus-integrity-enforcement)
+#   2. NN-prefixed slugs        — NN-name (Epic-Readiness-Playbook, e.g. 69-triage-and-bundling-signals)
+#   3. pure-alpha theme-named   — name-with-hyphens (e.g. knowledge-corpus-hygiene) — per #2539
+# The downstream `gh pr create --milestone` / `gh issue list --milestone` consume the
+# milestone TITLE, and the milestone title IS the slug — so each shape resolves to the
+# exact milestone title.
+#
+# Branch 3 closes the residual that #667 Finding 2 described and #2539 re-observed:
+# branches 1+2 alone fall through on a pure-alpha title, so the fallback returned the
+# Version field as the slug. That mis-derivation is silent and two-headed — phase 6
+# anchors the Version as a non-first RELEASE_LOG column (0 row matches → --apply abort)
+# while phase 4's `gh issue list --milestone <version>` matches no milestone and reports
+# 0 open release issues (a false PASS). Note --dry-run does NOT surface either symptom:
+# it resolves the row via find_log_row on the Version key. The self-test below carries a
+# case per branch, including pure-alpha versioned and version-less rows.
 extract_milestone_slug() {
   local row="$1"
   /usr/bin/printf '%s' "$row" | /usr/bin/awk -F ' \\| ' '
@@ -330,8 +338,14 @@ extract_milestone_slug() {
         if (f == "") continue
         if (field1 == "") field1 = f
         # version-prefixed slug (vMAJOR.MINOR[letter][-N]) followed by a hyphenated slug tail,
-        # OR an NN-prefixed Epic-Readiness-Playbook milestone slug (e.g. 63-finding-disposition-discipline).
-        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/ || f ~ /^[0-9]+-[A-Za-z]/) { print f; exit }
+        # OR an NN-prefixed Epic-Readiness-Playbook milestone slug (e.g. 63-finding-disposition-discipline),
+        # OR a pure-alpha theme-named slug (e.g. pda-rollup-and-portfolio, knowledge-corpus-hygiene).
+        # NOTE: no apostrophes in this awk block — it is one single-quoted shell argument.
+        # The pure-alpha branch is anchored end-to-end so that the Version field of a
+        # version-less row ("name (version-less)") cannot match and shadow the real field-2
+        # slug; a bare Version field (v3.78) cannot match either, having no hyphen after
+        # the leading alnum run.
+        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/ || f ~ /^[0-9]+-[A-Za-z]/ || f ~ /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/) { print f; exit }
       }
       # Fallback: no hyphenated-slug field found — emit field 1 (legacy/pure-version).
       print field1
@@ -2408,6 +2422,17 @@ EOF
   sample_row="| v2.36 | 69-triage-and-bundling-signals | #500 | #2284 | sha | v2.36 | VERIFIED | 2026-06-28 |"
   [[ "$(extract_milestone_slug "$sample_row")" == "69-triage-and-bundling-signals" ]] || { echo "FAIL: extract_milestone_slug (8-col, bare theme-named slug) should return field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
   [[ "$(extract_milestone_slug "$sample_row")" != "v2.36" ]] || { echo "FAIL: extract_milestone_slug returned the bare Version, not the theme-named slug"; failures=$((failures+1)); }
+  # #2539 (branch 3): a PURE-ALPHA theme-named slug (no vX.Y- and no NN- prefix) on a
+  # versioned row must resolve to the field-2 title, not fall back to the Version field.
+  # Regression anchor: the v3.78 close-out, milestone pda-rollup-and-portfolio.
+  sample_row="| v3.78 | pda-rollup-and-portfolio | #157 | #3549 | sha | v3.78 | DEPLOYED | 2026-07-17 |"
+  [[ "$(extract_milestone_slug "$sample_row")" == "pda-rollup-and-portfolio" ]] || { echo "FAIL: extract_milestone_slug (8-col, pure-alpha slug) should return field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  [[ "$(extract_milestone_slug "$sample_row")" != "v3.78" ]] || { echo "FAIL: extract_milestone_slug (#2539) returned the bare Version, not the pure-alpha slug"; failures=$((failures+1)); }
+  # #2539 (branch 3, anchoring): a VERSION-LESS row carries the slug plus a
+  # " (version-less)" suffix in field 1; the end-anchor must reject field 1 so the loop
+  # reaches the clean field-2 title.
+  sample_row="| public-flip-install-blockers (version-less) | public-flip-install-blockers | #606 | #627 | sha | (none) | VERIFIED | 2026-06-04 |"
+  [[ "$(extract_milestone_slug "$sample_row")" == "public-flip-install-blockers" ]] || { echo "FAIL: extract_milestone_slug (version-less row) should return the clean field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
 
   # Test 4b: phase_append_release_digest + phase_append_release_index (#667 F3/F6)
   # — offline, hermetic. Drives both append phases against sandbox corpus files
