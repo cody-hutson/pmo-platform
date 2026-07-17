@@ -858,6 +858,8 @@ Folder purposes for the closed 5-bin set (ADR-080). Legacy `01-08` bins map per 
 
 **Ambiguity rule:** When a file's content serves multiple purposes (e.g., a Jira export that contains both project plan milestones and test case data), route by primary function. A project plan exported from Jira routes to `1-Governance/` even though it's a Jira CSV. A test-specific export routes to `2-Delivery/Testing/`. When genuinely ambiguous, File Router presents both options to the user.
 
+**Program-tier routing (portfolio-level, not project-level).** Program-level artifacts — a program charter, a benefits-realization plan, a program roadmap, or a cross-component risk rollup — home at the **portfolio tier** `projects/_config/`, classified by their `program_id` frontmatter (the Program record is embedded there per the entity model's storage map). They MUST NOT be filed under a component project's bins: a program's cross-component coordination artifact stranded inside one component project is orphaned the moment that project closes (the anti-stranding rule — a program's identity is its `program_id` edge, not a component's folder). There is **no dedicated program folder** — the `program_id` classifier, not a folder location, determines tier. For the full portfolio/program/project naming conventions and the "Program-scoped ≠ Program tier" disambiguation, see the `### Operational Tier Taxonomy & Naming Conventions` block in `CLAUDE.md` (canonical) — not restated here.
+
 ---
 
 ## Generated-Artifact Cleanup Protocol
