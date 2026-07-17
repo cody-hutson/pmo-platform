@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.78] - 2026-07-17
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.78_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.78)
+
 ## [v3.77] - 2026-07-17
 
 On-demand `health-check` rollups, a semantic skill-routing conflict audit, and a clarified SKILL.md sizing rule that stops compliant multi-mode skills reading as oversized.

@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.78 (2026-07-17) — <headline — populated by operator at chore PR review>
+
 ### v3.77 (2026-07-17) — On-demand health-check rollups, semantic routing-conflict detection, and a clearer SKILL.md sizing rule
 A skill-suite hardening release — three disjoint slices on one PR (#3540). **#155** extends `health-check` with a `rollup` mode (`--scope portfolio|project`, `--depth full|status`) under a compose-not-absorb scope-lock (ADR-019): `--scope portfolio` invokes `weekly-status-rollup` Section 6 for the PORTFOLIO.md composition and stages the proposal to `08-Generated/_health-check/`, never writing the bridge file; the 7 existing modes + the 5-section contract are byte-identically preserved. **#2699** adds `run_routing_audit.py` — a three-tier Jaccard→embed→judge pipeline with a lazily-imported optional embedding backend + stub fallback that keeps the zero-dependency offline CI contract intact; **ADR-084** records the optional-heavy-dependency precedent, and `run_eval_audit.py` is imported read-only. **#3114** re-baselines the ~500-line SKILL.md authoring guideline in `canonical-skill-structure.md §5` as advisory, distinct from the hard `references/` gate (`C6_LINE_THRESHOLD=400`); additive, no skill splits. Re-anchored provisional v3.75→v3.77 after concurrent releases claimed v3.75/v3.76; commits re-signed (CLEAN merge, no admin override). All three slices Stage-8 ACCEPT, Stage-9 GO. CHEAP reversibility.
 
