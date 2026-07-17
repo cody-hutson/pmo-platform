@@ -155,10 +155,10 @@ disciplines|rules|governance/`), `other` for the rest of the scanned surface
   resolved to zero/missing files (unverifiable, not clean — the fail-loud
   contract that 18b and Check 42 also honor).
 
-**Global committed-default enforce posture (frontmatter gate, #2221).** The gate
+**Global committed-default enforce posture (frontmatter gate).** The gate
 ships **committed-default enforce across the authored-doc surface**: every finding
 — Tier A and `other` alike — routes to a hard `FAIL` (the split Tier-A-enforce /
-tier-other-warn partition #2220 shipped has collapsed to one global-enforce
+tier-other-warn partition the earlier warn-mode posture shipped has collapsed to one global-enforce
 verdict). Activation is the committed default in `deploy.sh` (`c50_mode` is
 hardcoded `enforce`) and does **not** depend on an un-committed
 `doc-frontmatter.mode` file, so any clone enforces — a fresh non-conformant
@@ -166,7 +166,7 @@ hardcoded `enforce`) and does **not** depend on an un-committed
 authored-doc subtree globs (the six Tier-A governance-class dirs plus `core/*.md`,
 `core/deploy/tools/*.md`, `core/diagrams/*.md`, `core/packs/*.md`,
 `core/references/**/*.md`, and `core/skills/**/references/*.md`); `core/ADRs/`
-(disjoint ADR schema, #1488) and `**/tests/fixtures/**` are excluded by
+(disjoint ADR schema, owned by a separate ADR-frontmatter effort) and `**/tests/fixtures/**` are excluded by
 construction. The global `DEPLOY_CHECK_MODE=off` kill-switch is retained so the
 gate stays disable-able in an emergency, not un-disableable.
 
