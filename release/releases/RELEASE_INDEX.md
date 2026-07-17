@@ -5,6 +5,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
 | v3.77 | skill-hardening | 2026-07-17 | Skill-suite hardening — on-demand health-check rollups, semantic routing-conflict detection, and a clarified SKILL.md sizing rule | #3540 | [notes/v3.77_RELEASE_NOTES.md](notes/v3.77_RELEASE_NOTES.md) |
+| v3.76 | knowledge-corpus-hygiene | 2026-07-17 | Corpus-wide frontmatter enforce + AUDIT_FRAMEWORK refreshed + SPI bands single-sourced + `[PROJECT_KEY]` classified + vision/install codified (ADR-083) | #3545 | [notes/v3.76_RELEASE_NOTES.md](notes/v3.76_RELEASE_NOTES.md) |
 | v3.75 | 101-skill-and-data-entity-hygiene | 2026-07-17 | — | #3544 | [notes/v3.75_RELEASE_NOTES.md](notes/v3.75_RELEASE_NOTES.md) |
 | v3.74 | build-security-hardening | 2026-07-12 | Durable CI regression-prevention gates for the two build-security advisory classes (hook fail-open + eval-viewer stored XSS) + Security elevated to build-philosophy's 6th first-class value (ADR-081) | #3428 | [notes/v3.74_RELEASE_NOTES.md](notes/v3.74_RELEASE_NOTES.md) |
 | v3.73.1 | update-refresh-deployed-hooks | 2026-07-12 | `update.sh` now refreshes the deployed security-hook bundle, so hook/helper fixes reach already-installed workspaces | #3431 | [notes/v3.73.1_RELEASE_NOTES.md](notes/v3.73.1_RELEASE_NOTES.md) |

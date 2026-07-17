@@ -14,6 +14,12 @@ On-demand `health-check` rollups, a semantic skill-routing conflict audit, and a
 
 [Full notes](release/releases/notes/v3.77_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.77)
 
+## [v3.76] - 2026-07-17
+
+The platform knowledge base is self-orienting: every `core/` reference doc carries a standard frontmatter header (enforced corpus-wide), the self-audit checklist + a duplicated threshold set point at real locations, `[PROJECT_KEY]` is classified example-data, and the product vision + install model (ADR-083) are codified.
+
+[Full notes](release/releases/notes/v3.76_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.76)
+
 ## [v3.75] - 2026-07-17
 
 Findings become a first-class data-model entity with one accountable owner, and a new `deploy.sh` check guards against skill-output ownership collisions.
