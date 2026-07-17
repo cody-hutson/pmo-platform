@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "weekly roll-up", "weekly status", "SteerCo prep", "SteerCo update", "executive status", "portfolio summary", "portfolio health", "cross-project status."
-version: v2.23
+version: v2.24
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -138,6 +138,58 @@ Both tracks converge on: [single unified priority or action]
 - Shared resource conflicts
 - Items that affect multiple projects
 
+#### Section 3.6: Cross-Project RAID Aggregation (S6 fill logic)
+
+The cross-project items above are rolled up into the composed **`## Cross-Project RAID`**
+portfolio section (S6, staged in Section 6) as a ranked, passive-voice-free risk view. S6 is
+**contract-driven**: the aggregation reads the three cross-project risk fields of the
+[portfolio write-back contract](../../../core/standards/portfolio-writeback-contract.md) §4
+(S6) — it never re-derives them and never hand-types a risk list — so the deterministic
+composer renders the rows from fields, not from agent-synthesized prose. This sub-block defines
+the 3-leg source union and the per-leg row projection that FILLS the S6 shell (whose columns,
+placement, and empty-state are defined in Section 6); it does not author a parallel cross-project
+risk section — S6 is the single cross-project risk surface.
+
+**3-leg source union** — aggregate the project-scoped leg, surface the two portfolio-tier legs:
+
+| Leg | Contract field (backing entity) | Read filter — risk-bearing states only | Aggregate vs. surface |
+|---|---|---|---|
+| 1 | `top_risks[]` — RAID Item (project-scoped `[Project]/`) | `lifecycle_state ∈ {open, in-progress, mitigating}` AND (`severity` High OR cross-project `impact`) | **aggregate** — roll each project's active RAID up to the portfolio view |
+| 2 | `key_dependencies[]` — Cross-Project Dependency / XPD (portfolio `projects/_config/`) | `state ∈ {open, broken}` (a `satisfied` / `waived` dependency is not a live risk) | **surface** — already portfolio-tier |
+| 3 | `cross_project_conflicts[]` — Cross-Project Resource Conflict / XRC (portfolio `projects/_config/`) | `state ∈ {detected, acknowledged}` (a `resolved` conflict is not a live risk) | **surface** — already portfolio-tier |
+
+The resource-conflict leg reads the `cross_project_conflicts[]` **contract field** (not the
+entity directly), so all three legs are contract fields and S6 renders fully from the contract —
+the composer stays deterministic and no S6 row is agent-synthesized.
+
+**Per-leg row projection → the S6 shell columns** (`Type · Item · Owner · Mitigation · Source-Tier · Projects-Affected`):
+
+| Shell column | Leg 1 — `top_risks[]` (RAID) | Leg 2 — `key_dependencies[]` (XPD) | Leg 3 — `cross_project_conflicts[]` (XRC) |
+|---|---|---|---|
+| **Type (R/A/I/D)** | RAID `raid_type` | `D` (dependency) | `R` (resource-contention risk) |
+| **Item** (risk) | RAID `summary` + `impact` (what is at stake) | `{from}` → `{to}` dependency is `{state}` | `{conflict}` — resource over-allocated across the competing projects |
+| **Owner** | RAID `owner_person_id` → Person | depended-on project lead / recorded dependency owner | resource manager resolving the contention |
+| **Mitigation** | RAID `action_plan` | resolution path (satisfy / waive / escalate) | reallocation / sequencing plan |
+| **Source-Tier** | `Project` | `Portfolio` | `Portfolio` |
+| **Projects-Affected** | the sourcing project | `{from}` + `{to}` projects | `projects_affected[]` |
+
+`Source-Tier` is the escalation-ladder tier defined by the S6 shell (Team → Project → Program →
+Program-Critical/Sponsor → Portfolio), seeded by each entity's storage tier: a project-scoped RAID
+roll-up starts at `Project` (escalating per its severity), a portfolio-tier dependency/conflict at
+`Portfolio`.
+
+**Aggregation rules (bind the fill):**
+- **Rank:** `severity` descending, then `impact` (the queryable key) — highest-signal risks first, not an unordered dump.
+- **Passive-voice-free (hard gate):** every S6 row carries all three of {risk, owner, mitigation}. A row whose contract field lacks an owner or a mitigation renders `[DRIFT: incomplete risk record — <field> missing]` (a repair flag) — never a passive "a risk exists" / "is being monitored" statement (CLAUDE.md § Guardrails, "No passive risk voice").
+- **≥ 3 cross-component risk categories:** the 3 legs ARE the categories — **timeline contention** (open / broken dependencies + RAID schedule risks), **shared bottlenecks** (resource over-allocation), and **cross-project / vendor dependency risk** (dependencies + RAID `Dependency`-type items).
+- **Sourced, not hand-typed:** the population reads the authoritative RAID / XPD / XRC records through the contract fields, so the profile stays current — there is no hand-maintained risk list.
+- **Staleness:** consumes the single `last_published` / `[STALE]` marker owned by the contract (§3); a field aged past cadence renders `[STALE]` — no parallel freshness field.
+- **Dedup:** a cross-project risk appears in **S6 only**; the per-project **S5** (`### Top Risks`) references it with `see Cross-Project: [item]` (the existing "cross-project items live in Section 3 only" convention). S6 (risk-roll-up lens: risk / owner / mitigation) and S7 / S8 (state-register lens: from / to / state; person / projects / pct) are distinct lenses on the same entities, not duplicated content.
+
+**Scope boundary (methodology-neutral):** this produces the neutral rolled-up rows only. The PMI
+"Risk Profile" *presentation* a methodology pack renders on top of these rows is out of scope
+here — owned by the portfolio-framework methodology pack, not this aggregation.
+
 #### Section 3.x: Cross-Project Correction Recurrence
 
 Detect a behavioral correction recurring across projects — a redirect that is not
@@ -271,7 +323,15 @@ For each active project in PORTFOLIO.md:
    - `Stakeholders`: Status + 1-line evidence
    - `Integration Risk`: Status + 1-line evidence (if applicable)
 
-3. **Top Risks** — Replace with current top risks from RAID Log (max 5), citing source
+3. **Top Risks (S5)** — Replace with the current top risks (max 5) as passive-voice-free
+   `risk · owner · mitigation` triples sourced from the `top_risks[]` contract field (RAID Item —
+   `summary` + `impact` → risk; `owner_person_id` → Person → owner; `action_plan` → mitigation),
+   ranked `severity` descending then `impact`. Each row names the risk, a named owner, and a named
+   mitigation; a row missing an owner or a mitigation renders `[DRIFT: incomplete risk record —
+   <field> missing]`, never a passive statement (CLAUDE.md § Guardrails, "No passive risk voice").
+   A cross-project risk is not restated here — it lives in the S6 `## Cross-Project RAID` roll-up
+   (Section 3.6) and is referenced with `see Cross-Project: [item]` (dedup — one surface). Renders
+   `[STALE]` per the contract's freshness marker when the source ages past cadence.
 
 4. **Last Updated** — Set to today's date
 
@@ -298,18 +358,24 @@ Section-6 checkpoint (never a Claude-side `projects/` write):
   project with no `investment_class` is `Unclassified` and surfaced as a coverage gap — never
   heuristically auto-classified from phase or type. (R-G-T investment classification is not the
   `capacity-model.md §5` 60/20/20 capacity effort-split.)
-- **S6 — `## Cross-Project RAID` (shell only).** Placed immediately after
+- **S6 — `## Cross-Project RAID` (shell + fill).** Placed immediately after
   `## Cross-Project Dependencies` (both are portfolio-tier cross-project surfaces). Shell columns:
   `Type (R/A/I/D) | Item | Owner | Mitigation | Source-Tier | Projects-Affected`. Each populated
   row is a passive-voice-free `risk · owner · mitigation` triple; **Source-Tier** enumerates the
   existing escalation ladder ([`escalation-thresholds.md`](../ppm-agent/references/escalation-thresholds.md)
   §2: Team → Project → Program → Program-Critical/Sponsor → Portfolio). **Empty-state:**
   `No cross-project RAID items — [N] per-project risks tracked in project details` (an honest empty
-  state, not a blank section). This section defines the SHELL — columns, placement, and
-  empty-state — ONLY; the cross-project risk-aggregation work item populates the rows (from
-  `top_risks[]` + `key_dependencies[]` + `cross_project_conflicts[]`) into this exact shell. S5
-  (per-project `### Top Risks`) and S6 (cross-project aggregated) are distinct scopes of ONE risk
-  model — composed, never a parallel section.
+  state, not a blank section). The shell — columns, placement, and
+  empty-state — is defined here; its **rows are filled** by the 3-leg cross-project risk
+  aggregation in Section 3.6 above: Leg 1 aggregates the project-scoped `top_risks[]` (RAID Item,
+  ranked `severity` then `impact`), Leg 2 surfaces `key_dependencies[]` (Cross-Project Dependency,
+  `open` / `broken`), Leg 3 surfaces `cross_project_conflicts[]` (Cross-Project Resource Conflict,
+  `detected` / `acknowledged`) — each projected into the shell columns as a passive-voice-free
+  `risk · owner · mitigation` triple with its `Source-Tier`. Because all three are contract fields,
+  the deterministic composer renders S6 from them (no agent-synthesized rows), staged at the
+  Section-6 human checkpoint (never a Claude-side `projects/` write). S5 (per-project
+  `### Top Risks`) and S6 (cross-project aggregated) are distinct scopes of ONE risk model —
+  composed, never a parallel section.
 
 **Write-back rules:**
 - Only update fields where the weekly analysis produced new evidence
