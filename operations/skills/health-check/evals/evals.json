@@ -1,6 +1,6 @@
 {
   "skill_name": "health-check",
-  "notes": "Per-mode binary-judge evals for all 7 modes. v1 (#1125): full / timeline / attribution plus the ADR-051 MCP-degradation case (ids 1-4). v2 (#1126): comms / plan <name> / raid / sources plus the plan no-arg 'which plan?' prompt case (ids 5-9). Fixtures, per-mode judge prompts, and case section-membership specs live under fixtures/, judges/, and cases/. Stakeholder names in fixtures are sanitized.",
+  "notes": "Per-mode binary-judge evals for all 8 modes. v1 (#1125): full / timeline / attribution plus the ADR-051 MCP-degradation case (ids 1-4). v2 (#1126): comms / plan <name> / raid / sources plus the plan no-arg 'which plan?' prompt case (ids 5-9). v3 rollup slice: the rollup mode (mode 8) 3 sub-modes — --scope portfolio (compose-not-absorb via weekly-status-rollup, staged bridge-file proposal), --scope project --depth full (sub-entity scan -> TRACKER_UPDATES), --scope project --depth status (status-fields-only quick refresh) (ids 10-12). Fixtures, per-mode judge prompts, and case section-membership specs live under fixtures/, judges/, and cases/. Stakeholder names in fixtures are sanitized.",
   "evals": [
     {
       "id": 1,
@@ -64,6 +64,27 @@
       "prompt": "/health-check sources --scope Synthetic-Hypercare  (against fixtures/hypercare-window.md)",
       "expected_output": "sources mode emits a canonical-source inventory naming its source-of-truth set — the MCP-primary set (Confluence / Jira / Smartsheet / SharePoint) plus the local fallback set — with a per-source freshness verdict (the headline deliverable). The Confluence sync timestamp recorded in PROJECT.md (April 2) is stale vs the live page (edited April 20) -> ## Auto-Actionable [confidence: HIGH · S2] with a sync-direction recommendation + TRACKER_UPDATES: block. SharePoint (no MCP connector) is listed as missing-but-expected / link-only / content-unverifiable — NOT asserted fresh. Jira sync (April 22, current) and the agreeing Smartsheet exit date land in ## Confirmed [confidence: HIGH · S0]. Five sections in order; every finding labeled. PASS iff the inventory is emitted naming the source-of-truth set, the stale Confluence sync is flagged with a direction, SharePoint is flagged missing-but-expected, and fresh sources are confirmed. Judge: judges/sources.md; case: cases/sources-hypercare.yaml.",
       "files": ["fixtures/hypercare-window.md"]
+    },
+    {
+      "id": 10,
+      "name": "rollup-portfolio-compose-not-absorb",
+      "prompt": "/health-check rollup --scope portfolio  (against fixtures/portfolio-two-project.md; two active projects with rollup entities + a stale PORTFOLIO.md)",
+      "expected_output": "rollup --scope portfolio audits per-project rollup-entity freshness vs PORTFOLIO.md. Synthetic-Alpha's rollup entity (refreshed 2026-04-24: Phase Hypercare, Health 🟡) is newer than PORTFOLIO.md (last updated 2026-04-13: Phase Testing, Health 🟢) -> a PORTFOLIO.md proposal (Phase Testing->Hypercare, Health 🟢->🟡). HEADLINE ASSERTION (compose-not-absorb, ADR-019): the PORTFOLIO.md composition is ROUTED to weekly-status-rollup Section 6 — NOT re-implemented inside health-check — and the staged proposal is re-homed under 08-Generated/_health-check/ and surfaced in ## Rollup-Diffs [MODERATE · HIGH]. PORTFOLIO.md is NOT written directly (bridge-file boundary, AC-3); no TRACKER_UPDATES: block is emitted for the portfolio proposal. The clean Synthetic-Beta row (matches its rollup entity) is NOT flagged. Five sections in order; every finding labeled. PASS iff the proposal is composed via weekly-status-rollup and staged (not written), the aggregation is not re-implemented inside health-check, and the clean row is not flagged. Judge: judges/rollup.md (Invocation A); case: cases/rollup-portfolio.yaml.",
+      "files": ["fixtures/portfolio-two-project.md"]
+    },
+    {
+      "id": 11,
+      "name": "rollup-project-full-sub-entity-scan",
+      "prompt": "/health-check rollup --scope project --depth full  (active project = Synthetic-Hypercare; against fixtures/hypercare-window.md)",
+      "expected_output": "rollup --scope project --depth full scans the project's sub-entities — Milestones (Go-Live April 13 / Hypercare exit April 24), RAID Items (R-PROJ-040 / 041 / 038), Plans (Hypercare Plan), Resources (war-room) — and proposes a refreshed rollup entity. The proposed field changes route via a TRACKER_UPDATES: block in ## Auto-Actionable to /tracker-manager on approval — NOT ## Rollup-Diffs (reserved for PROJECT.md/PORTFOLIO.md) — and are NEVER auto-applied. CONTRACT-TOLERANT: because the portfolio-writeback rollup-contract / rollup entity is not yet shipped, the output surfaces a ## Unknowns coverage note (schema not yet shipped; fields mapped best-effort) rather than crashing or fabricating a rollup entity. Five sections in order; every finding labeled. PASS iff the full four-class sub-entity scan feeds a TRACKER_UPDATES: refresh in ## Auto-Actionable (never ## Rollup-Diffs, never auto-applied) and the absent contract degrades to a ## Unknowns coverage note. Judge: judges/rollup.md (Invocation B); case: cases/rollup-project-full.yaml.",
+      "files": ["fixtures/hypercare-window.md"]
+    },
+    {
+      "id": 12,
+      "name": "rollup-project-status-quick-refresh-distinct",
+      "prompt": "/health-check rollup --scope project --depth status  (active project = Synthetic-Cutover; against fixtures/pre-cutover.md)",
+      "expected_output": "rollup --scope project --depth status is the quick path — it refreshes the rollup entity's status field(s) ONLY, NOT a full Milestones/RAID/Plans/Resources re-derivation. LOAD-BEARING DISTINCTNESS ASSERTION: --depth status is observably lighter than --depth full (id 11) — it does not scan all four sub-entity classes. The proposed status change routes via a TRACKER_UPDATES: block in ## Auto-Actionable, never auto-applied, never in ## Rollup-Diffs. Contract-tolerant: the absent contract degrades to a ## Unknowns coverage note (never a crash/fabrication). Five sections in order; every finding labeled. PASS iff the refresh is status-fields-only (distinct from --depth full), routed via TRACKER_UPDATES: and never auto-applied. Judge: judges/rollup.md (Invocation C); case: cases/rollup-project-status.yaml.",
+      "files": ["fixtures/pre-cutover.md"]
     }
   ]
 }

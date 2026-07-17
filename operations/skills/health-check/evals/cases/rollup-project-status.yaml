@@ -1,0 +1,19 @@
+# Case: rollup mode, --scope project --depth status (quick status-fields-only refresh) against the pre-cutover fixture
+case_id: rollup-project-status
+mode: rollup
+sub_mode: "--scope project --depth status"
+fixture: fixtures/pre-cutover.md
+judge: judges/rollup.md
+prompt: "/health-check rollup --scope project --depth status"   # active project = Synthetic-Cutover (the fixture)
+active_project: Synthetic-Cutover
+expected_section_membership:
+  Auto-Actionable:
+    - "Refreshed rollup-entity status field for Synthetic-Cutover (pre-cutover health/phase signal) — TRACKER_UPDATES: block routed to /tracker-manager"
+  tracker_updates_block: required          # same tracker routing as --depth full
+  Unknowns:
+    - "Portfolio-writeback rollup-contract schema not yet shipped; status field mapped best-effort — coverage note, not a fabrication"
+depth_is_status_fields_only: required      # DISTINCT from --depth full: refreshes only the status field, NOT a full Milestones/RAID/Plans/Resources re-derivation
+lighter_than_full: required                # the load-bearing distinctness assertion vs rollup-project-full
+never_auto_applied: required
+rollup_entity_update_not_in_rollup_diffs: required
+pass_rule: "Status-fields-only quick refresh (NOT a full sub-entity scan) proposes the rollup entity's status field via a TRACKER_UPDATES: block in ## Auto-Actionable (never ## Rollup-Diffs, never auto-applied); behavior is distinctly lighter than --depth full; the absent contract degrades to a ## Unknowns coverage note; five sections in order."

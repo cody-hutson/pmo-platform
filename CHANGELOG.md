@@ -8,6 +8,18 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.77] - 2026-07-17
+
+On-demand `health-check` rollups, a semantic skill-routing conflict audit, and a clarified SKILL.md sizing rule that stops compliant multi-mode skills reading as oversized.
+
+[Full notes](release/releases/notes/v3.77_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.77)
+
+## [v3.75] - 2026-07-17
+
+Findings become a first-class data-model entity with one accountable owner, and a new `deploy.sh` check guards against skill-output ownership collisions.
+
+[Full notes](release/releases/notes/v3.75_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.75)
+
 ## [v3.74] - 2026-07-12
 
 Automated regression checks now lock in two recent build-security fixes (a fail-open safety hook and the eval-viewer XSS hole), and Security becomes a first-class value in the platform's engineering charter.
