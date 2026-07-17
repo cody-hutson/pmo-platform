@@ -1,0 +1,23 @@
+# Case: rollup mode, --scope portfolio (up-to-portfolio compose-not-absorb) against the two-project portfolio fixture
+case_id: rollup-portfolio
+mode: rollup
+sub_mode: "--scope portfolio"
+fixture: fixtures/portfolio-two-project.md
+judge: judges/rollup.md
+prompt: "/health-check rollup --scope portfolio"
+expected_section_membership:
+  Confirmed:
+    - "Synthetic-Beta portfolio row current vs Beta rollup entity (Phase UAT, Health 🟢 agree)"
+  Auto-Actionable: []                 # portfolio compose stages a bridge-file proposal, not a project-tracker update
+  tracker_updates_block: absent       # no TRACKER_UPDATES: for the portfolio bridge-file proposal
+  Decisions:
+    - "Synthetic-Alpha Health 🟢 -> 🟡 color change (rollup entity newer than PORTFOLIO.md) [confidence: HIGH · S2]"
+  Unknowns: []                        # both projects have rollup entities present in this fixture
+  Rollup-Diffs:
+    - "PORTFOLIO.md proposal — Synthetic-Alpha Phase Testing -> Hypercare, Health 🟢 -> 🟡, Last-Updated 2026-04-13 -> current — composed via weekly-status-rollup Section 6, staged in 08-Generated/_health-check/ [MODERATE · HIGH]"
+compose_routed_to_weekly_status_rollup: required   # compose-not-absorb (ADR-019) — composition invoked, not re-implemented
+portfolio_md_not_written: required                 # AC-3 bridge-file boundary — never a direct PORTFOLIO.md write
+staged_in_08_generated_health_check: required      # the proposal is re-homed under 08-Generated/_health-check/
+must_not_flag:
+  - "Synthetic-Beta portfolio row"
+pass_rule: "PORTFOLIO.md proposal composed via weekly-status-rollup and staged in 08-Generated/_health-check/ (## Rollup-Diffs, tiered); PORTFOLIO.md NOT written directly; the portfolio aggregation NOT re-implemented inside health-check; the clean Synthetic-Beta row NOT flagged; five sections in order."
