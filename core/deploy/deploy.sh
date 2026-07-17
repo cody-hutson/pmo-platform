@@ -5859,106 +5859,105 @@ cmd_check() {
   # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
   #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
   #            (becomes required when the operator flips deploy-check.mode to enforce)
-  #   invariant: every core/hooks/block-*.sh maps to its CORRECT owning doc, and
-  #              every bypass-mode per-hook source maps back to a script AND a row
-  #              in the generated index — a bijection scoped by ownership, NOT a
-  #              forced single-file bijection (per ADR-030 + the Stage-6 ownership
-  #              caveat: block-skill-direct-edit and block-fragile-refs are owned
-  #              by their own discipline docs, not the bypass-mode registry).
-  #   falsification: add a new core/hooks/block-foo.sh with no owner entry -> Check
-  #                  37 WARNs (advisory) / FAILS (post-flip). Delete a per-hook
-  #                  source whose script still exists -> Check 37 WARNs / FAILS.
+  #   invariant: every core/hooks/block-*.sh DECLARES its owning doc in its own
+  #              `# hook-owner: <repo-relative-path>` header line, that owner
+  #              resolves on disk, and every bypass-mode per-hook source maps back
+  #              to a script that declares it AND a row in the generated index — a
+  #              bijection scoped by ownership, NOT a forced single-file bijection
+  #              (per ADR-030). Ownership is DERIVED by enumeration from the
+  #              per-hook declaration (#1476 closed the ADR-030 residual: no
+  #              central ownership array). Bypass-mode membership is itself
+  #              derived — a hook is bypass iff its declared owner is its per-hook
+  #              readiness fragment under core/rules/bypass-mode-readiness/.
+  #   falsification: add a new core/hooks/block-foo.sh with no `# hook-owner:`
+  #                  line (or a declared owner missing on disk) -> Check 37 WARNs
+  #                  (advisory) / FAILS (post-flip). Delete a per-hook source
+  #                  whose script still declares it -> Check 37 WARNs / FAILS.
   #
   # This is the drift-resistance teeth ADR-030 adds: it makes the live 5/7/9
   # registry drift (doc said "7 hooks"; subagent-security-posture said "5"; the
   # machine registry had all 9; no check reconciled them) structurally
-  # impossible. It asserts CONTENT (the on-disk script set vs the on-disk source
-  # set vs the generated-index rows), not a proxy.
+  # impossible. It asserts CONTENT (the on-disk script set + each script's
+  # declared owner vs the on-disk source set vs the generated-index rows), not a
+  # proxy — and adding a hook needs ZERO edit to this file (#1476 AC).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 37: Hook-registry completeness (ownership bijection)"
+    log "Check 37: Hook-registry completeness (ownership by per-hook declaration)"
     local c37_index="core/rules/bypass-mode-readiness.md"
     local c37_src_dir="core/rules/bypass-mode-readiness"
-    # Ownership manifest: each core/hooks/block-*.sh -> its owning doc. The 8
-    # bypass-mode security hooks are owned by the bypass-mode registry (their
-    # per-hook source lives under $c37_src_dir + a row in $c37_index); the other
-    # 2 are owned by their own discipline docs and are intentionally NOT in this
-    # registry. Edit this manifest (and add the per-hook source) when a new
-    # bypass-mode hook ships.
-    local -a C37_BYPASS_HOOKS=(
-      block-autonomy-ceiling
-      block-credential-reads
-      block-destructive
-      block-egress
-      block-fs-boundary
-      block-mcp-writes
-      block-rm-prefer-trash
-      block-shell-injection
-    )
-    # Non-bypass-mode hooks: hook-basename:owning-doc (owner must exist on disk).
-    local -a C37_OTHER_OWNERS=(
-      "block-skill-direct-edit:core/standards/canonical-skill-structure.md"
-      "block-fragile-refs:core/standards/reference-durability-standard.md"
-      "block-gh-path-leak:core/rules/git-workflow.md"
-      "block-draft-files:core/rules/git-workflow.md"
-    )
+    # Ownership is DERIVED by enumeration from each hook's own
+    # `# hook-owner: <repo-relative-path>` header line — there is NO central
+    # ownership array (#1476 closed the ADR-030 residual). A hook is a bypass-mode
+    # hook iff its declared owner is its per-hook readiness fragment under
+    # $c37_src_dir/ (which also carries a row in $c37_index); any other resolvable
+    # owner marks a standalone hook owned by its own discipline doc. Adding a hook
+    # therefore edits ZERO shared file here: the declaration ships inside the new
+    # hook's own .sh (plus a new fragment for a bypass-mode hook).
     if [[ ! -d core/hooks ]] || [[ ! -f "$c37_index" ]] || [[ ! -d "$c37_src_dir" ]]; then
       log "  SKIP:  hook scripts dir, index, or source dir absent (greenfield/partial checkout)"
     else
       local c37_violations=0
-      # Build the bypass-mode lookup set + the other-owner lookup set as strings.
-      local c37_bypass_set=" ${C37_BYPASS_HOOKS[*]} "
-      local c37_other_set=""
-      local _pair
-      for _pair in "${C37_OTHER_OWNERS[@]}"; do
-        c37_other_set+=" ${_pair%%:*} "
-      done
-      # (a) Every script on disk has an owner (bypass-mode OR an other-owner doc).
+      local c37_bypass_count=0
+      local c37_other_count=0
+      # (a) Forward: every script declares an owner that resolves on disk; a
+      #     bypass owner (a fragment under $c37_src_dir/) also requires an index row.
       local c37_script
       for c37_script in core/hooks/block-*.sh; do
         [[ -e "$c37_script" ]] || continue
         local c37_base; c37_base="$(basename "$c37_script" .sh)"
-        if [[ "$c37_bypass_set" == *" $c37_base "* ]]; then
-          # Bypass-mode hook: must have a per-hook source AND an index row.
-          if [[ ! -f "$c37_src_dir/$c37_base.md" ]]; then
-            flag_warn_or_issue "hook-registry-completeness" "bypass-mode hook $c37_base has no per-hook source at $c37_src_dir/$c37_base.md"
-            c37_violations=$((c37_violations + 1))
-          # The generated "## The Hooks" table emits one anchor-linked row per
-          # per-hook source: `[\`block-<hook>.sh\` (…)](#…)`. Assert that row exists.
-          elif ! grep -qE "\[\`?$c37_base\.sh\`? .*\]\(#" "$c37_index" 2>/dev/null; then
-            flag_warn_or_issue "hook-registry-completeness" "bypass-mode hook $c37_base has a source but no row in the generated index $c37_index (regenerate via build-hook-registry.py)"
-            c37_violations=$((c37_violations + 1))
-          fi
-        elif [[ "$c37_other_set" == *" $c37_base "* ]]; then
-          # Non-bypass-mode hook: its owning doc must exist on disk.
-          local c37_owner=""
-          for _pair in "${C37_OTHER_OWNERS[@]}"; do
-            [[ "${_pair%%:*}" == "$c37_base" ]] && c37_owner="${_pair##*:}"
-          done
-          if [[ -n "$c37_owner" ]] && [[ ! -f "$c37_owner" ]]; then
-            flag_warn_or_issue "hook-registry-completeness" "$c37_base owned by $c37_owner, but that owner doc is missing"
-            c37_violations=$((c37_violations + 1))
-          fi
-        else
-          # Script with NO owner manifest entry at all — the 5/7/9 failure mode.
-          flag_warn_or_issue "hook-registry-completeness" "$c37_base has no owner: add it to C37_BYPASS_HOOKS (+ a per-hook source) or C37_OTHER_OWNERS in deploy.sh Check 37"
+        local c37_owner
+        c37_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_script" | head -1)"
+        if [[ -z "$c37_owner" ]]; then
+          # Script with NO ownership declaration — the 5/7/9 failure mode.
+          flag_warn_or_issue "hook-registry-completeness" "$c37_base has no '# hook-owner:' declaration — add one to the hook source core/hooks/$c37_base.sh"
           c37_violations=$((c37_violations + 1))
+          continue
         fi
+        if [[ ! -f "$c37_owner" ]]; then
+          flag_warn_or_issue "hook-registry-completeness" "$c37_base declares owner '$c37_owner', but that owner doc is missing on disk"
+          c37_violations=$((c37_violations + 1))
+          continue
+        fi
+        case "$c37_owner" in
+          "$c37_src_dir"/*)
+            # Bypass-mode hook: declared owner must be ITS OWN per-hook source,
+            # and that source must have a row in the generated index.
+            c37_bypass_count=$((c37_bypass_count + 1))
+            if [[ "$c37_owner" != "$c37_src_dir/$c37_base.md" ]]; then
+              flag_warn_or_issue "hook-registry-completeness" "bypass-mode hook $c37_base declares owner '$c37_owner' but its per-hook source must be $c37_src_dir/$c37_base.md"
+              c37_violations=$((c37_violations + 1))
+            # The generated "## The Hooks" table emits one anchor-linked row per
+            # per-hook source: `[\`block-<hook>.sh\` (…)](#…)`. Assert that row exists.
+            elif ! grep -qE "\[\`?$c37_base\.sh\`? .*\]\(#" "$c37_index" 2>/dev/null; then
+              flag_warn_or_issue "hook-registry-completeness" "bypass-mode hook $c37_base has a source but no row in the generated index $c37_index (regenerate via build-hook-registry.py)"
+              c37_violations=$((c37_violations + 1))
+            fi
+            ;;
+          *)
+            # Standalone hook: owner doc existence already verified above. OK.
+            c37_other_count=$((c37_other_count + 1))
+            ;;
+        esac
       done
-      # (b) Reverse: every bypass-mode per-hook source maps back to a script.
+      # (b) Reverse: every bypass-mode per-hook source maps back to a script that
+      #     declares it as its owner (preserves the source⇄script bijection).
       local c37_src
       for c37_src in "$c37_src_dir"/block-*.md; do
         [[ -e "$c37_src" ]] || continue
         local c37_sbase; c37_sbase="$(basename "$c37_src" .md)"
-        if [[ "$c37_bypass_set" != *" $c37_sbase "* ]]; then
-          flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src is not a registered bypass-mode hook (add $c37_sbase to C37_BYPASS_HOOKS, or remove the source)"
-          c37_violations=$((c37_violations + 1))
-        elif [[ ! -f "core/hooks/$c37_sbase.sh" ]]; then
+        if [[ ! -f "core/hooks/$c37_sbase.sh" ]]; then
           flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src has no backing script core/hooks/$c37_sbase.sh"
           c37_violations=$((c37_violations + 1))
+        else
+          local c37_back_owner
+          c37_back_owner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "core/hooks/$c37_sbase.sh" | head -1)"
+          if [[ "$c37_back_owner" != "$c37_src" ]]; then
+            flag_warn_or_issue "hook-registry-completeness" "per-hook source $c37_src exists but backing script core/hooks/$c37_sbase.sh does not declare it as owner (declares '$c37_back_owner')"
+            c37_violations=$((c37_violations + 1))
+          fi
         fi
       done
       if [[ $c37_violations -eq 0 ]]; then
-        log "  OK:    ${#C37_BYPASS_HOOKS[@]} bypass-mode hooks ⇄ sources ⇄ index rows; ${#C37_OTHER_OWNERS[@]} other hooks own-doc resolved"
+        log "  OK:    $c37_bypass_count bypass-mode hooks ⇄ sources ⇄ index rows; $c37_other_count standalone hooks own-doc resolved"
       fi
     fi
   fi

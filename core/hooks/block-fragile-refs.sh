@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-fragile-refs.sh — PreToolUse hook enforcing the reference-durability standard
+# hook-owner: core/standards/reference-durability-standard.md
 #
 # Reference-durability issue (v3.18-corpus-integrity-enforcement):
 # Flags fragile references on net-new/modified content destined for durable-corpus

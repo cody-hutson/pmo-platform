@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # block-autonomy-ceiling.sh — PreToolUse hook enforcing the autonomy-level ceiling.
+# hook-owner: core/rules/bypass-mode-readiness/block-autonomy-ceiling.md
 #
 # Design source: core/standards/subagent-security-posture.md § 4 Deferred Hook
 # Contract (RESOLVED in v2.07 — this hook IS that contract's realization). The

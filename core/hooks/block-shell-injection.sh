@@ -1,5 +1,6 @@
 #!/bin/bash
 # block-shell-injection.sh — PreToolUse hook blocking shell-injection patterns in script-execution argv
+# hook-owner: core/rules/bypass-mode-readiness/block-shell-injection.md
 #
 # Closes the slash-command shell-injection class identified in a security audit:
 # the slash command surface (`~/.claude/commands/*.md` + upstream-vendored plugin commands)

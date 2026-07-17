@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # block-fs-boundary.sh — PreToolUse hook enforcing workspace-boundary scoping
 # for Bash file commands beyond the Anthropic settings.deny recognized subset.
+# hook-owner: core/rules/bypass-mode-readiness/block-fs-boundary.md
 #
 # Anthropic's native settings.deny `Read(...)` / `Edit(...)` rules cover the
 # Read tool, the Edit/Write tools, and the recognized Bash file-command subset

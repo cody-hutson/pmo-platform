@@ -1,6 +1,7 @@
 #!/bin/bash
 # block-draft-files.sh — PreToolUse Write hook: keep draft / scratch / proposal
 # content out of the TRACKED public corpus (#411b).
+# hook-owner: core/rules/git-workflow.md
 #
 # Enforces core/rules/git-workflow.md § Draft / scratch content (the #1823 rule):
 # drafts belong in the issue tracker or the git-ignored runtime tier, never as a
