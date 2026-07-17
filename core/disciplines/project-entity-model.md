@@ -358,7 +358,7 @@ Cell = MVP type of the edge `row → column`; blank = no frozen chain. (Entities
 
 ## 6. Owning-Agent Matrix
 
-Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifact 5 — verbatim; skills verified present 2026-05-15; **+Work Item row reconciled 2026-07-12** — the matrix was frozen before ADR-018 landed Work Item #18, so the row was absent (D3); **+Finding row added per ADR-044**). This is the authority that downstream automation (G8) and the interface layer (G9) consume to route entity reads/writes.
+Which skill **creates**, **maintains**, and **reads** each entity (FROZEN Artifact 5 — verbatim; skills verified present 2026-05-15; **+Work Item row reconciled 2026-07-12** — the matrix was frozen before ADR-018 landed Work Item [#18](#18-work-item), so the row was absent (D3); **+Finding row added per ADR-044**). This is the authority that downstream automation (G8) and the interface layer (G9) consume to route entity reads/writes.
 
 | Entity | Creates | Maintains | Primary Readers |
 |---|---|---|---|
