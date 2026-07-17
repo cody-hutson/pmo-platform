@@ -77,22 +77,20 @@ if [[ ${#OPERATIONS_SKILLS[@]} -eq 0 || ${#RELEASE_SKILLS[@]} -eq 0 || ${#CORE_S
   exit 1
 fi
 
-# Canonical source resolver (mirrors deploy.sh resolve_template_sync_source).
-# Modular canonical: templates → operations/templates/, template-* standards →
-# core/standards/. See docs/module-apis.md § Public templates.
-# The three explicit shared-standards-doc basenames (output-format.md,
-# operational-artifacts.md, #316; regression-checks.md, #94) are single-sourced
-# in core/standards/ and match neither the template-*.md nor the
-# *-template.{md,csv} pattern — mapped by an explicit narrow basename rule (NOT a
-# broad catch-all). Keep byte-aligned with deploy.sh resolve_template_sync_source().
-resolve_canonical_source() {
-  local name="$1"
-  case "$name" in
-    output-format.md|operational-artifacts.md|regression-checks.md) echo "core/standards/$name" ;;
-    template-*.md) echo "core/standards/$name" ;;
-    *) echo "operations/templates/$name" ;;
-  esac
-}
+# Canonical-source resolver — single-sourced from the shared lib fragment
+# (core/deploy/lib-template-sync-source.sh), the SAME definition deploy.sh
+# sources. #2158 eliminated the former hand-synced resolve_canonical_source()
+# copy here (the drift class that broke the #94 pmo-skill-editor rebuild when the
+# two copies diverged). This builder already single-sources TEMPLATE_SYNC_MAP +
+# the per-module skill arrays from deploy.sh; the resolver was the last
+# hand-synced duplicate. Presence-guarded like the TEMPLATE_SYNC_MAP extraction.
+LIB_TEMPLATE_SYNC_SOURCE="${SCRIPT_DIR}/../lib-template-sync-source.sh"
+if [[ ! -f "$LIB_TEMPLATE_SYNC_SOURCE" ]]; then
+  echo "ERROR: missing shared resolver lib: $LIB_TEMPLATE_SYNC_SOURCE" >&2
+  exit 1
+fi
+# shellcheck source=../lib-template-sync-source.sh disable=SC1091
+source "$LIB_TEMPLATE_SYNC_SOURCE"
 
 # Skill → module resolver — iterates the per-module arrays extracted from deploy.sh
 # above (mirrors deploy.sh resolve_skill_module). CANARY_SKILLS classifies to
@@ -169,7 +167,7 @@ build_one() {
 
     [[ "$m_skill" != "$skill" ]] && continue
 
-    canonical_source=$(resolve_canonical_source "$m_canonical")
+    canonical_source=$(resolve_template_sync_source "$m_canonical")
 
     if [[ ! -f "$canonical_source" ]]; then
       echo "ERROR: canonical missing for $skill: $canonical_source" >&2

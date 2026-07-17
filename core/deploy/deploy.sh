@@ -153,6 +153,15 @@ fi
 # shellcheck source=lib-instance-path.sh disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib-instance-path.sh"
 
+# ─── Template-sync canonical-source resolver ────────────────────────────────
+# Single source for resolve_template_sync_source() — the TEMPLATE_SYNC_MAP
+# canonical-source resolution rule. Sourced (not inlined) so build-skill-
+# packages.sh shares the SAME definition and the two can never diverge (#2158 —
+# the drift class that broke the #94 pmo-skill-editor rebuild). Sourced from this
+# script's own dir so it resolves regardless of the caller's cwd.
+# shellcheck source=lib-template-sync-source.sh disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
+
 # User-local skills mirror — exposes every PMO skill as a plain /skill-name
 # slash command in Claude Code (matching prompt-builder's pre-existing presence).
 # See core/rules/skill-deployment.md. Per Phase 0.5 Q2 default
@@ -1171,40 +1180,10 @@ should_full_roster() {
   return 0   # zero roster skills present → empty target
 }
 
-resolve_template_sync_source() {
-  # Resolve the source path for a TEMPLATE_SYNC_MAP canonical filename.
-  # Convention:
-  #   output-format.md          → core/standards/<name>   (explicit; #316)
-  #   operational-artifacts.md  → core/standards/<name>   (explicit; #316)
-  #   regression-checks.md      → core/standards/<name>   (explicit; #94)
-  #   template-*.md             → core/standards/<name>
-  #   *-template.{md,csv}       → operations/templates/<name>
-  # (templates → operations, template-* standards → core. The modular
-  # canonical is operations/templates/ — the public-API surface per
-  # docs/module-apis.md § Operations module § Public templates.)
-  #
-  # The explicit shared-standards-doc basenames (output-format.md,
-  # operational-artifacts.md, regression-checks.md) are single-sourced shared
-  # references homed in core/standards/ per template-storage.md §3 / §7.2. They
-  # match neither the template-*.md nor the *-template.{md,csv} pattern, so they
-  # are mapped by an explicit narrow basename rule rather than a broad
-  # "non-template → core/standards/" catch-all — a catch-all would silently
-  # re-home any future non-template basename and is deliberately avoided. Add a
-  # new explicit basename here when a further shared standards doc is
-  # single-sourced.
-  #
-  # Args:
-  #   $1 — canonical filename (e.g., raid-log-template.csv, template-storage.md,
-  #        output-format.md)
-  #
-  # Echoes the resolved source path. Caller checks file existence.
-  local name="$1"
-  case "$name" in
-    output-format.md|operational-artifacts.md|regression-checks.md) echo "core/standards/$name" ;;
-    template-*.md)                             echo "core/standards/$name" ;;
-    *)                                         echo "operations/templates/$name" ;;
-  esac
-}
+# resolve_template_sync_source() is single-sourced in
+# core/deploy/lib-template-sync-source.sh (sourced near the top of this script,
+# beside lib-instance-path.sh) — #2158. Do not re-inline the resolver here; add a
+# new shared-standards basename to arm 1 of that fragment instead.
 
 sync_canonical_templates_to_runtime() {
   # Inject canonical templates and standards docs from operations/templates/
