@@ -6033,31 +6033,41 @@ cmd_check() {
         flag_warn_or_issue "version-stamp-skew" ".version at repo root is empty/unreadable — cannot compare to latest published Release $c39_anchor"
       else
         # Parse vMAJOR.MINOR from local + anchor (tolerate letter/-N qualifiers: vX.Y[...]).
-        local c39_l_maj c39_l_min c39_a_maj c39_a_min
-        c39_l_maj="$(/usr/bin/printf '%s' "$c39_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
-        c39_l_min="$(/usr/bin/printf '%s' "$c39_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
-        c39_a_maj="$(/usr/bin/printf '%s' "$c39_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
-        c39_a_min="$(/usr/bin/printf '%s' "$c39_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
-
-        if [[ -z "$c39_l_maj" || -z "$c39_a_maj" ]]; then
-          flag_warn_or_issue "version-stamp-skew" ".version ('$c39_local') or latest-Release ('$c39_anchor') is not a parseable vMAJOR.MINOR — cannot assert version-stamp invariant"
-        elif [[ "$c39_local" == "$c39_anchor" ]]; then
-          log "  OK:    .version ($c39_local) == latest published Release ($c39_anchor) — version-skew banner clears"
-        elif [[ "$c39_l_maj" != "$c39_a_maj" ]]; then
-          # Different major-lineage — always FAIL (e.g. .version=v3.x vs published v2.x).
-          flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is a different major-lineage than the latest published Release ($c39_anchor) — wrong version source-of-truth; bump at release cut per stage-13-close.md Phase B5.7"
+        # Parse + compare via the version-grammar SSOT (#1676) rather than a local
+        # sed parser (#1800 — retire the last duplicate parser). Source set-e-safe
+        # with an empty positional so the lib's --self-test never fires (mirrors
+        # Check 41 / _vf_compute_verdict); guard on the lib's presence.
+        local c39_lib="$_audit_src_root/release/tools/version-grammar.sh"
+        if [[ ! -f "$c39_lib" ]]; then
+          log "  N/A:   Check 39 version-grammar.sh (#1676 SSOT comparator) not present — cannot assert version-stamp invariant"
         else
-          # Same lineage — compute signed minor distance. Force base-10 (10#…) so a
-          # zero-padded minor like 08/09 is not mis-parsed as invalid octal.
-          local c39_dist=$(( 10#$c39_l_min - 10#$c39_a_min ))
-          local c39_abs=${c39_dist#-}
-          if [[ "$c39_abs" -le 1 ]]; then
-            # Legitimate Stage-12->13 window: exactly one published-minor apart. The
-            # nearest-tag sub-signal disambiguates the tag-ahead/not-yet-published case.
-            flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is 1 published-minor from latest published Release ($c39_anchor); nearest mainline tag=${c39_nearest:-unknown} — legitimate Stage-12->13 window OR a pending bump; stamp .version at Stage 13 close per stage-13-close.md Phase B5.7"
+          # shellcheck source=/dev/null
+          source "$c39_lib" ""
+          if ! version_canonical "$c39_local" || ! version_canonical "$c39_anchor"; then
+            flag_warn_or_issue "version-stamp-skew" ".version ('$c39_local') or latest-Release ('$c39_anchor') is not canonical (vMAJOR.MINOR[.PATCH]) — cannot assert version-stamp invariant"
+          elif [[ "$(version_cmp "$c39_local" "$c39_anchor")" == "0" ]]; then
+            log "  OK:    .version ($c39_local) == latest published Release ($c39_anchor) — version-skew banner clears"
           else
-            # >=2 minors behind/ahead — the bug state. FAIL.
-            flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is $c39_abs published-minors from the latest published Release ($c39_anchor) — the version source-of-truth is stale; the version-skew banner will not clear. Bump .version at release cut (stage-13-close.md Phase B5.7 / automated-closeout.sh phase_bump_version)"
+            local c39_l_maj c39_l_min c39_a_maj c39_a_min _c39_patch
+            read -r c39_l_maj c39_l_min _c39_patch <<<"$(version_parse "$c39_local")"
+            read -r c39_a_maj c39_a_min _c39_patch <<<"$(version_parse "$c39_anchor")"
+            if [[ "$c39_l_maj" != "$c39_a_maj" ]]; then
+              # Different major-lineage — always FAIL (e.g. .version=v3.x vs published v2.x).
+              flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is a different major-lineage than the latest published Release ($c39_anchor) — wrong version source-of-truth; bump at release cut per stage-13-close.md Phase B5.7"
+            else
+              # Same lineage — signed minor distance. version_parse already base-10
+              # coerces each component, so a zero-padded minor (08/09) is never octal.
+              local c39_dist=$(( c39_l_min - c39_a_min ))
+              local c39_abs=${c39_dist#-}
+              if [[ "$c39_abs" -le 1 ]]; then
+                # Legitimate Stage-12->13 window: exactly one published-minor apart. The
+                # nearest-tag sub-signal disambiguates the tag-ahead/not-yet-published case.
+                flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is 1 published-minor from latest published Release ($c39_anchor); nearest mainline tag=${c39_nearest:-unknown} — legitimate Stage-12->13 window OR a pending bump; stamp .version at Stage 13 close per stage-13-close.md Phase B5.7"
+              else
+                # >=2 minors behind/ahead — the bug state. FAIL.
+                flag_warn_or_issue "version-stamp-skew" ".version ($c39_local) is $c39_abs published-minors from the latest published Release ($c39_anchor) — the version source-of-truth is stale; the version-skew banner will not clear. Bump .version at release cut (stage-13-close.md Phase B5.7 / automated-closeout.sh phase_bump_version)"
+              fi
+            fi
           fi
         fi
       fi
@@ -7550,25 +7560,37 @@ cmd_report() {
       echo "[PASS] version-stamp-skew — .version ($c39r_local) == latest published Release ($c39r_anchor)"
       PASS=$((PASS + 1))
     else
-      local c39r_l_maj c39r_l_min c39r_a_maj c39r_a_min
-      c39r_l_maj="$(/usr/bin/printf '%s' "$c39r_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
-      c39r_l_min="$(/usr/bin/printf '%s' "$c39r_local"  | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
-      c39r_a_maj="$(/usr/bin/printf '%s' "$c39r_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1/p')"
-      c39r_a_min="$(/usr/bin/printf '%s' "$c39r_anchor" | /usr/bin/sed -nE 's/^v([0-9]+)\.([0-9]+).*/\2/p')"
-      if [[ -z "$c39r_l_maj" || -z "$c39r_a_maj" ]]; then
-        echo "[FAIL] version-stamp-skew — .version ('$c39r_local') or latest-Release ('$c39r_anchor') not parseable vMAJOR.MINOR"
-        FAIL=$((FAIL + 1))
-      elif [[ "$c39r_l_maj" != "$c39r_a_maj" ]]; then
-        echo "[FAIL] version-stamp-skew — .version ($c39r_local) different major-lineage than latest published Release ($c39r_anchor)"
-        FAIL=$((FAIL + 1))
+      # Parse via the version-grammar SSOT (#1676) rather than a local sed parser
+      # (#1800 zero-drift — this is the report-mode mirror of Check 39, the SAME
+      # duplicate parser as cmd_check's c39_ block). Source set-e-safe (empty
+      # positional; --self-test inert). Lib absent => N/A PASS (never-FAIL idiom).
+      local c39r_lib="$_audit_src_root/release/tools/version-grammar.sh"
+      if [[ ! -f "$c39r_lib" ]]; then
+        echo "[PASS] version-stamp-skew — N/A: version-grammar.sh (#1676 SSOT comparator) not present"
+        PASS=$((PASS + 1))
       else
-        local c39r_dist=$(( 10#$c39r_l_min - 10#$c39r_a_min )); local c39r_abs=${c39r_dist#-}
-        if [[ "$c39r_abs" -le 1 ]]; then
-          echo "[PASS] version-stamp-skew — .version ($c39r_local) within 1 published-minor of latest Release ($c39r_anchor) — Stage-12->13 window"
-          PASS=$((PASS + 1))
-        else
-          echo "[FAIL] version-stamp-skew — .version ($c39r_local) is $c39r_abs published-minors from latest published Release ($c39r_anchor) — stale source-of-truth; bump per stage-13-close.md Phase B5.7"
+        # shellcheck source=/dev/null
+        source "$c39r_lib" ""
+        if ! version_canonical "$c39r_local" || ! version_canonical "$c39r_anchor"; then
+          echo "[FAIL] version-stamp-skew — .version ('$c39r_local') or latest-Release ('$c39r_anchor') not canonical (vMAJOR.MINOR[.PATCH])"
           FAIL=$((FAIL + 1))
+        else
+          local c39r_l_maj c39r_l_min c39r_a_maj c39r_a_min _c39r_patch
+          read -r c39r_l_maj c39r_l_min _c39r_patch <<<"$(version_parse "$c39r_local")"
+          read -r c39r_a_maj c39r_a_min _c39r_patch <<<"$(version_parse "$c39r_anchor")"
+          if [[ "$c39r_l_maj" != "$c39r_a_maj" ]]; then
+            echo "[FAIL] version-stamp-skew — .version ($c39r_local) different major-lineage than latest published Release ($c39r_anchor)"
+            FAIL=$((FAIL + 1))
+          else
+            local c39r_dist=$(( c39r_l_min - c39r_a_min )); local c39r_abs=${c39r_dist#-}
+            if [[ "$c39r_abs" -le 1 ]]; then
+              echo "[PASS] version-stamp-skew — .version ($c39r_local) within 1 published-minor of latest Release ($c39r_anchor) — Stage-12->13 window"
+              PASS=$((PASS + 1))
+            else
+              echo "[FAIL] version-stamp-skew — .version ($c39r_local) is $c39r_abs published-minors from latest published Release ($c39r_anchor) — stale source-of-truth; bump per stage-13-close.md Phase B5.7"
+              FAIL=$((FAIL + 1))
+            fi
+          fi
         fi
       fi
     fi
