@@ -1,0 +1,131 @@
+name: Skill registry-currency check
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce (WARN_MODE off — findings turn the check red)  always-reports=yes
+#   invariant: every deploy.sh-rostered skill (OPERATIONS_SKILLS + RELEASE_SKILLS +
+#              CORE_SKILLS, canary EXCLUDED) has a core/skills/registry.md
+#              `## Configuration Items` row — and every row is a roster member and
+#              resolves to a live SKILL.md (the Check 5(d) ROW layer, #1811).
+#   falsification: roster a skill in deploy.sh (add it to a *_SKILLS array) WITHOUT
+#                  adding its registry.md Configuration-Items row -> assertion (ii)
+#                  fires -> this gate turns RED (exit 1). Re-add the row -> green.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirements (b) + (b').)
+#
+# CI MIRROR of deploy.sh Check 5(d)'s ROW layer (#1811). deploy.sh --check is never
+# invoked in CI, so the row-currency invariant had no automatic run surface — a
+# #2497-class defect (a rostered skill with no registry row) could reach main
+# unblocked. Per gate-efficacy-standard Requirement (b'), a deploy-time-only check
+# cannot block a merge; this workflow is that missing CI surface.
+#
+# SINGLE SOURCE OF TRUTH with the deploy-time check: both read the SAME roster
+# authority — the deploy.sh per-module arrays (ADR-008 single roster source;
+# ADR-038 §Decision 1 CI population is the array members, canary NOT a CI). The
+# predicate is single-sourced at release/tools/check-registry-currency.sh; no
+# re-implemented roster list lives here. A filesystem-derived roster is empirically
+# wrong today (it sweeps _shared + _templates + the canary, 55 vs the true 52) —
+# duplicate a PARSE (fails loud), never a POLICY (drifts silent).
+#
+# ENFORCE, not warn-mode-initial. The row layer is declared "structural and zero-FP,
+# ALWAYS-ENFORCE, no warn window" at deploy time (deploy.sh:2257-2259), and the
+# baseline is verifiably clean (52 rostered == 52 rows). This gate is NOT yet a
+# required branch-protection context, so a red check is NON-BLOCKING (a red-but-
+# unblocked check honours the never-merge-red practice as a read-and-justify step,
+# without the repo-wide block a required gate would impose). Promotion to blocking
+# is a single operator-side step — add the job name below to
+# required_status_checks.contexts via `gh api` (NOT a file edit; gate-efficacy-
+# standard.md:84 places branch-protection outside the tree) — after a clean window.
+#
+# Runs on EVERY pull request (NO paths filter): registry-currency is a whole-roster
+# property, not a changed-files one, and the three trigger surfaces (a new
+# SKILL.md, a deploy.sh roster edit, a registry.md row edit) are not jointly
+# expressible as a path filter that also keeps the gate at `required` posture. Also
+# runs on push to main as a post-merge guard (mirrors skill-canonical-structure-check.yml).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  skill-registry-currency:
+    name: Skill registry-currency (Check 5(d) mirror)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detector precision probe (predicate self-test)
+        run: |
+          set -euo pipefail
+          # An enforce-mode scan still can't see a detector that is itself broken
+          # (a regression in roster extraction or the row parse could pass silently),
+          # so the predicate's self-test is a HARD gate: a regression in the
+          # extraction / shape-guard / membership-diff logic fails the PR. Mirrors
+          # the precision-probe step in skill-canonical-structure-check.yml.
+          bash release/tools/check-registry-currency.sh --self-test
+
+      - name: Scan the registry catalog for roster-currency drift
+        run: |
+          set -uo pipefail
+
+          # Same predicate script + same deploy.sh-extracted roster as deploy.sh
+          # Check 5(d) (single source of truth). Capture stdout (per-finding
+          # FAIL lines + SUMMARY) and the exit code without tripping set -e.
+          set +e
+          OUTPUT=$(bash release/tools/check-registry-currency.sh 2>&1)
+          EXIT=$?
+          set -e
+
+          # Always echo the raw verdict lines into the log.
+          printf '%s\n' "$OUTPUT"
+
+          if [ "$EXIT" -eq 3 ]; then
+            # Scan-surface error (roster could not be extracted / was shape-invalid,
+            # registry.md is absent, or 0 rows parsed) is ALWAYS hard-fail — a
+            # relocated/reformatted source tree means the gate ran against nothing
+            # and must not read green (fail-loud contract, mirrors the exit-3 path
+            # in skill-canonical-structure-check.yml).
+            {
+              echo "## :x: Skill registry-currency check — scan-surface error"
+              echo ""
+              echo "The Check 5(d) predicate could not extract a valid skill roster"
+              echo "from \`core/deploy/deploy.sh\`, or \`core/skills/registry.md\` is"
+              echo "absent / parsed 0 rows. This is a fail-loud condition — a"
+              echo "relocated, reformatted, or deleted scan surface must not read green."
+              echo ""
+              echo '```'
+              printf '%s\n' "$OUTPUT"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+
+          if [ "$EXIT" -eq 0 ]; then
+            echo ":white_check_mark: Skill registry-currency — the registry catalog is current (rows <-> roster symmetric, canary excluded, every row resolves to a live SKILL.md)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # EXIT == 1 -> one or more registry-currency findings. ENFORCE: the check
+          # turns red (there is no warn-mode swallow — see the header).
+          {
+            echo "## :x: Skill registry-currency check — drift found"
+            echo ""
+            echo "The skill roster (\`deploy.sh\` per-module arrays) and the registry"
+            echo "catalog (\`core/skills/registry.md\` \`## Configuration Items\`) are out"
+            echo "of sync. Each FAIL line below names the drifting skill/row and the"
+            echo "failing assertion:"
+            echo ""
+            echo '```'
+            printf '%s\n' "$OUTPUT"
+            echo '```'
+            echo "### Remediation"
+            echo ""
+            echo "- **\`roster member '<skill>' has no registry row\`:** add a \`## Configuration Items\` row for \`<skill>\` to \`core/skills/registry.md\` (or, if the skill was removed, drop it from the \`*_SKILLS\` array in \`core/deploy/deploy.sh\`)."
+            echo "- **\`registry row '<name>' has no roster member\`:** the registry lists a skill that \`deploy.sh\` does not roster — add it to the correct \`*_SKILLS\` array, or remove the stale registry row."
+            echo "- **\`registry row '<name>' resolves to no live SKILL.md\`:** fix the row name, or create \`<module>/skills/<name>/SKILL.md\`."
+            echo ""
+            echo "This gate is the PR-time mirror of \`deploy.sh\` Check 5(d) (row layer, #1811). The predicate is single-sourced at \`release/tools/check-registry-currency.sh\`; the deploy-time check and this mirror invoke the same script over the same deploy.sh-extracted roster. See \`core/standards/gate-efficacy-standard.md\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
