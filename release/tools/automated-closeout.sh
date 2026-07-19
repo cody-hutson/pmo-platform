@@ -275,10 +275,30 @@ workspace_boundary_check() {
   esac
 }
 
-# Validate version key format vX.Y or vX.Y-suffix
+# Version-grammar SSOT (#1676) sourced for validate_version (#1801) — set-e-safe:
+# pure functions, empty positional so its --self-test stays inert. A pre-#1676
+# checkout (lib absent) degrades validate_version to a minimal non-empty vX.Y check.
+if [[ -f "$SCRIPT_DIR/version-grammar.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/version-grammar.sh" ""
+  _ACO_HAVE_GRAMMAR=1
+else
+  _ACO_HAVE_GRAMMAR=0
+fi
+
+# Validate the current release version against the canonical grammar SSOT (#1676:
+# ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ — vX.Y or vX.Y.Z hotfix; suffix forms REJECTED).
+# #1801: was a permissive local regex accepting vX.Ysuffix — that form never shipped
+# on the reachable lineage, and validate_version only ever gates the current $VERSION
+# (always canonical), so the laxness was unneeded. Source, don't copy the regex (the
+# SSOT consumer contract: a copied-inline regex is a divergence defect).
 validate_version() {
   local v="$1"
-  [[ "$v" =~ ^v[0-9]+\.[0-9]+([a-z]|[a-z0-9.-]+)?$ ]]
+  if [[ "${_ACO_HAVE_GRAMMAR:-0}" == "1" ]]; then
+    version_canonical "$v"
+  else
+    [[ -n "$v" && "$v" == v*.* ]]   # SSOT absent (pre-#1676) — minimal degrade
+  fi
 }
 
 # Returns 0 if string starts with "v<MAJOR>" else 1
@@ -2259,9 +2279,10 @@ self_test() {
   local failures=0
 
   # Test 1: validate_version
-  validate_version "v2.12" || { echo "FAIL: validate_version v2.12"; failures=$((failures+1)); }
-  validate_version "v2.07b" || { echo "FAIL: validate_version v2.07b"; failures=$((failures+1)); }
-  validate_version "v2.04b-1" || { echo "FAIL: validate_version v2.04b-1"; failures=$((failures+1)); }
+  validate_version "v2.12" || { echo "FAIL: validate_version v2.12 (canonical vX.Y)"; failures=$((failures+1)); }
+  validate_version "v2.06.1" || { echo "FAIL: validate_version v2.06.1 (canonical vX.Y.Z hotfix)"; failures=$((failures+1)); }
+  ! validate_version "v2.07b" || { echo "FAIL: validate_version must REJECT suffix v2.07b (#1801 SSOT tighten)"; failures=$((failures+1)); }
+  ! validate_version "v2.04b-1" || { echo "FAIL: validate_version must REJECT suffix v2.04b-1 (#1801 SSOT tighten)"; failures=$((failures+1)); }
   ! validate_version "2.12" || { echo "FAIL: validate_version should reject 2.12 (no v prefix)"; failures=$((failures+1)); }
   ! validate_version "" || { echo "FAIL: validate_version should reject empty"; failures=$((failures+1)); }
 
@@ -3254,7 +3275,7 @@ done
 [[ -z "$PR_NUMBER" ]] && die "Required: --pr <N>"
 [[ -z "$VERSION" ]] && die "Required: --version v<X.Y>"
 [[ -z "$MILESTONE" ]] && die "Required: --milestone <N>"
-validate_version "$VERSION" || die "Invalid version format: '$VERSION' (expected vX.Y or vX.Y-suffix)"
+validate_version "$VERSION" || die "Invalid version format: '$VERSION' (expected canonical vX.Y or vX.Y.Z per version-grammar.sh; suffix forms are not accepted)"
 
 workspace_boundary_check
 RUN_TS="$(ts_now)"
