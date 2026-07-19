@@ -2139,7 +2139,11 @@ phase_check_release_body_drift() {
       mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. Detective-only (warn-mode); close NOT blocked. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
       ;;
     2)
-      mark_phase "check_release_body_drift" "N/A" "gh offline/unauthenticated — body-drift check skipped for $VERSION (never FAIL; mirrors Check 32/39 gh-guard)"
+      # N/A — a capability needed to compare is absent. Exit 2 now spans gh
+      # (offline/unauth) AND git (origin/main unresolvable / corrupt object): the
+      # tool writes the failing subsystem to stderr unconditionally, and $drift_out
+      # captured it (2>&1), so a git failure is NOT mis-reported as "gh offline".
+      mark_phase "check_release_body_drift" "N/A" "body-drift check N/A for $VERSION — a required capability is unavailable (gh or git); never FAIL. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
       ;;
     3)
       # MISSING note or Release. If publish phase did not land Surface 1 this run,
