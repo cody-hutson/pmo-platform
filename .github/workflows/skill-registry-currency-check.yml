@@ -19,7 +19,7 @@ name: Skill registry-currency check
 # SINGLE SOURCE OF TRUTH with the deploy-time check: both read the SAME roster
 # authority — the deploy.sh per-module arrays (ADR-008 single roster source;
 # ADR-038 §Decision 1 CI population is the array members, canary NOT a CI). The
-# predicate is single-sourced at release/tools/check-registry-currency.sh; no
+# predicate is single-sourced at core/deploy/tools/check-registry-currency.sh; no
 # re-implemented roster list lives here. A filesystem-derived roster is empirically
 # wrong today (it sweeps _shared + _templates + the canary, 55 vs the true 52) —
 # duplicate a PARSE (fails loud), never a POLICY (drifts silent).
@@ -63,7 +63,7 @@ jobs:
           # so the predicate's self-test is a HARD gate: a regression in the
           # extraction / shape-guard / membership-diff logic fails the PR. Mirrors
           # the precision-probe step in skill-canonical-structure-check.yml.
-          bash release/tools/check-registry-currency.sh --self-test
+          bash core/deploy/tools/check-registry-currency.sh --self-test
 
       - name: Scan the registry catalog for roster-currency drift
         run: |
@@ -73,7 +73,7 @@ jobs:
           # Check 5(d) (single source of truth). Capture stdout (per-finding
           # FAIL lines + SUMMARY) and the exit code without tripping set -e.
           set +e
-          OUTPUT=$(bash release/tools/check-registry-currency.sh 2>&1)
+          OUTPUT=$(bash core/deploy/tools/check-registry-currency.sh 2>&1)
           EXIT=$?
           set -e
 
@@ -126,6 +126,6 @@ jobs:
             echo "- **\`registry row '<name>' has no roster member\`:** the registry lists a skill that \`deploy.sh\` does not roster — add it to the correct \`*_SKILLS\` array, or remove the stale registry row."
             echo "- **\`registry row '<name>' resolves to no live SKILL.md\`:** fix the row name, or create \`<module>/skills/<name>/SKILL.md\`."
             echo ""
-            echo "This gate is the PR-time mirror of \`deploy.sh\` Check 5(d) (row layer, #1811). The predicate is single-sourced at \`release/tools/check-registry-currency.sh\`; the deploy-time check and this mirror invoke the same script over the same deploy.sh-extracted roster. See \`core/standards/gate-efficacy-standard.md\`."
+            echo "This gate is the PR-time mirror of \`deploy.sh\` Check 5(d) (row layer, #1811). The predicate is single-sourced at \`core/deploy/tools/check-registry-currency.sh\`; the deploy-time check and this mirror invoke the same script over the same deploy.sh-extracted roster. See \`core/standards/gate-efficacy-standard.md\`."
           } | tee -a "$GITHUB_STEP_SUMMARY"
           exit 1

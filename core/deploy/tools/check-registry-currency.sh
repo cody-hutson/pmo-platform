@@ -41,8 +41,8 @@
 # duplicate a PARSE (fails loud), never a POLICY (drifts silent).
 #
 # Usage:
-#   bash release/tools/check-registry-currency.sh            # scan the live roster
-#   bash release/tools/check-registry-currency.sh --self-test
+#   bash core/deploy/tools/check-registry-currency.sh            # scan the live roster
+#   bash core/deploy/tools/check-registry-currency.sh --self-test
 #
 # Output: one OK/FAIL line per finding on stdout; a trailing SUMMARY line.
 # Exit codes (mirror the sibling detectors):
@@ -76,10 +76,11 @@
 
 set -uo pipefail
 
-# Run from repo root regardless of cwd. This script lives in release/tools/, so the
-# repo root is two levels up (contrast the core/deploy/tools/ siblings at three).
+# Run from repo root regardless of cwd. This script lives in core/deploy/tools/, so
+# the repo root is three levels up — matching its sibling CI mirrors in the same
+# directory (check-canonical-structure.sh:56, build-skill-packages.sh:26).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Valid skill-name shape (the SHAPE GUARD, CD-3). Every live roster name conforms
 # (verified: 52/52 match, 0 non-conforming at the release baseline); the one-line-
@@ -426,7 +427,7 @@ main() {
       exit $?
       ;;
     *)
-      echo "Usage: bash release/tools/check-registry-currency.sh [--self-test]" >&2
+      echo "Usage: bash core/deploy/tools/check-registry-currency.sh [--self-test]" >&2
       exit 2
       ;;
   esac
