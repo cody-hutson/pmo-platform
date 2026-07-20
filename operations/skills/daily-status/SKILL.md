@@ -73,6 +73,24 @@ Before generating any status update, read these files in order:
    record (last line). Absent → "not configured." Producer schema:
    `core/standards/c3-external-sync-path-b.md`.
 
+**Read-side aggregation contract (tracked layer only).** Carry-forward and prior-state
+aggregation reads come **from the maintained tracked (Domain-B) layer** — the `DEC-###` /
+`ACT-###` entries in the Daily Status Log, the `MSG-##` Communications Tracker rows, and the RAID
+rows — together with each entry's provenance back-link (`source_inputs` on markdown-tracker
+entries, `source_ref` on RAID rows). This skill does **not** re-scan prior transcripts to
+reconstruct prior state: the tracked layer is `trust_category: controlled-truth`, and re-deriving
+carry-forward from raw evidence bypasses it and re-introduces un-cited, un-provenanced aggregation.
+
+Input 4 is the one deliberate raw read, and it is **write-side, not read-side**: the single
+same-day triggering transcript is read once to *extract* today's new decisions, actions, and risks
+into tracker entries (the `tracker-manager` ADD path stamps each with its `source_inputs`).
+Everything the update carries forward from before today comes from the tracked layer. Concretely:
+today's transcript may produce a new `ACT-###`, but yesterday's open actions are read from the
+Daily Status Log entries — never by re-opening yesterday's transcript. The weekly roll-up
+aggregates these same entries upward under the identical contract; the governing definition is the
+Aggregation source-of-truth rule in the Raw→Tracked Provenance section of
+`core/schemas/tracker-schemas.md`.
+
 **Memory-surface contract.** The inputs above are **memory surfaces** governed by the
 cross-surface read/write contract at
 [`memory-architecture.md`](../../../core/disciplines/memory-architecture.md). Before reading,
