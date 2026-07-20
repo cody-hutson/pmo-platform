@@ -6917,6 +6917,77 @@ cmd_check() {
   fi
 
 
+  # Check 55 — Work-hierarchy drift gate (warn-mode initial) [#1039]
+  #
+  # Two independent invariants, one check (the Check-16 multi-invariant shape):
+  #   H1 DOC     — no normative governance doc ASSERTS a banned parent tier
+  #                (`Initiative` / `Roadmap`, per ADR-049 §Decision 1/2) above a
+  #                licensed work-item kind. The licensed kind vocabulary is DERIVED
+  #                from the SSOT (core/packs/*/pack.toml `kind_id`), never hardcoded.
+  #   H2 BACKLOG — no open `type:epic` issue has a `type:epic` parent, resolved via
+  #                ONE batched+paginated GraphQL query over the native sub-issue
+  #                `parent` edge (never an N+1 per-epic loop — with ~39 open epics
+  #                an N+1 shape would materially slow --check).
+  # Predicate shape: closed-vocabulary membership inside a STRUCTURAL arrow-chain,
+  # not prose similarity — falsifiable, no paraphrase false-positive tail. A
+  # citation guard suppresses chains inside quotes/backticks (a CITED or NEGATED
+  # ladder is not an assertion; the live corpus contains exactly this case at
+  # architecture-evaluative-lens.md:45). Matching is case-sensitive: Title-Case =
+  # hierarchy tier, lowercase = label namespace (ADR-049's own `initiative->epic`
+  # label-mapping title must not read as a hierarchy violation).
+  # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
+  # (H1) or `#<issue> type:epic` (H2), mirroring Check 16's exempt_pair shape; this
+  # is #1039's "allowlist-able during cutover" requirement.
+  # Fail-loud: an unreadable SSOT vocabulary (zero kinds) exits 3 rather than
+  # reading green — a zero-vocabulary scan would find nothing by construction.
+  # gh-unavailable → H2 SKIPs with a logged reason (mirrors Check 39/40/51/52/53
+  # offline SKIP); H1 still runs (it is offline-capable). A backlog invariant must
+  # never read green offline.
+  # Warn-mode initial per core/rules/bypass-mode-readiness.md §Shakedown (the
+  # 14/18/42/43/50/51/52/53/54 precedent); flip via a `work-hierarchy-drift.mode`
+  # file after the >=3-day warn-log review. The introducing release is itself
+  # exempt (reflexive-pipeline loop). Read-only: mutates nothing; reversibility
+  # CHEAP (additive; `git revert`).
+  # Primitive: core/deploy/tools/check-work-hierarchy.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 55: Work-hierarchy drift (H1 doc + H2 backlog; warn-mode initial; enforce-flip deferred)"
+    local c55_script="core/deploy/tools/check-work-hierarchy.py"
+    if [[ ! -f "$c55_script" ]]; then
+      flag_warn_or_issue "work-hierarchy-drift" "primitive script missing: $c55_script"
+    else
+      local c55_mode c55_args
+      c55_mode=$(resolve_check_mode "work-hierarchy-drift")
+      c55_args=(--root . --output-format tsv)
+      if ! command -v gh >/dev/null 2>&1; then
+        log "  SKIP:  H2 backlog leg — gh unavailable (offline/unauth; mirrors Check 39/40/51/52/53). H1 doc leg still runs."
+        c55_args+=(--skip-backlog)
+      fi
+      local c55_out c55_exit=0
+      c55_out=$(/usr/bin/python3 "$c55_script" "${c55_args[@]}" 2>&1) || c55_exit=$?
+      if [[ $c55_exit -eq 3 ]]; then
+        flag_warn_or_issue "work-hierarchy-drift" "input failure (exit 3): $(echo "$c55_out" | head -1) — the SSOT kind vocabulary was unreadable or the GraphQL parent scan failed; fix the pack corpus / gh auth"
+      elif [[ $c55_exit -eq 0 ]]; then
+        local c55_scanned
+        c55_scanned=$(echo "$c55_out" | awk -F'\t' '$1=="SCANNED"{print $2}')
+        log "  OK:    work-hierarchy — 0 drift findings (${c55_scanned:-0} normative docs scanned; no banned parent tier, no epic-under-epic edge)"
+      elif [[ $c55_exit -eq 1 ]]; then
+        local c55_h1 c55_h2
+        c55_h1=$(echo "$c55_out" | awk -F'\t' '$1=="H1"{print $2}' | paste -sd, -)
+        c55_h2=$(echo "$c55_out" | awk -F'\t' '$1=="H2"{print "#"$2"->#"$3}' | paste -sd, -)
+        if [[ "$c55_mode" == "enforce" ]]; then
+          [[ -n "$c55_h1" ]] && { log "  FAIL:  work-hierarchy H1 — doc(s) asserting a banned parent tier: $c55_h1"; ISSUES=$((ISSUES + 1)); }
+          [[ -n "$c55_h2" ]] && { log "  FAIL:  work-hierarchy H2 — epic-under-epic edge(s): $c55_h2"; ISSUES=$((ISSUES + 1)); }
+        else
+          [[ -n "$c55_h1" ]] && flag_warn_or_issue "work-hierarchy-drift" "H1 doc invariant — banned parent tier asserted at: $c55_h1 (warn-mode; flip work-hierarchy-drift.mode to enforce after shakedown)"
+          [[ -n "$c55_h2" ]] && flag_warn_or_issue "work-hierarchy-drift" "H2 backlog invariant — epic-under-epic edge(s): $c55_h2 (warn-mode; re-parent or exempt)"
+        fi
+      else
+        flag_warn_or_issue "work-hierarchy-drift" "check errored (exit $c55_exit): $(echo "$c55_out" | head -1)"
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."

@@ -154,7 +154,10 @@ Intent tokens: `ADD` (new file) · `EDIT` (modify) · `DATA` (content edit to go
 
 ```
 EDIT  core/deploy/deploy.sh                                   # #1039 (Check 55 drift gate); #2219 (Check 56 membership); #2682 (Check 16 in-place widen); #2106 (Check 57 extraction contract); #3009 (backstop check)
-ADD   .claude/work-hierarchy-exemption-list.txt               # #1039 (instance-side allowlist; may ship empty)
+ADD   core/deploy/tools/check-work-hierarchy.py               # #1039 (H1 doc + H2 batched-GraphQL backlog primitive; carries --self-test)
+ADD   core/deploy/tools/check-milestone-epic-membership.py    # #2219 (membership + description-reconciliation primitive; carries --self-test)
+ADD   core/deploy/tools/check-extraction-contract.py          # #2106 (deploy.sh-internal extraction-contract primitive; carries --self-test)
+(none) .claude/work-hierarchy-exemption-list.txt              # #1039 — see Δ10: operator-instance state, NOT tracked (Check-16 precedent)
 EDIT  core/specs/label-taxonomy.md                            # #2682 (per-type status applicability + epic exemption; Rule 6 restatement)
 EDIT  .github/workflows/link-check.yml                        # #2685 (extend --target-paths; warn-mode)
 EDIT  release/tools/check-release-links.py                    # #2685 (reconcile is_skippable for 3 filename shapes)
@@ -244,6 +247,8 @@ Deltas between the Stage-4 plan of record and the ratified Stage-5 scope-lock. A
 | **Δ7** | #3009 audit = "21 of ~66" ADRs | **25 Proposed of 85** (17 core + 8 release); re-derive at audit time | Stage-5 census |
 | **Δ8** | Sequence #1488 sweep FIRST, then #3009 | **Inverted** — #3009 proceeds now with M1 + M2 | Stage-5 § Cross-Milestone Coordination |
 | **Δ9** | Populations per issue bodies (22 orphaned bundles, 56 statusless epics) | **Drained:** orphaned bundles **0**; statusless epics **38 of 39**. Fixtures become mandatory; epic exemption becomes load-bearing | Stage-5 live re-derivation |
+| **Δ10** | `ADD .claude/work-hierarchy-exemption-list.txt` (#1039, "may ship empty") | **Not created / not tracked.** `.claude/` exemption lists are **operator-instance runtime state** — Check 16's own `.claude/status-label-invariant-exemption-list.txt` is likewise untracked, and `.gitignore` treats `.claude/hooks/.mode` + siblings the same way. Both the primitive and the deploy.sh block degrade correctly on an absent file (verified). Shipping a tracked empty file would invert the established precedent | Stage-6 grounding vs `git ls-files` + `.gitignore` |
+| **Δ11** | #1039 H1 predicate = "flag any token **outside the licensed kind vocabulary** in parent position" | **Narrowed to the ADR-049 closed banned-tier set** `{Initiative, Roadmap}`, case-sensitive. The broad form was implemented first and measured: **8 findings, 8 false positives** (the KM altitude ladder `Unit → Task`, the SAFe row of the Layer-2 methodology map `Feature → Story`, ADR-018's `Issue → Story` projection, and ADR-049's own lowercase `initiative→epic` **label-mapping** title). Flagging the SSOT map for containing methodology tier names is incoherent; the narrowed form is the exact class #1039 names and returns **0** on reconciled `main` | Stage-6 self-verification against live corpus |
 
 ---
 
