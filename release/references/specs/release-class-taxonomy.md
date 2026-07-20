@@ -7,6 +7,7 @@ disambiguates_from: Document Tier (CLAUDE.md File Management Protocol), Skill Ti
 source: "Stage 5 spec for Release Class taxonomy + differentiated lifecycle; operator D-decisions at Collective Review 2026-05-24."
 version: v11.27
 ---
+<!-- reference-durability: allow-version-ref -->
 
 # Release Class Taxonomy
 

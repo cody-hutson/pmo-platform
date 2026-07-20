@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-version-ref -->
 # RELEASE_PROTOCOL.md — Platform Release Management
 
 **Effective:** 2026-03-19
