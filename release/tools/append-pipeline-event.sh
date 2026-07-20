@@ -141,7 +141,7 @@ parse_schema_enum() {
 # outside the repo tree); kept in lockstep with § 3.
 _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
-  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred outcome-statement-authored recommendation-choice-delta" \
+  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored recommendation-choice-delta" \
   "escalation	tier-0 tier-1 tier-2 tier-3" \
   "self-repair	retry escalate rollback" \
   "scope-change	tier-1-adjust tier-2-scope-change tier-3-plan-rejection redaction" \
@@ -311,6 +311,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   TS_TEST="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   validate_ts_iso "$TS_TEST" || die "self-test: ts_iso format check failed"
   validate_subtype "decision" "scope-lock" || die "self-test: subtype validation failed"
+  validate_subtype "decision" "cascade-sweep-block" || die "self-test: decision cascade-sweep-block subtype check failed"
   validate_subtype "self-repair" "retry" || die "self-test: self-repair subtype check failed"
   validate_subtype "iteration" "dt-eng-pass-2" || die "self-test: iteration prefix check failed"
   validate_subtype "test-run" "suite-pass" || die "self-test: test-run suite-pass subtype check failed"
