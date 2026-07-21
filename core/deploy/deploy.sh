@@ -7115,6 +7115,65 @@ cmd_check() {
   fi
 
 
+  # Check 57 — deploy.sh check-roster extraction-contract (warn-mode initial) [#2106]
+  #
+  # skill-deployment.md publishes ONE derive-from-source command for the live check
+  # set (grep -oE 'log "Check [0-9]+...' core/deploy/deploy.sh) INSTEAD of a
+  # hand-maintained enumeration — that enumeration was REMOVED by f0a0516 (#2095), so
+  # re-adding a doc-side marker would re-create the exact duplicate surface the removal
+  # eliminated (a register-or-remove violation, hence #2106's D-C re-scope). The
+  # command is only correct while two deploy.sh conventions hold for EVERY check:
+  #   (1) a runtime `log "Check N:"` EMITTER line, and
+  #   (2) a `# Check N` DEFINITION-BLOCK comment header.
+  # A check that follows one convention but not the other makes the documented command
+  # under- or over-report, silently falsifying the doc's single-source-of-truth claim
+  # with no enumeration anywhere to visibly drift. This check asserts the contract —
+  # E == (D \ R), where D = def-blocks, R = RETIRED-reserved numbers, E = emitters.
+  # SELF-REFERENTIAL: this very check carries both a `# Check 57` block and a
+  # `log "Check 57:"` emitter, so it satisfies its own contract. Offline-capable
+  # (reads deploy.sh itself; no gh). Fail-loud: a zero-check parse exits 3 rather than
+  # reading green (the conventions moved). Warn-mode initial per bypass-mode-readiness.md
+  # §Shakedown (the 14/18/42/.../55/56 precedent); flip via an `extraction-contract.mode`
+  # file after the >=3-day warn-log review. The introducing release is itself exempt
+  # (reflexive-pipeline loop). Read-only; reversibility CHEAP (additive; git revert).
+  # Primitive: core/deploy/tools/check-extraction-contract.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 57: Check-roster extraction-contract (emitters vs def-blocks minus retired; warn-mode initial; enforce-flip deferred)"
+    local c57_script="core/deploy/tools/check-extraction-contract.py"
+    if [[ ! -f "$c57_script" ]]; then
+      flag_warn_or_issue "extraction-contract" "primitive script missing: $c57_script"
+    else
+      local c57_mode c57_out c57_exit=0
+      c57_mode=$(resolve_check_mode "extraction-contract")
+      c57_out=$(/usr/bin/python3 "$c57_script" --root . --output-format tsv 2>&1) || c57_exit=$?
+      if [[ $c57_exit -eq 3 ]]; then
+        flag_warn_or_issue "extraction-contract" "input failure (exit 3): $(echo "$c57_out" | head -1) — zero checks parsed; the '# Check N' / 'log \"Check N:\"' conventions may have moved, leaving the documented derive command unverifiable"
+      elif [[ $c57_exit -eq 0 ]]; then
+        local c57_def c57_emit
+        c57_def=$(echo "$c57_out" | awk -F'\t' '$1=="DEFBLOCKS"{print $2}')
+        c57_emit=$(echo "$c57_out" | awk -F'\t' '$1=="EMITTERS"{print $2}')
+        log "  OK:    extraction-contract — emitters match def-blocks (${c57_emit:-?} emitters, ${c57_def:-?} def-blocks; the documented derive-from-source command is complete)"
+      elif [[ $c57_exit -eq 1 ]]; then
+        local c57_me c57_md c57_re
+        c57_me=$(echo "$c57_out" | awk -F'\t' '$1=="MISSING_EMITTER"{print $2}' | paste -sd, -)
+        c57_md=$(echo "$c57_out" | awk -F'\t' '$1=="MISSING_DEFBLOCK"{print $2}' | paste -sd, -)
+        c57_re=$(echo "$c57_out" | awk -F'\t' '$1=="RETIRED_EMITTING"{print $2}' | paste -sd, -)
+        if [[ "$c57_mode" == "enforce" ]]; then
+          [[ -n "$c57_me" ]] && { log "  FAIL:  extraction-contract — check(s) with a def-block but NO log emitter (invisible to the documented command): $c57_me"; ISSUES=$((ISSUES + 1)); }
+          [[ -n "$c57_md" ]] && { log "  FAIL:  extraction-contract — check(s) that log but carry NO def-block: $c57_md"; ISSUES=$((ISSUES + 1)); }
+          [[ -n "$c57_re" ]] && { log "  FAIL:  extraction-contract — RETIRED number(s) still emitting: $c57_re"; ISSUES=$((ISSUES + 1)); }
+        else
+          [[ -n "$c57_me" ]] && flag_warn_or_issue "extraction-contract" "def-block without emitter (invisible to the documented derive command): Check(s) $c57_me (warn-mode; add a 'log \"Check N:\"' line or flip extraction-contract.mode)"
+          [[ -n "$c57_md" ]] && flag_warn_or_issue "extraction-contract" "emitter without def-block: Check(s) $c57_md (warn-mode; add a '# Check N' block)"
+          [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re (warn-mode; retire the emitter or un-reserve the number)"
+        fi
+      else
+        flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(echo "$c57_out" | head -1)"
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
