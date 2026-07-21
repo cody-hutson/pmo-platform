@@ -258,6 +258,27 @@ query($owner:String!,$name:String!,$endCursor:String){
 """
 
 
+def iter_json_docs(text):
+    """Yield each JSON document from a CONCATENATED stream.
+
+    `gh api graphql --paginate` emits one JSON document per page with NO separator
+    between them — not newline-delimited JSON. Splitting on newlines therefore
+    yields a single unparseable blob the moment a query spans >1 page, and the
+    result silently reads as zero nodes (a false-green). raw_decode walks the
+    concatenation correctly regardless of page count.
+    """
+    decoder = json.JSONDecoder()
+    idx, n = 0, len(text)
+    while idx < n:
+        while idx < n and text[idx].isspace():
+            idx += 1
+        if idx >= n:
+            break
+        obj, end = decoder.raw_decode(text, idx)
+        yield obj
+        idx = end
+
+
 def fetch_epic_parent_map(repo):
     """ONE batched+paginated GraphQL call — never an N+1 per-epic loop."""
     owner, _, name = repo.partition("/")
@@ -270,18 +291,11 @@ def fetch_epic_parent_map(repo):
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or "graphql call failed").strip().splitlines()[0])
     nodes = []
-    for chunk in proc.stdout.split("\n"):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        try:
-            payload = json.loads(chunk)
-        except ValueError:
-            continue
-        try:
+    try:
+        for payload in iter_json_docs(proc.stdout):
             nodes.extend(payload["data"]["repository"]["issues"]["nodes"])
-        except (KeyError, TypeError):
-            raise RuntimeError("unexpected GraphQL payload shape")
+    except (KeyError, TypeError, ValueError):
+        raise RuntimeError("unexpected GraphQL payload shape")
     return nodes
 
 
@@ -409,6 +423,15 @@ def self_test():
               "labels": {"nodes": [{"name": "type:epic"}]}}}]
     f, ex = run_h2(nodes, {("#11", "type:epic")})
     check("H2 exemption suppresses edge", len(f) == 0 and len(ex) == 1)
+
+    # PAGINATION: `gh --paginate` concatenates page documents with NO separator.
+    # A newline-split parse silently yields ZERO nodes past page 1 — a FALSE-GREEN
+    # on a >100-epic repo. Regression guard for that bug.
+    concat = '{"a":1}{"a":2}  {"a":3}'
+    check("concatenated multi-page JSON parses to all documents",
+          [d["a"] for d in iter_json_docs(concat)] == [1, 2, 3])
+    check("single-document JSON still parses",
+          [d["a"] for d in iter_json_docs('{"a":9}')] == [9])
 
     failed = [n for n, ok in results if not ok]
     for name, ok in results:
