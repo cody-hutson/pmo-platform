@@ -3420,21 +3420,35 @@ cmd_check() {
   # an in-tree Check 15 in a future release if architectural posture changes.
 
   # ─── Check 16: Status-label invariant (I1/I2/I3/I4) ────────
-  # Asserts the 4 atomic invariants on open improvement issues:
-  #   I1 mutex          — any open improvement with >1 status:* label
-  #   I2 presence       — any open improvement with 0 status:* labels
-  #   I3 contradiction-A — status: proposed + milestone set
-  #   I4 contradiction-B — status: bundled + no milestone
-  # Status-label vocabulary-agnostic via startswith("status: ") — accepts
-  # any current or future status value (status: deferred / status: rejected
-  # land cleanly).
-  # Mode-gated via $DEPLOY_CHECK_MODE (warn / enforce / off) per Checks 8-10
-  # precedent. Ships in warn-mode for ≥3-day shakedown per
-  # bypass-mode-readiness.md §Shakedown.
+  # Asserts the 4 atomic invariants on ALL open intake issues:
+  #   I1 mutex          — any open issue with >1 status:* label          (all types)
+  #   I2 presence       — any open issue with 0 status:* labels          (all types
+  #                       EXCEPT type:epic + sub-task — see the I2 exemption below)
+  #   I3 contradiction-A — status: proposed + milestone set               (all types)
+  #   I4 contradiction-B — status: bundled + no milestone                 (all types)
+  # SCOPE [#2682, 2026-07-19]: previously scanned `--label improvement` only; the
+  # fetch is now unscoped so bug/observation/sub-task/type:task intake is covered.
+  # Status-label vocabulary-agnostic via startswith("status: ") — accepts any
+  # current or future status value (status: deferred / status: rejected land cleanly).
+  # MODE DECOUPLED [#2682]: resolves its mode via resolve_check_mode
+  # "status-label-invariant" (a dedicated `status-label-invariant.mode` file), NOT
+  # the shared $DEPLOY_CHECK_MODE cohort — so the newly-broadened scope can graduate
+  # warn→enforce independently and a shared flip elsewhere cannot enforce the
+  # untested wider net (Check 22's g1-enforcement decoupling precedent). Absent a
+  # dedicated file it falls back to the shared mode (→ warn default), byte-identical
+  # to the prior behavior. Ships warn-mode for ≥3-day shakedown per
+  # bypass-mode-readiness.md §Shakedown; the introducing release is itself exempt
+  # (reflexive-pipeline loop — the broadened net does not gate its own release).
   # Exemption: .claude/status-label-invariant-exemption-list.txt — lines of
   # `<issue-number> <invariant-id>` skip the matching violation.
-  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 16: Status-label invariant (I1/I2/I3/I4)"
+  # NOTE: the c14_ / C14_ variable prefix below is stale copy-paste naming WITHIN
+  # Check 16 (not a numbering error) — flagged for a cosmetic follow-up rename;
+  # deliberately NOT renamed here to keep this in-place scope-widen a single
+  # focused, minimal, independently-revertible diff.
+  local STATUS_LABEL_MODE
+  STATUS_LABEL_MODE=$(resolve_check_mode "status-label-invariant")
+  if [[ "$STATUS_LABEL_MODE" != "off" ]]; then
+    log "Check 16: Status-label invariant (I1/I2/I3/I4; all-intake scope; warn-mode initial; enforce-flip deferred)"
     local C14_EXEMPT_FILE=".claude/status-label-invariant-exemption-list.txt"
     local c14_violations=0
 
@@ -3445,10 +3459,39 @@ cmd_check() {
       grep -qE "^[[:space:]]*${_num}[[:space:]]+${_inv}([[:space:]]|$)" "$C14_EXEMPT_FILE"
     }
 
+    # flag_status_label — Check 16 decoupled emit. Mirrors flag_warn_or_issue but
+    # switches on $STATUS_LABEL_MODE (resolved above), not the shared mode — the
+    # flag_g1_enforcement precedent. enforce → FAIL (increments ISSUES); warn →
+    # WARN + jsonl, no increment.
+    flag_status_label() {
+      local check_id="$1" detail="$2"
+      case "$STATUS_LABEL_MODE" in
+        enforce)
+          log "  FAIL:  $check_id — $detail"
+          ISSUES=$((ISSUES + 1))
+          ;;
+        warn)
+          log "  WARN:  $check_id — $detail (warn-mode; flip status-label-invariant.mode to 'enforce' after shakedown)"
+          local _ts
+          _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          local _detail_escaped="${detail//\\/\\\\}"
+          _detail_escaped="${_detail_escaped//\"/\\\"}"
+          printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+          ;;
+      esac
+    }
+
     # Single fetch — feeds all 4 invariant queries via local jq filters.
+    # SCOPE WIDENED [#2682, 2026-07-19]: the `--label improvement` filter was
+    # dropped so the invariants cover ALL open intake (bug / observation / sub-task
+    # / type:task) — not just improvement. The prior scope let non-improvement
+    # intake drift half-labeled indefinitely (facet 2), and left the already-present
+    # I4 orphaned-bundle detector blind to non-improvement bundles. Per-invariant
+    # type applicability is enforced BELOW (I2 exempts type:epic + sub-task); I1/I3/I4
+    # remain all-types. --limit 5000 has ample headroom for the ~300 open population.
     local c14_issues_json
     c14_issues_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-      --label improvement --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
+      --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
 
     # I1 — mutex: >1 status:* label
     local c14_i1_violators
@@ -3461,14 +3504,27 @@ cmd_check() {
         log "  EXEMPT: I1 mutex on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I1-mutex" "issue #$_num has >1 status:* label"
+      flag_status_label "status-label-I1-mutex" "issue #$_num has >1 status:* label"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i1_violators"
 
-    # I2 — presence: 0 status:* labels
+    # I2 — presence: 0 status:* labels.
+    # TYPE EXEMPTION [#2682, 2026-07-19]: skip `type:epic` and `sub-task`.
+    #   - type:epic: operator decision — epics are CONTAINERS, not lifecycle work
+    #     items, so "exactly one status label" does not apply (label-taxonomy.md
+    #     Rule 2). Without this, the widened scope would false-FAIL on the 38
+    #     statusless epics (load-bearing, not cosmetic).
+    #   - sub-task: the pre-existing carve-out (label-taxonomy.md Rule 6) — a
+    #     sub-task's status label is a point-in-time hygiene mirror, not an
+    #     invariant-enforced field. Previously implicit (sub-tasks lacked the
+    #     `improvement` label); now explicit since the fetch is unscoped.
+    # This exemption applies to I2 ONLY. I1 (mutex) / I3 / I4 stay all-types: an
+    # epic that never carries a status label simply never trips them.
     local c14_i2_violators
     c14_i2_violators=$(printf '%s' "$c14_issues_json" | jq -r '
       .[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)
+      | select((.labels | map(.name) | index("type:epic")) | not)
+      | select((.labels | map(.name) | index("sub-task")) | not)
       | .number')
     while IFS= read -r _num; do
       [[ -n "$_num" ]] || continue
@@ -3476,7 +3532,7 @@ cmd_check() {
         log "  EXEMPT: I2 presence on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I2-presence" "issue #$_num missing all status:* labels"
+      flag_status_label "status-label-I2-presence" "issue #$_num missing all status:* labels"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i2_violators"
 
@@ -3492,7 +3548,7 @@ cmd_check() {
         log "  EXEMPT: I3 contradiction-A on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
+      flag_status_label "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i3_violators"
 
@@ -3508,14 +3564,14 @@ cmd_check() {
         log "  EXEMPT: I4 contradiction-B on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
+      flag_status_label "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i4_violators"
 
     if [[ "$c14_violations" -eq 0 ]]; then
-      log "  OK:    0 violations across I1/I2/I3/I4 (open improvements)"
+      log "  OK:    0 violations across I1/I2/I3/I4 (all open intake; type:epic + sub-task exempt from I2)"
     else
-      log "  ${c14_violations} violation(s) emitted (mode=${DEPLOY_CHECK_MODE})"
+      log "  ${c14_violations} violation(s) emitted (mode=${STATUS_LABEL_MODE})"
     fi
   fi
 

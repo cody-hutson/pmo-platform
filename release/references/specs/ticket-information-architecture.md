@@ -610,16 +610,16 @@ This pattern is **idempotent** — running it twice with the same arguments prod
 
 #### Invariant Enforcement (`deploy.sh --check` Check 16)
 
-State Anchor Sync drift is detected at session-boundary by `core/deploy/deploy.sh --check` Check 16, which asserts 4 atomic invariants on open `improvement` issues:
+State Anchor Sync drift is detected at session-boundary by `core/deploy/deploy.sh --check` Check 16, which asserts 4 atomic invariants on **all open intake issues** (widened from `--label improvement`-only per #2682, 2026-07-19):
 
 | Invariant | Rule | Failure message |
 |---|---|---|
-| **I1 mutex** | At most one `status: *` label per issue | `issue #N has >1 status:* label` |
-| **I2 presence** | At least one `status: *` label per issue | `issue #N missing all status:* labels` |
-| **I3 contradiction-A** | `status: proposed` is incompatible with milestone set | `issue #N is status: proposed but milestone is set` |
-| **I4 contradiction-B** | `status: bundled` is incompatible with milestone unset | `issue #N is status: bundled but no milestone` |
+| **I1 mutex** | At most one `status: *` label per issue (all types) | `issue #N has >1 status:* label` |
+| **I2 presence** | At least one `status: *` label per issue, **except `type:epic` + `sub-task`** (per label-taxonomy.md Rule 2 applicability table) | `issue #N missing all status:* labels` |
+| **I3 contradiction-A** | `status: proposed` is incompatible with milestone set (all types) | `issue #N is status: proposed but milestone is set` |
+| **I4 contradiction-B** | `status: bundled` is incompatible with milestone unset (all types) | `issue #N is status: bundled but no milestone` |
 
-Check 16 is status-label vocabulary-agnostic (`startswith("status: ")`) — any present or future `status:` label values participate automatically. Ships in warn-mode (`core/hooks/deploy-check.mode`) for ≥3-day shakedown per [bypass-mode-readiness.md § Shakedown → Enforce Transition Checklist](../../../core/rules/bypass-mode-readiness.md). Legitimate exceptions register in `core/config/allowlists/status-label-invariant-exemption-list.txt` per the "No ungoverned changes" protocol.
+Check 16 is status-label vocabulary-agnostic (`startswith("status: ")`) — any present or future `status:` label values participate automatically. Ships in warn-mode for ≥3-day shakedown per [bypass-mode-readiness.md § Shakedown → Enforce Transition Checklist](../../../core/rules/bypass-mode-readiness.md); its mode is decoupled to a dedicated `status-label-invariant.mode` (falling back to the shared `deploy-check.mode` when absent) so the widened scope graduates warn→enforce independently. Legitimate exceptions register in `core/config/allowlists/status-label-invariant-exemption-list.txt` per the "No ungoverned changes" protocol.
 
 ### Mechanism Selection Matrix
 
