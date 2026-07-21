@@ -6988,6 +6988,77 @@ cmd_check() {
   fi
 
 
+  # Check 56 — Milestone↔epic membership (warn-mode initial) [#2219]
+  #
+  # Two legs, DIFFERENT severities (the #749 asymmetric-severity precedent):
+  #   M1 membership     — for each open milestone that DECLARES an epic
+  #                       (`<!-- milestone-epic: #N -->` or `**Epic:** #N`), every
+  #                       open non-sub-task child's parent-epic must equal it, unless
+  #                       the child body carries `<!-- milestone-epic: allow -->`.
+  #                       A milestone with NO declared epic is SKIPPED, never failed.
+  #                       ENFORCE-capable leg (resolve_check_mode).
+  #   M2 reconciliation — the description's `### Scope` card list vs live membership;
+  #                       WARN-ONLY, never enforce-capable. A description legitimately
+  #                       lags membership mid-release; gating it would make it
+  #                       chronically non-green. Emitted as its own sub-invariant.
+  # Sub-tasks are excluded from both legs (pipeline scaffolding, no parent-epic by
+  # design; counting them would make M2 permanently non-green).
+  # Placement: deploy.sh --check per D-A (sibling to Check 16's gh+jq invariant
+  # pattern; repo-integrity.yml rejected as altitude mismatch — membership is
+  # repo-state, not a PR-diff property). ONE batched+paginated GraphQL issue query
+  # + one milestones REST call — not an N+1 per-milestone loop.
+  # ADOPTION NOTE: 0 of 46 open milestones declare an epic today, so M1 SKIPs
+  # universally and is INERT until descriptions adopt the marker (reported as
+  # DECLARED 0, not a silent green). M2 fires on the ~16 milestones whose
+  # description lags membership — warn-mode is exactly what keeps that non-blocking.
+  # gh-unavailable → SKIP (needs the live milestone + issue set; mirrors Check
+  # 39/40/51/52/53). Warn-mode initial per bypass-mode-readiness.md §Shakedown;
+  # flip via `milestone-epic-membership.mode` after the >=3-day review. The
+  # introducing release is itself exempt (reflexive-pipeline loop). Read-only;
+  # reversibility CHEAP. Primitive: core/deploy/tools/check-milestone-epic-membership.py
+  # (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 56: Milestone↔epic membership (M1 membership + M2 reconciliation; warn-mode initial; enforce-flip deferred)"
+    local c56_script="core/deploy/tools/check-milestone-epic-membership.py"
+    if [[ ! -f "$c56_script" ]]; then
+      flag_warn_or_issue "milestone-epic-membership" "primitive script missing: $c56_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — milestone↔epic membership needs the live milestone + issue set (offline/unauth; mirrors Check 39/40/51/52/53)"
+    else
+      local c56_mode c56_out c56_exit=0
+      c56_mode=$(resolve_check_mode "milestone-epic-membership")
+      c56_out=$(/usr/bin/python3 "$c56_script" --repo "$AUDIT_REPO" --output-format tsv 2>&1) || c56_exit=$?
+      if [[ $c56_exit -eq 3 ]]; then
+        flag_warn_or_issue "milestone-epic-membership" "input failure (exit 3): $(echo "$c56_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+      elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
+        local c56_declared c56_m1 c56_m2
+        c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
+        c56_m1=$(echo "$c56_out" | awk -F'\t' '$1=="M1"{print "ms#"$2":#"$3"(parent #"$4"!=epic #"$5")"}' | paste -sd'; ' -)
+        c56_m2=$(echo "$c56_out" | awk -F'\t' '$1=="M2"{print "ms#"$2}' | paste -sd, -)
+        if [[ -z "$c56_m1" && -z "$c56_m2" ]]; then
+          log "  OK:    milestone↔epic membership — no drift (${c56_declared:-0} milestone(s) declare an epic; M2 reconciliation clean)"
+        else
+          # M1 — enforce-capable
+          if [[ -n "$c56_m1" ]]; then
+            if [[ "$c56_mode" == "enforce" ]]; then
+              log "  FAIL:  milestone-epic M1 — cross-epic child(ren): $c56_m1"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "milestone-epic-membership" "M1 membership — cross-epic child(ren) (warn-mode; flip milestone-epic-membership.mode to enforce after shakedown): $c56_m1"
+            fi
+          fi
+          # M2 — warn-only ALWAYS (never gates, independent of mode)
+          if [[ -n "$c56_m2" ]]; then
+            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2"
+          fi
+        fi
+      else
+        flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(echo "$c56_out" | head -1)"
+      fi
+    fi
+  fi
+
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
