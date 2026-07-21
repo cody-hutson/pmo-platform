@@ -3146,6 +3146,88 @@ STUB
     failures=$((failures+1))
   fi
 
+  # Test 10: corpus append-ledger merge-immunity (#3108, AC1). Two release
+  # branches each PREPEND a distinct row into the same top-of-ledger region — the
+  # concurrent Stage-13 append shape. Under a `merge=union` driver the second-to-
+  # merge reconcile auto-resolves with ZERO conflict markers and keeps BOTH rows
+  # (the #117 version-slot-loss blocker removed); the SAME merge WITHOUT the driver
+  # CONFLICTS, proving the driver is load-bearing (not a vacuous green). A third
+  # control merges a state-bearing status column under union and asserts it
+  # CORRUPTS (the transitioned row is duplicated) — locking in WHY RELEASE_LOG and
+  # RELEASE_REVERSIONS are EXCLUDED from the union set (Stage-5 empirical Test B).
+  # Hermetic: scratch git repos under mktemp; seeds its OWN .gitattributes, so it
+  # exercises the driver behavior independent of the repo's root file; no network.
+  if [[ -x "$GIT" ]]; then
+    local _ua_tmp; _ua_tmp="$(/usr/bin/mktemp -d -t union-attr-selftest.XXXXXX)"
+    local _ua_attr _ua_dir
+
+    # (a)+(b) additive ledger: build once with the driver, once without.
+    for _ua_attr in union none; do
+      _ua_dir="$_ua_tmp/$_ua_attr"; /bin/mkdir -p "$_ua_dir"
+      # `) || true` neutralizes the intentional non-zero exit of the non-union
+      # merge (it conflicts by design) under the script's `set -e` — same guard
+      # the #1680/#1682 scratch-git subshells above use.
+      ( cd "$_ua_dir"
+        $GIT init -q -b main . >/dev/null 2>&1 || { $GIT init -q . >/dev/null 2>&1; $GIT checkout -q -b main >/dev/null 2>&1; }
+        /usr/bin/printf '%s\n' '| Version | Milestone | Date |' '|---|---|---|' '| v9.79 | prior | 2026-01-01 |' > ledger.md
+        if [[ "$_ua_attr" == union ]]; then /usr/bin/printf 'ledger.md merge=union\n' > .gitattributes; fi
+        $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1
+        $GIT -c user.email=t@t -c user.name=t commit -qm seed >/dev/null 2>&1
+        $GIT checkout -q -b relA >/dev/null 2>&1
+        /usr/bin/printf '%s\n' '| Version | Milestone | Date |' '|---|---|---|' '| v9.80 | branchA | 2026-02-01 |' '| v9.79 | prior | 2026-01-01 |' > ledger.md
+        $GIT -c user.email=t@t -c user.name=t commit -qam A >/dev/null 2>&1
+        $GIT checkout -q main >/dev/null 2>&1; $GIT checkout -q -b relB >/dev/null 2>&1
+        /usr/bin/printf '%s\n' '| Version | Milestone | Date |' '|---|---|---|' '| v9.81 | branchB | 2026-03-01 |' '| v9.79 | prior | 2026-01-01 |' > ledger.md
+        $GIT -c user.email=t@t -c user.name=t commit -qam B >/dev/null 2>&1
+        $GIT checkout -q relA >/dev/null 2>&1
+        $GIT -c user.email=t@t -c user.name=t merge -q --no-edit relB >/dev/null 2>&1
+      ) || true
+    done
+
+    # (a) union → CLEAN auto-merge: no conflict markers, BOTH rows kept exactly once
+    if /usr/bin/grep -qE '^(<<<<<<<|=======|>>>>>>>)' "$_ua_tmp/union/ledger.md" 2>/dev/null; then
+      echo "FAIL: #3108 union driver must auto-resolve a two-branch additive append with NO conflict markers"; failures=$((failures+1))
+    fi
+    if [[ "$(/usr/bin/grep -c 'v9.80' "$_ua_tmp/union/ledger.md" 2>/dev/null)" != "1" \
+       || "$(/usr/bin/grep -c 'v9.81' "$_ua_tmp/union/ledger.md" 2>/dev/null)" != "1" ]]; then
+      echo "FAIL: #3108 union merge must keep BOTH concurrent rows exactly once (take-both, never drop a release's row)"; failures=$((failures+1))
+    fi
+
+    # (b) CONTROL — same merge WITHOUT the driver MUST conflict (driver is load-bearing)
+    if ! /usr/bin/grep -qE '^(<<<<<<<|=======|>>>>>>>)' "$_ua_tmp/none/ledger.md" 2>/dev/null; then
+      echo "FAIL: #3108 control — a default (non-union) merge of the same concurrent append MUST conflict; a green here means the test proves nothing"; failures=$((failures+1))
+    fi
+
+    # (c) EXCLUSION control — a state-bearing status column under union CORRUPTS:
+    #     each branch transitions a DIFFERENT row DEPLOYED->VERIFIED; union takes
+    #     both sides -> the rows duplicate with contradictory status. This is why
+    #     RELEASE_LOG / RELEASE_REVERSIONS are EXCLUDED. If this stops corrupting,
+    #     the exclusion premise changed and must be re-evaluated.
+    local _ua_log="$_ua_tmp/logexcl"; /bin/mkdir -p "$_ua_log"
+    ( cd "$_ua_log"
+      $GIT init -q -b main . >/dev/null 2>&1 || { $GIT init -q . >/dev/null 2>&1; $GIT checkout -q -b main >/dev/null 2>&1; }
+      /usr/bin/printf '%s\n' '| Version | State |' '|---|---|' '| v9.79 | DEPLOYED |' '| v9.78 | DEPLOYED |' > LOG.md
+      /usr/bin/printf 'LOG.md merge=union\n' > .gitattributes
+      $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1
+      $GIT -c user.email=t@t -c user.name=t commit -qm seed >/dev/null 2>&1
+      $GIT checkout -q -b relA >/dev/null 2>&1
+      /usr/bin/printf '%s\n' '| Version | State |' '|---|---|' '| v9.79 | VERIFIED |' '| v9.78 | DEPLOYED |' > LOG.md
+      $GIT -c user.email=t@t -c user.name=t commit -qam A >/dev/null 2>&1
+      $GIT checkout -q main >/dev/null 2>&1; $GIT checkout -q -b relB >/dev/null 2>&1
+      /usr/bin/printf '%s\n' '| Version | State |' '|---|---|' '| v9.79 | DEPLOYED |' '| v9.78 | VERIFIED |' > LOG.md
+      $GIT -c user.email=t@t -c user.name=t commit -qam B >/dev/null 2>&1
+      $GIT checkout -q relA >/dev/null 2>&1
+      $GIT -c user.email=t@t -c user.name=t merge -q --no-edit relB >/dev/null 2>&1
+    ) || true
+    if [[ "$(/usr/bin/grep -c 'v9.79' "$_ua_log/LOG.md" 2>/dev/null)" -lt 2 ]]; then
+      echo "FAIL: #3108 exclusion control — union on a state-bearing status column MUST duplicate the transitioned row (Test B corruption); if it no longer does, re-evaluate the RELEASE_LOG/RELEASE_REVERSIONS exclusion"; failures=$((failures+1))
+    fi
+
+    /bin/rm -rf "$_ua_tmp" 2>/dev/null || true
+  else
+    echo "  (skipped #3108 union-merge self-test — git not executable at $GIT)" >&2
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -3170,6 +3252,7 @@ STUB
   echo "  JSON report renders valid JSON" >&2
   echo "  usage block extractable" >&2
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
+  echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
   exit 0
 }
 
