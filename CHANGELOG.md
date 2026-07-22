@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.81] - 2026-07-22
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Releases named by theme instead of a version number now leave a complete record, and every tool judges a version number by the same rule.
 
 [Full notes](release/releases/notes/v3.81_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.81)
 
