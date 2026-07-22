@@ -658,7 +658,15 @@ _cc_row_findings() {
         case "$_d_exit" in
           0) : ;;  # MATCH
           1) printf '%s: published Release body != frontmatter-stripped note (§5.1 drift)\n' "$_ver" ;;
-          2) : ;;  # N/A at tool layer (gh offline) — already covered above
+          2) # N/A at tool layer. gh is confirmed up above (the _gh_ok pre-check),
+             # so exit 2 here is a git capability absence (origin/main unresolvable
+             # / corrupt object), NOT gh. At the "gate" surface an unverifiable
+             # canonical must fail-closed (the merge gate cannot certify blind);
+             # at "lifecycle" it is a no-finding N/A.
+             if [[ "$surface" == "gate" ]]; then
+               printf '%s: §5.1 body-drift unverifiable (git/origin-main unreadable at gate surface — fail-closed)\n' "$_ver"
+             fi
+             ;;
           3) : ;;  # no Release/note to compare — Surface-1 existence owns it (h)
           *) printf '%s: body-drift tool returned unexpected exit %s\n' "$_ver" "$_d_exit" ;;
         esac
@@ -5281,7 +5289,10 @@ cmd_check() {
             c47_output+="${_v47}: published Release body != frontmatter-stripped in-repo note (§5.1 drift)"$'\n'
             c47_findings=$((c47_findings + 1))
             ;;
-          2) log "  N/A:   ${_v47} drift sub-check skipped (gh offline/unauth at tool layer)" ;;
+          2) # gh is confirmed up before this loop (gh-guard above), so exit 2 here
+             # is a git capability absence (origin/main unresolvable / corrupt
+             # object), NOT gh. Name it from the tool's stderr; never FAIL.
+             log "  N/A:   ${_v47} drift sub-check N/A at tool layer — required capability unavailable (git/origin-main; gh already confirmed up). $(/usr/bin/printf '%s' "$_d47_out" | /usr/bin/head -1)" ;;
           3) log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
           *) c47_output+="${_v47}: drift tool returned unexpected exit ${_d47_exit}"$'\n'; c47_findings=$((c47_findings + 1)) ;;
         esac
