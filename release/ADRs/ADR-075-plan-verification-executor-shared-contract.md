@@ -1,6 +1,6 @@
 ---
 title: "ADR-075 — Plan-verification executor: a versioned shared-executor contract over a thin check-family dispatcher"
-status: Proposed
+status: Accepted
 date: 2026-07-03
 release: 70-verification-execution-surface
 deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + operator at the Collective Review scope-lock; contract-record elected at Stage 6 first-commit"

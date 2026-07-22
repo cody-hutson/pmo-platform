@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-046 — Roadmap-instance in-repo home — shipped /roadmaps/ folder + token-as-override
-status: Proposed (supersedes-in-part ADR-012's location clause; flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-27
 release: 40-initiative-roadmap-vocabulary-and-home
 deciders: "Workspace owner (architecture ratified at the Stage 9 review); design authored at Stage 5 Solutioning"

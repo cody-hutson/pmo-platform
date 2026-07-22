@@ -1,6 +1,6 @@
 ---
 title: "ADR-073 — Cross-issue release-integration check: Stage-9 extension over new Stage 7.5"
-status: Proposed
+status: Accepted
 date: 2026-07-03
 release: 70-verification-execution-surface
 deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + operator at the Collective Review scope-lock"

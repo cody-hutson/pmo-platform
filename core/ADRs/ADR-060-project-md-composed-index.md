@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: PROJECT.md is a composed wiki-link index, not the entity container
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-30
 release: 21-shared-entity-storage-layout
 deciders: "[operator]"

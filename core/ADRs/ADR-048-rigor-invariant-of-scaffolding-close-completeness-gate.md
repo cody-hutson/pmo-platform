@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: Rigor is invariant of scaffolding; close-completeness is asserted by a scaffold-independent gate
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-28
 release: 91-release-notes-conformance
 deciders: "Workspace owner"

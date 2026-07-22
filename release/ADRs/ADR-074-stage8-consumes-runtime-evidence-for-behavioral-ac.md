@@ -1,6 +1,6 @@
 ---
 title: "ADR-074 — Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute)"
-status: Proposed
+status: Accepted
 date: 2026-07-03
 release: 70-verification-execution-surface
 deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + operator at the Collective Review scope-lock"

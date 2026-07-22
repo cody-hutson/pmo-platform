@@ -37,10 +37,12 @@ Scans target files for broken cross-references. Default mode when
 `--from-path/--to-path` are NOT supplied.
 
 ```bash
-# deploy.sh Check 14 invocation pattern (governance + skill SKILL.md scope)
+# Ad-hoc scan over an explicit scope. `--allowlist` is REPEATABLE and the
+# pattern sets UNION — see "Check 14 (deploy.sh) Invocation" below for the
+# tracked-base + instance-additions layering the recurring callers use.
 python3 core/deploy/tools/check-doc-links.py \
   --target-paths "core/governance/,core/standards/,operations/skills/*/SKILL.md" \
-  --allowlist core/config/allowlists/skip-doc-link-check.txt \
+  --allowlist core/deploy/allowlists/skip-doc-link-check-ci.txt \
   --output-format tsv \
   --exclude-code-blocks
 ```
@@ -297,8 +299,10 @@ failure on any → exit 1 with explicit assertion message.
 | 7 | `--require-targets` fail-loud | a `--target-paths` glob resolving to zero files is flagged (exit 3); a populated scan-root is not |
 | 8 | placeholder / meta-doc-literal exclusion precision | `<…>` tokens, barewords, `...`, and blockquoted worked-example links are skipped while a genuine broken ref still fires |
 | 9 | relocatable workspace-root + precedence | a `/`-rooted link re-roots under a sandbox root; CLI > `$CLAUDE_WORKSPACE_ROOT` > default |
+| 10 | `--target-paths-file` loader (shared scan-scope SSOT) | one-glob-per-line parsing; blank/comment lines ignored; missing or comment-only file returns `[]` (which `main()` converts to a hard error, never a silent empty scan) |
+| 11 | repeatable `--allowlist` UNION (shared tracked base + instance additions) | two allowlist files concatenate in argument order and neither shadows the other; a missing file does not discard the present one; the union actually suppresses (with an unallowlisted control that still fires) |
 
-Expected output: `self-test OK (9 fixtures passed)`.
+Expected output: `self-test OK (11 fixtures passed)`.
 
 ## Check 14 (deploy.sh) Invocation
 
@@ -307,15 +311,25 @@ the governance + skill SKILL.md surface across all 3 modules:
 
 ```bash
 python3 core/deploy/tools/check-doc-links.py \
-  --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,release/schemas/,release/specs/,release/standards/,release/rules/,operations/OPERATIONS.md,operations/references/,operations/schemas/,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
+  --target-paths-file core/deploy/allowlists/doc-link-target-paths.txt \
+  --allowlist core/deploy/allowlists/skip-doc-link-check-ci.txt \
   --allowlist "$PMO_INSTANCE_PATH/skip-doc-link-check.txt" \
   --output-format tsv \
+  --require-targets \
   --exclude-code-blocks
 ```
 
-Allowlist fallback: when `$PMO_INSTANCE_PATH/skip-doc-link-check.txt` does
-not exist, deploy.sh falls back to `.claude/skip-doc-link-check.txt` (legacy
-operator-side workspace location).
+Scan scope comes from the shared `--target-paths-file`, the SAME list
+`.github/workflows/link-check.yml` passes, so the two callers' scope cannot
+drift.
+
+Allowlist layering: `--allowlist` is repeatable and the pattern sets UNION in
+argument order. The first is the **tracked corpus-level base** — also the SAME
+file `link-check.yml` passes, so the two callers' ignore list cannot drift
+either. The second carries operator-instance additions layered on top; when
+`$PMO_INSTANCE_PATH/skip-doc-link-check.txt` does not exist, deploy.sh falls
+back to `.claude/skip-doc-link-check.txt` (legacy operator-side workspace
+location), and an absent instance file simply contributes no patterns.
 
 Warn-mode initial per `core/rules/bypass-mode-readiness.md` shakedown
 precedent; flip-to-enforce timeline codified in

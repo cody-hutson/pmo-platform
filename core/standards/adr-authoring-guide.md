@@ -90,6 +90,20 @@ core/specs/reversibility-protocol.md.>
 
 Author ADR body/frontmatter references in **ADR-number form** (`ADR-005`), never issue `#N` — this keeps the repository-integrity issue-reference gate green (see both ADR READMEs' § Repo-integrity authoring discipline).
 
+### Durability rules (enforced by the ADR durability lint)
+
+Three authoring rules keep an ADR readable after the events the platform actually performs — history rewrites, corpus growth, and repository moves. They are enforced by a repository-integrity lint, [`release/tools/check-adr-durability.py`](../../release/tools/check-adr-durability.py), which runs as a job on every pull request that touches an ADR and carries a `--self-test` covering each rule.
+
+| Rule | Write this | Not this |
+|---|---|---|
+| **Status enum** — the `status:` value's leading token is one of the four Nygard tokens defined in [`adr-schema.md` §2](../schemas/adr-schema.md). A prose tail after the token (a ratification anchor, a supersession pointer) is permitted and expected. | `status: Proposed (flips to Accepted at the Stage 9 review)` | `status: Draft` |
+| **No stale anchors** — durable prose carries no hardcoded commit SHA and no live corpus-population count. A commit hash is the durability ladder's least-durable rung, and a population count is false the next time the corpus grows. Cite the deriving command instead of a number, summarize a change instead of naming its hash, or anchor the fact historically ("as of authoring, …"). | "the check roster, derived by the command the deployment rules publish" | "the 44 skills" · "resolved by commit `a1b2c3d`" |
+| **No operator handle** — the sanctioned ADR carve-out permits the operator's literal **name** on a `deciders:` line and nothing more. The GitHub **handle** is never sanctioned, on any line, including `deciders:`. | `deciders: "Ada Lovelace (operator) + Stage 5 spoke"` | `deciders: "ada-lovelace + Stage 5 spoke"` |
+
+The stale-anchor rule exempts, by construction: fenced code blocks (a worked command example is not durable prose); the `source_observations:` frontmatter block (the schema defines it as point-in-time grounding evidence, so pinning it is correct); a line carrying an explicit historical anchor; and any `Superseded` or `Deprecated` record, which is frozen for the audit trail under the supersede-not-edit policy below. A file that genuinely needs a pinned anchor declares the marker `<!-- adr-durability: allow-anchor -->` once, as an HTML comment anywhere in the file — a deliberate, auditable declaration, exactly as the reference-durability markers work. The marker never suppresses the handle rule.
+
+The lint currently reports without blocking. It locks a clean baseline rather than creating one, so it graduates to blocking only after the ADR corpus has had its full structural-conformance pass and the usual warn-log shakedown has run.
+
 ## Worked example
 
 A condensed real ADR (distilled from [ADR-005](../../release/ADRs/ADR-005-append-pattern-aware-cross-pr-contention-scoring.md), the canonical worked exemplar named in both ADR READMEs). Trimmed to show the shape; the live record carries the full detail.
