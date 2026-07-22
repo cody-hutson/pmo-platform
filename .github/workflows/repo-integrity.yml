@@ -1066,3 +1066,143 @@ jobs:
             exit 0
           fi
           exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE 9 — ADR durability lint (#1490). The sibling of GATE 4: that gate guards
+  #          ADR *identity* (one global, gap-free ADR-NNN sequence); this one guards
+  #          ADR *durability*. Three rules, all in release/tools/check-adr-durability.py:
+  #            R1 STATUS-ENUM     the `status:` leading token is Proposed | Accepted |
+  #                               Deprecated | Superseded (a prose tail is allowed —
+  #                               the schema's leading-token rule, not a closed enum).
+  #            R2 STALE-ANCHOR    a hardcoded commit SHA or a live corpus-population
+  #                               count baked into durable prose.
+  #            R3 OPERATOR-HANDLE the operator's literal GitHub handle. The sanctioned
+  #                               ADR carve-out is NAME-scoped (the literal name on a
+  #                               `deciders:` line); the HANDLE is never sanctioned, so
+  #                               R3 closes the gap the line-scoped depersonalization
+  #                               skip would otherwise leave open.
+  #
+  #          DELTA-SCOPED + WARN-MODE: scans only ADR files changed in the PR, and only
+  #          lines ADDED since the base (the net-new posture the other gates use), so
+  #          pre-existing corpus rot in unchanged files is never re-flagged.
+  #
+  #          *** ENFORCE-FLIP IS DEFERRED AND HARD-GATED — DO NOT FLIP WARN_MODE HERE ***
+  #          This lint LOCKS a clean baseline; it does not create one. The ADR corpus has
+  #          not yet had its full structural-conformance pass, so flipping to enforce
+  #          today would red-CI the existing corpus — the exact ordering the issue's own
+  #          dependency note forbids ("guarding before cleaning would red-CI the existing
+  #          corpus"). The flip is a POST-CONFORMANCE shakedown step: it becomes eligible
+  #          only after the ADR full-conformance pass lands a clean baseline, and then
+  #          only after the standard >=3-day warn-log review per
+  #          core/rules/bypass-mode-readiness.md § Shakedown -> Enforce Transition.
+  #
+  #          Handle resolution: `github.repository_owner` — the repo's own owner segment,
+  #          which is bot-invariant (unlike github.actor) and fork-correct. The handle is
+  #          NEVER hardcoded, in this workflow or in the checker.
+  #
+  #          Self-test runs FIRST and hard-fails INDEPENDENT of warn-mode (the CDF-2
+  #          posture the governance-file-map gate uses) — a mis-parsing detector that
+  #          reads green is indistinguishable from a passing one.
+  #
+  #          Injection-safety: BASE_SHA/HEAD_SHA/HANDLE bound via env: and used as "$VAR";
+  #          no github-context expression is inlined into a run command.
+  # ---------------------------------------------------------------------------
+  adr-durability:
+    name: ADR durability gate
+    runs-on: ubuntu-latest
+    env:
+      WARN_MODE: 'true'   # warn-mode ONLY — the enforce-flip is hard-gated on the ADR
+                          # full-conformance pass landing a clean baseline first.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # need the base commit for the added-lines delta
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Lint changed ADRs for status-enum, stale-anchor, and operator-handle violations
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HANDLE: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          # Self-test FIRST — hard-fails regardless of WARN_MODE.
+          python3 release/tools/check-adr-durability.py --self-test
+
+          OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-adr-durability[[:space:]]*-->'
+
+          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" \
+            -- 'core/ADRs/ADR-*.md' 'release/ADRs/ADR-*.md' 2>/dev/null || true)
+          FILES=()
+          for f in "${CHANGED[@]}"; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            if grep -qE "$OVERRIDE" "$f"; then
+              echo "::notice::repo-integrity adr-durability: $f carries allow-adr-durability — skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            FILES+=("$f")
+          done
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo ":white_check_mark: ADR durability — no changed ADR files to lint" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          set +e
+          python3 release/tools/check-adr-durability.py \
+            --root . --handle "$HANDLE" --diff-base "$BASE_SHA" \
+            --files "${FILES[@]}" | tee /tmp/adr-durability.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### ADR durability lint output"
+            echo '```'
+            cat /tmp/adr-durability.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # exit 3 = input failure (the ADR tree moved) — fail loud regardless of warn-mode.
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::ADR durability lint could not resolve the ADR tree — the checker scanned nothing."
+            exit 1
+          fi
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: ADR durability — changed ADRs carry no net-new durability violation" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## ADR durability gate findings"
+            echo ""
+            echo "A changed ADR introduces, on an added line, one of:"
+            echo ""
+            echo "- **R1** a \`status:\` value whose leading token is outside \`Proposed | Accepted | Deprecated | Superseded\`."
+            echo "- **R2** a hardcoded commit SHA or a live corpus-population count in durable prose."
+            echo "- **R3** the operator's literal GitHub handle (the ADR carve-out covers the literal *name* on a \`deciders:\` line — never the handle)."
+            echo ""
+            echo "See \`core/standards/adr-authoring-guide.md\` and \`core/rules/git-workflow.md\` § Repository-Integrity Gates."
+            echo ""
+            echo "### Fixes"
+            echo ""
+            echo "- **R1** — use a Nygard enum token; a prose tail after it is fine."
+            echo "- **R2** — state the fact so it survives: cite the deriving command instead of a count, summarize the change instead of a SHA, or anchor the number historically (\"as of authoring, ...\")."
+            echo "- **R3** — write the operator's literal name, or the operator-name token, instead of the handle."
+            echo ""
+            echo "### Exemptions (already handled)"
+            echo ""
+            echo "- Fenced code blocks, the \`source_observations:\` frontmatter block, historically-anchored lines, and \`Superseded\`/\`Deprecated\` records are R2-exempt by construction."
+            echo "- A file that genuinely needs a pinned anchor: add \`<!-- adr-durability: allow-anchor -->\` (R2 only — never R3)."
+            echo "- Whole-file skip: \`<!-- repo-integrity: allow-adr-durability -->\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "::warning::ADR durability gate (warn-mode): findings reported, not blocking. The enforce-flip is HARD-GATED on the ADR full-conformance pass landing a clean baseline first — do not flip WARN_MODE before then."
+            exit 0
+          fi
+          exit 1
