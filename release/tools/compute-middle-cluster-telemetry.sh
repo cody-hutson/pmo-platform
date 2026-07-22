@@ -107,9 +107,16 @@ for line in sys.stdin:
     if len(parts) < 9:
         continue
     ts = parts[0][2:].strip()
-    parse_iso(ts)
+    # Parse ONCE at ingest and carry the datetime on the row. Every temporal
+    # comparison below orders on `tsdt`, never on the raw `ts` string: lexicographic
+    # order equals chronological order only under ONE fixed timestamp format, and a
+    # fractional-second stamp ("…:00.500Z") parses cleanly, clears the exit-2
+    # integrity gate, then sorts BEFORE "…:00Z" — silently dropping a real escape
+    # and publishing it as a clean signal. `ts` is retained for display only.
+    tsdt = parse_iso(ts)
     rows.append({
         "ts": ts,
+        "tsdt": tsdt,
         "version": parts[1].strip(),
         "stage": parts[2].strip(),
         "etype": parts[3].strip(),
@@ -151,11 +158,11 @@ dt_pass = {}
 for r in rows:
     if r["etype"] == "gate-outcome" and r["esub"] == "dt-pass":
         s = r["subject"]
-        if s not in dt_pass or r["ts"] < dt_pass[s]:
-            dt_pass[s] = r["ts"]
+        if s not in dt_pass or r["tsdt"] < dt_pass[s]:
+            dt_pass[s] = r["tsdt"]
 escaped = 0
 for s, p_ts in dt_pass.items():
-    if any(rr["etype"] == "gate-outcome" and rr["esub"] == "qa-rejection" and rr["ts"] > p_ts for rr in by_subject[s]):
+    if any(rr["etype"] == "gate-outcome" and rr["esub"] == "qa-rejection" and rr["tsdt"] > p_ts for rr in by_subject[s]):
         escaped += 1
 i19 = {"num": escaped, "den": len(dt_pass), "rate": rhu(escaped, len(dt_pass))}
 
@@ -255,6 +262,20 @@ print("NA" if d is None else d)' "$ST_JSON" "$@"; }
   # I22 presence: plan-review rows present -> "present"
   [[ "$(get narrowed decision-record-conformance presence)" == "present" ]] || die "self-test: I22 presence = $(get narrowed decision-record-conformance presence), expected present"
 
+  # Temporal ordering must compare PARSED datetimes, never raw timestamp strings.
+  # Discriminating fixture: a QA rejection 250ms after its DT pass, in the same whole
+  # second. Lexicographically "…:00.250Z" sorts BEFORE "…:00Z" ('.' < 'Z'), so a raw-string
+  # compare reads the rejection as PRE-pass and drops a REAL escape — publishing
+  # `escape-rate 0/1 (0.00)`, an FM1-shaped fabricated clean signal. Expected 1.0.
+  TS_FIXTURE="$(/bin/cat <<'ROWS'
+| 2026-04-10T09:00:00Z | v2.00 | 7 | gate-outcome | dt-pass | spoke:#Y | #Y | CHEAP | resolved | p |
+| 2026-04-10T09:00:00.250Z | v2.00 | 8 | gate-outcome | qa-rejection | spoke:#Y | #Y | MODERATE | resolved | post-pass |
+ROWS
+)"
+  TS_JSON="$(printf '%s\n' "$TS_FIXTURE" | "$PY" -c "$MIDDLE_AGG_PY" "")"
+  TSR="$("$PY" -c 'import json,sys; v=json.loads(sys.argv[1])["build"]["escape-rate"]["rate"]; print("NA" if v is None else v)' "$TS_JSON")"
+  [[ "$TSR" == "1.0" ]] || die "self-test: I19 fractional-second ordering = $TSR, expected 1.0 (the .250Z rejection is AFTER the Z-form dt-pass; a raw-string compare drops the escape and fabricates a clean 0.00)"
+
   # N/A discipline: an empty stream yields N/A rates (not 0.00) for every BUILD rate.
   EMPTY_JSON="$(printf '' | "$PY" -c "$MIDDLE_AGG_PY" "")"
   ER="$("$PY" -c 'import json,sys; v=json.loads(sys.argv[1])["build"]["escape-rate"]["rate"]; print("NA" if v is None else v)' "$EMPTY_JSON")"
@@ -265,6 +286,7 @@ print("NA" if d is None else d)' "$ST_JSON" "$@"; }
   echo "self-test: PASS"
   echo "  4 BUILD indicators validated (loop-depth mean, escape, conditional-accept, exception-trigger)"
   echo "  NARROWED I22 presence flag validated (present / absent)"
+  echo "  temporal ordering validated on parsed datetimes (fractional-second stamp does not drop an escape)"
   echo "  N/A discipline validated (empty population -> N/A, never synthesized 0.00)"
   echo "  query-pipeline-event.sh dependency validated"
   exit 0

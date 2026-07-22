@@ -109,7 +109,7 @@ format_duration() {
 #            "| ts | version | stage | event_type | event_subtype | actor | subject |
 #             reversibility | outcome | payload |").
 FRONT_AGG_PY="$(/bin/cat <<'PY'
-import sys, json, math
+import sys, json, math, re
 from datetime import datetime
 from collections import defaultdict
 
@@ -139,9 +139,17 @@ for line in sys.stdin:
     if len(parts) < 9:
         continue
     ts = parts[0][2:].strip()   # strip leading "| "
-    parse_iso(ts)               # source-integrity: exit 2 on malformed ts
+    # Parse ONCE at ingest and carry the datetime on the row. Every temporal
+    # comparison below orders on `tsdt`, never on the raw `ts` string:
+    # lexicographic order equals chronological order only under ONE fixed
+    # timestamp format, and a fractional-second stamp ("…:00.500Z") parses
+    # cleanly, clears the exit-2 integrity gate, then sorts BEFORE "…:00Z" —
+    # silently dropping a real escape and publishing it as a clean signal.
+    # `ts` is retained for display only.
+    tsdt = parse_iso(ts)        # source-integrity: exit 2 on malformed ts
     rows.append({
         "ts": ts,
+        "tsdt": tsdt,
         "version": parts[1].strip(),
         "stage": parts[2].strip(),
         "etype": parts[3].strip(),
@@ -175,12 +183,12 @@ g1g2 = {}
 for r in rows:
     if r["etype"] == "gate-outcome" and r["esub"] == "g1-g2":
         s = r["subject"]
-        if s not in g1g2 or r["ts"] < g1g2[s]:
-            g1g2[s] = r["ts"]
+        if s not in g1g2 or r["tsdt"] < g1g2[s]:
+            g1g2[s] = r["tsdt"]
 zrt = 0
 for s, g_ts in g1g2.items():
     round_trip = any(
-        rr["ts"] <= g_ts and rr["etype"] in ("scope-change", "escalation")
+        rr["tsdt"] <= g_ts and rr["etype"] in ("scope-change", "escalation")
         for rr in by_subject[s]
     )
     if not round_trip:
@@ -190,8 +198,8 @@ i1 = {"num": zrt, "den": len(g1g2), "rate": rhu(zrt, len(g1g2))}
 # ─── I4 triage cycle-time (median over subjects: first-seen -> g1-g2) ─────────
 cyc = []
 for s, g_ts in g1g2.items():
-    first_ts = min(rr["ts"] for rr in by_subject[s])
-    d = int((parse_iso(g_ts) - parse_iso(first_ts)).total_seconds())
+    first_ts = min(rr["tsdt"] for rr in by_subject[s])
+    d = int((g_ts - first_ts).total_seconds())
     if d >= 0:
         cyc.append(d)
 cyc.sort()
@@ -212,14 +220,14 @@ plan = {}
 for r in rows:
     if r["stage"] == "4" and r["etype"] == "decision" and not r["subject"].startswith("milestone:"):
         s = r["subject"]
-        if s not in plan or r["ts"] < plan[s]:
-            plan[s] = r["ts"]
+        if s not in plan or r["tsdt"] < plan[s]:
+            plan[s] = r["tsdt"]
 surv = 0
 for s, p_ts in plan.items():
     broke = any(
         rr["etype"] == "scope-change"
         and rr["esub"] in ("tier-2-scope-change", "tier-3-plan-rejection")
-        and rr["ts"] >= p_ts
+        and rr["tsdt"] >= p_ts
         for rr in by_subject[s]
     )
     if not broke:
@@ -238,9 +246,18 @@ for r in rows:
 i7 = {"num": len(amended), "den": len(bundles), "rate": rhu(len(amended), len(bundles))}
 
 # ─── I8 Phase-A0 C3 rate (Definition) ────────────────────────────────────────
-# Denominator: re-review/phase-a0-row rows. Numerator: those carrying a C3 class token.
+# Denominator: re-review/phase-a0-row rows. Numerator: those carrying a C3 CLASS TOKEN.
+# The match is on the structured `class:C3` token (triage-design-rereview.md § 5), NOT a
+# bare "C3" substring: payloads are free text to 300 chars, so a `class:C1` row whose prose
+# merely MENTIONS C3 ("no C3-level challenge raised") would otherwise score as a premise
+# challenge — fabricating a dirty signal in the numerator of two indicators.
+CLASS_C3 = re.compile(r"\bclass:\s*C3\b", re.IGNORECASE)
+
+def has_c3(payload):
+    return bool(CLASS_C3.search(payload or ""))
+
 a0_total = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase-a0-row")
-a0_c3 = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase-a0-row" and "C3" in r["payload"])
+a0_c3 = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase-a0-row" and has_c3(r["payload"]))
 i8 = {"num": a0_c3, "den": a0_total, "rate": rhu(a0_c3, a0_total)}
 
 # ─── I11 plan-survival post-Solutioning (Solution-design) ────────────────────
@@ -250,18 +267,18 @@ lock = {}
 for r in rows:
     if r["etype"] == "decision" and r["esub"] == "scope-lock":
         s = r["subject"]
-        if s not in lock or r["ts"] < lock[s]:
-            lock[s] = r["ts"]
+        if s not in lock or r["tsdt"] < lock[s]:
+            lock[s] = r["tsdt"]
 surv2 = 0
 for s, l_ts in lock.items():
-    broke = any(rr["etype"] == "scope-change" and rr["ts"] >= l_ts for rr in by_subject[s])
+    broke = any(rr["etype"] == "scope-change" and rr["tsdt"] >= l_ts for rr in by_subject[s])
     if not broke:
         surv2 += 1
 i11 = {"num": surv2, "den": len(lock), "rate": rhu(surv2, len(lock))}
 
 # ─── I14 Phase-0.5 C3 rate (Solution-design) ─────────────────────────────────
 p05_total = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase-0.5-row")
-p05_c3 = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase-0.5-row" and "C3" in r["payload"])
+p05_c3 = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase-0.5-row" and has_c3(r["payload"]))
 i14 = {"num": p05_c3, "den": p05_total, "rate": rhu(p05_c3, p05_total)}
 
 # ─── I15 collective-review scope-lock first-pass (Solution-design) ───────────
@@ -334,8 +351,10 @@ if [[ "${1:-}" == "--self-test" ]]; then
 | 2026-03-06T10:00:00Z | v1.00 | 3 | decision | outcome-statement-authored | hub | milestone:#M2 | CHEAP | resolved | p |
 | 2026-03-07T10:00:00Z | v1.00 | 4 | re-review | phase-a0-row | spoke:#E | #E | CHEAP | resolved | class:C1 |
 | 2026-03-07T11:00:00Z | v1.00 | 4 | re-review | phase-a0-row | spoke:#F | #F | CHEAP | resolved | class:C3; PT:PT-2 |
+| 2026-03-07T12:00:00Z | v1.00 | 4 | re-review | phase-a0-row | spoke:#F2 | #F2 | CHEAP | resolved | class:C1; note: no C3-level premise challenge raised |
 | 2026-03-08T09:00:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G | #G | CHEAP | resolved | class:C1 |
 | 2026-03-08T09:05:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G2 | #G2 | CHEAP | resolved | class:C3 |
+| 2026-03-08T09:07:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G4 | #G4 | CHEAP | resolved | class: C3 |
 | 2026-03-08T09:10:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G3 | #G3 | CHEAP | resolved | class:C1 |
 | 2026-03-08T10:00:00Z | v1.00 | 5 | decision | scope-lock | hub | #G | CHEAP | approved | p |
 | 2026-03-09T10:00:00Z | v1.00 | 5 | decision | scope-lock | hub | #H | CHEAP | resolved | p |
@@ -357,12 +376,32 @@ print("NA" if d is None else d)' "$ST_JSON" "$@"; }
   [[ "$(get build triage-cycle-time median_seconds)" == "10800" ]] || die "self-test: I4 triage-cycle median = $(get build triage-cycle-time median_seconds)s, expected 10800 (3h)"
   [[ "$(get build plan-survival-rate rate)" == "0.5" ]]           || die "self-test: I6 plan-survival = $(get build plan-survival-rate rate), expected 0.5 (1/2)"
   [[ "$(get build bundle-amendment-rate rate)" == "0.5" ]]        || die "self-test: I7 bundle-amendment = $(get build bundle-amendment-rate rate), expected 0.5 (1/2)"
-  [[ "$(get build phase-a0-c3-rate rate)" == "0.5" ]]             || die "self-test: I8 phase-a0-c3 = $(get build phase-a0-c3-rate rate), expected 0.5 (1/2)"
+  # I8: 3 phase-a0 rows, exactly ONE carrying a `class:C3` token. #F2 is the false-positive
+  # guard — a `class:C1` row whose free prose MENTIONS C3. A bare-substring match scores it
+  # as a premise challenge and reports 0.67; the class-token match reports the true 0.33.
+  [[ "$(get build phase-a0-c3-rate rate)" == "0.33" ]]            || die "self-test: I8 phase-a0-c3 = $(get build phase-a0-c3-rate rate), expected 0.33 (1/3 — the class:C1 row whose prose mentions C3 must NOT count)"
   [[ "$(get build plan-survival-post-solutioning-rate rate)" == "0.5" ]] || die "self-test: I11 post-sol survival = $(get build plan-survival-post-solutioning-rate rate), expected 0.5 (1/2)"
-  [[ "$(get build phase-0.5-c3-rate rate)" == "0.33" ]]           || die "self-test: I14 phase-0.5-c3 = $(get build phase-0.5-c3-rate rate), expected 0.33 (1/3)"
+  # I14: 4 phase-0.5 rows, two C3 — one `class:C3`, one spaced `class: C3` (whitespace
+  # tolerance in the token match).
+  [[ "$(get build phase-0.5-c3-rate rate)" == "0.5" ]]            || die "self-test: I14 phase-0.5-c3 = $(get build phase-0.5-c3-rate rate), expected 0.5 (2/4 — incl. the spaced 'class: C3' form)"
   [[ "$(get build collective-review-scope-lock-first-pass-rate rate)" == "0.5" ]] || die "self-test: I15 scope-lock first-pass = $(get build collective-review-scope-lock-first-pass-rate rate), expected 0.5 (1/2)"
   # I5 gauge is N/A without gh (self-test never calls gh)
   [[ "$(get build approved-queue-depth value)" == "NA" ]]         || die "self-test: I5 approved-queue-depth = $(get build approved-queue-depth value), expected NA (no gh in self-test)"
+
+  # Temporal ordering must compare PARSED datetimes, never raw timestamp strings.
+  # Discriminating fixture: two rows in the same whole second, one carrying a fractional
+  # part. Lexicographically "…:00.500Z" sorts BEFORE "…:00Z" ('.' < 'Z'), inverting the
+  # true order — so a raw-string compare reads the escalation as PRE-gate (a round trip)
+  # when it in fact fired 500ms AFTER the gate. Expected 1.00 (clean); a string compare
+  # yields 0.00.
+  TS_FIXTURE="$(/bin/cat <<'ROWS'
+| 2026-03-10T10:00:00Z | v2.00 | 2 | gate-outcome | g1-g2 | spoke:#Z | #Z | CHEAP | resolved | verdict:Approved |
+| 2026-03-10T10:00:00.500Z | v2.00 | 2 | escalation | tier-1 | operator | #Z | MODERATE | resolved | post-gate |
+ROWS
+)"
+  TS_JSON="$(printf '%s\n' "$TS_FIXTURE" | "$PY" -c "$FRONT_AGG_PY" "NA" "")"
+  TSR="$("$PY" -c 'import json,sys; v=json.loads(sys.argv[1])["build"]["zero-round-trip-triage-rate"]["rate"]; print("NA" if v is None else v)' "$TS_JSON")"
+  [[ "$TSR" == "1.0" ]] || die "self-test: I1 fractional-second ordering = $TSR, expected 1.0 (the .500Z escalation is AFTER the Z-form gate; a raw-string compare inverts it)"
 
   # N/A discipline: an empty stream yields N/A rates (not 0.00) for every BUILD rate.
   EMPTY_JSON="$(printf '' | "$PY" -c "$FRONT_AGG_PY" "NA" "")"
@@ -372,6 +411,8 @@ print("NA" if d is None else d)' "$ST_JSON" "$@"; }
   echo "self-test: PASS"
   echo "  duration formatter validated"
   echo "  9 BUILD indicators validated (8 event-sourced rates/median + gauge-N/A path)"
+  echo "  C3 class-token match validated (class:C1 prose mentioning C3 excluded; spaced 'class: C3' included)"
+  echo "  temporal ordering validated on parsed datetimes (fractional-second stamp does not invert order)"
   echo "  N/A discipline validated (empty population -> N/A, never synthesized 0.00)"
   echo "  query-pipeline-event.sh dependency validated"
   exit 0
