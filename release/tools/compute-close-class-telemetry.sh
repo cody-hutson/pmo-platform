@@ -31,12 +31,14 @@
 #                                        preservation read-model over the hub-spoke
 #                                        sub-task `gh` state (NO net-new store): CLOSED
 #                                        stage sub-tasks carrying >=1 trusted-authored
-#                                        output/skip-closure comment (P) / stage sub-tasks
-#                                        scaffolded for the release (S). The single
-#                                        Stage-13 G-CL4 close-gate boolean is RETAINED as
-#                                        evidence-close-gate (pass|fail|N/A). Mechanical
-#                                        gh-state read — honors the § 8 boundary (NOT the
-#                                        event log).
+#                                        output/skip-closure comment (P) / MEASURABLE
+#                                        stage sub-tasks scaffolded for the release (S —
+#                                        terminal stages 12/13 EXCLUDED, since capture
+#                                        happens during them; see count_subtask_evidence).
+#                                        The single Stage-13 G-CL4 close-gate boolean is
+#                                        RETAINED as evidence-close-gate (pass|fail|N/A).
+#                                        Mechanical gh-state read — honors the § 8
+#                                        boundary (NOT the event log).
 #
 # Ratio rounding mode is round-half-up, taken by reference from
 # bundle-composition-doctrine.md § 3 Step 5 (the single definitional home) — NOT
@@ -197,27 +199,54 @@ PY
 # and closes it ONLY after consuming its output comment (skipped stages carry a skip-closure
 # comment). A CLOSED sub-task carrying >=1 trusted-authored comment = phase-completion evidence
 # preserved.
-#   Denominator S = stage sub-tasks scaffolded for the release (milestone + label:sub-task).
+#   Denominator S = MEASURABLE stage sub-tasks scaffolded for the release (milestone +
+#                   label:sub-task), EXCLUDING the terminal stages 12 (Execute) and 13 (Close).
 #   Numerator   P = those CLOSED with >=1 trusted-authored (output / skip-closure) comment.
+#
+# TERMINAL-STAGE EXCLUSION (why S is not simply the scaffolded count). The field's mandated
+# capture moment is the Stage-13 Phase B chore PR (close-class-telemetry.md § 3.2) — i.e.
+# DURING stage 13, with stage 12/13 evidence not yet terminal. Counting stages 12/13 in S made
+# the published rate a function of WHEN it was read rather than of how well evidence was
+# preserved: three readings of one live milestone moved 0.46 -> 0.61 -> 0.75 with the numerator
+# equal to the closed count every time (100% of the variance was measurement timing). Excluding
+# the two terminal stages makes the rate measure the thing its name claims. Detection is by the
+# sub-task title's `Stage <N>` prefix; a title that does not parse to a stage number is RETAINED
+# (fail-safe — never shrink the denominator on an unrecognized title).
+#
 # "Trusted-authored" = comment authorAssociation in {OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR}
 # (guards a public drive-by comment on a CLOSED sub-task from counting as evidence); when the
 # payload carries no authorAssociation, or `comments` is an integer count, falls back to
-# comment-presence (>=1). Echoes "<P> <S>" from a JSON array of {number,state,comments}
-# (both the gh-issue-list array shape and an integer-count shape are accepted). Exit 2 on
-# unparseable source (source-integrity violation; escalate).
+# comment-presence (>=1). Echoes "<P> <S> <X>" (X = terminal-stage sub-tasks excluded) from a
+# JSON array of {number,title,state,comments} (both the gh-issue-list array shape and an
+# integer-count shape are accepted). Exit 2 on unparseable source (integrity violation).
 count_subtask_evidence() {
   local json="$1"
   /usr/bin/python3 - "$json" <<'PY'
-import json, sys
+import json, re, sys
 TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"}
+# Terminal stages: their own completion evidence is produced at or after the § 3.2 capture
+# moment, so their inclusion would measure timing, not preservation.
+TERMINAL_STAGES = {12, 13}
+STAGE_RE = re.compile(r"^\s*stage\s*0*(\d+)\b", re.IGNORECASE)
+
+def is_terminal(title):
+    m = STAGE_RE.match(str(title or ""))
+    # Unparseable title -> NOT terminal (fail-safe: retain in the denominator).
+    return bool(m) and int(m.group(1)) in TERMINAL_STAGES
+
 try:
     items = json.loads(sys.argv[1])
 except (ValueError, TypeError) as e:
     print(f"sub-task evidence source unparseable: {e}", file=sys.stderr)
     sys.exit(2)
-scaffolded = len(items)
+excluded = 0
+scaffolded = 0
 preserved = 0
 for it in items:
+    if is_terminal(it.get("title", "")):
+        excluded += 1
+        continue
+    scaffolded += 1
     if str(it.get("state", "")).upper() != "CLOSED":
         continue
     c = it.get("comments", 0)
@@ -230,7 +259,7 @@ for it in items:
         has_evidence = int(c or 0) >= 1  # integer comment-count shape -> presence
     if has_evidence:
         preserved += 1
-print(f"{preserved} {scaffolded}")
+print(f"{preserved} {scaffolded} {excluded}")
 PY
 }
 
@@ -298,34 +327,54 @@ if [[ "${1:-}" == "--self-test" ]]; then
   [[ "$EXPECTED_MARKERS" -eq 10 ]] || die "self-test: EXPECTED_MARKERS = $EXPECTED_MARKERS, expected 10"
 
   # Test 6: Indicator 6 — phase-completion evidence preservation (read-model over sub-task gh
-  #   state). Denominator = scaffolded stage sub-tasks; numerator = CLOSED with >=1 trusted-
-  #   authored comment. Covers: full-preserved / OPEN-excluded / CLOSED-empty-excluded /
-  #   untrusted-author-excluded / no-author-payload presence-fallback / integer-count shape /
-  #   zero-scaffolded -> N/A.
-  EVID_FULL='[{"number":1,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"},{"authorAssociation":"MEMBER"}]},{"number":3,"state":"CLOSED","comments":[{"authorAssociation":"COLLABORATOR"}]},{"number":4,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]}]'
-  read -r EP ES < <(count_subtask_evidence "$EVID_FULL")
-  [[ "$EP" == "4" && "$ES" == "4" ]] || die "self-test: subtask-evidence(full) = $EP/$ES, expected 4/4"
+  #   state). Denominator = MEASURABLE scaffolded stage sub-tasks (terminal stages 12/13
+  #   excluded); numerator = CLOSED with >=1 trusted-authored comment. Covers: full-preserved /
+  #   OPEN-excluded / CLOSED-empty-excluded / untrusted-author-excluded / no-author-payload
+  #   presence-fallback / integer-count shape / zero-scaffolded -> N/A.
+  EVID_FULL='[{"number":1,"title":"Stage 5 · #1 · Solutioning","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"title":"Stage 6 · #1 · Engineering","state":"CLOSED","comments":[{"authorAssociation":"OWNER"},{"authorAssociation":"MEMBER"}]},{"number":3,"title":"Stage 7 · #1 · Dev Testing","state":"CLOSED","comments":[{"authorAssociation":"COLLABORATOR"}]},{"number":4,"title":"Stage 8 · #1 · QA / Acceptance","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_FULL")
+  [[ "$EP" == "4" && "$ES" == "4" && "$EX" == "0" ]] || die "self-test: subtask-evidence(full) = $EP/$ES (excl $EX), expected 4/4 (excl 0)"
   R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "1.00" ]] || die "self-test: subtask-evidence ratio(full) = $R, expected 1.00"
 
   # OPEN (excluded), CLOSED-empty (excluded), CLOSED-OWNER (counted), CLOSED-NONE (untrusted, excluded) -> 1/4
-  EVID_PARTIAL='[{"number":1,"state":"OPEN","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"state":"CLOSED","comments":[]},{"number":3,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":4,"state":"CLOSED","comments":[{"authorAssociation":"NONE"}]}]'
-  read -r EP ES < <(count_subtask_evidence "$EVID_PARTIAL")
+  EVID_PARTIAL='[{"number":1,"title":"Stage 5 · #1 · Solutioning","state":"OPEN","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"title":"Stage 6 · #1 · Engineering","state":"CLOSED","comments":[]},{"number":3,"title":"Stage 7 · #1 · Dev Testing","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":4,"title":"Stage 8 · #1 · QA / Acceptance","state":"CLOSED","comments":[{"authorAssociation":"NONE"}]}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_PARTIAL")
   [[ "$EP" == "1" && "$ES" == "4" ]] || die "self-test: subtask-evidence(partial) = $EP/$ES, expected 1/4 (OPEN + CLOSED-empty + untrusted-author excluded)"
   R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "0.25" ]] || die "self-test: subtask-evidence ratio(partial) = $R, expected 0.25"
 
   # No authorAssociation in payload -> presence fallback (CLOSED w/ >=1 comment counts; CLOSED-empty excluded) -> 1/2
-  EVID_FALLBACK='[{"number":1,"state":"CLOSED","comments":[{"body":"output posted"}]},{"number":2,"state":"CLOSED","comments":[]}]'
-  read -r EP ES < <(count_subtask_evidence "$EVID_FALLBACK")
+  EVID_FALLBACK='[{"number":1,"title":"Stage 5 · #1 · Solutioning","state":"CLOSED","comments":[{"body":"output posted"}]},{"number":2,"title":"Stage 6 · #1 · Engineering","state":"CLOSED","comments":[]}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_FALLBACK")
   [[ "$EP" == "1" && "$ES" == "2" ]] || die "self-test: subtask-evidence(no-author-payload) = $EP/$ES, expected 1/2 (presence fallback)"
 
   # Integer comment-count shape -> presence (CLOSED count>=1 counts; OPEN excluded; CLOSED count0 excluded) -> 1/3
-  EVID_INT='[{"number":1,"state":"CLOSED","comments":2},{"number":2,"state":"OPEN","comments":5},{"number":3,"state":"CLOSED","comments":0}]'
-  read -r EP ES < <(count_subtask_evidence "$EVID_INT")
+  EVID_INT='[{"number":1,"title":"Stage 5 · #1 · Solutioning","state":"CLOSED","comments":2},{"number":2,"title":"Stage 6 · #1 · Engineering","state":"OPEN","comments":5},{"number":3,"title":"Stage 7 · #1 · Dev Testing","state":"CLOSED","comments":0}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_INT")
   [[ "$EP" == "1" && "$ES" == "3" ]] || die "self-test: subtask-evidence(int-count) = $EP/$ES, expected 1/3"
 
+  # F-01 terminal-stage exclusion (the capture-timing artifact). At the § 3.2 capture moment
+  # (the Stage-13 chore PR) the Stage-12/13 sub-tasks are still in flight; counting them made
+  # the rate a function of WHEN it was read. 6 scaffolded, 2 terminal -> 4/4 (1.00), not 4/6.
+  EVID_TERMINAL='[{"number":1,"title":"Stage 5 · #1 · Solutioning","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"title":"Stage 6 · #1 · Engineering","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":3,"title":"Stage 7 · #1 · Dev Testing","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":4,"title":"Stage 9 · Plan Review (GO/NO-GO) — r","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":5,"title":"Stage 12 · Execute — r","state":"OPEN","comments":[]},{"number":6,"title":"Stage 13 · Close — r","state":"OPEN","comments":[]}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_TERMINAL")
+  [[ "$EP" == "4" && "$ES" == "4" && "$EX" == "2" ]] || die "self-test: subtask-evidence(terminal-exclusion) = $EP/$ES (excl $EX), expected 4/4 (excl 2)"
+  R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "1.00" ]] || die "self-test: subtask-evidence ratio(terminal-exclusion) = $R, expected 1.00 (terminal stages must not depress the rate)"
+
+  # Fail-safe: a sub-task whose title does not carry a parseable `Stage <N>` prefix is RETAINED
+  # in the denominator (never shrink S on an unrecognized title). Stage 1/2/3 are not terminal.
+  EVID_UNPARSEABLE='[{"number":1,"title":"[Subtask] Software-domain templates — Wave 1","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"title":"","state":"OPEN","comments":[]},{"number":3,"title":"Stage 3 · Bundle","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_UNPARSEABLE")
+  [[ "$EP" == "2" && "$ES" == "3" && "$EX" == "0" ]] || die "self-test: subtask-evidence(unparseable-title) = $EP/$ES (excl $EX), expected 2/3 (excl 0 — fail-safe retain)"
+
+  # All-terminal population -> S collapses to 0 -> N/A (not a 0/0 rate)
+  EVID_ALL_TERMINAL='[{"number":1,"title":"Stage 12 · Execute — r","state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"title":"Stage 13 · Close — r","state":"OPEN","comments":[]}]'
+  read -r EP ES EX < <(count_subtask_evidence "$EVID_ALL_TERMINAL")
+  [[ "$EP" == "0" && "$ES" == "0" && "$EX" == "2" ]] || die "self-test: subtask-evidence(all-terminal) = $EP/$ES (excl $EX), expected 0/0 (excl 2)"
+  R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "N/A" ]] || die "self-test: subtask-evidence ratio(all-terminal) = $R, expected N/A"
+
   # Zero scaffolded -> 0/0 -> N/A rate
-  read -r EP ES < <(count_subtask_evidence '[]')
-  [[ "$EP" == "0" && "$ES" == "0" ]] || die "self-test: subtask-evidence(zero) = $EP/$ES, expected 0/0"
+  read -r EP ES EX < <(count_subtask_evidence '[]')
+  [[ "$EP" == "0" && "$ES" == "0" && "$EX" == "0" ]] || die "self-test: subtask-evidence(zero) = $EP/$ES (excl $EX), expected 0/0 (excl 0)"
   R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "N/A" ]] || die "self-test: subtask-evidence ratio(zero) = $R, expected N/A (no stage sub-tasks scaffolded)"
 
   rm -rf "$TMPD"; trap - EXIT
@@ -335,6 +384,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   echo "  Indicator 2 lessons-population validated (placeholder detection 2/4 + zero-prompted N/A)"
   echo "  canonical-marker set validated (10 verbatim Kerth + PMBOK 7 + Triple-Linkage headers)"
   echo "  Indicator 6 phase-evidence preservation validated (full 4/4 + partial 1/4 + presence-fallback + int-count + zero-scaffolded N/A)"
+  echo "  Indicator 6 terminal-stage exclusion validated (Stage-12/13 excluded 4/4 not 4/6 + unparseable-title fail-safe retain + all-terminal N/A)"
   exit 0
 fi
 
@@ -458,11 +508,12 @@ if [[ "$OUTCOME_PRESENT" == "1" ]]; then ROLLUP_PRESENCE="present"; else ROLLUP_
 
 # ─── Indicator 6: phase-completion evidence preservation (read-model) + retained close-gate ─
 # Primary reading: a bounded read-model over the hub-spoke sub-task `gh` state (NO net-new
-# store) — CLOSED stage sub-tasks carrying >=1 trusted-authored comment (P) / stage sub-tasks
-# scaffolded for the release (S); rate = P/S. Reuses the GH + REPO resolved for Indicator 3.
-# Mechanical gh-state read only — honors the standard § 8 boundary (NOT the event log). N/A
-# when the release scaffolded zero stage sub-tasks (pre-hub-spoke / grandfathered).
-EVID_PRESERVED="N/A"; EVID_SCAFFOLDED="N/A"; EVID_RATIO="N/A"; EVID_NA_REASON=""
+# store) — CLOSED stage sub-tasks carrying >=1 trusted-authored comment (P) / MEASURABLE stage
+# sub-tasks scaffolded for the release (S, terminal stages 12/13 excluded); rate = P/S. Reuses
+# the GH + REPO resolved for Indicator 3. Mechanical gh-state read only — honors the standard
+# § 8 boundary (NOT the event log). N/A when the release scaffolded zero stage sub-tasks
+# (pre-hub-spoke / grandfathered), or when every scaffolded sub-task is terminal-stage.
+EVID_PRESERVED="N/A"; EVID_SCAFFOLDED="N/A"; EVID_RATIO="N/A"; EVID_NA_REASON=""; EVID_EXCLUDED=0
 if [[ -z "$GH" ]]; then
   EVID_NA_REASON="gh unavailable — phase-evidence preservation not computed"
 elif [[ -z "${REPO:-}" ]]; then
@@ -470,14 +521,18 @@ elif [[ -z "${REPO:-}" ]]; then
 else
   SUBTASK_JSON="$("$GH" issue list --repo "$REPO" \
     --milestone "$MILESTONE" --label "sub-task" --state all --limit 500 \
-    --json number,state,comments 2>/dev/null || true)"
+    --json number,title,state,comments 2>/dev/null || true)"
   if [[ -z "$SUBTASK_JSON" || "$SUBTASK_JSON" == "[]" ]]; then
     EVID_NA_REASON="no stage sub-tasks scaffolded"
     EVID_SCAFFOLDED=0; EVID_PRESERVED=0
   else
-    read -r EVID_PRESERVED EVID_SCAFFOLDED < <(count_subtask_evidence "$SUBTASK_JSON")
+    read -r EVID_PRESERVED EVID_SCAFFOLDED EVID_EXCLUDED < <(count_subtask_evidence "$SUBTASK_JSON")
     if [[ "$EVID_SCAFFOLDED" -eq 0 ]]; then
-      EVID_NA_REASON="no stage sub-tasks scaffolded"
+      if [[ "$EVID_EXCLUDED" -gt 0 ]]; then
+        EVID_NA_REASON="no non-terminal stage sub-tasks scaffolded"
+      else
+        EVID_NA_REASON="no stage sub-tasks scaffolded"
+      fi
     else
       EVID_RATIO="$(ratio_round_half_up "$EVID_PRESERVED" "$EVID_SCAFFOLDED")"
     fi
@@ -517,7 +572,7 @@ if [[ "$OUTPUT_FORMAT" == "json" ]]; then
     "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON" \
     "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON" \
     "$ROLLUP_PRESENCE" "$EVIDENCE_GATE" \
-    "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON" <<'PY'
+    "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON" "$EVID_EXCLUDED" <<'PY'
 import json, sys
 a = sys.argv
 def na(v): return None if v == "N/A" else v
@@ -529,7 +584,10 @@ out = {
   "carry_forward_closure": {"ratio": na(a[11]), "closed": na(a[12]), "raised": na(a[13]), "na_reason": a[14] or None},
   "pattern_emergence": "deferred-to-aggregate",
   "rollup_presence": a[15],
-  "phase_evidence_preservation": {"ratio": na(a[17]), "preserved": na(a[18]), "scaffolded": na(a[19]), "na_reason": a[20] or None},
+  # `scaffolded` is the MEASURABLE denominator (terminal stages 12/13 excluded);
+  # `terminal_excluded` discloses how many were held out, so a reader can reconcile
+  # it against the raw sub-task count without re-deriving the rule.
+  "phase_evidence_preservation": {"ratio": na(a[17]), "preserved": na(a[18]), "scaffolded": na(a[19]), "na_reason": a[20] or None, "terminal_excluded": int(a[21])},
   "evidence_close_gate": a[16],
   "mechanism": "compute-close-class-telemetry.sh",
 }
