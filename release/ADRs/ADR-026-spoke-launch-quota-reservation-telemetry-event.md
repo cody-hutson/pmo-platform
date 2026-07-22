@@ -1,6 +1,6 @@
 ---
 title: "ADR-026 — Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key"
-status: Proposed
+status: Accepted
 date: 2026-06-13
 release: parallel-launch-quota-budget-gate
 deciders: "Stage 5 Solutioning (Principal Engineer — Architecture Assessment) D-EventTelemetrySurface; rendered at Collective Review scope-lock"

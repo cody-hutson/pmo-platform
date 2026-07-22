@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: The _pmo/ entity page is the SSOT on person_id; the roster and leadership-owner refs are consumers
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-30
 release: 21-shared-entity-storage-layout
 deciders: "[operator]"

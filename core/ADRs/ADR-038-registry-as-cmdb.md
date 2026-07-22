@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-038 — Registry as CMDB / single skill catalog — core/skills/registry.md is evolved into the platform's single Configuration-Management catalog (all deployed skills are CIs carrying lifecycle-state, dependency, and owner axes; version and roster-existence are CITED from SKILL.md and deploy.sh, never stored); the pmo-skill-router classifies against a kind==role-Specialist filtered VIEW, so routing is unblurred; this SUPERSEDES ADR-035 §Decision part 4 (role-Specialists-only population) and PRESERVES ADR-035's central-index and no-SKILL.md-frontmatter decisions
-status: Proposed
+status: Accepted
 date: 2026-06-23
 release: 13-field-lifecycle-and-cmdb-automation (v2.20)
 deciders: "operator + Stage 5 Solutioning spoke"

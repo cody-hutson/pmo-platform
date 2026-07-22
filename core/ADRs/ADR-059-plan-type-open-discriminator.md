@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: plan_type is an OPEN discriminator that fills the deferred enum — no second sub-type field
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-30
 release: 21-shared-entity-storage-layout
 deciders: "[operator]"

@@ -1,6 +1,6 @@
 ---
 title: "ADR-011 — Analysis-class methodology-design treatment: Stage 5 persona variant (not a new stage)"
-status: Proposed
+status: Accepted
 date: 2026-06-02
 release: v1.04-planning
 deciders: "Stage 5 Solutioning (Principal Engineer — Architecture Assessment) + Adversarial Design Review"
