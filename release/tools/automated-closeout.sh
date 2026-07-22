@@ -896,7 +896,7 @@ PY
   return 0
 }
 
-# ─── Phase 8.5: append_reversions (#1679 — machine-readable re-version ledger) ─
+# ─── Phase 8.5: append_reversions (#1679; SLIM #3109 — orphan-tag recovery record) ─
 #
 # Appends row(s) to RELEASE_REVERSIONS.md — the append-only re-version ledger —
 # ONE row per ABANDONED version, ONLY when this release re-versioned mid-pipeline.
@@ -919,6 +919,13 @@ PY
 # present-and-not-canonical => `tag-orphaned` (the reaper READS this). `unknown`
 # abandoned_tag_pushed maps to `unrecoverable` only via an explicit pre-instrumentation
 # marker, never inferred here.
+#
+# SLIM (#3109): only a `tag-orphaned` disposition is RECORDED going forward — a `none`
+# abandoned version (no orphan tag; the common defer-to-merge path, or a version that is
+# canonical for a live sibling row) is gated out AFTER the probe, so an all-`none`
+# re-version records N/A and writes nothing. Historical `none`/`unrecoverable` rows are
+# retained (append-only). The ledger is an orphan-tag recovery record — the input the
+# recovery-doctrine reaper reads — not a collision-rate telemetry surface.
 #
 # Idempotent: a (slug, abandoned_version) row already present is skipped. Append is
 # chronological-recent-first (below the `|---` separator), matching the sibling
@@ -988,7 +995,7 @@ PY
   # (4) Apply — one row per abandoned version, idempotent on (slug, abandoned_version),
   #     disposition grounded by a tag probe. Each abandoned version is processed in turn.
   local date_str; date_str="$(date_today)"
-  local appended=0 abv
+  local appended=0 gated=0 abv
   while IFS= read -r abv; do
     [[ -z "$abv" ]] && continue
     # Idempotency: skip if (slug, abandoned_version) row already present.
@@ -1011,6 +1018,16 @@ PY
     else
       disp="none"; tag_pushed="false"
     fi
+    # SLIM gate (#3109): only a tag-orphaned re-version leaves an artifact the reaper must
+    # act on. A disposition=none abandoned version (no tag cut — the common defer-to-merge
+    # path, or a version canonical for a live sibling row) leaves no orphan, so it is no
+    # longer recorded: the ledger is an orphan-tag recovery record, not a collision-rate
+    # telemetry surface. Reuses the $disp the tag-probe just grounded above (no re-probe);
+    # historical `none` rows remain (append-only) — they simply stop accreting.
+    if [[ "$disp" == "none" ]]; then
+      gated=$((gated+1))
+      continue
+    fi
     # Hand-append below the first `|---` separator (chronological-recent-first).
     /usr/bin/python3 - "$RELEASE_REVERSIONS" "$slug" "$abv" "$rv_final" "$rv_seq_disp" "$tag_pushed" "$rv_sha" "$rv_collided" "$rv_stage" "$disp" "$rv_residual" "$date_str" <<'PY'
 import sys
@@ -1032,7 +1049,14 @@ PY
   done <<<"$abandoned_list"
 
   if [[ "$appended" -eq 0 ]]; then
-    mark_phase "append_reversions" "SKIPPED" "all abandoned-version rows for $slug already present (idempotent)"
+    # SLIM (#3109): separate an all-`none` re-version (gated — no orphan tag to record)
+    # from a true idempotent re-run (its rows already present). The former is N/A — not a
+    # PASS-with-rows and not the stale "already present" SKIPPED.
+    if [[ "$gated" -gt 0 ]]; then
+      mark_phase "append_reversions" "N/A" "re-version left no orphan tag — not recorded (SLIM #3109)"
+    else
+      mark_phase "append_reversions" "SKIPPED" "all abandoned-version rows for $slug already present (idempotent)"
+    fi
     return 0
   fi
   mark_phase "append_reversions" "PASS" "appended ${appended} re-version row(s) for $slug (final $rv_final)"
@@ -2303,14 +2327,16 @@ self_test() {
   REPO_ROOT="$_bv_saved_root"; MODE="$_bv_saved_mode"; VERSION="$_bv_saved_version"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
-  # Test 1c: phase_append_reversions (#1679) — offline, hermetic. Drives the phase
-  # against a sandbox RELEASE_REVERSIONS + RELEASE_LOG and asserts the N/A common
-  # path, the round-trip derivation (the set-minus-is-wrong fix), the multi-abandoned
-  # fan-out, idempotency, and the dry-run no-write — plus a query self-check that the
-  # numerator grep counts every row it writes (the dotted/leading-digit/uppercase-slug
-  # AC verification). The tag probe is offline: the sandbox REPO_ROOT is not a git
-  # repo, so `git ls-remote` fails => on_origin=0 => disposition `none` (the expected
-  # value for every post-instrumentation fixture).
+  # Test 1c: phase_append_reversions (#1679; SLIM #3109) — offline, hermetic. Drives the
+  # phase against a sandbox RELEASE_REVERSIONS + RELEASE_LOG and asserts the SLIM gate:
+  # a disposition=none re-version is NOT recorded (records N/A, writes no row) across the
+  # round-trip derivation (the set-minus-is-wrong fix), the multi-abandoned fan-out, a
+  # re-run (no accretion), and a historical-none-row immutability check; a tag-orphaned
+  # re-version DOES record exactly one row with abandoned_tag_pushed=true. The none-path
+  # tag probe is offline: the sandbox REPO_ROOT is not a git repo, so `git ls-remote`
+  # fails => on_origin=0 => disposition `none`. The positive (g) fixture installs a `git`
+  # shim to force the probe positive, and also covers the dry-run no-write + orphan-row
+  # idempotency.
   local _rv_saved_root="$REPO_ROOT" _rv_saved_mode="$MODE" _rv_saved_version="$VERSION"
   local _rv_saved_slug="$STATE_MILESTONE_SLUG" _rv_saved_log="$RELEASE_LOG" _rv_saved_rev="$RELEASE_REVERSIONS"
   local _rv_saved_spec="$REVERSION_SPEC"
@@ -2334,51 +2360,97 @@ EOF
   _rv_rows="$(/usr/bin/grep -cE '^\| [A-Za-z0-9.-]+ \| v' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
   [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: phase_append_reversions N/A path must write no rows, got $_rv_rows"; failures=$((failures+1)); }
 
-  # (b) round-trip v2.12 → v2.14 → v2.12 (final v2.12) → exactly ONE row,
-  #     abandoned_version=v2.14, final_version=v2.12 (the set-minus-is-wrong fix).
+  # Deterministic tag probe: the phase's `git ls-remote` runs in the invoker's cwd (which
+  # may be a real repo where an abandoned version IS a live tag), so grounding cannot be
+  # left to a "sandbox is offline" assumption — under SLIM the disposition VALUE decides
+  # the outcome. Install a `git` shim keyed on _selftest_lsremote_hit: 0 => probe returns
+  # empty (disposition=none, the gated path); 1 => probe reports the abandoned tag PRESENT
+  # (disposition=tag-orphaned). Unset after the block.
+  local _selftest_lsremote_hit=0
+  git() {
+    if [[ "$1" == "ls-remote" ]]; then
+      # $4 is the "refs/tags/<v>" refspec; emit a matching ref line only when hit=1.
+      [[ "$_selftest_lsremote_hit" == "1" ]] && /usr/bin/printf '2222222222222222222222222222222222222222\t%s\n' "$4"
+      return 0
+    fi
+    command git "$@"
+  }
+
+  # (b) round-trip v2.12 → v2.14 → v2.12 (final v2.12): the set-minus-is-wrong derivation
+  #     still yields the single abandoned v2.14, but disposition grounds to `none`, so the
+  #     SLIM gate suppresses it → N/A, ZERO rows (the gate is what changes the outcome).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   STATE_MILESTONE_SLUG="round-trip-release"
   REVERSION_SPEC="v2.12|v2.12 -> v2.14 -> v2.12|deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|sibling@v2.14|S12|branch named v2.12"
   phase_append_reversions >/dev/null 2>&1
-  [[ "$(get_phase append_reversions)" == PASS\|* ]] || { echo "FAIL: phase_append_reversions round-trip should PASS, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: round-trip none-path must be N/A under the SLIM gate, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
   _rv_rows="$(/usr/bin/grep -cE '^\| round-trip-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
-  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: round-trip must yield exactly 1 row, got $_rv_rows"; failures=$((failures+1)); }
-  /usr/bin/grep -qE '^\| round-trip-release \| v2\.14 \| v2\.12 \|' "$RELEASE_REVERSIONS" || { echo "FAIL: round-trip row must be abandoned=v2.14 final=v2.12 (set-minus-is-wrong fix)"; failures=$((failures+1)); }
-  /usr/bin/grep -qE '^\| round-trip-release \| v2\.12 \|' "$RELEASE_REVERSIONS" && { echo "FAIL: round-trip must NOT record v2.12 as abandoned (it is the final)"; failures=$((failures+1)); }
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: round-trip none-path must write 0 rows (gated), got $_rv_rows"; failures=$((failures+1)); }
 
-  # (c) multi-abandoned: v1.18 → v1.19 → v1.20 (final v1.20) → TWO rows (v1.18, v1.19)
+  # (c) multi-abandoned v1.18 → v1.19 → v1.20 (final v1.20): both abandoned versions ground
+  #     to `none` → both gated → N/A, ZERO rows (fan-out composes with the gate).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   STATE_MILESTONE_SLUG="multi-abandoned-release"
   REVERSION_SPEC="v1.20|v1.18 -> v1.19 -> v1.20|cafebabecafebabecafebabecafebabecafebabe|a@v1.18,b@v1.19|S12|legacy branch"
   phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: multi-abandoned none-path must be N/A under the SLIM gate, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
   _rv_rows="$(/usr/bin/grep -cE '^\| multi-abandoned-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
-  [[ "$_rv_rows" -eq 2 ]] || { echo "FAIL: multi-abandoned must yield 2 rows (v1.18,v1.19), got $_rv_rows"; failures=$((failures+1)); }
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: multi-abandoned none-path must write 0 rows (both gated), got $_rv_rows"; failures=$((failures+1)); }
 
-  # (d) idempotency — re-run the round-trip spec → no new row, SKIPPED
+  # (d) re-run the round-trip none-path → still N/A, still 0 rows. The gate writes nothing,
+  #     so there is nothing to be idempotent about: it is stable and accretes no row across
+  #     re-runs (orphan-row idempotency is covered on the positive (g) fixture).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   STATE_MILESTONE_SLUG="round-trip-release"
   REVERSION_SPEC="v2.12|v2.12 -> v2.14 -> v2.12|deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|sibling@v2.14|S12|branch named v2.12"
   phase_append_reversions >/dev/null 2>&1
-  [[ "$(get_phase append_reversions)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_reversions re-run must be SKIPPED (idempotent), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: re-run of a none-path must stay N/A, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
   _rv_rows="$(/usr/bin/grep -cE '^\| round-trip-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
-  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the round-trip row, got $_rv_rows"; failures=$((failures+1)); }
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: re-run of a gated none-path must not accrete a row, got $_rv_rows"; failures=$((failures+1)); }
 
-  # (e) dry-run → DRY-RUN, no write
+  # (e) immutability: the SLIM gate NEVER disturbs a pre-existing historical `none` row.
+  #     Seed one, run a fresh none-path re-version (different slug) → N/A + 0 new rows for
+  #     that slug + the historical row still present (append-only history is preserved).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  MODE="dry-run"; STATE_MILESTONE_SLUG="dry-run-release"
-  REVERSION_SPEC="v3.01|v3.00 -> v3.01|0000000000000000000000000000000000000000|x@v3.00|S12|—"
+  /usr/bin/printf '| legacy-none-release | v0.90 | v0.92 | v0.90 → v0.92 | false | 1111111111111111111111111111111111111111 | s@v0.90 | S12 | none | historical | — | 2026-06-01 |\n' >> "$RELEASE_REVERSIONS"
+  STATE_MILESTONE_SLUG="immutability-release"
+  REVERSION_SPEC="v5.02|v5.01 -> v5.02|3333333333333333333333333333333333333333|z@v5.01|S12|—"
   phase_append_reversions >/dev/null 2>&1
-  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: phase_append_reversions should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
-  /usr/bin/grep -qE '^\| dry-run-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: dry-run must NOT write a row"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: fresh none-path must be N/A, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| immutability-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: gated none-path must write 0 rows for its slug, got $_rv_rows"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| legacy-none-release \| v0\.90 \|.*\| none \|' "$RELEASE_REVERSIONS" || { echo "FAIL: SLIM gate must preserve the pre-existing historical none row (append-only immutability)"; failures=$((failures+1)); }
 
-  # (f) query self-check (the AC: collision rate measurable) — every written row is
-  #     counted by the numerator grep, INCLUDING a dotted + leading-digit + uppercase
-  #     slug (the FMF-2 class). Append such a row directly and assert the count rises.
+  # (g) POSITIVE — the tag-orphaned path (the sole disposition still recorded). Flip the
+  #     shim so the probe reports the abandoned tag PRESENT on origin; the sandbox
+  #     RELEASE_LOG has no canonical row for it, so the phase grounds tag-orphaned +
+  #     abandoned_tag_pushed=true. Covers dry-run no-write, the positive write, and
+  #     orphan-row idempotency.
+  _selftest_lsremote_hit=1
+  # (g.1) dry-run of the orphan spec → DRY-RUN preview, no row written.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; STATE_MILESTONE_SLUG="orphan-release"
+  REVERSION_SPEC="v4.02|v4.01 -> v4.02|abcabcabcabcabcabcabcabcabcabcabcabcabca|w@v4.01|S12|branch named v4.01"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: orphan dry-run should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: orphan dry-run must NOT write a row"; failures=$((failures+1)); }
+  # (g.2) apply the orphan spec → PASS, exactly 1 row, abandoned_tag_pushed=true, disposition=tag-orphaned.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   MODE="apply"
-  /usr/bin/printf '| v1.03-Bundle-AND-related | v1.03 | unrecoverable | v1.03 → (unknown) | unknown | (unrecoverable) | — | pre-merge | unrecoverable | lost | — | 2026-06-02 |\n' >> "$RELEASE_REVERSIONS"
-  local _rv_total; _rv_total="$(/usr/bin/grep -cE '^\| [A-Za-z0-9.-]+ \| v' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_total="${_rv_total:-0}"
-  # rows so far: 1 round-trip + 2 multi-abandoned + 1 dotted/uppercase = 4
-  [[ "$_rv_total" -eq 4 ]] || { echo "FAIL: numerator grep must count all 4 written rows incl. dotted/uppercase slug, got $_rv_total"; failures=$((failures+1)); }
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == PASS\|* ]] || { echo "FAIL: tag-orphaned path should PASS, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| orphan-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: tag-orphaned path must write exactly 1 row, got $_rv_rows"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \| v4\.01 \| v4\.02 \|' "$RELEASE_REVERSIONS" || { echo "FAIL: tag-orphaned row must be abandoned=v4.01 final=v4.02"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \|.*\| true \|' "$RELEASE_REVERSIONS" || { echo "FAIL: tag-orphaned row must carry abandoned_tag_pushed=true"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \|.*\| tag-orphaned \|' "$RELEASE_REVERSIONS" || { echo "FAIL: tag-orphaned row must carry disposition=tag-orphaned"; failures=$((failures+1)); }
+  # (g.3) re-run apply → SKIPPED (idempotent), still exactly 1 row.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == SKIPPED\|* ]] || { echo "FAIL: tag-orphaned re-run must be SKIPPED (idempotent), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| orphan-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: tag-orphaned idempotent re-run must not duplicate the row, got $_rv_rows"; failures=$((failures+1)); }
+  unset -f git
 
   /bin/rm -rf "$_rv_tmp" 2>/dev/null || true
   REPO_ROOT="$_rv_saved_root"; MODE="$_rv_saved_mode"; VERSION="$_rv_saved_version"
@@ -3236,7 +3308,7 @@ STUB
   echo "self-test: PASS" >&2
   echo "  validate_version + extract_major validated" >&2
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
-  echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
+  echo "  phase_append_reversions validated (#1679; SLIM #3109 — N/A common path / none-path SLIM gate → N/A no-row across round-trip + multi-abandoned fan-out + re-run + historical-none immutability / tag-orphaned positive → 1 row abandoned_tag_pushed=true / dry-run no-write + orphan-row idempotency)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (incl. #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2

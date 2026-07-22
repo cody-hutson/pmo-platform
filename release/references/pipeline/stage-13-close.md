@@ -110,7 +110,7 @@ Memory-eviction manifest entries are VERIFY-CORPUS-gated per [`knowledge-archite
 
 Concurrency: Cowork opens for B-OPS2/B-OPS3, closes before C1. Per operations-bridge.md.
 
-**Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations to main-tracked release-corpus governance files (`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `release/releases/RELEASE_INDEX.md` new row; `release/releases/RELEASE_DIGEST.md` new entry; `release/releases/notes/vX.Y_RELEASE_NOTES.md` new file; `CHANGELOG.md` at repo root — Surface 2 of Layer-1 dual-write; `.version` at repo root — the version source-of-truth read by the SessionStart version-skew hook, stamped to the shipped `vX.Y` for *versioned* releases and SKIP-with-PASS for version-less releases; `release/releases/RELEASE_REVERSIONS.md` — the machine-readable re-version ledger, append one row per abandoned version ONLY when the release re-versioned mid-pipeline via `automated-closeout.sh` phase `append_reversions`, N/A on the common no-collision path) ship via a single Stage 13 chore PR — never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the Stage 13 release-corpus updates into one atomic main-landing.
+**Phase B commit mechanism — chore PR:** Phase B + B-OPS state-mutations to main-tracked release-corpus governance files (`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` `DEPLOYED` → `VERIFIED` transition; `release/releases/RELEASE_INDEX.md` new row; `release/releases/RELEASE_DIGEST.md` new entry; `release/releases/notes/vX.Y_RELEASE_NOTES.md` new file; `CHANGELOG.md` at repo root — Surface 2 of Layer-1 dual-write; `.version` at repo root — the version source-of-truth read by the SessionStart version-skew hook, stamped to the shipped `vX.Y` for *versioned* releases and SKIP-with-PASS for version-less releases; `release/releases/RELEASE_REVERSIONS.md` — the machine-readable re-version ledger (an orphan-tag recovery record), append one row per abandoned version ONLY when the release re-versioned mid-pipeline **and the abandoned version left an orphan tag** (`disposition=tag-orphaned`) via `automated-closeout.sh` phase `append_reversions`, N/A on the common no-collision path and on any re-version that left no orphan tag) ship via a single Stage 13 chore PR — never via direct-to-main commit. The chore-PR mechanism honors [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § "What NOT To Do" AND bundles the Stage 13 release-corpus updates into one atomic main-landing.
 
 Canonical chore-PR shape (Stage 13 spoke executes after Phase A verification clears + Phase B-OPS verification clears, BEFORE Phase C C1 Milestone close):
 
@@ -195,8 +195,8 @@ Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
 │   │                Read by the SessionStart version-skew hook (notify-version-skew.sh)
 │   │                Idempotency: no-op if .version already == v<X.Y>
 │   │                Version-less SKIP: non-vX.Y / version-less release → SKIP with PASS (.version untouched)
-│   ├── Phase B5.8 — Append RELEASE_REVERSIONS.md: one row per abandoned version (the re-version ledger)
-│   │                ONLY when the release re-versioned mid-pipeline; N/A on the common no-collision path
+│   ├── Phase B5.8 — Append RELEASE_REVERSIONS.md: one row per abandoned version (the orphan-tag recovery record)
+│   │                ONLY when the release re-versioned mid-pipeline AND the abandoned version left an orphan tag; N/A otherwise
 │   │                Idempotency: skip an already-present (slug, abandoned_version) row
 │   ├── Commit: chore(v<X.Y>): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG
 │   └── chore PR merged + Phase B merge verification PASS
