@@ -149,7 +149,8 @@ _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "deployment-status	deploy-skill deploy-harness deploy-package deploy-rules-mirror deploy-helper" \
   "release-synthesis	learnings-triple qc4-05-result qc4-06-result" \
   "test-run	suite-pass suite-fail suite-skip" \
-  "spoke-launch	quota-reservation")"
+  "spoke-launch	quota-reservation" \
+  "session-retro	learning operator-feedback no-learning")"
 
 _schema_rows="$(parse_schema_enum 2>/dev/null || true)"
 if [[ -n "$_schema_rows" ]]; then
@@ -318,6 +319,11 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_subtype "test-run" "suite-fail" || die "self-test: test-run suite-fail subtype check failed"
   validate_subtype "test-run" "suite-skip" || die "self-test: test-run suite-skip subtype check failed"
   is_in_list "test-run" "$EVENT_TYPES" || die "self-test: test-run missing from EVENT_TYPES enum"
+  validate_subtype "session-retro" "learning" || die "self-test: session-retro learning subtype check failed"
+  validate_subtype "session-retro" "operator-feedback" || die "self-test: session-retro operator-feedback subtype check failed"
+  validate_subtype "session-retro" "no-learning" || die "self-test: session-retro no-learning subtype check failed"
+  is_in_list "session-retro" "$EVENT_TYPES" || die "self-test: session-retro missing from EVENT_TYPES enum"
+  validate_actor "skill:session-retro" || die "self-test: actor 'skill:session-retro' check failed"
   validate_actor "hub" || die "self-test: actor 'hub' check failed"
   validate_actor "spoke:#1" || die "self-test: actor 'spoke:#N' check failed"
   validate_actor "skill:release-planner" || die "self-test: actor 'skill:NAME' check failed"
@@ -331,6 +337,12 @@ if [[ "$SELF_TEST" == "true" ]]; then
   fi
   if validate_subtype "test-run" "suite-bogus" 2>/dev/null; then
     die "self-test: test-run subtype rejection check failed (suite-bogus accepted)"
+  fi
+  # Guards the § 3 parse against prose leakage: the session-retro row's col-3
+  # parenthetical names the decision-anchored delta path, so a backtick around
+  # that name would silently admit it as a session-retro subtype.
+  if validate_subtype "session-retro" "recommendation-choice-delta" 2>/dev/null; then
+    die "self-test: session-retro subtype rejection check failed (prose token leaked into the § 3 enum)"
   fi
   if validate_subtype "bogus-type" "anything" 2>/dev/null; then
     die "self-test: unknown event_type rejection check failed (bogus-type accepted)"

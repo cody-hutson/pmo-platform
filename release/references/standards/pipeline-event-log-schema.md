@@ -1,6 +1,6 @@
 ---
 title: Pipeline Event Log Schema
-purpose: Unified 10-field schema and 11 event-type enum for the additive append-only audit-trail capture surface at `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md`
+purpose: Unified 10-field schema and 12 event-type enum for the additive append-only audit-trail capture surface at `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md`
 applies_to: hub-spoke-bridge.md, release-personas.md (Stages 2-13), pipeline/stage-{02..09,12,13}.md §11, future skills release-planner / release-executor / principal-engineer
 parallel_to: gate-evaluation-spec.md (calibration-data surface), handoff-coordinator-spec.md (iteration-log surface), decision-discipline.md § 4 (observation surface)
 source: Stage 5 Solutioning + Collective Review scope-lock APPROVED 2026-05-16
@@ -49,7 +49,7 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | 9 | `outcome` | enum: `resolved` / `pending` / `escalated` / `superseded` | terminal state of the event | `resolved` |
 | 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or pipe-escaped key:value pairs; longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
 
-## 3. Event-Type Enum (11 values) with Subtypes
+## 3. Event-Type Enum (12 values) with Subtypes
 
 | `event_type` | Description | Allowed `event_subtype` values |
 |---|---|---|
@@ -64,10 +64,11 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | `release-synthesis` | Per-release Stage 13 row carrying learnings triple + QC4-05 verdict | `learnings-triple` / `qc4-05-result` / `qc4-06-result` (Stage 13 QC4-06 verdict ATTAINED/PARTIALLY-ATTAINED/NOT-ATTAINED; applies going forward) |
 | `test-run` | Runtime code-test suite execution at Stage 6 (author self-verification) or Stage 7 (DT gate); the suite is selected per [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) | `suite-pass` / `suite-fail` / `suite-skip` |
 | `spoke-launch` | Per-spoke startup-token reservation telemetry consumed by the quota-budget gate ([`quota-budget-protocol.md`](quota-budget-protocol.md) Checkpoint B); fired at spoke-launch time (Stage 5 / 7 / 8 parallel waves); `tokens_used:` rides the payload | `quota-reservation` |
+| `session-retro` | Per-session self-retrospective row emitted by the `session-retro` skill at a session boundary — the SESSION-grained learning-capture sibling of the RELEASE-grained `release-synthesis` row; signal-only (payload convention below) | `learning` / `operator-feedback` (a learning derived from operator feedback with NO preceding recommendation — the surface the decision-anchored recommendation-choice-delta path structurally cannot emit) / `no-learning` (the EXPLICIT zero-state, never a silent omission) |
 
 Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` rejects unknown subtypes with non-zero exit. Adding a subtype requires a governance change per `release/governance/release-process.md` § Inter-Stage Feedback Protocol Tier 2 / Tier 3.
 
-**`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, pipe-free per § 4.3):
+**`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing` / `session-retro`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. The `session-retro` provenance value marks a delta the per-session retro surfaced retrospectively rather than one captured live at the decision moment; the row is otherwise identical, so the existing look-back read-model needs no change to see it. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, pipe-free per § 4.3):
 
 ```markdown
 | 2026-06-29T14:00:00Z | v2.39 | 4 | decision | recommendation-choice-delta | hub | milestone:#N | CHEAP | resolved | rec:bundle-A+B; chose:bundle-A-only; delta:diverged; why:B-blocked-on-dep; via:stage4-bundle |
@@ -80,6 +81,20 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 | 2026-06-13T14:00:00Z | v1.12 | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
 | 2026-06-13T14:00:01Z | v1.12 | 7 | test-run | suite-fail | spoke:#N | #N | CHEAP | escalated | suite:deploy-suite; selected-by:glob-2; pass:24; fail:1; env:sandbox-home-tmp; sha:def5678 |
 | 2026-06-13T14:00:02Z | v1.12 | 6 | test-run | suite-skip | spoke:#N | #N | CHEAP | resolved | suite:NONE; selected-by:no-match; reason:doc-only-change; sha:9abcdef |
+```
+
+**`session-retro` payload convention.** A `session-retro` row reuses the standard 10 columns (no new fields); the session-grained learning lives in `payload`, keyed `session:` (an opaque session handle — never a transcript path, never operator content) / `source:` (what produced the signal — one of `correction` / `preference` / `redirection` / `friction` / `delta`) / `theme:` (a short kebab-case clusterable key — **the only field the cross-session cluster read-model tokenizes**, so it carries the pattern identity) / `domain:` (the surface the learning touches) / `learning:` (one abstracted sentence). `actor` is `skill:session-retro`; `subject` is `session:<handle>`; `stage` is the pipeline stage the session was working in, or `13` for a non-pipeline conversational session (the retro is session-grained, not stage-grained — the column is an anchor, not a claim). `version` is the active release tag.
+
+**Signal-only surface, and the boundary that makes it one.** A `session-retro` row is a SENSOR reading, never an actuator: emitting one creates zero toolkit changes, and a cross-session cluster (§ 11.5, `cluster_min` ≥ 3 spanning ≥ 2 versions) yields an `improvement.yml` CANDIDATE through the governance gate (issue → plan → PR per "No ungoverned changes"), never a direct edit. The retro NEVER writes the operator's auto-memory store (operator-write-only per § 5.3) — the memory corpus is a promotion TARGET reachable only through that gate, never a write target of the retro itself.
+
+**Explicit zero-state.** A session that produced no learning emits a `no-learning` row rather than nothing, so "the retro ran and found nothing" is distinguishable from "the retro never ran" — the same discipline as `delta:aligned` above and the release-synthesis explicit-N/A markers (§ 11.3). A `no-learning` row carries `session:` + `reason:` and deliberately carries **no `theme:`**, so it contributes no cluster signal.
+
+**PII (§ 4.2 applies unchanged, and bites hardest here).** The retro reflects over session content, so every payload field is an ABSTRACTION, never a quotation: no verbatim operator text, no external-stakeholder names, no Cowork-owned Layer 2 content, no transcript excerpt. `learning:` states the pattern, not the utterance that revealed it. Examples (≤ 300 chars, pipe-free per § 4.3):
+
+```markdown
+| 2026-07-22T22:10:00Z | v3.80 | 6 | session-retro | operator-feedback | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:correction; theme:read-before-edit; domain:corpus-edit; learning:operator redirected a pattern-sweep toward per-file reading |
+| 2026-07-22T22:10:01Z | v3.80 | 6 | session-retro | learning | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:friction; theme:worktree-cwd-guard; domain:release-ops; learning:git writes needed an explicit cwd guard to stay in the worktree |
+| 2026-07-22T22:10:02Z | v3.80 | 13 | session-retro | no-learning | skill:session-retro | session:d4e5f6 | CHEAP | resolved | session:d4e5f6; reason:below-sampling-threshold-no-novel-signal |
 ```
 
 ## 4. Constraints
@@ -373,4 +388,17 @@ The sibling H4 block is **additive**. Consumer code MUST tolerate its absence on
 **Cutover-applicability rule:** the synthesizer emits the H4 block in RELEASE_LOG.md for releases that enter Stage 13 going forward. **The rule's own publishing release is EXEMPT** — its Stage 13 close emits the release-synthesis/learnings-triple event per the existing capture-start protocol but does NOT trigger the synthesizer (a rule's own shipping release cannot fire it without a reflexive-pipeline loop).
 
 Matches the reflexive-pipeline-loop discipline of prior protocol introductions: pipeline-event-log capture, Phase A.5 main-divergence pre-check, Stage 12/13 chore-PR convention, Phase A.6 mergeStateStatus polling, Phase B0 dependent-PR pre-merge check, Phase J.5 rebuild-then-commit hygiene, Stage 13 orphan state cleanup, G-CL6 design-artifact refresh-gate.
+
+### 11.8 Pattern-detect source selection (`--source`)
+
+Pattern-detect is **source-parameterized**, not source-fixed. The same trailing-window + cluster + auto-promotion machinery (§ 11.4 / § 11.5) runs over either grain; only the input filter and the clustered field-set differ. This is a REUSE of the shipped ≥ 3-cluster engine, not a second cluster implementation — a second implementation would be the producer/producer-disagreement failure the Indicator-4 pointer discipline already rejects.
+
+| `--source` | Input filter | Labels recognized in payload | Field(s) clustered | Zero-state excluded from clustering |
+|---|---|---|---|---|
+| `release-synthesis` (default — the pre-existing behavior, unchanged) | `--event-type release-synthesis --event-subtype learnings-triple` | `surprise` / `would-change` / `watch-for` | all three | a field equal to the literal `N/A — no novel learning this release` |
+| `session-retro` | `--event-type session-retro` | `session` / `source` / `theme` / `domain` / `learning` | `theme` ONLY | a `no-learning` row (it carries no `theme:`, so it contributes nothing by construction) |
+
+**Why `theme:` only.** Free-text `learning:` prose would cluster on incidental vocabulary and manufacture patterns out of shared phrasing — the same over-capture noise the sampling threshold exists to suppress. `theme:` is an author-chosen kebab-case key, so a cluster of ≥ 3 same-`theme` rows across ≥ 2 versions is a real recurrence of the same pattern rather than a vocabulary coincidence. The remaining labels are recognized so the parser terminates each field cleanly; they are not tokenized.
+
+The auto-promotion predicate, the ≥ 2-distinct-version requirement, the `--apply` gate, and the `improvement.yml` CANDIDATE body are shared verbatim across both sources — a session-retro cluster promotes through exactly the same governance gate, never a direct change.
 

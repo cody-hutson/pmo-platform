@@ -219,6 +219,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[CLAUDE_WORKSPACE_ROOT]/.claude/hooks/session-retro-trigger.sh"
+          }
+        ]
+      }
     ]
   }
 }

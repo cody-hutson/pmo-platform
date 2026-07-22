@@ -84,6 +84,7 @@ CORE_SKILLS=(
   pmo-qa-auditor
   pmo-skill-router
   prompt-builder
+  session-retro
   skill-compliance-auditor
 )
 
@@ -5916,6 +5917,29 @@ cmd_check() {
             c37_other_count=$((c37_other_count + 1))
             ;;
         esac
+      done
+      # (a2) Opt-in arm: a NON-`block-*` hook (a trigger/notifier rather than a
+      #      guard) is scanned IFF it declares an owner. Declaring is the opt-in —
+      #      a hook with no `# hook-owner:` line is skipped here rather than
+      #      flagged, because the forward invariant in (a) is scoped to the
+      #      guard set and widening it would retro-fail the pre-existing
+      #      notifier/helper scripts that never declared one. What this arm DOES
+      #      assert: once a hook declares an owner, that owner must resolve on
+      #      disk — so a declaration cannot rot into decoration.
+      local c37_any
+      for c37_any in core/hooks/*.sh; do
+        [[ -e "$c37_any" ]] || continue
+        case "$c37_any" in core/hooks/block-*.sh) continue ;; esac   # covered by (a)
+        local c37_abase; c37_abase="$(basename "$c37_any" .sh)"
+        local c37_aowner
+        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"
+        [[ -n "$c37_aowner" ]] || continue                            # not opted in
+        if [[ ! -f "$c37_aowner" ]]; then
+          flag_warn_or_issue "hook-registry-completeness" "$c37_abase declares owner '$c37_aowner', but that owner doc is missing on disk"
+          c37_violations=$((c37_violations + 1))
+        else
+          c37_other_count=$((c37_other_count + 1))
+        fi
       done
       # (b) Reverse: every bypass-mode per-hook source maps back to a script that
       #     declares it as its owner (preserves the source⇄script bijection).
