@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.82 | governance-doc-reconciliation | 2026-07-22 | — | #3667 | [notes/v3.82_RELEASE_NOTES.md](notes/v3.82_RELEASE_NOTES.md) |
 | v3.81 | 92-version-identity-and-parser-ssot | 2026-07-22 | — | #3656 | [notes/v3.81_RELEASE_NOTES.md](notes/v3.81_RELEASE_NOTES.md) |
 | v3.80 | close-out-reliability-hardening | 2026-07-22 | — | #3618 | [notes/v3.80_RELEASE_NOTES.md](notes/v3.80_RELEASE_NOTES.md) |
 | v3.79 | 95-deploy-tooling-resolver-and-test-parity | 2026-07-17 | Deploy/gate tooling de-duplicated + tested — one canonical link-resolution rule across both checkers (ADR-085, supersedes ADR-009), the last template-sync resolver single-sourced, hook ownership derived by enumeration (both C37 arrays deleted), and hook↔test parity restored 12/12 | #3543 | [notes/v3.79_RELEASE_NOTES.md](notes/v3.79_RELEASE_NOTES.md) |
