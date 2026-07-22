@@ -27,9 +27,16 @@
 #   Indicator 5 rollup-presence        : present|absent — the release-level Outcome:
 #                                        field + Stage-13 A7.1 rollup PRESENCE (the
 #                                        rate is DEFERRED, denominator undefined).
-#   Indicator 6 evidence-close-gate    : pass|fail|N/A — the single Stage-13 G-CL4
-#                                        close-gate boolean (the per-phase reading is
-#                                        N/A-until-source-exists; no ledger).
+#   Indicator 6 evidence-preservation  : <P>/<S> (<ratio>) — phase-completion evidence
+#                                        preservation read-model over the hub-spoke
+#                                        sub-task `gh` state (NO net-new store): CLOSED
+#                                        stage sub-tasks carrying >=1 trusted-authored
+#                                        output/skip-closure comment (P) / stage sub-tasks
+#                                        scaffolded for the release (S). The single
+#                                        Stage-13 G-CL4 close-gate boolean is RETAINED as
+#                                        evidence-close-gate (pass|fail|N/A). Mechanical
+#                                        gh-state read — honors the § 8 boundary (NOT the
+#                                        event log).
 #
 # Ratio rounding mode is round-half-up, taken by reference from
 # bundle-composition-doctrine.md § 3 Step 5 (the single definitional home) — NOT
@@ -55,7 +62,9 @@
 #                      absent -> Indicator 2 N/A.
 #   --outcome-present {0|1}   OPTIONAL Indicator-5 presence override (the Stage 13 spoke knows
 #                      whether the Outcome: field + A7.1 rollup are present). Default: absent.
-#   --close-gate {pass|fail|na}  OPTIONAL Indicator-6 G-CL4 close-gate verdict. Default: na.
+#   --close-gate {pass|fail|na}  OPTIONAL Indicator-6 G-CL4 close-gate verdict — the
+#                      RETAINED secondary sub-signal alongside the phase-evidence rate
+#                      (the rate is primary; the boolean loses no signal). Default: na.
 #
 # Cutover: applies to releases entering Stage 13 strictly AFTER this field's
 # introducing-release merge SHA. The introducing release itself is exempt. This
@@ -63,7 +72,8 @@
 #
 # Exit codes:
 #   0 = success (an indicator may legitimately produce N/A — no register, no
-#       carry-forwards; or the Indicator-4 pointer / I5 presence / I6 boolean)
+#       carry-forwards, no stage sub-tasks; or the Indicator-4 pointer / I5 presence /
+#       I6 evidence-preservation rate + retained close-gate boolean)
 #   1 = invalid args / required input missing / gh unavailable when carry-forward
 #       closure is requested
 #   2 = malformed source (a register that exists but cannot be parsed, or a
@@ -181,6 +191,49 @@ print(f"{populated} {prompted}")
 PY
 }
 
+# ─── Indicator 6: phase-completion evidence preservation (read-model over sub-task gh state) ─
+# Bounded read-model, NO net-new store. The per-stage hub-spoke sub-task surface IS the
+# evidence trail: the hub scaffolds one `sub-task`-labelled issue per release-execution stage
+# and closes it ONLY after consuming its output comment (skipped stages carry a skip-closure
+# comment). A CLOSED sub-task carrying >=1 trusted-authored comment = phase-completion evidence
+# preserved.
+#   Denominator S = stage sub-tasks scaffolded for the release (milestone + label:sub-task).
+#   Numerator   P = those CLOSED with >=1 trusted-authored (output / skip-closure) comment.
+# "Trusted-authored" = comment authorAssociation in {OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR}
+# (guards a public drive-by comment on a CLOSED sub-task from counting as evidence); when the
+# payload carries no authorAssociation, or `comments` is an integer count, falls back to
+# comment-presence (>=1). Echoes "<P> <S>" from a JSON array of {number,state,comments}
+# (both the gh-issue-list array shape and an integer-count shape are accepted). Exit 2 on
+# unparseable source (source-integrity violation; escalate).
+count_subtask_evidence() {
+  local json="$1"
+  /usr/bin/python3 - "$json" <<'PY'
+import json, sys
+TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"}
+try:
+    items = json.loads(sys.argv[1])
+except (ValueError, TypeError) as e:
+    print(f"sub-task evidence source unparseable: {e}", file=sys.stderr)
+    sys.exit(2)
+scaffolded = len(items)
+preserved = 0
+for it in items:
+    if str(it.get("state", "")).upper() != "CLOSED":
+        continue
+    c = it.get("comments", 0)
+    if isinstance(c, list):
+        if any("authorAssociation" in cm for cm in c):
+            has_evidence = any(str(cm.get("authorAssociation", "")).upper() in TRUSTED for cm in c)
+        else:
+            has_evidence = len(c) >= 1   # no author data in payload -> presence fallback
+    else:
+        has_evidence = int(c or 0) >= 1  # integer comment-count shape -> presence
+    if has_evidence:
+        preserved += 1
+print(f"{preserved} {scaffolded}")
+PY
+}
+
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -244,12 +297,44 @@ if [[ "${1:-}" == "--self-test" ]]; then
   # Test 5: expected-marker count is the canonical 10
   [[ "$EXPECTED_MARKERS" -eq 10 ]] || die "self-test: EXPECTED_MARKERS = $EXPECTED_MARKERS, expected 10"
 
+  # Test 6: Indicator 6 — phase-completion evidence preservation (read-model over sub-task gh
+  #   state). Denominator = scaffolded stage sub-tasks; numerator = CLOSED with >=1 trusted-
+  #   authored comment. Covers: full-preserved / OPEN-excluded / CLOSED-empty-excluded /
+  #   untrusted-author-excluded / no-author-payload presence-fallback / integer-count shape /
+  #   zero-scaffolded -> N/A.
+  EVID_FULL='[{"number":1,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"},{"authorAssociation":"MEMBER"}]},{"number":3,"state":"CLOSED","comments":[{"authorAssociation":"COLLABORATOR"}]},{"number":4,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]}]'
+  read -r EP ES < <(count_subtask_evidence "$EVID_FULL")
+  [[ "$EP" == "4" && "$ES" == "4" ]] || die "self-test: subtask-evidence(full) = $EP/$ES, expected 4/4"
+  R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "1.00" ]] || die "self-test: subtask-evidence ratio(full) = $R, expected 1.00"
+
+  # OPEN (excluded), CLOSED-empty (excluded), CLOSED-OWNER (counted), CLOSED-NONE (untrusted, excluded) -> 1/4
+  EVID_PARTIAL='[{"number":1,"state":"OPEN","comments":[{"authorAssociation":"OWNER"}]},{"number":2,"state":"CLOSED","comments":[]},{"number":3,"state":"CLOSED","comments":[{"authorAssociation":"OWNER"}]},{"number":4,"state":"CLOSED","comments":[{"authorAssociation":"NONE"}]}]'
+  read -r EP ES < <(count_subtask_evidence "$EVID_PARTIAL")
+  [[ "$EP" == "1" && "$ES" == "4" ]] || die "self-test: subtask-evidence(partial) = $EP/$ES, expected 1/4 (OPEN + CLOSED-empty + untrusted-author excluded)"
+  R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "0.25" ]] || die "self-test: subtask-evidence ratio(partial) = $R, expected 0.25"
+
+  # No authorAssociation in payload -> presence fallback (CLOSED w/ >=1 comment counts; CLOSED-empty excluded) -> 1/2
+  EVID_FALLBACK='[{"number":1,"state":"CLOSED","comments":[{"body":"output posted"}]},{"number":2,"state":"CLOSED","comments":[]}]'
+  read -r EP ES < <(count_subtask_evidence "$EVID_FALLBACK")
+  [[ "$EP" == "1" && "$ES" == "2" ]] || die "self-test: subtask-evidence(no-author-payload) = $EP/$ES, expected 1/2 (presence fallback)"
+
+  # Integer comment-count shape -> presence (CLOSED count>=1 counts; OPEN excluded; CLOSED count0 excluded) -> 1/3
+  EVID_INT='[{"number":1,"state":"CLOSED","comments":2},{"number":2,"state":"OPEN","comments":5},{"number":3,"state":"CLOSED","comments":0}]'
+  read -r EP ES < <(count_subtask_evidence "$EVID_INT")
+  [[ "$EP" == "1" && "$ES" == "3" ]] || die "self-test: subtask-evidence(int-count) = $EP/$ES, expected 1/3"
+
+  # Zero scaffolded -> 0/0 -> N/A rate
+  read -r EP ES < <(count_subtask_evidence '[]')
+  [[ "$EP" == "0" && "$ES" == "0" ]] || die "self-test: subtask-evidence(zero) = $EP/$ES, expected 0/0"
+  R="$(ratio_round_half_up "$EP" "$ES")"; [[ "$R" == "N/A" ]] || die "self-test: subtask-evidence ratio(zero) = $R, expected N/A (no stage sub-tasks scaffolded)"
+
   rm -rf "$TMPD"; trap - EXIT
   echo "self-test: PASS"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / zero-den)"
   echo "  Indicator 1 retro canonical-form conformance validated (full 10/10 + partial 6/10)"
   echo "  Indicator 2 lessons-population validated (placeholder detection 2/4 + zero-prompted N/A)"
   echo "  canonical-marker set validated (10 verbatim Kerth + PMBOK 7 + Triple-Linkage headers)"
+  echo "  Indicator 6 phase-evidence preservation validated (full 4/4 + partial 1/4 + presence-fallback + int-count + zero-scaffolded N/A)"
   exit 0
 fi
 
@@ -371,8 +456,36 @@ PATTERN_POINTER="deferred-to-aggregate (see synthesize-release-learnings.sh)"
 
 if [[ "$OUTCOME_PRESENT" == "1" ]]; then ROLLUP_PRESENCE="present"; else ROLLUP_PRESENCE="absent"; fi
 
-# ─── Indicator 6: evidence-close-gate (single G-CL4 boolean) ─────────────────
+# ─── Indicator 6: phase-completion evidence preservation (read-model) + retained close-gate ─
+# Primary reading: a bounded read-model over the hub-spoke sub-task `gh` state (NO net-new
+# store) — CLOSED stage sub-tasks carrying >=1 trusted-authored comment (P) / stage sub-tasks
+# scaffolded for the release (S); rate = P/S. Reuses the GH + REPO resolved for Indicator 3.
+# Mechanical gh-state read only — honors the standard § 8 boundary (NOT the event log). N/A
+# when the release scaffolded zero stage sub-tasks (pre-hub-spoke / grandfathered).
+EVID_PRESERVED="N/A"; EVID_SCAFFOLDED="N/A"; EVID_RATIO="N/A"; EVID_NA_REASON=""
+if [[ -z "$GH" ]]; then
+  EVID_NA_REASON="gh unavailable — phase-evidence preservation not computed"
+elif [[ -z "${REPO:-}" ]]; then
+  EVID_NA_REASON="could not resolve target repo — set REPO or run inside a gh-authenticated repo"
+else
+  SUBTASK_JSON="$("$GH" issue list --repo "$REPO" \
+    --milestone "$MILESTONE" --label "sub-task" --state all --limit 500 \
+    --json number,state,comments 2>/dev/null || true)"
+  if [[ -z "$SUBTASK_JSON" || "$SUBTASK_JSON" == "[]" ]]; then
+    EVID_NA_REASON="no stage sub-tasks scaffolded"
+    EVID_SCAFFOLDED=0; EVID_PRESERVED=0
+  else
+    read -r EVID_PRESERVED EVID_SCAFFOLDED < <(count_subtask_evidence "$SUBTASK_JSON")
+    if [[ "$EVID_SCAFFOLDED" -eq 0 ]]; then
+      EVID_NA_REASON="no stage sub-tasks scaffolded"
+    else
+      EVID_RATIO="$(ratio_round_half_up "$EVID_PRESERVED" "$EVID_SCAFFOLDED")"
+    fi
+  fi
+fi
 
+# Retained secondary sub-signal: the single Stage-13 G-CL4 close-gate boolean (non-destructive
+# upgrade — the rate is primary, the boolean loses no signal).
 case "$CLOSE_GATE" in
   pass) EVIDENCE_GATE="pass" ;;
   fail) EVIDENCE_GATE="fail" ;;
@@ -395,6 +508,7 @@ fmt_rate() {
 RETRO_STR="$(fmt_rate "$RETRO_RATIO" "$RETRO_PRESENT" "$RETRO_EXPECTED" "$RETRO_NA_REASON")"
 LESS_STR="$(fmt_rate "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON")"
 CF_STR="$(fmt_rate "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON")"
+EVID_STR="$(fmt_rate "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON")"
 
 if [[ "$OUTPUT_FORMAT" == "json" ]]; then
   /usr/bin/python3 - \
@@ -402,7 +516,8 @@ if [[ "$OUTPUT_FORMAT" == "json" ]]; then
     "$RETRO_RATIO" "$RETRO_PRESENT" "$RETRO_EXPECTED" "$RETRO_NA_REASON" \
     "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON" \
     "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON" \
-    "$ROLLUP_PRESENCE" "$EVIDENCE_GATE" <<'PY'
+    "$ROLLUP_PRESENCE" "$EVIDENCE_GATE" \
+    "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON" <<'PY'
 import json, sys
 a = sys.argv
 def na(v): return None if v == "N/A" else v
@@ -414,6 +529,7 @@ out = {
   "carry_forward_closure": {"ratio": na(a[11]), "closed": na(a[12]), "raised": na(a[13]), "na_reason": a[14] or None},
   "pattern_emergence": "deferred-to-aggregate",
   "rollup_presence": a[15],
+  "phase_evidence_preservation": {"ratio": na(a[17]), "preserved": na(a[18]), "scaffolded": na(a[19]), "na_reason": a[20] or None},
   "evidence_close_gate": a[16],
   "mechanism": "compute-close-class-telemetry.sh",
 }
@@ -423,5 +539,5 @@ PY
 fi
 
 # Human form == the literal **Close-Class-Telemetry:** field value embedded in the H4 block.
-echo "retro-conformance ${RETRO_STR}; lessons-population ${LESS_STR}; carry-forward-closure ${CF_STR}; pattern-emergence ${PATTERN_POINTER}; rollup-presence ${ROLLUP_PRESENCE}; evidence-close-gate ${EVIDENCE_GATE}; mechanism: compute-close-class-telemetry.sh"
+echo "retro-conformance ${RETRO_STR}; lessons-population ${LESS_STR}; carry-forward-closure ${CF_STR}; pattern-emergence ${PATTERN_POINTER}; rollup-presence ${ROLLUP_PRESENCE}; evidence-preservation ${EVID_STR}; evidence-close-gate ${EVIDENCE_GATE}; mechanism: compute-close-class-telemetry.sh"
 exit 0

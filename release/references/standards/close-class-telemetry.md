@@ -20,7 +20,7 @@ Prior to this standard, none of these close-quality signals existed as a machine
 
 **Scope:** per-release close-out quality, captured at Stage 13 close, derived from **mechanical sources** — the operator-instance retro/lessons registers (grep of canonical-form section markers + populated-row counts), the `gh` `status: deferred` label state over the milestone (carry-forward closure), and the release-level `Outcome:` field + Stage-13 A7.1 rollup (decision-rollup presence). The instrument reads filesystem registers and `gh` state — it does **NOT** read the pipeline-event-log (that is the disjoint surface owned by the cycle-time / DORA read-models; see § 8 boundary clause).
 
-**Out of scope:** per-issue close quality (the field is release-level only); the cross-release pattern-emergence rate (Indicator 4 — computed by `synthesize-release-learnings.sh`, referenced here as a POINTER, never recomputed — see § 4 Indicator 4); a per-phase evidence-preservation ledger (Indicator 6 — no pipeline-wide evidence ledger exists; scoped to the single Stage-13 close-gate boolean and otherwise N/A-until-source-exists — see § 4 Indicator 6); deployment latency / bundle throughput (the disjoint sibling fields).
+**Out of scope:** per-issue close quality (the field is release-level only); the cross-release pattern-emergence rate (Indicator 4 — computed by `synthesize-release-learnings.sh`, referenced here as a POINTER, never recomputed — see § 4 Indicator 4); a net-new per-phase evidence-preservation ledger (Indicator 6 — no net-new store is built; reuse-first, Indicator 6 ships as a bounded read-model over the existing hub-spoke sub-task `gh` state — see § 4 Indicator 6); deployment latency / bundle throughput (the disjoint sibling fields).
 
 ### 1.1 The anti-overfit posture (load-bearing)
 
@@ -33,13 +33,13 @@ This standard deliberately ships **fewer fully-built indicators than the close-o
 | 3 `carry_forward_closure_rate` | **BUILD (read-model)** | `status: deferred` label state over the milestone is a real `gh`-queryable closure ratio. |
 | 4 `cross_release_pattern_emergence_rate` | **POINTER ONLY** | Already computed by `synthesize-release-learnings.sh` (qualifying-clusters ÷ events-in-window). Reference it; never recompute it. |
 | 5 `decision_record_release_level_rollup_rate` | **DETERMINED — presence/coverage; rate NOT COMPUTABLE (terminal)** | No principled denominator exists in existing data — "how many decisions *should* roll up" has no mechanical marker; every countable candidate is circular (≡ the numerator) or a conflation FM1 rejects, and any non-degenerate denominator reads the event log (§ 8 boundary). Presence-only is **terminal, not interim** — a reached determination, not a pending deferral. See § 4 Indicator 5. |
-| 6 `phase_completion_evidence_preservation_rate` | **N/A-ONLY / DEFERRED** | No pipeline-wide evidence ledger exists. Scope to the single Stage-13 close-gate (G-CL4) boolean; mark the broader per-phase reading N/A-until-source-exists. Build no per-phase machinery. |
+| 6 `phase_completion_evidence_preservation_rate` | **BUILD (read-model)** | Reuse-first: the hub-spoke sub-task `gh` state IS the per-phase evidence trail — no net-new store. CLOSED stage sub-tasks carrying a trusted-authored (output / skip-closure) comment ÷ stage sub-tasks scaffolded for the release is a real `gh`-queryable preservation rate; the G-CL4 close-gate boolean is retained as a sub-signal. See § 4 Indicator 6. |
 
 The discipline: **measure what has a real, mechanical denominator; pointer to what is already measured; explicitly defer what has no source yet.** A deferred indicator is recorded as deferred (with its blocking reason), never silently dropped and never faked with a synthetic denominator.
 
 ## 2. What is measured
 
-The `**Close-Class-Telemetry:**` field carries the three built indicators, the Indicator-4 pointer, the Indicator-5 presence flag, and the Indicator-6 close-gate boolean, plus a producing-tool marker:
+The `**Close-Class-Telemetry:**` field carries the three built indicators, the Indicator-4 pointer, the Indicator-5 presence flag, and the Indicator-6 phase-evidence rate (with the retained close-gate boolean), plus a producing-tool marker:
 
 | Sub-signal | Indicator | Source | Format | Notes |
 |---|---|---|---|---|
@@ -48,7 +48,7 @@ The `**Close-Class-Telemetry:**` field carries the three built indicators, the I
 | **carry-forward-closure** | 3 | `gh` `status: deferred` label state over the release milestone — deferred items that have since closed ÷ total deferred items raised by/at this release's close | `<closed>/<raised> (<ratio>)` | Sources the `status: deferred` label per [`deferred-item-tracking.md`](deferred-item-tracking.md). N/A when this release raised zero carry-forward items. |
 | **pattern-emergence** | 4 | **POINTER** to `synthesize-release-learnings.sh --mode aggregate` | `deferred-to-aggregate (see synthesize-release-learnings.sh)` | NOT recomputed here — the field carries the pointer; the rate lives at the synthesizer (§ 4 Indicator 4). |
 | **rollup-presence** | 5 | presence of the release-level `Outcome:` field (per [`decision-outcome-tracking.md`](decision-outcome-tracking.md)) + the Stage-13 A7.1 recommendation↔choice rollup | `present` / `absent` (presence, NOT a rate) | The rate is **not computable** — no principled denominator exists (§ 4 Indicator 5). Presence answers "did the release record its decision rollup at all?" |
-| **evidence-close-gate** | 6 | the single Stage-13 close-gate G-CL4 ("verification evidence persisted") boolean | `pass` / `fail` / `N/A` (single gate, NOT a per-phase rate) | The broader per-phase evidence-preservation reading is `N/A-until-source-exists` — no pipeline-wide evidence ledger to measure against. |
+| **evidence-preservation** (+ retained **evidence-close-gate**) | 6 | reuse-first read-model over the hub-spoke sub-task `gh` state — CLOSED stage sub-tasks carrying a trusted-authored (output / skip-closure) comment ÷ stage sub-tasks scaffolded for the release; the single Stage-13 G-CL4 close-gate boolean is retained as a sub-signal | `<P>/<S> (<ratio>)` for evidence-preservation; `pass` / `fail` / `N/A` for evidence-close-gate | Rate is primary (a real `gh`-mechanical denominator — no net-new store); the retained boolean loses no signal. N/A when the release scaffolded zero stage sub-tasks. |
 | **mechanism** | — | literal `compute-close-class-telemetry.sh` | suffix | Discoverability marker, mirroring the velocity field's `mechanism:` convention. |
 
 ## 3. Unit / Format
@@ -66,19 +66,19 @@ The three built indicators are 2-decimal ratios, rounded **round-half-up** at th
 **Default emit (non-N/A):**
 
 ```markdown
-**Close-Class-Telemetry:** retro-conformance <Pc>/<Ec> (<ratio>); lessons-population <Pl>/<Tl> (<ratio>); carry-forward-closure <Cf>/<Rf> (<ratio>); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence <present|absent>; evidence-close-gate <pass|fail|N/A>; mechanism: compute-close-class-telemetry.sh
+**Close-Class-Telemetry:** retro-conformance <Pc>/<Ec> (<ratio>); lessons-population <Pl>/<Tl> (<ratio>); carry-forward-closure <Cf>/<Rf> (<ratio>); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence <present|absent>; evidence-preservation <Pe>/<Se> (<ratio>); evidence-close-gate <pass|fail|N/A>; mechanism: compute-close-class-telemetry.sh
 ```
 
-Worked example (a release whose retro fully conformed — all 10 canonical-form markers present — with 8/10 lessons rows populated, 2/3 carry-forwards since closed, rollup present, close-gate passed):
+Worked example (a release whose retro fully conformed — all 10 canonical-form markers present — with 8/10 lessons rows populated, 2/3 carry-forwards since closed, rollup present, 12 of 13 stage sub-tasks carrying preserved evidence, close-gate passed):
 
 ```markdown
-**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh
 ```
 
-**N/A emit (a release that authored no retro register and raised no carry-forwards):**
+**N/A emit (a release that authored no retro register, raised no carry-forwards, and scaffolded no stage sub-tasks):**
 
 ```markdown
-**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v<X.Y>; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence <present|absent>; evidence-close-gate <pass|fail|N/A>; mechanism: compute-close-class-telemetry.sh
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v<X.Y>; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence <present|absent>; evidence-preservation N/A — no stage sub-tasks scaffolded; evidence-close-gate <pass|fail|N/A>; mechanism: compute-close-class-telemetry.sh
 ```
 
 Emit mechanism: the Stage 13 spoke invokes `compute-close-class-telemetry.sh <version> --milestone <N>` at the Stage 13 chore PR and embeds the returned value into the visible-H4 block. Per the chore-PR convention the field lands on main via the Stage 13 chore PR, never direct-to-main.
@@ -116,9 +116,19 @@ Emit mechanism: the Stage 13 spoke invokes `compute-close-class-telemetry.sh <ve
 
 **Two independent, load-bearing blockers** (each alone is sufficient): **(1) Semantic — denominator undefinability.** No existing field marks a decision "roll-up-worthy" independent of whether it rolled up; the only countable populations are *did-roll-up* populations (≡ the numerator → circular) or the conflations FM1 rejects. A denominator equal to the numerator is not a rate. **(2) Architectural — source boundary.** Any denominator rich enough to be non-degenerate must count individual decision *events*, which reads the pipeline-event-log — the surface § 8 explicitly excludes — reclassifying Indicator 5 as a different instrument, not an upgrade to this one. Presence-only is therefore **structurally terminal** here, not merely unbuilt; the deferral is closed as a reached determination. (Consistent with § 1.1's anti-overfit posture and FM1: measure what has a real mechanical denominator; never synthesize one.)
 
-### Indicator 6 — `phase_completion_evidence_preservation_rate` (N/A-ONLY / DEFERRED)
+### Indicator 6 — `phase_completion_evidence_preservation_rate` (BUILD — read-model over sub-task `gh` state)
 
-**Definition (as scoped):** the fraction of pipeline phases whose completion evidence was preserved. **Disposition:** **N/A-only / deferred.** No pipeline-wide evidence ledger exists — there is no per-phase evidence store to measure a preservation rate against. Building per-phase machinery to manufacture one is explicitly out of scope. The instrument therefore scopes Indicator 6 to the **single Stage-13 close-gate boolean** — G-CL4 ("verification evidence persisted") per [`stage-13-close.md`](../pipeline/stage-13-close.md) § 7 — emitting `evidence-close-gate pass|fail|N/A`. The broader per-phase reading is marked **N/A-until-source-exists** and documented as deferred (its blocking reason: no pipeline-wide evidence ledger). Do NOT build per-phase evidence machinery to fill this; record the deferral.
+**Definition:** of the release-execution phases the release scaffolded, what fraction preserved their completion evidence. **Disposition:** **BUILD as a bounded read-model — NO net-new store.**
+
+**Reuse-first finding (why no net-new ledger).** v3.34 deferred this indicator because "no pipeline-wide evidence ledger exists." The reuse-first check — the same lens that made Indicator 4 a synthesizer extension rather than a new tool — finds that **an adequate de-facto per-phase evidence trail already exists**: the hub-spoke pipeline scaffolds one `sub-task`-labelled issue per release-execution stage, and the hub closes a sub-task **only after consuming its output comment** (skipped stages carry a skip-closure comment). A CLOSED sub-task carrying a trusted-authored comment is therefore preserved phase-completion evidence. Building a net-new per-phase evidence store to manufacture a denominator is explicitly rejected (anti-overfit, § 1.1 / FM1) — the read-model measures the trail that already exists.
+
+**Source:** `gh issue list --milestone <N> --label "sub-task" --state all` (the same `gh`-state read class as Indicator 3, NOT the event log — § 8). **Denominator S** = stage sub-tasks scaffolded for the release. **Numerator P** = those sub-tasks that are **CLOSED and carry ≥1 trusted-authored comment** (the hub's output or skip-closure comment; "trusted-authored" = comment `authorAssociation` ∈ {OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR}, guarding a public drive-by comment on a closed sub-task from counting; presence fallback when the payload carries no author data). Comment-presence guards a closed-but-empty sub-task from counting as evidence. **Rate** = P ÷ S (round-half-up, § 3.1). The field emits `evidence-preservation <P>/<S> (<ratio>)`.
+
+**Retained sub-signal (non-destructive upgrade):** the **single Stage-13 close-gate boolean** — G-CL4 ("verification evidence persisted") per [`stage-13-close.md`](../pipeline/stage-13-close.md) § 7 — is retained as `evidence-close-gate pass|fail|N/A`. The rate is the primary reading (a real mechanical denominator); the boolean loses no signal.
+
+**N/A:** when the release scaffolded **zero stage sub-tasks** (pre-hub-spoke / grandfathered releases) → `evidence-preservation N/A — no stage sub-tasks scaffolded` (a clean absence, NOT a 0/0 rate). The retained boolean is independently `N/A` when the G-CL4 gate did not run / is unreadable.
+
+**Anti-overfit denominator scope (§ 1.1 / FM1 honesty).** "Total phases" resolves mechanically to the **scaffolded stage sub-task set** — the release-execution phases at which phase-completion evidence is actually produced and preserved (the hub-spoke stages: e.g. Solutioning / Engineering / DevTest / QA / Plan-Review / Execute / Close). Per-issue pre-release intake stages and the compressed review/execute stages are outside the release-scoped sub-task surface **by construction**; the read-model measures the real, `gh`-mechanical denominator that exists rather than a manufactured fixed count. This finds a real denominator via reuse — it does not reverse the § 1.1 discipline of never synthesizing one.
 
 ## 5. N/A semantics (per-indicator, independent)
 
@@ -131,7 +141,7 @@ Each indicator resolves its own N/A independently — a release can yield a real
 | 3 carry-forward-closure | this release raised zero carry-forward (`status: deferred`) items → `N/A — no carry-forward items raised` (a clean close, NOT a 0/0 rate) |
 | 4 pattern-emergence | always the pointer (`deferred-to-aggregate`) — not an N/A, a structural deferral to the synthesizer |
 | 5 rollup-presence | not a rate — emits `present`/`absent`; the RATE is **not computable** (no principled denominator exists — § 4 Indicator 5), documented as presence-not-rate — a reached determination, not a pending deferral |
-| 6 evidence-close-gate | the G-CL4 gate did not run / is unreadable → `N/A`; the per-phase reading is `N/A-until-source-exists` (no ledger) |
+| 6 evidence-preservation (+ retained evidence-close-gate) | the release scaffolded zero stage sub-tasks → `evidence-preservation N/A — no stage sub-tasks scaffolded` (pre-hub-spoke / grandfathered, a clean absence NOT a 0/0 rate); the retained G-CL4 boolean is independently `N/A` when the gate did not run / is unreadable |
 
 **Explicit-N/A discipline:** every indicator slot in the field is present with a value, an `N/A (reason)`, a pointer (Indicator 4), or a presence flag (Indicator 5). A missing slot is a tool defect, not a silent N/A. A release either carries the full field (post-cutover) or carries no field at all (pre-cutover, grandfathered) — never a partial field with a slot dropped.
 
@@ -145,7 +155,7 @@ This instrument is the measurement layer for the platform's **close-out discipli
 
 Reference implementation: [`release/tools/compute-close-class-telemetry.sh`](../../tools/compute-close-class-telemetry.sh).
 
-**Form factor:** a thin wrapper mirroring the `compute-release-velocity.sh` form factor and exit-code contract — stdlib-only (`/usr/bin/python3`), PATH pinned to system tools, a built-in `--self-test`, and a `--json` detail mode. It sources from **mechanical surfaces** (filesystem registers + `gh` state), NOT the event log: (a) the retro register file (grep canonical-form markers), (b) the lessons register file (count populated vs prompted rows), (c) `gh issue list --label "status: deferred"` over the milestone (carry-forward closure), (d) the RELEASE_LOG `Outcome:` field + A7.1 rollup presence (Indicator 5), (e) the G-CL4 close-gate boolean (Indicator 6). Indicator 4 is emitted as the `deferred-to-aggregate` pointer string — the tool never recomputes it.
+**Form factor:** a thin wrapper mirroring the `compute-release-velocity.sh` form factor and exit-code contract — stdlib-only (`/usr/bin/python3`), PATH pinned to system tools, a built-in `--self-test`, and a `--json` detail mode. It sources from **mechanical surfaces** (filesystem registers + `gh` state), NOT the event log: (a) the retro register file (grep canonical-form markers), (b) the lessons register file (count populated vs prompted rows), (c) `gh issue list --label "status: deferred"` over the milestone (carry-forward closure), (d) the RELEASE_LOG `Outcome:` field + A7.1 rollup presence (Indicator 5), (e) the hub-spoke sub-task `gh` state — CLOSED stage sub-tasks with a trusted-authored comment ÷ scaffolded (Indicator 6 phase-evidence read-model) + the retained G-CL4 close-gate boolean. Indicator 4 is emitted as the `deferred-to-aggregate` pointer string — the tool never recomputes it.
 
 **CLI:**
 
@@ -156,7 +166,7 @@ Reference implementation: [`release/tools/compute-close-class-telemetry.sh`](../
 ```
 
 **Exit codes:**
-- `0` — success (an indicator may legitimately produce N/A — no register, no carry-forwards; or the Indicator-4 pointer / Indicator-5 presence / Indicator-6 boolean)
+- `0` — success (an indicator may legitimately produce N/A — no register, no carry-forwards, no stage sub-tasks; or the Indicator-4 pointer / Indicator-5 presence / Indicator-6 phase-evidence rate + retained boolean)
 - `1` — invalid args / required input missing / `gh` unavailable when carry-forward closure is requested
 - `2` — malformed source (a register that exists but cannot be parsed, or a milestone that does not resolve — source-integrity violation; escalate)
 
@@ -164,7 +174,7 @@ Reference implementation: [`release/tools/compute-close-class-telemetry.sh`](../
 
 ## 8. Boundary statement (mechanical-source, NOT the event log)
 
-Close-class telemetry sources from **filesystem registers + `gh` state**, NOT the pipeline-event-log. This is the deliberate boundary that distinguishes it from the event-log read-models (deployment-cycle-time, DORA): those answer "what happened in the pipeline event stream"; this answers "what close-out artifacts did the release produce, and in what conforming form". The retro/lessons registers are operator-instance markdown files; the carry-forward state is `gh` label state; the rollup presence and close-gate are RELEASE_LOG / gate surfaces. None of these is an event-log read — the event log is untouched by this instrument. (Indicator 4's pattern-emergence rate IS an event-log read-model, which is exactly why it is delegated to `synthesize-release-learnings.sh` and only pointed-to here, never computed here.)
+Close-class telemetry sources from **filesystem registers + `gh` state**, NOT the pipeline-event-log. This is the deliberate boundary that distinguishes it from the event-log read-models (deployment-cycle-time, DORA): those answer "what happened in the pipeline event stream"; this answers "what close-out artifacts did the release produce, and in what conforming form". The retro/lessons registers are operator-instance markdown files; the carry-forward state is `gh` label state; the rollup presence and close-gate are RELEASE_LOG / gate surfaces. None of these is an event-log read — the event log is untouched by this instrument. (Indicator 4's pattern-emergence rate IS an event-log read-model, which is exactly why it is delegated to `synthesize-release-learnings.sh` and only pointed-to here, never computed here.) Indicator 6's phase-evidence-preservation read-model reads the hub-spoke **sub-task `gh` state** — issue open/closed state plus comment presence — which is `gh` state (the same read class as Indicator 3's carry-forward closure), **NOT** an event-log read; it therefore sits squarely within this mechanical-source boundary.
 
 ## 9. Cutover / grandfather
 
@@ -206,7 +216,7 @@ Per [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.m
 | Carry-forward closure (Indicator 3 source) | [`deferred-item-tracking.md`](deferred-item-tracking.md) | The `status: deferred` label state this indicator reads for closure-rate |
 | Pattern-emergence rate (Indicator 4 owner) | [`synthesize-release-learnings.sh`](../../tools/synthesize-release-learnings.sh) | Owns the cross-release pattern-emergence rate; this field POINTS to it (`deferred-to-aggregate`), never recomputes it |
 | Rollup presence (Indicator 5 source) | [`decision-outcome-tracking.md`](decision-outcome-tracking.md) | The release-level `Outcome:` field whose presence (with the Stage-13 A7.1 rollup) Indicator 5 records |
-| Evidence close-gate (Indicator 6 source) | [`pipeline/stage-13-close.md`](../pipeline/stage-13-close.md) § 7 | The G-CL4 "verification evidence persisted" close-gate Indicator 6 scopes to (single boolean; per-phase reading N/A-until-source-exists) |
+| Phase-evidence preservation (Indicator 6 source) | hub-spoke sub-task `gh` state + [`pipeline/stage-13-close.md`](../pipeline/stage-13-close.md) § 7 | The per-stage hub-spoke sub-task surface (CLOSED + trusted-authored comment ÷ scaffolded) the Indicator-6 read-model measures; the G-CL4 "verification evidence persisted" close-gate is retained as a sub-signal |
 | Point scale rounding mode | `bundle-composition-doctrine.md § 3 Step 5` | Owns the round-half-up definitional home (taken by reference; § 3.1) |
 | Capture surface | [`pipeline/stage-13-close.md`](../pipeline/stage-13-close.md) Phase B | Where the field is embedded (Stage 13 chore PR) |
 | Convention documentation | `release/governance/release-process.md` Stage 13 | Documents what/when/how the field is captured |
