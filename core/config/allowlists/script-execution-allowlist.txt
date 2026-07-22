@@ -106,6 +106,15 @@ release/tools/version-grammar.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
 ./release/tools/claim-version.sh
 release/tools/claim-version.sh
+# check-registry-currency.sh — Check 5(d) row-layer CI-mirror predicate (#2540).
+# Executed agent-side as `bash <path> --self-test` and as the AC-1 falsification
+# test (roster a skill without a registry row); all four forms allowlisted so
+# BLOCK-DESTRUCTIVE-022 does not block the Stage-7 DevTest invocation. (CI itself
+# runs no Claude hooks, so this is for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-registry-currency.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-registry-currency.sh
+./core/deploy/tools/check-registry-currency.sh
+core/deploy/tools/check-registry-currency.sh
 
 # extract-roster-needles.sh — generates PII needles from the operator-instance
 # people-roster into the localized-context needle file (people-graph data surface).
