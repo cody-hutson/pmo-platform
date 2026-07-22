@@ -11,7 +11,7 @@ description: >
   improvement CANDIDATE through the governance gate, and the operator memory store is never written.
   Sampled, not fire-always. Triggers: "run the session retro", "retro this session", "session-retro",
   "what did this session teach us", "capture learnings from this session".
-version: v3.80
+version: v3.83
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 delivery_approach: advisory

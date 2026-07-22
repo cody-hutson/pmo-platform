@@ -52,7 +52,7 @@ A session that produced no novel learning emits **exactly one** `no-learning` ro
 
 ```bash
 ./release/tools/append-pipeline-event.sh \
-  --version v3.80 --stage 13 \
+  --version v3.83 --stage 13 \
   --event-type session-retro --event-subtype no-learning \
   --actor skill:session-retro --subject "session:d4e5f6" \
   --reversibility CHEAP --outcome resolved \
@@ -79,7 +79,7 @@ Operator feedback with no preceding recommendation (the AC6 class — the row th
 
 ```bash
 ./release/tools/append-pipeline-event.sh \
-  --version v3.80 --stage 6 \
+  --version v3.83 --stage 6 \
   --event-type session-retro --event-subtype operator-feedback \
   --actor skill:session-retro --subject "session:a1b2c3" \
   --reversibility CHEAP --outcome resolved \
@@ -90,7 +90,7 @@ Session friction:
 
 ```bash
 ./release/tools/append-pipeline-event.sh \
-  --version v3.80 --stage 6 \
+  --version v3.83 --stage 6 \
   --event-type session-retro --event-subtype learning \
   --actor skill:session-retro --subject "session:a1b2c3" \
   --reversibility CHEAP --outcome resolved \
@@ -100,10 +100,10 @@ Session friction:
 A hindsight recommendation↔choice delta — **only** when the live path emitted none for that decision (verify first; see the PROC failure mode in SKILL.md). This is a `decision` row, not a `session-retro` row; the retro's contribution is the `via:` provenance:
 
 ```bash
-./release/tools/query-pipeline-event.sh --version v3.80 --event-subtype recommendation-choice-delta   # verify absence FIRST
+./release/tools/query-pipeline-event.sh --version v3.83 --event-subtype recommendation-choice-delta   # verify absence FIRST
 
 ./release/tools/append-pipeline-event.sh \
-  --version v3.80 --stage 5 \
+  --version v3.83 --stage 5 \
   --event-type decision --event-subtype recommendation-choice-delta \
   --actor skill:session-retro --subject "#N" \
   --reversibility CHEAP --outcome resolved \
