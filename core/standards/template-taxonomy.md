@@ -93,7 +93,7 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 
 ## §4 Software-Domain Taxonomy (engineering best-practice canons)
 
-The software domain organizes around the documents engineers produce. Each artifact family has a named native canon (the upstream best-practice convention) and, where applicable, an Anthropic plugin cross-reference (a plugin skill installed in this workspace that already implements the same canon as an authoring route).
+The software domain organizes around the documents engineers produce. Each artifact family has a named native canon (the upstream best-practice convention) and, where applicable, an Anthropic plugin cross-reference — a convention-anchor that names the plugin authoring convention implementing the same canon, NOT a claim that the plugin is installed today; live availability is re-verified per template at the L4 P5 promotion gate (see §7).
 
 ### §4.1 Architecture / Decision (ADR)
 
@@ -156,7 +156,7 @@ Single authoritative table — 9 rows binding each artifact family to its native
 |---|---|---|---|---|---|---|
 | 1 | ADR | software | Nygard, "Documenting Architecture Decisions" (2011) — 4-section structure (Context / Decision / Status / Consequences) | `engineering:architecture` plugin | `adr-template.md` | Anthropic plugin implements Nygard convention; no CONFLICT |
 | 2 | Runbook | software | Google SRE Workbook §Runbook Design | `operations:runbook` plugin (PMO operations role-skill — covers SOPs + recurring task documentation) | `runbook-template.md` | ITIL Service Operation §Operations Management referenced as secondary; align template fields with `operations:runbook` field shape |
-| 3 | Design doc | software | Google design-doc convention (Atwood/Henderson templates) — Context/Goals/Non-goals/Proposal/Alternatives/Risks | `engineering:system-design` plugin | `design-doc-template.md` | Anthropic plugin co-locates system-design output; PMO template aligns with Google convention referenced therein |
+| 3 | Design doc | software | Google design-doc convention (Atwood/Henderson templates) — Context/Goals/Non-goals/Proposal/Alternatives/Risks | `engineering:system-design` plugin | `design-doc-template.md` | Anthropic plugin implements Google design-doc convention; PMO template aligns with that convention |
 | 4 | RFC | software | IETF RFC 7322 + Rust RFC template | (no Anthropic plugin equivalent) | `rfc-template.md` | Generic heuristic stands without localization; canon coverage complete via upstream documents |
 | 5 | PRD / Feature spec | software | Anthropic `product-management:write-spec` plugin convention | `product-management:write-spec` plugin (direct hit per Stage 4 D4) | `prd-template.md` | Per Stage 4 D4 +  offload-routing: PMO PRD canon IS the Anthropic plugin convention; secondary reference Aha! / Lenny Rachitsky template fills any field-shape gap |
 | 6 | Postmortem | software | Google SRE Workbook §Postmortem Culture | `engineering:incident-response` plugin (covers triage + communicate + postmortem) | `postmortem-template.md` | Anthropic plugin implements Google SRE postmortem convention; PRINCE2 lessons-learned cross-reference for project-domain instances |
