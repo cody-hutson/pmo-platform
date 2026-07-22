@@ -75,7 +75,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # jsdom 29.1.1 engines: ^20.19.0 || ^22.13.0 || >=24.0.0 -- '22' clears the floor.
           node-version: '22'
