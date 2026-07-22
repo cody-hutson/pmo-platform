@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.82] - 2026-07-22
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Exec briefs state a concrete consequence, status updates cite the entries behind them, and escalations read the stakeholder register.
 
 [Full notes](release/releases/notes/v3.82_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.82)
 
