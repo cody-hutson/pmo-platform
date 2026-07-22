@@ -275,10 +275,57 @@ workspace_boundary_check() {
   esac
 }
 
-# Validate version key format vX.Y or vX.Y-suffix
+# Version-grammar SSOT (#1676) sourced for validate_version (#1801) — set-e-safe:
+# pure functions, empty positional so its --self-test stays inert. A pre-#1676
+# checkout (lib absent) degrades validate_version to a minimal non-empty vX.Y check.
+if [[ -f "$SCRIPT_DIR/version-grammar.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/version-grammar.sh" ""
+  _ACO_HAVE_GRAMMAR=1
+else
+  _ACO_HAVE_GRAMMAR=0
+fi
+
+# Validate the current release version against the canonical grammar SSOT (#1676:
+# ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ — vX.Y or vX.Y.Z hotfix; suffix forms REJECTED).
+# #1801: was a permissive local regex accepting vX.Ysuffix — that form never shipped
+# on the reachable lineage, and validate_version only ever gates the current $VERSION
+# (always canonical), so the laxness was unneeded. Source, don't copy the regex (the
+# SSOT consumer contract: a copied-inline regex is a divergence defect).
 validate_version() {
   local v="$1"
-  [[ "$v" =~ ^v[0-9]+\.[0-9]+([a-z]|[a-z0-9.-]+)?$ ]]
+  if [[ "${_ACO_HAVE_GRAMMAR:-0}" == "1" ]]; then
+    version_canonical "$v"
+  else
+    [[ -n "$v" && "$v" == v*.* ]]   # SSOT absent (pre-#1676) — minimal degrade
+  fi
+}
+
+# TRUE when this release is version-less — $VERSION is not a canonical vX.Y[.Z]
+# (the milestone slug stands in for the version). Corpus convention (#2048):
+#   INDEX  Version cell -> "<slug> (version-less)"
+#   DIGEST H3           -> "### <slug> (<date>, version-less) — <headline>"
+#   notes link/path     -> notes/_unversioned/<slug>_RELEASE_NOTES.md
+#   .version + CHANGELOG-> SKIP (nothing to stamp; no `## [vX.Y]` key to write)
+# Mirrors the phase_bump_version SKIP predicate so all four Stage-13 emits agree
+# on what "version-less" means. Previously only bump_version branched on it; the
+# INDEX/DIGEST/CHANGELOG emits did not, so a version-less close produced entries
+# that diverged from the corpus convention (#2048 residual).
+is_version_less() { ! validate_version "$VERSION"; }
+
+# The notes path/link for this release — version-less notes live under
+# notes/_unversioned/ (per the shipped corpus), versioned notes sit flat.
+notes_rel_path() {
+  if is_version_less; then
+    printf 'notes/_unversioned/%s_RELEASE_NOTES.md' "$VERSION"
+  else
+    printf 'notes/%s_RELEASE_NOTES.md' "$VERSION"
+  fi
+}
+
+# The INDEX Version-cell label: version-less rows carry the "(version-less)" marker.
+index_version_cell() {
+  if is_version_less; then printf '%s (version-less)' "$VERSION"; else printf '%s' "$VERSION"; fi
 }
 
 # Returns 0 if string starts with "v<MAJOR>" else 1
@@ -846,26 +893,32 @@ phase_append_release_index() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
 
-  # Idempotent: skip if a row keyed on this bare version is already present
-  # (version is the first table cell in the 6-col schema — matches Check 32(a)).
-  if /usr/bin/grep -qE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" "$RELEASE_INDEX" 2>/dev/null; then
+  # Idempotent: skip if a row keyed on this version is already present (version is
+  # the first table cell in the 6-col schema — matches Check 32(a)). The optional
+  # " (version-less)" marker is accepted so a version-less row is recognised too
+  # (#2048 — without it the guard missed the marked cell and re-appended a dup).
+  if /usr/bin/grep -qE "^\|[[:space:]]*${VERSION//./\\.}([[:space:]]+\(version-less\))?[[:space:]]*\|" "$RELEASE_INDEX" 2>/dev/null; then
     mark_phase "append_release_index" "SKIPPED" "INDEX row for $VERSION already present"
     return 0
   fi
 
+  local ver_cell note_rel
+  ver_cell="$(index_version_cell)"   # "<version>" | "<slug> (version-less)"
+  note_rel="$(notes_rel_path)"       # notes/… | notes/_unversioned/…
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $VERSION | $slug | $(date_today) | — | #${PR_NUMBER} | notes link |) at the top of RELEASE_INDEX.md"
+    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $ver_cell | $slug | $(date_today) | — | #${PR_NUMBER} | $note_rel |) at the top of RELEASE_INDEX.md"
     return 0
   fi
 
   local date_str note_link pr_cell
   date_str="$(date_today)"
-  note_link="[notes/${VERSION}_RELEASE_NOTES.md](notes/${VERSION}_RELEASE_NOTES.md)"
+  note_link="[${note_rel}](${note_rel})"
   pr_cell="#${PR_NUMBER}"
 
   # Pure single-row insert in the 6-column schema. Insert immediately after the
   # first separator line (`|---`), keeping chronological-recent-first order.
-  /usr/bin/python3 - "$RELEASE_INDEX" "$VERSION" "$slug" "$date_str" "$pr_cell" "$note_link" <<'PY'
+  /usr/bin/python3 - "$RELEASE_INDEX" "$ver_cell" "$slug" "$date_str" "$pr_cell" "$note_link" <<'PY'
 import sys
 path, version, slug, date, pr_cell, note_link = sys.argv[1:7]
 with open(path, "r", encoding="utf-8") as f:
@@ -922,22 +975,30 @@ phase_append_release_digest() {
 
   # Headline from the note H1 (minus `# `); placeholder only when the note is
   # absent (e.g. dry-run before scaffold, or scaffold-without-prose).
+  # Version-less notes live under notes/_unversioned/ (#2048). Resolve off
+  # RELEASE_NOTES_DIR (not a hardcoded root) so the self-test override is honored.
   local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  if is_version_less; then notes_path="${RELEASE_NOTES_DIR}/_unversioned/${VERSION}_RELEASE_NOTES.md"; fi
   local headline=""
   if [[ -f "$notes_path" ]]; then
     headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
   fi
   [[ -z "$headline" || "$headline" == "$VERSION" ]] && headline="<headline — populated by operator at chore PR review>"
 
+  # The date cell carries the "(<date>, version-less)" marker for a version-less
+  # release, matching the shipped DIGEST convention (#2048).
+  local date_cell
+  if is_version_less; then date_cell="$(date_today), version-less"; else date_cell="$(date_today)"; fi
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($(date_today)) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
+    mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($date_cell) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
     return 0
   fi
 
   # Prepend the H3 entry under the topmost `## ` working H2 (the most-recent
   # entry sits immediately after the H2 + its blank line, above the current top
   # `### ` entry). Drop the family-H2 search + the `### Releases` table scaffold.
-  /usr/bin/python3 - "$RELEASE_DIGEST" "$VERSION" "$(date_today)" "$headline" <<'PY'
+  /usr/bin/python3 - "$RELEASE_DIGEST" "$VERSION" "$date_cell" "$headline" <<'PY'
 import sys
 path, version, date, headline = sys.argv[1:5]
 with open(path, "r", encoding="utf-8") as f:
@@ -1356,6 +1417,16 @@ phase_lint_release_notes() {
 phase_append_changelog() {
   local notes_path="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
   local changelog_path="$REPO_ROOT/CHANGELOG.md"
+
+  # (0) Version-less SKIP — CHANGELOG is keyed on `## [vX.Y]`; a version-less
+  # release has no version to key an entry on, so there is nothing to write
+  # (#2048 — mirrors the phase_bump_version version-less SKIP. Previously this
+  # phase had no version-less branch and would have emitted `## [<slug>]`).
+  if is_version_less; then
+    mark_phase "append_changelog" "SKIPPED" \
+      "version-less release ('$VERSION'): no ## [vX.Y] key to write; CHANGELOG intentionally untouched"
+    return 0
+  fi
 
   # Preflight: CHANGELOG.md must exist
   if [[ ! -f "$changelog_path" ]]; then
@@ -2412,9 +2483,10 @@ self_test() {
   local failures=0
 
   # Test 1: validate_version
-  validate_version "v2.12" || { echo "FAIL: validate_version v2.12"; failures=$((failures+1)); }
-  validate_version "v2.07b" || { echo "FAIL: validate_version v2.07b"; failures=$((failures+1)); }
-  validate_version "v2.04b-1" || { echo "FAIL: validate_version v2.04b-1"; failures=$((failures+1)); }
+  validate_version "v2.12" || { echo "FAIL: validate_version v2.12 (canonical vX.Y)"; failures=$((failures+1)); }
+  validate_version "v2.06.1" || { echo "FAIL: validate_version v2.06.1 (canonical vX.Y.Z hotfix)"; failures=$((failures+1)); }
+  ! validate_version "v2.07b" || { echo "FAIL: validate_version must REJECT suffix v2.07b (#1801 SSOT tighten)"; failures=$((failures+1)); }
+  ! validate_version "v2.04b-1" || { echo "FAIL: validate_version must REJECT suffix v2.04b-1 (#1801 SSOT tighten)"; failures=$((failures+1)); }
   ! validate_version "2.12" || { echo "FAIL: validate_version should reject 2.12 (no v prefix)"; failures=$((failures+1)); }
   ! validate_version "" || { echo "FAIL: validate_version should reject empty"; failures=$((failures+1)); }
 
@@ -2762,6 +2834,39 @@ EOF
   [[ "$(get_phase append_release_index)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_release_index re-run must SKIP (bare-version idempotency), got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
   _ai_dig_n="$(/usr/bin/grep -cE '^### v9\.97[[:space:](]' "$RELEASE_DIGEST" 2>/dev/null || true)"; _ai_dig_n="${_ai_dig_n:-0}"
   [[ "$_ai_dig_n" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the DIGEST H3, got $_ai_dig_n"; failures=$((failures+1)); }
+
+  # (d) VERSION-LESS emit (#2048) — a non-canonical $VERSION (the milestone slug
+  # stands in for the version) must follow the shipped corpus convention: INDEX
+  # Version cell carries the "(version-less)" marker + a notes/_unversioned/ link;
+  # DIGEST H3 carries the "(<date>, version-less)" marker; CHANGELOG SKIPs (there
+  # is no `## [vX.Y]` key); and the marker-aware idempotency guards still fire.
+  # Before the fix only phase_bump_version branched on version-less, so these
+  # emits produced entries that diverged from every shipped version-less row.
+  local _vl="77-some-version-less-theme"
+  VERSION="$_vl"; STATE_MILESTONE_SLUG="$_vl"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_digest >/dev/null 2>&1
+  phase_append_release_index >/dev/null 2>&1
+  /usr/bin/grep -qE "^### ${_vl} \([0-9-]+, version-less\)" "$RELEASE_DIGEST" \
+    || { echo "FAIL: version-less DIGEST H3 must be '### $_vl (<date>, version-less) — …'"; failures=$((failures+1)); }
+  local _vl_row; _vl_row="$(/usr/bin/grep -E "^\| ${_vl} \(version-less\) \|" "$RELEASE_INDEX" | /usr/bin/head -1 || true)"
+  [[ -n "$_vl_row" ]] || { echo "FAIL: version-less INDEX row must key on '| $_vl (version-less) |'"; failures=$((failures+1)); }
+  /usr/bin/printf '%s' "$_vl_row" | /usr/bin/grep -q "notes/_unversioned/${_vl}_RELEASE_NOTES.md" \
+    || { echo "FAIL: version-less INDEX row must link notes/_unversioned/${_vl}_RELEASE_NOTES.md; got: $_vl_row"; failures=$((failures+1)); }
+  # marker-aware idempotency — both re-runs must SKIP (the guard must recognise
+  # the marked cell; the bare-version pattern alone would re-append a duplicate)
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_digest >/dev/null 2>&1
+  [[ "$(get_phase append_release_digest)" == SKIPPED\|* ]] || { echo "FAIL: version-less DIGEST re-run must SKIP"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_release_index >/dev/null 2>&1
+  [[ "$(get_phase append_release_index)" == SKIPPED\|* ]] || { echo "FAIL: version-less INDEX re-run must SKIP (marker-aware guard)"; failures=$((failures+1)); }
+  # CHANGELOG must SKIP for a version-less release, and write nothing
+  /usr/bin/printf '# Changelog\n\n## [Unreleased]\n' > "$_ai_tmp/CHANGELOG.md"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_changelog >/dev/null 2>&1
+  [[ "$(get_phase append_changelog)" == SKIPPED\|* ]] || { echo "FAIL: version-less CHANGELOG must SKIP, got '$(get_phase append_changelog)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -q "\[${_vl}\]" "$_ai_tmp/CHANGELOG.md" || { echo "FAIL: version-less release must not write a ## [$_vl] CHANGELOG entry"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
   REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
@@ -3617,8 +3722,8 @@ STUB
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
   echo "  phase_append_reversions validated (#1679; SLIM #3109 — N/A common path / none-path SLIM gate → N/A no-row across round-trip + multi-abandoned fan-out + re-run + historical-none immutability / tag-orphaned positive → 1 row abandoned_tag_pushed=true / dry-run no-write + orphan-row idempotency); dry-run<=>apply parity validated on the GATED paths (F-01 — none-path preview 0 == apply 0; mixed orphan+none preview 1 == apply 1, orphan recorded, gated surfaced)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
-  echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor)" >&2
-  echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
+  echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
+  echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
@@ -3716,7 +3821,7 @@ done
 [[ -z "$PR_NUMBER" ]] && die "Required: --pr <N>"
 [[ -z "$VERSION" ]] && die "Required: --version v<X.Y>"
 [[ -z "$MILESTONE" ]] && die "Required: --milestone <N>"
-validate_version "$VERSION" || die "Invalid version format: '$VERSION' (expected vX.Y or vX.Y-suffix)"
+validate_version "$VERSION" || die "Invalid version format: '$VERSION' (expected canonical vX.Y or vX.Y.Z per version-grammar.sh; suffix forms are not accepted)"
 
 workspace_boundary_check
 RUN_TS="$(ts_now)"

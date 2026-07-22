@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.81] - 2026-07-22
+
+Releases named by theme instead of a version number now leave a complete record, and every tool judges a version number by the same rule.
+
+[Full notes](release/releases/notes/v3.81_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.81)
+
 ## [v3.80] - 2026-07-22
 
 Hardens the release close-out machinery so theme-named releases finish cleanly and more close-out defects are caught in CI.
