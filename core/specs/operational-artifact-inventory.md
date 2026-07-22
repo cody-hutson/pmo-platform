@@ -219,6 +219,19 @@ The table is keyed by **surface-class** (the §3 taxonomy values, with the `stru
 
 **Reading note.** The two named `structural-file` splits (SESSION_STATE / PORTFOLIO / CORRECTIONS / SWAP_HANDOFF) are broken out because they have divergent growth-patterns within the one `structural-file` §3 class (the §5.3 rows the first pass flagged `[ASSUMPTION – CONFIRM]` on `source_entity`) — this §8 resolves their *lifecycle* without touching those frozen §5.3 cells. The `lifecycle SSOT` column (col 6) names two homes per surface: the cross-surface memory contract row (the read/write authority) **and** the artifact's own over-time protocol (its lifecycle). Neither this section nor the contract copies the other's cells — the contract owns *who reads/writes under what authority*; this section owns *how a surface grows/cleans/retires*. Copying the lifecycle fields into the contract would itself be a shadow SSOT (the no-shadow invariant the contract's §3 forbids), so the contract references this lifecycle home and this section references the contract row.
 
+**CORRECTIONS two-tier note.** The `CORRECTIONS.md` row above governs **both tiers** of the two-tier
+corrections model, which share one lifecycle. The **program file** `projects/_config/CORRECTIONS.md`
+holds redirects that apply regardless of which project is active (platform-wide) and is read at session
+start after CLAUDE.md. The per-project **project file** `[Project]/CORRECTIONS.md` holds project-scoped
+redirects for the active project, is read at session start after that project's PROJECT.md, and
+overrides the program file on the same claim. Both tiers grow `append-correction`, and the same
+scheduled graduation/expiry review enumerates both — a correction in either tier graduates to the
+corpus or expires on the same terms, so neither tier accumulates un-reviewed. Tier placement is a
+scope test, not a lifecycle difference: a new correction belongs to the project file when it
+references a project's systems, people, cadence, or artifacts (it would not fire for a different
+project), and to the program file only when it holds regardless of the active project; when unsure,
+the narrower project file is the safer home.
+
 **SESSION_STATE.md trim rule.** `SESSION_STATE.md` is `single-record-overwrite` — bounded to the *current* handoff. It is refreshed (overwritten) at session-end per the Session-End Checklist, **never accreted**. This binds to the existing CLAUDE.md staleness signal ("if `Last Updated` is older than 2 business days, flag and recommend a full-state refresh"): a stale SESSION_STATE is **refreshed in place, not appended to** — prior-session state is not retained in-file (the durable record is git history plus the project artifacts the handoff points at, mirroring the cross-surface contract's "metadata + pointers only" posture for the sibling SWAP_HANDOFF). No new trigger is invented — this reuses the 2-business-day staleness flag already in CLAUDE.md and the Session-End Checklist already in SESSION_STATE.md.
 
 ---

@@ -105,21 +105,37 @@ specs (the rendering — email, Teams, a CRITICAL-finding block, dual-format —
 
 ## Decision-Owner Mapping
 
-When an escalation needs a named decision owner (HIGH and CRITICAL severities), resolve the owner by role
-from the project's **free-text `## Key People` table** in PROJECT.md (per
-[project-md-template.md](../../operations/templates/project-md-template.md) §Key People).
+When an escalation needs a named decision owner (HIGH and CRITICAL severities), resolve the owner by
+**structured lookup against the project's Stakeholder Register when one exists**, falling back to the
+project's **free-text `## Key People` table** in PROJECT.md (per
+[project-md-template.md](../../operations/templates/project-md-template.md) §Key People) when it does not.
 
 **Resolution procedure:**
 1. Determine the decision domain (schedule / scope / resource / technical / vendor).
-2. Look up the role responsible in the `## Key People` table (e.g., scope → sponsor; resource → eng manager; technical → tech lead).
-3. **If a matching role is present:** name that owner by role in the Recommendation / Ask ("Recommend the Program Manager approve Option 1 by …").
-4. **If no matching authority role is present, or the table is absent:** do **not** fabricate an owner. **Emit a warning and route the escalation to the PgM** as the default escalation owner ("⚠️ No authority owner resolvable for [domain] from `## Key People`; routing to PgM").
+2. **Structured resolution (preferred).** When the project maintains a Stakeholder Register — the
+   per-project register whose schema is Tracker 8 in [tracker-schemas.md](../schemas/tracker-schemas.md)
+   and whose committed template is `operations/templates/stakeholder-register-template.csv` — select the
+   row whose `Decision Owner` column is `yes` AND whose `Authority` column matches the decision domain,
+   and name that stakeholder by role in the Recommendation / Ask ("Recommend the Program Manager approve
+   Option 1 by …"). The register's typed `Decision Owner` + `Authority` columns ARE the structured
+   authority field; reading them is what makes this resolution structured rather than heuristic.
+3. **Free-text fallback (graceful degradation).** When the project maintains no Stakeholder Register,
+   look up the role responsible in the `## Key People` table (e.g., scope → sponsor; resource → eng
+   manager; technical → tech lead). If a matching role is present, name that owner by role.
+4. **If no matching authority role resolves from either source, or both are absent:** do **not** fabricate
+   an owner. **Emit a warning and route the escalation to the PgM** as the default escalation owner
+   ("⚠️ No authority owner resolvable for [domain] from the Stakeholder Register or `## Key People`;
+   routing to PgM").
 
-> **Authority-field status (residual).** PROJECT.md has no structured `decision_owner` / `authority`
-> field today — the `## Key People` table is free-text, and the dedicated Stakeholder Register / RACI
-> template is a documented future-release gap ([template-taxonomy.md](template-taxonomy.md) §future).
-> This mapping degrades gracefully against that reality: it reads the free-text table and warns-and-routes
-> when authority is unresolvable. When a structured authority field ships, this section upgrades to read it.
+> **Authority-field status.** The structured authority field **has shipped**. The Stakeholder Register
+> carries typed `Decision Owner` and `Authority` columns — schema: Tracker 8 in
+> [tracker-schemas.md](../schemas/tracker-schemas.md); committed template:
+> `operations/templates/stakeholder-register-template.csv` — and the Tracker 8 schema records that these
+> columns graduate this mapping from free-text heuristic to structured lookup. This section reads that
+> field wherever a project maintains a register. The free-text `## Key People` path is **retained as the
+> fallback, not the primary**: PROJECT.md itself still persists people as free-text prose, and not every
+> project maintains a register, so the prose lookup plus the warn-and-route-to-PgM terminal case remain
+> the graceful degradation when no register exists or no authority resolves.
 
 ## Presentation Neutrality
 

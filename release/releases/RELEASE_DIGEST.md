@@ -5,6 +5,12 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.82 (2026-07-22) — Exec briefs name the real consequence; status updates cite their sources
+
+### v3.81 (2026-07-22) — <headline — populated by operator at chore PR review>
+
+### v3.80 (2026-07-22) — <headline — populated by operator at chore PR review>
+
 ### v3.79 (2026-07-17) — Both link checkers now agree, and the deploy tooling stops repeating itself
 
 ### v3.78 (2026-07-17) — PORTFOLIO.md composed deterministically from per-project rollups: freshness-gated health scoring, cross-component risk aggregation, and a portfolio/program/project tier taxonomy

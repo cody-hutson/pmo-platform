@@ -28,7 +28,6 @@ Defines the three-layer assessment protocol for stage-gate transitions: how to e
 ## Schema
 
 **Schema version:** 1.2
-**Introduced in:** v7.5
 
 ---
 
@@ -341,7 +340,6 @@ When QA checkpoints are implemented, the evaluator can consume them as additiona
 ## Versioning
 
 **Schema version:** 1.2
-**Introduced in:** v7.5
 
 **v1.2 changes (non-breaking — minor; additive — late-stage judgment anchors + G1-04 bidirectional rubric note):**
 - Added **Per-Boundary Judgment-Dimension Anchors** subsection binding the existing §7 prose judgment dimensions of Stage 9 / 12 / 13 to their structural criteria (G-PR* / G-EX* / G-CL*). No new dimensions authored — the shard §7 `Judgment` lines are cited, not restated (Gate 6→7 precedent). Enumerated the three late boundaries in the Layer-2 worked-example (Source-mapping) so the rubric names all Path-B boundaries, not just Stage 5.
