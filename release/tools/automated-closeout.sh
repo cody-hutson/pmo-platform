@@ -15,18 +15,24 @@
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
+#   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
+#   9.9 ledger_guard       pre-commit §220 I1/I2 read-modify-write guard on the 4 append-only ledgers (#1680)
+#   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
+#   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift)
+#   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
+#   16.5 pattern_scan      optional synthesize-release-learnings.sh --mode pattern-detect (only with --with-pattern-scan)
 #   17 generate_report     structured markdown or JSON close-out report
 #
 # Usage:
@@ -251,6 +257,13 @@ MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
                          # phase_publish_github_release binds the Release --target
                          # to it and asserts the tag points at it.
 
+# .skill packages rebuilt by phase_rebuild_skill_packages (Phase 9.95): one
+# "packages/<skill>.skill" + "packages/<skill>.skill.sha256" pair per skill whose
+# source (or an injected canonical) changed in the release diff. Populated there,
+# consumed by phase_commit_chore_pr's files=() staging array + its post-commit
+# staging-completeness assertion. Empty on a release that touches no skill source.
+REBUILT_PACKAGES=()
+
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
 # keyed by phase name. Lookup is O(n) but phase count is small (<20).
@@ -261,7 +274,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,83p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -1631,9 +1644,156 @@ phase_ledger_guard() {
   return 0
 }
 
+# ─── Phase 9.95: rebuild_skill_packages (#3322 — .skill package rebuild) ──────
+#
+# Fold the .skill package rebuild into the Stage-13 chore PR so a release that
+# changes a skill's source (or an injected canonical) ships the rebuilt package
+# ATOMICALLY with the corpus, BEFORE Milestone close — closing the post-close
+# orphan-rebuild gap (a package rebuilt after close cannot attach to the closed
+# milestone). Placed downstream of ledger_guard so a guard FAIL (exit 3) aborts
+# before this phase mutates the packages/ working tree.
+#
+# Detection = union of two rules over the release diff:
+#   (a) direct source — any changed path matching ^(core|operations|release)/
+#       skills/<skill>/ → <skill> (covers SKILL.md, references/**, scripts/**,
+#       evals/** — everything build-skill-packages.sh's `cp -R` carries).
+#   (b) injected canonical — any changed path under core/standards/ or
+#       operations/templates/ whose basename is the middle field of a
+#       TEMPLATE_SYNC_MAP entry → every skill in field 1 of a matching entry.
+#       Load-bearing: template-*.md inject into a package at build time with no
+#       skills/ path of their own, so editing a canonical stales the package
+#       while touching zero skills/ path.
+# The TEMPLATE_SYNC_MAP is read from deploy.sh AT RUNTIME (never copied) via the
+# same awk window build-skill-packages.sh:34–36 uses — single-sourced.
+#
+# R8 (zip non-determinism): the .skill archive embeds per-entry mtimes, so a
+# content-identical rebuild differs at the byte level. Stage a rebuilt package
+# ONLY when its content-manifest sidecar (packages/<skill>.skill.sha256) shows a
+# working-tree change (or the skill is newly-tracked); otherwise discard the
+# mtime-only churn with `git checkout --`. The .skill bytes are NEVER compared.
+#
+# Staging: this phase WRITES + populates REBUILT_PACKAGES=(); it does not `git
+# add` (write/stage separation — commit_chore_pr stages via files=()).
+# --no-merge: pre-commit phase; does NOT defer (the chore PR is still created, so
+# the rebuild must ride its commit) — hence no NO_MERGE guard here and no entry
+# in either deferral list.
+
+# changed_skills_from_paths — pure function: read newline-separated changed paths
+# on stdin, emit the deduped candidate skill set (one per line) per rules (a)+(b).
+# Offline: its only external read is deploy.sh's TEMPLATE_SYNC_MAP.
+changed_skills_from_paths() {
+  local deploy_sh="$REPO_ROOT/core/deploy/deploy.sh"
+  # (b) reverse TEMPLATE_SYNC_MAP: canonical-basename -> skills. Read the map from
+  # deploy.sh at runtime — same awk window as build-skill-packages.sh:34–36.
+  local map=""
+  if [[ -f "$deploy_sh" ]]; then
+    map="$(/usr/bin/awk '/^TEMPLATE_SYNC_MAP=\(/,/^\)/' "$deploy_sh" 2>/dev/null \
+      | /usr/bin/grep -E '^[[:space:]]*"[^"]+:[^"]+:[^"]+"' \
+      | /usr/bin/sed 's/^[[:space:]]*"//; s/"$//; s/[[:space:]]*#.*//' || true)"
+  fi
+  local path base entry m_skill m_canonical
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    # (a) direct source
+    if [[ "$path" =~ ^(core|operations|release)/skills/([^/]+)/ ]]; then
+      /usr/bin/printf '%s\n' "${BASH_REMATCH[2]}"
+    fi
+    # (b) injected canonical
+    case "$path" in
+      core/standards/*|operations/templates/*)
+        base="$(/usr/bin/basename "$path")"
+        while IFS= read -r entry; do
+          [[ -z "$entry" ]] && continue
+          m_skill="${entry%%:*}"
+          m_canonical="${entry#*:}"; m_canonical="${m_canonical%%:*}"
+          [[ "$m_canonical" == "$base" ]] && /usr/bin/printf '%s\n' "$m_skill"
+        done <<< "$map"
+        ;;
+    esac
+  done | /usr/bin/sort -u | /usr/bin/grep -vE '^$' || true
+}
+
+phase_rebuild_skill_packages() {
+  local builder="$REPO_ROOT/core/deploy/tools/build-skill-packages.sh"
+
+  # Resolve the release-diff path set: MERGE_SHA first-parent diff, else the
+  # release PR's file list. D-4d: if BOTH yield an empty set, staleness is
+  # undeterminable → FAIL loud (never SKIP — a silent SKIP re-opens the gap).
+  local changed=""
+  if [[ -n "$MERGE_SHA" ]]; then
+    changed="$($GIT -C "$REPO_ROOT" diff --name-only "${MERGE_SHA}^1" "${MERGE_SHA}" 2>/dev/null || true)"
+  fi
+  if [[ -z "$changed" ]]; then
+    changed="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json files --jq '.files[].path' 2>/dev/null || true)"
+  fi
+  if [[ -z "$changed" ]]; then
+    mark_phase "rebuild_skill_packages" "FAIL" "release diff base unresolvable (MERGE_SHA empty + gh pr view fallback empty) — .skill staleness undeterminable; re-run --apply once the release-PR merge SHA resolves, or rebuild + stage the affected package(s) per core/rules/skill-deployment.md before closing"
+    return 3
+  fi
+
+  # Detection (rules a+b). || true keeps set -e safe on a zero-candidate diff.
+  local candidates
+  candidates="$(/usr/bin/printf '%s\n' "$changed" | changed_skills_from_paths || true)"
+
+  if [[ -z "$candidates" ]]; then
+    mark_phase "rebuild_skill_packages" "N/A" "no skill source or injected canonical changed in the release diff — no package to rebuild (0 deferred)"
+    return 0
+  fi
+
+  local names count
+  names="$(/usr/bin/printf '%s' "$candidates" | /usr/bin/tr '\n' ' ' | /usr/bin/sed 's/ *$//')"
+  count="$(/usr/bin/printf '%s\n' "$candidates" | /usr/bin/grep -c . || true)"
+
+  # Dry-run: enumerate only (a --dry-run creates no chore branch + no diff).
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "rebuild_skill_packages" "DRY-RUN" "would rebuild ${count} package(s): ${names}"
+    return 0
+  fi
+
+  # Apply: rebuild, then sidecar-gate the staging set (R8).
+  if [[ ! -x "$builder" ]]; then
+    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh not executable at $builder"
+    return 3
+  fi
+
+  # Guarded call (M3-3): the builder runs set -euo pipefail + exit 1 on failure;
+  # the subshell isolates its set -e so its exit does not abort this script
+  # before mark_phase runs. Word-split $candidates into per-skill args.
+  if ! ( /bin/bash "$builder" $candidates ) >/dev/null 2>&1; then
+    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh failed for one of: ${names} — package(s) not rebuilt; close blocked (re-run after resolving the build error)"
+    return 3
+  fi
+
+  # R8 content-sidecar gate: stage a package ONLY when its .sha256 sidecar shows a
+  # working-tree change (real content drift) OR the skill is newly-tracked;
+  # otherwise revert the mtime-only zip churn so it cannot enter the commit.
+  REBUILT_PACKAGES=()
+  local skill pkg sidecar sidecar_changed pkg_untracked
+  for skill in $candidates; do
+    pkg="packages/${skill}.skill"
+    sidecar="packages/${skill}.skill.sha256"
+    sidecar_changed="$($GIT -C "$REPO_ROOT" diff --name-only -- "$sidecar" 2>/dev/null || true)"
+    pkg_untracked="$($GIT -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$pkg" "$sidecar" 2>/dev/null || true)"
+    if [[ -n "$sidecar_changed" || -n "$pkg_untracked" ]]; then
+      REBUILT_PACKAGES+=("$pkg" "$sidecar")
+    else
+      # Content-identical rebuild — discard mtime-only churn (never compare bytes).
+      $GIT -C "$REPO_ROOT" checkout -- "$pkg" "$sidecar" 2>/dev/null || true
+    fi
+  done
+
+  if [[ ${#REBUILT_PACKAGES[@]} -eq 0 ]]; then
+    mark_phase "rebuild_skill_packages" "PASS" "${count} skill(s) rebuilt (${names}); all content-identical by sidecar — nothing to stage (0 deferred)"
+    return 0
+  fi
+
+  mark_phase "rebuild_skill_packages" "PASS" "rebuilt + staged ${#REBUILT_PACKAGES[@]} package file(s) for: ${names} (content-sidecar drift; 0 deferred)"
+  return 0
+}
+
 phase_commit_chore_pr() {
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
+    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_REVERSIONS.md (if re-versioned) RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) packages/<skill>.skill + .sha256 (per rebuilt skill) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
   fi
 
@@ -1645,11 +1805,15 @@ phase_commit_chore_pr() {
     "release/releases/notes/${VERSION}_RELEASE_NOTES.md"
     "CHANGELOG.md"
     ".version"
-  )
+    "${REBUILT_PACKAGES[@]:-}"      # .skill packages + .sha256 sidecars staged by
+  )                                 # phase_rebuild_skill_packages (Phase 9.95); empty
+                                    # on a release that touches no skill source.
 
   # Stage only files that actually exist + have changes
   local staged=0
   for f in "${files[@]}"; do
+    [[ -z "$f" ]] && continue       # "${ARR[@]:-}" on an empty array yields one
+                                    # empty element under bash 3.2 + set -u
     if [[ -f "$REPO_ROOT/$f" ]]; then
       $GIT -C "$REPO_ROOT" add "$f" 2>/dev/null || true
       staged=1
@@ -1663,6 +1827,21 @@ phase_commit_chore_pr() {
 
   local commit_msg="chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG"
   if $GIT -C "$REPO_ROOT" commit -m "$commit_msg" >/dev/null 2>&1; then
+    # Staging-completeness assertion (#3322 E9): every path phase_rebuild_skill_
+    # packages reported as staged MUST be in the commit just created. Reads the
+    # COMMIT, not the phase's own report — the phase does not certify itself.
+    # Structurally general: catches the same omission for any future phase that
+    # populates REBUILT_PACKAGES.
+    local _committed _missing="" _rp
+    _committed="$($GIT -C "$REPO_ROOT" diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
+    for _rp in "${REBUILT_PACKAGES[@]:-}"; do
+      [[ -z "$_rp" ]] && continue
+      /usr/bin/printf '%s\n' "$_committed" | /usr/bin/grep -qxF "$_rp" || _missing="${_missing}${_rp} "
+    done
+    if [[ -n "$_missing" ]]; then
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: rebuilt package(s) NOT in the chore commit — ${_missing% }; the chore PR would ship a stale package while every phase reported PASS"
+      return 3
+    fi
     mark_phase "commit_chore_pr" "PASS" "committed: $commit_msg"
     return 0
   fi
@@ -2384,7 +2563,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -3493,7 +3672,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,83p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -3526,6 +3705,36 @@ STUB
     failures=$((failures+1))
   fi
 
+  # Test 10: changed_skills_from_paths + files=() composition (#3322 — offline,
+  # hermetic; catches the P1 staging omission in CI before any live close).
+  local _csp_out
+  # (a) direct source — a references/ path stales the whole skill (cp -R), and a
+  #     non-skill path emits nothing.
+  _csp_out="$(/usr/bin/printf '%s\n' 'core/skills/eval-writer/references/release-notes-eval-rubric.md' 'release/releases/RELEASE_LOG.md' | changed_skills_from_paths || true)"
+  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
+    echo "FAIL: changed_skills_from_paths must detect eval-writer from a core/skills/eval-writer/ path (rule a direct-source)"; failures=$((failures+1))
+  fi
+  if /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'RELEASE_LOG.md'; then
+    echo "FAIL: changed_skills_from_paths must NOT emit a non-skill path"; failures=$((failures+1))
+  fi
+  # (b) injected canonical — template-taxonomy.md maps to eval-writer per the
+  #     deploy.sh TEMPLATE_SYNC_MAP (read at runtime); stales it with zero skills/ path.
+  _csp_out="$(/usr/bin/printf '%s\n' 'core/standards/template-taxonomy.md' | changed_skills_from_paths || true)"
+  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
+    echo "FAIL: changed_skills_from_paths must detect eval-writer from core/standards/template-taxonomy.md (rule b reverse TEMPLATE_SYNC_MAP)"; failures=$((failures+1))
+  fi
+  # negative — a non-skill, non-canonical path set yields nothing.
+  _csp_out="$(/usr/bin/printf '%s\n' 'CHANGELOG.md' 'core/disciplines/knowledge-architecture.md' | changed_skills_from_paths || true)"
+  if [[ -n "$_csp_out" ]]; then
+    echo "FAIL: changed_skills_from_paths must emit nothing for non-skill/non-canonical paths, got '$_csp_out'"; failures=$((failures+1))
+  fi
+  # files=() composition (P1 regression guard) — the commit phase MUST expand
+  # "${REBUILT_PACKAGES[@]:-}" in its files=() array, else a rebuilt package is
+  # silently dropped from the chore commit.
+  if ! declare -f phase_commit_chore_pr | /usr/bin/grep -qF '"${REBUILT_PACKAGES[@]:-}"'; then
+    echo "FAIL: phase_commit_chore_pr files=() must expand \"\${REBUILT_PACKAGES[@]:-}\" (P1 staging-omission guard)"; failures=$((failures+1))
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -3544,6 +3753,7 @@ STUB
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
+  echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
@@ -3654,6 +3864,7 @@ phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
 phase_ledger_guard || { generate_report; exit 3; }                    # Phase 9.9 — pre-commit §220 I1/I2 read-modify-write guard (#1680)
+phase_rebuild_skill_packages || { generate_report; exit 3; }          # Phase 9.95 — .skill package rebuild into the chore commit (#3322; content-sidecar-gated)
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
