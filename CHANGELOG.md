@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.80] - 2026-07-22
+
+Hardens the release close-out machinery so theme-named releases finish cleanly and more close-out defects are caught in CI.
+
+[Full notes](release/releases/notes/v3.80_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.80)
+
 ## [v3.79] - 2026-07-17
 
 Both doc-link checkers now follow one rule and give the same verdict, and the deploy tooling keeps one copy of its logic instead of two.
