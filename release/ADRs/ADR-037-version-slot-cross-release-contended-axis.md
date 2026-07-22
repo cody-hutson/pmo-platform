@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-037 — Version slot as a cross-release contended axis (extends ADR-024) via a version-slot virtual-path token on the unchanged serialize() predicate"
-status: Proposed
+status: Accepted
 date: 2026-06-21
 release: release-version-claim-determinism
 deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + operator at the Collective Review scope-lock"

@@ -1,6 +1,6 @@
 ---
 title: Leadership-owner fields are typed Person refs with an external free-text fallback
-status: Proposed
+status: Accepted
 tags: [entity-model, people-graph, leadership-owner, tier-2-scope-change, person-ref]
 ---
 

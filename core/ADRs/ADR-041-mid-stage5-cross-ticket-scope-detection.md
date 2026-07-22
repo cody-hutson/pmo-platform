@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-041 — Mid-Stage-5 cross-ticket scope detection keys on the Stage-4 Contention Map with a two-signal escalation threshold
-status: Proposed
+status: Accepted
 deciders: "operator + Collective Review scope-lock"
 tags: [hub-spoke, solutioning, stage-05, cross-ticket-scope, contention-map, escalation-threshold]
 ---
