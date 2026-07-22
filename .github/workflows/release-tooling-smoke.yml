@@ -175,7 +175,7 @@ jobs:
         # Default depth: each --self-test reads committed fixtures from the working
         # tree, not git history — a shallow checkout is sufficient.
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
 
