@@ -182,6 +182,43 @@ and informal internal threads.
 | **Template residue** | "[INSERT STAKEHOLDER NAME]" in sent communication | Signals carelessness; undermines credibility | Every gap must be a named information need or the draft is NOT READY |
 | **Wall of text** | 500-word paragraph with no structure | Reader skips it; buried action items are missed | Max 3 sentences per paragraph; tables for structured data; bold for action items |
 | **Metric dumping** | 15 KPIs with no interpretation | Reader cannot determine what matters | Max 5 metrics per communication; each includes "so what?" interpretation |
+| **Abstraction hedge** | "The system is exposed." "There may be operational impact." | An abstraction standing where a consequence belongs carries no magnitude, no unit, and no clock — the reader cannot size it or decide against it | State the concrete consequence in the reader's own unit, with a time bound: "Up to 300 invoices will not post between 14:00 and 18:00 today." |
+| **Technical attribute over business meaning** | Leading with "replication lag exceeded 45 seconds" or "queue depth crossed threshold" | Reports the instrument reading instead of what it means; forces the reader to perform the translation the writer skipped, and most will not | Lead with the business meaning and demote the attribute to supporting cause: "Order confirmations went out about a minute late for 40 orders; the cause was replication lag." |
+
+---
+
+## Executive Compression & Concreteness
+
+Executive attention is the scarcest input a communication spends. Compression is not
+shortening — it is removing everything that is not load-bearing for the reader's decision,
+then making what remains concrete enough to act on. Five moves, applied in order:
+
+**1. Compress the mechanism to its essence.** The cause earns one clause, not a paragraph. An
+executive does not need the failure chain; they need what broke, in the smallest true
+statement. A cause that still fills a paragraph has been summarized, not compressed.
+
+**2. State the concrete consequence, never an abstraction.** "Exposed", "impacted", "at risk",
+and "degraded" are placeholders standing where a consequence belongs. Replace each with what
+actually happens to something the reader can picture, and attach a clock: what happens, to how
+much, starting when, for how long.
+
+**3. Use the executive's unit, not the technical proxy.** Count the thing the reader owns —
+invoices, orders, shipments, dollars, customers served — not the system's internal proxy
+(records, rows, transactions, API calls). One translation performed by the writer saves that
+same translation being performed, badly or not at all, by every reader.
+
+**4. Separate expected from unexpected.** When an outcome was partly anticipated — a known
+tradeoff of an approved change, a documented limitation, a planned degradation — say which part
+was expected and which part was a genuine surprise. Presenting a partly-expected outcome as a
+pure defect misdirects the response: it invites a hunt for a failure that did not occur and
+buries the part that actually warrants attention.
+
+**5. Cut a paragraph.** Before sending, remove the least decision-relevant paragraph. A brief
+that survived the pass without losing anything was not compressed. If nothing can go, the brief
+is either genuinely minimal or not yet understood well enough to compress.
+
+**Compression test:** a reader who stops after the first two sentences should still know what
+happened, what it costs in their own unit, and what is being asked of them.
 
 ---
 
