@@ -12,6 +12,9 @@ source_observations:
   - "AC2 of the originating issue named 'resolve by regeneration' as the RELEASE_INDEX mechanism. Issue #667 Finding 6 (fix commit 6dd9fd6) had DELIBERATELY REMOVED a regenerate path because it was itself the churn root — 'sibling-row reorder + notes-link drop'. Restoring regeneration would revive a known, already-fixed defect."
   - "Both decisions are facets of one question — which release state binds at which pipeline moment, and which surfaces are therefore safe to resolve mechanically — so they are recorded as one ADR rather than two thin ones (operator decision 2026-07-22)."
 ---
+
+<!-- repo-integrity: allow-issue-ref -->
+
 # ADR-087 — Release-state binding points and the mechanical-merge boundary
 
 ## Status
