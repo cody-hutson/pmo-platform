@@ -296,19 +296,33 @@ find_log_row() {
 }
 
 # Extract milestone slug from existing log row, e.g. "v2.10-content-audits".
-# Schema-aware (mirrors extract_row_state's position-independence):
+# Schema-aware:
 #   - Current 8-column schema `| Version | Milestone | … |`: field 1 is the bare
 #     Version (e.g. v3.18); the milestone slug is field 2
 #     (e.g. v3.18-corpus-integrity-enforcement).
 #   - Legacy 5-column schema `| Milestone | Date | … |`: the slug is field 1.
-# Resolution rule (position-independent): the slug is the FIRST field that looks
-# like a milestone slug — EITHER a version-prefixed key `v<MAJOR>.<MINOR>` (optional
+# Resolution rule: forward-scan the fields and emit the FIRST that matches a
+# milestone-slug shape — EITHER a version-prefixed key `v<MAJOR>.<MINOR>` (optional
 # letter / -N qualifier) carrying a `-<alpha…>` slug tail (e.g. v3.18-corpus-integrity),
 # OR an NN-prefixed Epic-Readiness-Playbook slug `<digits>-<alpha…>`
-# (e.g. 63-finding-disposition-discipline). A bare Version field (v3.18) has no slug
-# tail, and the trailing date column (2026-06-20) is digits-hyphen-digits, so both are skipped.
+# (e.g. 63-finding-disposition-discipline), OR a pure-alpha kebab-or-word slug
+# (e.g. knowledge-corpus-hygiene, or a hyphen-less word like "hardening"). A bare
+# Version field (v3.18) carries a dot / has no slug tail, and the trailing date column
+# (2026-06-20) is digits-hyphen-digits, so both are skipped.
+#
+# TRUE safety invariant — this is a first-match-wins FORWARD scan that exits on the
+# first shape-match; it is NOT position-independent (inserting a kebab-valued column
+# before Milestone would make the scan return that column instead — verified). The
+# resolver is correct ONLY because Milestone is field 2 and the single column preceding
+# it, Version, is contractually dot-bearing (validate_version() below enforces the dot),
+# and a dot cannot pass any of the three slug-shape branches. So "first shape-match ==
+# Milestone slug" holds only because exactly one contractually-dot-bearing column
+# precedes Milestone. If a column is ever inserted before Milestone this resolver
+# mis-resolves — and the D-3 fail-loud preflight gate (phase_preflight → log_row_match)
+# is what catches it before any mutation.
 # Fallback (defensive): if no field matches (a pure-version row with no slug column),
-# return field 1 stripped — preserving the prior behavior.
+# return field 1 stripped — preserving the prior behavior. A field-1 value matches zero
+# LOG rows under the slug-keyed predicate, so the D-3 gate flags the mis-resolution.
 #
 # Three regex branches cover the milestone-title shapes that appear in RELEASE_LOG:
 #   1. version-prefixed slugs   — vX.Y-name (older rows, e.g. v3.18-corpus-integrity-enforcement)
@@ -339,13 +353,16 @@ extract_milestone_slug() {
         if (field1 == "") field1 = f
         # version-prefixed slug (vMAJOR.MINOR[letter][-N]) followed by a hyphenated slug tail,
         # OR an NN-prefixed Epic-Readiness-Playbook milestone slug (e.g. 63-finding-disposition-discipline),
-        # OR a pure-alpha theme-named slug (e.g. pda-rollup-and-portfolio, knowledge-corpus-hygiene).
+        # OR a pure-alpha theme-named slug (e.g. pda-rollup-and-portfolio, knowledge-corpus-hygiene,
+        # or a hyphen-less single word like "hardening").
         # NOTE: no apostrophes in this awk block — it is one single-quoted shell argument.
-        # The pure-alpha branch is anchored end-to-end so that the Version field of a
-        # version-less row ("name (version-less)") cannot match and shadow the real field-2
-        # slug; a bare Version field (v3.78) cannot match either, having no hyphen after
-        # the leading alnum run.
-        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/ || f ~ /^[0-9]+-[A-Za-z]/ || f ~ /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/) { print f; exit }
+        # Branch 3 (a4) is anchored end-to-end (^...$) so it matches ONLY a full lowercase
+        # kebab-or-word field. It cannot match the Version field of a version-less row
+        # ("name (version-less)" — contains a space) nor a bare Version (v3.78 — contains a
+        # dot, and [a-z0-9-] excludes dots; validate_version guarantees every Version is
+        # dot-bearing). It DOES match a hyphen-less single word — the case the prior
+        # hyphen-requiring recognizer missed (#2539).
+        if (f ~ /^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?-[a-z]/ || f ~ /^[0-9]+-[A-Za-z]/ || f ~ /^[a-z][a-z0-9-]*$/) { print f; exit }
       }
       # Fallback: no hyphenated-slug field found — emit field 1 (legacy/pure-version).
       print field1
@@ -369,6 +386,54 @@ extract_row_state() {
         print f; exit
       }
     }'
+}
+
+# Unified RELEASE_LOG row-match predicate (#2539 AC-3 — dry-run/apply parity).
+# Matches the row whose Milestone column is <slug> (any field position) and whose
+# State field is one of <state-regex> (an alternation, e.g. 'DEPLOYED' or
+# 'DEPLOYED|VERIFIED'). ONE predicate for all three call sites — the D-3 preflight
+# gate (count), the phase-6 dry-run check (count), and the phase-6 apply write
+# (apply) — so a green dry-run CANNOT diverge from a red apply. That divergence (two
+# different match keys against the same row) is the defect-hiding pattern behind the
+# v3.24 / v3.66 / v3.71 close-out aborts.
+#
+#   log_row_match <slug> <state-regex> <count|apply>
+#
+#   count : print the TRUE number of matching rows (Python findall — NOT capped), and
+#           write nothing. rc 0 iff exactly one row matches; rc 1 otherwise.
+#   apply : flip the single matching row's State field to VERIFIED in place. print the
+#           number flipped; rc 0 iff exactly one row flipped; rc 1 otherwise.
+#
+# The count path MUST be a true findall count, never subn(count=1): a capped count
+# returns 1 for an over-match (n>=2) and would silently disarm the D-3 preflight gate
+# (A6.5 FMF-1 — an unfireable gate is worse than no gate). The write cap (count=1)
+# lives ONLY on the apply path, where flipping exactly one row is the intended write.
+# A field-1 (Version) value matches zero rows here: `^\|.*\| <slug> \|` requires a
+# field separator BEFORE the slug, which a leading Version field cannot supply — so a
+# mis-resolution that falls back to the Version is caught as n=0, fail-loud.
+log_row_match() {
+  local slug="$1" state_re="$2" action="$3"
+  /usr/bin/python3 - "$RELEASE_LOG" "$slug" "$state_re" "$action" <<'PY'
+import sys, re
+log_path, slug, state_re, action = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+with open(log_path, "r", encoding="utf-8") as f:
+    txt = f.read()
+# Row carrying `| <slug> |` (any field) whose State field is one of <state_re>.
+pat = re.compile(r"(^\|.*\| " + re.escape(slug) + r" \|.*\| )(?:" + state_re + r")( \|)", re.MULTILINE)
+if action == "apply":
+    # Flip exactly one matching row's State field to VERIFIED (count=1 = the write cap).
+    new_txt, n = pat.subn(r"\1VERIFIED\2", txt, count=1)
+    if n == 1:
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(new_txt)
+    print(n)
+    sys.exit(0 if n == 1 else 1)
+else:
+    # TRUE count — findall, never capped — so an over-match (n>=2) is visible to D-3.
+    n = len(pat.findall(txt))
+    print(n)
+    sys.exit(0 if n == 1 else 1)
+PY
 }
 
 # Pre-submit parser-clean check on chore-PR body draft (D9).
@@ -441,6 +506,20 @@ phase_preflight() {
 
   if [[ "$STATE_LOG_ROW_STATE" != "DEPLOYED" && "$STATE_LOG_ROW_STATE" != "VERIFIED" ]]; then
     mark_phase "preflight" "FAIL" "RELEASE_LOG row state='$STATE_LOG_ROW_STATE' (expected DEPLOYED); Stage 12 chore PR may not have landed"
+    return 2
+  fi
+
+  # (d.1) D-3 fail-loud slug-resolution gate (#2539 / A6.5). The resolved milestone
+  # slug must match EXACTLY ONE RELEASE_LOG row under the SAME slug-keyed predicate
+  # phase 6 apply will use (log_row_match, TRUE count). A mis-resolved slug — an
+  # unenumerated name shape that falls back to the Version (n=0), or a kebab-valued
+  # column that shadows Milestone (n>=2) — is caught HERE, before any mutation, rather
+  # than aborting 4 phases later at --apply or silently writing a bad INDEX cell. The
+  # state alternation is required because an idempotent re-run reads VERIFIED, not DEPLOYED.
+  local _slug_match_n
+  _slug_match_n="$(log_row_match "$STATE_MILESTONE_SLUG" 'DEPLOYED|VERIFIED' count)"
+  if [[ "$_slug_match_n" != "1" ]]; then
+    mark_phase "preflight" "FAIL" "resolved milestone slug '$STATE_MILESTONE_SLUG' matches $_slug_match_n RELEASE_LOG rows (expected 1) — slug resolution failed for this milestone naming pattern"
     return 2
   fi
 
@@ -605,31 +684,27 @@ phase_transition_release_log() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "transition_release_log" "DRY-RUN" "would replace trailing '| DEPLOYED |' with '| VERIFIED |' on $slug row"
+    # AC-3: the dry-run tests the SAME slug-keyed predicate the apply will use, so a
+    # green dry-run cannot mask a red apply (the v3.24/v3.66/v3.71 defect-hiding gap).
+    local _dry_n
+    _dry_n="$(log_row_match "$slug" 'DEPLOYED' count)"
+    if [[ "$_dry_n" != "1" ]]; then
+      mark_phase "transition_release_log" "FAIL" "DEPLOYED→VERIFIED transition would match $_dry_n rows for slug=$slug (expected 1) — dry-run predicts --apply abort (AC-3 parity)"
+      return 3
+    fi
+    mark_phase "transition_release_log" "DRY-RUN" "would replace trailing '| DEPLOYED |' with '| VERIFIED |' on $slug row (log_row_match n=1)"
     return 0
   fi
 
-  # Use Python for in-place text edit (avoids BSD-sed -i incompatibility).
-  # Schema-agnostic: match the row whose Milestone column is <slug> (any field
-  # position) and flip its `| DEPLOYED |` state field to VERIFIED — works for the
-  # legacy 5-column schema (slug field 1, State trailing) AND the current 8-column
-  # schema (slug field 2, Date column trailing the State field).
-  /usr/bin/python3 - "$RELEASE_LOG" "$slug" <<'PY'
-import sys, re
-log_path, slug = sys.argv[1], sys.argv[2]
-with open(log_path, "r", encoding="utf-8") as f:
-    txt = f.read()
-# Match the row carrying `| <slug> |` (any field) and flip its `| DEPLOYED |` state field.
-pat = re.compile(r"(^\|.*\| " + re.escape(slug) + r" \|.*\| )DEPLOYED( \|)", re.MULTILINE)
-new_txt, n = pat.subn(r"\1VERIFIED\2", txt, count=1)
-if n != 1:
-    print(f"ERROR: expected 1 row match for slug='{slug}', got {n}", file=sys.stderr)
-    sys.exit(3)
-with open(log_path, "w", encoding="utf-8") as f:
-    f.write(new_txt)
-PY
-  if [[ $? -ne 0 ]]; then
-    mark_phase "transition_release_log" "FAIL" "RELEASE_LOG DEPLOYED→VERIFIED transition matched no row for slug=$slug (regex/schema mismatch)"
+  # AC-3: apply calls the SAME predicate the dry-run tested, in apply mode — one code
+  # path, so dry-run PASS ⟺ apply PASS by construction. Schema-agnostic: matches the
+  # row whose Milestone column is <slug> at any field position and flips its DEPLOYED
+  # state field to VERIFIED (legacy 5-col: slug field 1, State trailing; current 8-col:
+  # slug field 2, Date trailing the State field). Python edit avoids BSD-sed -i.
+  local _apply_n
+  _apply_n="$(log_row_match "$slug" 'DEPLOYED' apply)"
+  if [[ "$_apply_n" != "1" ]]; then
+    mark_phase "transition_release_log" "FAIL" "RELEASE_LOG DEPLOYED→VERIFIED transition matched $_apply_n rows for slug=$slug (expected 1) — regex/schema mismatch or slug resolution failure"
     return 3
   fi
 
@@ -2064,7 +2139,11 @@ phase_check_release_body_drift() {
       mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. Detective-only (warn-mode); close NOT blocked. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
       ;;
     2)
-      mark_phase "check_release_body_drift" "N/A" "gh offline/unauthenticated — body-drift check skipped for $VERSION (never FAIL; mirrors Check 32/39 gh-guard)"
+      # N/A — a capability needed to compare is absent. Exit 2 now spans gh
+      # (offline/unauth) AND git (origin/main unresolvable / corrupt object): the
+      # tool writes the failing subsystem to stderr unconditionally, and $drift_out
+      # captured it (2>&1), so a git failure is NOT mis-reported as "gh offline".
+      mark_phase "check_release_body_drift" "N/A" "body-drift check N/A for $VERSION — a required capability is unavailable (gh or git); never FAIL. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
       ;;
     3)
       # MISSING note or Release. If publish phase did not land Surface 1 this run,
@@ -2415,10 +2494,10 @@ EOF
   # version-with-letter-and-qualifier carrying a slug tail (v2.04b-1-…) resolves.
   sample_row="| v2.04b-1 | v2.04b-1-hotfix-rollup | #1 | pr | sha | tag | VERIFIED | 2026-06-03 |"
   [[ "$(extract_milestone_slug "$sample_row")" == "v2.04b-1-hotfix-rollup" ]] || { echo "FAIL: extract_milestone_slug (8-col, vN.Nb-N qualifier) got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
-  # #667 Finding 2 (VERIFY-then-close): a bare-slug THEME-NAMED row (NN-name, the
-  # current convention) resolves to the slug == milestone title (what
-  # `--milestone` consumes). Confirms the position-independent resolver handles
-  # the case Finding 2 described — the defect is no longer live.
+  # #667 Finding 2 (VERIFY-then-close): an NN-prefixed theme-named row resolves to the
+  # slug == milestone title (what `--milestone` consumes). Confirms the forward-scan
+  # resolver (NOT position-independent — see extract_milestone_slug's TRUE-invariant
+  # note) handles the NN case Finding 2 described.
   sample_row="| v2.36 | 69-triage-and-bundling-signals | #500 | #2284 | sha | v2.36 | VERIFIED | 2026-06-28 |"
   [[ "$(extract_milestone_slug "$sample_row")" == "69-triage-and-bundling-signals" ]] || { echo "FAIL: extract_milestone_slug (8-col, bare theme-named slug) should return field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
   [[ "$(extract_milestone_slug "$sample_row")" != "v2.36" ]] || { echo "FAIL: extract_milestone_slug returned the bare Version, not the theme-named slug"; failures=$((failures+1)); }
@@ -2433,6 +2512,13 @@ EOF
   # reaches the clean field-2 title.
   sample_row="| public-flip-install-blockers (version-less) | public-flip-install-blockers | #606 | #627 | sha | (none) | VERIFIED | 2026-06-04 |"
   [[ "$(extract_milestone_slug "$sample_row")" == "public-flip-install-blockers" ]] || { echo "FAIL: extract_milestone_slug (version-less row) should return the clean field-2 slug, got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  # #2539 (branch 3 = a4): a HYPHEN-LESS single-word milestone must resolve to the
+  # field-2 title. This is the exact case the prior hyphen-requiring recognizer
+  # (^[a-z][a-z0-9]*(-[a-z0-9]+)+$, needs >=1 hyphen group) MISSED and a4
+  # (^[a-z][a-z0-9-]*$) fixes — the #2539 divergence signature.
+  sample_row="| v3.99 | hardening | #1 | #2 | sha | v3.99 | DEPLOYED | 2026-07-18 |"
+  [[ "$(extract_milestone_slug "$sample_row")" == "hardening" ]] || { echo "FAIL: extract_milestone_slug (8-col, hyphen-less pure-alpha) should return field-2 slug 'hardening', got '$(extract_milestone_slug "$sample_row")'"; failures=$((failures+1)); }
+  [[ "$(extract_milestone_slug "$sample_row")" != "v3.99" ]] || { echo "FAIL: extract_milestone_slug (hyphen-less) returned the bare Version, not the slug — a4 branch regression"; failures=$((failures+1)); }
 
   # Test 4b: phase_append_release_digest + phase_append_release_index (#667 F3/F6)
   # — offline, hermetic. Drives both append phases against sandbox corpus files
@@ -2658,6 +2744,63 @@ STUB
   EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4d.2: phase_detect_open_issues ARMED-gate classification (#2539 / A6.5 FMF-2)
+  # — offline, hermetic. Before the resolver fix, `gh issue list --milestone <slug>` was
+  # called with the MIS-RESOLVED Version (e.g. "v3.79"); gh returns an empty list + exit
+  # 0 for a nonexistent milestone, so OPEN_ISSUE_COUNT=0 — a SILENT false-negative on
+  # every one of the 32 prior pure-alpha releases (the D6 auto-close-anomaly gate never
+  # queried the real milestone). Once the fixed resolver yields the real pure-alpha slug,
+  # the gate ARMS and counts real open issues. This is the operator-ruled "verify, do NOT
+  # assume the count drains to zero" fixture: prove BOTH legs against a MILESTONE-AWARE
+  # stub (populated for the correct slug; empty+exit0 for a wrong key — gh's real behavior).
+  local _ag_saved_gh="$GH" _ag_saved_mode="$MODE" _ag_saved_slug="$STATE_MILESTONE_SLUG"
+  local _ag_saved_list="$OPEN_ISSUE_LIST" _ag_saved_count="$OPEN_ISSUE_COUNT"
+  local _ag_tmp; _ag_tmp="$(/usr/bin/mktemp -d -t armedgate-selftest.XXXXXX)"
+  local _ag_stub="$_ag_tmp/gh-stub.sh"
+  /bin/cat > "$_ag_stub" <<'STUB'
+#!/usr/bin/env bash
+# Milestone-aware gh stub: emulate `gh issue list --milestone <slug>` returning open
+# issues ONLY for the correct pure-alpha milestone title, and an EMPTY list + exit 0
+# for any other (mis-resolved) key — gh's real behavior for a nonexistent milestone.
+if [[ "$1" == "issue" && "$2" == "list" ]]; then
+  ms=""
+  while [[ $# -gt 0 ]]; do
+    [[ "$1" == "--milestone" ]] && { ms="$2"; break; }
+    shift
+  done
+  if [[ "$ms" == "close-out-reliability-hardening" ]]; then
+    printf '%s\t%s\n' 2578 "Some open sub-task"
+    printf '%s\t%s\n' 1771 "Another open sub-task"
+  fi
+  exit 0
+fi
+exit 0
+STUB
+  /bin/chmod +x "$_ag_stub"
+  GH="$_ag_stub"; MODE="apply"; EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+
+  # (a) ARMED: the correct pure-alpha slug (what the fixed resolver returns) → the gate
+  #     queries the real milestone and counts its open issues — NOT a false 0.
+  STATE_MILESTONE_SLUG="close-out-reliability-hardening"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  [[ "$OPEN_ISSUE_COUNT" -eq 2 ]] || { echo "FAIL: armed gate must count 2 open issues for the correct pure-alpha slug (not a false 0), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+
+  # (b) Pre-fix false-negative (documented, pins the ARMED classification): a MIS-RESOLVED
+  #     Version key queries a nonexistent milestone → gh empty + exit 0 → false 0. This is
+  #     the silent failure the fixed resolver eliminates; the gate was decorative for 32
+  #     releases and now bites.
+  STATE_MILESTONE_SLUG="v9.99"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  [[ "$OPEN_ISSUE_COUNT" -eq 0 ]] || { echo "FAIL: mis-resolved Version key must reproduce the historical false-0 (gh empty+exit0), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ag_tmp" 2>/dev/null || true
+  GH="$_ag_saved_gh"; MODE="$_ag_saved_mode"; STATE_MILESTONE_SLUG="$_ag_saved_slug"
+  OPEN_ISSUE_LIST="$_ag_saved_list"; OPEN_ISSUE_COUNT="$_ag_saved_count"
+  EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
   # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
   # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
@@ -2824,6 +2967,65 @@ EOF
   phase_transition_release_log >/dev/null 2>&1
   [[ "$(get_phase transition_release_log)" == PASS\|* ]] || { echo "FAIL: transition DEPLOYED row must PASS (normal transition), got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
   /usr/bin/grep -qE '^\| v9\.93 \| 88-some-milestone \|.*\| VERIFIED \|' "$RELEASE_LOG" || { echo "FAIL: DEPLOYED→VERIFIED transition must flip the v9.93 row state"; failures=$((failures+1)); }
+
+  # (d) #2539 AC-2 + AC-3 — END-TO-END pure-alpha parity. The blind-spot that let #2539
+  #     ship: Test 4 tests the resolver in isolation and case (c) hard-assigns the global
+  #     — neither drives the resolver → phase-6 COMPOSITION. Here the slug is RESOLVED
+  #     FROM THE ROW (not hard-assigned), then phase 6 runs in BOTH modes: AC-3 dry-run
+  #     verdict <=> apply verdict (one predicate); AC-2 the pure-alpha row flips to VERIFIED.
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.94 | close-out-reliability-hardening | #2539 | #4242 | sha | v9.94 | DEPLOYED | 2026-07-18 |
+EOF
+  VERSION="v9.94"
+  STATE_MILESTONE_SLUG="$(extract_milestone_slug "$(find_log_row "$VERSION")")"
+  [[ "$STATE_MILESTONE_SLUG" == "close-out-reliability-hardening" ]] || { echo "FAIL: AC-2 end-to-end resolver must yield the pure-alpha slug from the row, got '$STATE_MILESTONE_SLUG'"; failures=$((failures+1)); }
+  GH="$_td_stub_merged"; MODE="dry-run"; STATE_LOG_ROW_STATE="DEPLOYED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_release_log >/dev/null 2>&1
+  [[ "$(get_phase transition_release_log | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: AC-3 pure-alpha dry-run must be DRY-RUN (predict apply), got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+  MODE="apply"; STATE_LOG_ROW_STATE="DEPLOYED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_release_log >/dev/null 2>&1
+  [[ "$(get_phase transition_release_log)" == PASS\|* ]] || { echo "FAIL: AC-3 pure-alpha apply must PASS (parity with dry-run), got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| v9\.94 \| close-out-reliability-hardening \|.*\| VERIFIED \|' "$RELEASE_LOG" || { echo "FAIL: AC-2 pure-alpha DEPLOYED->VERIFIED transition must flip the row"; failures=$((failures+1)); }
+
+  # (e) #2539 AC-3 negative (the load-bearing parity assertion): a slug matching NO row
+  #     must make the dry-run FAIL too. Under the pre-delta code the dry-run only printed
+  #     (never tested the slug predicate), so it passed while --apply aborted — the exact
+  #     defect-hiding gap. With log_row_match, dry-run FAILs for a no-match slug.
+  MODE="dry-run"; STATE_MILESTONE_SLUG="no-such-milestone-slug"; STATE_LOG_ROW_STATE="DEPLOYED"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  # `if …; then` wraps the expected-FAIL phase (suppresses set -e inside it, per the
+  # existing self-test idiom); the phase returning non-zero means the then-branch is skipped.
+  if phase_transition_release_log >/dev/null 2>&1; then
+    echo "FAIL: AC-3 negative — dry-run must return non-zero for a no-match slug (parity with apply)"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase transition_release_log | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC-3 negative — dry-run must mark transition FAIL for a no-match slug, got '$(get_phase transition_release_log)'"; failures=$((failures+1)); }
+
+  # (f) #2539 D-3 true-count (A6.5 FMF-1): log_row_match `count` must return the TRUE
+  #     number of matching rows (findall), NOT a capped count=1 — else an over-match
+  #     (n>=2) returns 1 and silently disarms the D-3 preflight gate. Two rows sharing a
+  #     slug must count as 2 (rc!=0 => D-3 FAILs); a unique slug counts as 1 (rc 0).
+  /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.95 | dup-slug | #1 | #10 | sha | v9.95 | DEPLOYED | 2026-07-18 |
+| v9.96 | dup-slug | #2 | #11 | sha | v9.96 | DEPLOYED | 2026-07-18 |
+| v9.97 | uniq-slug | #3 | #12 | sha | v9.97 | DEPLOYED | 2026-07-18 |
+EOF
+  local _d3_dup _d3_uniq
+  # `|| true` keeps the count-substitution from tripping set -e when log_row_match
+  # exits non-zero (n!=1) — the printed count is still captured; we assert the VALUE.
+  _d3_dup="$(log_row_match "dup-slug" 'DEPLOYED|VERIFIED' count)" || true
+  [[ "$_d3_dup" == "2" ]] || { echo "FAIL: D-3 true-count must return 2 for a 2-row over-match (findall, not capped count=1), got '$_d3_dup'"; failures=$((failures+1)); }
+  log_row_match "dup-slug" 'DEPLOYED|VERIFIED' count >/dev/null 2>&1 && { echo "FAIL: D-3 gate — log_row_match count must exit non-zero for an over-match (n=2); a passing rc would disarm the gate"; failures=$((failures+1)); }
+  _d3_uniq="$(log_row_match "uniq-slug" 'DEPLOYED|VERIFIED' count)" || true
+  [[ "$_d3_uniq" == "1" ]] || { echo "FAIL: D-3 true-count must return 1 for a unique slug, got '$_d3_uniq'"; failures=$((failures+1)); }
+  log_row_match "uniq-slug" 'DEPLOYED|VERIFIED' count >/dev/null 2>&1 || { echo "FAIL: D-3 gate — log_row_match count must exit zero for a unique slug (n=1)"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_td_tmp" 2>/dev/null || true
   GH="$_td_saved_gh"; MODE="$_td_saved_mode"; STATE_LOG_ROW_STATE="$_td_saved_state"
@@ -3156,13 +3358,13 @@ STUB
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
   echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
-  echo "  extract_row_state + extract_milestone_slug validated (incl. #667 F2 bare theme-named slug → title)" >&2
+  echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
-  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment)" >&2
+  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
-  echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition)" >&2
+  echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
