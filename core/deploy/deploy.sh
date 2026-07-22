@@ -7013,7 +7013,7 @@ cmd_check() {
     else
       local c55_mode c55_args
       c55_mode=$(resolve_check_mode "work-hierarchy-drift")
-      c55_args=(--root . --output-format tsv)
+      c55_args=(--root . --repo "$AUDIT_REPO" --output-format tsv)
       if ! command -v gh >/dev/null 2>&1; then
         log "  SKIP:  H2 backlog leg — gh unavailable (offline/unauth; mirrors Check 39/40/51/52/53). H1 doc leg still runs."
         c55_args+=(--skip-backlog)

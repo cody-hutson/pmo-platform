@@ -610,7 +610,7 @@ This pattern is **idempotent** — running it twice with the same arguments prod
 
 #### Invariant Enforcement (`deploy.sh --check` Check 16)
 
-State Anchor Sync drift is detected at session-boundary by `core/deploy/deploy.sh --check` Check 16, which asserts 4 atomic invariants on **all open intake issues** (widened from `--label improvement`-only per #2682, 2026-07-19):
+State Anchor Sync drift is detected at session-boundary by `core/deploy/deploy.sh --check` Check 16, which asserts 4 atomic invariants on **all open intake issues** (widened from a prior `--label improvement`-only scope):
 
 | Invariant | Rule | Failure message |
 |---|---|---|

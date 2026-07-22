@@ -440,10 +440,27 @@ def self_test():
     return 1 if failed else 0
 
 
+def _derive_repo(explicit):
+    """owner/name of the running clone's origin (fork-correct); never hardcode the
+    operator handle (depersonalization gate). Returns None if unset and unresolved."""
+    if explicit:
+        return explicit
+    try:
+        url = subprocess.run(["git", "config", "--get", "remote.origin.url"],
+                             capture_output=True, text=True).stdout.strip()
+        m = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return None
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Work-hierarchy drift detector (#1039).")
+    ap = argparse.ArgumentParser(description="Work-hierarchy drift detector.")
     ap.add_argument("--root", default=".", help="repo root to scan")
-    ap.add_argument("--repo", default="cody-hutson/pmo-platform", help="owner/name for H2")
+    ap.add_argument("--repo", default=None,
+                    help="owner/name for H2; derived from git remote origin when omitted")
     ap.add_argument("--exempt-file", default=EXEMPT_FILE_DEFAULT)
     ap.add_argument("--output-format", choices=("tsv",), default="tsv")
     ap.add_argument("--skip-backlog", action="store_true",
@@ -487,8 +504,13 @@ def main():
     elif args.skip_backlog:
         out.append("SKIP\tH2\tbacklog leg skipped by request")
     else:
+        repo = _derive_repo(args.repo)
+        if not repo:
+            print("ERROR\t--repo not supplied and git remote origin unresolved",
+                  file=sys.stderr)
+            return 3
         try:
-            nodes = fetch_epic_parent_map(args.repo)
+            nodes = fetch_epic_parent_map(repo)
         except RuntimeError as exc:
             print("ERROR\tH2 GraphQL failure: " + str(exc), file=sys.stderr)
             return 3

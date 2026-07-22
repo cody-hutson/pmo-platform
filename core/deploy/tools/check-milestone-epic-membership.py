@@ -328,9 +328,26 @@ def self_test():
     return 1 if failed else 0
 
 
+def _derive_repo(explicit):
+    """owner/name of the running clone's origin (fork-correct); never hardcode the
+    operator handle (depersonalization gate). Returns None if unset and unresolved."""
+    if explicit:
+        return explicit
+    try:
+        url = subprocess.run(["git", "config", "--get", "remote.origin.url"],
+                             capture_output=True, text=True).stdout.strip()
+        m = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return None
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Milestone↔epic membership check (#2219).")
-    ap.add_argument("--repo", default="cody-hutson/pmo-platform")
+    ap = argparse.ArgumentParser(description="Milestone-epic membership check.")
+    ap.add_argument("--repo", default=None,
+                    help="owner/name; derived from git remote origin when omitted")
     ap.add_argument("--output-format", choices=("tsv",), default="tsv")
     ap.add_argument("--fixture", help="JSON {milestones:[],issues:[]} — drives both legs offline")
     ap.add_argument("--self-test", action="store_true")
@@ -348,9 +365,14 @@ def main():
             print("ERROR\tfixture unreadable: " + str(exc), file=sys.stderr)
             return 3
     else:
+        repo = _derive_repo(args.repo)
+        if not repo:
+            print("ERROR\t--repo not supplied and git remote origin unresolved",
+                  file=sys.stderr)
+            return 3
         try:
-            milestones = fetch_milestones(args.repo)
-            issues = fetch_open_issues(args.repo)
+            milestones = fetch_milestones(repo)
+            issues = fetch_open_issues(repo)
         except RuntimeError as exc:
             print("ERROR\t" + str(exc), file=sys.stderr)
             return 3
