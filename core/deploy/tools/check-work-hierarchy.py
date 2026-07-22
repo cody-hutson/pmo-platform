@@ -68,9 +68,22 @@ parser: negation detection is the NLP-shaped predicate this design rejects.
 
 EXEMPTION
 ---------
-`.claude/work-hierarchy-exemption-list.txt` — lines of `<path> <token>`, mirroring
+`.claude/work-hierarchy-exemption-list.txt` — one entry per line, mirroring
 Check 16's `exempt_pair` shape. Operator escape hatch for anything the citation
-guard does not cover (e.g. a superseded ADR narrating an old hierarchy).
+guard does not cover (e.g. a superseded ADR narrating an old hierarchy), and
+#1039's "allowlist-able during cutover" requirement.
+
+  H1   <path> <token>         e.g. `core/disciplines/foo.md initiative`
+  H2   #<issue> <token>       e.g. `#242 type:epic`   (bare `242 type:epic`
+                              is accepted too — both normalize to one key)
+
+`#` still starts a comment EXCEPT when it is immediately followed by digits and
+then whitespace, which is the H2 entry shape. Both must hold: with a blanket
+comment filter the documented H2 form is swallowed as a comment, and without key
+normalization the bare form loads under a key the lookup never produces — that
+combination shipped once and made the H2 escape hatch unreachable by ANY string
+while its self-test still read green. The self-test now round-trips a real file
+through load_exemptions (with negative cases), so a regression here fails.
 
 OUTPUT (TSV) / EXIT CODES
 -------------------------
@@ -157,8 +170,42 @@ def load_licensed_kinds(root):
     return kinds
 
 
+# An H2 exemption entry is `#<issue> <token>` — a '#' immediately followed by
+# digits and then whitespace. A blanket `startswith("#")` comment filter eats the
+# feature's OWN documented syntax, which is how the escape hatch shipped 100%
+# dead: `#242 type:epic` was swallowed as a comment, and the near-miss `242
+# type:epic` loaded under a key the `"#" + num` lookup never produced. NO string
+# worked. This pattern is deliberately tight — `#` + digits + whitespace + a
+# token — so ordinary comments keep working, including date-shaped ones
+# (`#2026-07-22 note` has `-` after the digits, not whitespace, so it stays a
+# comment).
+H2_EXEMPT_LINE_RE = re.compile(r"^#\d+\s+\S")
+
+# An exemption's first field is either an H2 issue ref or an H1 repo path. Issue
+# refs normalize to BARE digits so `#242` and `242` are ONE key: the operator may
+# write either and the lookup side has exactly one form to compare against.
+# A path is never all-digits, so H1 keys pass through verbatim.
+ISSUE_REF_RE = re.compile(r"^#?(\d+)$")
+
+
+def is_exemption_comment(line):
+    """True when a stripped exemption line is a comment rather than an entry."""
+    return line.startswith("#") and not H2_EXEMPT_LINE_RE.match(line)
+
+
+def normalize_exempt_key(field):
+    """Canonicalize an exemption's first field (issue ref → bare digits)."""
+    m = ISSUE_REF_RE.match(field)
+    return m.group(1) if m else field
+
+
 def load_exemptions(root, exempt_path):
-    """Parse `<path> <token>` exemption lines. Absent file → empty set."""
+    """Parse `<path> <token>` (H1) / `#<issue> <token>` (H2) exemption lines.
+
+    Absent file → empty set. Issue-ref first fields are normalized to bare digits
+    (see normalize_exempt_key) so both documented and near-miss forms resolve to
+    the same key; run_h2 looks up the same normalized form.
+    """
     pairs = set()
     full = os.path.join(root, exempt_path)
     if not os.path.isfile(full):
@@ -167,11 +214,11 @@ def load_exemptions(root, exempt_path):
         with open(full, "r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
-                if not line or line.startswith("#"):
+                if not line or is_exemption_comment(line):
                     continue
                 parts = line.split()
                 if len(parts) >= 2:
-                    pairs.add((parts[0], parts[1].lower()))
+                    pairs.add((normalize_exempt_key(parts[0]), parts[1].lower()))
     except OSError:
         pass
     return pairs
@@ -310,7 +357,10 @@ def run_h2(nodes, exemptions):
         if "type:epic" not in labels:
             continue
         num = str(node.get("number"))
-        if ("#" + num, "type:epic") in exemptions:
+        # Look up the NORMALIZED key (bare digits — see normalize_exempt_key), so
+        # both `#242 type:epic` and `242 type:epic` in the exemption file resolve
+        # here. The EXEMPT output row keeps the `#`-prefixed display form.
+        if (num, "type:epic") in exemptions:
             exempted.append(("H2", "#" + num))
             continue
         findings.append((num, str(parent.get("number"))))
@@ -418,11 +468,69 @@ def self_test():
     f, _ = run_h2([{"number": 11, "parent": None}], set())
     check("H2 ignores parentless epic", len(f) == 0)
 
-    # H2-d: exemption suppresses a genuine edge.
-    nodes = [{"number": 11, "parent": {"number": 22,
-              "labels": {"nodes": [{"name": "type:epic"}]}}}]
-    f, ex = run_h2(nodes, {("#11", "type:epic")})
-    check("H2 exemption suppresses edge", len(f) == 0 and len(ex) == 1)
+    # ── H2-d: the exemption ROUND-TRIP, end to end through load_exemptions ──
+    # The previous version of this test handed run_h2 a hand-built tuple, so it
+    # never touched load_exemptions and would have passed unchanged if that
+    # function were DELETED — which is why the escape hatch shipped structurally
+    # unreachable with a green self-test. These cases write a REAL exemption file,
+    # parse it with the REAL loader, and assert on the live finding shape
+    # (an epic parented to an epic, both carrying type:epic).
+    LIVE_CHILD, LIVE_PARENT = "242", "1153"
+    live_nodes = [{"number": int(LIVE_CHILD),
+                   "parent": {"number": int(LIVE_PARENT),
+                              "labels": {"nodes": [{"name": "type:epic"}]}}}]
+
+    def _h2_via_file(body):
+        """Write `body` as the exemption file, load it, run H2 over live_nodes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            name = "work-hierarchy-exemption-list.txt"
+            with open(os.path.join(tmp, name), "w", encoding="utf-8") as fh:
+                fh.write(body)
+            return run_h2(live_nodes, load_exemptions(tmp, name))
+
+    # Control: with NO exemption file the finding must fire, or every suppression
+    # assertion below would be vacuously true.
+    f, ex = run_h2(live_nodes, load_exemptions("/nonexistent-root", "nope.txt"))
+    check("H2 control: unexempted live edge fires",
+          f == [(LIVE_CHILD, LIVE_PARENT)] and len(ex) == 0)
+
+    # The DOCUMENTED format must work end to end. This is the case that was dead.
+    f, ex = _h2_via_file("# operator notes\n#" + LIVE_CHILD + " type:epic\n")
+    check("H2 documented `#<issue> type:epic` suppresses via load_exemptions",
+          len(f) == 0 and ex == [("H2", "#" + LIVE_CHILD)])
+
+    # The near-miss bare form an operator reaches for when the documented one
+    # appears to do nothing must ALSO work, rather than silently failing twice.
+    f, ex = _h2_via_file(LIVE_CHILD + " type:epic\n")
+    check("H2 bare `<issue> type:epic` suppresses via load_exemptions",
+          len(f) == 0 and ex == [("H2", "#" + LIVE_CHILD)])
+
+    # NEGATIVE: an exemption for a DIFFERENT issue must not suppress this one.
+    # Without this, a loader that returned a match-everything set would pass.
+    f, ex = _h2_via_file("#999999 type:epic\n")
+    check("H2 non-matching issue exemption does NOT suppress",
+          f == [(LIVE_CHILD, LIVE_PARENT)] and len(ex) == 0)
+
+    # NEGATIVE: right issue, wrong token — the pair is the key, not the number.
+    f, ex = _h2_via_file("#" + LIVE_CHILD + " type:story\n")
+    check("H2 non-matching token exemption does NOT suppress",
+          f == [(LIVE_CHILD, LIVE_PARENT)] and len(ex) == 0)
+
+    # Ordinary comments still comment. `#` + digits is an entry ONLY when
+    # whitespace follows the digits, so a date-shaped comment stays a comment.
+    f, ex = _h2_via_file("# " + LIVE_CHILD + " type:epic\n"
+                         "#2026-07-22 reviewed, left in place\n")
+    check("H2 comment lines are still comments (no accidental exemption)",
+          f == [(LIVE_CHILD, LIVE_PARENT)] and len(ex) == 0)
+
+    # The H1 leg shares the loader — a path key must survive normalization.
+    with tempfile.TemporaryDirectory() as tmp:
+        name = "exempt.txt"
+        with open(os.path.join(tmp, name), "w", encoding="utf-8") as fh:
+            fh.write("# a comment\ncore/doc.md initiative\n#" + LIVE_CHILD + " type:epic\n")
+        loaded = load_exemptions(tmp, name)
+        check("loader keeps H1 path keys verbatim alongside H2 issue keys",
+              loaded == {("core/doc.md", "initiative"), (LIVE_CHILD, "type:epic")})
 
     # PAGINATION: `gh --paginate` concatenates page documents with NO separator.
     # A newline-split parse silently yields ZERO nodes past page 1 — a FALSE-GREEN

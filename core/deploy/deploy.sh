@@ -3381,8 +3381,22 @@ cmd_check() {
     log "Check 14: Doc-link maintenance (governance + skill SKILL.md scope)"
     local c14_script="core/deploy/tools/check-doc-links.py"
     local c14_target_paths_file="core/deploy/allowlists/doc-link-target-paths.txt"
-    local c14_allowlist="$(pmo_instance_path)/skip-doc-link-check.txt"
-    [[ -f "$c14_allowlist" ]] || c14_allowlist=".claude/skip-doc-link-check.txt"
+    # TWO allowlists, UNIONed by the primitive (--allowlist is repeatable and
+    # additive — a later file adds to the earlier, never replaces it):
+    #   1. c14_allowlist_base — the TRACKED corpus-level skip class, the SAME
+    #      file link-check.yml passes. Scan scope has been single-sourced via
+    #      --target-paths-file; this single-sources the IGNORE list on the same
+    #      principle. While it was dual-sourced, the two callers scanned
+    #      byte-identical files and reached different verdicts (0 at PR time vs
+    #      84 at deploy time), so "one list, two callers, cannot drift" held for
+    #      scope but not for outcome.
+    #   2. c14_allowlist_instance — operator-local additions layered on top.
+    #      Stays operator-instance (with the legacy .claude/ fallback) so an
+    #      operator can suppress paths that exist only in their workspace,
+    #      WITHOUT re-declaring the tracked entries locally.
+    local c14_allowlist_base="core/deploy/allowlists/skip-doc-link-check-ci.txt"
+    local c14_allowlist_instance="$(pmo_instance_path)/skip-doc-link-check.txt"
+    [[ -f "$c14_allowlist_instance" ]] || c14_allowlist_instance=".claude/skip-doc-link-check.txt"
     if [[ ! -f "$c14_script" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "primitive script missing: $c14_script"
     elif [[ ! -f "$c14_target_paths_file" ]]; then
@@ -3390,6 +3404,13 @@ cmd_check() {
       # missing list must never read GREEN (the tool would refuse to scan
       # nothing, but flag the missing surface here with a clear message).
       flag_warn_or_issue "doc-link-maintenance" "shared target-paths file missing: $c14_target_paths_file (scan scope undefined; check is unverifiable)"
+    elif [[ ! -f "$c14_allowlist_base" ]]; then
+      # Name the asymmetry rather than letting the operator rediscover it as a
+      # wall of findings. A missing allowlist can only OVER-report (it never
+      # manufactures a false green), so this is diagnosability, not safety —
+      # but "tracked base missing" is the actionable message, not "84 broken
+      # cross-refs" from a baseline that silently diverged from CI's.
+      flag_warn_or_issue "doc-link-maintenance" "tracked base allowlist missing: $c14_allowlist_base (deploy-time baseline would diverge from the PR-time gate)"
     elif [[ ! -x "/usr/bin/python3" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "/usr/bin/python3 not executable; cannot run primitive"
     else
@@ -3402,7 +3423,8 @@ cmd_check() {
       # yield >= 1 .md (verified when the list is edited).
       c14_output=$(/usr/bin/python3 "$c14_script" \
         --target-paths-file "$c14_target_paths_file" \
-        --allowlist "$c14_allowlist" \
+        --allowlist "$c14_allowlist_base" \
+        --allowlist "$c14_allowlist_instance" \
         --output-format tsv \
         --require-targets \
         --exclude-code-blocks 2>&1) || c14_exit=$?
@@ -7030,7 +7052,11 @@ cmd_check() {
   # label-mapping title must not read as a hierarchy violation).
   # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
   # (H1) or `#<issue> type:epic` (H2), mirroring Check 16's exempt_pair shape; this
-  # is #1039's "allowlist-able during cutover" requirement.
+  # is #1039's "allowlist-able during cutover" requirement. The H2 form is parsed
+  # as an ENTRY, not a comment (`#` + digits + whitespace); the bare `<issue>
+  # <token>` form is accepted too, since both normalize to one lookup key. The
+  # primitive's self-test round-trips a real exemption file through the loader, so
+  # neither leg of that parse can silently regress.
   # Fail-loud: an unreadable SSOT vocabulary (zero kinds) exits 3 rather than
   # reading green — a zero-vocabulary scan would find nothing by construction.
   # gh-unavailable → H2 SKIPs with a logged reason (mirrors Check 39/40/51/52/53
@@ -7094,12 +7120,22 @@ cmd_check() {
   #                       WARN-ONLY, never enforce-capable. A description legitimately
   #                       lags membership mid-release; gating it would make it
   #                       chronically non-green. Emitted as its own sub-invariant.
+  # The two legs read DIFFERENT membership sets, deliberately. M1 is OPEN-scoped: it
+  # asks a live-drift question, and a completed card's parent-epic is history. M2's
+  # set spans ALL issue states, because an OPEN-only set cannot tell "the Scope names
+  # a card that is DONE" (benign) from "the Scope names a card that is NOT in this
+  # milestone" (the divergence M2 exists to report) — it renders both as
+  # named-not-member and puts a false positive on an already-advisory leg.
   # Sub-tasks are excluded from both legs (pipeline scaffolding, no parent-epic by
   # design; counting them would make M2 permanently non-green).
   # Placement: deploy.sh --check per D-A (sibling to Check 16's gh+jq invariant
   # pattern; repo-integrity.yml rejected as altitude mismatch — membership is
   # repo-state, not a PR-diff property). ONE batched+paginated GraphQL issue query
-  # + one milestones REST call — not an N+1 per-milestone loop.
+  # + one milestones REST call + ONE batched membership query scoped THROUGH the
+  # open milestones — not an N+1 per-milestone loop. Scoping the all-states
+  # membership fetch through the milestones (rather than scanning every issue in
+  # the repository) is what keeps it cheap: measured 1.3s vs 16.5s, with zero
+  # membership divergence between the two over the open-milestone population.
   # ADOPTION NOTE: 0 of 46 open milestones declare an epic today, so M1 SKIPs
   # universally and is INERT until descriptions adopt the marker (reported as
   # DECLARED 0, not a silent green). M2 fires on the ~16 milestones whose

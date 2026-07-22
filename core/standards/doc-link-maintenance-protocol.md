@@ -62,7 +62,7 @@ Pattern C requires text-pattern detection (semantic, not structural) and is out 
 ```
 python3 core/deploy/tools/check-doc-links.py \
   --target-paths <comma-separated-globs> \
-  [--allowlist .claude/skip-doc-link-check.txt] \
+  [--allowlist <tracked-base>] [--allowlist <instance-additions>] \
   [--workspace-root <path>] \
   [--output-format tsv|json|github] \
   [--exclude-code-blocks]
@@ -104,16 +104,21 @@ Layer 2 (Operations) is intentionally excluded per CLAUDE.md domain boundary —
 
 ## 5. Allowlist Policy
 
-Allowlist: [`.claude/skip-doc-link-check.txt`](<OPERATOR_INSTANCE_CLAUDE_DIR>/skip-doc-link-check.txt).
+Two layered allowlists, UNIONed by the primitive (`--allowlist` is repeatable and additive — a later file adds to the earlier, never replaces it):
 
-**Format:** One pattern per line. Trailing slash matches directories. `#` introduces comments. Empty lines ignored.
+| Allowlist | Tracked? | Holds |
+|---|---|---|
+| [`core/deploy/allowlists/skip-doc-link-check-ci.txt`](../deploy/allowlists/skip-doc-link-check-ci.txt) | **Yes** | The **corpus-level base** — skips that follow from a fact about the repository, so they must hold wherever the corpus is scanned. Read by BOTH deploy-time Check 14 and the PR-time `link-check.yml`, so the two surfaces cannot reach different verdicts on the same tree |
+| [`.claude/skip-doc-link-check.txt`](<OPERATOR_INSTANCE_CLAUDE_DIR>/skip-doc-link-check.txt) | No — operator-instance | Additions for paths that exist only in the operator's own workspace. Never re-declares tracked entries |
 
-**Allowlisted by default:**
+**Format:** One pattern per line. Trailing slash matches directories. `#` introduces comments. Empty lines ignored. Same format for both files.
+
+**Allowlisted by default (instance file):**
 - `release/releases/archive/` — archived release plans contain intentional historical references (e.g., to deleted files like `IMPROVEMENTS.md` from an earlier bridge era)
 - `pmo-platform/analysis/legacy-imp-audit-*/` — audit artifacts cite broken refs as evidence (the broken-ref TSV literally enumerates broken refs as data)
 - `pmo-platform/analysis/cross-domain-drift-audit-*/` — same evidentiary purpose
 
-**Adding entries:** Use any standard text editor. Each addition should include a comment line documenting why the path is allowlisted (e.g., "intentional historical reference", "audit evidence"). Allowlist additions are governed under the standard "No ungoverned changes" protocol — operator approval required for non-trivial scope expansion.
+**Adding entries:** Use any standard text editor. Route by WHY the path is skipped — a fact about the repository goes in the tracked base (so both surfaces agree), a fact about one operator's workspace goes in the instance file. Each addition should include a comment line documenting why the path is allowlisted (e.g., "intentional historical reference", "audit evidence"). Allowlist additions are governed under the standard "No ungoverned changes" protocol — operator approval required for non-trivial scope expansion.
 
 **Anti-pattern:** Do NOT allowlist files solely to silence Check 14 warnings. Allowlist entries should reflect a deliberate "this file's broken refs are by design" judgment, not a "the broken refs here are too numerous to fix" judgment. The latter case routes to the broken-ref backlog drainage tracked at F-4.
 

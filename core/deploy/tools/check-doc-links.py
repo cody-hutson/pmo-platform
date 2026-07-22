@@ -287,6 +287,29 @@ def load_allowlist(path: Path | None) -> list[str]:
     return [line.rstrip("\n") for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
 
+def load_allowlists(paths: list[Path] | None) -> list[str]:
+    """UNION the pattern sets of several allowlist files, in argument order.
+
+    Layering, not replacement: the pattern list is the concatenation of every
+    supplied file's patterns, so a second `--allowlist` ADDS to the first and
+    can never shadow it. That is the property deploy.sh Check 14 relies on to
+    read the TRACKED corpus-level base (core/deploy/allowlists/
+    skip-doc-link-check-ci.txt — the same file link-check.yml passes) AND the
+    operator-instance file, without the operator having to re-declare the
+    tracked entries locally. Before this, scan SCOPE was single-sourced through
+    --target-paths-file while the ALLOWLIST stayed dual-sourced, so the two
+    callers scanned the same files and reached different verdicts.
+
+    A missing/absent file contributes zero patterns. That is the safe
+    direction: allowlists only ever SUPPRESS findings, so an absent one can
+    over-report, never under-report — it cannot manufacture a false green.
+    """
+    patterns: list[str] = []
+    for p in paths or []:
+        patterns.extend(load_allowlist(p))
+    return patterns
+
+
 def load_target_paths_file(path: Path | None) -> list[str]:
     """Read newline-delimited --target-paths globs from a shared list file.
 
@@ -818,7 +841,43 @@ def run_self_test() -> int:
         assert load_target_paths_file(empty) == [], \
             "fixture 10: comment/blank-only file did not return []"
 
-    print("self-test OK (10 fixtures passed)")
+    # ─── Fixture 11: repeatable --allowlist UNIONs (tracked base + instance) ─
+    # The scan SCOPE is single-sourced via --target-paths-file; this pins the
+    # matching property on the ALLOWLIST axis. Two callers (deploy.sh Check 14
+    # and link-check.yml) must be able to share ONE tracked base while the
+    # operator layers instance-local additions on top — so load_allowlists must
+    # CONCATENATE, never let a later file shadow an earlier one. The regression
+    # this guards is a real one: while the allowlist stayed dual-sourced, the
+    # two callers scanned identical files and returned 0 vs 84 findings.
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        base = td_path / "tracked-base.txt"
+        base.write_text("# tracked corpus-level base\nCHANGELOG.md\n")
+        instance = td_path / "instance.txt"
+        instance.write_text("# operator-instance additions\nlocal-only/\n")
+
+        unioned = load_allowlists([base, instance])
+        assert unioned == ["CHANGELOG.md", "local-only/"], \
+            f"fixture 11: allowlist union mismatch (got {unioned})"
+        # Order is argument order, and the reverse union carries the same set —
+        # the second file adds, it does not replace.
+        assert sorted(load_allowlists([instance, base])) == sorted(unioned), \
+            "fixture 11: union is order-dependent (a later file replaced an earlier one)"
+        # A missing file contributes nothing and must not drop the present one
+        # (an absent instance allowlist can only over-report, never false-green).
+        assert load_allowlists([base, td_path / "absent.txt"]) == ["CHANGELOG.md"], \
+            "fixture 11: a missing allowlist file discarded the tracked base"
+        assert load_allowlists([]) == [] and load_allowlists(None) == [], \
+            "fixture 11: empty/None allowlist list did not return []"
+        # End-to-end: the union must actually suppress. A doc whose only broken
+        # ref lives in an allowlisted file is clean ONLY when the base applies.
+        (td_path / "CHANGELOG.md").write_text("See [notes](release/releases/notes/vX.Y.md).\n")
+        assert scan_file(td_path / "CHANGELOG.md", [], td_path), \
+            "fixture 11: control case — unallowlisted broken ref did not fire"
+        assert not scan_file(td_path / "CHANGELOG.md", unioned, td_path), \
+            "fixture 11: union allowlist did not suppress the tracked-base entry"
+
+    print("self-test OK (11 fixtures passed)")
     return 0
 
 
@@ -874,7 +933,19 @@ def main() -> int:
              "an empty/missing file is a hard error (exit 2), never a silent "
              "empty scan.",
     )
-    p.add_argument("--allowlist", help="Path to allowlist file (one pattern per line; '#' comments)")
+    p.add_argument(
+        "--allowlist",
+        action="append",
+        metavar="PATH",
+        help="Path to an allowlist file (one pattern per line; '#' comments). "
+             "REPEATABLE: pass it more than once and the pattern sets UNION in "
+             "argument order — a later file ADDS to the earlier ones, it never "
+             "replaces them. That is how deploy.sh Check 14 layers the "
+             "operator-instance allowlist on top of the tracked corpus-level "
+             "base that link-check.yml also passes, so the two callers share "
+             "the ignore list the same way --target-paths-file makes them share "
+             "the scan scope. A missing file contributes nothing.",
+    )
     p.add_argument(
         "--output-format",
         choices=["tsv", "json", "github", "markdown"],
@@ -957,7 +1028,10 @@ def main() -> int:
         )
         return 2
     files = expand_globs(globs, workspace_root)
-    allowlist = load_allowlist(Path(args.allowlist)) if args.allowlist else []
+    # --allowlist is repeatable and UNIONs (see load_allowlists): the tracked
+    # corpus-level base + any operator-instance additions layer, they do not
+    # replace each other.
+    allowlist = load_allowlists([Path(a) for a in (args.allowlist or [])])
 
     # ─── Path-resolution-failure guard (broken-refs mode, opt-in) ──────────
     # Clause 2 of the fail-loud contract: a declared --target-paths glob that

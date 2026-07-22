@@ -47,7 +47,10 @@ core/deploy/
 # CONTRIBUTING.md, SECURITY.md, CHANGELOG.md); NOT `.` (which would rglob the
 # whole repo). CHANGELOG.md's per-release-notes links point into the
 # instance-side release/releases/notes/ tree (deliberately excluded below), so
-# CHANGELOG.md is routed to skip-doc-link-check-ci.txt for the CI gate.
+# CHANGELOG.md is routed to the TRACKED base allowlist
+# skip-doc-link-check-ci.txt, which BOTH the CI gate and deploy-time Check 14
+# read — this list single-sources the scan scope, that one single-sources the
+# ignore list, and both are needed for the two callers to agree.
 *.md
 # .github/ holds exactly one .md today (PULL_REQUEST_TEMPLATE.md). This is a
 # single-file tree under --require-targets: if that file is ever removed, the
