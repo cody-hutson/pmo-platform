@@ -8,7 +8,7 @@ ADRs follow the canonical **[ADR schema](../schemas/adr-schema.md)** — the sin
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 are foundational core-scope decisions migrated from an earlier governance location. ADR-001 + ADR-002 + ADR-005 (release-scope) live in [`../../release/ADRs/`](../../release/ADRs/). ADR-006..009 are module-restructure decisions.
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 are foundational core-scope decisions migrated from an earlier governance location. ADR-001 + ADR-002 + ADR-005 (release-scope) live in [`../../release/ADRs/`](../../release/ADRs/). ADR-006..009 are module-restructure decisions. ADR-087 is the current highest core-scope number (see § Runtime-control / hook-class ADRs).
 
 **Enforcement.** The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`), which fails any PR that introduces a duplicate ADR number or a gap in the global sequence.
 
@@ -217,6 +217,15 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Decision:** For a work item that cites a **substrate-level affected file**, a canonical-spec edit at the file's governed home WINS over mutating the substrate citation or the issue body. A substrate reference — a cross-repo `originally #NNN` public-flip migration marker (whose local number may or may not resolve in this repo) or a body-level raw path — is a pointer to be translated, not a surface to be edited; issue bodies remain historical record (directional, not authoritative). The rule is enforced at Stage-5 A1 scope-assessment by the new **Phase A1.5** (canonical-surface enumeration + cross-repo-citation translation) in `stage-05-solutioning.md`. Reflexive cutover — applies to releases entering Stage 5 after the introducing-release merge SHA; the introducing release is exempt.
 **Reversibility:** CHEAP (additive — a new ADR record + one Stage-5 phase block + this index line; `git revert`-able with no data migration).
 **File:** [ADR-062-substrate-vs-canonical-precedent.md](ADR-062-substrate-vs-canonical-precedent.md)
+
+## Runtime-control / hook-class ADRs
+
+### ADR-087 — `Stop`-hook agent-loop re-entry as a hook class (ship-inert activation boundary)
+
+**Status:** Proposed (flips to Accepted at the operator's plan-review / activation gate; verify in-file, never from milestone closure).
+**Decision:** Agent-loop re-entry via a `Stop` hook returning `{"decision":"block"}` is adopted as a **second hook shape**, distinct from the `PreToolUse` *gate* shape every prior hook uses — a gate constrains a pending action, a re-entrant hook consumes agent turns. `SessionEnd` is rejected for this purpose (cleanup-only; cannot re-enter the loop). Admitted under four standing obligations: (1) `Stop` + `decision:block` is the sanctioned re-entry mechanism; (2) a once-per-session idempotence sentinel is **mandatory** and MUST be written *before* the block decision, because `Stop` fires per assistant turn and the re-entered work's own final turn would otherwise loop; (3) fail-open on every path — a hook that can restart the agent must never wedge a session; (4) **ship-inert activation boundary (D2(a))** — the script and its settings-template registration ship, the activation does not, and no live settings file is modified by the release. Governs the hook *class*, not what any instance does with the turn it takes.
+**Reversibility:** CHEAP as shipped (additive + inert; revert changes no session behaviour because none changed on the way in) / MODERATE at activation (two reversible operator edits, but it registers workspace-wide the first hook able to re-enter the agent loop).
+**File:** [ADR-087-stop-hook-agent-loop-re-entry-class.md](ADR-087-stop-hook-agent-loop-re-entry-class.md)
 
 ## Foundational ADRs in core (migrated from pmo-platform/governance/adr/)
 

@@ -84,12 +84,14 @@ memory/
 .claude/hooks/*.log
 .claude/hooks/*.jsonl
 .claude/hooks/.mode
+.claude/hooks/.session-retro-state/
 # Source-tree hook runtime artifacts (produced when hooks run from the worktree
 # during engineering/testing). The committed source is the .sh + .mode.template;
 # the live .mode and the per-hook logs are runtime-only.
 core/hooks/*.log
 core/hooks/*.jsonl
 core/hooks/.mode
+core/hooks/.session-retro-state/
 
 # pmo-skill-editor runtime sentinels — session markers, never committed
 # (v2 modular-monolith path; v1 was pmo-platform/skills/*/.editor-session)

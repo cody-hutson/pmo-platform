@@ -622,3 +622,11 @@ Read these on first use:
 ## Reference docs
 
 - **Design-time best-practice anchor:** [`core/standards/domain-best-practices/governance.md`](../../../core/standards/domain-best-practices/governance.md) — the authoritative project/program governance practice guide (PMBOK 7th · release-planning practice; release sequencing, dependency, and gate discipline) this skill consults as design-consumption input. Pointer only — no content absorption ([ADR-019](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md) compose-by-reference); mirrors the Stage-5 design spoke's domain-guide consultation in [`release/references/pipeline/stage-05-solutioning.md`](../../references/pipeline/stage-05-solutioning.md) §5.7.
+
+### Mode B calibration read-model inputs (telemetry)
+
+Mode B reads the platform's on-demand window telemetry read-models for capacity/quality calibration once a window establishes (≥3 comparable windows per the platform N=3 threshold). Pointer only — read on demand, never recompute; these are read-models over existing events, never written back:
+
+- [`release/references/standards/phase-telemetry-front-cluster.md`](../../references/standards/phase-telemetry-front-cluster.md) — front-cluster (Demand / Definition / Solution-design) phase-distinctive read-models: triageability, capacity-feasibility, implementation-readiness (e.g., plan-survival-rate, bundle-amendment-rate, scope-lock-first-pass-rate). Compute via `release/tools/compute-front-cluster-telemetry.sh`.
+- [`release/references/standards/phase-telemetry-middle-cluster.md`](../../references/standards/phase-telemetry-middle-cluster.md) — middle-cluster (Verify / Authorize) phase-distinctive read-models: handoff-fidelity, decision-quality (e.g., escape-rate, conditional-accept-rate, exception-plan-trigger-rate). Compute via `release/tools/compute-middle-cluster-telemetry.sh`.
+- Siblings: [`dora-telemetry.md`](../../references/standards/dora-telemetry.md) (build+deploy DORA-4) and [`close-class-telemetry.md`](../../references/standards/close-class-telemetry.md) (close-quality) complete the telemetry surface.
