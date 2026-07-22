@@ -3333,49 +3333,57 @@ cmd_check() {
   # ─── Check 14: Doc-link maintenance — governance + skill SKILL.md scope ───
   # Per Collective Review CR-D1 / CR-D2.
   # Invokes the shared primitive at core/deploy/tools/check-doc-links.py over
-  # the disjoint governance + skill SKILL.md surface. Warn-mode initial per
-  # core/rules/bypass-mode-readiness.md shakedown precedent; flip-to-enforce
+  # the governance + reference + rules + skill SKILL.md surface. Warn-mode initial
+  # per core/rules/bypass-mode-readiness.md shakedown precedent; flip-to-enforce
   # timeline codified in core/standards/doc-link-maintenance-protocol.md.
-  # Target-paths are a module-prefixed comma-joined string covering all 3
-  # modules + cross-cutting surfaces per Spec Surface 5.2.
-  # The tool carries a module-aware prefix table (V1_PREFIXES + V2_PREFIXES) —
-  # bare v2 module refs (e.g., release/ from core/) resolve via workspace-root
-  # fallback instead of false-positive relative resolution. The tool also has a
-  # --from-path/--to-path EMIT-ONLY rewrite-map mode for per-edit discipline
-  # workflows. Check 15 (release-corpus) RETIRED in v2 per FX-Check15 — see
-  # citation block below Check 14.
+  # Scan scope is read from the SHARED --target-paths-file
+  # (core/deploy/allowlists/doc-link-target-paths.txt) that .github/workflows/
+  # link-check.yml also reads — one list, two callers, so the deploy-time and
+  # PR-time scan scope can never drift (they formerly carried a byte-identical
+  # inline string in two places). The list also covers the residual dead-ref
+  # trees core/ADRs/, core/deploy/, repo-root *.md, and .github/; per-tree
+  # rationale + the release/releases/ exclusion live in that file's header.
+  # Link resolution is the one canonical rule (ADR-085): relative to the source
+  # file's directory, a leading `/` denotes the repo root, and there is NO bare
+  # module-prefix fallback. The tool also has a --from-path/--to-path EMIT-ONLY
+  # rewrite-map mode for per-edit discipline workflows. Check 15 (release-corpus)
+  # RETIRED in v2 per FX-Check15 — see citation block below Check 14.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 14: Doc-link maintenance (governance + skill SKILL.md scope)"
     local c14_script="core/deploy/tools/check-doc-links.py"
+    local c14_target_paths_file="core/deploy/allowlists/doc-link-target-paths.txt"
     local c14_allowlist="$(pmo_instance_path)/skip-doc-link-check.txt"
     [[ -f "$c14_allowlist" ]] || c14_allowlist=".claude/skip-doc-link-check.txt"
     if [[ ! -f "$c14_script" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "primitive script missing: $c14_script"
+    elif [[ ! -f "$c14_target_paths_file" ]]; then
+      # Fail-loud: the shared scan-scope list is the single source of truth; a
+      # missing list must never read GREEN (the tool would refuse to scan
+      # nothing, but flag the missing surface here with a clear message).
+      flag_warn_or_issue "doc-link-maintenance" "shared target-paths file missing: $c14_target_paths_file (scan scope undefined; check is unverifiable)"
     elif [[ ! -x "/usr/bin/python3" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "/usr/bin/python3 not executable; cannot run primitive"
     else
       local c14_output c14_exit=0
-      # --require-targets (per #459): a declared --target-paths glob resolving to
-      # zero files is a path-resolution failure (exit 3), not a clean pass — so a
-      # relocated/typo'd scan surface can never read GREEN.
-      # Target globs match the post-restructure live layout (per #459 follow-up):
-      # release specs/standards live under release/references/ (recursively
-      # covered by the release/references/ entry, which also covers the release
-      # schema files under references/standards/); release has no rules surface
-      # (rules are core-only via core/rules/); operations has no references/ or
-      # schemas/ dirs (OPERATIONS.md + operations/skills/*/SKILL.md are the
-      # operations governance + skill scope). The earlier release/{schemas,specs,
-      # standards,rules}/ and operations/{references,schemas}/ globs never matched
-      # this layout and were dropped to keep every glob zero-yield-free.
+      # Scan scope comes from the SHARED --target-paths-file (single source of
+      # truth with link-check.yml — see the file's header for per-tree rationale).
+      # --require-targets (per #459): a declared glob resolving to zero files is a
+      # path-resolution failure (exit 3), not a clean pass — so a relocated/typo'd
+      # scan surface can never read GREEN. Every entry in the shared list must
+      # yield >= 1 .md (verified when the list is edited).
       c14_output=$(/usr/bin/python3 "$c14_script" \
-        --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,operations/OPERATIONS.md,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
+        --target-paths-file "$c14_target_paths_file" \
         --allowlist "$c14_allowlist" \
         --output-format tsv \
         --require-targets \
         --exclude-code-blocks 2>&1) || c14_exit=$?
       if [[ $c14_exit -eq 3 ]]; then
         # Path-resolution failure — never a silent PASS (per #459 fail-loud).
-        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(echo "$c14_output" | head -1) — a declared --target-paths glob resolved to zero files (relocated/typo'd scan surface); fix the glob list in this check"
+        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(echo "$c14_output" | head -1) — a declared glob in $c14_target_paths_file resolved to zero files (relocated/typo'd scan surface); fix the shared list"
+      elif [[ $c14_exit -eq 2 ]]; then
+        # Config error (exit 2) — e.g. the shared target-paths file is empty, or
+        # an invalid flag combination. Fail-loud rather than treat as findings.
+        flag_warn_or_issue "doc-link-maintenance" "primitive config error (exit 2): $(echo "$c14_output" | head -1)"
       elif [[ $c14_exit -eq 0 ]]; then
         log "  OK:    no broken cross-refs in scope"
       else

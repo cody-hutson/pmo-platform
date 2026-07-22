@@ -287,6 +287,28 @@ def load_allowlist(path: Path | None) -> list[str]:
     return [line.rstrip("\n") for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
 
+def load_target_paths_file(path: Path | None) -> list[str]:
+    """Read newline-delimited --target-paths globs from a shared list file.
+
+    One glob/dir/file per line (relative to the workspace root); blank lines and
+    '#' full-line comments are ignored. Mirrors load_allowlist's file convention
+    so two callers (deploy.sh Check 14 + link-check.yml) can share ONE scan-scope
+    source of truth via --target-paths-file — their scope can never drift because
+    there is one list, referenced twice, not two copies kept in lockstep.
+
+    Returns [] for a missing/empty file; main() treats an empty result under
+    --target-paths-file as a hard error (refuse to scan nothing — the fail-loud
+    contract: a missing scan-scope config must never read green).
+    """
+    if path is None or not path.exists():
+        return []
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
 def expand_globs(globs: list[str], workspace_root: Path = WORKSPACE_ROOT) -> list[Path]:
     out: list[Path] = []
     for g in globs:
@@ -475,7 +497,7 @@ def emit_rewrite_map_markdown(entries: list[dict]) -> str:
 def run_self_test() -> int:
     """Sanity check: parser + resolver + rewrite-map mode + EMIT-ONLY enforcement.
 
-    9 fixtures:
+    10 fixtures:
       1. Existing: code-block exclusion + single broken ref.
       2. Anti-fallback regression guard (ADR-085): a bare module-prefixed link
          from a non-root file reads BROKEN even when the same path EXISTS at the
@@ -505,6 +527,11 @@ def run_self_test() -> int:
               root (proves the override re-roots /-prefixed links), AND the
               resolve_workspace_root precedence holds: CLI > $CLAUDE_WORKSPACE_ROOT
               > parents[3] default (hermetic — env saved/restored around the probe).
+     10. NEW: --target-paths-file loader parses one-glob-per-line (blank lines +
+              '#' comments ignored, whitespace stripped) so deploy.sh Check 14
+              and link-check.yml share one scan-scope source of truth; a
+              missing/empty file returns [] (main() hard-errors on that — never a
+              silent empty scan).
     """
     import tempfile
 
@@ -759,7 +786,39 @@ def run_self_test() -> int:
         else:
             os.environ["CLAUDE_WORKSPACE_ROOT"] = _saved_env
 
-    print("self-test OK (9 fixtures passed)")
+    # ─── Fixture 10: --target-paths-file loader (shared scan-scope SSOT) ────
+    # load_target_paths_file parses one-glob-per-line, ignoring blank lines and
+    # '#' comments, so deploy.sh Check 14 and link-check.yml can share one
+    # scan-scope file (their --target-paths can never drift). An empty/missing
+    # file returns [] — main() converts that to a hard error (never a silent
+    # empty scan); this fixture pins the parser, and the empty-return contract.
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        tp_file = td_path / "target-paths.txt"
+        tp_file.write_text(
+            "# a comment line\n"
+            "core/governance/\n"
+            "\n"                       # blank line — ignored
+            "   core/rules/  \n"        # surrounding whitespace — stripped
+            "operations/skills/*/SKILL.md\n"
+            "  # indented comment\n"
+            "*.md\n"
+        )
+        globs = load_target_paths_file(tp_file)
+        assert globs == [
+            "core/governance/", "core/rules/",
+            "operations/skills/*/SKILL.md", "*.md",
+        ], f"fixture 10: parsed globs mismatch (got {globs})"
+        # Missing file → [] (main() hard-errors on this; here we pin the []).
+        assert load_target_paths_file(td_path / "does_not_exist.txt") == [], \
+            "fixture 10: missing target-paths file did not return []"
+        # Empty file → [] (same hard-error path in main()).
+        empty = td_path / "empty.txt"
+        empty.write_text("# only a comment\n\n")
+        assert load_target_paths_file(empty) == [], \
+            "fixture 10: comment/blank-only file did not return []"
+
+    print("self-test OK (10 fixtures passed)")
     return 0
 
 
@@ -767,7 +826,8 @@ MODE_HELP_EPILOG = """\
 Two modes (mode discrimination via flag presence):
 
   broken-refs mode (default — when --from-path/--to-path NOT supplied):
-    Scans --target-paths for broken cross-references.
+    Scans the scope (--target-paths, OR --target-paths-file for the shared
+    single-source-of-truth list) for broken cross-references.
     Output: TSV/JSON/GitHub-Actions per --output-format.
     Exit codes: 0 = clean, 1 = broken refs found.
 
@@ -804,7 +864,16 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=MODE_HELP_EPILOG,
     )
-    p.add_argument("--target-paths", help="Comma-separated globs/dirs/files (relative to workspace root)")
+    p.add_argument("--target-paths", help="Comma-separated globs/dirs/files (relative to workspace root). Mutually exclusive with --target-paths-file.")
+    p.add_argument(
+        "--target-paths-file",
+        help="Path to a file listing the scan-scope globs, one per line ('#' "
+             "comments + blank lines ignored). The single-source-of-truth form: "
+             "deploy.sh Check 14 and link-check.yml both pass the SAME file so "
+             "their scope cannot drift. Mutually exclusive with --target-paths; "
+             "an empty/missing file is a hard error (exit 2), never a silent "
+             "empty scan.",
+    )
     p.add_argument("--allowlist", help="Path to allowlist file (one pattern per line; '#' comments)")
     p.add_argument(
         "--output-format",
@@ -857,11 +926,36 @@ def main() -> int:
         )
         return 2
 
-    if not args.target_paths:
-        print("error: --target-paths is required (or use --self-test)", file=sys.stderr)
+    if args.target_paths and args.target_paths_file:
+        print(
+            "error: --target-paths and --target-paths-file are mutually exclusive "
+            "(provide exactly one)",
+            file=sys.stderr,
+        )
         return 2
-
-    globs = [g.strip() for g in args.target_paths.split(",") if g.strip()]
+    if args.target_paths_file:
+        # Single-source-of-truth scan scope (shared by deploy.sh Check 14 +
+        # link-check.yml). An empty/missing list is a hard error, not a silent
+        # empty scan — the fail-loud contract: a missing scan-scope config must
+        # never read green (mirrors the --require-targets zero-yield discipline).
+        globs = load_target_paths_file(Path(args.target_paths_file))
+        if not globs:
+            print(
+                "error: --target-paths-file resolved to zero globs (missing or "
+                "empty: %s) — scan scope is undefined, refusing to scan nothing"
+                % args.target_paths_file,
+                file=sys.stderr,
+            )
+            return 2
+    elif args.target_paths:
+        globs = [g.strip() for g in args.target_paths.split(",") if g.strip()]
+    else:
+        print(
+            "error: one of --target-paths / --target-paths-file is required "
+            "(or use --self-test)",
+            file=sys.stderr,
+        )
+        return 2
     files = expand_globs(globs, workspace_root)
     allowlist = load_allowlist(Path(args.allowlist)) if args.allowlist else []
 

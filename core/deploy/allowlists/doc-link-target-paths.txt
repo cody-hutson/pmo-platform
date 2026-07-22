@@ -1,0 +1,64 @@
+# doc-link-target-paths.txt — SINGLE SOURCE OF TRUTH for the doc-link checker's
+# scan scope (the --target-paths globs). Consumed by BOTH surfaces that run the
+# check-doc-links.py primitive over the governance/reference/rules/skill corpus:
+#
+#   * core/deploy/deploy.sh  Check 14   (deploy-time)  via --target-paths-file
+#   * .github/workflows/link-check.yml  (PR-time)      via --target-paths-file
+#
+# Both pass THIS file with --target-paths-file, so their scan scope can never
+# drift — the two used to carry a byte-identical inline --target-paths string,
+# and keeping two copies in lockstep is exactly the drift hazard this file
+# removes (one list, two identical references).
+#
+# Format: one glob/dir/file per line (relative to the workspace root). Blank
+# lines and '#' full-line comments are ignored. A directory entry is scanned
+# recursively for *.md (check-doc-links.py expand_globs: a dir -> rglob("*.md"));
+# a glob such as `*.md` matches workspace-root top-level *.md only.
+#
+# --require-targets contract (both callers pass it): EVERY entry below must
+# resolve to >= 1 file, or the checker exits 3 (path-resolution failure, ALWAYS
+# hard-fail, independent of warn-mode) — a relocated/typo'd scan surface can
+# never read green. When adding an entry, confirm it yields >= 1 .md today.
+
+# ── Layer-1 governance + codified-knowledge corpus (core) ──────────────────
+core/governance/
+core/disciplines/
+core/schemas/
+core/standards/
+core/specs/
+core/rules/
+core/CLAUDE.md.template
+
+# ── Release + operations governance/reference + skill SKILL.md sets ─────────
+release/governance/
+release/references/
+operations/OPERATIONS.md
+operations/skills/*/SKILL.md
+release/skills/*/SKILL.md
+core/skills/*/SKILL.md
+
+# ── Residual dead-ref coverage — trees formerly OUTSIDE the scan ────────────
+# A dead outbound link whose target was deleted while the referencer is
+# untouched ships green unless the referencer's tree is in whole-corpus scope.
+# These four close that gap:
+core/ADRs/
+core/deploy/
+# Repo-root docs — the `*.md` glob matches TOP-LEVEL *.md only (README.md,
+# CONTRIBUTING.md, SECURITY.md, CHANGELOG.md); NOT `.` (which would rglob the
+# whole repo). CHANGELOG.md's per-release-notes links point into the
+# instance-side release/releases/notes/ tree (deliberately excluded below), so
+# CHANGELOG.md is routed to skip-doc-link-check-ci.txt for the CI gate.
+*.md
+# .github/ holds exactly one .md today (PULL_REQUEST_TEMPLATE.md). This is a
+# single-file tree under --require-targets: if that file is ever removed, the
+# glob yields zero and the checker exits 3 (hard-fail) even in warn-mode. That
+# is the intended fail-loud behavior for a vanished declared scan surface, not a
+# defect — named here so it is expected, not discovered.
+.github/
+
+# ── DELIBERATELY EXCLUDED ───────────────────────────────────────────────────
+# release/releases/  — 260 md (RELEASE_LOG/INDEX/DIGEST + plans + notes). NOT
+#   added here: it is already walked recursively by release/tools/
+#   check-release-links.py (the Dead-file-reference gate + release-link-check.yml),
+#   and it carries the heaviest pre-existing rot. Adding it would duplicate
+#   coverage while importing that rot into this gate.
