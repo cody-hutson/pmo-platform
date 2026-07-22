@@ -23,7 +23,6 @@ Defines the orchestration layer above the gate evaluator. Specifies HOW stage tr
 - Agents executing stage transitions — read this protocol at each boundary
 
 **Schema version:** 1.0
-**Introduced in:** v7.5
 
 ---
 
@@ -174,7 +173,7 @@ Append-only event log. Exactly one row per re-entry event across all boundaries 
 
 | Column | Type | Purpose |
 |---|---|---|
-| **Version** | String | Release in which the iteration occurred (e.g., `v7.5`). |
+| **Version** | String | Release in which the iteration occurred (e.g., `v2.06`). |
 | **Boundary** | String | Stage boundary (e.g., `Stage 7 → Stage 6`). Uses the direction of the return, not the forward direction. |
 | **Issue** | String | GitHub issue number of the affected artifact. |
 | **Pass** | Integer | Iteration count post-increment at this boundary for this issue in this release (Tier 1 events use pass 0 since they do not increment). |
@@ -313,6 +312,5 @@ release/skills/handoff-coordinator/
 ## Versioning
 
 **Schema version:** 1.0
-**Introduced in:** v7.5
 
 Schema consumers (, boundary-specific protocols) should reference the schema version to detect breaking changes. Breaking changes (phase additions/removals, output template modifications, iteration log schema changes) increment the major version. Non-breaking changes (new boundary-specific caps, additional trend computations, routing refinements) increment the minor version.

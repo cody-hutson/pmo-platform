@@ -29,13 +29,35 @@ by the PPM Agent and daily status workflow. You are rolling up the results.
 Read these files in order before generating:
 
 1. **PORTFOLIO.md** — List of all active projects with governance models and key dates
-2. For each active project:
+2. For each active project (every item below is a **tracked-layer** read — see the read-side
+   aggregation contract that follows):
    a. **PROJECT.md** — Current phase, milestones, health status
-   b. **Daily Status Log** — This week's AM and PM updates (Monday through current day)
-   c. **Daily Status Log carry-forward** — Current blockers, decisions, actions
-   d. **Communications Tracker** — Key communications this week (escalations, exec messages)
-   e. **RAID entries** — Any new or updated risks/issues from this week
+   b. **Daily Status Log** — this week's `DEC-###` / `ACT-###` entries (Monday through current day)
+   c. **Daily Status Log carry-forward** — the open `DEC-###` / `ACT-###` entries carrying current
+      blockers, decisions, and actions
+   d. **Communications Tracker** — `MSG-##` rows for key communications this week (escalations, exec messages)
+   e. **RAID entries** — Any new or updated risk/issue rows from this week
 3. **GitHub Issues** — Any improvement proposals created this week: `gh issue list --label "improvement" --json number,title,createdAt --created ">YYYY-MM-DD"` (where date = 7 days ago)
+
+**Read-side aggregation contract (tracked layer only).** This roll-up aggregates **from the
+maintained tracked (Domain-B) layer** — the `DEC-###` / `ACT-###` / `MTG-###` tracker entries and the
+RAID rows — and **never re-scans raw transcripts to re-derive them**. The tracked layer is
+`trust_category: controlled-truth`, and every extracted entry already carries its provenance
+back-link: `source_inputs` on markdown-tracker entries, `source_ref` on RAID rows, each resolving to
+the `TR-###` / `MSG-###` / source file the entry was extracted from. The declared inputs above are
+therefore **tracker entries plus those back-links**, never the raw evidence behind them.
+
+- **Cite provenance; do not re-derive it.** When a roll-up line must show where a decision, action,
+  or risk came from, resolve and cite that entry's `source_inputs` / `source_ref` — do not open the
+  transcript and re-read it.
+- **A missing entry is a tracked-layer gap, not a licence to re-scan.** When an item is absent from
+  the tracked layer, surface it as a gap for `tracker-manager` to add on the write side; do not
+  reconstruct it from raw evidence inside the roll-up.
+- **Why:** re-deriving a roll-up from raw evidence bypasses the controlled-truth layer and
+  re-introduces the un-cited, un-provenanced aggregation that the raw→tracked bridge exists to
+  eliminate. Write-side maintenance of the layer belongs to `tracker-manager`; read-side enforcement
+  is this skill's responsibility. The governing definition is the Aggregation source-of-truth rule in
+  the Raw→Tracked Provenance section of `core/schemas/tracker-schemas.md`.
 
 ## Reference docs
 
