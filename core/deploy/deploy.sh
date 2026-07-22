@@ -2793,6 +2793,35 @@ cmd_check() {
     esac
   }
 
+  # flag_advisory_only — the ADVISORY class emitter: a standing drift SIGNAL that is
+  # STRUCTURALLY INCAPABLE of enforcement. Note what is absent: there is no `case` on
+  # any mode, no enforce branch, and no ISSUES increment anywhere in the body. That is
+  # the whole point — the constraint is expressed in the code's shape, not in a default
+  # value some future edit could flip. It is deliberately NOT flag_warn_or_issue: that
+  # helper escalates to FAIL the moment the shared cohort graduates to enforce, which
+  # for this class would be a defect.
+  #
+  # WHEN A CHECK BELONGS TO THIS CLASS: its predicate cannot distinguish a violation
+  # from a correct record. Check 58 (ADR ratification-flip) is the founding member —
+  # it can see that an ADR promises a flip while still Proposed, but the ratifying
+  # reference is free text, so it cannot see whether that review has CLOSED. A
+  # genuinely-pending ADR is correct and reports on every run; failing on it would
+  # punish correctness. Enforcement for that invariant lives at the release-close gate
+  # (G-CL9), which has the release context this surface structurally lacks.
+  #
+  # Consequence for callers: an advisory finding NEVER contributes to the exit code.
+  # Rows are logged to the same warn jsonl so the signal is reviewable over time.
+  flag_advisory_only() {
+    local check_id="$1"
+    local detail="$2"
+    log "  ADVISORY: $check_id — $detail (advisory-only; this check is never enforce-capable — see G-CL9 for the authoritative gate)"
+    local _ts
+    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local _detail_escaped="${detail//\\/\\\\}"
+    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+  }
+
   # resolve_check_mode — per-check mode resolver (decouples a single check from
   # the shared deploy-check.mode cohort). Reads a CHECK-SPECIFIC mode file
   # "<check_id>.mode" from the same operator-instance base (and legacy
@@ -7177,6 +7206,63 @@ cmd_check() {
         fi
       else
         flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(echo "$c57_out" | head -1)"
+      fi
+    fi
+  fi
+
+  # Check 58 — ADR ratification-flip backstop (ADVISORY ONLY) [#3009]
+  #
+  # An ADR may record a CONDITIONAL ratification — `status: Proposed … flips to Accepted
+  # at <review>`. When that review closes, the flip is a manual close-out step with
+  # nothing confirming it landed, so a record can sit Proposed on the mainline long after
+  # its ratifying review shipped, silently failing any downstream gate that asks "is this
+  # ADR Accepted?".
+  #
+  # *** THIS CHECK IS NEVER ENFORCE-CAPABLE — STRUCTURALLY, NOT BY DEFAULT ***
+  # Two mechanisms close the defect, mirroring the live G-CL8 + Check-28 pairing, and
+  # THIS IS THE NON-AUTHORITATIVE HALF:
+  #   * G-CL9 (gate-criteria-spec.md, Gate 13 Close) is THE AUTHORITY. It is release-
+  #     scoped because the operator closing a release KNOWS which review just closed.
+  #   * Check 58 is a standing drift SIGNAL only.
+  # The ratifying reference is FREE TEXT (live wordings vary per record, and one lives
+  # inside the `status:` line itself), so this surface can answer only "does a flip
+  # PROMISE exist while the record is still Proposed?" — never "is the flip OVERDUE?".
+  # A genuinely-pending ADR is CORRECT and reports here on every run; failing on it would
+  # punish correctness. Hence every row routes through flag_advisory_only, which has NO
+  # enforce branch and NEVER increments ISSUES, and this check deliberately does NOT call
+  # resolve_check_mode — there is no mode file that could graduate it, because there is
+  # no enforce state to graduate TO. Do not "fix" that by wiring it to
+  # flag_warn_or_issue: that helper escalates with the shared cohort, which for this
+  # class is the defect, not the feature.
+  #
+  # Age is the actionable axis (the Check 17 aging posture): a flip promised long ago is
+  # far more likely stuck than one made this week. Offline-capable (reads the ADR tree;
+  # no gh). Fail-loud: a zero-ADR parse exits 3 rather than reading green. Read-only;
+  # reversibility CHEAP (additive; git revert).
+  # Primitive: core/deploy/tools/check-adr-flip.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 58: ADR ratification-flip backstop (Proposed + flip-promise; ADVISORY — never enforce-capable; G-CL9 is the authority)"
+    local c58_script="core/deploy/tools/check-adr-flip.py"
+    if [[ ! -f "$c58_script" ]]; then
+      flag_advisory_only "adr-flip-verify" "primitive script missing: $c58_script"
+    else
+      local c58_out c58_exit=0
+      c58_out=$(/usr/bin/python3 "$c58_script" --root . --output-format tsv 2>&1) || c58_exit=$?
+      if [[ $c58_exit -eq 3 ]]; then
+        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(echo "$c58_out" | head -1) — zero ADRs parsed; the ADR tree may have moved"
+      elif [[ $c58_exit -ne 0 ]]; then
+        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(echo "$c58_out" | head -1)"
+      else
+        local c58_proposed c58_count c58_oldest
+        c58_proposed=$(echo "$c58_out" | awk -F'\t' '$1=="PROPOSED"{print $2}')
+        c58_count=$(echo "$c58_out" | awk -F'\t' '$1=="COUNT"{print $2}')
+        if [[ "${c58_count:-0}" -eq 0 ]]; then
+          log "  OK:    adr-flip-verify — no Proposed ADR carries unresolved flip-promise wording (${c58_proposed:-0} Proposed)"
+        else
+          # Oldest promise first — the aging signal, not an alphabetical dump.
+          c58_oldest=$(echo "$c58_out" | awk -F'\t' '$1=="PROMISED" && $3 != "?" {print $3"\t"$2}' | sort -rn | head -3 | awk -F'\t' '{printf "%s (%sd) ", $2, $1}')
+          flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT"
+        fi
       fi
     fi
   fi
