@@ -110,13 +110,14 @@ _host_origin_tags() {
 # _host_release_log_deployed  — echo the Version column of every RELEASE_LOG row
 #   whose State column is exactly DEPLOYED (the in-flight, tag-pushed-but-Release-
 #   unpublished claims). Schema: | Version | Milestone | Issues | Release PR |
-#   Merge SHA | Tag | State | Date |  (Version = field 1, State = field 7).
+#   Merge SHA | Tag | State | Date |  — under `awk -F'|'` the leading pipe makes
+#   $1 empty, so Version = $2 and State = $8 (NOT $7, which is the Tag column).
 _host_release_log_deployed() {
   local log="${CLAIM_REPO_ROOT}/release/releases/RELEASE_LOG.md"
   [[ -f "$log" ]] || return 0
   awk -F'|' '
     /^\|/ {
-      ver=$2; st=$7
+      ver=$2; st=$8
       gsub(/^[ \t]+|[ \t]+$/, "", ver)
       gsub(/^[ \t]+|[ \t]+$/, "", st)
       if (st == "DEPLOYED" && ver ~ /^v[0-9]/) print ver
@@ -614,6 +615,29 @@ _claim_self_test() {
 
   _st_f() { printf '%s/%s' "$_ST_DIR" "$1"; }   # path to a state file
 
+  # ----- U-0: REAL RELEASE_LOG parser regression (#2075 defect #2) --------------
+  # Runs BEFORE the stub seam below shadows _host_release_log_deployed, so it
+  # exercises the ACTUAL awk field-indexing against a real 8-column RELEASE_LOG
+  # table. Guards State=$8: a DEPLOYED row MUST be extracted; a VERIFIED row must
+  # NOT. The prior st=$7 read the Tag column, so category-3 was silently dead — the
+  # hermetic fixture stub (next block) reads a pre-parsed list and could never catch
+  # it. Synthetic v9.0x versions avoid any real-lineage semantics.
+  _t_label="U-0 real RELEASE_LOG parser (State=\$8)"
+  {
+    local _u0d; _u0d="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-u0.XXXXXX")"
+    mkdir -p "$_u0d/release/releases"
+    printf '%s\n' \
+      '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |' \
+      '|---|---|---|---|---|---|---|---|' \
+      '| v9.01 | m-verified | #1 | #2 | aaa | v9.01 | VERIFIED | 2026-07-18 |' \
+      '| v9.02 | m-deployed | #3 | #4 | bbb | v9.02 | DEPLOYED | 2026-07-19 |' \
+      > "$_u0d/release/releases/RELEASE_LOG.md"
+    local _u0out; _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)"
+    printf '%s\n' "$_u0out" | grep -qx 'v9.02' || { echo "FAIL [$_t_label]: must extract the DEPLOYED row v9.02 (State=\$8)"; failures=$((failures+1)); }
+    printf '%s\n' "$_u0out" | grep -qx 'v9.01' && { echo "FAIL [$_t_label]: must NOT extract the VERIFIED row v9.01"; failures=$((failures+1)); }
+    rm -rf "$_u0d"
+  }
+
   # --- stub seams (override the real host I/O; all state via $_ST_DIR files) ---
   _host_published_tags()       { cat "$(_st_f published)"    2>/dev/null || true; }
   _host_latest_release()       { cat "$(_st_f latest)"       2>/dev/null || true; }
@@ -859,7 +883,7 @@ _claim_self_test() {
   printf '%s' "$cs10b" | grep -qx 'v3.20' && _ct_fail "U-10 claimed_set must EXCLUDE genuine stray v3.20"
 
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-1..U-10 incl. net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-10 incl. real-RELEASE_LOG-parser(State=\$8), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force)"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
