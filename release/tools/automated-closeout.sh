@@ -178,8 +178,13 @@ COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
 # Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
 # source of the published-body-vs-stripped-note equality logic; phase 15.6 below
-# invokes it as the post-emit detective assert (warn-mode — never blocks close).
+# invokes it as the post-emit assert. Genuine drift BLOCKS the close (cutoff-gated,
+# sharing deploy.sh Check 47's cutoff so the two surfaces cannot disagree); the
+# capability-absent and artifact-missing exits stay non-blocking.
 DRIFT_CHECK_TOOL="$SCRIPT_DIR/check-release-body-drift.sh"
+# Shared with deploy.sh Check 47 — see phase 15.6 for why the close-path block is
+# cutoff-gated at all. Same complete-token default; __none__ is the opt-out.
+DRIFT_CHECK_CUTOFF="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-v3.78}"
 # NOTE (#667 Finding 6): phase_append_release_index no longer invokes the
 # deterministic INDEX generator (core/deploy/tools/generate_release_index.py).
 # The full-regenerate path could re-sort/reorder unrelated rows (the churn root),
@@ -2153,6 +2158,37 @@ phase_publish_github_release() {
   return 3
 }
 
+# _drift_block_in_scope <version> — is <version> inside the body-drift gate's
+# cutoff scope? (Helper for Phase 15.6 below.) Replicates deploy.sh Check 47's
+# predicate EXACTLY rather than approximating it with a version compare:
+# enumerate RELEASE_LOG rows in FILE order (date-ascending, NOT version-ordered),
+# latch on the first row whose version PREFIX-matches the cutoff, and treat the
+# contiguous suffix from there to EOF as in scope. A semantic or lexical version
+# compare would diverge from Check 47 on exactly the rows where ordering matters,
+# reintroducing the two-surfaces-disagree defect this change exists to remove.
+# Returns 0 (in scope, block eligible) / 1 (out of scope, warn only).
+# Out of scope on: the __none__ opt-out, an unreadable LOG, or a version carrying
+# no LOG row. The last case is unreachable on the close path (preflight already
+# asserts this version's DEPLOYED row exists); defaulting it OUT means a missing
+# row can never manufacture a block.
+_drift_block_in_scope() {
+  local _v="$1"
+  if [[ "$DRIFT_CHECK_CUTOFF" == "__none__" ]]; then return 1; fi
+  if [[ ! -f "$RELEASE_LOG" ]]; then return 1; fi
+  local _rows _row _past=0
+  _rows="$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG" 2>/dev/null \
+    | /usr/bin/awk -F ' \\| ' '{
+        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v); print v
+      }')" || _rows=""
+  while IFS= read -r _row; do
+    if [[ -z "$_row" ]]; then continue; fi
+    if [[ "$_past" -eq 0 && "$_row" == "$DRIFT_CHECK_CUTOFF"* ]]; then _past=1; fi
+    if [[ "$_past" -eq 0 ]]; then continue; fi
+    if [[ "$_row" == "$_v" ]]; then return 0; fi
+  done <<<"$_rows"
+  return 1
+}
+
 # ─── Phase 15.6: check_release_body_drift (post-emit §5.1 drift assert) ──────────
 #
 # DETECTIVE-ONLY post-emit verification that the just-published Release body
@@ -2164,14 +2200,33 @@ phase_publish_github_release() {
 # This phase COEXISTS with phase_lint_release_notes (§3.2 note-content close
 # gate): that phase lints the in-repo note file (network-free, BLOCKS close on a
 # this-version finding); THIS phase compares the published Release body against
-# the note (network-dependent, NEVER blocks). Distinct concerns, distinct phases.
+# the note (network-dependent). Distinct concerns, distinct phases.
 #
-# WARN-MODE / non-blocking by design (reflexive-pipeline-loop discipline): the
-# drift check is the detective backstop, NOT a close gate — a drift finding or a
-# tool-edge-case (CRLF / GitHub body normalization) must not hard-block a close,
-# least of all v2.37's own close (which rides the path it hardens). So this phase
-# ALWAYS returns 0; exit codes from the tool map to PASS / WARN / N/A only.
-# Detective-only: it never re-emits the Release (auto-remediation is out of scope).
+# BLOCKING ON GENUINE DRIFT ONLY. Tool exit 1 (the published body differs from the
+# frontmatter-stripped note) marks FAIL and returns non-zero, which the dispatch
+# tail turns into a report-and-exit. This RECONCILES the implementation to the
+# governance surface that already specifies it — stage-13-close.md's Phase B5.6
+# states "A failure blocks closure: the canonical note is corrected first, then all
+# surfaces re-emit from it per §5.6" — it does not escalate past it. The prior
+# "close NOT blocked" marks were the drifted half of that pair.
+#
+# EXIT 2 (a needed capability is absent) and EXIT 3 (no published Release / no note
+# to compare) STAY NON-BLOCKING, deliberately. Those are the mid-close timing
+# states: Surface 1 not yet published, or the note not yet on origin/main. Blocking
+# them is the reflexive-pipeline-loop pathology — a close failing itself for a
+# timing reason rather than a defect. Keeping them non-blocking is what makes the
+# blocking arm safe to ship in the release that introduces it.
+#
+# CUTOFF-GATED (shares deploy.sh Check 47's RELEASE_BODY_DRIFT_CHECK_CUTOFF). The
+# block applies only to versions in the same scope Check 47 scans. Close-out is
+# re-runnable against an OLDER version — a §5.6 re-emit, or a historical-row
+# backfill — and without the gate such a re-run would hard-block on drift that
+# Check 47 deliberately exempts. With it, the standing gate and the close gate are
+# consistent BY CONSTRUCTION rather than by coincidence. A drift finding outside
+# the cutoff scope is still surfaced, as a non-blocking WARN.
+#
+# Still detective-only in the remediation sense: it never re-emits the Release
+# (auto-remediation would raise an autonomy-tier decision, out of scope).
 phase_check_release_body_drift() {
   # --no-merge (#2919): this detective phase compares the just-published Surface 1
   # Release body against the in-repo note. Under --no-merge publish_github_release
@@ -2188,7 +2243,7 @@ phase_check_release_body_drift() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "check_release_body_drift" "DRY-RUN" "would assert published Release body == frontmatter-stripped in-repo note for $VERSION (detective-only; warn-mode; per release-notes-standard.md §5.1)"
+    mark_phase "check_release_body_drift" "DRY-RUN" "would assert published Release body == frontmatter-stripped in-repo note for $VERSION (per release-notes-standard.md §5.1; genuine drift BLOCKS close when $VERSION is at/after cutoff $DRIFT_CHECK_CUTOFF)"
     return 0
   fi
 
@@ -2201,13 +2256,25 @@ phase_check_release_body_drift() {
   local drift_out drift_exit=0
   drift_out="$(REPO="$REPO_SLUG" "$DRIFT_CHECK_TOOL" "$VERSION" --quiet 2>&1)" || drift_exit=$?
 
+  # Blocking flag, set ONLY by the genuine-drift arm below when $VERSION is inside
+  # the shared cutoff scope. Every other arm leaves it 0 and the phase returns 0.
+  local drift_blocking=0
+
   case "$drift_exit" in
     0)
       mark_phase "check_release_body_drift" "PASS" "published Release body matches the frontmatter-stripped in-repo note for $VERSION (§5.1 invariant holds)"
       ;;
     1)
-      # DRIFT — warn-mode: surface it, do NOT block the close (return 0 below).
-      mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. Detective-only (warn-mode); close NOT blocked. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      # DRIFT — the genuine defect. Blocks the close for an in-scope version;
+      # surfaced as a non-blocking WARN for a version the standing gate exempts
+      # (a §5.6 re-emit or a historical backfill re-run), so this phase and
+      # deploy.sh Check 47 never disagree about the same version.
+      if _drift_block_in_scope "$VERSION"; then
+        drift_blocking=1
+        mark_phase "check_release_body_drift" "FAIL" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; close BLOCKED per stage-13-close.md Phase B5.6. Correct the canonical note first, then re-emit every surface from it per §5.6 (gh release edit) or release-executor Mode F. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      else
+        mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. NOT blocking: $VERSION is outside the body-drift cutoff scope (cutoff $DRIFT_CHECK_CUTOFF), which deploy.sh Check 47 also exempts. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      fi
       ;;
     2)
       # N/A — a capability needed to compare is absent. Exit 2 now spans gh
@@ -2222,13 +2289,19 @@ phase_check_release_body_drift() {
       if [[ "$pub_result" != "PASS" ]]; then
         mark_phase "check_release_body_drift" "N/A" "no published Release / note to compare for $VERSION (Surface 1 not emitted this run: publish phase=$pub_result)"
       else
-        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (warn-mode; close NOT blocked). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (non-blocking: an artifact-missing state, not a drift finding — see the exit 2/3 rationale above). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
       fi
       ;;
     *)
-      mark_phase "check_release_body_drift" "WARN" "body-drift check returned unexpected exit $drift_exit for $VERSION (warn-mode; close NOT blocked)"
+      mark_phase "check_release_body_drift" "WARN" "body-drift check returned unexpected exit $drift_exit for $VERSION (non-blocking: only the genuine-drift exit blocks; an unexpected exit is a tool-contract anomaly, not a §5.1 finding)"
       ;;
   esac
+
+  # Non-zero ONLY on gated genuine drift; the dispatch tail maps that to
+  # generate_report + a non-zero close-out exit.
+  if [[ "$drift_blocking" -eq 1 ]]; then
+    return 1
+  fi
   return 0
 }
 
@@ -3589,7 +3662,7 @@ phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
-phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (detective-only; warn-mode never blocks)
+phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
 
