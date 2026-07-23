@@ -84,6 +84,7 @@ CORE_SKILLS=(
   pmo-qa-auditor
   pmo-skill-router
   prompt-builder
+  session-retro
   skill-compliance-auditor
 )
 
@@ -2801,6 +2802,35 @@ cmd_check() {
     esac
   }
 
+  # flag_advisory_only — the ADVISORY class emitter: a standing drift SIGNAL that is
+  # STRUCTURALLY INCAPABLE of enforcement. Note what is absent: there is no `case` on
+  # any mode, no enforce branch, and no ISSUES increment anywhere in the body. That is
+  # the whole point — the constraint is expressed in the code's shape, not in a default
+  # value some future edit could flip. It is deliberately NOT flag_warn_or_issue: that
+  # helper escalates to FAIL the moment the shared cohort graduates to enforce, which
+  # for this class would be a defect.
+  #
+  # WHEN A CHECK BELONGS TO THIS CLASS: its predicate cannot distinguish a violation
+  # from a correct record. Check 58 (ADR ratification-flip) is the founding member —
+  # it can see that an ADR promises a flip while still Proposed, but the ratifying
+  # reference is free text, so it cannot see whether that review has CLOSED. A
+  # genuinely-pending ADR is correct and reports on every run; failing on it would
+  # punish correctness. Enforcement for that invariant lives at the release-close gate
+  # (G-CL9), which has the release context this surface structurally lacks.
+  #
+  # Consequence for callers: an advisory finding NEVER contributes to the exit code.
+  # Rows are logged to the same warn jsonl so the signal is reviewable over time.
+  flag_advisory_only() {
+    local check_id="$1"
+    local detail="$2"
+    log "  ADVISORY: $check_id — $detail (advisory-only; this check is never enforce-capable — see G-CL9 for the authoritative gate)"
+    local _ts
+    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local _detail_escaped="${detail//\\/\\\\}"
+    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+  }
+
   # resolve_check_mode — per-check mode resolver (decouples a single check from
   # the shared deploy-check.mode cohort). Reads a CHECK-SPECIFIC mode file
   # "<check_id>.mode" from the same operator-instance base (and legacy
@@ -3341,49 +3371,79 @@ cmd_check() {
   # ─── Check 14: Doc-link maintenance — governance + skill SKILL.md scope ───
   # Per Collective Review CR-D1 / CR-D2.
   # Invokes the shared primitive at core/deploy/tools/check-doc-links.py over
-  # the disjoint governance + skill SKILL.md surface. Warn-mode initial per
-  # core/rules/bypass-mode-readiness.md shakedown precedent; flip-to-enforce
+  # the governance + reference + rules + skill SKILL.md surface. Warn-mode initial
+  # per core/rules/bypass-mode-readiness.md shakedown precedent; flip-to-enforce
   # timeline codified in core/standards/doc-link-maintenance-protocol.md.
-  # Target-paths are a module-prefixed comma-joined string covering all 3
-  # modules + cross-cutting surfaces per Spec Surface 5.2.
-  # The tool carries a module-aware prefix table (V1_PREFIXES + V2_PREFIXES) —
-  # bare v2 module refs (e.g., release/ from core/) resolve via workspace-root
-  # fallback instead of false-positive relative resolution. The tool also has a
-  # --from-path/--to-path EMIT-ONLY rewrite-map mode for per-edit discipline
-  # workflows. Check 15 (release-corpus) RETIRED in v2 per FX-Check15 — see
-  # citation block below Check 14.
+  # Scan scope is read from the SHARED --target-paths-file
+  # (core/deploy/allowlists/doc-link-target-paths.txt) that .github/workflows/
+  # link-check.yml also reads — one list, two callers, so the deploy-time and
+  # PR-time scan scope can never drift (they formerly carried a byte-identical
+  # inline string in two places). The list also covers the residual dead-ref
+  # trees core/ADRs/, core/deploy/, repo-root *.md, and .github/; per-tree
+  # rationale + the release/releases/ exclusion live in that file's header.
+  # Link resolution is the one canonical rule (ADR-085): relative to the source
+  # file's directory, a leading `/` denotes the repo root, and there is NO bare
+  # module-prefix fallback. The tool also has a --from-path/--to-path EMIT-ONLY
+  # rewrite-map mode for per-edit discipline workflows. Check 15 (release-corpus)
+  # RETIRED in v2 per FX-Check15 — see citation block below Check 14.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 14: Doc-link maintenance (governance + skill SKILL.md scope)"
     local c14_script="core/deploy/tools/check-doc-links.py"
-    local c14_allowlist="$(pmo_instance_path)/skip-doc-link-check.txt"
-    [[ -f "$c14_allowlist" ]] || c14_allowlist=".claude/skip-doc-link-check.txt"
+    local c14_target_paths_file="core/deploy/allowlists/doc-link-target-paths.txt"
+    # TWO allowlists, UNIONed by the primitive (--allowlist is repeatable and
+    # additive — a later file adds to the earlier, never replaces it):
+    #   1. c14_allowlist_base — the TRACKED corpus-level skip class, the SAME
+    #      file link-check.yml passes. Scan scope has been single-sourced via
+    #      --target-paths-file; this single-sources the IGNORE list on the same
+    #      principle. While it was dual-sourced, the two callers scanned
+    #      byte-identical files and reached different verdicts (0 at PR time vs
+    #      84 at deploy time), so "one list, two callers, cannot drift" held for
+    #      scope but not for outcome.
+    #   2. c14_allowlist_instance — operator-local additions layered on top.
+    #      Stays operator-instance (with the legacy .claude/ fallback) so an
+    #      operator can suppress paths that exist only in their workspace,
+    #      WITHOUT re-declaring the tracked entries locally.
+    local c14_allowlist_base="core/deploy/allowlists/skip-doc-link-check-ci.txt"
+    local c14_allowlist_instance="$(pmo_instance_path)/skip-doc-link-check.txt"
+    [[ -f "$c14_allowlist_instance" ]] || c14_allowlist_instance=".claude/skip-doc-link-check.txt"
     if [[ ! -f "$c14_script" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "primitive script missing: $c14_script"
+    elif [[ ! -f "$c14_target_paths_file" ]]; then
+      # Fail-loud: the shared scan-scope list is the single source of truth; a
+      # missing list must never read GREEN (the tool would refuse to scan
+      # nothing, but flag the missing surface here with a clear message).
+      flag_warn_or_issue "doc-link-maintenance" "shared target-paths file missing: $c14_target_paths_file (scan scope undefined; check is unverifiable)"
+    elif [[ ! -f "$c14_allowlist_base" ]]; then
+      # Name the asymmetry rather than letting the operator rediscover it as a
+      # wall of findings. A missing allowlist can only OVER-report (it never
+      # manufactures a false green), so this is diagnosability, not safety —
+      # but "tracked base missing" is the actionable message, not "84 broken
+      # cross-refs" from a baseline that silently diverged from CI's.
+      flag_warn_or_issue "doc-link-maintenance" "tracked base allowlist missing: $c14_allowlist_base (deploy-time baseline would diverge from the PR-time gate)"
     elif [[ ! -x "/usr/bin/python3" ]]; then
       flag_warn_or_issue "doc-link-maintenance" "/usr/bin/python3 not executable; cannot run primitive"
     else
       local c14_output c14_exit=0
-      # --require-targets (per #459): a declared --target-paths glob resolving to
-      # zero files is a path-resolution failure (exit 3), not a clean pass — so a
-      # relocated/typo'd scan surface can never read GREEN.
-      # Target globs match the post-restructure live layout (per #459 follow-up):
-      # release specs/standards live under release/references/ (recursively
-      # covered by the release/references/ entry, which also covers the release
-      # schema files under references/standards/); release has no rules surface
-      # (rules are core-only via core/rules/); operations has no references/ or
-      # schemas/ dirs (OPERATIONS.md + operations/skills/*/SKILL.md are the
-      # operations governance + skill scope). The earlier release/{schemas,specs,
-      # standards,rules}/ and operations/{references,schemas}/ globs never matched
-      # this layout and were dropped to keep every glob zero-yield-free.
+      # Scan scope comes from the SHARED --target-paths-file (single source of
+      # truth with link-check.yml — see the file's header for per-tree rationale).
+      # --require-targets (per #459): a declared glob resolving to zero files is a
+      # path-resolution failure (exit 3), not a clean pass — so a relocated/typo'd
+      # scan surface can never read GREEN. Every entry in the shared list must
+      # yield >= 1 .md (verified when the list is edited).
       c14_output=$(/usr/bin/python3 "$c14_script" \
-        --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,operations/OPERATIONS.md,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
-        --allowlist "$c14_allowlist" \
+        --target-paths-file "$c14_target_paths_file" \
+        --allowlist "$c14_allowlist_base" \
+        --allowlist "$c14_allowlist_instance" \
         --output-format tsv \
         --require-targets \
         --exclude-code-blocks 2>&1) || c14_exit=$?
       if [[ $c14_exit -eq 3 ]]; then
         # Path-resolution failure — never a silent PASS (per #459 fail-loud).
-        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(echo "$c14_output" | head -1) — a declared --target-paths glob resolved to zero files (relocated/typo'd scan surface); fix the glob list in this check"
+        flag_warn_or_issue "doc-link-maintenance" "path-resolution failure (exit 3): $(echo "$c14_output" | head -1) — a declared glob in $c14_target_paths_file resolved to zero files (relocated/typo'd scan surface); fix the shared list"
+      elif [[ $c14_exit -eq 2 ]]; then
+        # Config error (exit 2) — e.g. the shared target-paths file is empty, or
+        # an invalid flag combination. Fail-loud rather than treat as findings.
+        flag_warn_or_issue "doc-link-maintenance" "primitive config error (exit 2): $(echo "$c14_output" | head -1)"
       elif [[ $c14_exit -eq 0 ]]; then
         log "  OK:    no broken cross-refs in scope"
       else
@@ -3428,21 +3488,35 @@ cmd_check() {
   # an in-tree Check 15 in a future release if architectural posture changes.
 
   # ─── Check 16: Status-label invariant (I1/I2/I3/I4) ────────
-  # Asserts the 4 atomic invariants on open improvement issues:
-  #   I1 mutex          — any open improvement with >1 status:* label
-  #   I2 presence       — any open improvement with 0 status:* labels
-  #   I3 contradiction-A — status: proposed + milestone set
-  #   I4 contradiction-B — status: bundled + no milestone
-  # Status-label vocabulary-agnostic via startswith("status: ") — accepts
-  # any current or future status value (status: deferred / status: rejected
-  # land cleanly).
-  # Mode-gated via $DEPLOY_CHECK_MODE (warn / enforce / off) per Checks 8-10
-  # precedent. Ships in warn-mode for ≥3-day shakedown per
-  # bypass-mode-readiness.md §Shakedown.
+  # Asserts the 4 atomic invariants on ALL open intake issues:
+  #   I1 mutex          — any open issue with >1 status:* label          (all types)
+  #   I2 presence       — any open issue with 0 status:* labels          (all types
+  #                       EXCEPT type:epic + sub-task — see the I2 exemption below)
+  #   I3 contradiction-A — status: proposed + milestone set               (all types)
+  #   I4 contradiction-B — status: bundled + no milestone                 (all types)
+  # SCOPE [#2682, 2026-07-19]: previously scanned `--label improvement` only; the
+  # fetch is now unscoped so bug/observation/sub-task/type:task intake is covered.
+  # Status-label vocabulary-agnostic via startswith("status: ") — accepts any
+  # current or future status value (status: deferred / status: rejected land cleanly).
+  # MODE DECOUPLED [#2682]: resolves its mode via resolve_check_mode
+  # "status-label-invariant" (a dedicated `status-label-invariant.mode` file), NOT
+  # the shared $DEPLOY_CHECK_MODE cohort — so the newly-broadened scope can graduate
+  # warn→enforce independently and a shared flip elsewhere cannot enforce the
+  # untested wider net (Check 22's g1-enforcement decoupling precedent). Absent a
+  # dedicated file it falls back to the shared mode (→ warn default), byte-identical
+  # to the prior behavior. Ships warn-mode for ≥3-day shakedown per
+  # bypass-mode-readiness.md §Shakedown; the introducing release is itself exempt
+  # (reflexive-pipeline loop — the broadened net does not gate its own release).
   # Exemption: .claude/status-label-invariant-exemption-list.txt — lines of
   # `<issue-number> <invariant-id>` skip the matching violation.
-  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 16: Status-label invariant (I1/I2/I3/I4)"
+  # NOTE: the c14_ / C14_ variable prefix below is stale copy-paste naming WITHIN
+  # Check 16 (not a numbering error) — flagged for a cosmetic follow-up rename;
+  # deliberately NOT renamed here to keep this in-place scope-widen a single
+  # focused, minimal, independently-revertible diff.
+  local STATUS_LABEL_MODE
+  STATUS_LABEL_MODE=$(resolve_check_mode "status-label-invariant")
+  if [[ "$STATUS_LABEL_MODE" != "off" ]]; then
+    log "Check 16: Status-label invariant (I1/I2/I3/I4; all-intake scope; warn-mode initial; enforce-flip deferred)"
     local C14_EXEMPT_FILE=".claude/status-label-invariant-exemption-list.txt"
     local c14_violations=0
 
@@ -3453,10 +3527,39 @@ cmd_check() {
       grep -qE "^[[:space:]]*${_num}[[:space:]]+${_inv}([[:space:]]|$)" "$C14_EXEMPT_FILE"
     }
 
+    # flag_status_label — Check 16 decoupled emit. Mirrors flag_warn_or_issue but
+    # switches on $STATUS_LABEL_MODE (resolved above), not the shared mode — the
+    # flag_g1_enforcement precedent. enforce → FAIL (increments ISSUES); warn →
+    # WARN + jsonl, no increment.
+    flag_status_label() {
+      local check_id="$1" detail="$2"
+      case "$STATUS_LABEL_MODE" in
+        enforce)
+          log "  FAIL:  $check_id — $detail"
+          ISSUES=$((ISSUES + 1))
+          ;;
+        warn)
+          log "  WARN:  $check_id — $detail (warn-mode; flip status-label-invariant.mode to 'enforce' after shakedown)"
+          local _ts
+          _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          local _detail_escaped="${detail//\\/\\\\}"
+          _detail_escaped="${_detail_escaped//\"/\\\"}"
+          printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+          ;;
+      esac
+    }
+
     # Single fetch — feeds all 4 invariant queries via local jq filters.
+    # SCOPE WIDENED [#2682, 2026-07-19]: the `--label improvement` filter was
+    # dropped so the invariants cover ALL open intake (bug / observation / sub-task
+    # / type:task) — not just improvement. The prior scope let non-improvement
+    # intake drift half-labeled indefinitely (facet 2), and left the already-present
+    # I4 orphaned-bundle detector blind to non-improvement bundles. Per-invariant
+    # type applicability is enforced BELOW (I2 exempts type:epic + sub-task); I1/I3/I4
+    # remain all-types. --limit 5000 has ample headroom for the ~300 open population.
     local c14_issues_json
     c14_issues_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-      --label improvement --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
+      --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
 
     # I1 — mutex: >1 status:* label
     local c14_i1_violators
@@ -3469,14 +3572,27 @@ cmd_check() {
         log "  EXEMPT: I1 mutex on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I1-mutex" "issue #$_num has >1 status:* label"
+      flag_status_label "status-label-I1-mutex" "issue #$_num has >1 status:* label"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i1_violators"
 
-    # I2 — presence: 0 status:* labels
+    # I2 — presence: 0 status:* labels.
+    # TYPE EXEMPTION [#2682, 2026-07-19]: skip `type:epic` and `sub-task`.
+    #   - type:epic: operator decision — epics are CONTAINERS, not lifecycle work
+    #     items, so "exactly one status label" does not apply (label-taxonomy.md
+    #     Rule 2). Without this, the widened scope would false-FAIL on the 38
+    #     statusless epics (load-bearing, not cosmetic).
+    #   - sub-task: the pre-existing carve-out (label-taxonomy.md Rule 6) — a
+    #     sub-task's status label is a point-in-time hygiene mirror, not an
+    #     invariant-enforced field. Previously implicit (sub-tasks lacked the
+    #     `improvement` label); now explicit since the fetch is unscoped.
+    # This exemption applies to I2 ONLY. I1 (mutex) / I3 / I4 stay all-types: an
+    # epic that never carries a status label simply never trips them.
     local c14_i2_violators
     c14_i2_violators=$(printf '%s' "$c14_issues_json" | jq -r '
       .[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)
+      | select((.labels | map(.name) | index("type:epic")) | not)
+      | select((.labels | map(.name) | index("sub-task")) | not)
       | .number')
     while IFS= read -r _num; do
       [[ -n "$_num" ]] || continue
@@ -3484,7 +3600,7 @@ cmd_check() {
         log "  EXEMPT: I2 presence on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I2-presence" "issue #$_num missing all status:* labels"
+      flag_status_label "status-label-I2-presence" "issue #$_num missing all status:* labels"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i2_violators"
 
@@ -3500,7 +3616,7 @@ cmd_check() {
         log "  EXEMPT: I3 contradiction-A on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
+      flag_status_label "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i3_violators"
 
@@ -3516,14 +3632,14 @@ cmd_check() {
         log "  EXEMPT: I4 contradiction-B on issue #$_num (exemption-list)"
         continue
       fi
-      flag_warn_or_issue "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
+      flag_status_label "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
       c14_violations=$((c14_violations + 1))
     done <<< "$c14_i4_violators"
 
     if [[ "$c14_violations" -eq 0 ]]; then
-      log "  OK:    0 violations across I1/I2/I3/I4 (open improvements)"
+      log "  OK:    0 violations across I1/I2/I3/I4 (all open intake; type:epic + sub-task exempt from I2)"
     else
-      log "  ${c14_violations} violation(s) emitted (mode=${DEPLOY_CHECK_MODE})"
+      log "  ${c14_violations} violation(s) emitted (mode=${STATUS_LABEL_MODE})"
     fi
   fi
 
@@ -5928,6 +6044,29 @@ cmd_check() {
             ;;
         esac
       done
+      # (a2) Opt-in arm: a NON-`block-*` hook (a trigger/notifier rather than a
+      #      guard) is scanned IFF it declares an owner. Declaring is the opt-in —
+      #      a hook with no `# hook-owner:` line is skipped here rather than
+      #      flagged, because the forward invariant in (a) is scoped to the
+      #      guard set and widening it would retro-fail the pre-existing
+      #      notifier/helper scripts that never declared one. What this arm DOES
+      #      assert: once a hook declares an owner, that owner must resolve on
+      #      disk — so a declaration cannot rot into decoration.
+      local c37_any
+      for c37_any in core/hooks/*.sh; do
+        [[ -e "$c37_any" ]] || continue
+        case "$c37_any" in core/hooks/block-*.sh) continue ;; esac   # covered by (a)
+        local c37_abase; c37_abase="$(basename "$c37_any" .sh)"
+        local c37_aowner
+        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"
+        [[ -n "$c37_aowner" ]] || continue                            # not opted in
+        if [[ ! -f "$c37_aowner" ]]; then
+          flag_warn_or_issue "hook-registry-completeness" "$c37_abase declares owner '$c37_aowner', but that owner doc is missing on disk"
+          c37_violations=$((c37_violations + 1))
+        else
+          c37_other_count=$((c37_other_count + 1))
+        fi
+      done
       # (b) Reverse: every bypass-mode per-hook source maps back to a script that
       #     declares it as its owner (preserves the source⇄script bijection).
       local c37_src
@@ -6933,6 +7072,278 @@ cmd_check() {
         fi
       else
         flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(echo "$c54_out" | head -1)"
+      fi
+    fi
+  fi
+
+
+  # Check 55 — Work-hierarchy drift gate (warn-mode initial) [#1039]
+  #
+  # Two independent invariants, one check (the Check-16 multi-invariant shape):
+  #   H1 DOC     — no normative governance doc ASSERTS a banned parent tier
+  #                (`Initiative` / `Roadmap`, per ADR-049 §Decision 1/2) above a
+  #                licensed work-item kind. The licensed kind vocabulary is DERIVED
+  #                from the SSOT (core/packs/*/pack.toml `kind_id`), never hardcoded.
+  #   H2 BACKLOG — no open `type:epic` issue has a `type:epic` parent, resolved via
+  #                ONE batched+paginated GraphQL query over the native sub-issue
+  #                `parent` edge (never an N+1 per-epic loop — with ~39 open epics
+  #                an N+1 shape would materially slow --check).
+  # Predicate shape: closed-vocabulary membership inside a STRUCTURAL arrow-chain,
+  # not prose similarity — falsifiable, no paraphrase false-positive tail. A
+  # citation guard suppresses chains inside quotes/backticks (a CITED or NEGATED
+  # ladder is not an assertion; the live corpus contains exactly this case at
+  # architecture-evaluative-lens.md:45). Matching is case-sensitive: Title-Case =
+  # hierarchy tier, lowercase = label namespace (ADR-049's own `initiative->epic`
+  # label-mapping title must not read as a hierarchy violation).
+  # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
+  # (H1) or `#<issue> type:epic` (H2), mirroring Check 16's exempt_pair shape; this
+  # is #1039's "allowlist-able during cutover" requirement. The H2 form is parsed
+  # as an ENTRY, not a comment (`#` + digits + whitespace); the bare `<issue>
+  # <token>` form is accepted too, since both normalize to one lookup key. The
+  # primitive's self-test round-trips a real exemption file through the loader, so
+  # neither leg of that parse can silently regress.
+  # Fail-loud: an unreadable SSOT vocabulary (zero kinds) exits 3 rather than
+  # reading green — a zero-vocabulary scan would find nothing by construction.
+  # gh-unavailable → H2 SKIPs with a logged reason (mirrors Check 39/40/51/52/53
+  # offline SKIP); H1 still runs (it is offline-capable). A backlog invariant must
+  # never read green offline.
+  # Warn-mode initial per core/rules/bypass-mode-readiness.md §Shakedown (the
+  # 14/18/42/43/50/51/52/53/54 precedent); flip via a `work-hierarchy-drift.mode`
+  # file after the >=3-day warn-log review. The introducing release is itself
+  # exempt (reflexive-pipeline loop). Read-only: mutates nothing; reversibility
+  # CHEAP (additive; `git revert`).
+  # Primitive: core/deploy/tools/check-work-hierarchy.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 55: Work-hierarchy drift (H1 doc + H2 backlog; warn-mode initial; enforce-flip deferred)"
+    local c55_script="core/deploy/tools/check-work-hierarchy.py"
+    if [[ ! -f "$c55_script" ]]; then
+      flag_warn_or_issue "work-hierarchy-drift" "primitive script missing: $c55_script"
+    else
+      local c55_mode c55_args
+      c55_mode=$(resolve_check_mode "work-hierarchy-drift")
+      c55_args=(--root . --repo "$AUDIT_REPO" --output-format tsv)
+      if ! command -v gh >/dev/null 2>&1; then
+        log "  SKIP:  H2 backlog leg — gh unavailable (offline/unauth; mirrors Check 39/40/51/52/53). H1 doc leg still runs."
+        c55_args+=(--skip-backlog)
+      fi
+      local c55_out c55_exit=0
+      c55_out=$(/usr/bin/python3 "$c55_script" "${c55_args[@]}" 2>&1) || c55_exit=$?
+      if [[ $c55_exit -eq 3 ]]; then
+        flag_warn_or_issue "work-hierarchy-drift" "input failure (exit 3): $(echo "$c55_out" | head -1) — the SSOT kind vocabulary was unreadable or the GraphQL parent scan failed; fix the pack corpus / gh auth"
+      elif [[ $c55_exit -eq 0 ]]; then
+        local c55_scanned
+        c55_scanned=$(echo "$c55_out" | awk -F'\t' '$1=="SCANNED"{print $2}')
+        log "  OK:    work-hierarchy — 0 drift findings (${c55_scanned:-0} normative docs scanned; no banned parent tier, no epic-under-epic edge)"
+      elif [[ $c55_exit -eq 1 ]]; then
+        local c55_h1 c55_h2
+        c55_h1=$(echo "$c55_out" | awk -F'\t' '$1=="H1"{print $2}' | paste -sd, -)
+        c55_h2=$(echo "$c55_out" | awk -F'\t' '$1=="H2"{print "#"$2"->#"$3}' | paste -sd, -)
+        if [[ "$c55_mode" == "enforce" ]]; then
+          [[ -n "$c55_h1" ]] && { log "  FAIL:  work-hierarchy H1 — doc(s) asserting a banned parent tier: $c55_h1"; ISSUES=$((ISSUES + 1)); }
+          [[ -n "$c55_h2" ]] && { log "  FAIL:  work-hierarchy H2 — epic-under-epic edge(s): $c55_h2"; ISSUES=$((ISSUES + 1)); }
+        else
+          [[ -n "$c55_h1" ]] && flag_warn_or_issue "work-hierarchy-drift" "H1 doc invariant — banned parent tier asserted at: $c55_h1 (warn-mode; flip work-hierarchy-drift.mode to enforce after shakedown)"
+          [[ -n "$c55_h2" ]] && flag_warn_or_issue "work-hierarchy-drift" "H2 backlog invariant — epic-under-epic edge(s): $c55_h2 (warn-mode; re-parent or exempt)"
+        fi
+      else
+        flag_warn_or_issue "work-hierarchy-drift" "check errored (exit $c55_exit): $(echo "$c55_out" | head -1)"
+      fi
+    fi
+  fi
+
+
+  # Check 56 — Milestone↔epic membership (warn-mode initial) [#2219]
+  #
+  # Two legs, DIFFERENT severities (the #749 asymmetric-severity precedent):
+  #   M1 membership     — for each open milestone that DECLARES an epic
+  #                       (`<!-- milestone-epic: #N -->` or `**Epic:** #N`), every
+  #                       open non-sub-task child's parent-epic must equal it, unless
+  #                       the child body carries `<!-- milestone-epic: allow -->`.
+  #                       A milestone with NO declared epic is SKIPPED, never failed.
+  #                       ENFORCE-capable leg (resolve_check_mode).
+  #   M2 reconciliation — the description's `### Scope` card list vs live membership;
+  #                       WARN-ONLY, never enforce-capable. A description legitimately
+  #                       lags membership mid-release; gating it would make it
+  #                       chronically non-green. Emitted as its own sub-invariant.
+  # The two legs read DIFFERENT membership sets, deliberately. M1 is OPEN-scoped: it
+  # asks a live-drift question, and a completed card's parent-epic is history. M2's
+  # set spans ALL issue states, because an OPEN-only set cannot tell "the Scope names
+  # a card that is DONE" (benign) from "the Scope names a card that is NOT in this
+  # milestone" (the divergence M2 exists to report) — it renders both as
+  # named-not-member and puts a false positive on an already-advisory leg.
+  # Sub-tasks are excluded from both legs (pipeline scaffolding, no parent-epic by
+  # design; counting them would make M2 permanently non-green).
+  # Placement: deploy.sh --check per D-A (sibling to Check 16's gh+jq invariant
+  # pattern; repo-integrity.yml rejected as altitude mismatch — membership is
+  # repo-state, not a PR-diff property). ONE batched+paginated GraphQL issue query
+  # + one milestones REST call + ONE batched membership query scoped THROUGH the
+  # open milestones — not an N+1 per-milestone loop. Scoping the all-states
+  # membership fetch through the milestones (rather than scanning every issue in
+  # the repository) is what keeps it cheap: measured 1.3s vs 16.5s, with zero
+  # membership divergence between the two over the open-milestone population.
+  # ADOPTION NOTE: 0 of 46 open milestones declare an epic today, so M1 SKIPs
+  # universally and is INERT until descriptions adopt the marker (reported as
+  # DECLARED 0, not a silent green). M2 fires on the ~16 milestones whose
+  # description lags membership — warn-mode is exactly what keeps that non-blocking.
+  # gh-unavailable → SKIP (needs the live milestone + issue set; mirrors Check
+  # 39/40/51/52/53). Warn-mode initial per bypass-mode-readiness.md §Shakedown;
+  # flip via `milestone-epic-membership.mode` after the >=3-day review. The
+  # introducing release is itself exempt (reflexive-pipeline loop). Read-only;
+  # reversibility CHEAP. Primitive: core/deploy/tools/check-milestone-epic-membership.py
+  # (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 56: Milestone↔epic membership (M1 membership + M2 reconciliation; warn-mode initial; enforce-flip deferred)"
+    local c56_script="core/deploy/tools/check-milestone-epic-membership.py"
+    if [[ ! -f "$c56_script" ]]; then
+      flag_warn_or_issue "milestone-epic-membership" "primitive script missing: $c56_script"
+    elif ! command -v gh >/dev/null 2>&1; then
+      log "  SKIP:  gh unavailable — milestone↔epic membership needs the live milestone + issue set (offline/unauth; mirrors Check 39/40/51/52/53)"
+    else
+      local c56_mode c56_out c56_exit=0
+      c56_mode=$(resolve_check_mode "milestone-epic-membership")
+      c56_out=$(/usr/bin/python3 "$c56_script" --repo "$AUDIT_REPO" --output-format tsv 2>&1) || c56_exit=$?
+      if [[ $c56_exit -eq 3 ]]; then
+        flag_warn_or_issue "milestone-epic-membership" "input failure (exit 3): $(echo "$c56_out" | head -1) — the live milestone/issue set was unreadable; fix gh auth/connectivity"
+      elif [[ $c56_exit -eq 0 || $c56_exit -eq 1 ]]; then
+        local c56_declared c56_m1 c56_m2
+        c56_declared=$(echo "$c56_out" | awk -F'\t' '$1=="DECLARED"{print $2}')
+        c56_m1=$(echo "$c56_out" | awk -F'\t' '$1=="M1"{print "ms#"$2":#"$3"(parent #"$4"!=epic #"$5")"}' | paste -sd'; ' -)
+        c56_m2=$(echo "$c56_out" | awk -F'\t' '$1=="M2"{print "ms#"$2}' | paste -sd, -)
+        if [[ -z "$c56_m1" && -z "$c56_m2" ]]; then
+          log "  OK:    milestone↔epic membership — no drift (${c56_declared:-0} milestone(s) declare an epic; M2 reconciliation clean)"
+        else
+          # M1 — enforce-capable
+          if [[ -n "$c56_m1" ]]; then
+            if [[ "$c56_mode" == "enforce" ]]; then
+              log "  FAIL:  milestone-epic M1 — cross-epic child(ren): $c56_m1"
+              ISSUES=$((ISSUES + 1))
+            else
+              flag_warn_or_issue "milestone-epic-membership" "M1 membership — cross-epic child(ren) (warn-mode; flip milestone-epic-membership.mode to enforce after shakedown): $c56_m1"
+            fi
+          fi
+          # M2 — warn-only ALWAYS (never gates, independent of mode)
+          if [[ -n "$c56_m2" ]]; then
+            flag_warn_or_issue "milestone-epic-membership" "M2 reconciliation (warn-only; advisory) — description↔membership divergence on: $c56_m2"
+          fi
+        fi
+      else
+        flag_warn_or_issue "milestone-epic-membership" "check errored (exit $c56_exit): $(echo "$c56_out" | head -1)"
+      fi
+    fi
+  fi
+
+
+  # Check 57 — deploy.sh check-roster extraction-contract (warn-mode initial) [#2106]
+  #
+  # skill-deployment.md publishes ONE derive-from-source command for the live check
+  # set (grep -oE 'log "Check [0-9]+...' core/deploy/deploy.sh) INSTEAD of a
+  # hand-maintained enumeration — that enumeration was REMOVED by f0a0516 (#2095), so
+  # re-adding a doc-side marker would re-create the exact duplicate surface the removal
+  # eliminated (a register-or-remove violation, hence #2106's D-C re-scope). The
+  # command is only correct while two deploy.sh conventions hold for EVERY check:
+  #   (1) a runtime `log "Check N:"` EMITTER line, and
+  #   (2) a `# Check N` DEFINITION-BLOCK comment header.
+  # A check that follows one convention but not the other makes the documented command
+  # under- or over-report, silently falsifying the doc's single-source-of-truth claim
+  # with no enumeration anywhere to visibly drift. This check asserts the contract —
+  # E == (D \ R), where D = def-blocks, R = RETIRED-reserved numbers, E = emitters.
+  # SELF-REFERENTIAL: this very check carries both a `# Check 57` block and a
+  # `log "Check 57:"` emitter, so it satisfies its own contract. Offline-capable
+  # (reads deploy.sh itself; no gh). Fail-loud: a zero-check parse exits 3 rather than
+  # reading green (the conventions moved). Warn-mode initial per bypass-mode-readiness.md
+  # §Shakedown (the 14/18/42/.../55/56 precedent); flip via an `extraction-contract.mode`
+  # file after the >=3-day warn-log review. The introducing release is itself exempt
+  # (reflexive-pipeline loop). Read-only; reversibility CHEAP (additive; git revert).
+  # Primitive: core/deploy/tools/check-extraction-contract.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 57: Check-roster extraction-contract (emitters vs def-blocks minus retired; warn-mode initial; enforce-flip deferred)"
+    local c57_script="core/deploy/tools/check-extraction-contract.py"
+    if [[ ! -f "$c57_script" ]]; then
+      flag_warn_or_issue "extraction-contract" "primitive script missing: $c57_script"
+    else
+      local c57_mode c57_out c57_exit=0
+      c57_mode=$(resolve_check_mode "extraction-contract")
+      c57_out=$(/usr/bin/python3 "$c57_script" --root . --output-format tsv 2>&1) || c57_exit=$?
+      if [[ $c57_exit -eq 3 ]]; then
+        flag_warn_or_issue "extraction-contract" "input failure (exit 3): $(echo "$c57_out" | head -1) — zero checks parsed; the '# Check N' / 'log \"Check N:\"' conventions may have moved, leaving the documented derive command unverifiable"
+      elif [[ $c57_exit -eq 0 ]]; then
+        local c57_def c57_emit
+        c57_def=$(echo "$c57_out" | awk -F'\t' '$1=="DEFBLOCKS"{print $2}')
+        c57_emit=$(echo "$c57_out" | awk -F'\t' '$1=="EMITTERS"{print $2}')
+        log "  OK:    extraction-contract — emitters match def-blocks (${c57_emit:-?} emitters, ${c57_def:-?} def-blocks; the documented derive-from-source command is complete)"
+      elif [[ $c57_exit -eq 1 ]]; then
+        local c57_me c57_md c57_re
+        c57_me=$(echo "$c57_out" | awk -F'\t' '$1=="MISSING_EMITTER"{print $2}' | paste -sd, -)
+        c57_md=$(echo "$c57_out" | awk -F'\t' '$1=="MISSING_DEFBLOCK"{print $2}' | paste -sd, -)
+        c57_re=$(echo "$c57_out" | awk -F'\t' '$1=="RETIRED_EMITTING"{print $2}' | paste -sd, -)
+        if [[ "$c57_mode" == "enforce" ]]; then
+          [[ -n "$c57_me" ]] && { log "  FAIL:  extraction-contract — check(s) with a def-block but NO log emitter (invisible to the documented command): $c57_me"; ISSUES=$((ISSUES + 1)); }
+          [[ -n "$c57_md" ]] && { log "  FAIL:  extraction-contract — check(s) that log but carry NO def-block: $c57_md"; ISSUES=$((ISSUES + 1)); }
+          [[ -n "$c57_re" ]] && { log "  FAIL:  extraction-contract — RETIRED number(s) still emitting: $c57_re"; ISSUES=$((ISSUES + 1)); }
+        else
+          [[ -n "$c57_me" ]] && flag_warn_or_issue "extraction-contract" "def-block without emitter (invisible to the documented derive command): Check(s) $c57_me (warn-mode; add a 'log \"Check N:\"' line or flip extraction-contract.mode)"
+          [[ -n "$c57_md" ]] && flag_warn_or_issue "extraction-contract" "emitter without def-block: Check(s) $c57_md (warn-mode; add a '# Check N' block)"
+          [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re (warn-mode; retire the emitter or un-reserve the number)"
+        fi
+      else
+        flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(echo "$c57_out" | head -1)"
+      fi
+    fi
+  fi
+
+  # Check 58 — ADR ratification-flip backstop (ADVISORY ONLY) [#3009]
+  #
+  # An ADR may record a CONDITIONAL ratification — `status: Proposed … flips to Accepted
+  # at <review>`. When that review closes, the flip is a manual close-out step with
+  # nothing confirming it landed, so a record can sit Proposed on the mainline long after
+  # its ratifying review shipped, silently failing any downstream gate that asks "is this
+  # ADR Accepted?".
+  #
+  # *** THIS CHECK IS NEVER ENFORCE-CAPABLE — STRUCTURALLY, NOT BY DEFAULT ***
+  # Two mechanisms close the defect, mirroring the live G-CL8 + Check-28 pairing, and
+  # THIS IS THE NON-AUTHORITATIVE HALF:
+  #   * G-CL9 (gate-criteria-spec.md, Gate 13 Close) is THE AUTHORITY. It is release-
+  #     scoped because the operator closing a release KNOWS which review just closed.
+  #   * Check 58 is a standing drift SIGNAL only.
+  # The ratifying reference is FREE TEXT (live wordings vary per record, and one lives
+  # inside the `status:` line itself), so this surface can answer only "does a flip
+  # PROMISE exist while the record is still Proposed?" — never "is the flip OVERDUE?".
+  # A genuinely-pending ADR is CORRECT and reports here on every run; failing on it would
+  # punish correctness. Hence every row routes through flag_advisory_only, which has NO
+  # enforce branch and NEVER increments ISSUES, and this check deliberately does NOT call
+  # resolve_check_mode — there is no mode file that could graduate it, because there is
+  # no enforce state to graduate TO. Do not "fix" that by wiring it to
+  # flag_warn_or_issue: that helper escalates with the shared cohort, which for this
+  # class is the defect, not the feature.
+  #
+  # Age is the actionable axis (the Check 17 aging posture): a flip promised long ago is
+  # far more likely stuck than one made this week. Offline-capable (reads the ADR tree;
+  # no gh). Fail-loud: a zero-ADR parse exits 3 rather than reading green. Read-only;
+  # reversibility CHEAP (additive; git revert).
+  # Primitive: core/deploy/tools/check-adr-flip.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 58: ADR ratification-flip backstop (Proposed + flip-promise; ADVISORY — never enforce-capable; G-CL9 is the authority)"
+    local c58_script="core/deploy/tools/check-adr-flip.py"
+    if [[ ! -f "$c58_script" ]]; then
+      flag_advisory_only "adr-flip-verify" "primitive script missing: $c58_script"
+    else
+      local c58_out c58_exit=0
+      c58_out=$(/usr/bin/python3 "$c58_script" --root . --output-format tsv 2>&1) || c58_exit=$?
+      if [[ $c58_exit -eq 3 ]]; then
+        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(echo "$c58_out" | head -1) — zero ADRs parsed; the ADR tree may have moved"
+      elif [[ $c58_exit -ne 0 ]]; then
+        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(echo "$c58_out" | head -1)"
+      else
+        local c58_proposed c58_count c58_oldest
+        c58_proposed=$(echo "$c58_out" | awk -F'\t' '$1=="PROPOSED"{print $2}')
+        c58_count=$(echo "$c58_out" | awk -F'\t' '$1=="COUNT"{print $2}')
+        if [[ "${c58_count:-0}" -eq 0 ]]; then
+          log "  OK:    adr-flip-verify — no Proposed ADR carries unresolved flip-promise wording (${c58_proposed:-0} Proposed)"
+        else
+          # Oldest promise first — the aging signal, not an alphabetical dump.
+          c58_oldest=$(echo "$c58_out" | awk -F'\t' '$1=="PROMISED" && $3 != "?" {print $3"\t"$2}' | sort -rn | head -3 | awk -F'\t' '{printf "%s (%sd) ", $2, $1}')
+          flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT"
+        fi
       fi
     fi
   fi

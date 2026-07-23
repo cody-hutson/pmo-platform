@@ -3,7 +3,9 @@ name: Doc-link check
 # gate-efficacy: posture=required  enforcement=branch-protection:"Cross-reference integrity (governance + reference + rules + skills)"  always-reports=yes
 #   invariant: every internal markdown link in the governance/reference/rules/skill
 #              corpus resolves (target file + anchor) — asserted by the shared
-#              check-doc-links.py primitive over the same --target-paths as Check 14.
+#              check-doc-links.py primitive over the shared --target-paths-file
+#              (core/deploy/allowlists/doc-link-target-paths.txt), the same scan
+#              scope Check 14 reads.
 #   falsification: add "[x](does-not-exist.md)" to a governance doc -> this gate red.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
@@ -11,7 +13,12 @@ name: Doc-link check
 # Check-14 primitive (core/deploy/tools/check-doc-links.py) to a PR gate, so a
 # broken outbound markdown reference in the governance / reference / rules-mirror
 # / skill corpora is caught at PR time, not only at deploy time. Single source of
-# truth with Check 14: both invoke the SAME primitive over the SAME --target-paths.
+# truth with Check 14: both invoke the SAME primitive over the SAME scan scope,
+# now factored into one shared list file (--target-paths-file) so the two can
+# never drift. The scope also covers the residual trees core/ADRs/, core/deploy/,
+# repo-root *.md, and .github/ (a dead ref there is caught even when the
+# referencer is untouched); release/releases/ stays out (check-release-links.py
+# already covers it). See the target-paths file's header for per-tree rationale.
 #
 # Runs on EVERY pull request (no paths filter), so this status check always
 # reports a result and never sits required-but-absent on a shared release PR; a PR
@@ -47,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
 
@@ -64,15 +71,17 @@ jobs:
         run: |
           set -uo pipefail
 
-          # Same engine + same --target-paths as deploy.sh Check 14 (single source
-          # of truth). --require-targets: a glob resolving to zero files is a
+          # Same engine + same scan scope as deploy.sh Check 14 — both read the
+          # SHARED --target-paths-file (core/deploy/allowlists/doc-link-target-paths.txt),
+          # the single source of truth for scan scope, so the two gates can never
+          # drift. --require-targets: a glob resolving to zero files is a
           # path-resolution failure (exit 3), never a silent green — a relocated
           # scan surface cannot pass. --output-format github: inline file/line/
           # broken-target annotations in the PR (issue #169 AC: failure output
           # names file, line, and broken-ref target).
           set +e
           OUTPUT=$(python3 core/deploy/tools/check-doc-links.py \
-            --target-paths "core/governance/,core/disciplines/,core/schemas/,core/standards/,core/specs/,core/rules/,core/CLAUDE.md.template,release/governance/,release/references/,operations/OPERATIONS.md,operations/skills/*/SKILL.md,release/skills/*/SKILL.md,core/skills/*/SKILL.md" \
+            --target-paths-file core/deploy/allowlists/doc-link-target-paths.txt \
             --allowlist core/deploy/allowlists/skip-doc-link-check-ci.txt \
             --output-format github \
             --require-targets \

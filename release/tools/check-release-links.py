@@ -23,7 +23,10 @@ Skips (treated as intentional non-links):
 - Pure anchors (`#section`)  [resolved in-file only when --check-anchors]
 - Template placeholders (`{REPO}`, `<OPERATOR_INSTANCE_*>`, `$VAR`, `~/...`)
 - All-caps bareword placeholders (`URL`, `PATH`, `...`)
-- Version-string placeholders (`vX.Y`, `v2.18_RELEASE_PLAN.md` worked-example refs)
+- Version-string placeholders (`vX.Y`)
+- Release-plan / release-notes worked-example refs — any version- OR slug-prefix
+  ending in `_RELEASE_PLAN.md` / `_RELEASE_NOTES.md` (versioned `v3.56_RELEASE_NOTES.md`,
+  theme-named `pda-...RELEASE_PLAN.md`, or hybrid `v3.72-...RELEASE_PLAN.md`)
 
 Backward-compatibility contract:
   Invoked with NO arguments, this script is byte-for-byte equivalent in behavior
@@ -79,7 +82,16 @@ def is_skippable(target: str) -> bool:
         return True
     if re.search(r'v[A-Z]\.[A-Z]', target):
         return True
-    if re.search(r'v\d+\.\d+[a-z]?_(?:RELEASE_PLAN|RELEASE_NOTES)\.md', target):
+    # Release-plan / release-notes worked-example refs are instance-side notes
+    # that need not exist in the public tree. Three live filename shapes must be
+    # treated consistently (the skip formerly matched only the versioned shape):
+    #   versioned          v3.56_RELEASE_NOTES.md
+    #   version-less/theme  pda-rollup-and-portfolio_RELEASE_PLAN.md
+    #   hybrid             v3.72-release-hub-mode-r-and-o_RELEASE_PLAN.md
+    # Any version- OR slug-prefix, still anchored on the _RELEASE_PLAN|_RELEASE_NOTES
+    # .md suffix so ordinary links can never over-skip (a link must literally end
+    # in that suffix to match).
+    if re.search(r'[A-Za-z0-9][A-Za-z0-9.\-]*_(?:RELEASE_PLAN|RELEASE_NOTES)\.md', target):
         return True
     return False
 
@@ -297,6 +309,65 @@ def iter_markdown(roots: list[str], top_level_md: bool,
             yield md
 
 
+def run_self_test() -> int:
+    """In-process smoke test for is_skippable — the skip predicate the release
+    dead-file-ref gate + release-link-check.yml both consume.
+
+    The load-bearing case is the release-plan / release-notes filename-shape
+    consistency: three shapes exist on disk (versioned, version-less/theme-named,
+    hybrid) and MUST be treated identically as intentionally-instance-side worked
+    examples. Formerly only the versioned shape was skipped, so a theme-named or
+    hybrid note ref was flagged inconsistently. Fixtures also pin that the
+    broadened skip does NOT over-skip ordinary links (it stays anchored on the
+    _RELEASE_PLAN / _RELEASE_NOTES .md suffix), and that the pre-existing skip
+    classes still hold.
+    """
+    # ── The three live release-plan/notes filename shapes — ALL skippable ──
+    plan_note_shapes = [
+        # versioned
+        "release/releases/notes/v3.56_RELEASE_NOTES.md",
+        "release/releases/plans/v3.56_RELEASE_PLAN.md",
+        # version-less / theme-named
+        "release/releases/plans/pda-rollup-and-portfolio_RELEASE_PLAN.md",
+        "release/releases/notes/declarative-gating-model_RELEASE_NOTES.md",
+        # hybrid (version prefix + hyphen-slug)
+        "release/releases/plans/v3.72-release-hub-mode-r-and-o_RELEASE_PLAN.md",
+        # bare filename (no directory) — the search anchor still matches
+        "v1.24_RELEASE_NOTES.md",
+    ]
+    for t in plan_note_shapes:
+        assert is_skippable(t), \
+            f"self-test: expected release-plan/notes ref to be skippable: {t!r}"
+
+    # ── Regression guard: ordinary links MUST NOT be over-skipped ──
+    # NB: the skip is deliberately NOT end-anchored — is_skippable runs on the
+    # raw target BEFORE the '#anchor' split, so `foo_RELEASE_PLAN.md#sec` must
+    # still skip. These guards therefore test the token/suffix boundary, not a
+    # trailing-content boundary (the original regex was non-anchored too).
+    not_skippable = [
+        "release/references/pipeline/stage-13-close.md",
+        "../governance/RELEASE_PROTOCOL.md",
+        "release/releases/RELEASE_LOG.md",
+        "docs/RELEASE_PLANNING.md",   # RELEASE_PLAN not immediately followed by .md
+        "guide_release_plan.md",      # lowercase — not the RELEASE_PLAN token
+    ]
+    for t in not_skippable:
+        assert not is_skippable(t), \
+            f"self-test: ordinary link wrongly skipped (over-skip): {t!r}"
+
+    # ── Pre-existing skip classes still hold ──
+    for t in ["https://example.com/x", "#anchor", "mailto:a@b.c",
+              "{REPO}/x.md", "<OPERATOR_INSTANCE_LOG>", "$VAR/x.md",
+              "~/x.md", "URL", "...", "vX.Y"]:
+        assert is_skippable(t), f"self-test: pre-existing skip class regressed: {t!r}"
+    # ...and a plain relative link in that same neighborhood is still checked.
+    assert not is_skippable("stage-02-triage.md"), \
+        "self-test: a plain relative link must remain checkable"
+
+    print("self-test OK (release-plan/notes shape consistency + skip classes)")
+    return 0
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Intra-repo markdown link (and optional anchor/image) checker.")
@@ -335,6 +406,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
              "touched for unrelated reasons are not re-flagged — the same net-new "
              "added-lines posture the reference-durability gate uses. Omit "
              "(default) to consider every link in the in-scope files.")
+    p.add_argument(
+        "--self-test", action="store_true",
+        help="Run the in-process is_skippable smoke test (release-plan/notes "
+             "filename-shape consistency + skip-class regression guards) and exit.")
     return p.parse_args(argv)
 
 
@@ -361,6 +436,8 @@ def resolve_only(files: list[str] | None) -> set[Path] | None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.self_test:
+        return run_self_test()
     only = resolve_only(args.files)
     total_broken = 0
     files_with_broken = 0

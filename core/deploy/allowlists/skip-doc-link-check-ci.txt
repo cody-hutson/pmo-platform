@@ -1,14 +1,33 @@
-# skip-doc-link-check-ci.txt — TRACKED CI allowlist for the PR-time link-check gate
-# (issue #169). Consumed by .github/workflows/link-check.yml via
-# `check-doc-links.py --allowlist`. One pattern per line; '#' starts a comment;
-# a trailing slash matches a directory prefix; bare patterns match by basename or
-# substring (per check-doc-links.py is_allowlisted semantics).
+# skip-doc-link-check-ci.txt — the TRACKED, corpus-level base allowlist for the
+# doc-link scan. Consumed by BOTH callers via `check-doc-links.py --allowlist`:
+#   - .github/workflows/link-check.yml  (PR-time gate)
+#   - core/deploy/deploy.sh Check 14    (deploy-time gate)
+# One pattern per line; '#' starts a comment; a trailing slash matches a
+# directory prefix; bare patterns match by basename or substring (per
+# check-doc-links.py is_allowlisted semantics).
 #
-# DISTINCT from the operator-instance `.claude/skip-doc-link-check.txt` that
-# deploy.sh Check 14 reads: that file is operator-local (absent from a fresh
-# checkout) and carries operator-specific suppressions; THIS file is tracked and
-# minimal, so CI on `ubuntu-latest` after `actions/checkout` has a deterministic
-# allowlist. Keep it thin — the heavy lifting is done natively by the engine's
+# NAMING NOTE: the `-ci` suffix is historical — the file was introduced when CI
+# was its only caller. It is now the shared tracked base for BOTH surfaces; the
+# name is kept because the frozen release corpus records the artifact under it.
+# Read it as "the tracked allowlist", not "the CI-only allowlist".
+#
+# LAYERED, NOT EXCLUSIVE, with the operator-instance
+# `<instance>/skip-doc-link-check.txt`: `--allowlist` is repeatable and the
+# pattern sets UNION, so Check 14 passes THIS file *and* the instance file and
+# the operator layers local-only suppressions on top without re-declaring
+# anything tracked here. Scope is single-sourced through
+# doc-link-target-paths.txt; this file is the matching single source on the
+# ignore axis. Sharing only one of the two is not enough — with a shared scope
+# but split allowlists the two callers scan byte-identical files and can still
+# reach opposite verdicts (measured: 0 findings at PR time vs 84 at deploy time
+# when the CHANGELOG.md class below was recorded on the CI path only).
+#
+# WHICH FILE DOES AN ENTRY BELONG IN? If the path is skipped because of a fact
+# about the REPOSITORY, it belongs here so both surfaces agree. If it is skipped
+# because of a fact about one operator's WORKSPACE (a local analysis or archive
+# subtree absent from a fresh checkout), it belongs in the instance file.
+#
+# Keep it thin — the heavy lifting is done natively by the engine's
 # templated-placeholder and meta-doc-literal skips in is_internal(), NOT by this
 # file. Each entry documents WHY the path is allowlisted (per
 # doc-link-maintenance.md § Allowlist), not why warnings are silenced.
@@ -25,3 +44,17 @@
 _archived/
 _snapshots/
 archive/
+
+# ── Repo-root CHANGELOG (pre-existing rot in a newly-scanned tree)
+# When the scan scope was widened to the repo-root `*.md` glob, CHANGELOG.md
+# entered scope. Its per-release entries link to the versioned/theme-named
+# release-notes files under release/releases/notes/ — the instance-side tree
+# that is DELIBERATELY excluded from this doc-link scan (and is the same class
+# release/tools/check-release-links.py is_skippable already treats as
+# intentionally-absent worked-example refs). Those links are therefore
+# expected-broken in the public tree, not real drift, so CHANGELOG.md is
+# allowlisted here rather than failing the widened gate. This is a fact about
+# the REPOSITORY, so it belongs in the tracked base and applies to both the
+# PR-time and deploy-time surfaces (84 deploy-time findings, all this one
+# class, when the entry reached only the CI caller).
+CHANGELOG.md

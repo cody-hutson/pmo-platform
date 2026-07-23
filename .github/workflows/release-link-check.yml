@@ -31,9 +31,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
+
+      - name: Detector self-test (is_skippable precision probe)
+        # A scan is blind to a skip-predicate regression — a broadened skip that
+        # silently swallows a real link would pass. So the in-process self-test is
+        # a HARD gate (independent of the scan result): it pins release-plan/notes
+        # filename-shape consistency + skip-class regression guards. Mirrors
+        # link-check.yml's check-doc-links.py --self-test precision probe.
+        run: python3 release/tools/check-release-links.py --self-test
 
       - name: Run release/ link checker
         run: python3 release/tools/check-release-links.py

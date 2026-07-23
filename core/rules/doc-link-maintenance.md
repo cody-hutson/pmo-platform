@@ -31,7 +31,7 @@ Detect and remediate stale cross-references in the workspace's documentation cor
 ```bash
 python3 core/deploy/tools/check-doc-links.py \
   --target-paths <comma-separated-globs> \
-  [--allowlist .claude/skip-doc-link-check.txt] \
+  [--allowlist <tracked-base>] [--allowlist <instance-additions>] \
   [--require-targets] \
   [--workspace-root <path>] \
   [--output-format tsv|json|github]
@@ -65,24 +65,28 @@ python3 core/deploy/tools/check-doc-links.py \
 | **Dead-file-reference gate** (`repo-integrity.yml`, PR-time) — via `release/tools/check-release-links.py` | `core release docs .github` + top-level `*.md`, changed-delta / added-lines only | **required** (branch-protection); enforce — a broken added-line link fails the PR; anchors warn-mode |
 | **`release-link-check.yml`** (PR-time) — via the same `check-release-links.py` | `release/` full walk (bare invocation) | advisory (path-filtered to `release/**`; absent-is-pass) |
 
-Check 14 (deploy-time) and `link-check.yml` (PR-time) both call the `check-doc-links.py` primitive with the live module-scoped `--target-paths` — they are one engine on one source of truth, so the deploy-time and PR-time verdicts cannot drift. `check-release-links.py` (the Dead-file-reference gate + `release-link-check.yml`) implements the **same canonical resolution rule** (see § The Primitive → Path resolution), so the doc-links and release-links checker families cannot return opposite verdicts on a given link form either. Layer 2 (Operations) governance + references are in scope; project/operational content is excluded per CLAUDE.md domain boundary.
+Check 14 (deploy-time) and `link-check.yml` (PR-time) both call the `check-doc-links.py` primitive over the SAME shared `--target-paths-file` scan scope AND the SAME tracked base `--allowlist` (see § Allowlist) — one engine, one scope list, one tracked ignore list, so the deploy-time and PR-time verdicts cannot drift. Sharing scope alone is not sufficient: two callers scanning identical files with different allowlists still reach different verdicts. `check-release-links.py` (the Dead-file-reference gate + `release-link-check.yml`) implements the **same canonical resolution rule** (see § The Primitive → Path resolution), so the doc-links and release-links checker families cannot return opposite verdicts on a given link form either. Layer 2 (Operations) governance + references are in scope; project/operational content is excluded per CLAUDE.md domain boundary.
 
 The PR-time gate runs on every pull request (no paths filter) so the status check always reports, and on push to `main` as a post-merge guard. A path-resolution failure (a `--target-paths` glob resolving to zero files, exit 3) is always hard-fail regardless of warn-mode — a relocated scan surface must never read green. The primitive's `--self-test` runs first as a precision probe: a parser/resolver/exclusion regression fails the PR independently of warn-mode.
 
 ## Allowlist
 
-Two allowlist files, one per enforcement surface. Both use the same syntax: one pattern per line; trailing slash matches directories; `#` introduces comments.
+Two allowlist files, layered — **not** one per surface. Both use the same syntax: one pattern per line; trailing slash matches directories; `#` introduces comments.
 
 | Allowlist | Consumed by | Tracked? | Role |
 |---|---|---|---|
-| `.claude/skip-doc-link-check.txt` | Check 14 (deploy-time) | No — operator-instance (absent from a fresh checkout) | Operator-specific suppressions on the operator's own machine |
-| `core/deploy/allowlists/skip-doc-link-check-ci.txt` | `link-check.yml` (PR-time) | **Yes** — tracked | Deterministic CI allowlist after `actions/checkout`, where the operator-instance file does not exist. Thin by design — the engine's native skips (above) do the heavy lifting, not this file |
+| `core/deploy/allowlists/skip-doc-link-check-ci.txt` | **Both** — `link-check.yml` (PR-time) and Check 14 (deploy-time) | **Yes** — tracked | The tracked **corpus-level base**: the skip class that is a property of the repository, so it must apply identically wherever the corpus is scanned. Also the deterministic CI allowlist after `actions/checkout`, where the operator-instance file does not exist. Thin by design — the engine's native skips (above) do the heavy lifting, not this file |
+| `<OPERATOR_INSTANCE_CLAUDE_DIR>/skip-doc-link-check.txt` | Check 14 (deploy-time), **layered on top of the tracked base** | No — operator-instance (absent from a fresh checkout) | Operator-specific suppressions for paths that exist only in the operator's own workspace. Additions only — the operator never re-declares the tracked entries here |
+
+The two are UNIONed, not chosen between: `--allowlist` is repeatable and additive, so Check 14 passes the tracked base **and** the instance file and a later file can never shadow an earlier one. This makes the ignore list single-sourced on the same principle `--target-paths-file` already applies to the scan scope. Both properties are required together: with scope shared but the allowlist split, the two callers scan byte-identical files and can still return different verdicts — which is precisely what happened when the repo-root `*.md` glob entered scope and the resulting skip class was recorded on the CI path only.
+
+**Which file does a new entry belong in?** If the reason the path is skipped is a fact about the *repository* (a tracked file whose links point outside the scanned tree by design), it belongs in the tracked base so both surfaces agree. If the reason is a fact about *this operator's workspace* (a local analysis or archive subtree that does not exist in a fresh checkout), it belongs in the instance file.
 
 **Operator-instance default entries (illustrative — that file itself is operator-instance):**
 - `release/releases/archive/` — historical references by design
 - audit-evidence subtrees (e.g. `legacy-imp-audit-*/`, `cross-domain-drift-audit-*/`) — read-once analysis artifacts
 
-**Tracked CI allowlist entries:** archive/snapshot subtrees (`_archived/`, `_snapshots/`, `archive/`) as forward-protection — none currently exist inside the scoped corpora, so they protect future additions rather than suppressing anything today.
+**Tracked base entries:** archive/snapshot subtrees (`_archived/`, `_snapshots/`, `archive/`) as forward-protection — none currently exist inside the scoped corpora, so they protect future additions rather than suppressing anything today; plus the repo-root `CHANGELOG.md`, whose per-release links point into the instance-side `release/releases/notes/` tree that this scan deliberately excludes.
 
 **Adding entries:** standard text editor + governance approval for non-trivial scope expansion. Allowlist additions document WHY the path is allowlisted, not WHY the operator wants to silence warnings. Prefer a native engine skip (angle-bracket placeholder, etc.) over an allowlist entry where the target is genuinely a non-link — an allowlist is file-granular and would blind the gate to real drift in the rest of the file.
 

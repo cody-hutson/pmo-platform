@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-039 — Declarative gate-condition construct (3-kind discriminated union) + two EAD annotation classes + cycle-safety doctrine
-status: Proposed
+status: Accepted
 date: 2026-06-23
 deciders: "operator + Collective Review scope-lock"
 tags: [entity-model, work-item, type-system, gate-conditions, declarative-gating, ead-materialization, cycle-safety, methodology-projection]

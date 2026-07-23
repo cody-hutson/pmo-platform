@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: Canonical initiative / roadmap / milestone vocabulary + initiative→epic/project label mapping
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-29
 release: 34-terminology-and-controlled-vocabulary
 deciders: "Technical Program Manager (operator)"

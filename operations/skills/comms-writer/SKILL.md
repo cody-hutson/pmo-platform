@@ -307,6 +307,23 @@ SteerCo preparation, any [COMMS] tag for status reporting.
    array `[A, B]` (the Hybrid-Two form per project-schema §6.5), read it as a list (not a
    string) and pick the per-surface cadence from each constituent.
 
+**Compression pass (run before the brief ships).** Every executive brief runs this five-step
+pass. The principles live in the voice guide's Executive Compression & Concreteness section;
+this is the operative sequence:
+
+1. **Cause → clause.** Reduce the mechanism to a single clause. A cause still occupying a
+   paragraph has been summarized, not compressed.
+2. **Consequence → concrete + clock.** Replace every abstraction ("exposed", "impacted", "at
+   risk", "degraded") with what actually happens: to how much, starting when, for how long.
+3. **Impact → executive unit.** Restate impact in the unit the reader owns — invoices, orders,
+   shipments, dollars, customers served — never the system's internal proxy (records,
+   transactions, API calls).
+4. **Expected vs. unexpected.** Split a partly-anticipated outcome into the portion that was a
+   known tradeoff and the portion that was a genuine surprise, so the reader calibrates the
+   response to the surprise rather than to the whole event.
+5. **Cut a paragraph.** Remove the least decision-relevant paragraph before sending. A brief
+   that lost nothing in this pass was not compressed.
+
 ### Communications Tracker integration
 
 When producing drafts that will be tracked in the Communications Tracker (MSG-##
@@ -986,6 +1003,52 @@ structural conformance and content quality.
   owned-generation path, applies the harvested structure first-party, and declares the
   readiness gate. Junior drafts it off the announcement template — the output misses the PMO
   voice contract the two owned types require.
+
+### Abstract consequence shipped where a concrete one is knowable — OUT
+
+- **Signature (observable signal):** An executive brief or escalation states its consequence as an
+  abstraction — "the system is exposed", "there may be operational impact", "the process is at risk" —
+  carrying no magnitude, no unit the reader owns, and no clock, while the source artifacts (tracker
+  entries, run logs, the RAID row) hold the specifics needed to state it concretely.
+- **Conditional:** do NOT ship an abstraction as the consequence when the concrete effect is knowable
+  from the source artifacts, because an abstraction carries no magnitude, unit, or time bound — the
+  reader cannot size the consequence or decide against it, and the translation the writer skipped then
+  gets performed badly, or not at all, by every recipient.
+- **Root cause:** abstraction is cheap and feels safe — it is defensible against every fact and demands
+  no arithmetic — while the concrete form commits the writer to a number that could be wrong. The cost
+  of the vagueness lands on the reader's decision quality rather than the writer's, so it is invisible
+  at drafting time.
+- **Mitigation:** run the Executive-brief compression pass — step 2 (consequence → concrete + clock) and
+  step 3 (impact → executive unit): name what happens, to how much, starting when and for how long, in
+  the unit the reader owns. When the magnitude genuinely is not yet known, state that explicitly with a
+  bound and the time the number will exist — an owned unknown, never a hedge.
+- **Principal response vs. junior response:** Principal writes "Up to 300 invoices will not post between
+  14:00 and 18:00 today; posting resumes automatically once the queue drains." Junior writes "invoice
+  processing is currently impacted", leaving every reader to guess whether that means three invoices or
+  thirty thousand.
+
+### Partially-expected outcome framed as a pure defect — INPUT
+
+- **Signature (observable signal):** A draft presents an outcome as an unqualified failure while the
+  source evidence records part of it as anticipated — a documented tradeoff of an approved change, a
+  known limitation, or a planned degradation captured in the decision or RAID entry the event traces
+  to — and the draft never separates the expected portion from the genuinely unexpected one.
+- **Conditional:** do NOT frame an outcome as a pure defect when the source artifacts record part of it
+  as an expected consequence, because collapsing expected and unexpected into one failure narrative
+  misdirects the response — it invites investigation of a failure that did not occur, buries the smaller
+  part that actually warrants attention, and erodes trust in the next report once the recipient learns
+  the tradeoff had already been agreed.
+- **Root cause:** the unexpected portion is what makes an event feel reportable, so it colors the whole
+  framing. Separating the two requires reading back to the originating decision or RAID entry — extra
+  evidence work whose omission leaves no visible trace in the draft itself.
+- **Mitigation:** before framing, resolve the event against its originating decision or RAID entry
+  through the tracked layer, then apply compression-pass step 4 (expected vs. unexpected): state the
+  expected portion as the known tradeoff it was, and scope the ask to the unexpected remainder. When no
+  source records an expectation, report the outcome as unanticipated — do not assume it either way.
+- **Principal response vs. junior response:** Principal writes "Two of the three symptoms were the
+  documented tradeoff of the cutover we approved; the third — late confirmations — was not anticipated
+  and is what we are investigating." Junior reports all three as one regression, triggering a root-cause
+  hunt for behavior the team deliberately chose.
 
 ## Shared Behavioral Rules
 

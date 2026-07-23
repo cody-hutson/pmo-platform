@@ -1,6 +1,6 @@
 ---
 title: Staleness-confidence canonical representation — ordinal depth bands backed by an optional projected score
-status: Proposed
+status: Accepted
 tags: [staleness-confidence, representation-standard, ordinal-scale, cross-mechanism, depth-axis]
 ---
 <!-- reference-durability: allow-link -->

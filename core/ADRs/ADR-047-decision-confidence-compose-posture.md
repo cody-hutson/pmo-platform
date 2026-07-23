@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: Decision-confidence relationship posture — extend-and-compose across the decision-quality layer, not a standalone discipline
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-27
 release: 104-agent-decision-confidence
 deciders: "Workspace owner"
