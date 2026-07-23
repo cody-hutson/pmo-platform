@@ -8,7 +8,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037, ADR-072, ADR-073, ADR-074, ADR-079, ADR-087. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 + ADR-006 + ADR-007 + ADR-008 + ADR-009 live in [`../../core/ADRs/`](../../core/ADRs/); this module holds ADR-001, ADR-002, ADR-005, ADR-011, ADR-021, ADR-024, ADR-025, ADR-026, ADR-036, ADR-037, ADR-072, ADR-073, ADR-074, ADR-079, ADR-088. Future release-scoped ADRs continue the global sequence. The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`).
 
 ## Release-scoped ADRs
 
@@ -28,7 +28,7 @@ ADRs follow the canonical **[ADR schema](../../core/schemas/adr-schema.md)** —
 | [ADR-073](ADR-073-cross-issue-integration-check-stage9-extension.md) | Cross-issue release-integration check: extend Stage 9 (Phase A3.6 + QC3.5 + G-PR10) over a new Stage 7.5, reading the executor-emitted CIAC verdicts read-only (single-runner) with a G-PR9-style evidence-freshness guard | Proposed | 2026-07-03 | 70-verification-execution-surface |
 | [ADR-074](ADR-074-stage8-consumes-runtime-evidence-for-behavioral-ac.md) | Stage 8 consumes the Stage-7 A8 runtime `test-run` result for behavioral-AC acceptance (Phase A validates the envelope, Phase B adds the Test-results read) rather than defining its own Stage-8 execution step — one dispatch map, honest `suite-skip` fallback for unmapped domains | Proposed | 2026-07-03 | 70-verification-execution-surface |
 | [ADR-079](ADR-079-hub-owned-subtask-close.md) | Hub-owned sub-task close (spoke posts output; hub closes) — relocates sub-task-close ownership from spoke to hub so the authorized-close guardrail false-positive is removed in-git (the spoke's close *action* was the harness-warning trigger; no harness change) | Proposed | 2026-07-11 | 98-pipeline-freshness-and-spoke-safety |
-| [ADR-087](ADR-087-release-state-binding-and-mechanical-merge-boundary.md) | Release-state binding points: Gate 3 asserts identity-mode intent, not claim-time version freeness; mechanical merge (`merge=union`) is safe only for pure-additive ledgers | Accepted | 2026-07-22 | version-identity-and-corpus-ledgers |
+| [ADR-088](ADR-088-release-state-binding-and-mechanical-merge-boundary.md) | Release-state binding points: Gate 3 asserts identity-mode intent, not claim-time version freeness; mechanical merge (`merge=union`) is safe only for pure-additive ledgers | Accepted | 2026-07-22 | version-identity-and-corpus-ledgers |
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout. ADR-011, ADR-021, ADR-024, ADR-025, and ADR-026 are authored natively in the modular-monolith layout.
 

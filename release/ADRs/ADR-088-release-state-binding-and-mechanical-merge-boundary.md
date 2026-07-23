@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-087 — Release-state binding points: Gate 3 asserts identity-mode intent, not claim-time freeness; mechanical merge is safe only for pure-additive ledgers"
+title: "ADR-088 — Release-state binding points: Gate 3 asserts identity-mode intent, not claim-time freeness; mechanical merge is safe only for pure-additive ledgers"
 status: Accepted
 date: 2026-07-22
 release: version-identity-and-corpus-ledgers
@@ -15,7 +15,7 @@ source_observations:
 
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-087 — Release-state binding points and the mechanical-merge boundary
+# ADR-088 — Release-state binding points and the mechanical-merge boundary
 
 ## Status
 
