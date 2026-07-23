@@ -1,6 +1,6 @@
 ---
 title: ADR-023 — Skill sourcing-coupling posture (own-with-harvest default; guarded-wrap exception)
-status: Proposed
+status: Accepted
 date: 2026-06-13
 release: knowledge-architecture-initiative (epic knowledge-corpus)
 deciders: "operator (decision adopted 2026-06-13) + the build-philosophy charter initiative"

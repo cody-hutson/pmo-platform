@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: The deliverable-domain axis lands on PROJECT.md frontmatter, not the type-pack
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted
 date: 2026-06-29
 release: 18-pmbok-coverage-and-project-schema
 deciders: "Workspace owner"

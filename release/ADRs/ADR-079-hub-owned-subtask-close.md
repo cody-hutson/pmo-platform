@@ -1,6 +1,6 @@
 ---
 title: "ADR-079 — Hub-owned sub-task close (spoke posts output; hub closes)"
-status: Proposed
+status: Accepted
 date: 2026-07-11
 release: 98-pipeline-freshness-and-spoke-safety (v3.70 provisional; bound at Stage 12)
 deciders: "Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment; #3368 design) flagged the ADR; Stage 6 Engineering authored it; operator ratifies at the Stage 9 plan-review gate"

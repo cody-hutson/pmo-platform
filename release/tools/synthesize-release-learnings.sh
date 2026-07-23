@@ -22,6 +22,7 @@
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5 --cluster-min 3 --apply
 #   ./synthesize-release-learnings.sh --mode pattern-detect --window 5 --emit rate
+#   ./synthesize-release-learnings.sh --mode pattern-detect --source session-retro --window 5
 #   ./synthesize-release-learnings.sh --self-test
 #   ./synthesize-release-learnings.sh --help
 #
@@ -40,6 +41,13 @@
 #                                         This is the rate close-class-telemetry.md Indicator 4
 #                                         POINTS to (deferred-to-aggregate). Human line + a
 #                                         machine `rate=<2dp>` token; `--apply` is ignored in rate mode.
+#   --source {release-synthesis|session-retro}
+#                                         pattern-detect INPUT GRAIN (default release-synthesis —
+#                                         the pre-existing behavior, byte-unchanged). `session-retro`
+#                                         clusters per-session self-retro rows on their `theme:` key.
+#                                         The window / cluster / auto-promotion machinery is SHARED
+#                                         across both grains; only the input filter and the clustered
+#                                         field-set differ. See pipeline-event-log-schema.md § 11.8.
 #   --apply                               actually create Issues via `gh issue create`
 #                                         (default is dry-run; prints the would-create
 #                                         Issue body to stdout)
@@ -88,7 +96,7 @@ export PMO_REPO_SLUG="$REPO_SLUG"
 die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 
 usage() {
-  /usr/bin/sed -n '4,46p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '4,55p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -101,6 +109,7 @@ WINDOW_BY_ROW=false
 CLUSTER_MIN=3
 APPLY=false
 EMIT="report"   # report | rate — pattern-detect mode only (rate = cross_release_pattern_emergence_rate)
+SOURCE="release-synthesis"   # release-synthesis | session-retro — pattern-detect input grain (§ 11.8)
 SELF_TEST=false
 
 while [[ $# -gt 0 ]]; do
@@ -111,6 +120,7 @@ while [[ $# -gt 0 ]]; do
     --window-by-row) WINDOW_BY_ROW=true; shift ;;
     --cluster-min) CLUSTER_MIN="$2"; shift 2 ;;
     --emit) EMIT="$2"; shift 2 ;;
+    --source) SOURCE="$2"; shift 2 ;;
     --apply) APPLY=true; shift ;;
     --self-test) SELF_TEST=true; shift ;;
     --help|-h) usage ;;
@@ -291,22 +301,44 @@ emit_pattern_detect_report() {
   local by_row="$3"
   local apply="$4"
   local emit="${5:-report}"   # report | rate
+  local source="${6:-release-synthesis}"   # release-synthesis | session-retro
 
-  # Read ALL learnings-triple rows (filtered by subtype).
+  # Source-parameterized input filter per pipeline-event-log-schema.md § 11.8.
+  # The window/cluster/promotion machinery below is SHARED across both sources —
+  # only the query filter, the payload label-set, and the clustered field-set
+  # differ. A second cluster implementation is exactly the producer/producer
+  # disagreement the Indicator-4 pointer discipline rejects.
+  local src_label            # human name in report/N-A strings
   local rows
-  rows="$("$QUERY_TOOL" --event-type release-synthesis --event-subtype learnings-triple 2>/dev/null \
-    | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+  case "$source" in
+    release-synthesis)
+      src_label="release-synthesis/learnings-triple"
+      rows="$("$QUERY_TOOL" --event-type release-synthesis --event-subtype learnings-triple 2>/dev/null \
+        | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+      ;;
+    session-retro)
+      # All three subtypes are read; `no-learning` rows carry no `theme:` and so
+      # contribute no cluster signal BY CONSTRUCTION (§ 11.8) — they are not
+      # filtered out, they simply tokenize to nothing.
+      src_label="session-retro"
+      rows="$("$QUERY_TOOL" --event-type session-retro 2>/dev/null \
+        | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+      ;;
+    *)
+      die "--source must be one of: release-synthesis | session-retro (got '$source')"
+      ;;
+  esac
 
   if [[ -z "$rows" ]]; then
     if [[ "$emit" == "rate" ]]; then
       # cross_release_pattern_emergence_rate over an empty window is N/A (no
       # events-in-window denominator) — the close-class-telemetry N/A discipline.
-      echo "cross_release_pattern_emergence_rate: N/A — no release-synthesis/learnings-triple events in window (window=$window) | rate=N/A"
+      echo "cross_release_pattern_emergence_rate: N/A — no $src_label events in window (window=$window) | rate=N/A"
       return 0
     fi
     echo "## Pattern-Detect Report (window=$window$([ "$by_row" == "true" ] && echo " by-row"))"
     echo ""
-    echo "No \`release-synthesis/learnings-triple\` events found in \`pipeline-event-log.md\`."
+    echo "No \`$src_label\` events found in \`pipeline-event-log.md\`."
     return 0
   fi
 
@@ -326,6 +358,32 @@ cluster_min = int(sys.argv[2])
 by_row = (sys.argv[3] == "true")
 apply_mode = (sys.argv[4] == "true")
 emit_mode = sys.argv[5] if len(sys.argv) > 5 else "report"  # report | rate
+source = sys.argv[6] if len(sys.argv) > 6 else "release-synthesis"
+
+# Per-source payload contract (pipeline-event-log-schema.md § 11.8).
+#   LABELS       — every label recognized in the payload. Needed IN FULL so the
+#                  field regex terminates each field at the next label; an
+#                  unlisted label would be swallowed into the preceding field
+#                  content and tokenized as if it were signal.
+#   CLUSTER_ON   — the subset actually tokenized into clusters.
+# NB: this heredoc sits inside a $( ) command substitution, so bash still lexes
+# quotes here even though the delimiter is quoted — every line must carry an EVEN
+# number of apostrophes (an unpaired one is a hard parse error, not a comment).
+SOURCE_CONTRACT = {
+    "release-synthesis": {
+        "labels": ["surprise", "would-change", "watch-for"],
+        "cluster_on": ["surprise", "would-change", "watch-for"],
+    },
+    "session-retro": {
+        # theme: ONLY — free-text `learning:` prose would cluster on incidental
+        # vocabulary and manufacture patterns out of shared phrasing.
+        "labels": ["session", "source", "theme", "domain", "learning", "reason"],
+        "cluster_on": ["theme"],
+    },
+}
+contract = SOURCE_CONTRACT.get(source, SOURCE_CONTRACT["release-synthesis"])
+LABELS = contract["labels"]
+CLUSTER_ON = contract["cluster_on"]
 
 # Stopword list — minimal; operator can extend via .claude/synthesizer-stopwords.txt
 # in a future release. For now ship a small in-script default.
@@ -348,8 +406,10 @@ def parse_row(row):
     return ts, version, payload
 
 def parse_triple(payload):
-    labels = ["surprise", "would-change", "watch-for"]
-    label_alt = "|".join(re.escape(l) for l in labels)
+    labels = LABELS
+    # Longest-first so a label that prefixes another (none today, but the
+    # session-retro set is open to growth) cannot shadow the longer one.
+    label_alt = "|".join(re.escape(l) for l in sorted(labels, key=len, reverse=True))
     pattern = re.compile(
         r"(?P<label>" + label_alt + r"):\s*(?P<content>.*?)(?=\s*(?:" + label_alt + r"):|$)",
         re.DOTALL,
@@ -395,7 +455,7 @@ else:
     windowed = [r for r in all_rows if r["version"] in keep]
 
 # Per-field clustering: collect token → list of (ts, version, field, payload-excerpt)
-fields = ["surprise", "would-change", "watch-for"]
+fields = CLUSTER_ON
 clusters = {}  # (field, token) -> list of dicts
 for r in windowed:
     triple = parse_triple(r["payload"])
@@ -515,7 +575,7 @@ else:
         print(f"  - title: {title}")
 PY
 )"
-  echo "$rows" | "$PY" -c "$pattern_py" "$window" "$cluster_min" "$by_row" "$apply" "$emit"
+  echo "$rows" | "$PY" -c "$pattern_py" "$window" "$cluster_min" "$by_row" "$apply" "$emit" "$source"
 }
 
 # ─── Self-test mode ──────────────────────────────────────────────────────────
@@ -574,6 +634,18 @@ run_self_test() {
     echo "| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
     echo "|---|---|---|---|---|---|---|---|---|---|"
     echo "| 2026-03-01T12:00:00Z | v2.10 | 13 | release-synthesis | learnings-triple | skill:synthesize-release-learnings | release:v2.10 | CHEAP | resolved | surprise: fixture surprise; would-change: fixture would-change; watch-for: fixture watch-for |"
+    # session-retro fixture (Test 10/11) — a SEPARATE event_type, so the
+    # release-synthesis query filter above never sees these rows and Tests 5–9 are
+    # unaffected. Shaped to yield EXACTLY ONE qualifying cluster:
+    #   theme:over-building   x3 across v2.10 + v2.11 -> qualifies (>=3, >=2 versions)
+    #   theme:one-off-noise   x2 in v2.11 only        -> below cluster-min, excluded
+    #   no-learning row       carries NO theme:       -> contributes nothing by construction
+    echo "| 2026-03-02T09:00:00Z | v2.10 | 6 | session-retro | learning | skill:session-retro | session:s1 | CHEAP | resolved | session:s1; source:friction; theme:over-building; domain:corpus-edit; learning:scope grew past the ask |"
+    echo "| 2026-03-02T09:00:01Z | v2.10 | 6 | session-retro | operator-feedback | skill:session-retro | session:s2 | CHEAP | resolved | session:s2; source:correction; theme:over-building; domain:release-ops; learning:operator trimmed unrequested scope |"
+    echo "| 2026-03-03T09:00:02Z | v2.11 | 5 | session-retro | learning | skill:session-retro | session:s3 | CHEAP | resolved | session:s3; source:friction; theme:over-building; domain:planning; learning:design outran the acceptance criteria |"
+    echo "| 2026-03-03T09:00:03Z | v2.11 | 5 | session-retro | learning | skill:session-retro | session:s4 | CHEAP | resolved | session:s4; source:preference; theme:one-off-noise; domain:comms; learning:single-session preference |"
+    echo "| 2026-03-03T09:00:04Z | v2.11 | 5 | session-retro | learning | skill:session-retro | session:s5 | CHEAP | resolved | session:s5; source:preference; theme:one-off-noise; domain:comms; learning:repeat within one version only |"
+    echo "| 2026-03-03T09:00:05Z | v2.11 | 13 | session-retro | no-learning | skill:session-retro | session:s6 | CHEAP | resolved | session:s6; reason:trivial-session-no-novel-signal |"
   } > "$st_fixture_dir/pipeline-event-log.md" || die "self-test: could not write fixture log"
   export EVALS_RESULTS_PATH="$st_fixture_dir"
 
@@ -630,6 +702,37 @@ run_self_test() {
     [[ "$rh" -le 100 ]] || die "self-test: rate $rate_val exceeds 1.00 (qualifying > events-in-window — impossible)"
   fi
 
+  # Test 10: --source session-retro clusters the SESSION grain on `theme:` and
+  # yields EXACTLY ONE qualifying cluster over the seeded fixture (the #2423 AC3
+  # method: "seeded fixture yields exactly one cluster"). Also asserts the cluster
+  # is the intended one and that the sub-threshold theme did NOT qualify.
+  local sr_report
+  sr_report="$(emit_pattern_detect_report 5 3 false false report session-retro)" \
+    || die "self-test: session-retro pattern-detect emit failed"
+  echo "$sr_report" | /usr/bin/grep -q "^## Pattern-Detect Report" \
+    || die "self-test: session-retro pattern-detect header missing"
+  local sr_qualifying
+  sr_qualifying="$(echo "$sr_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  [[ "$sr_qualifying" == "1" ]] \
+    || die "self-test: session-retro fixture expected exactly 1 qualifying cluster, got '$sr_qualifying'"
+  echo "$sr_report" | /usr/bin/grep -q '^### Cluster: `over-building` (theme,' \
+    || die "self-test: session-retro cluster should be theme/over-building"
+  if echo "$sr_report" | /usr/bin/grep -q 'one-off-noise'; then
+    die "self-test: sub-threshold theme one-off-noise must NOT qualify"
+  fi
+
+  # Test 11: the explicit zero-state contributes NO cluster signal (a no-learning
+  # row carries no theme:), and an unknown --source is rejected rather than
+  # silently falling back to the release grain. The reject probe runs in a
+  # SUBSHELL — die() exits, and an un-subshelled call would tear down the whole
+  # self-test instead of being caught by the `if`.
+  if echo "$sr_report" | /usr/bin/grep -q 'trivial-session'; then
+    die "self-test: no-learning row must contribute no cluster signal"
+  fi
+  if ( emit_pattern_detect_report 5 3 false false report bogus-source ) >/dev/null 2>&1; then
+    die "self-test: unknown --source must be rejected (bogus-source accepted)"
+  fi
+
   echo "self-test: PASS"
   echo "  parse_triple validated (synthetic + real payload)"
   echo "  N/A sentinel exact-match validated"
@@ -637,6 +740,8 @@ run_self_test() {
   echo "  pattern-detect report renders cleanly on current data"
   echo "  dry-run-vs-apply switch validated"
   echo "  --emit rate (cross_release_pattern_emergence_rate) validated"
+  echo "  --source session-retro: exactly 1 qualifying cluster on the seeded fixture"
+  echo "  no-learning zero-state + unknown-source rejection validated"
   exit 0
 }
 
@@ -658,7 +763,8 @@ case "$MODE" in
     [[ "$WINDOW" =~ ^[0-9]+$ ]] || die "--window must be a positive integer (got '$WINDOW')"
     [[ "$CLUSTER_MIN" =~ ^[0-9]+$ ]] || die "--cluster-min must be a positive integer (got '$CLUSTER_MIN')"
     case "$EMIT" in report|rate) : ;; *) die "--emit must be report|rate (got '$EMIT')" ;; esac
-    emit_pattern_detect_report "$WINDOW" "$CLUSTER_MIN" "$WINDOW_BY_ROW" "$APPLY" "$EMIT"
+    case "$SOURCE" in release-synthesis|session-retro) : ;; *) die "--source must be release-synthesis|session-retro (got '$SOURCE')" ;; esac
+    emit_pattern_detect_report "$WINDOW" "$CLUSTER_MIN" "$WINDOW_BY_ROW" "$APPLY" "$EMIT" "$SOURCE"
     ;;
   "")
     die "Required: --mode {per-release|pattern-detect} (or --self-test)"

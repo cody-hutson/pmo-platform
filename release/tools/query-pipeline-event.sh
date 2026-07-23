@@ -15,6 +15,8 @@
 #   ./query-pipeline-event.sh --event-type self-repair                         # all retries/escalates/rollbacks
 #   ./query-pipeline-event.sh --event-type release-synthesis --event-subtype learnings-triple  # subtype filter
 #   ./query-pipeline-event.sh --event-subtype recommendation-choice-delta --window 5  # look-back: trailing 5 versions of rec↔choice deltas
+#   ./query-pipeline-event.sh --event-type session-retro                       # per-session self-retro rows (all 3 subtypes)
+#   ./query-pipeline-event.sh --event-type session-retro --event-subtype operator-feedback  # no-decision operator-feedback learnings only
 #   ./query-pipeline-event.sh --r-class                                        # EXPENSIVE + IRREVERSIBLE decisions
 #   ./query-pipeline-event.sh --count                                          # row count summary
 #
@@ -90,7 +92,7 @@ LOG_FILE="$EVALS_RESULTS_PATH/pipeline-event-log.md"
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 usage() {
-  /usr/bin/sed -n '11,26p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '11,28p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
