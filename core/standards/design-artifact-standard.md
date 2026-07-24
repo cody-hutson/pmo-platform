@@ -42,12 +42,12 @@ This standard is the **META framework** governing design-artifact discipline. It
 
 | Flow class | Definition | Tool | Location | Naming pattern | Current-state reference |
 |---|---|---|---|---|---|
-| **Architecture** | Structural map of files, layers, components, or systems | ASCII tree in plain fenced code block | Embedded in parent doc by default | Section anchor in parent | [`architecture-overview.md`](../disciplines/architecture-overview.md), [`operating-model.md`](../disciplines/operating-model.md) |
+| **Architecture** | Structural map of files, layers, components, or systems | ASCII tree in plain fenced code block | Embedded in parent doc by default | Section anchor in parent | [`architecture-overview.md`](../disciplines/architecture-overview.md) (fenced ASCII tree § File Architecture); `operating-model.md` is concept prose + tables (no fenced tree) — not an architecture artifact |
 | **Data flow** | Producer→consumer relationships, schemas, contracts | Markdown tables; Mermaid when ≥2 actors | Embedded in parent doc | Section anchor in parent | [`per-skill-output-contracts.md`](../schemas/per-skill-output-contracts.md), [`stage-io-contracts.md`](../schemas/stage-io-contracts.md), [`tracker-schemas.md`](../schemas/tracker-schemas.md) |
-| **Agent process** | Steps an agent (skill, hub, spoke) takes through a workflow | Mermaid or ASCII flow-block per [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) decision rule | Embedded in parent doc (skill SKILL.md, pipeline-stage doc) | Section anchor in parent | `process-flow-diagram-standards.md` examples |
+| **Agent process** | Steps an agent (skill, hub, spoke) takes through a workflow | Mermaid or ASCII flow-block per [`process-flow-diagram-standards.md`](../standards/process-flow-diagram-standards.md) decision rule | Embedded in parent doc (skill SKILL.md, pipeline-stage doc) | Section anchor in parent | `release/references/pipeline/stage-07-dev-testing.md` (Loop Flow), `release/references/pipeline/stage-13-close.md` (Layer-1 dual-write emit sequence), `release/references/standards/design-exploration.md` § 7 — NOT `process-flow-diagram-standards.md` (that is the rendering standard; its blocks are labelled "Example") |
 | **Human process** | Steps a human operator takes through a workflow | Same as agent process | Same | Same | None — no human-process artifact exists yet; baseline established by the backfill |
 | **Concept model** | Named structural concept and its relationships | ASCII tree + structured tables | Embedded in parent doc (explanation/ folder) | Section anchor in parent | [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md), [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) |
-| **Skill flow** | Mode-routing, internal phases, or invocation flow for a skill | Mermaid OR Mode-card tables per `process-flow-diagram-standards.md` | Co-located: `{core,operations,release}/skills/<skill>/SKILL.md` (embedded) or `{core,operations,release}/skills/<skill>/diagrams/` (dedicated, rare) | `skill-flow-<skill-name>.md` (dedicated); section anchor (embedded) | `pmo-skill-refiner/SKILL.md`, `delivery-engine/SKILL.md` |
+| **Skill flow** | Mode-routing, internal phases, or invocation flow for a skill | Mermaid OR Mode-card tables per `process-flow-diagram-standards.md` | Co-located: `{core,operations,release}/skills/<skill>/SKILL.md` (embedded) or `{core,operations,release}/skills/<skill>/diagrams/` (dedicated, rare) | `skill-flow-<skill-name>.md` (dedicated); section anchor (embedded) | `release/skills/pmo-skill-refiner/SKILL.md`, `operations/skills/delivery-engine/SKILL.md` (navigation aids; ~14 SKILL.md carry a Mode-card table corpus-wide — enumerate via § 12.2) |
 | **Decision tree** | Gate-and-branch logic for a routing decision | Mermaid (gate nodes) per `process-flow-diagram-standards.md` | Embedded in parent doc | Section anchor in parent | [`version-management-protocol.md`](../../release/references/protocols/version-management-protocol.md), [`triage-design-rereview.md`](../../release/references/standards/triage-design-rereview.md) |
 
 For each class, the tool column names the source-of-truth format. All formats are text-based and agent-readable. Per § 6, proprietary tools (Lucid / Figma / Miro / Whimsical), binary formats (SVG), and server-side-rendered formats (PlantUML) are rejected.
@@ -120,7 +120,7 @@ The current file is the current state. Git is the version database. This matches
 | Human process | Same as agent process | Same | Same. |
 | Skill flow | Same as agent process; OR Mode-card tables when modes are the dominant structure | Same | Same. |
 | Decision tree | Mermaid (gate nodes) per `process-flow-diagram-standards.md` decision rule | Same | Same. |
-| Architecture | ASCII tree in plain fenced code block | This standard (§ 6) | Matches existing [`architecture-overview.md`](../disciplines/architecture-overview.md), [`operating-model.md`](../disciplines/operating-model.md), [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md) convention. |
+| Architecture | ASCII tree in plain fenced code block | This standard (§ 6) | Matches existing [`architecture-overview.md`](../disciplines/architecture-overview.md), [`five-function-spine-and-process-flows.md`](../disciplines/five-function-spine-and-process-flows.md) convention (`operating-model.md` is concept prose + tables, not a fenced ASCII tree). |
 | Concept model | ASCII tree + structured tables | This standard (§ 6) | Matches existing `explanation/` folder convention. |
 | Data flow | Markdown tables; Mermaid when multi-actor | This standard (§ 6) + `process-flow-diagram-standards.md` (when multi-actor triggers process-flow rules) | Matches [`per-skill-output-contracts.md`](../schemas/per-skill-output-contracts.md) + [`stage-io-contracts.md`](../schemas/stage-io-contracts.md) precedent. |
 
@@ -229,7 +229,7 @@ Every design artifact carries bidirectional links between itself and the source 
   - `name` — the canonical kebab-case subject of the artifact (the `<artifact-name>` form from § 4).
   - `depicts` — a comma-separated list of repo-root-relative source paths the artifact depicts (same semantics as the dedicated-file `depicts:` frontmatter below).
   - **Declared region** — the marker bounds the artifact: from the marker line to the next heading of the **same or higher level**. That region *is* the artifact; everything else in the parent doc is ordinary prose. This is the crisp artifact-vs-prose boundary the conformance check in § 12 inspects.
-  - **Discovery query:** `grep -rn '<!-- design-artifact:' core operations release` → each hit is one embedded artifact; parse `flow-class` / `name` / `depicts` from the line.
+  - **Discovery query:** `grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release` → each hit is one embedded artifact; parse `flow-class` / `name` / `depicts` from the line. The query is **enum-anchored** (requires a real flow-class value) and field-order-tolerant (`[^>]*`), so the § 9 grammar line above and the bracketed `<one-of-7>` / `<data-flow>` examples do not self-match — the `>` in `[^>]` is what excludes them.
   - The marker renders invisibly on GitHub (it is an HTML comment), so it carries the machine payload without altering the human reading surface. The rationale for choosing a section-level marker over a parent-frontmatter index or a heading-convention amendment is recorded in [ADR-089](../ADRs/ADR-089-embedded-design-artifact-declaration-marker.md).
 
 **Doc-link maintenance:** Bidirectional links are subject to [Check 14 / Check 15](../rules/doc-link-maintenance.md) protocols (the workspace's automated link-resolver and warn-log surface). Stale links surface during deploy-time scans and route per the standard finding triage path.
@@ -318,15 +318,22 @@ Discovery is declaration-based (immune to table-invisibility). The rule below is
 # Dedicated artifacts (depicts: frontmatter — § 9)
 grep -rl '^depicts:' core operations release
 
-# Embedded artifacts (section-level marker — § 9)
-grep -rn '<!-- design-artifact:' core operations release
+# Embedded artifacts (section-level marker — § 9; enum-anchored + field-order-tolerant so the
+# § 9 grammar line and the bracketed <one-of-7> examples do not self-match — the `>` in [^>] excludes them)
+grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release
 
 # Per-flow-type count (dedicated + embedded, one row per type)
 for t in architecture data-flow agent-process human-process concept-model skill-flow decision-tree; do
   d=$(grep -rlE "^flow_class:[[:space:]]+$t\b" core operations release --include='*.md' | wc -l)
-  e=$(grep -rn "design-artifact:[^-]*flow-class=$t\b" core operations release --include='*.md' | wc -l)
+  e=$(grep -rn "design-artifact:[^>]*flow-class=$t\b" core operations release --include='*.md' | wc -l)
   printf "%-16s dedicated=%s embedded=%s total=%s\n" "$t" "$d" "$e" "$((d+e))"
 done
+
+# Enum-validation lint — surface any marker whose flow-class is NOT one of the 7 (the per-type
+# loop above drops an out-of-enum / typo'd flow-class silently; this catches it)
+grep -rnoE '<!-- design-artifact:[^>]*flow-class=[a-z-]+' core operations release --include='*.md' \
+ | grep -vE 'flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' \
+ && echo "WARN: out-of-enum flow-class marker(s) above" || echo "enum OK"
 ```
 
 The three queries are deterministic (RUN 1 == RUN 2 over an unchanged tree). This harness is the enumeration method the six flow-type backfill children cite for their completion condition, and the source of the per-flow-type gap count for the confirm-or-collapse (fission) decision.

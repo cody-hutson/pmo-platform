@@ -90,6 +90,8 @@ Re-verify at any SHA by running [`../core/deploy/tools/cross-module-audit.sh`](.
 
 This module hosts the operations skills — the canonical roster is the `OPERATIONS_SKILLS` array in [`core/deploy/deploy.sh`](../core/deploy/deploy.sh), which `deploy.sh --check` Check 5 asserts against the on-disk `operations/skills/` directories (so the roster cannot silently drift) — and the operations governance file (`operations/OPERATIONS.md`).
 
+The centralized structural map that depicts this module's place in the platform layout is the design artifact [`../core/diagrams/architecture-platform-structure.md`](../core/diagrams/architecture-platform-structure.md).
+
 ## Future-Extraction Readiness
 
 This module is designed to be extractable to its own repo if needed in the future. Self-containment invariants:

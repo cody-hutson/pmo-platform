@@ -84,6 +84,8 @@ Cross-cutting capability lives in the core module as separately-named **discipli
 
 For the architectural deep-dive (workspace layout, token-resolved config templates, where the security hooks live, how the deploy script bootstraps a fresh clone, how each module's skill roster maps to consumer audiences), see [docs/workspace-setup.md](docs/workspace-setup.md).
 
+The canonical structural map of this layout is the centralized design artifact [`core/diagrams/architecture-platform-structure.md`](core/diagrams/architecture-platform-structure.md) — the agent-maintained ASCII-tree expansion of the top-level layout shown above.
+
 ## License
 
 Business Source License 1.1 (BSL 1.1).
