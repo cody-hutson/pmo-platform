@@ -50,7 +50,12 @@ report() {
 
 assert_contains() {
   local name="$1" haystack="$2" needle="$3"
-  if printf '%s' "${haystack}" | grep -q -- "${needle}"; then
+  # SIGPIPE-safe: feed grep via here-string instead of `printf | grep`. A
+  # `printf` upstream of a short-circuiting `grep -q` gets EPIPE when grep exits
+  # on the first match before printf finishes writing a large haystack; under
+  # `set -o pipefail` printf's exit(141) then dominates the pipeline and the
+  # `if` wrongly takes the else branch (intermittent false-FAIL). See #3210.
+  if grep -q -- "${needle}" <<<"${haystack}"; then
     report "${name}" 1
   else
     report "${name}" 0 "expected to find: ${needle}"
@@ -59,8 +64,12 @@ assert_contains() {
 
 assert_not_contains() {
   local name="$1" haystack="$2" needle="$3"
-  if printf '%s' "${haystack}" | grep -q -- "${needle}"; then
-    local first; first=$(printf '%s' "${haystack}" | grep -- "${needle}" | head -1)
+  # SIGPIPE-safe: same here-string form as assert_contains (see #3210). The
+  # first-match extraction uses `grep -m1` (stop after one match) rather than
+  # `grep -- ... | head -1`, so there is no downstream `head` closing the pipe
+  # early on grep either — no pipeline, no broken-pipe, identical first line.
+  if grep -q -- "${needle}" <<<"${haystack}"; then
+    local first; first=$(grep -m1 -- "${needle}" <<<"${haystack}")
     report "${name}" 0 "unexpectedly found: ${first}"
   else
     report "${name}" 1
