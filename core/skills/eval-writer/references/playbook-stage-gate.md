@@ -54,7 +54,7 @@ When authoring, use Template 4 (handoff quality) as the structural base for gate
 For Gates 1-3 (Path A): read `gate-criteria-spec.md`, filter to `Check=judgment`. Example (Gate 3):
 ```
 G3-04: Scope is implementation-ready
-G3-05: Bundle rationale is documented
+G3-05: AC are measurable
 ```
 
 For Gates 4+ (Path B): read the specific `pipeline/stage-NN-*.md` §7 (Stage-Transition Gate) entry for the stage, parse Judgment dimensions. Example (Stage 5 exit, from your reading of release-process.md):
@@ -159,7 +159,7 @@ One `rubrics.md` per gate covering all criteria:
 | Criterion ID | Name | Judge file | Score scale |
 |---|---|---|---|
 | G3-04 | Scope is implementation-ready | `G3-04-scope-readiness.md` | 1-5 |
-| G3-05 | Bundle rationale is documented | `G3-05-bundle-rationale.md` | 1-5 |
+| G3-05 | AC are measurable | `G3-05-ac-measurable.md` | 1-5 |
 
 ## Aggregate decision
 Per gate-evaluation-spec.md §Decision Matrix:
@@ -203,7 +203,7 @@ Default: `core/schemas/gate-prompts/<gate-id>/`
 gate-prompts/
 └── G3/
     ├── G3-04-scope-readiness.md
-    ├── G3-05-bundle-rationale.md
+    ├── G3-05-ac-measurable.md
     ├── rubrics.md
     └── calibration-protocol.md
 ```

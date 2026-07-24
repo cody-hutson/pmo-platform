@@ -1,0 +1,107 @@
+name: Deploy-check required subset (pre-merge load-bearing gate)
+
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: every load-bearing deploy.sh --check member in the enumerated
+#              required-subset (network-free AND install-independent AND
+#              posture:required AND lacking a dedicated CI mirror) holds pre-merge —
+#              asserted as a blocking status check BEFORE the change lands, closing
+#              the gap that the whole --check battery ran only at deploy time
+#              (operator machine, post-merge) and was therefore skippable. Today the
+#              subset resolves to exactly one member: Check 38
+#              (hook-registry-index-freshness); it grows as posture:required checks
+#              lacking a mirror are back-filled (#1036 / #313).
+#   falsification: edit a per-hook source (e.g. add a rule row) under
+#                  core/rules/bypass-mode-readiness/ without regenerating the index
+#                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
+#                  red + exit 1). A fresh index -> green.
+# Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
+# block. Ships warn-mode-initial (reports, does not block) until the operator flips
+# the committed .github/deploy-check-ci.enforce sentinel token to `enforce` AND adds
+# this job to required_status_checks (branch protection — the out-of-tree
+# enforcement surface, R3).
+# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
+# core/rules/git-workflow.md § Repository-Integrity Gates.)
+#
+# THIN caller of the single engine. --check-required-subset runs each subset
+# member's shared _cNN_compute_verdict "gate" body and aggregates the verdict;
+# NO check predicate is re-encoded in this YAML (single-engine discipline, CIAC-2).
+# The runner reads the .enforce sentinel itself, so warn-mode swallows an in-scope
+# FAIL into exit 0 (reported, non-blocking); enforce propagates exit 1.
+#
+# Platform: macos-latest — deploy.sh uses BSD `stat -f`/`md5` and resolves tools at
+# the macOS image locations (mirrors version-freeness.yml + release-tooling-smoke.yml).
+#
+# Security: consumes NO untrusted github.event.* input. Every run: block is a static
+# invocation against workspace files; the RC handoff between steps uses the env-var
+# pattern (no ${{ }} interpolation inside a run: block).
+
+on:
+  pull_request:
+    paths:
+      # The union of surfaces the current subset members assert, plus the engine and
+      # the gate's own switch. Grows as members are added.
+      - 'core/rules/bypass-mode-readiness.md'
+      - 'core/rules/bypass-mode-readiness/**'
+      - 'core/hooks/**'
+      - 'core/deploy/tools/build-hook-registry.py'
+      - 'core/deploy/deploy.sh'
+      - '.github/workflows/deploy-check-ci.yml'
+      - '.github/deploy-check-ci.enforce'
+  push:
+    branches: [main]
+    paths:
+      - 'core/rules/bypass-mode-readiness.md'
+      - 'core/rules/bypass-mode-readiness/**'
+      - 'core/hooks/**'
+      - 'core/deploy/tools/build-hook-registry.py'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-check-required-subset:
+    name: Pre-merge load-bearing check subset
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          uname -s
+          command -v bash
+          command -v git
+          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the subset's Check 38 member will fail-closed"
+
+      - name: Run required-subset (via the deploy.sh engine)
+        id: check
+        # THIN caller of the single engine. The runner honors the committed
+        # .github/deploy-check-ci.enforce sentinel internally: warn swallows an
+        # in-scope FAIL into exit 0 (reported), enforce propagates exit 1; an
+        # ERROR/unexpected verdict always fail-closes (exit 1) regardless of sentinel.
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(bash core/deploy/deploy.sh --check-required-subset 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Gate decision (warn-mode-initial)
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          set -euo pipefail
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: required-subset: all load-bearing checks passed (or a finding was reported in warn-mode)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: required-subset gate FAILED (enforce mode) or fail-closed"
+            echo ""
+            echo "A load-bearing check in the enumerated subset FAILed with the enforce sentinel active,"
+            echo "OR a member returned an unexpected/ERROR verdict (fail-closed). See the check output above."
+            echo "Regenerate/repair the flagged surface before merge."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1

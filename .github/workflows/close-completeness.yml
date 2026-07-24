@@ -1,0 +1,105 @@
+name: Close-completeness (pre-merge Stage-13 output-set gate)
+
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: every VERIFIED RELEASE_LOG row at/after the close-completeness cutover
+#              carries its complete Stage-13 output-set (RELEASE_INDEX row +
+#              RELEASE_DIGEST entry + RELEASE_NOTES file [+ tag + published Release
+#              post-cutover]) — asserted pre-merge so a close that dropped a codified
+#              Stage-13 output cannot land on main undetected (the canonical
+#              LOG-row-only close incident). The probe (Check 48) and this gate are
+#              scaffold-independent: they read main's state, not the execution path.
+#   falsification: on a PR that adds a VERIFIED RELEASE_LOG row (at/after the armed
+#                  cutover) without its INDEX/DIGEST/NOTES companions -> this gate
+#                  reports INCOMPLETE (warn-mode: summary + exit 0; enforce: red +
+#                  exit 1). A complete output-set, or the dormant default (no cutover
+#                  set) -> green/SKIP.
+# Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
+# block. DORMANT by default — _cc_compute_verdict SKIPs until an operator arms
+# CLOSE_COMPLETENESS_CHECK_CUTOFF (honoring the reflexive-pipeline-loop exemption).
+# Ships warn-mode-initial: the committed .github/close-completeness.enforce sentinel
+# token governs blocking (warn reports, enforce blocks) and is read by the probe
+# itself; flipping it to `enforce` plus adding this job to required_status_checks
+# (branch protection, out-of-tree) arms the merge gate.
+# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
+# core/rules/git-workflow.md § Repository-Integrity Gates.)
+#
+# THIN caller of the single engine (#3795 — the probe + sentinel already shipped
+# with #1290; this workflow wires the missing caller). --check-close-completeness
+# runs ONLY Check 48's shared _cc_compute_verdict "gate" body and honors the
+# .enforce sentinel internally (warn swallows INCOMPLETE into exit 0; enforce
+# propagates exit 1; an unexpected verdict fail-closes). NO predicate is re-encoded
+# in this YAML (single-engine discipline).
+#
+# Platform: macos-latest — mirrors version-freeness.yml + deploy-check-ci.yml.
+#
+# Security: consumes NO untrusted github.event.* input. Every run: block is a static
+# invocation; the RC handoff uses the env-var pattern (no ${{ }} inside a run: block).
+
+on:
+  pull_request:
+    paths:
+      - 'release/releases/**'
+      - 'core/deploy/deploy.sh'
+      - '.github/workflows/close-completeness.yml'
+      - '.github/close-completeness.enforce'
+  push:
+    branches: [main]
+    paths:
+      - 'release/releases/RELEASE_LOG.md'
+
+permissions:
+  contents: read
+
+jobs:
+  close-completeness:
+    name: Pre-merge close-completeness gate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0          # body-drift sub-check reads origin/main when armed
+
+      - name: Verify prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          uname -s
+          command -v bash
+          command -v git
+          command -v gh || echo "::warning::gh not on PATH — post-cutover network sub-checks degrade (dormant default is unaffected)"
+          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — note-content lint delegation degrades"
+
+      - name: Run close-completeness check (single check, via the deploy.sh engine)
+        id: check
+        # THIN caller. The probe reads .github/close-completeness.enforce itself:
+        # warn swallows INCOMPLETE into exit 0 (reported), enforce propagates exit 1;
+        # an unexpected verdict fail-closes. Dormant default (no cutover) -> SKIP/exit 0.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(bash core/deploy/deploy.sh --check-close-completeness 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Gate decision (warn-mode-initial)
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          set -euo pipefail
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: close-completeness: every in-scope VERIFIED release has its full Stage-13 output-set (or gate dormant / reported in warn-mode)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: close-completeness gate FAILED (enforce mode) or fail-closed"
+            echo ""
+            echo "A VERIFIED RELEASE_LOG row is missing a Stage-13 output (INDEX / DIGEST / NOTES / tag / Release),"
+            echo "with the enforce sentinel active — OR the verdict was unexpected (fail-closed)."
+            echo "Backfill the missing output(s) per release/references/pipeline/stage-13-close.md Phase B before merge."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1

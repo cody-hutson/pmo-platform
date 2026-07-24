@@ -1,0 +1,25 @@
+# deploy-check-ci gate — enforcement sentinel (#1485)
+#
+# This committed marker governs whether the required-subset CI gate
+# (`deploy.sh --check-required-subset`, the enumerated load-bearing check subset —
+# today seeded with Check 38 hook-registry-index-freshness) BLOCKS or merely
+# REPORTS when an in-scope check FAILs. The runner reads this file directly, so the
+# sentinel is load-bearing on its own; the thin CI workflow (deploy-check-ci.yml)
+# additionally consumes the runner's exit code.
+#
+# The first non-comment, non-blank line is the mode token:
+#   warn      → report only (exit-0); an in-scope FAIL is surfaced but does not block.
+#   enforce   → block on an in-scope FAIL (exit-1 propagates to the CI caller).
+#
+# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
+# posture and the reflexive-pipeline-loop discipline (the introducing release
+# `governance-ci-gates` dogfoods this gate green on its own PR before any flip).
+# Flip the token below to `enforce` after a >=3-day warn-log review with zero false
+# positives AND after the operator adds the `deploy-check-ci` job to
+# `required_status_checks.contexts` via branch protection (the out-of-tree
+# enforcement surface). That single-token edit, plus the branch-protection change,
+# arms the gate. No code change is needed to graduate.
+#
+# (Token-flagged rather than presence-flagged so the file can ship now — the docs
+#  reference it — while the gate stays non-blocking; mirrors close-completeness.enforce.)
+warn

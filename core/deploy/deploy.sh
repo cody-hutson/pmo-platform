@@ -785,6 +785,288 @@ _cc_compute_verdict() {
   return 0
 }
 
+# ─── Hook-registry index freshness (Check 38 / --check-required-subset) — #1485 ──
+# The regenerate-and-diff freshness predicate, factored to TOP LEVEL so it is
+# shared by two surfaces with ONE body (mirroring the version-freeness DD1 and
+# close-completeness DD1 patterns above): the lifecycle Check 38 (inside cmd_check,
+# mapping the verdict to a deploy-time always-enforce FAIL) and the
+# --check-required-subset runner (cmd_check_required_subset, mapping the verdict to
+# an exit code for the CI gate). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2).
+#
+# Check 38 is always-enforce/deterministic — a non-empty regenerate-and-diff is
+# unambiguous drift, not a calibration signal. There is no offline/network anchor,
+# so the surface argument does not change the verdict; it is accepted for signature
+# parity with the other _cNN_compute_verdict bodies (and so the runner can call
+# every member the same way). The generator resolves its own sources via
+# Path(__file__).parents[3], so an absolute script path works from any cwd.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a FAIL or an exit
+# code); any generator diff detail goes to stderr:
+#   FRESH                  committed core/rules/bypass-mode-readiness.md == regenerated
+#   STALE                  committed index drifts from its sources (generator rc 1)
+#   ERROR <reason>         generator/python3 absent, or generator exit >=2 (fail-closed)
+_c38_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local gen="${_audit_src_root:-.}/core/deploy/tools/build-hook-registry.py"
+  if [[ ! -f "$gen" ]]; then
+    printf 'ERROR generator-missing:%s\n' "$gen"
+    return 0
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    printf 'ERROR python3-not-executable (cannot verify index freshness)\n'
+    return 0
+  fi
+  local out rc=0
+  out=$(/usr/bin/python3 "$gen" --check 2>&1) || rc=$?
+  case "$rc" in
+    0) printf 'FRESH\n' ;;
+    1) printf '%s\n' "$out" | /usr/bin/head -20 | /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'STALE\n' ;;
+    *) printf '%s\n' "$out" | /usr/bin/head -10 | /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'ERROR generator-exit-%s (source-resolution failure or error)\n' "$rc" ;;
+  esac
+}
+
+# ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
+# The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
+# by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
+# lifecycle Check 32 (inside cmd_check, routing the verdict through
+# flag_warn_or_issue / DEPLOY_CHECK_MODE — deploy-time warn-mode unchanged) and the
+# --check-release-corpus probe (cmd_check_release_corpus, mapping the verdict to an
+# exit code for the CI gate). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2). This is the same LOG-row → INDEX+DIGEST+NOTES resolution
+# _cc_compute_verdict delegates to (close-completeness reuses "the SAME path
+# resolution Check 32 uses"); factoring it here makes that reuse literal.
+#
+# For every RELEASE_LOG row at/after $c32_cutoff (default v1.01), asserts the
+# matching INDEX row + DIGEST entry + NOTES file; for rows at/after the SEPARATE,
+# dormant-by-default (__none__) $c32_release_cutoff, also asserts the LOG Tag column
+# + a published GitHub Release. LOG-row-driven (INDEX/DIGEST-only rows not flagged).
+# Corpus paths read from C32_* (fixture-overridable). Offline gh at the network
+# sub-check ⇒ N/A (no finding) on the "lifecycle" surface, finding/fail-closed on
+# the "gate" surface (the merge gate must not certify completeness blind — the
+# version-freeness FM-2 precedent).
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a warn-emit OR exit
+# code); per-row detail goes to stderr:
+#   SKIP <reason>            LOG absent — nothing to enumerate
+#   CLEAN <n>                n logged release(s) on/after the cutover are complete
+#   INCOMPLETE <f> <n>       f finding(s) across n checked row(s) — detail to stderr
+_c32_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local c32_log="${C32_LOG:-release/releases/RELEASE_LOG.md}"
+  local c32_index="${C32_INDEX:-release/releases/RELEASE_INDEX.md}"
+  local c32_digest="${C32_DIGEST:-release/releases/RELEASE_DIGEST.md}"
+  local c32_notes_dir="${C32_NOTES_DIR:-release/releases/notes}"
+  local c32_allowlist="${C32_ALLOWLIST:-.claude/skip-release-corpus-check.txt}"
+  local c32_cutoff="${RELEASE_CORPUS_CHECK_CUTOFF:-v1.01}"
+  local c32_release_cutoff="${RELEASE_CORPUS_RELEASE_CUTOFF:-__none__}"
+
+  if [[ ! -f "$c32_log" ]]; then
+    printf 'SKIP %s not found; cannot enumerate logged releases\n' "$c32_log"
+    return 0
+  fi
+
+  # Allowlist filter (exact version match; trailing # comment supported).
+  _c32_is_allowlisted() {
+    local _v="$1"
+    [[ -f "$c32_allowlist" ]] || return 1
+    /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$c32_allowlist"
+  }
+
+  # Enumerate logged releases in LOG file order: emit "version|milestone|tag".
+  local c32_rows
+  c32_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null \
+    | /usr/bin/awk -F ' \\| ' '{
+        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
+        ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
+        tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
+        print v "|" ms "|" tg
+      }') || c32_rows=""
+
+  local c32_past_cutoff=false c32_past_release_cutoff=false
+  local c32_targets=0 c32_findings=0 c32_output=""
+  local _row _ver _ms _tag _notes_ok _release_eligible
+  while IFS= read -r _row; do
+    [[ -n "$_row" ]] || continue
+    _ver="${_row%%|*}"
+    _ms="${_row#*|}"; _ms="${_ms%%|*}"
+    _tag="${_row##*|}"
+
+    if [[ "$c32_past_cutoff" == "false" && "$_ver" == "$c32_cutoff"* ]]; then
+      c32_past_cutoff=true
+    fi
+    [[ "$c32_past_cutoff" == "true" ]] || continue
+    _c32_is_allowlisted "$_ver" && continue
+    c32_targets=$((c32_targets + 1))
+
+    # (a) INDEX row present (version is the first table cell)
+    if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$c32_index" 2>/dev/null; then
+      c32_output+="${_ver}: missing RELEASE_INDEX.md row"$'\n'
+      c32_findings=$((c32_findings + 1))
+    fi
+    # (b) DIGEST entry present (### vX.YZ H3 heading)
+    if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$c32_digest" 2>/dev/null; then
+      c32_output+="${_ver}: missing RELEASE_DIGEST.md entry (### ${_ver} ...)"$'\n'
+      c32_findings=$((c32_findings + 1))
+    fi
+    # (c) NOTES file present under EITHER version stem OR milestone slug
+    _notes_ok=0
+    [[ -f "${c32_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
+    [[ -n "$_ms" && -f "${c32_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
+    if [[ $_notes_ok -eq 0 ]]; then
+      c32_output+="${_ver}: missing notes file (${_ver}_RELEASE_NOTES.md or ${_ms}_RELEASE_NOTES.md)"$'\n'
+      c32_findings=$((c32_findings + 1))
+    fi
+
+    # Stricter post-Release-cutover assertions (tag + published Release). Dormant
+    # when c32_release_cutoff is the __none__ sentinel.
+    _release_eligible=0
+    if [[ "$c32_release_cutoff" != "__none__" ]]; then
+      if [[ "$c32_past_release_cutoff" == "false" && "$_ver" == "$c32_release_cutoff"* ]]; then
+        c32_past_release_cutoff=true
+      fi
+      [[ "$c32_past_release_cutoff" == "true" ]] && _release_eligible=1
+    fi
+    if [[ $_release_eligible -eq 1 ]]; then
+      # (d) signed-tag presence — read from the LOG Tag column (in-corpus; no network).
+      if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" ]]; then
+        c32_output+="${_ver}: post-Release-cutover row has no tag recorded in RELEASE_LOG Tag column"$'\n'
+        c32_findings=$((c32_findings + 1))
+      fi
+      # (e) published GitHub Release — network-dependent. gh authed + missing ⇒
+      # finding; gh offline/unauth ⇒ N/A (no finding) on lifecycle, finding
+      # (fail-closed) on the gate surface.
+      if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        if ! gh release view "$_ver" >/dev/null 2>&1; then
+          c32_output+="${_ver}: post-Release-cutover row has no published GitHub Release (gh release view returned non-zero)"$'\n'
+          c32_findings=$((c32_findings + 1))
+        fi
+      elif [[ "$surface" == "gate" ]]; then
+        c32_output+="${_ver}: post-Release-cutover published-Release unverifiable (gh offline/unauth at gate surface — fail-closed)"$'\n'
+        c32_findings=$((c32_findings + 1))
+      else
+        printf 'release-corpus: %s published-Release sub-check N/A (gh offline/unauth) — reuses pre-Release SKIP semantics\n' "$_ver" >&2
+      fi
+    fi
+  done <<<"$c32_rows"
+
+  if [[ $c32_findings -eq 0 ]]; then
+    printf 'CLEAN %s\n' "$c32_targets"
+  else
+    printf '%s' "$c32_output" | /usr/bin/sed '/^$/d' >&2
+    printf 'INCOMPLETE %s %s\n' "$c32_findings" "$c32_targets"
+  fi
+  return 0
+}
+
+# ─── Skill package content-freshness (Check 7 / --check-package-freshness) — #2656 ──
+# The content-manifest freshness predicate, factored to TOP LEVEL so it is shared by
+# two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_compute_verdict): the
+# lifecycle Check 7 (inside cmd_check, always-enforce → ++ISSUES per stale skill) and
+# the --check-package-freshness probe (cmd_check_package_freshness, mapping the verdict
+# to an exit code for the CI gate). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2).
+#
+# ASSERT-BY-CONTENT, NOT BY PROXY (gate-efficacy Req (a)): the verdict rests on the
+# rebuild-stable content-manifest hash of a STAGED REBUILD of source vs the committed
+# baseline sidecar (packages/<skill>.skill.sha256) — mtime-independent, so a
+# committed-stale package is caught even on a fresh checkout. mtime is a cheap
+# non-verdict pre-filter only. python3/unzip absent → degrades to the
+# baseline-vs-live-package content compare + the mtime signal (logged), matching the
+# graceful-skip posture of the deploy-time Check 7.
+#
+# Check 7 has no network anchor, so the surface argument does not change the verdict;
+# it is accepted for signature parity with the other _cNN_compute_verdict bodies.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to ++ISSUES or an exit code);
+# per-skill detail goes to stderr:
+#   FRESH <n>                all n rostered skill package(s) content-fresh
+#   STALE <count> <csv>      count stale skill(s), comma-separated — detail to stderr
+_c7_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local c7_can_rebuild=true
+  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
+  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
+
+  local c7_total=0 c7_stale=0 c7_stale_list=""
+  local skill c7_module c7_src_dir c7_pkg c7_sidecar c7_live_hash c7_baseline
+  local c7_newest_src c7_pkg_mtime c7_src_newer
+  local c7_tmp_pkgdir c7_rebuilt_pkg c7_rebuilt_hash
+  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
+    c7_total=$((c7_total + 1))
+    c7_module=$(resolve_skill_module "$skill")
+    c7_src_dir="$c7_module/skills/$skill"
+    c7_pkg="packages/${skill}.skill"
+    c7_sidecar="packages/${skill}.skill.sha256"
+
+    if [[ ! -f "$c7_pkg" ]]; then
+      printf '  FAIL:  %s — .skill package missing\n' "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+    c7_live_hash=$(skill_content_hash "$c7_pkg")
+    if [[ -z "$c7_live_hash" ]]; then
+      printf '  FAIL:  %s — could not compute package content hash (corrupt archive or missing unzip/shasum)\n' "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+    if [[ ! -f "$c7_sidecar" ]]; then
+      printf '  FAIL:  %s — content baseline sidecar missing (%s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_sidecar" "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+    c7_baseline=$(tr -d '[:space:]' < "$c7_sidecar" 2>/dev/null)
+    if [[ "$c7_live_hash" != "$c7_baseline" ]]; then
+      printf '  FAIL:  %s — package content hash (%s) != committed baseline (%s); package tampered or sidecar stale — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_live_hash" "$c7_baseline" "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+
+    # mtime PRE-FILTER (cheap, non-verdict source-change signal).
+    c7_src_newer=false
+    c7_newest_src=$(find "$c7_src_dir" -type f -not -path '*/.*' -exec stat -f '%m' {} \; 2>/dev/null | sort -n | tail -1)
+    c7_pkg_mtime=$(stat -f '%m' "$c7_pkg" 2>/dev/null)
+    if [[ -n "$c7_newest_src" && -n "$c7_pkg_mtime" && "$c7_newest_src" -gt "$c7_pkg_mtime" ]]; then
+      c7_src_newer=true
+    fi
+
+    # CONTENT VERDICT: stage a rebuild of source and compare its content hash to the
+    # committed baseline (mtime-independent — catches a committed-stale package on a
+    # fresh checkout). Run whenever a rebuild is available; the result decides.
+    if [[ "$c7_can_rebuild" == "true" ]]; then
+      c7_tmp_pkgdir="$(mktemp -d)"
+      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
+        c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
+        c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
+        if [[ -z "$c7_rebuilt_hash" ]]; then
+          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (PASS, staged-rebuild inconclusive)\n' "$skill" >&2
+        elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
+          printf '  FAIL:  %s — source content changed since build (rebuilt hash %s != committed baseline %s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_rebuilt_hash" "$c7_baseline" "$skill" >&2
+          c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
+        fi
+      else
+        printf '  WARN:  %s — staged rebuild failed to run; falling back to baseline-vs-package content compare\n' "$skill" >&2
+        if [[ "$c7_src_newer" == "true" ]]; then
+          printf '  FAIL:  %s — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
+          c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
+        fi
+      fi
+      rm -rf "$c7_tmp_pkgdir"
+    else
+      # Degraded: no rebuild available; the baseline-vs-live-package compare already
+      # passed, so the mtime pre-filter is the only remaining source-change signal.
+      if [[ "$c7_src_newer" == "true" ]]; then
+        printf '  FAIL:  %s — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
+        c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
+      fi
+    fi
+  done
+
+  if [[ $c7_stale -eq 0 ]]; then
+    printf 'FRESH %s\n' "$c7_total"
+  else
+    printf 'STALE %s %s\n' "$c7_stale" "${c7_stale_list%,}"
+  fi
+}
+
 # Remove a derived-mirror subtree, self-healing read-only orphans and
 # failing loud (never silently) when removal is impossible. Returns 0 if the
 # path is gone after the call, non-zero (with an actionable error logged) if not.
@@ -2663,107 +2945,29 @@ cmd_check() {
   # not mtime) and logs the degraded scope (matches the graceful-skip posture of
   # Checks 14/18/20/23).
   log "Check 7: Package freshness (content-manifest hash)"
-  local c7_can_rebuild=true
-  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
-  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
-  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
-    local c7_module
-    c7_module=$(resolve_skill_module "$skill")
-    local c7_src_dir="$c7_module/skills/$skill"
-    local c7_pkg="packages/${skill}.skill"
-    local c7_sidecar="packages/${skill}.skill.sha256"
-
-    if [[ ! -f "$c7_pkg" ]]; then
-      log "  FAIL:  $skill — .skill package missing"
+  # Verdict computed by the shared _c7_compute_verdict body (DD1) so the CI probe
+  # (--check-package-freshness) and this lifecycle check cannot diverge. The body
+  # emits per-skill detail to stderr; this block maps the verdict to the deploy-time
+  # emit. Always-enforce: each stale skill increments ISSUES (byte-identical accounting).
+  local c7_verdict c7_tok c7_rest c7_count
+  c7_verdict="$(_c7_compute_verdict "lifecycle")"
+  c7_tok="${c7_verdict%% *}"
+  case "$c7_tok" in
+    FRESH)
+      log "  OK:    all ${c7_verdict#FRESH } rostered skill package(s) content-fresh"
+      ;;
+    STALE)
+      # "STALE <count> <csv>" — per-skill detail already on stderr.
+      c7_rest="${c7_verdict#STALE }"
+      c7_count="${c7_rest%% *}"
+      log "  FAIL:  ${c7_count} stale skill package(s): ${c7_rest#* } — rebuild via core/deploy/tools/build-skill-packages.sh (per-skill detail above)"
+      ISSUES=$((ISSUES + c7_count))
+      ;;
+    *)
+      log "  FAIL:  Check 7 — unexpected verdict: $c7_verdict"
       ISSUES=$((ISSUES + 1))
-      continue
-    fi
-
-    # Live package's content-manifest hash (content of what is committed).
-    local c7_live_hash
-    c7_live_hash=$(skill_content_hash "$c7_pkg")
-    if [[ -z "$c7_live_hash" ]]; then
-      log "  FAIL:  $skill — could not compute package content hash (corrupt archive or missing unzip/shasum)"
-      ISSUES=$((ISSUES + 1))
-      continue
-    fi
-
-    # Committed content baseline (sidecar). Its absence is a freshness gap — the
-    # sidecar must be emitted at build time (build-skill-packages.sh) and
-    # committed alongside the package.
-    if [[ ! -f "$c7_sidecar" ]]; then
-      log "  FAIL:  $skill — content baseline sidecar missing ($c7_sidecar); rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-      ISSUES=$((ISSUES + 1))
-      continue
-    fi
-    local c7_baseline
-    c7_baseline=$(tr -d '[:space:]' < "$c7_sidecar" 2>/dev/null)
-
-    # Tamper/corruption check: the committed package's content must match its
-    # committed baseline. A `touch` leaves content identical, so the live hash
-    # still matches the baseline (touch → GREEN). A post-build edit to the
-    # package bytes (without re-emitting the sidecar) flips this red.
-    if [[ "$c7_live_hash" != "$c7_baseline" ]]; then
-      log "  FAIL:  $skill — package content hash ($c7_live_hash) != committed baseline ($c7_baseline); package tampered or sidecar stale — rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-      ISSUES=$((ISSUES + 1))
-      continue
-    fi
-
-    # mtime PRE-FILTER (cheap, non-verdict): is anything under source newer than
-    # the committed package? If not, AND the baseline already matched above, the
-    # common clean case can fast-PASS without a rebuild.
-    local c7_newest_src c7_pkg_mtime c7_src_newer=false
-    c7_newest_src=$(find "$c7_src_dir" -type f -not -path '*/.*' -exec stat -f '%m' {} \; 2>/dev/null | sort -n | tail -1)
-    c7_pkg_mtime=$(stat -f '%m' "$c7_pkg" 2>/dev/null)
-    if [[ -n "$c7_newest_src" && -n "$c7_pkg_mtime" && "$c7_newest_src" -gt "$c7_pkg_mtime" ]]; then
-      c7_src_newer=true
-    fi
-
-    # CONTENT VERDICT: stage a rebuild of source and compare its content hash to
-    # the committed baseline. This is the load-bearing freshness assertion —
-    # mtime-independent, so it catches a committed-stale package on a fresh
-    # checkout. Run it whenever a rebuild is available; the result decides.
-    if [[ "$c7_can_rebuild" == "true" ]]; then
-      local c7_tmp_pkgdir c7_rebuilt_pkg c7_rebuilt_hash
-      c7_tmp_pkgdir="$(mktemp -d)"
-      # build-skill-packages.sh writes packages/<skill>.skill at REPO_ROOT, so
-      # redirect its output dir via the packager directly into a temp dir to
-      # avoid clobbering the committed package. We stage source + inject
-      # canonicals exactly as build_one() does, then emit into the temp dir.
-      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
-        c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
-        c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
-        if [[ -z "$c7_rebuilt_hash" ]]; then
-          log "  WARN:  $skill — rebuild produced no hashable package; falling back to baseline-vs-package content compare (PASS, baseline matched)"
-          log "  OK:    $skill (content baseline verified; staged-rebuild inconclusive)"
-        elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
-          log "  FAIL:  $skill — source content changed since build (rebuilt hash $c7_rebuilt_hash != committed baseline $c7_baseline); rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-          ISSUES=$((ISSUES + 1))
-        else
-          log "  OK:    $skill (content current — staged rebuild matches committed baseline)"
-        fi
-      else
-        log "  WARN:  $skill — staged rebuild failed to run; falling back to baseline-vs-package content compare"
-        if [[ "$c7_src_newer" == "true" ]]; then
-          log "  FAIL:  $skill — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-          ISSUES=$((ISSUES + 1))
-        else
-          log "  OK:    $skill (content baseline verified; rebuild unavailable, mtime shows no source change)"
-        fi
-      fi
-      rm -rf "$c7_tmp_pkgdir"
-    else
-      # Degraded: no rebuild available. The baseline-vs-live-package content
-      # compare already passed; fall back on the mtime pre-filter as the only
-      # available source-change signal (still better than nothing; logged).
-      if [[ "$c7_src_newer" == "true" ]]; then
-        log "  FAIL:  $skill — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-        ISSUES=$((ISSUES + 1))
-      else
-        log "  OK:    $skill (content baseline verified; rebuild unavailable [python3/unzip], mtime shows no source change)"
-      fi
-    fi
-  done
+      ;;
+  esac
 
   # Warn-mode gate for Checks 8-10 (and downstream warn-mode checks).
   # MODE_FILE adapts to an operator-instance path-via-env-var per Spec
@@ -5193,6 +5397,20 @@ cmd_check() {
 
 
   # ─── Check 32: Release-corpus completeness (every RELEASE_LOG row implies its corpus) ──
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (a)+(b)/(b')):
+  #   posture: required   enforcement-surface: release-corpus-completeness CI gate
+  #            (.github/workflows/release-corpus-completeness.yml, warn-mode-initial —
+  #             the deploy-time inline check below stays warn via DEPLOY_CHECK_MODE; the
+  #             REQUIRED posture is realized at the pre-merge CI mirror per Req b', which
+  #             mandates a required gate be CI-enforced, not deploy-time-only. The
+  #             deploy-time enforce-flip is a separate concern owned elsewhere.)
+  #   invariant: every RELEASE_LOG row at/after the cutover implies its INDEX row +
+  #              DIGEST entry + NOTES file (+ tag + published Release post-cutover).
+  #   falsification: a RELEASE_LOG row present with its INDEX/DIGEST/NOTES absent -> the
+  #                  gate reports INCOMPLETE (warn: summary + exit 0; enforce: red + exit 1).
+  #                  A complete output-set for every in-scope row -> CLEAN/green.
+  #
   # Per the release-corpus completeness forcing-function. Stage 13 Close produces four
   # release-corpus artifacts — RELEASE_LOG row, RELEASE_INDEX row, RELEASE_DIGEST entry,
   # and a notes/<slug>_RELEASE_NOTES.md file — plus (for post-cutover rows) a signed
@@ -5241,130 +5459,31 @@ cmd_check() {
   # when either is unavailable.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 32: Release-corpus completeness (RELEASE_LOG row -> INDEX + DIGEST + NOTES [+ tag + Release post-cutover])"
-    local c32_log="release/releases/RELEASE_LOG.md"
-    local c32_index="release/releases/RELEASE_INDEX.md"
-    local c32_digest="release/releases/RELEASE_DIGEST.md"
-    local c32_notes_dir="release/releases/notes"
-    local c32_allowlist=".claude/skip-release-corpus-check.txt"
-    local c32_cutoff="${RELEASE_CORPUS_CHECK_CUTOFF:-v1.01}"
-    # Separate, later cutover for the network/tag stricter assertions. Sentinel
-    # __none__ => no row is post-Release-cutover (published-Release sub-check dormant).
-    local c32_release_cutoff="${RELEASE_CORPUS_RELEASE_CUTOFF:-__none__}"
-
-    if [[ ! -f "$c32_log" ]]; then
-      flag_warn_or_issue "release-corpus-completeness" \
-        "$c32_log not found; cannot enumerate logged releases"
-    else
-      # Allowlist filter (exact version match; trailing # comment supported)
-      c32_is_allowlisted() {
-        local _v="$1"
-        [[ -f "$c32_allowlist" ]] || return 1
-        /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$c32_allowlist"
-      }
-
-      # Enumerate logged releases in LOG file order: emit "version|milestone|tag"
-      # for each `| vX.Y[...] | <milestone> | ... | <tag> | <state> | <date> |` row.
-      # Field 2 (awk -F ' | ') = version, field 3 = milestone, field 7 = tag column.
-      # The Tag column may carry a backtick-wrapped value (`v1.01`) or an em-dash.
-      # grep exits 1 when the log carries no matching version rows; guard so the
-      # empty enumeration is tolerated rather than aborting under set -e + pipefail.
-      local c32_rows
-      c32_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null \
-        | /usr/bin/awk -F ' \\| ' '{
-            v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
-            ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
-            tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
-            print v "|" ms "|" tg
-          }') || c32_rows=""
-
-      local c32_past_cutoff=false
-      local c32_past_release_cutoff=false
-      local c32_targets=0
-      local c32_findings=0
-      local c32_output=""
-      local _row _ver _ms _tag _notes_ok _release_eligible
-      while IFS= read -r _row; do
-        [[ -n "$_row" ]] || continue
-        _ver="${_row%%|*}"
-        _ms="${_row#*|}"; _ms="${_ms%%|*}"
-        _tag="${_row##*|}"
-
-        # 3-artifact cutover gate (walk LOG order; arm on first cutoff-prefix match)
-        if [[ "$c32_past_cutoff" == "false" && "$_ver" == "$c32_cutoff"* ]]; then
-          c32_past_cutoff=true
-        fi
-        [[ "$c32_past_cutoff" == "true" ]] || continue
-        c32_is_allowlisted "$_ver" && continue
-        c32_targets=$((c32_targets + 1))
-
-        # (a) INDEX row present (version is the first table cell)
-        if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$c32_index" 2>/dev/null; then
-          c32_output+="${_ver}: missing RELEASE_INDEX.md row"$'\n'
-          c32_findings=$((c32_findings + 1))
-        fi
-
-        # (b) DIGEST entry present (### vX.YZ <space> H3 heading)
-        if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$c32_digest" 2>/dev/null; then
-          c32_output+="${_ver}: missing RELEASE_DIGEST.md entry (### ${_ver} ...)"$'\n'
-          c32_findings=$((c32_findings + 1))
-        fi
-
-        # (c) NOTES file present under EITHER version stem OR milestone slug
-        _notes_ok=0
-        [[ -f "${c32_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
-        [[ -n "$_ms" && -f "${c32_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
-        if [[ $_notes_ok -eq 0 ]]; then
-          c32_output+="${_ver}: missing notes file (${_ver}_RELEASE_NOTES.md or ${_ms}_RELEASE_NOTES.md)"$'\n'
-          c32_findings=$((c32_findings + 1))
-        fi
-
-        # Stricter post-Release-cutover assertions (tag + published Release).
-        # Dormant when c32_release_cutoff is the __none__ sentinel.
-        _release_eligible=0
-        if [[ "$c32_release_cutoff" != "__none__" ]]; then
-          if [[ "$c32_past_release_cutoff" == "false" && "$_ver" == "$c32_release_cutoff"* ]]; then
-            c32_past_release_cutoff=true
-          fi
-          [[ "$c32_past_release_cutoff" == "true" ]] && _release_eligible=1
-        fi
-
-        if [[ $_release_eligible -eq 1 ]]; then
-          # (d) signed-tag presence — read from the LOG Tag column (in-corpus; no network).
-          # Empty / em-dash Tag column => missing tag for a post-cutover row.
-          if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" ]]; then
-            c32_output+="${_ver}: post-Release-cutover row has no tag recorded in RELEASE_LOG Tag column"$'\n'
-            c32_findings=$((c32_findings + 1))
-          fi
-          # (e) published GitHub Release — network-dependent; N/A (never FAIL) when
-          # gh/network unavailable, reusing pre-Release SKIP semantics.
-          if command -v gh >/dev/null 2>&1; then
-            if ! gh release view "$_ver" >/dev/null 2>&1; then
-              # Distinguish "absent" from "unreachable": a generic gh failure (auth/
-              # network) must NOT be treated as a missing Release (N/A, not FAIL).
-              if gh auth status >/dev/null 2>&1; then
-                c32_output+="${_ver}: post-Release-cutover row has no published GitHub Release (gh release view returned non-zero)"$'\n'
-                c32_findings=$((c32_findings + 1))
-              else
-                log "  N/A:   ${_ver} published-Release sub-check skipped (gh unauthenticated/offline) — reuses pre-Release SKIP semantics"
-              fi
-            fi
-          else
-            log "  N/A:   ${_ver} published-Release sub-check skipped (gh not on PATH) — reuses pre-Release SKIP semantics"
-          fi
-        fi
-      done <<<"$c32_rows"
-
-      if [[ $c32_findings -eq 0 ]]; then
-        log "  OK:    all $c32_targets logged release(s) on/after $c32_cutoff have INDEX + DIGEST + NOTES (Release-cutover: $c32_release_cutoff)"
-      else
+    # Verdict computed by the shared _c32_compute_verdict body (DD1) so the CI probe
+    # (--check-release-corpus) and this lifecycle check cannot diverge. The body emits
+    # per-row detail to stderr; this block maps the verdict to the deploy-time emit
+    # (warn-mode via flag_warn_or_issue / DEPLOY_CHECK_MODE — behavior unchanged).
+    local c32_verdict c32_tok c32_rest c32_f c32_n
+    c32_verdict="$(_c32_compute_verdict "lifecycle")"
+    c32_tok="${c32_verdict%% *}"
+    case "$c32_tok" in
+      SKIP)
+        flag_warn_or_issue "release-corpus-completeness" "${c32_verdict#SKIP }"
+        ;;
+      CLEAN)
+        log "  OK:    all ${c32_verdict#CLEAN } logged release(s) on/after the corpus cutover have INDEX + DIGEST + NOTES"
+        ;;
+      INCOMPLETE)
+        # "INCOMPLETE <findings> <targets>" — per-row detail already on stderr.
+        c32_rest="${c32_verdict#INCOMPLETE }"
+        c32_f="${c32_rest%% *}"; c32_n="${c32_rest##* }"
         flag_warn_or_issue "release-corpus-completeness" \
-          "$c32_findings corpus-completeness finding(s) across $c32_targets logged release(s) — a close dropped an output; see release/references/pipeline/stage-13-close.md Phase B"
-        printf '%s' "$c32_output" | head -10 | sed 's/^/         /'
-        if [[ $c32_findings -gt 10 ]]; then
-          log "         ... ($((c32_findings - 10)) more)"
-        fi
-      fi
-    fi
+          "$c32_f corpus-completeness finding(s) across $c32_n logged release(s) — a close dropped an output; see release/references/pipeline/stage-13-close.md Phase B (per-row detail above)"
+        ;;
+      *)
+        flag_warn_or_issue "release-corpus-completeness" "unexpected verdict: $c32_verdict"
+        ;;
+    esac
   fi
 
   # ─── Check 47: Release-body drift (published Release body == in-repo note) ──
@@ -6202,29 +6321,28 @@ cmd_check() {
   # completeness half). Fails LOUD if the generator can't run (missing python3 /
   # missing generator), never silently passing a potentially-stale index.
   log "Check 38: Hook-registry index freshness (regenerate-and-diff)"
-  local c38_gen="core/deploy/tools/build-hook-registry.py"
-  if [[ ! -f "$c38_gen" ]]; then
-    log "  FAIL:  Check 38 generator missing: $c38_gen"
-    ISSUES=$((ISSUES + 1))
-  elif [[ ! -x "/usr/bin/python3" ]]; then
-    log "  FAIL:  Check 38 — /usr/bin/python3 not executable; cannot verify index freshness"
-    ISSUES=$((ISSUES + 1))
-  else
-    local c38_out c38_rc=0
-    c38_out=$(/usr/bin/python3 "$c38_gen" --check 2>&1) || c38_rc=$?
-    if [[ $c38_rc -eq 0 ]]; then
+  # Verdict computed by the shared _c38_compute_verdict body (DD1) so the CI probe
+  # (--check-required-subset) and this lifecycle check cannot diverge. The body
+  # emits any regenerate-and-diff detail to stderr; this block maps the verdict
+  # token to the deploy-time emit. Always-enforce (deterministic generator): a
+  # STALE/ERROR verdict fails loud (++ISSUES), never silently passing a stale index.
+  local c38_verdict c38_tok
+  c38_verdict="$(_c38_compute_verdict "lifecycle")"
+  c38_tok="${c38_verdict%% *}"
+  case "$c38_tok" in
+    FRESH)
       log "  OK:    core/rules/bypass-mode-readiness.md is in sync with its sources"
-    elif [[ $c38_rc -eq 1 ]]; then
-      log "  FAIL:  core/rules/bypass-mode-readiness.md is STALE vs its sources — regenerate via 'python3 $c38_gen' and commit"
-      echo "$c38_out" | head -20 | sed 's/^/         /' || true
+      ;;
+    STALE)
+      log "  FAIL:  core/rules/bypass-mode-readiness.md is STALE vs its sources — regenerate via 'python3 core/deploy/tools/build-hook-registry.py' and commit"
       ISSUES=$((ISSUES + 1))
-    else
-      # exit 3 (source-resolution failure) or any other non-zero — fail loud.
-      log "  FAIL:  Check 38 generator exited $c38_rc (source-resolution failure or error)"
-      echo "$c38_out" | head -10 | sed 's/^/         /' || true
+      ;;
+    *)
+      # ERROR <reason> — generator/python3 absent or generator exit >=2; fail loud.
+      log "  FAIL:  Check 38 — ${c38_verdict#ERROR }"
       ISSUES=$((ISSUES + 1))
-    fi
-  fi
+      ;;
+  esac
 
   # Check 39 — Platform .version drift vs latest published Release (advisory; warn-mode initial; #1643)
   #
@@ -7699,6 +7817,202 @@ cmd_check_close_completeness() {
   esac
 }
 
+# ─── Mode: --check-required-subset (the CI load-bearing-check subset runner) — #1485 ─
+#
+# Runs the network-free, install-independent, load-bearing subset of the
+# deploy.sh --check battery pre-merge in CI and maps the AGGREGATE verdict to an
+# EXIT CODE (the verdict->exit contract the CI gate depends on). The subset is an
+# ENUMERATED ALLOWLIST of check-ids — NOT "all ~38 checks" — selected by the
+# predicate { network-free AND install-independent AND posture:required AND NOT
+# already covered by a dedicated CI mirror }. It is a real allowlist (not a runtime
+# grep) so it is auditable and slots into the #45 per-check registry; each member
+# runs its shared _cNN_compute_verdict "gate" body (single-engine, no re-encoded
+# predicate — CIAC-2). Checks with a DEDICATED CI mirror are EXCLUDED so an
+# invariant is never double-gated (R6): Check 6 (skill-canonical-structure-check.yml),
+# Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
+# #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
+#
+# TODAY the predicate resolves to exactly ONE member — Check 38
+# (hook-registry-index-freshness), the only explicit posture:required check lacking
+# a dedicated mirror. New members are appended here as future posture:required
+# checks are back-filled (#1036 / #313).
+#
+# Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
+# committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
+# in-scope FAIL is reported but swallowed (exit 0); flip the token to 'enforce' after
+# shakedown to block. Mirrors cmd_check_close_completeness's sentinel-aware contract.
+#
+#   exit 0  — every subset member passed, OR a member FAILed but the sentinel is warn
+#             (true verdict reported, not blocking).
+#   exit 1  — a subset member FAILed AND the sentinel is enforce, OR any member
+#             returned an unexpected/ERROR verdict (fail-closed regardless of sentinel).
+cmd_check_required_subset() {
+  validate_workspace
+  detect_install_path || true
+
+  # Sentinel-aware enforcement (committed .github/deploy-check-ci.enforce). The
+  # first non-comment token decides whether an in-scope FAIL BLOCKS (enforce) or is
+  # SWALLOWED non-blocking (warn / absent). The probe reads the sentinel directly,
+  # so it is load-bearing without a CI workflow wired first (a thin CI caller still
+  # consumes this exit code once added).
+  local rs_enforce_file="${DEPLOY_CHECK_CI_ENFORCE_FILE:-.github/deploy-check-ci.enforce}"
+  local rs_enforce="warn" _rs_tok_line
+  if [[ -f "$rs_enforce_file" ]]; then
+    _rs_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rs_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
+  fi
+
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Check 38 only. Append a
+  # row per future posture:required check that lacks a dedicated CI mirror.
+  local -a rs_checks=(
+    "hook-registry-index-freshness:_c38_compute_verdict"
+  )
+
+  local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
+  for _entry in "${rs_checks[@]}"; do
+    _id="${_entry%%:*}"
+    _fn="${_entry##*:}"
+    _verdict="$("$_fn" "gate")"
+    _tok="${_verdict%% *}"
+    case "$_tok" in
+      FRESH|CLEAN|PASS|FREE|SKIP|NA)
+        log "required-subset: $_id — OK ($_tok)"
+        rs_pass=$((rs_pass + 1))
+        ;;
+      STALE|NOT_FREE|INCOMPLETE|FAIL)
+        log "required-subset: $_id — FAIL ($_verdict)"
+        rs_fail=$((rs_fail + 1))
+        ;;
+      *)
+        log "required-subset: $_id — ERROR/unexpected verdict ($_verdict) — fail-closed"
+        rs_err=$((rs_err + 1))
+        ;;
+    esac
+  done
+
+  # An unexpected/ERROR verdict is a tooling failure, not a calibration finding —
+  # always fail-closed regardless of the warn/enforce sentinel (mirrors
+  # cmd_check_close_completeness).
+  if [[ $rs_err -gt 0 ]]; then
+    log "required-subset: $rs_err check(s) returned an unexpected/ERROR verdict — fail-closed exit 1"
+    exit 1
+  fi
+  if [[ $rs_fail -gt 0 ]]; then
+    if [[ "$rs_enforce" == "enforce" ]]; then
+      log "required-subset: $rs_fail load-bearing check(s) FAILed (sentinel enforce) — blocking exit 1"
+      exit 1
+    fi
+    log "required-subset: $rs_fail load-bearing check(s) FAILed but sentinel '$rs_enforce_file' token != enforce — WARN-MODE, reporting not blocking (flip the token to 'enforce' after shakedown)"
+    exit 0
+  fi
+  log "required-subset: all $rs_pass load-bearing check(s) passed"
+  exit 0
+}
+
+# ─── Mode: --check-release-corpus (the CI release-corpus-completeness probe) — #1484 ─
+#
+# Runs ONLY Check 32's release-corpus completeness verdict (not the full --check
+# suite) and maps the verdict to an EXIT CODE for the CI gate. Warn-vs-enforce at the
+# CI surface is decided by the committed .github/release-corpus-completeness.enforce
+# sentinel — during the warn-mode window an INCOMPLETE verdict is reported but
+# swallowed (exit 0); flip the token to 'enforce' after shakedown to block. Mirrors
+# cmd_check_close_completeness's sentinel-aware contract. Surface = "gate": fail-closed
+# (an offline anchor for the post-cutover published-Release sub-check is a finding, not
+# degraded to N/A). This gate is the SINGLE canonical required-context for Check 32
+# (the --check-required-subset runner EXCLUDES Check 32, so it is never double-gated).
+#
+#   exit 0  — CLEAN (every in-scope row complete) / SKIP (LOG absent — nothing to
+#             assert), OR INCOMPLETE but the sentinel is warn (true verdict reported).
+#   exit 1  — INCOMPLETE AND the sentinel is enforce, OR an unexpected verdict
+#             (fail-closed regardless of the sentinel).
+cmd_check_release_corpus() {
+  validate_workspace
+  detect_install_path || true
+
+  local rc_enforce_file="${RELEASE_CORPUS_ENFORCE_FILE:-.github/release-corpus-completeness.enforce}"
+  local rc_enforce="warn" _rc_tok_line
+  if [[ -f "$rc_enforce_file" ]]; then
+    _rc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_rc_tok_line" == "enforce" ]] && rc_enforce="enforce"
+  fi
+
+  local verdict tok
+  verdict="$(_c32_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    CLEAN)
+      log "release-corpus: ${verdict#CLEAN } logged release(s) on/after the cutover carry the full corpus set — OK"
+      exit 0
+      ;;
+    SKIP)
+      log "release-corpus: SKIP — ${verdict#SKIP } (nothing to assert)"
+      exit 0
+      ;;
+    INCOMPLETE)
+      log "release-corpus: INCOMPLETE — ${verdict#INCOMPLETE } (findings count / checked-row count; see detail above)"
+      log "  A close dropped a Stage-13 release-corpus output (INDEX row / DIGEST entry / NOTES file [+ tag / Release])."
+      log "  Backfill per release/references/pipeline/stage-13-close.md Phase B."
+      if [[ "$rc_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$rc_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
+      exit 0
+      ;;
+    *)
+      log "release-corpus: unexpected verdict '$verdict' — fail-closed"
+      exit 1
+      ;;
+  esac
+}
+
+# ─── Mode: --check-package-freshness (the CI .skill content-freshness probe) — #2656 ─
+#
+# Runs ONLY Check 7's package content-freshness verdict — the FULL rostered-skill
+# content-hash comparison, no per-skill diff-scoping (the WORKFLOW path-filters the
+# TRIGGER, so no parallel scoping logic lives here; a stale package for ANY skill
+# correctly blocks) — and maps the verdict to an EXIT CODE for the CI gate.
+# Warn-vs-enforce at the CI surface is decided by the committed
+# .github/skill-package-freshness.enforce sentinel. Mirrors cmd_check_close_completeness.
+#
+#   exit 0  — FRESH (every rostered skill package content-current), OR STALE but the
+#             sentinel is warn (true verdict reported, not blocking).
+#   exit 1  — STALE AND the sentinel is enforce, OR an unexpected verdict (fail-closed).
+cmd_check_package_freshness() {
+  validate_workspace
+  detect_install_path || true
+
+  local pf_enforce_file="${SKILL_PACKAGE_FRESHNESS_ENFORCE_FILE:-.github/skill-package-freshness.enforce}"
+  local pf_enforce="warn" _pf_tok_line
+  if [[ -f "$pf_enforce_file" ]]; then
+    _pf_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$pf_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_pf_tok_line" == "enforce" ]] && pf_enforce="enforce"
+  fi
+
+  local verdict tok
+  verdict="$(_c7_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    FRESH)
+      log "package-freshness: ${verdict#FRESH } rostered skill package(s) content-fresh — OK"
+      exit 0
+      ;;
+    STALE)
+      log "package-freshness: STALE — ${verdict#STALE } (count + stale skill(s); see detail above)"
+      log "  A skill's SKILL.md or references/ changed without rebuilding its .skill package."
+      log "  Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + its .sha256 sidecar."
+      if [[ "$pf_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
+      exit 0
+      ;;
+    *)
+      log "package-freshness: unexpected verdict '$verdict' — fail-closed"
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Mode: --report ──────────────────────────────────────────────────────────
 
 cmd_report() {
@@ -8164,6 +8478,32 @@ main() {
       # (_cc_compute_verdict), no copy. Used by .github/workflows/close-completeness.yml.
       cmd_check_close_completeness
       ;;
+    --check-required-subset)
+      # CI runner (#1485): runs the enumerated load-bearing subset (network-free AND
+      # install-independent AND posture:required AND no dedicated CI mirror) and exits
+      # per the AGGREGATE verdict, honoring the committed .github/deploy-check-ci.enforce
+      # sentinel (warn swallows a FAIL, enforce blocks). Each member runs its shared
+      # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today seeded with
+      # Check 38 (hook-registry-index-freshness). Used by .github/workflows/deploy-check-ci.yml.
+      cmd_check_required_subset
+      ;;
+    --check-release-corpus)
+      # Single-check CI release-corpus-completeness probe (#1484): runs ONLY Check 32's
+      # verdict and exits per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE — sentinel-gated
+      # at .github/release-corpus-completeness.enforce; fail-closed at the gate surface).
+      # The Check 32 logic ALSO fires inside the full --check suite — one shared body
+      # (_c32_compute_verdict), no copy. Used by .github/workflows/release-corpus-completeness.yml.
+      cmd_check_release_corpus
+      ;;
+    --check-package-freshness)
+      # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
+      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH, 1 STALE
+      # when the .github/skill-package-freshness.enforce sentinel is enforce; fail-closed
+      # on an unexpected verdict). The Check 7 logic ALSO fires inside the full --check
+      # suite — one shared body (_c7_compute_verdict), no copy. Used by
+      # .github/workflows/skill-package-freshness.yml.
+      cmd_check_package_freshness
+      ;;
     --self-test)
       # Offline, hermetic regression for the close-completeness invariant (#1290 AC5):
       # a deliberately-abbreviated scaffold (a VERIFIED row missing a Stage-13 output)
@@ -8176,7 +8516,7 @@ main() {
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --self-test | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-required-subset | --self-test | --report]"
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
@@ -8185,6 +8525,9 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; exits 1 on a STALE package when enforce) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""

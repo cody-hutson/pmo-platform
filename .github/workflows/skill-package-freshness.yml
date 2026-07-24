@@ -1,0 +1,104 @@
+name: Skill package content-freshness (pre-merge gate)
+
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: every rostered skill's compiled .skill package reflects current source
+#              content (the committed package == what source would build now) — asserted
+#              PRE-MERGE so a PR that edits a skill's SKILL.md or references/ cannot
+#              merge green while its .skill package is stale (the v3.35 defect: 9 skills
+#              edited, 0 packages rebuilt, 28/28 CI SUCCESS — the stale state was caught
+#              only at Stage-13 close-out, not by CI). Mirrors deploy.sh Check 7 (which
+#              ran only at deploy time) into a pre-merge status check per Req (b').
+#   falsification: edit a skills/*/SKILL.md (or references/) without rebuilding the
+#                  .skill package -> this gate reports STALE (warn-mode: summary +
+#                  exit 0; enforce: red + exit 1). Rebuild via build-skill-packages.sh
+#                  and commit the package + .sha256 sidecar -> FRESH/green.
+# Path-filtered to skill sources + packages, so ADVISORY by skip-semantics: absence on
+# an unrelated PR MUST NOT block. Ships warn-mode-initial. Dep #2159 (Check 7's
+# non-reproducible-archive false-positives) is CLOSED, so mirroring the content-hash
+# verdict into CI does not yield false-positive failures. Flips when the committed
+# .github/skill-package-freshness.enforce token -> `enforce` AND the job is added to
+# required_status_checks (branch protection, out-of-tree — R3).
+# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
+# core/rules/git-workflow.md § Repository-Integrity Gates.)
+#
+# THIN caller of the single engine. --check-package-freshness runs Check 7's FULL
+# rostered-skill content-hash verdict via the shared _c7_compute_verdict "gate" body —
+# NO per-skill diff-scoping logic lives here (the path filter is on the TRIGGER only,
+# satisfying "no parallel logic"; a stale package for ANY skill correctly blocks). NO
+# predicate is re-encoded in this YAML (single-engine, CIAC-2).
+#
+# Platform: macos-latest — the content-hash verdict needs python3 + unzip (both on the
+# macOS image) and deploy.sh uses BSD `stat -f`/`md5` (mirrors version-freeness.yml).
+#
+# Security: consumes NO untrusted github.event.* input. Every run: block is a static
+# invocation; the RC handoff uses the env-var pattern (no ${{ }} inside a run: block).
+
+on:
+  pull_request:
+    paths:
+      - 'operations/skills/**'
+      - 'release/skills/**'
+      - 'core/skills/**'
+      - 'packages/*.skill'
+      - 'packages/*.skill.sha256'
+      - 'core/deploy/deploy.sh'
+      - '.github/workflows/skill-package-freshness.yml'
+      - '.github/skill-package-freshness.enforce'
+  push:
+    branches: [main]
+    paths:
+      - 'operations/skills/**'
+      - 'release/skills/**'
+      - 'core/skills/**'
+      - 'packages/*.skill'
+
+permissions:
+  contents: read
+
+jobs:
+  skill-package-freshness:
+    name: Pre-merge .skill package content-freshness gate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          uname -s
+          command -v bash
+          command -v git
+          command -v unzip || echo "::warning::unzip missing — Check 7 degrades to the mtime signal"
+          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the staged-rebuild content verdict degrades"
+
+      - name: Run package-freshness check (single check, via the deploy.sh engine)
+        id: check
+        # THIN caller. The probe reads .github/skill-package-freshness.enforce itself:
+        # warn swallows STALE into exit 0 (reported), enforce propagates exit 1; an
+        # unexpected verdict fail-closes.
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(bash core/deploy/deploy.sh --check-package-freshness 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Gate decision (warn-mode-initial)
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          set -euo pipefail
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: package-freshness: every rostered skill package is content-fresh (or a stale package was reported in warn-mode)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: skill package-freshness gate FAILED (enforce mode) or fail-closed"
+            echo ""
+            echo "A rostered skill's SKILL.md or references/ changed without rebuilding its .skill package,"
+            echo "with the enforce sentinel active — OR the verdict was unexpected (fail-closed)."
+            echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar before merge."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
