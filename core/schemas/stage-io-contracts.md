@@ -125,7 +125,7 @@ Stage 3 (Bundle) produces a versioned Milestone for Stage 4 (Planning) to plan a
 |----------|--------|----------|----------------|----------------|----------|------------|
 | Versioned Milestone | GitHub Milestone (vX.Y) with assigned issues | YES | Bundle approval — Tier 3 (Stage 3 Phase B) | Summary | GitHub Milestone with issues + version + due date | `gh milestone view vX.Y` returns Milestone with ≥1 issue assigned |
 | Dependency graph | Structured section in Stage 3 sub-task comment | YES | NO | Detail | "Output for Stage 4" section on Stage 3 sub-task | All `#N` dependency refs validated; no circular deps; compatible states per Gate 3 G3-04 |
-| Capacity assessment | Structured section in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Capacity heuristics applied per Gate 3 G3-05 |
+| Capacity assessment | Structured section in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Capacity heuristics applied per Stage 3 Bundle sizing |
 | Bundle rationale | Text in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Rationale text present per Gate 3 G3-06 |
 | Re-review artifact | Structured section at HEAD of Stage 4 sub-task comment | YES (post-cutover) | C3 → operator decision Tier 0 — Tier 3 (Phase 1) | Detail | Stage 4 sub-task comment, BEFORE "Output for Stage 5" | Header metadata present (8 fields); per-requirement table covers all ACs + proposed-changes + risks; D1/D2/D3 findings + citations per Rule 3; classification per requirement; PT taxonomy if C3. Validated per [`triage-design-rereview.md`](../../release/references/standards/triage-design-rereview.md) § 1-3. |
 

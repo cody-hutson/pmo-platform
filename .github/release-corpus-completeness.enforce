@@ -1,0 +1,26 @@
+# release-corpus-completeness gate — enforcement sentinel (#1484)
+#
+# This committed marker governs whether the release-corpus-completeness CI gate
+# (`deploy.sh --check-release-corpus`, i.e. Check 32's verdict) BLOCKS or merely
+# REPORTS on an INCOMPLETE verdict. The probe reads this file directly, so the
+# sentinel is load-bearing on its own; the thin CI workflow
+# (release-corpus-completeness.yml) additionally consumes the probe's exit code.
+#
+# The first non-comment, non-blank line is the mode token:
+#   warn      → report only (exit-0); an INCOMPLETE finding is surfaced but does not block.
+#   enforce   → block on an INCOMPLETE verdict (exit-1 propagates to the CI caller).
+#
+# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
+# posture and the reflexive-pipeline-loop discipline. NOTE: the release ledger
+# currently carries pre-existing corpus-completeness findings (notes files stored in
+# versioned subdirectories that the flat-path check does not resolve, plus genuinely
+# historical gaps); these are reported in warn-mode but MUST be drained or allowlisted
+# (.claude/skip-release-corpus-check.txt) before any flip to enforce, or the gate will
+# false-block. Flip the token below to `enforce` after that drain AND after the
+# operator adds the `release-corpus-completeness` job to `required_status_checks`
+# (branch protection — the out-of-tree enforcement surface). No code change is needed
+# to graduate.
+#
+# (Token-flagged rather than presence-flagged so the file can ship now — the docs
+#  reference it — while the gate stays non-blocking; mirrors close-completeness.enforce.)
+warn

@@ -463,6 +463,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 | G6-03 | **PR body is parser-clean.** The PR body parses without a BLOCKING/parse-error signal (required metadata sections resolvable: implementation summary, per-issue status) — mirrors the release-planner parse-status `clean` semantics. | artifact | structural | auto | `gh pr view <PR> --json body` feeds the parse; PR-body parse yields no parse-error signal |
 | G6-04 | **Verification evidence present.** The PR body contains a Verification Evidence section with per-issue PASS/FAIL results; `issues_with_verification_block / total_issues = 1.0`. | artifact | structural | auto | `gh pr view <PR> --json body` -> `grep -qE 'Verification Evidence'` |
 | G6-05 | **Change Description section present.** The release plan FILE contains a `## Change Description` section (authored at Stage 6 Phase C1 per RELEASE_PROTOCOL § Change Description Protocol), committed on the release branch before PR ready-for-review. | artifact | structural | auto | `grep -qE '^#{2} Change Description' <release-plan>` |
+| G6-06 | **Skill packages content-fresh (PR-CI).** A PR that edits any rostered skill's `SKILL.md` or `references/` has its compiled `.skill` package rebuilt and content-fresh in the same PR — the committed package equals what source would build now, mirroring `deploy.sh` Check 7's content-hash verdict pre-merge (closing the class defect where skill-source edits merged green while the `.skill` package stayed stale, caught only at Stage-13 close-out). Initial **warn-mode** posture per [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist precedent — a stale package logs and Engineering proceeds; it flips to enforce when the committed `.github/skill-package-freshness.enforce` token → `enforce` AND the CI job enters branch-protection required checks. Backed by the `skill-package-freshness` CI gate (`deploy.sh --check-package-freshness`, single-engine with Check 7). **Cutover discipline:** applies to skill-editing releases going forward; the introducing release itself is exempt (reflexive-pipeline-loop discipline) yet dogfoods it green (its eval-writer reference edit + package rebuild is the live regression signal). | artifact | structural | auto (warn → enforce) | `bash core/deploy/deploy.sh --check-package-freshness` (FRESH → exit 0; STALE → exit 1 when enforce); backed by `.github/workflows/skill-package-freshness.yml` |
 
 ### Self-Repair Actions
 
@@ -473,6 +474,7 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 | G6-03 | PR body fails parse (missing/malformed required sections) | Return to Stage 6 Engineering Phase C2: repair the PR body to the metadata template (implementation summary + per-issue status). Warn-mode: log + proceed. |
 | G6-04 | Verification Evidence section absent from PR body | Return to Stage 6 Engineering Phase C4: author the Verification Evidence section with per-issue PASS/FAIL results before handoff. Warn-mode: log + proceed. |
 | G6-05 | Change Description section absent from release plan | Return to Stage 6 Engineering Phase C1: author the `## Change Description` section in the release plan FILE per RELEASE_PROTOCOL § Change Description Protocol; commit on the release branch before PR ready-for-review. Warn-mode: log + proceed. |
+| G6-06 | Skill package stale for a skill-editing PR | Return to Stage 6 Engineering: rebuild the stale package(s) via `core/deploy/tools/build-skill-packages.sh <skill>` and commit the package + its `.sha256` sidecar on the release branch. Warn-mode: log to `core/hooks/gate-g6-warn-log.jsonl` and proceed. Enforce-mode (post-shakedown): block until the package is rebuilt. |
 
 ---
 
@@ -608,7 +610,13 @@ The G2-11 / G3-12 gates apply to issues entering Triage / Bundle going forward. 
 
 ## Versioning
 
-**Schema version:** 2.3
+**Schema version:** 2.4
+
+**v2.4 changes (non-breaking — minor; additive — G6-06; no criterion ID renumber; existing IDs stable):**
+
+- Added **G6-06** (Skill packages content-fresh — PR-CI) to Gate 6 (Engineering Completeness) — 1 criterion row + 1 self-repair row, section-local to § Gate 6. Registers the PR-time `.skill` package content-freshness gate: a PR editing a rostered skill's `SKILL.md` or `references/` must rebuild its compiled `.skill` package in the same PR, mirroring `deploy.sh` Check 7's content-hash verdict pre-merge (via the new `skill-package-freshness` CI gate, single-engine with Check 7). Closes the class defect where skill-source edits merged green while the compiled package stayed stale — caught only at Stage-13 close-out, not by CI. Row is `artifact` / `structural` / `auto (warn → enforce)`; ships warn-mode-initial.
+- Schema bump v2.3 → v2.4 (non-breaking minor; additive — G6-06). Schema consumers (automated gate-validation tooling, stage-gate evaluator, CER Claim agents) require no structural change — the stage-gate evaluator routes by the `Check` column and an `auto` structural row uses the existing structural checker; no evaluator, no field-lifecycle-matrix entry changes. Existing G1-01..G1-09 / G2-01..G2-12 / G3-01..G3-19 + G4-01..G4-05 + G6-01..G6-05 + G-BR1..G-BR4 + G-PR1..G-PR10 + G-EX1..G-EX8 + G-CL1..G-CL9 IDs unchanged (G6-06 is the v2.4 addition; the prior max in the G6 range was G6-05); no ID renumber, no column/type change.
+- **Cutover discipline (v2.4 additions):** G6-06 applies to skill-editing releases entering Stage 6 strictly AFTER its introducing-release merge SHA recorded in the release log; the introducing release itself is exempt (reflexive-pipeline-loop discipline) yet dogfoods it green (its eval-writer reference edit + package rebuild is the live regression signal).
 
 **v2.3 changes (non-breaking — minor; additive — G3-19; no criterion ID renumber; existing IDs stable):**
 
