@@ -1,3 +1,4 @@
+<!-- reference-durability: allow-version-ref -->
 # RELEASE_PROTOCOL.md — Platform Release Management
 
 **Effective:** 2026-03-19
@@ -106,6 +107,19 @@ A `## Change Description` section is embedded in every release plan FILE (`relea
 ## Versioning
 
 A release's version is **allocated in two phases, separated in time**: an *intent* declared at plan time, and the *concrete number* computed and claimed only at the merge moment. This is the authoritative allocation rule — it answers "what is the next version" deterministically, where the older "the bump-class decides the number" framing could not (a "Minor" change-type never said *which* minor). The rule is **host-agnostic**: it is pure version-tuple arithmetic over the canonical version grammar and consumes the repository-host adapter operations `anchor()` and `claimed_set()` **by name**. It does not itself call any host tool (no `gh`, no `git`); how a host computes the anchor and the claimed set is that host's adapter's concern, not this rule's. The adapter operations and the GitHub/git reference adapter are defined in the repo-host adapter version-claim interface (`core/standards/repo-host-adapter-versioning.md`); the version grammar, its integer-triple total order, and the comparator the arithmetic uses are defined in the version-grammar standard (`release/references/standards/version-grammar.md`), implemented once in `release/tools/version-grammar.sh`.
+
+### Release-identity mode (`{versioned, version-less}`) — the precondition on this rule
+
+Every release declares a **release-identity mode** at Bundle — the closed enum `{versioned, version-less}` whose declaration home is the Stage-3 bundle shard (`release/references/pipeline/stage-03-bundle.md` § Release-Identity Mode). The mode is the precondition on everything below:
+
+- **`versioned`** (the default) — the release claims a version number, and the two-phase allocation rule in this section applies in full: a bump-class intent declared at plan time, a next-free computation and atomic claim performed at the merge moment.
+- **`version-less`** — the release carries **no version string**; its identity is the capability slug alone. The allocation rule below is **inapplicable, not failed**: there is no floor to derive, no candidate to compute, and no tag to claim. A `version-less` release records `(none)` where a version key would sit and is identified in the release log by its slug.
+
+`version-less` is an **identity-axis value, not a malformed or empty version string.** The version-grammar canonicalization, comparison, and freeness functions are therefore **never invoked** for a `version-less` release, so the grammar's rejection of the empty form is never reached and never contradicted. Do not synthesize a placeholder version to force a `version-less` release through the allocation rule, and do not read the absent version as a collision.
+
+The mode is **orthogonal to bundle size** — all four combinations (`versioned` / `version-less` × single-item / bundle) are supported. Gate 3 asserts the mode's validity, and the mode-appropriate obligation (a declared bump-class intent for `versioned`; the absence of a version string for `version-less`), at the Bundle→Planning boundary via criterion **G3-19** in `core/schemas/gate-criteria-spec.md` § Gate 3. That gate deliberately asserts identity-mode validity only and **never version freeness** — freeness is claim-time state owned by Phase 2 below, where the compare-and-swap renders it.
+
+**Cutover discipline:** applies to releases entering Bundle strictly AFTER this sub-block's introducing-release merge SHA recorded in the release log; pre-cutover releases grandfathered; the introducing release itself exempt (reflexive-pipeline-loop discipline).
 
 ### Phase 1 — Plan time: declare the bump-class + provisional-display version (the FLOOR)
 

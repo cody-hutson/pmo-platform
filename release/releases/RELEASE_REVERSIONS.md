@@ -1,10 +1,14 @@
 <!-- reference-durability: allow-version-ref -->
 # RELEASE_REVERSIONS
 
-Machine-readable re-version ledger. A re-version is a release that **changed its
-version mid-pipeline** (`vX claimed → abandoned → reshipped as vY`) — the collision
-class the version-claim-determinism capability exists to prevent, made queryable so
-the collision rate is measurable over time.
+Machine-readable re-version **orphan-tag recovery record**. A re-version is a release
+that **changed its version mid-pipeline** (`vX claimed → abandoned → reshipped as vY`) —
+the collision class the version-claim-determinism capability exists to prevent. This
+records the rare recoverable case: an abandoned version whose git tag was pushed before
+the version was abandoned (`disposition=tag-orphaned`), which the recovery-doctrine
+reaper reads to find the orphan tag to clean up.
+
+> Provenance: narrowed to an orphan-tag recovery record per #3109 (was a collision-rate telemetry surface, #1679). The producer records only `tag-orphaned` re-versions going forward — a `disposition=none` re-version (no tag cut, the common defer-to-merge path) is no longer written; the historical `none`/`unrecoverable` rows below are retained under the append-only contract.
 
 This ledger is the fourth release-corpus surface beside RELEASE_LOG (the per-release
 audit trail), RELEASE_INDEX (the release index), and RELEASE_DIGEST (the version-family
@@ -104,38 +108,6 @@ DERIVATION — abandoned_versions from a claim sequence (handles the round-trip 
   so a round-trip v2.12 → v2.14 → v2.12 (final v2.12) yields abandoned = {v2.14} (one
   row), correctly KEEPING v2.12 as the final while recording v2.14 as abandoned.
   Each member of the abandoned set is one row.
-```
-
-## Collision rate (the measurable AC)
-
-The collision rate is `(re-version count) / (release count)` over a window. Both
-counts are grep-able from the corpus. The numerator slug class includes `.`, a
-leading digit, and uppercase so every real slug shape is counted — a version-prefixed
-slug (`v1.03-bundle-and-related`, dotted) and a milestone-derived slug
-(`05-ROLE-sustain-coverage-router`, leading digit + uppercase) both match. The
-denominator counts ALL releases including the version-less ones (a version-less
-release is itself frequently a collision outcome, so it must not be dropped):
-
-```bash
-# Re-version rows (the collision history) — one per abandoned version:
-grep -E '^\| [A-Za-z0-9.-]+ \| ' release/releases/RELEASE_REVERSIONS.md | grep -v -- '---'
-
-# Re-version count (rows) — numerator. The [A-Za-z0-9.-] class matches dotted,
-# leading-digit, and uppercase slugs (every shape the live corpus carries):
-RX=$(grep -cE '^\| [A-Za-z0-9.-]+ \| v' release/releases/RELEASE_REVERSIONS.md)
-
-# Release count — denominator. Anchor on the trailing State + Date columns (every
-# RELEASE_LOG release row has them), NOT a digit-led Version, so the 7 version-less
-# releases are NOT dropped:
-REL=$(grep -cE '\| (VERIFIED|DEPLOYED) \| [0-9]{4}-[0-9]{2}-[0-9]{2} \|$' release/releases/RELEASE_LOG.md)
-
-echo "re-version rate = $RX abandoned-version rows / $REL releases"
-
-# What the recovery reaper must act on (orphan / unrecoverable dispositions).
-# Pipe-split fields (leading `|` makes field 1 empty): 2=slug 3=abandoned_version
-# 10=disposition. Match the disposition column by its position in the data rows:
-awk -F'|' '$10 ~ /tag-orphaned|unrecoverable/ {gsub(/ /,"",$2); gsub(/ /,"",$3); print $2, $3, $10}' \
-  release/releases/RELEASE_REVERSIONS.md
 ```
 
 ## Evidence-grounding (why every historical `disposition` is `none` or `unrecoverable`)
