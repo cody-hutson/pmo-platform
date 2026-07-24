@@ -3,6 +3,14 @@ title: Architecture — Platform Structure
 purpose: The centralized, canonical ASCII-tree map of the pmo-platform modular-monolith top-level structure, referenced from the architecture overview, operating model, and module READMEs.
 type: reference
 status: ACTIVE
+flow_class: architecture
+depicts:
+  - core/disciplines/architecture-overview.md
+  - core/disciplines/operating-model.md
+  - README.md
+  - operations/README.md
+  - release/README.md
+  - core/README.md
 reversibility: CHEAP / Confidence HIGH
 ---
 <!-- reference-durability: allow-link -->
