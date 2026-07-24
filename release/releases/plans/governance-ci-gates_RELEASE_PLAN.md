@@ -34,6 +34,29 @@ reversibility: MODERATE / Confidence HIGH
 
 ---
 
+## Change Description
+
+*Authored at Stage 6 Phase C1 per RELEASE_PROTOCOL § Change Description Protocol. Operator-facing.*
+
+**Outcome.** Governance self-validates *before* a change lands. Four load-bearing `deploy.sh --check` verifiers — which previously ran only at deploy time on the operator's machine, and so could not block a merge — gain thin-caller **pre-merge CI gates**, all shipping **warn-mode** (they report, they do not block yet). One long-standing criterion-ID collision is reconciled, and the deploy-time enforce-flip backlog gets a recorded, evidence-based decision. After this release, the release ledger's completeness, a skill's package-freshness, the hook-registry index, and the close-out output-set each have a machine gate reachable at the pull-request boundary — the flip to actually-blocking is a deliberate, one-token follow-up once each gate has dogfooded clean.
+
+**Issues resolved (6).**
+- **#1632** — the Gate-3 criterion ID `G3-05` resolved to three different meanings across the corpus (pre-renumber rot). Reconciled every live surface to the canonical "AC are measurable" (remedy a). The eval-writer skill's own eval suite already expected this, so the fix makes the playbook consistent with both the schema and the skill.
+- **#1485 (+#3795)** — the whole `deploy.sh --check` battery ran only at deploy time. Adds an enumerated, extensible **required-subset CI runner** (seeded today with the one load-bearing check that lacked a mirror) and wires the previously-dead close-completeness gate to its CI caller.
+- **#1484** — the highest-frequency documented release failure (closing a release with only its ledger row) now has a **release-corpus-completeness** pre-merge gate; Check 32 gains a `posture: required` declaration.
+- **#2656** — a skill-source edit could merge green with a stale compiled `.skill` package; a **skill-package-freshness** pre-merge gate now catches it, registered as gate criterion G6-06.
+- **#1486** — records the enforce-flip decision for the warn-mode check cohort: the flip mechanism already exists in-tree; every flip is **deferred** because the drain evidence is operator-instance data a CI agent cannot read, and the cohort is still warning at scale.
+
+**Key decisions.** All new gates ship **warn-mode** (operator gate, Stage-4 R1 → Option A): dogfood green on this PR, flip to enforce as a separate Stage-12/13 step. The `#1485` subset **excludes** any check with a dedicated mirror, so Check 32 is never double-gated (R6). `#1486` ships the mechanism and defers all flips (scope-lock D-1). `#3795` folded into `#1485` (scope-lock D-2).
+
+**Reversibility.** **CHEAP.** All-additive: new workflows + warn-mode sentinels + append-only register rows + behavior-preserving `deploy.sh` factoring (the inline checks keep their exact deploy-time verdicts). Whole-release rollback is `git revert` of the PR. The only MODERATE surface is the future operator-side branch-protection flip, reversible by un-requiring.
+
+**Downstream impact.** No runtime/skill behavior changes for end users. Every new gate is warn-mode, so no PR is blocked by this release. The deploy-time `deploy.sh --check` verdicts are byte-identical to before (verified by a full `--check` run). Flipping any gate to blocking is an explicit future step (a one-token sentinel edit + a branch-protection change), gated on a clean dogfood.
+
+**Cross-references.** Stage-4 plan #3734 · Stage-5 design #3790 · this milestone #236. Enforcement posture per `core/standards/gate-efficacy-standard.md` Req (b)/(b'); warn-mode-initial per `core/rules/git-workflow.md` § Repository-Integrity Gates.
+
+---
+
 ## Scope
 
 ### Summary
