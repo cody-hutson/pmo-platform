@@ -1,0 +1,14 @@
+# Release-corpus append-ledgers: mechanize the §220 I1 "take-both, never re-sort"
+# doctrine (release/references/pipeline/stage-13-close.md) as git's built-in union
+# merge, so concurrent release closes auto-merge instead of textually conflicting (#3108).
+# Scope is EXACT paths only (never a glob) — R6 blast-radius containment.
+release/releases/RELEASE_INDEX.md   merge=union
+release/releases/RELEASE_DIGEST.md  merge=union
+/CHANGELOG.md                       merge=union
+# RELEASE_LOG.md is INTENTIONALLY OMITTED: it carries an I2 state-bearing status
+# column (DEPLOYED < VERIFIED). A line-level union duplicates rows with contradictory
+# status (see #3108 Stage-5 empirical Test B). It stays on git-default merge, resolved
+# by the shipped §220 doctrine + #1680 ledger_guard/reparse_ledgers controls.
+# RELEASE_REVERSIONS.md is ALSO INTENTIONALLY OMITTED (Collective Review 2026-07-19):
+# its schema carries reaper-mutable disposition/reaped_ref cells — state-bearing, so a
+# line-level union corrupts it the same way. It stays on git-default merge as well.
