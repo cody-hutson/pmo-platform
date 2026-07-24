@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.86] - 2026-07-24
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.86_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.86)
+
 ## [v3.85] - 2026-07-24
 
 Release close-out now verifies the published notes page, rebuilds changed skill packages, and requires a sample for format changes.

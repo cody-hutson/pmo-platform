@@ -149,7 +149,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v3.83 | pipeline-telemetry-tail | #3301, #2646, #2647, #2645, #2423, #166 | #3657 | `4dcf8298c33b79bffc6efebebb7b53bafd631869` | `v3.83` | VERIFIED | 2026-07-22 |
 | v3.84 | version-identity-and-corpus-ledgers | #3016, #3108, #3109 | #3654 | `1dd1ca01a8dbf471f389bdd8a388775b5899e4ea` | `v3.84` | VERIFIED | 2026-07-24 |
 | v3.85 | close-out-hardening-wave-2 | #3118, #3322, #2600, #3215 | #3729 | `68736d5e6340838c5cd15512e42f9c1f0260a7db` | `v3.85` | VERIFIED | 2026-07-24 |
-| v3.86 | structure-records-and-review-signals | #2225, #2021, #681 | #3797 | `e1b631414c7fc36b38ed07e5de36f1057ffe63b8` | `v3.86` | DEPLOYED | 2026-07-24 |
+| v3.86 | structure-records-and-review-signals | #2225, #2021, #681 | #3797 | `e1b631414c7fc36b38ed07e5de36f1057ffe63b8` | `v3.86` | VERIFIED | 2026-07-24 |
 
 #### Deployment Log v3.86
 **Files deployed:** structure-records integrity + drift-detection slice (routine class) — one release PR #3797 (`release/v3.88-structure-records-and-review-signals → main`, merge-commit `e1b63141`), 3 parent issues, 9 files. **#2225** adds `release/tools/check-analysis-staleness.py` — an operator-local, non-blocking lint (embedded `--self-test`; confirm-gated archive) flagging past-`sunset` + missing-frontmatter analysis artifacts, siblinged to the existing `release/tools/check-*.py` family (NOT `deploy.sh`, avoiding contention with concurrent release #281); the analysis-workspace standard is untouched (enforcement was the deferred half of #1492). **#2021** thin-wires the methodology type-pack read into `tracker-manager` + `weekly-status-rollup` (prose citation of the OPERATIONS.md Methodology Awareness Protocol; `weekly-status-rollup`'s methodology-neutral scope boundary preserved verbatim), with `delivery-engine` + `ppm-agent` confirmed already-conformant (verify-only); both `.skill` packages rebuilt (Check-7). **#681** homes the Layer-1 boundary-violation detection-signal fingerprint in `core/disciplines/concurrency-safeguards.md` (which already owns Layer-1 concurrent-write detection, L49/L59); AC2's originating flow is Cowork-side/off-git → accept-risk recorded (writer-side twin of the checker bug ADR-085 fixed).
@@ -157,6 +157,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Timestamp:** 2026-07-24
 **Cycle-Time:** N/A — (mechanism: compute-cycle-time.sh; content release — no `deployment-status/deploy-skill` event carried a `v3.86` version tag)
 **Result:** SUCCESS
+**Outcome:** SUCCESS
 **Version lineage:** scoped at provisional **v3.88** on the branch/labels (a conservative next-free that over-counted the sibling release branches #281 `v3.86` / #291 `v3.87`, which hold branches but no tags) → claimed **v3.86** at the Stage-12 atomic ref-CAS (the adapter's true next-free, since `claimed_set()` counts published tags + DEPLOYED rows, not branches). No tag was cut for v3.88 → `disposition: none`, no `RELEASE_REVERSIONS` row.
 
 #### Deployment Log v3.85
