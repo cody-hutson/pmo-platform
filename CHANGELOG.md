@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.84] - 2026-07-24
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Concurrent releases no longer collide when updating shared release records, and a release without a version number is now a first-class option.
 
 [Full notes](release/releases/notes/v3.84_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.84)
 
