@@ -184,6 +184,12 @@ Foundation release — the packs aren't read by the skills yet ([#2021](https://
 
 [Full notes](release/releases/notes/v3.58_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.58)
 
+## [v3.57] - 2026-07-02
+
+Impact analysis now follows the code import graph for software changes, and git-native releases no longer dead-end at the dry-run halt.
+
+[Full notes](release/releases/notes/v3.57_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.57)
+
 ## [v3.56] - 2026-07-02
 
 Stage 3 Bundling becomes a self-triggering composer with automated milestone-position derivation and a first-class version-less release-identity mode.

@@ -85,6 +85,10 @@ Methodology (Scrum, Kanban, or your own) becomes a self-contained, swappable pac
 
 ### v3.58 (2026-07-02) — <headline — populated by operator at chore PR review>
 
+### v3.57 (2026-07-02) — Impact analysis reads code, and git-native releases stop dead-ending
+
+Two release-pipeline improvements on milestone `80-solutioning-and-engineering-skill-modes` (2 issues, PR #3082). **#505** adds `domain-blast-radius.sh`, which traces change impact through the code import graph (`from x import y` edges) for `domain: software` deliverables and emits the same schema-v1 surface the design-review checklist consumes; the markdown-tree `blast-radius.sh` default is unchanged and now shares a common emitter library (architecture recorded in ADR-068). **#674** stops the release-executor Dry-Run-Record halt from dead-ending git-native releases (where the PR diff *is* the dry-run review), fixed at both the Step-1 input-validation check and the failure-mode entry; Cowork-lineage plans still route to release-planner Mode C. Provisional **v3.54** re-versioned forward to **v3.57** at the atomic tag claim (forward-only per bundle-composition-doctrine §5.3). MODERATE / `git revert -m 1` of PR #3082 reverses both cleanly; additive tooling + one routing-condition fix, no data migration.
+
 ### v3.53 (2026-07-02) — <headline — populated by operator at chore PR review>
 
 ### v3.52 (2026-07-02) — The eval framework is complete — tested refiner scripts, runnable eval sets, and chain-aware QA
