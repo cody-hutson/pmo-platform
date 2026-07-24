@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.85] - 2026-07-24
+
+Release close-out now verifies the published notes page, rebuilds changed skill packages, and requires a sample for format changes.
+
+[Full notes](release/releases/notes/v3.85_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.85)
+
 ## [v3.84] - 2026-07-24
 
 Concurrent releases no longer collide when updating shared release records, and a release without a version number is now a first-class option.
