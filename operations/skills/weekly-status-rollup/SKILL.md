@@ -210,7 +210,7 @@ roll-up starts at `Project` (escalating per its severity), a portfolio-tier depe
 
 **Scope boundary (methodology-neutral):** this produces the neutral rolled-up rows only. The PMI
 "Risk Profile" *presentation* a methodology pack renders on top of these rows is out of scope
-here — owned by the portfolio-framework methodology pack, not this aggregation.
+here — owned by the portfolio-framework methodology pack, not this aggregation. *(Boundary scope: this excludes the methodology-pack **presentation** layer only; reading `delivery_approach` to project neutral kinds/fields is done per the OPERATIONS.md Methodology Awareness Protocol and is distinct from the presentation the pack owns.)*
 
 #### Section 3.x: Cross-Project Correction Recurrence
 
@@ -642,6 +642,7 @@ These rules are inherited from OPERATIONS.md and apply to all PMO skills. See OP
 - **Max 5 clarifying questions:** Ask at most 5 questions per invocation. Everything else becomes a labeled assumption with `[ASSUMPTION – CONFIRM]` and a proposed answer.
 - **Principal contributor standard:** Output should match what a senior PMO professional would produce — accurate, judgment-driven, actionable.
 - **Dual-Framing Bridge (conditional):** When generating roll-ups for dual-framing co-managed projects, include both Agile and Waterfall track summaries converging on unified priorities. Only produce dual Agile/Waterfall framing when the project's PROJECT.md has `dual_framing_enabled: true`. Do not generate dual-framing outputs for single-framing projects. **When a project's `delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two array form per project-schema §6.5)**, summarize each constituent track natively and take the **union** of priorities across both (per `work-organization-mapping-framework.md` §2.5) rather than collapsing to one track — independent of `dual_framing_enabled`.
+- **Methodology read (at invocation, SSOT-anchored):** Read the project's `delivery_approach` at invocation per the OPERATIONS.md Methodology Awareness Protocol (Rule 1: no caching across invocations; Rule 3: `Custom` via the `custom_methodology_definition` block, no blind Scrum fallback). Where a roll-up section surfaces archetype-sensitive content, project it per the archetype matrix row; on an absent field, render methodology-agnostic, never assume Scrum (Rule 4 PROC-3/PROC-4). The methodology-pack **risk-profile presentation** remains out of scope here (see the Section 3 methodology-neutral scope boundary) — this read anchors the neutral projection only, not the downstream presentation.
 
 ### Guardrails
 
