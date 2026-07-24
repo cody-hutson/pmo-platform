@@ -828,6 +828,139 @@ _c38_compute_verdict() {
   esac
 }
 
+# ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
+# The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
+# by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
+# lifecycle Check 32 (inside cmd_check, routing the verdict through
+# flag_warn_or_issue / DEPLOY_CHECK_MODE — deploy-time warn-mode unchanged) and the
+# --check-release-corpus probe (cmd_check_release_corpus, mapping the verdict to an
+# exit code for the CI gate). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2). This is the same LOG-row → INDEX+DIGEST+NOTES resolution
+# _cc_compute_verdict delegates to (close-completeness reuses "the SAME path
+# resolution Check 32 uses"); factoring it here makes that reuse literal.
+#
+# For every RELEASE_LOG row at/after $c32_cutoff (default v1.01), asserts the
+# matching INDEX row + DIGEST entry + NOTES file; for rows at/after the SEPARATE,
+# dormant-by-default (__none__) $c32_release_cutoff, also asserts the LOG Tag column
+# + a published GitHub Release. LOG-row-driven (INDEX/DIGEST-only rows not flagged).
+# Corpus paths read from C32_* (fixture-overridable). Offline gh at the network
+# sub-check ⇒ N/A (no finding) on the "lifecycle" surface, finding/fail-closed on
+# the "gate" surface (the merge gate must not certify completeness blind — the
+# version-freeness FM-2 precedent).
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a warn-emit OR exit
+# code); per-row detail goes to stderr:
+#   SKIP <reason>            LOG absent — nothing to enumerate
+#   CLEAN <n>                n logged release(s) on/after the cutover are complete
+#   INCOMPLETE <f> <n>       f finding(s) across n checked row(s) — detail to stderr
+_c32_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local c32_log="${C32_LOG:-release/releases/RELEASE_LOG.md}"
+  local c32_index="${C32_INDEX:-release/releases/RELEASE_INDEX.md}"
+  local c32_digest="${C32_DIGEST:-release/releases/RELEASE_DIGEST.md}"
+  local c32_notes_dir="${C32_NOTES_DIR:-release/releases/notes}"
+  local c32_allowlist="${C32_ALLOWLIST:-.claude/skip-release-corpus-check.txt}"
+  local c32_cutoff="${RELEASE_CORPUS_CHECK_CUTOFF:-v1.01}"
+  local c32_release_cutoff="${RELEASE_CORPUS_RELEASE_CUTOFF:-__none__}"
+
+  if [[ ! -f "$c32_log" ]]; then
+    printf 'SKIP %s not found; cannot enumerate logged releases\n' "$c32_log"
+    return 0
+  fi
+
+  # Allowlist filter (exact version match; trailing # comment supported).
+  _c32_is_allowlisted() {
+    local _v="$1"
+    [[ -f "$c32_allowlist" ]] || return 1
+    /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$c32_allowlist"
+  }
+
+  # Enumerate logged releases in LOG file order: emit "version|milestone|tag".
+  local c32_rows
+  c32_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null \
+    | /usr/bin/awk -F ' \\| ' '{
+        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
+        ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
+        tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
+        print v "|" ms "|" tg
+      }') || c32_rows=""
+
+  local c32_past_cutoff=false c32_past_release_cutoff=false
+  local c32_targets=0 c32_findings=0 c32_output=""
+  local _row _ver _ms _tag _notes_ok _release_eligible
+  while IFS= read -r _row; do
+    [[ -n "$_row" ]] || continue
+    _ver="${_row%%|*}"
+    _ms="${_row#*|}"; _ms="${_ms%%|*}"
+    _tag="${_row##*|}"
+
+    if [[ "$c32_past_cutoff" == "false" && "$_ver" == "$c32_cutoff"* ]]; then
+      c32_past_cutoff=true
+    fi
+    [[ "$c32_past_cutoff" == "true" ]] || continue
+    _c32_is_allowlisted "$_ver" && continue
+    c32_targets=$((c32_targets + 1))
+
+    # (a) INDEX row present (version is the first table cell)
+    if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$c32_index" 2>/dev/null; then
+      c32_output+="${_ver}: missing RELEASE_INDEX.md row"$'\n'
+      c32_findings=$((c32_findings + 1))
+    fi
+    # (b) DIGEST entry present (### vX.YZ H3 heading)
+    if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$c32_digest" 2>/dev/null; then
+      c32_output+="${_ver}: missing RELEASE_DIGEST.md entry (### ${_ver} ...)"$'\n'
+      c32_findings=$((c32_findings + 1))
+    fi
+    # (c) NOTES file present under EITHER version stem OR milestone slug
+    _notes_ok=0
+    [[ -f "${c32_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
+    [[ -n "$_ms" && -f "${c32_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
+    if [[ $_notes_ok -eq 0 ]]; then
+      c32_output+="${_ver}: missing notes file (${_ver}_RELEASE_NOTES.md or ${_ms}_RELEASE_NOTES.md)"$'\n'
+      c32_findings=$((c32_findings + 1))
+    fi
+
+    # Stricter post-Release-cutover assertions (tag + published Release). Dormant
+    # when c32_release_cutoff is the __none__ sentinel.
+    _release_eligible=0
+    if [[ "$c32_release_cutoff" != "__none__" ]]; then
+      if [[ "$c32_past_release_cutoff" == "false" && "$_ver" == "$c32_release_cutoff"* ]]; then
+        c32_past_release_cutoff=true
+      fi
+      [[ "$c32_past_release_cutoff" == "true" ]] && _release_eligible=1
+    fi
+    if [[ $_release_eligible -eq 1 ]]; then
+      # (d) signed-tag presence — read from the LOG Tag column (in-corpus; no network).
+      if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" ]]; then
+        c32_output+="${_ver}: post-Release-cutover row has no tag recorded in RELEASE_LOG Tag column"$'\n'
+        c32_findings=$((c32_findings + 1))
+      fi
+      # (e) published GitHub Release — network-dependent. gh authed + missing ⇒
+      # finding; gh offline/unauth ⇒ N/A (no finding) on lifecycle, finding
+      # (fail-closed) on the gate surface.
+      if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        if ! gh release view "$_ver" >/dev/null 2>&1; then
+          c32_output+="${_ver}: post-Release-cutover row has no published GitHub Release (gh release view returned non-zero)"$'\n'
+          c32_findings=$((c32_findings + 1))
+        fi
+      elif [[ "$surface" == "gate" ]]; then
+        c32_output+="${_ver}: post-Release-cutover published-Release unverifiable (gh offline/unauth at gate surface — fail-closed)"$'\n'
+        c32_findings=$((c32_findings + 1))
+      else
+        printf 'release-corpus: %s published-Release sub-check N/A (gh offline/unauth) — reuses pre-Release SKIP semantics\n' "$_ver" >&2
+      fi
+    fi
+  done <<<"$c32_rows"
+
+  if [[ $c32_findings -eq 0 ]]; then
+    printf 'CLEAN %s\n' "$c32_targets"
+  else
+    printf '%s' "$c32_output" | /usr/bin/sed '/^$/d' >&2
+    printf 'INCOMPLETE %s %s\n' "$c32_findings" "$c32_targets"
+  fi
+  return 0
+}
+
 # Remove a derived-mirror subtree, self-healing read-only orphans and
 # failing loud (never silently) when removal is impossible. Returns 0 if the
 # path is gone after the call, non-zero (with an actionable error logged) if not.
@@ -5236,6 +5369,20 @@ cmd_check() {
 
 
   # ─── Check 32: Release-corpus completeness (every RELEASE_LOG row implies its corpus) ──
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (a)+(b)/(b')):
+  #   posture: required   enforcement-surface: release-corpus-completeness CI gate
+  #            (.github/workflows/release-corpus-completeness.yml, warn-mode-initial —
+  #             the deploy-time inline check below stays warn via DEPLOY_CHECK_MODE; the
+  #             REQUIRED posture is realized at the pre-merge CI mirror per Req b', which
+  #             mandates a required gate be CI-enforced, not deploy-time-only. The
+  #             deploy-time enforce-flip is a separate concern owned elsewhere.)
+  #   invariant: every RELEASE_LOG row at/after the cutover implies its INDEX row +
+  #              DIGEST entry + NOTES file (+ tag + published Release post-cutover).
+  #   falsification: a RELEASE_LOG row present with its INDEX/DIGEST/NOTES absent -> the
+  #                  gate reports INCOMPLETE (warn: summary + exit 0; enforce: red + exit 1).
+  #                  A complete output-set for every in-scope row -> CLEAN/green.
+  #
   # Per the release-corpus completeness forcing-function. Stage 13 Close produces four
   # release-corpus artifacts — RELEASE_LOG row, RELEASE_INDEX row, RELEASE_DIGEST entry,
   # and a notes/<slug>_RELEASE_NOTES.md file — plus (for post-cutover rows) a signed
@@ -5284,130 +5431,31 @@ cmd_check() {
   # when either is unavailable.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 32: Release-corpus completeness (RELEASE_LOG row -> INDEX + DIGEST + NOTES [+ tag + Release post-cutover])"
-    local c32_log="release/releases/RELEASE_LOG.md"
-    local c32_index="release/releases/RELEASE_INDEX.md"
-    local c32_digest="release/releases/RELEASE_DIGEST.md"
-    local c32_notes_dir="release/releases/notes"
-    local c32_allowlist=".claude/skip-release-corpus-check.txt"
-    local c32_cutoff="${RELEASE_CORPUS_CHECK_CUTOFF:-v1.01}"
-    # Separate, later cutover for the network/tag stricter assertions. Sentinel
-    # __none__ => no row is post-Release-cutover (published-Release sub-check dormant).
-    local c32_release_cutoff="${RELEASE_CORPUS_RELEASE_CUTOFF:-__none__}"
-
-    if [[ ! -f "$c32_log" ]]; then
-      flag_warn_or_issue "release-corpus-completeness" \
-        "$c32_log not found; cannot enumerate logged releases"
-    else
-      # Allowlist filter (exact version match; trailing # comment supported)
-      c32_is_allowlisted() {
-        local _v="$1"
-        [[ -f "$c32_allowlist" ]] || return 1
-        /usr/bin/grep -qE "^[[:space:]]*${_v//./\\.}[[:space:]]*(#.*)?\$" "$c32_allowlist"
-      }
-
-      # Enumerate logged releases in LOG file order: emit "version|milestone|tag"
-      # for each `| vX.Y[...] | <milestone> | ... | <tag> | <state> | <date> |` row.
-      # Field 2 (awk -F ' | ') = version, field 3 = milestone, field 7 = tag column.
-      # The Tag column may carry a backtick-wrapped value (`v1.01`) or an em-dash.
-      # grep exits 1 when the log carries no matching version rows; guard so the
-      # empty enumeration is tolerated rather than aborting under set -e + pipefail.
-      local c32_rows
-      c32_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$c32_log" 2>/dev/null \
-        | /usr/bin/awk -F ' \\| ' '{
-            v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
-            ms=$2; sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
-            tg=$6; gsub(/`/,"",tg); sub(/^[[:space:]]*/,"",tg); sub(/[[:space:]]*$/,"",tg);
-            print v "|" ms "|" tg
-          }') || c32_rows=""
-
-      local c32_past_cutoff=false
-      local c32_past_release_cutoff=false
-      local c32_targets=0
-      local c32_findings=0
-      local c32_output=""
-      local _row _ver _ms _tag _notes_ok _release_eligible
-      while IFS= read -r _row; do
-        [[ -n "$_row" ]] || continue
-        _ver="${_row%%|*}"
-        _ms="${_row#*|}"; _ms="${_ms%%|*}"
-        _tag="${_row##*|}"
-
-        # 3-artifact cutover gate (walk LOG order; arm on first cutoff-prefix match)
-        if [[ "$c32_past_cutoff" == "false" && "$_ver" == "$c32_cutoff"* ]]; then
-          c32_past_cutoff=true
-        fi
-        [[ "$c32_past_cutoff" == "true" ]] || continue
-        c32_is_allowlisted "$_ver" && continue
-        c32_targets=$((c32_targets + 1))
-
-        # (a) INDEX row present (version is the first table cell)
-        if ! /usr/bin/grep -qE "^\|[[:space:]]*${_ver//./\\.}[[:space:]]*\|" "$c32_index" 2>/dev/null; then
-          c32_output+="${_ver}: missing RELEASE_INDEX.md row"$'\n'
-          c32_findings=$((c32_findings + 1))
-        fi
-
-        # (b) DIGEST entry present (### vX.YZ <space> H3 heading)
-        if ! /usr/bin/grep -qE "^### ${_ver//./\\.}[[:space:](]" "$c32_digest" 2>/dev/null; then
-          c32_output+="${_ver}: missing RELEASE_DIGEST.md entry (### ${_ver} ...)"$'\n'
-          c32_findings=$((c32_findings + 1))
-        fi
-
-        # (c) NOTES file present under EITHER version stem OR milestone slug
-        _notes_ok=0
-        [[ -f "${c32_notes_dir}/${_ver}_RELEASE_NOTES.md" ]] && _notes_ok=1
-        [[ -n "$_ms" && -f "${c32_notes_dir}/${_ms}_RELEASE_NOTES.md" ]] && _notes_ok=1
-        if [[ $_notes_ok -eq 0 ]]; then
-          c32_output+="${_ver}: missing notes file (${_ver}_RELEASE_NOTES.md or ${_ms}_RELEASE_NOTES.md)"$'\n'
-          c32_findings=$((c32_findings + 1))
-        fi
-
-        # Stricter post-Release-cutover assertions (tag + published Release).
-        # Dormant when c32_release_cutoff is the __none__ sentinel.
-        _release_eligible=0
-        if [[ "$c32_release_cutoff" != "__none__" ]]; then
-          if [[ "$c32_past_release_cutoff" == "false" && "$_ver" == "$c32_release_cutoff"* ]]; then
-            c32_past_release_cutoff=true
-          fi
-          [[ "$c32_past_release_cutoff" == "true" ]] && _release_eligible=1
-        fi
-
-        if [[ $_release_eligible -eq 1 ]]; then
-          # (d) signed-tag presence — read from the LOG Tag column (in-corpus; no network).
-          # Empty / em-dash Tag column => missing tag for a post-cutover row.
-          if [[ -z "$_tag" || "$_tag" == "—" || "$_tag" == "-" ]]; then
-            c32_output+="${_ver}: post-Release-cutover row has no tag recorded in RELEASE_LOG Tag column"$'\n'
-            c32_findings=$((c32_findings + 1))
-          fi
-          # (e) published GitHub Release — network-dependent; N/A (never FAIL) when
-          # gh/network unavailable, reusing pre-Release SKIP semantics.
-          if command -v gh >/dev/null 2>&1; then
-            if ! gh release view "$_ver" >/dev/null 2>&1; then
-              # Distinguish "absent" from "unreachable": a generic gh failure (auth/
-              # network) must NOT be treated as a missing Release (N/A, not FAIL).
-              if gh auth status >/dev/null 2>&1; then
-                c32_output+="${_ver}: post-Release-cutover row has no published GitHub Release (gh release view returned non-zero)"$'\n'
-                c32_findings=$((c32_findings + 1))
-              else
-                log "  N/A:   ${_ver} published-Release sub-check skipped (gh unauthenticated/offline) — reuses pre-Release SKIP semantics"
-              fi
-            fi
-          else
-            log "  N/A:   ${_ver} published-Release sub-check skipped (gh not on PATH) — reuses pre-Release SKIP semantics"
-          fi
-        fi
-      done <<<"$c32_rows"
-
-      if [[ $c32_findings -eq 0 ]]; then
-        log "  OK:    all $c32_targets logged release(s) on/after $c32_cutoff have INDEX + DIGEST + NOTES (Release-cutover: $c32_release_cutoff)"
-      else
+    # Verdict computed by the shared _c32_compute_verdict body (DD1) so the CI probe
+    # (--check-release-corpus) and this lifecycle check cannot diverge. The body emits
+    # per-row detail to stderr; this block maps the verdict to the deploy-time emit
+    # (warn-mode via flag_warn_or_issue / DEPLOY_CHECK_MODE — behavior unchanged).
+    local c32_verdict c32_tok c32_rest c32_f c32_n
+    c32_verdict="$(_c32_compute_verdict "lifecycle")"
+    c32_tok="${c32_verdict%% *}"
+    case "$c32_tok" in
+      SKIP)
+        flag_warn_or_issue "release-corpus-completeness" "${c32_verdict#SKIP }"
+        ;;
+      CLEAN)
+        log "  OK:    all ${c32_verdict#CLEAN } logged release(s) on/after the corpus cutover have INDEX + DIGEST + NOTES"
+        ;;
+      INCOMPLETE)
+        # "INCOMPLETE <findings> <targets>" — per-row detail already on stderr.
+        c32_rest="${c32_verdict#INCOMPLETE }"
+        c32_f="${c32_rest%% *}"; c32_n="${c32_rest##* }"
         flag_warn_or_issue "release-corpus-completeness" \
-          "$c32_findings corpus-completeness finding(s) across $c32_targets logged release(s) — a close dropped an output; see release/references/pipeline/stage-13-close.md Phase B"
-        printf '%s' "$c32_output" | head -10 | sed 's/^/         /'
-        if [[ $c32_findings -gt 10 ]]; then
-          log "         ... ($((c32_findings - 10)) more)"
-        fi
-      fi
-    fi
+          "$c32_f corpus-completeness finding(s) across $c32_n logged release(s) — a close dropped an output; see release/references/pipeline/stage-13-close.md Phase B (per-row detail above)"
+        ;;
+      *)
+        flag_warn_or_issue "release-corpus-completeness" "unexpected verdict: $c32_verdict"
+        ;;
+    esac
   fi
 
   # ─── Check 47: Release-body drift (published Release body == in-repo note) ──
@@ -7833,6 +7881,62 @@ cmd_check_required_subset() {
   exit 0
 }
 
+# ─── Mode: --check-release-corpus (the CI release-corpus-completeness probe) — #1484 ─
+#
+# Runs ONLY Check 32's release-corpus completeness verdict (not the full --check
+# suite) and maps the verdict to an EXIT CODE for the CI gate. Warn-vs-enforce at the
+# CI surface is decided by the committed .github/release-corpus-completeness.enforce
+# sentinel — during the warn-mode window an INCOMPLETE verdict is reported but
+# swallowed (exit 0); flip the token to 'enforce' after shakedown to block. Mirrors
+# cmd_check_close_completeness's sentinel-aware contract. Surface = "gate": fail-closed
+# (an offline anchor for the post-cutover published-Release sub-check is a finding, not
+# degraded to N/A). This gate is the SINGLE canonical required-context for Check 32
+# (the --check-required-subset runner EXCLUDES Check 32, so it is never double-gated).
+#
+#   exit 0  — CLEAN (every in-scope row complete) / SKIP (LOG absent — nothing to
+#             assert), OR INCOMPLETE but the sentinel is warn (true verdict reported).
+#   exit 1  — INCOMPLETE AND the sentinel is enforce, OR an unexpected verdict
+#             (fail-closed regardless of the sentinel).
+cmd_check_release_corpus() {
+  validate_workspace
+  detect_install_path || true
+
+  local rc_enforce_file="${RELEASE_CORPUS_ENFORCE_FILE:-.github/release-corpus-completeness.enforce}"
+  local rc_enforce="warn" _rc_tok_line
+  if [[ -f "$rc_enforce_file" ]]; then
+    _rc_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rc_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_rc_tok_line" == "enforce" ]] && rc_enforce="enforce"
+  fi
+
+  local verdict tok
+  verdict="$(_c32_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    CLEAN)
+      log "release-corpus: ${verdict#CLEAN } logged release(s) on/after the cutover carry the full corpus set — OK"
+      exit 0
+      ;;
+    SKIP)
+      log "release-corpus: SKIP — ${verdict#SKIP } (nothing to assert)"
+      exit 0
+      ;;
+    INCOMPLETE)
+      log "release-corpus: INCOMPLETE — ${verdict#INCOMPLETE } (findings count / checked-row count; see detail above)"
+      log "  A close dropped a Stage-13 release-corpus output (INDEX row / DIGEST entry / NOTES file [+ tag / Release])."
+      log "  Backfill per release/references/pipeline/stage-13-close.md Phase B."
+      if [[ "$rc_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$rc_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
+      exit 0
+      ;;
+    *)
+      log "release-corpus: unexpected verdict '$verdict' — fail-closed"
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Mode: --report ──────────────────────────────────────────────────────────
 
 cmd_report() {
@@ -8307,6 +8411,14 @@ main() {
       # Check 38 (hook-registry-index-freshness). Used by .github/workflows/deploy-check-ci.yml.
       cmd_check_required_subset
       ;;
+    --check-release-corpus)
+      # Single-check CI release-corpus-completeness probe (#1484): runs ONLY Check 32's
+      # verdict and exits per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE — sentinel-gated
+      # at .github/release-corpus-completeness.enforce; fail-closed at the gate surface).
+      # The Check 32 logic ALSO fires inside the full --check suite — one shared body
+      # (_c32_compute_verdict), no copy. Used by .github/workflows/release-corpus-completeness.yml.
+      cmd_check_release_corpus
+      ;;
     --self-test)
       # Offline, hermetic regression for the close-completeness invariant (#1290 AC5):
       # a deliberately-abbreviated scaffold (a VERIFIED row missing a Stage-13 output)
@@ -8329,6 +8441,7 @@ main() {
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""

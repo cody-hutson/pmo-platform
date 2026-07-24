@@ -1,0 +1,102 @@
+name: Release-corpus completeness (pre-merge Stage-13 corpus gate)
+
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=path-filtered  skip-semantics=absent-is-pass
+#   invariant: every RELEASE_LOG row at/after the corpus cutover implies its matching
+#              RELEASE_INDEX row + RELEASE_DIGEST entry + RELEASE_NOTES file (+ signed
+#              tag + published Release for post-Release-cutover rows) — asserted
+#              PRE-MERGE so the highest-frequency documented release failure (closing a
+#              release with only the RELEASE_LOG row, the INDEX/DIGEST/NOTES silently
+#              missing) is caught at the merge gate, not just at deploy time on the
+#              operator machine (a Requirement (b') violation the deploy-time-only
+#              Check 32 could not close). This is the SINGLE canonical required-context
+#              for Check 32 (the required-subset runner EXCLUDES Check 32 — no
+#              double-gating, R6).
+#   falsification: a RELEASE_LOG row present with its INDEX row / DIGEST entry / NOTES
+#                  file absent -> this gate reports INCOMPLETE (warn-mode: summary +
+#                  exit 0; enforce: red + exit 1). A complete output-set -> CLEAN/green.
+# Path-filtered to release/releases/**, so ADVISORY by skip-semantics: absence on an
+# unrelated PR MUST NOT block. Ships warn-mode-initial (reports, does not block) — the
+# ledger currently carries pre-existing corpus findings that must be drained/allowlisted
+# before enforce. Flips when the committed .github/release-corpus-completeness.enforce
+# token -> `enforce` AND the job is added to required_status_checks (branch protection,
+# out-of-tree — R3).
+# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
+# core/rules/git-workflow.md § Repository-Integrity Gates.)
+#
+# THIN caller of the single engine. --check-release-corpus runs ONLY Check 32's shared
+# _c32_compute_verdict "gate" body and honors the .enforce sentinel internally (warn
+# swallows INCOMPLETE into exit 0; enforce propagates exit 1; an unexpected verdict
+# fail-closes). NO predicate is re-encoded in this YAML (single-engine, CIAC-2).
+#
+# Platform: macos-latest — mirrors version-freeness.yml + deploy-check-ci.yml.
+#
+# Security: consumes NO untrusted github.event.* input. Every run: block is a static
+# invocation; the RC handoff uses the env-var pattern (no ${{ }} inside a run: block).
+
+on:
+  pull_request:
+    paths:
+      - 'release/releases/**'
+      - 'core/deploy/deploy.sh'
+      - '.github/workflows/release-corpus-completeness.yml'
+      - '.github/release-corpus-completeness.enforce'
+  push:
+    branches: [main]
+    paths:
+      - 'release/releases/RELEASE_LOG.md'
+      - 'release/releases/RELEASE_INDEX.md'
+      - 'release/releases/RELEASE_DIGEST.md'
+
+permissions:
+  contents: read
+
+jobs:
+  release-corpus-completeness:
+    name: Pre-merge release-corpus completeness gate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          uname -s
+          command -v bash
+          command -v git
+          command -v gh || echo "::warning::gh not on PATH — the post-cutover published-Release sub-check degrades (dormant default is unaffected)"
+
+      - name: Run release-corpus check (single check, via the deploy.sh engine)
+        id: check
+        # THIN caller. The probe reads .github/release-corpus-completeness.enforce
+        # itself: warn swallows INCOMPLETE into exit 0 (reported), enforce propagates
+        # exit 1; an unexpected verdict fail-closes.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(bash core/deploy/deploy.sh --check-release-corpus 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Gate decision (warn-mode-initial)
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          set -euo pipefail
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: release-corpus: every in-scope release has its INDEX + DIGEST + NOTES (or a finding was reported in warn-mode)" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: release-corpus completeness gate FAILED (enforce mode) or fail-closed"
+            echo ""
+            echo "A RELEASE_LOG row is missing its INDEX row / DIGEST entry / NOTES file (or post-cutover tag / Release),"
+            echo "with the enforce sentinel active — OR the verdict was unexpected (fail-closed)."
+            echo "Backfill the missing output(s) per release/references/pipeline/stage-13-close.md Phase B before merge."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
