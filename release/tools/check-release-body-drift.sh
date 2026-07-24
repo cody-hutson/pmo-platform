@@ -70,18 +70,24 @@
 # the operator-set acceptance criterion requires the compare read the canonical
 # note from origin/main; release-notes-standard.md §5.1 establishes the in-repo
 # source-of-record note as what the Release page is the rendered copy of.
-# origin/main FRESHNESS is the CALLER's contract (accepted residual): origin/main is
-# a local cache, only as fresh as the last fetch. automated-closeout.sh's live
-# post-emit consumer proves the note present on origin/main in an earlier phase on
-# the idempotent-re-run path (so an absent note cannot fire there), but a present-
-# but-content-stale origin/main can still yield a false DRIFT; deploy.sh Check 47
-# performs no fetch (dormant + warn-mode). A self-fetch here would violate the
-# detective-only posture, so freshness stays the caller's responsibility.
+# origin/main FRESHNESS is the CALLER's contract (accepted residual, and SHARPER
+# now that both callers gate on this script's verdict): origin/main is a local
+# cache, only as fresh as the last fetch. automated-closeout.sh's live post-emit
+# consumer proves the note present on origin/main in an earlier phase on the
+# idempotent-re-run path (so an absent note cannot fire there), but a present-but-
+# content-stale origin/main can still yield a false DRIFT — and a false DRIFT is no
+# longer a harmless warning: the standing deploy.sh Check now FAILS on it and the
+# close phase BLOCKS on it. deploy.sh Check 47 still performs no fetch, by design.
+# A self-fetch here would violate the detective-only posture (this script reads and
+# reports; it does not mutate refs), so freshness remains the caller's
+# responsibility: fetch origin immediately before an enforcing check run.
 #
-# Cutover (reflexive-pipeline-loop discipline): the standing deploy.sh Check that
-# invokes this script ships warn-mode-initial and does not bind its own
-# introducing release; this script itself is version-agnostic — the caller honors
-# cutover. v2.37 (the introducing release) closes under pre-merge rules.
+# Cutover: this script is version-agnostic and always reports the same verdict for
+# the same inputs — the CALLER owns cutover scoping. Both callers now share one
+# cutoff variable (RELEASE_BODY_DRIFT_CHECK_CUTOFF) with a committed default, so
+# the standing check and the close-path phase cannot disagree about which releases
+# the verdict is allowed to gate. This script's posture is unchanged by that: it
+# still FLAGS and never re-emits, and it never decides whether a flag blocks.
 
 set -euo pipefail
 
