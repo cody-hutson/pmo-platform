@@ -785,6 +785,49 @@ _cc_compute_verdict() {
   return 0
 }
 
+# ─── Hook-registry index freshness (Check 38 / --check-required-subset) — #1485 ──
+# The regenerate-and-diff freshness predicate, factored to TOP LEVEL so it is
+# shared by two surfaces with ONE body (mirroring the version-freeness DD1 and
+# close-completeness DD1 patterns above): the lifecycle Check 38 (inside cmd_check,
+# mapping the verdict to a deploy-time always-enforce FAIL) and the
+# --check-required-subset runner (cmd_check_required_subset, mapping the verdict to
+# an exit code for the CI gate). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2).
+#
+# Check 38 is always-enforce/deterministic — a non-empty regenerate-and-diff is
+# unambiguous drift, not a calibration signal. There is no offline/network anchor,
+# so the surface argument does not change the verdict; it is accepted for signature
+# parity with the other _cNN_compute_verdict bodies (and so the runner can call
+# every member the same way). The generator resolves its own sources via
+# Path(__file__).parents[3], so an absolute script path works from any cwd.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a FAIL or an exit
+# code); any generator diff detail goes to stderr:
+#   FRESH                  committed core/rules/bypass-mode-readiness.md == regenerated
+#   STALE                  committed index drifts from its sources (generator rc 1)
+#   ERROR <reason>         generator/python3 absent, or generator exit >=2 (fail-closed)
+_c38_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local gen="${_audit_src_root:-.}/core/deploy/tools/build-hook-registry.py"
+  if [[ ! -f "$gen" ]]; then
+    printf 'ERROR generator-missing:%s\n' "$gen"
+    return 0
+  fi
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    printf 'ERROR python3-not-executable (cannot verify index freshness)\n'
+    return 0
+  fi
+  local out rc=0
+  out=$(/usr/bin/python3 "$gen" --check 2>&1) || rc=$?
+  case "$rc" in
+    0) printf 'FRESH\n' ;;
+    1) printf '%s\n' "$out" | /usr/bin/head -20 | /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'STALE\n' ;;
+    *) printf '%s\n' "$out" | /usr/bin/head -10 | /usr/bin/sed 's/^/         /' >&2 || true
+       printf 'ERROR generator-exit-%s (source-resolution failure or error)\n' "$rc" ;;
+  esac
+}
+
 # Remove a derived-mirror subtree, self-healing read-only orphans and
 # failing loud (never silently) when removal is impossible. Returns 0 if the
 # path is gone after the call, non-zero (with an actionable error logged) if not.
@@ -6202,29 +6245,28 @@ cmd_check() {
   # completeness half). Fails LOUD if the generator can't run (missing python3 /
   # missing generator), never silently passing a potentially-stale index.
   log "Check 38: Hook-registry index freshness (regenerate-and-diff)"
-  local c38_gen="core/deploy/tools/build-hook-registry.py"
-  if [[ ! -f "$c38_gen" ]]; then
-    log "  FAIL:  Check 38 generator missing: $c38_gen"
-    ISSUES=$((ISSUES + 1))
-  elif [[ ! -x "/usr/bin/python3" ]]; then
-    log "  FAIL:  Check 38 — /usr/bin/python3 not executable; cannot verify index freshness"
-    ISSUES=$((ISSUES + 1))
-  else
-    local c38_out c38_rc=0
-    c38_out=$(/usr/bin/python3 "$c38_gen" --check 2>&1) || c38_rc=$?
-    if [[ $c38_rc -eq 0 ]]; then
+  # Verdict computed by the shared _c38_compute_verdict body (DD1) so the CI probe
+  # (--check-required-subset) and this lifecycle check cannot diverge. The body
+  # emits any regenerate-and-diff detail to stderr; this block maps the verdict
+  # token to the deploy-time emit. Always-enforce (deterministic generator): a
+  # STALE/ERROR verdict fails loud (++ISSUES), never silently passing a stale index.
+  local c38_verdict c38_tok
+  c38_verdict="$(_c38_compute_verdict "lifecycle")"
+  c38_tok="${c38_verdict%% *}"
+  case "$c38_tok" in
+    FRESH)
       log "  OK:    core/rules/bypass-mode-readiness.md is in sync with its sources"
-    elif [[ $c38_rc -eq 1 ]]; then
-      log "  FAIL:  core/rules/bypass-mode-readiness.md is STALE vs its sources — regenerate via 'python3 $c38_gen' and commit"
-      echo "$c38_out" | head -20 | sed 's/^/         /' || true
+      ;;
+    STALE)
+      log "  FAIL:  core/rules/bypass-mode-readiness.md is STALE vs its sources — regenerate via 'python3 core/deploy/tools/build-hook-registry.py' and commit"
       ISSUES=$((ISSUES + 1))
-    else
-      # exit 3 (source-resolution failure) or any other non-zero — fail loud.
-      log "  FAIL:  Check 38 generator exited $c38_rc (source-resolution failure or error)"
-      echo "$c38_out" | head -10 | sed 's/^/         /' || true
+      ;;
+    *)
+      # ERROR <reason> — generator/python3 absent or generator exit >=2; fail loud.
+      log "  FAIL:  Check 38 — ${c38_verdict#ERROR }"
       ISSUES=$((ISSUES + 1))
-    fi
-  fi
+      ;;
+  esac
 
   # Check 39 — Platform .version drift vs latest published Release (advisory; warn-mode initial; #1643)
   #
@@ -7699,6 +7741,98 @@ cmd_check_close_completeness() {
   esac
 }
 
+# ─── Mode: --check-required-subset (the CI load-bearing-check subset runner) — #1485 ─
+#
+# Runs the network-free, install-independent, load-bearing subset of the
+# deploy.sh --check battery pre-merge in CI and maps the AGGREGATE verdict to an
+# EXIT CODE (the verdict->exit contract the CI gate depends on). The subset is an
+# ENUMERATED ALLOWLIST of check-ids — NOT "all ~38 checks" — selected by the
+# predicate { network-free AND install-independent AND posture:required AND NOT
+# already covered by a dedicated CI mirror }. It is a real allowlist (not a runtime
+# grep) so it is auditable and slots into the #45 per-check registry; each member
+# runs its shared _cNN_compute_verdict "gate" body (single-engine, no re-encoded
+# predicate — CIAC-2). Checks with a DEDICATED CI mirror are EXCLUDED so an
+# invariant is never double-gated (R6): Check 6 (skill-canonical-structure-check.yml),
+# Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
+# #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
+#
+# TODAY the predicate resolves to exactly ONE member — Check 38
+# (hook-registry-index-freshness), the only explicit posture:required check lacking
+# a dedicated mirror. New members are appended here as future posture:required
+# checks are back-filled (#1036 / #313).
+#
+# Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
+# committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
+# in-scope FAIL is reported but swallowed (exit 0); flip the token to 'enforce' after
+# shakedown to block. Mirrors cmd_check_close_completeness's sentinel-aware contract.
+#
+#   exit 0  — every subset member passed, OR a member FAILed but the sentinel is warn
+#             (true verdict reported, not blocking).
+#   exit 1  — a subset member FAILed AND the sentinel is enforce, OR any member
+#             returned an unexpected/ERROR verdict (fail-closed regardless of sentinel).
+cmd_check_required_subset() {
+  validate_workspace
+  detect_install_path || true
+
+  # Sentinel-aware enforcement (committed .github/deploy-check-ci.enforce). The
+  # first non-comment token decides whether an in-scope FAIL BLOCKS (enforce) or is
+  # SWALLOWED non-blocking (warn / absent). The probe reads the sentinel directly,
+  # so it is load-bearing without a CI workflow wired first (a thin CI caller still
+  # consumes this exit code once added).
+  local rs_enforce_file="${DEPLOY_CHECK_CI_ENFORCE_FILE:-.github/deploy-check-ci.enforce}"
+  local rs_enforce="warn" _rs_tok_line
+  if [[ -f "$rs_enforce_file" ]]; then
+    _rs_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$rs_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
+  fi
+
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Check 38 only. Append a
+  # row per future posture:required check that lacks a dedicated CI mirror.
+  local -a rs_checks=(
+    "hook-registry-index-freshness:_c38_compute_verdict"
+  )
+
+  local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
+  for _entry in "${rs_checks[@]}"; do
+    _id="${_entry%%:*}"
+    _fn="${_entry##*:}"
+    _verdict="$("$_fn" "gate")"
+    _tok="${_verdict%% *}"
+    case "$_tok" in
+      FRESH|CLEAN|PASS|FREE|SKIP|NA)
+        log "required-subset: $_id — OK ($_tok)"
+        rs_pass=$((rs_pass + 1))
+        ;;
+      STALE|NOT_FREE|INCOMPLETE|FAIL)
+        log "required-subset: $_id — FAIL ($_verdict)"
+        rs_fail=$((rs_fail + 1))
+        ;;
+      *)
+        log "required-subset: $_id — ERROR/unexpected verdict ($_verdict) — fail-closed"
+        rs_err=$((rs_err + 1))
+        ;;
+    esac
+  done
+
+  # An unexpected/ERROR verdict is a tooling failure, not a calibration finding —
+  # always fail-closed regardless of the warn/enforce sentinel (mirrors
+  # cmd_check_close_completeness).
+  if [[ $rs_err -gt 0 ]]; then
+    log "required-subset: $rs_err check(s) returned an unexpected/ERROR verdict — fail-closed exit 1"
+    exit 1
+  fi
+  if [[ $rs_fail -gt 0 ]]; then
+    if [[ "$rs_enforce" == "enforce" ]]; then
+      log "required-subset: $rs_fail load-bearing check(s) FAILed (sentinel enforce) — blocking exit 1"
+      exit 1
+    fi
+    log "required-subset: $rs_fail load-bearing check(s) FAILed but sentinel '$rs_enforce_file' token != enforce — WARN-MODE, reporting not blocking (flip the token to 'enforce' after shakedown)"
+    exit 0
+  fi
+  log "required-subset: all $rs_pass load-bearing check(s) passed"
+  exit 0
+}
+
 # ─── Mode: --report ──────────────────────────────────────────────────────────
 
 cmd_report() {
@@ -8164,6 +8298,15 @@ main() {
       # (_cc_compute_verdict), no copy. Used by .github/workflows/close-completeness.yml.
       cmd_check_close_completeness
       ;;
+    --check-required-subset)
+      # CI runner (#1485): runs the enumerated load-bearing subset (network-free AND
+      # install-independent AND posture:required AND no dedicated CI mirror) and exits
+      # per the AGGREGATE verdict, honoring the committed .github/deploy-check-ci.enforce
+      # sentinel (warn swallows a FAIL, enforce blocks). Each member runs its shared
+      # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today seeded with
+      # Check 38 (hook-registry-index-freshness). Used by .github/workflows/deploy-check-ci.yml.
+      cmd_check_required_subset
+      ;;
     --self-test)
       # Offline, hermetic regression for the close-completeness invariant (#1290 AC5):
       # a deliberately-abbreviated scaffold (a VERIFIED row missing a Stage-13 output)
@@ -8176,7 +8319,7 @@ main() {
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --self-test | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-required-subset | --self-test | --report]"
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
@@ -8185,6 +8328,7 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""
