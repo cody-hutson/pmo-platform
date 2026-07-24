@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.85 (2026-07-24) — Release close-out now guards its published notes, packages, and ledgers
+
 ### v3.84 (2026-07-24) — Two releases can now finish at the same time without tripping over each other
 
 ### v3.83 (2026-07-23) — Self-measurement for release close-out; a session sensor that ships switched off
