@@ -219,6 +219,14 @@ release/releases/RELEASE_LOG.md                                   # edit — Sta
 
 ---
 
+## Domain Practice Provenance
+
+The File Change Matrix is entirely internal pmo-platform artifacts — release-pipeline tooling (`core/deploy/deploy.sh` + the new CI workflows + `.enforce` sentinels), governance standards (`gate-efficacy-standard.md`, `gate-criteria-spec.md`), and the release corpus. The deliverable's abstract domain class is **governance** (the encoding of the platform's own internal-deliverable practice). Per Stage-7 Phase-C this class runs the FULL conformance walk — no exemption short-circuit: `domain: governance` resolves `governance.md`, and a well-behaved governance design meets its compliance / auditability / traceability dimensions without tripping CI-3 (research-grade / formal-audit imposed where lightweight self-review suffices). This label was **folded in at Stage 13** (it was absent from the Stage-4 plan); domain class is mandatory in every mode, and the classification travels unchanged into Solutioning and Engineering.
+
+domain_practice: { source: release-hub Mode O Stage-13 fold-in, cross-cutting governance CI-gate promotion, date: 2026-07-24, domain: governance }
+
+---
+
 ## Deviation Log
 
 Deltas between the Stage-4 plan of record (#3734) and the ratified Stage-5 scope-lock (#3790), plus Stage-6 implementation findings. All are refinements or reductions; none re-opens the bundle.
