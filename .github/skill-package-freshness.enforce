@@ -1,0 +1,25 @@
+# skill-package-freshness gate — enforcement sentinel (#2656)
+#
+# This committed marker governs whether the .skill package content-freshness CI gate
+# (`deploy.sh --check-package-freshness`, i.e. Check 7's content-hash verdict) BLOCKS
+# or merely REPORTS when a rostered skill's compiled `.skill` package is stale versus
+# its source (SKILL.md / references/). The probe reads this file directly, so the
+# sentinel is load-bearing on its own; the thin CI workflow
+# (skill-package-freshness.yml) additionally consumes the probe's exit code.
+#
+# The first non-comment, non-blank line is the mode token:
+#   warn      → report only (exit-0); a STALE package is surfaced but does not block.
+#   enforce   → block on a STALE package (exit-1 propagates to the CI caller).
+#
+# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
+# posture. The introducing release `governance-ci-gates` dogfoods this gate green on
+# its own PR (its #1632 eval-writer reference edit + rebuild is the live regression
+# signal). Flip the token below to `enforce` after a >=3-day warn-log review with zero
+# false positives (dep #2159 — Check 7's non-reproducible-archive false-positives —
+# is CLOSED) AND after the operator adds the `skill-package-freshness` job to
+# `required_status_checks` (branch protection — the out-of-tree enforcement surface).
+# No code change is needed to graduate.
+#
+# (Token-flagged rather than presence-flagged so the file can ship now — the docs
+#  reference it — while the gate stays non-blocking; mirrors close-completeness.enforce.)
+warn

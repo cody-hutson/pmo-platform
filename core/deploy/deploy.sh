@@ -961,6 +961,112 @@ _c32_compute_verdict() {
   return 0
 }
 
+# ─── Skill package content-freshness (Check 7 / --check-package-freshness) — #2656 ──
+# The content-manifest freshness predicate, factored to TOP LEVEL so it is shared by
+# two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_/_c32_compute_verdict): the
+# lifecycle Check 7 (inside cmd_check, always-enforce → ++ISSUES per stale skill) and
+# the --check-package-freshness probe (cmd_check_package_freshness, mapping the verdict
+# to an exit code for the CI gate). No predicate is re-encoded on either surface
+# (single-engine, CIAC-2).
+#
+# ASSERT-BY-CONTENT, NOT BY PROXY (gate-efficacy Req (a)): the verdict rests on the
+# rebuild-stable content-manifest hash of a STAGED REBUILD of source vs the committed
+# baseline sidecar (packages/<skill>.skill.sha256) — mtime-independent, so a
+# committed-stale package is caught even on a fresh checkout. mtime is a cheap
+# non-verdict pre-filter only. python3/unzip absent → degrades to the
+# baseline-vs-live-package content compare + the mtime signal (logged), matching the
+# graceful-skip posture of the deploy-time Check 7.
+#
+# Check 7 has no network anchor, so the surface argument does not change the verdict;
+# it is accepted for signature parity with the other _cNN_compute_verdict bodies.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to ++ISSUES or an exit code);
+# per-skill detail goes to stderr:
+#   FRESH <n>                all n rostered skill package(s) content-fresh
+#   STALE <count> <csv>      count stale skill(s), comma-separated — detail to stderr
+_c7_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local c7_can_rebuild=true
+  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
+  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
+
+  local c7_total=0 c7_stale=0 c7_stale_list=""
+  local skill c7_module c7_src_dir c7_pkg c7_sidecar c7_live_hash c7_baseline
+  local c7_newest_src c7_pkg_mtime c7_src_newer
+  local c7_tmp_pkgdir c7_rebuilt_pkg c7_rebuilt_hash
+  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
+    c7_total=$((c7_total + 1))
+    c7_module=$(resolve_skill_module "$skill")
+    c7_src_dir="$c7_module/skills/$skill"
+    c7_pkg="packages/${skill}.skill"
+    c7_sidecar="packages/${skill}.skill.sha256"
+
+    if [[ ! -f "$c7_pkg" ]]; then
+      printf '  FAIL:  %s — .skill package missing\n' "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+    c7_live_hash=$(skill_content_hash "$c7_pkg")
+    if [[ -z "$c7_live_hash" ]]; then
+      printf '  FAIL:  %s — could not compute package content hash (corrupt archive or missing unzip/shasum)\n' "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+    if [[ ! -f "$c7_sidecar" ]]; then
+      printf '  FAIL:  %s — content baseline sidecar missing (%s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_sidecar" "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+    c7_baseline=$(tr -d '[:space:]' < "$c7_sidecar" 2>/dev/null)
+    if [[ "$c7_live_hash" != "$c7_baseline" ]]; then
+      printf '  FAIL:  %s — package content hash (%s) != committed baseline (%s); package tampered or sidecar stale — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_live_hash" "$c7_baseline" "$skill" >&2
+      c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"; continue
+    fi
+
+    # mtime PRE-FILTER (cheap, non-verdict source-change signal).
+    c7_src_newer=false
+    c7_newest_src=$(find "$c7_src_dir" -type f -not -path '*/.*' -exec stat -f '%m' {} \; 2>/dev/null | sort -n | tail -1)
+    c7_pkg_mtime=$(stat -f '%m' "$c7_pkg" 2>/dev/null)
+    if [[ -n "$c7_newest_src" && -n "$c7_pkg_mtime" && "$c7_newest_src" -gt "$c7_pkg_mtime" ]]; then
+      c7_src_newer=true
+    fi
+
+    # CONTENT VERDICT: stage a rebuild of source and compare its content hash to the
+    # committed baseline (mtime-independent — catches a committed-stale package on a
+    # fresh checkout). Run whenever a rebuild is available; the result decides.
+    if [[ "$c7_can_rebuild" == "true" ]]; then
+      c7_tmp_pkgdir="$(mktemp -d)"
+      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
+        c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
+        c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
+        if [[ -z "$c7_rebuilt_hash" ]]; then
+          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (PASS, staged-rebuild inconclusive)\n' "$skill" >&2
+        elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
+          printf '  FAIL:  %s — source content changed since build (rebuilt hash %s != committed baseline %s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_rebuilt_hash" "$c7_baseline" "$skill" >&2
+          c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
+        fi
+      else
+        printf '  WARN:  %s — staged rebuild failed to run; falling back to baseline-vs-package content compare\n' "$skill" >&2
+        if [[ "$c7_src_newer" == "true" ]]; then
+          printf '  FAIL:  %s — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
+          c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
+        fi
+      fi
+      rm -rf "$c7_tmp_pkgdir"
+    else
+      # Degraded: no rebuild available; the baseline-vs-live-package compare already
+      # passed, so the mtime pre-filter is the only remaining source-change signal.
+      if [[ "$c7_src_newer" == "true" ]]; then
+        printf '  FAIL:  %s — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
+        c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
+      fi
+    fi
+  done
+
+  if [[ $c7_stale -eq 0 ]]; then
+    printf 'FRESH %s\n' "$c7_total"
+  else
+    printf 'STALE %s %s\n' "$c7_stale" "${c7_stale_list%,}"
+  fi
+}
+
 # Remove a derived-mirror subtree, self-healing read-only orphans and
 # failing loud (never silently) when removal is impossible. Returns 0 if the
 # path is gone after the call, non-zero (with an actionable error logged) if not.
@@ -2839,107 +2945,29 @@ cmd_check() {
   # not mtime) and logs the degraded scope (matches the graceful-skip posture of
   # Checks 14/18/20/23).
   log "Check 7: Package freshness (content-manifest hash)"
-  local c7_can_rebuild=true
-  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
-  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
-  for skill in "${OPERATIONS_SKILLS[@]}" "${RELEASE_SKILLS[@]}" "${CORE_SKILLS[@]}"; do
-    local c7_module
-    c7_module=$(resolve_skill_module "$skill")
-    local c7_src_dir="$c7_module/skills/$skill"
-    local c7_pkg="packages/${skill}.skill"
-    local c7_sidecar="packages/${skill}.skill.sha256"
-
-    if [[ ! -f "$c7_pkg" ]]; then
-      log "  FAIL:  $skill — .skill package missing"
+  # Verdict computed by the shared _c7_compute_verdict body (DD1) so the CI probe
+  # (--check-package-freshness) and this lifecycle check cannot diverge. The body
+  # emits per-skill detail to stderr; this block maps the verdict to the deploy-time
+  # emit. Always-enforce: each stale skill increments ISSUES (byte-identical accounting).
+  local c7_verdict c7_tok c7_rest c7_count
+  c7_verdict="$(_c7_compute_verdict "lifecycle")"
+  c7_tok="${c7_verdict%% *}"
+  case "$c7_tok" in
+    FRESH)
+      log "  OK:    all ${c7_verdict#FRESH } rostered skill package(s) content-fresh"
+      ;;
+    STALE)
+      # "STALE <count> <csv>" — per-skill detail already on stderr.
+      c7_rest="${c7_verdict#STALE }"
+      c7_count="${c7_rest%% *}"
+      log "  FAIL:  ${c7_count} stale skill package(s): ${c7_rest#* } — rebuild via core/deploy/tools/build-skill-packages.sh (per-skill detail above)"
+      ISSUES=$((ISSUES + c7_count))
+      ;;
+    *)
+      log "  FAIL:  Check 7 — unexpected verdict: $c7_verdict"
       ISSUES=$((ISSUES + 1))
-      continue
-    fi
-
-    # Live package's content-manifest hash (content of what is committed).
-    local c7_live_hash
-    c7_live_hash=$(skill_content_hash "$c7_pkg")
-    if [[ -z "$c7_live_hash" ]]; then
-      log "  FAIL:  $skill — could not compute package content hash (corrupt archive or missing unzip/shasum)"
-      ISSUES=$((ISSUES + 1))
-      continue
-    fi
-
-    # Committed content baseline (sidecar). Its absence is a freshness gap — the
-    # sidecar must be emitted at build time (build-skill-packages.sh) and
-    # committed alongside the package.
-    if [[ ! -f "$c7_sidecar" ]]; then
-      log "  FAIL:  $skill — content baseline sidecar missing ($c7_sidecar); rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-      ISSUES=$((ISSUES + 1))
-      continue
-    fi
-    local c7_baseline
-    c7_baseline=$(tr -d '[:space:]' < "$c7_sidecar" 2>/dev/null)
-
-    # Tamper/corruption check: the committed package's content must match its
-    # committed baseline. A `touch` leaves content identical, so the live hash
-    # still matches the baseline (touch → GREEN). A post-build edit to the
-    # package bytes (without re-emitting the sidecar) flips this red.
-    if [[ "$c7_live_hash" != "$c7_baseline" ]]; then
-      log "  FAIL:  $skill — package content hash ($c7_live_hash) != committed baseline ($c7_baseline); package tampered or sidecar stale — rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-      ISSUES=$((ISSUES + 1))
-      continue
-    fi
-
-    # mtime PRE-FILTER (cheap, non-verdict): is anything under source newer than
-    # the committed package? If not, AND the baseline already matched above, the
-    # common clean case can fast-PASS without a rebuild.
-    local c7_newest_src c7_pkg_mtime c7_src_newer=false
-    c7_newest_src=$(find "$c7_src_dir" -type f -not -path '*/.*' -exec stat -f '%m' {} \; 2>/dev/null | sort -n | tail -1)
-    c7_pkg_mtime=$(stat -f '%m' "$c7_pkg" 2>/dev/null)
-    if [[ -n "$c7_newest_src" && -n "$c7_pkg_mtime" && "$c7_newest_src" -gt "$c7_pkg_mtime" ]]; then
-      c7_src_newer=true
-    fi
-
-    # CONTENT VERDICT: stage a rebuild of source and compare its content hash to
-    # the committed baseline. This is the load-bearing freshness assertion —
-    # mtime-independent, so it catches a committed-stale package on a fresh
-    # checkout. Run it whenever a rebuild is available; the result decides.
-    if [[ "$c7_can_rebuild" == "true" ]]; then
-      local c7_tmp_pkgdir c7_rebuilt_pkg c7_rebuilt_hash
-      c7_tmp_pkgdir="$(mktemp -d)"
-      # build-skill-packages.sh writes packages/<skill>.skill at REPO_ROOT, so
-      # redirect its output dir via the packager directly into a temp dir to
-      # avoid clobbering the committed package. We stage source + inject
-      # canonicals exactly as build_one() does, then emit into the temp dir.
-      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
-        c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
-        c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
-        if [[ -z "$c7_rebuilt_hash" ]]; then
-          log "  WARN:  $skill — rebuild produced no hashable package; falling back to baseline-vs-package content compare (PASS, baseline matched)"
-          log "  OK:    $skill (content baseline verified; staged-rebuild inconclusive)"
-        elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
-          log "  FAIL:  $skill — source content changed since build (rebuilt hash $c7_rebuilt_hash != committed baseline $c7_baseline); rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-          ISSUES=$((ISSUES + 1))
-        else
-          log "  OK:    $skill (content current — staged rebuild matches committed baseline)"
-        fi
-      else
-        log "  WARN:  $skill — staged rebuild failed to run; falling back to baseline-vs-package content compare"
-        if [[ "$c7_src_newer" == "true" ]]; then
-          log "  FAIL:  $skill — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-          ISSUES=$((ISSUES + 1))
-        else
-          log "  OK:    $skill (content baseline verified; rebuild unavailable, mtime shows no source change)"
-        fi
-      fi
-      rm -rf "$c7_tmp_pkgdir"
-    else
-      # Degraded: no rebuild available. The baseline-vs-live-package content
-      # compare already passed; fall back on the mtime pre-filter as the only
-      # available source-change signal (still better than nothing; logged).
-      if [[ "$c7_src_newer" == "true" ]]; then
-        log "  FAIL:  $skill — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh $skill"
-        ISSUES=$((ISSUES + 1))
-      else
-        log "  OK:    $skill (content baseline verified; rebuild unavailable [python3/unzip], mtime shows no source change)"
-      fi
-    fi
-  done
+      ;;
+  esac
 
   # Warn-mode gate for Checks 8-10 (and downstream warn-mode checks).
   # MODE_FILE adapts to an operator-instance path-via-env-var per Spec
@@ -7937,6 +7965,54 @@ cmd_check_release_corpus() {
   esac
 }
 
+# ─── Mode: --check-package-freshness (the CI .skill content-freshness probe) — #2656 ─
+#
+# Runs ONLY Check 7's package content-freshness verdict — the FULL rostered-skill
+# content-hash comparison, no per-skill diff-scoping (the WORKFLOW path-filters the
+# TRIGGER, so no parallel scoping logic lives here; a stale package for ANY skill
+# correctly blocks) — and maps the verdict to an EXIT CODE for the CI gate.
+# Warn-vs-enforce at the CI surface is decided by the committed
+# .github/skill-package-freshness.enforce sentinel. Mirrors cmd_check_close_completeness.
+#
+#   exit 0  — FRESH (every rostered skill package content-current), OR STALE but the
+#             sentinel is warn (true verdict reported, not blocking).
+#   exit 1  — STALE AND the sentinel is enforce, OR an unexpected verdict (fail-closed).
+cmd_check_package_freshness() {
+  validate_workspace
+  detect_install_path || true
+
+  local pf_enforce_file="${SKILL_PACKAGE_FRESHNESS_ENFORCE_FILE:-.github/skill-package-freshness.enforce}"
+  local pf_enforce="warn" _pf_tok_line
+  if [[ -f "$pf_enforce_file" ]]; then
+    _pf_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$pf_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_pf_tok_line" == "enforce" ]] && pf_enforce="enforce"
+  fi
+
+  local verdict tok
+  verdict="$(_c7_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    FRESH)
+      log "package-freshness: ${verdict#FRESH } rostered skill package(s) content-fresh — OK"
+      exit 0
+      ;;
+    STALE)
+      log "package-freshness: STALE — ${verdict#STALE } (count + stale skill(s); see detail above)"
+      log "  A skill's SKILL.md or references/ changed without rebuilding its .skill package."
+      log "  Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + its .sha256 sidecar."
+      if [[ "$pf_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
+      exit 0
+      ;;
+    *)
+      log "package-freshness: unexpected verdict '$verdict' — fail-closed"
+      exit 1
+      ;;
+  esac
+}
+
 # ─── Mode: --report ──────────────────────────────────────────────────────────
 
 cmd_report() {
@@ -8419,6 +8495,15 @@ main() {
       # (_c32_compute_verdict), no copy. Used by .github/workflows/release-corpus-completeness.yml.
       cmd_check_release_corpus
       ;;
+    --check-package-freshness)
+      # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
+      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH, 1 STALE
+      # when the .github/skill-package-freshness.enforce sentinel is enforce; fail-closed
+      # on an unexpected verdict). The Check 7 logic ALSO fires inside the full --check
+      # suite — one shared body (_c7_compute_verdict), no copy. Used by
+      # .github/workflows/skill-package-freshness.yml.
+      cmd_check_package_freshness
+      ;;
     --self-test)
       # Offline, hermetic regression for the close-completeness invariant (#1290 AC5):
       # a deliberately-abbreviated scaffold (a VERIFIED row missing a Stage-13 output)
@@ -8442,6 +8527,7 @@ main() {
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; exits 1 on a STALE package when enforce) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""
