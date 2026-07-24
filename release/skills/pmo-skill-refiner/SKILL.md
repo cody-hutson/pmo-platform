@@ -58,6 +58,7 @@ Common operator phrasings that route to this skill (preserved as trigger-matchin
 **Template-protocol consumption.** When refining a skill that produces a template-like artifact (delivery-engine RAID, eval-writer rubric, release-planner release-plan-template, etc.), validate that the produced artifact's lifecycle complies with `core/standards/template-protocol.md` (state machine, provenance schema, T1-T5 / P1-P5 gates) and that compliance is documented in the refined skill's behavioral markers. New skill-authored templates default to `skill-internal-standalone` unless P1-P5 promotion gates are met. See [`OPERATIONS.md § Template Protocol`](../../../core/governance/OPERATIONS.md).
 
 ## Modes
+<!-- design-artifact: flow-class=skill-flow; name=pmo-skill-refiner; depicts=release/skills/pmo-skill-refiner/SKILL.md -->
 
 Three modes, sequenced as a pipeline: Interview always fires first, then Mode 2 or Mode 3 depending on intent.
 

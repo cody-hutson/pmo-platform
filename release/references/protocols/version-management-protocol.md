@@ -23,6 +23,7 @@ All PMO skills use **semantic versioning** in the format `MAJOR.MINOR`.
 | **MINOR** | +0.1 | Refinements within existing structure: guardrail additions, wording improvements, bug fixes, reference doc additions, or non-breaking prompt optimization | v4 → v4.1 |
 
 ### Decision Tree
+<!-- design-artifact: flow-class=decision-tree; name=version-management; depicts=release/references/protocols/version-management-protocol.md -->
 
 When preparing a skill update, use this decision tree to determine version increment:
 

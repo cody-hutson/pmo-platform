@@ -96,6 +96,7 @@ Operate normally per the modes defined below. The handoff format is not required
 for direct user invocation.
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=pmo-process-designer; depicts=operations/skills/pmo-process-designer/SKILL.md -->
 
 This skill has 5 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous across modes.** Most triggers (e.g., "build the traceability matrix", "do a gap analysis") are unambiguous; ambiguity arises for phrases like "document this process" that could map to Requirements, Process Documentation, or Gap Analysis depending on the artifact's state.
 

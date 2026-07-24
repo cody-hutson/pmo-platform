@@ -128,6 +128,7 @@ Two candidates eliminated on constraint breaches — one for being **too low** (
 This worked example demonstrates all three steps end-to-end on a real decision, and — unlike a placement-only example — exercises the `altitude` axis directly: the candidates diverge on abstraction altitude, the ≥2-band rule fires (new mechanism) and is satisfied (three bands present), and the narrowing kills both a too-low (point-fix) and a too-high (new-abstraction) candidate to land at the correct extend-seam altitude. It is the inverse of the actual version-claim-determinism history, where the host-concrete point-fix was *not* eliminated because no altitude axis forced the extend-seam candidate into the generated set — the exact gap this axis closes.
 
 ## 7. Process-flow artifact (Tier-A)
+<!-- design-artifact: flow-class=agent-process; name=design-exploration; depicts=release/references/pipeline/stage-05-solutioning.md,release/references/standards/design-exploration.md -->
 
 This protocol defines an agent-process flow with a gate (the elimination step) and a clear sequence, and it is cited as canonical by the Stage-5 Phase A4 spec — so it activates the Tier-A process-flow artifact requirement. The flow, as a Mermaid flowchart (required for a gated, cited-as-canonical process-flow per [`process-flow-diagram-standards.md`](../../../core/standards/process-flow-diagram-standards.md) § Scope & Diagram-Form Decision Rule):
 

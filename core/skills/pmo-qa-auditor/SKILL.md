@@ -65,6 +65,7 @@ Output-contract compliance (G1) is necessary but not sufficient — review-class
 outputs must also pass review-discipline compliance.
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=pmo-qa-auditor; depicts=core/skills/pmo-qa-auditor/SKILL.md -->
 
 This skill's modes are enumerated in the Mode Selection table below. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "cross-output review", "push-to-resolve audit", "platform health audit") are unambiguous; ambiguity arises for generic phrases like "review this" or "QA this" which most commonly mean Mode A Single Output Review but can also map to any of the other modes depending on input.
 

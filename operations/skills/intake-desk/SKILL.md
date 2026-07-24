@@ -88,6 +88,7 @@ rule plus the WHAT/HOW boundary; the loop and the rule are in
   AskUserQuestion before anything is filed.
 
 ## Mode detection
+<!-- design-artifact: flow-class=skill-flow; name=intake-desk; depicts=operations/skills/intake-desk/SKILL.md -->
 
 | Signal | Mode |
 |---|---|

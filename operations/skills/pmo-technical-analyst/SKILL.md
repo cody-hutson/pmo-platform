@@ -93,6 +93,7 @@ Operate normally per the modes defined below. The handoff format is not required
 for direct user invocation.
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=pmo-technical-analyst; depicts=operations/skills/pmo-technical-analyst/SKILL.md -->
 
 This skill has 5 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "review this FDD", "integration risk") are unambiguous; ambiguity arises for phrases like "review this technical doc" or "what are the technical risks" that could map to FDD review, Integration review, or Architecture review depending on artifact type.
 
