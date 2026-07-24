@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.86] - 2026-07-24
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Trackers and status roll-ups now match your project's methodology, and stale analysis artifacts are detected instead of assumed.
 
 [Full notes](release/releases/notes/v3.86_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.86)
 

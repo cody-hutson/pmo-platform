@@ -5,7 +5,7 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
-### v3.86 (2026-07-24) — <headline — populated by operator at chore PR review>
+### v3.86 (2026-07-24) — Trackers now match each project's methodology, and stale analysis notes get flagged
 
 ### v3.85 (2026-07-24) — Release close-out now guards its published notes, packages, and ledgers
 
