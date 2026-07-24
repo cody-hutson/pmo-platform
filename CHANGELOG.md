@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.84] - 2026-07-24
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.84_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.84)
+
 ## [v3.83] - 2026-07-22
 
 Adds internal measurement of release close-out quality and ships a session-learning sensor that is present but not yet switched on.

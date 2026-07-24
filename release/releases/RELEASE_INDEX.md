@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.84 | version-identity-and-corpus-ledgers | 2026-07-24 | — | #3654 | [notes/v3.84_RELEASE_NOTES.md](notes/v3.84_RELEASE_NOTES.md) |
 | v3.83 | pipeline-telemetry-tail | 2026-07-23 | — | #3657 | [notes/v3.83_RELEASE_NOTES.md](notes/v3.83_RELEASE_NOTES.md) |
 | v3.82 | governance-doc-reconciliation | 2026-07-22 | — | #3667 | [notes/v3.82_RELEASE_NOTES.md](notes/v3.82_RELEASE_NOTES.md) |
 | v3.81 | 92-version-identity-and-parser-ssot | 2026-07-22 | — | #3656 | [notes/v3.81_RELEASE_NOTES.md](notes/v3.81_RELEASE_NOTES.md) |
