@@ -1,7 +1,14 @@
+# CANONICAL ENTRY POINT for spoke model/effort posture is
+# platform-config.toml [spoke_runtime] (default_spoke_model + chip_model; effort
+# posture is the immutable feedback_model_preference directive, pointer-only).
+# THIS file is its per-stage-override companion (subagent path) — read by
+# deploy.sh Check 27 alongside that canonical default. See ADR-094.
+#
 # Per-stage model overrides for hub-spawned spokes (Stage 5 ADR Dimension 5).
 #
-# Default for all agents in .claude/agents/pmo-*.md is `opus`. This file
-# declares per-stage overrides.
+# Default for all agents in .claude/agents/pmo-*.md is the canonical
+# [spoke_runtime].default_spoke_model (`opus`). This file declares per-stage
+# overrides.
 #
 # Format: one `<agent-name> <model>` entry per line; `#` introduces comments.
 # Agent name matches the filename stem at .claude/agents/<agent-name>.md
