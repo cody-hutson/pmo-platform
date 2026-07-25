@@ -4,7 +4,7 @@ title: ADR-028 — Operations skills consume core safety-control references via-
 status: Accepted
 date: 2026-06-15
 release: 02-FNH-est-lifecycle-status-hardening (v2.01)
-deciders: "[OPERATOR_NAME] (decision adopted 2026-06-15 at the v2.01 Collective Review scope-lock)"
+deciders: "Cody Hutson (decision adopted 2026-06-15 at the v2.01 Collective Review scope-lock)"
 tags: [architecture, skill, cross-module, safety-control, watermelon, via-public-api, fork-avoidance, reversibility]
 source_observations:
   - "weekly-status-rollup (#256) needs the 8-signal watermelon set to scan portfolio projects for green-outside/red-inside status. The complete W1-W8 set is already authored and owned by core/skills/pmo-qa-auditor/references/watermelon-detection.md, which self-declares it is 'the canonical home of the watermelon signal set' with severity tiers, false-positive filters, and a verdict-composition algorithm."
