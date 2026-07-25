@@ -1,6 +1,6 @@
 ---
 title: "ADR-089 — Embedded design-artifact declaration via a section-level HTML-comment marker"
-status: Proposed
+status: Accepted
 date: 2026-07-24
 release: design-artifact-backfill (#291) (v3.87; bound at the Stage-12 tag-claim, re-rendered from provisional v3.86 after a concurrent claim)
 deciders: "Stage 5 Solutioning spoke drafted the options analysis + trade-off matrix inline per the read-only Solutioning discipline; the Stage 6 Engineering spoke committed it; the operator ratifies at the design-artifact-backfill Collective Review scope-lock / Stage 9"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-Proposed — authored at Stage 6 Engineering of release `design-artifact-backfill` from the Stage-5 Solutioning draft; ratified at the operator's Collective Review scope-lock / Stage 9 plan-review gate. The Accepted flip is verified against this file's `status:` field, never assumed from milestone closure.
+Accepted — authored at Stage 6 Engineering of release `design-artifact-backfill` (v3.87) from the Stage-5 Solutioning draft; ratified at the operator's Collective Review scope-lock / Stage 9 plan-review gate and shipped in the merged release PR #3796. The Accepted flip is verified against this file's `status:` field, never assumed from milestone closure.
 
 ## Context
 
