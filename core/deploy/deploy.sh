@@ -5096,12 +5096,26 @@ cmd_check() {
     log "Check 27: Designated-model config for hub-spawned spokes (release/.claude/agents/pmo-*.md)"
     # Per the layout §1.4 agent definitions live under release/.claude/agents/.
     local c26_agents_dir="release/.claude/agents"
-    local c26_overrides="release/.claude/agents-model-overrides.txt"
     # Fallback to workspace .claude/agents/ for backwards-compatibility during
     # transition window if the operator workspace has not yet been updated.
     [[ -d "$c26_agents_dir" ]] || c26_agents_dir=".claude/agents"
+    # Companion per-stage-override allowlist (#340): canonical read location is the
+    # DEPLOYED instance surface — composition-surface-manifest.sh installs the source
+    # core/config/allowlists/agents-model-overrides.txt to the instance base as an
+    # `instance`-tier file. The prior release/.claude and .claude paths are retained
+    # as back-compat fallbacks for a workspace not yet re-deployed. This reconciles the
+    # read-path-vs-deploy-path seam so operator per-stage overrides placed in the
+    # deployed file are visible to this check.
+    local c26_overrides="$(pmo_instance_path)/agents-model-overrides.txt"
+    [[ -f "$c26_overrides" ]] || c26_overrides="release/.claude/agents-model-overrides.txt"
     [[ -f "$c26_overrides" ]] || c26_overrides=".claude/agents-model-overrides.txt"
-    local c26_default_model="opus"
+    # Default spoke model: read the canonical platform-config [spoke_runtime] surface
+    # (#340) via the rung-reader; fall back to the documented "opus" literal when the
+    # field is unresolved at every rung (resolver Rule-2 consumer-default). This
+    # de-hardcodes the prior literal so the default and the Model Provenance block read
+    # ONE source (both prior detection anchors converge, neither eliminated).
+    local c26_default_model="$(resolve_platform_config default_spoke_model)"
+    [ -n "$c26_default_model" ] || c26_default_model="opus"
     local c26_findings=0
     local c26_output=""
     local c26_files_scanned=0
