@@ -29,6 +29,8 @@ The platform serves a specific set of **human** roles and models every **other**
 
 **Quality bar.** "Principal-level" is not a figure of speech — it is the measurable bar defined by the [`Principal Contributor Standard`](../standards/principal-standard-checklist.md). Every agent output is evaluated against that standard's competencies and PASS/FAIL behaviors; this document does not restate them (the checklist is the single source). When an output would fall short of that bar, the discipline is to surface the gap and its resolution path, not to ship briefing-grade work.
 
+**Target-state evolution.** The forward-looking evolution of this human-orchestrator / agent-contributor split — the three-actor target model (orchestrator / specialist skill / free AI agent) bound by governance-as-contract — is stated, as a target architecture (not current state), in [`actor-model-and-governance-as-contract.md`](actor-model-and-governance-as-contract.md).
+
 ---
 
 ## One Agent, One Workspace
@@ -354,3 +356,4 @@ The actual work being managed by the platform:
 ## Related References
 
 - [`core/diagrams/architecture-platform-structure.md`](../diagrams/architecture-platform-structure.md) — the centralized, current-state ASCII structural map of the modular-monolith top-level layout. This overview narrates how the platform works; that artifact is the maintained tree of where everything lives. The artifact reciprocates with a link back to this overview as a parent it depicts.
+- [`actor-model-and-governance-as-contract.md`](actor-model-and-governance-as-contract.md) — the forward-looking **target-architecture** statement: the three-actor target operating model (orchestrator / specialist skill / free AI agent) bound by governance-as-contract, the permanent determinism-vs-judgment division, and the migration path from today's hub-spoke model. Target-state, not current-state.

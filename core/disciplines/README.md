@@ -27,6 +27,7 @@ reversibility: CHEAP / Confidence HIGH
 | [five-function-spine-and-process-flows.md](five-function-spine-and-process-flows.md) | Maps the 13 stages to the 5 PMBUK process groups (Initiating / Planning / Executing / Monitoring & Controlling / Closing) + the 10 cross-cutting flows that thread through them. |
 | [execution-framework.md](execution-framework.md) | The 5 tool-agnostic execution dimensions (Work Breakdown / Assignment / Tracking / Handoff / State Persistence). Sits between the Process layer and the Tool layer. |
 | [build-philosophy.md](build-philosophy.md) | The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability, Security + the read-before-edit / track-all-edits disciplines) and the philosophy × surface coverage matrix mapping each value to the artifact enforcing it across skills / agents / hub-spokes / hooks / slash-commands. Names and routes; cites, never restates. |
+| [actor-model-and-governance-as-contract.md](actor-model-and-governance-as-contract.md) | The **target** operating model: the three-actor model (orchestrator / specialist skill / free AI agent), each actor's governing surface, the permanent determinism-vs-judgment division, and the governance-as-procedure → governance-as-contract enforcement shift. Forward-looking (target-state, not current); consumes the seed docs, does not restate them. |
 
 ## Knowledge & corpus
 
