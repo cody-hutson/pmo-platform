@@ -490,6 +490,16 @@ find_first_order() {
     t3="$t2"
   fi
 
+  # Basename-uniqueness pre-count (#3291) over the (worktree-excluded, #3300) scan list.
+  # The target carries its own basename once, so bn_count == 1 means the basename is
+  # genuinely unique; bn_count >= 2 means another scanned file shares it. This gates the
+  # basename-shaped match below so a non-unique basename cannot over-count every same-named
+  # file as blast radius. Depends on #3300: with worktree copies present every basename
+  # reads as non-unique, so this classification is only correct on the de-duplicated list.
+  local bn_count
+  bn_count="$(awk -F/ '{print $NF}' "$SCAN_LIST_FILE" | grep -Fxc -- "$t2" 2>/dev/null || true)"
+  [ -z "$bn_count" ] && bn_count=1
+
   local matches_raw="$WORK_DIR/matches-raw.txt"
   : > "$matches_raw"
 
@@ -519,10 +529,24 @@ find_first_order() {
   }
 
   # Collect all match lines: <abs_path>:<line>:<text>
+  # Adaptive uniqueness gate (#3291): T1 (full path) is always path-true and always fires.
+  # The basename-shaped match (T2, and T3 when it has collapsed to the basename for a
+  # 2-component target) is fired ONLY when the basename is unique across the scan list —
+  # preserving today's behavior for the common unique case (AC-2). For a non-unique
+  # basename we match path-anchored only: T3 fires only when it is a genuine
+  # multi-component suffix (never the collapsed-to-basename form), and T2 (bare basename)
+  # is dropped — so a shared basename reports only its path-true consumers (AC-1).
   {
     grep_token "$t1"
-    if [ "$t3" != "$t1" ]; then grep_token "$t3"; fi
-    if [ "$t2" != "$t3" ] && [ "$t2" != "$t1" ]; then grep_token "$t2"; fi
+    if [ "$bn_count" -le 1 ]; then
+      # Unique basename → today's behavior (T1 + T3 + T2).
+      if [ "$t3" != "$t1" ]; then grep_token "$t3"; fi
+      if [ "$t2" != "$t3" ] && [ "$t2" != "$t1" ]; then grep_token "$t2"; fi
+    else
+      # Non-unique basename → path-anchored only: T3 only as a real multi-component
+      # suffix (t3 != t2 guards the shallow-path collapsed-to-basename case); T2 dropped.
+      if [ "$t3" != "$t1" ] && [ "$t3" != "$t2" ]; then grep_token "$t3"; fi
+    fi
   } > "$matches_raw"
 
   # Parse: <abs_path>:<line>:<text> → <rel>\t<line>\t<text>
