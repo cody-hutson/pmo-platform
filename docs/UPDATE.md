@@ -23,7 +23,7 @@ The `update.sh` script regenerates package-managed content from current template
 | Category | Update behavior |
 |---|---|
 | **Universal** (skill prompts, hook scripts, schemas) | Refreshed by `git pull`; no separate action |
-| **Customizable** (`CLAUDE.md`, `settings.json`) | Managed section regenerated from current template + your `operator.toml`; operator-extension area preserved verbatim |
+| **Customizable** (`CLAUDE.md`, `settings.json`) | Composed at install by `setup-workspace.sh`; **not refreshed by `update.sh`**. Re-run `setup-workspace.sh` to pick up template changes (recomposes the whole file) |
 | **Composition-surface** (allowlists, exemption lists) | Managed section regenerated; OPERATOR ADDITIONS section preserved verbatim |
 | **Operator-instance** (`projects/`, `personal/`, `knowledge/`) | Never touched |
 
@@ -32,7 +32,7 @@ The contract is defined at [`core/standards/composition-surface-spec.md`](../cor
 ## 2. What does NOT get updated
 
 - Your work: `projects/`, `personal/notes/`, `knowledge/`
-- OPERATOR ADDITIONS sections in any managed file (allowlists, CLAUDE.md operator-extension area)
+- OPERATOR ADDITIONS sections in composition-surface managed files (allowlists, exemption lists)
 - Values you've set in `~/.config/pmo-platform/operator.toml`
 - User-scoped Claude config at `~/.claude/`
 
