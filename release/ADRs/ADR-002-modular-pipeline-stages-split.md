@@ -3,7 +3,7 @@ title: ADR-002 — Modular Pipeline Stages Split
 status: Accepted
 date: 2026-05-10
 release: platform-architecture-operating-model
-deciders: "cody-hutson (operator) + Stage 5 Solutioning spoke"
+deciders: "Cody Hutson (operator) + Stage 5 Solutioning spoke"
 tags: [architecture, governance, pipeline, reference-doc-layout]
 source_observations:
   - Stage 4 release plan (D-Modular-Path = A, D-Cascade-Strategy = A)

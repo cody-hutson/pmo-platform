@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.89 (2026-07-25) — Reusable Change Impact Matrix and Training Plan templates, plus a RAID-log template header reconcile
+
 ### v3.88 (2026-07-25) — <headline — populated by operator at chore PR review>
 
 ### v3.87 (2026-07-24) — Design diagrams and process flows in the docs are now labeled and findable

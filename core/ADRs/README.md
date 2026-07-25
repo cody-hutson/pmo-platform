@@ -218,6 +218,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP (additive — a new ADR record + one Stage-5 phase block + this index line; `git revert`-able with no data migration).
 **File:** [ADR-062-substrate-vs-canonical-precedent.md](ADR-062-substrate-vs-canonical-precedent.md)
 
+### ADR-090 — Structural/path-move blast-radius mode extends blast-radius.sh (qualifies ADR-068); soft gate, shadow → warn → enforce
+
+**Status:** Accepted (operator-ratified at the Stage-5 D-gate for milestone `blast-radius-scan-correctness`; authored at Stage 6 per the ADR-062 / ADR-068 Stage-6 ADR-authoring precedent).
+**Decision:** The structural/path-move mode (`blast-radius.sh --mode=structural <old-path>` — "who hard-codes this PATH?", the consumer class both existing tracers are blind to, and the exact miss behind #230 → RCA #3118) is an **additive mode branch that EXTENDS `blast-radius.sh`**, not a new sibling. This **qualifies ADR-068** with the reusable boundary **"same-scanner → extend; different-scanner → sibling"**: ADR-068 shipped the domain fan-out as a sibling because it needs a *different scanner*; the structural query reuses the doc scanner unchanged and needs only a *different query over the same scan list*, so it extends without contradicting ADR-068. The merge-gate (**SR-G5** in `stage-05-solutioning.md` §7.2, Phase A3.3 sweep) is a **soft** update-or-accept-per-consumer criterion (a `grep -F` literal match over-includes reconcilable non-consumers, so a hard block would false-positive-stop a legit merge), rolled out **shadow → warn → enforce** and **shipping in shadow**.
+**Reversibility:** CHEAP (mode code — additive) / MODERATE (gate wire-in — a merge-gate criterion; commit-split isolates it, ships inert in shadow).
+**File:** [ADR-090-structural-path-move-mode-extend-vs-sibling.md](ADR-090-structural-path-move-mode-extend-vs-sibling.md)
+
 ## Runtime-control / hook-class ADRs
 
 ### ADR-087 — `Stop`-hook agent-loop re-entry as a hook class (ship-inert activation boundary)
