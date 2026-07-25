@@ -45,6 +45,8 @@ The PMBOK 7 standard organizes project work into 8 Performance Domains. Each pro
 | Stakeholder Register | Identification + classification + engagement strategy per stakeholder | `operations/templates/stakeholder-register-template.csv` | No (shipped; schema in tracker-schemas.md § Tracker 8) |
 | RACI / RAEW / RAS | Responsibility-assignment matrix | `operations/templates/raci-template.md` | No (shipped; schema in tracker-schemas.md § Tracker 9) |
 | Glossary / Key Terms | Shared-vocabulary index | `operations/templates/key-terms-glossary-template.csv` | No |
+| Change Impact Matrix | Structured change-impact analysis per topic (current→future state, impact, stakeholders, mgmt plan) | `operations/templates/change-impact-matrix-template.md` | No |
+| Training Plan | Training needs + delivery plan per team (approach, content, topics) | `operations/templates/training-plan-template.md` | No |
 
 ### §3.2 Team
 
@@ -150,7 +152,7 @@ Skill-embedded templates whose audience is the skill at runtime (not project sta
 
 ## §6 Canon-per-Artifact-Family Mapping (REQUIRED — AC4)
 
-Single authoritative table — 9 rows binding each artifact family to its native canon plus Anthropic plugin cross-reference (rows 1–8 per Foundation Stage 5 DD-2 + Stage 4 D4 operator-approved 2026-05-10 per the D-Gate Decision Record; row 9 — Test plan / Test case — added per the D-TaxonomyRowShape operator decision, 2026-07-03). Localization Notes per §7.
+Single authoritative table — 11 rows binding each artifact family to its native canon plus Anthropic plugin cross-reference (rows 1–8 per Foundation Stage 5 DD-2 + Stage 4 D4 operator-approved 2026-05-10 per the D-Gate Decision Record; row 9 — Test plan / Test case — added per the D-TaxonomyRowShape operator decision, 2026-07-03; rows 10–11 — Change Impact Matrix + Training Plan — added 2026-07-24 as project-domain §Stakeholder families, both `canon_compat: none`). Localization Notes per §7.
 
 | # | Family | Domain | Primary Canon | Anthropic Plugin Cross-Ref | Current Canonical PMO Template | Localization Note |
 |---|---|---|---|---|---|---|
@@ -163,6 +165,8 @@ Single authoritative table — 9 rows binding each artifact family to its native
 | 7 | Status report | project | PMBOK 7 §Measurement Performance Domain | (no direct plugin; weekly-status-rollup PMO skill consumes) | `executive-status-report-prompt-template.md`, `daily-status-log-template.md`, `daily-status-update-framework-template.md` | Existing canonical templates already PMBOK-aligned operationally; row documents existing convention |
 | 8 | Stakeholder Register / RACI | project | PMBOK 7 §Stakeholder Performance Domain +  composition | (no direct plugin; PMO operations role-skills indirectly consume) | `stakeholder-register-template.csv`, `raci-template.md` (schemas in tracker-schemas.md §§ Tracker 8-9) | RAEW / RAS variants noted as references for  authoring |
 | 9 | Test plan / Test case | software | PMBOK 7 §Quality + Anthropic `engineering:testing-strategy` plugin convention | `engineering:testing-strategy` plugin | `test-plan-template.md` | Dual-anchor family — PMBOK 7 §Quality (quality-management framing) + plugin convention (engineer-facing structure); plugin availability re-verified at promotion per L4 P5; registered per the D-TaxonomyRowShape operator decision (2026-07-03) |
+| 10 | Change Impact Matrix | project | PMBOK 7 §Stakeholder Performance Domain | (no Anthropic plugin equivalent) | `change-impact-matrix-template.md` | Project-domain OCM change-impact artifact; no Anthropic plugin counterpart — stands on the PMBOK 7 §Stakeholder canon alone (`canon_compat: none`, P5 path c-i); one of the first two project-domain templates to carry the L4 provenance header (added 2026-07-24) |
+| 11 | Training Plan | project | PMBOK 7 §Stakeholder Performance Domain | (no Anthropic plugin equivalent) | `training-plan-template.md` | Project-domain stakeholder-enablement artifact; no Anthropic plugin counterpart — stands on the PMBOK 7 §Stakeholder canon alone (`canon_compat: none`, P5 path c-i); column model aligns with the change-management skill's `references/training-plan.md` (added 2026-07-24) |
 
 ## §7 Localization Notes (Mechanism 1 audit trail)
 
