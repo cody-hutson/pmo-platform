@@ -18,14 +18,21 @@ Two detectors (selectable via --mode {imp,count,both}; default both):
     `<!-- skill-count-imp: allow-imp-ref -->`.
 
   count detector
-    Computes the authoritative roster count at runtime by counting
-    `<module>/skills/*/` directories across operations, release, core (the same
-    source-of-truth deploy.sh Check 5 derives EXPECTED_ROSTER from). Two
-    authoritative framings are both accepted as correct, because the corpus and
-    deploy.sh both use both: the PUBLIC roster (canary excluded, ADR-canonical —
-    deploy.sh Check 5(c)'s enum caps at 22) and the DIRECTORY count (canary
-    included — deploy.sh's Check 5 OK message counts "across
-    operations/release/core/canary"; the v1.08 plan records "23 SKILL.md dirs").
+    Computes the authoritative roster count at runtime by PARSING the deploy.sh
+    per-module roster arrays — OPERATIONS_SKILLS / RELEASE_SKILLS / CORE_SKILLS
+    (public) + CANARY_SKILLS — the single roster source of truth (ADR-008; the
+    same arrays deploy.sh Check 5 reconciles against disk and derives
+    EXPECTED_ROSTER from, and the same arrays the compliant sibling
+    check-canonical-structure.sh extracts with the identical awk idiom). It does
+    NOT walk `<module>/skills/*/` directories: a filesystem walk wrongly counts
+    the non-roster `_shared` / `_templates` dirs and re-introduces the
+    deliberately-excluded canary, diverging from Check 5(c) — the #3578 defect.
+    The invariant: duplicate a PARSE (fails loud if the arrays move), never a
+    POLICY (drifts silent). Two authoritative framings are both accepted as
+    correct, because the corpus and deploy.sh both use both: the PUBLIC roster
+    (canary excluded, ADR-canonical — the OPERATIONS/RELEASE/CORE arrays) and the
+    DIRECTORY count (canary included — deploy.sh's Check 5 OK message counts
+    "across operations/release/core/canary").
     A roster-TOTAL claim on a changed line whose number equals NEITHER framing is
     flagged as drift. The claim shape is deliberately TIGHT (a totalizing
     qualifier is required — "all N skills", "N PMO skills", "N skills total", …)
@@ -45,7 +52,8 @@ Exit codes (matching the check-doc-links.py family convention):
   0  no findings
   1  finding(s)
   2  input / argument error
-  3  a declared --files entry that should be readable but cannot be read
+  3  a declared --files entry that should be readable but cannot be read, OR
+     the deploy.sh roster source is missing / parses an empty public roster
      (fail-loud: a relocated/renamed scan surface must not read green)
 
 Authored under the Stage 5 spec (issue #130, release cross-reference-integrity-ci).
@@ -57,18 +65,37 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # Repo root: this file lives at <root>/core/deploy/tools/check-skill-count-imp.py,
 # so parents[3] is the repository root (same idiom as check-doc-links.py).
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
-# Modules whose skills/*/ directories form the roster (deploy.sh Check 5 scope).
-ROSTER_MODULES = ("operations", "release", "core")
+# ── Roster authority: the deploy.sh per-module arrays (ADR-008 single roster
+#    source), NOT a filesystem directory walk. ───────────────────────────────
+# deploy.sh Check 5 reconciles these same arrays against disk, and the compliant
+# sibling core/deploy/tools/check-canonical-structure.sh extracts them at runtime
+# with the identical awk idiom (its extract_roster_array) — so parsing them here
+# keeps this PR-time mirror's population byte-aligned with the deploy-time
+# authority (deploy.sh Check 5(c)) and structurally immune to the non-roster
+# directories a filesystem walk wrongly includes (`_shared`, `_templates`) and
+# the canary a walk re-introduces. Duplicate a PARSE (fails loud if the arrays
+# move), never a POLICY (drifts silent) — the root-cause lesson of #3578.
+#
+# Authority: ADR-008 (core/ADRs/ADR-008-deploy-sh-per-module-array-design.md),
+# Decision Rule 1 — the per-module arrays are the roster structure; and
+# core/skills/registry.md L37 (CMDB roster-authority row). Do NOT re-introduce a
+# `skills_dir.iterdir()` filesystem walk here: the count must derive from the
+# arrays named below, or it will diverge from Check 5(c) exactly as it did
+# before this fix (the 55-vs-52 population divergence #3578 closed).
+DEPLOY_SH_RELPATH = Path("core") / "deploy" / "deploy.sh"
 
-# Canary skill name (source-only per ADR-04; excluded from the PUBLIC roster but
-# present as a directory, so it is the +1 that separates the two framings).
-CANARY_SKILL_NAME = "pmo-skill-refiner-selftest-canary"
+# The three PUBLIC-roster array identifiers (canary excluded) and the canary
+# array identifier, as they appear in deploy.sh. extract_roster_array() parses
+# each by name.
+PUBLIC_ROSTER_ARRAYS = ("OPERATIONS_SKILLS", "RELEASE_SKILLS", "CORE_SKILLS")
+CANARY_ROSTER_ARRAY = "CANARY_SKILLS"
 
 # IMP-XXX matcher: case-insensitive IMP- immediately followed by one-or-more
 # digits. The form the originating v11.01e audit used (documented in #130's own
@@ -182,29 +209,75 @@ ALLOW_IMP_RE = re.compile(r"<!--\s*skill-count-imp:\s*allow-imp-ref\s*-->")
 ALLOW_COUNT_RE = re.compile(r"<!--\s*skill-count-imp:\s*allow-count\s*-->")
 
 
-def compute_authoritative_counts(repo_root: Path):
-    """Return (public_count, with_canary_count) computed from the live tree.
+class RosterSourceError(Exception):
+    """The deploy.sh roster source is missing or a public-roster array parsed
+    empty — a fail-loud scan-surface condition (exit 3). A relocated or renamed
+    roster source must not read green: duplicating a PARSE means the parse fails
+    loud when the arrays move, rather than silently returning a stale count."""
 
-    public_count    = directories under {operations,release,core}/skills/
-                      excluding the canary (the ADR-canonical public roster).
-    with_canary_count = public_count + 1 if the canary directory exists
-                      (the directory-count framing deploy.sh's OK message and
-                      the release log use).
+
+def extract_roster_array(deploy_sh_text, array_name):
+    """Return the members of a `NAME=( ... )` bash array literal in deploy.sh.
+
+    Mirrors the awk idiom in check-canonical-structure.sh extract_roster_array()
+    (its L115-127): between the opening `NAME=(` line and the closing `)` line,
+    each captured line has its trailing `#comment` stripped and ALL whitespace
+    removed; a non-empty remainder is one array member. A parse, not a policy
+    re-implementation — if the array is renamed or relocated this yields no
+    members and the caller fails loud.
     """
-    public = 0
-    canary_present = False
-    for module in ROSTER_MODULES:
-        skills_dir = repo_root / module / "skills"
-        if not skills_dir.is_dir():
+    open_re = re.compile(r"^%s=\(" % re.escape(array_name))
+    members = []
+    capturing = False
+    for raw in deploy_sh_text.splitlines():
+        if not capturing:
+            if open_re.match(raw):
+                capturing = True
             continue
-        for child in sorted(skills_dir.iterdir()):
-            if not child.is_dir():
-                continue
-            if child.name == CANARY_SKILL_NAME:
-                canary_present = True
-                continue
-            public += 1
-    with_canary = public + (1 if canary_present else 0)
+        if raw.startswith(")"):  # closing paren at column 0 (awk /^\)/)
+            break
+        line = re.sub(r"#.*$", "", raw)      # strip trailing comment
+        line = re.sub(r"\s+", "", line)      # strip all whitespace
+        if line:
+            members.append(line)
+    return members
+
+
+def compute_authoritative_counts(repo_root: Path):
+    """Return (public_count, with_canary_count) parsed from the deploy.sh
+    per-module roster ARRAYS (the ADR-008 single roster source) — NOT a
+    filesystem directory walk.
+
+    public_count      = total members of OPERATIONS_SKILLS + RELEASE_SKILLS +
+                        CORE_SKILLS (the ADR-canonical public roster). `_shared`,
+                        `_templates`, and the canary are structurally absent
+                        because they are not members of these arrays — no
+                        skip-list is needed or used.
+    with_canary_count = public_count + the CANARY_SKILLS member count (the
+                        directory-count framing deploy.sh's Check 5 OK message
+                        and the release log use).
+
+    Raises RosterSourceError (→ exit 3, fail-loud) if deploy.sh is unreadable or
+    the public roster parses empty.
+    """
+    deploy_sh = repo_root / DEPLOY_SH_RELPATH
+    if not deploy_sh.is_file():
+        raise RosterSourceError(
+            "roster source not found: %s — expected the deploy.sh per-module "
+            "arrays (OPERATIONS_SKILLS/RELEASE_SKILLS/CORE_SKILLS); a relocated "
+            "roster source must not read green" % deploy_sh
+        )
+    text = deploy_sh.read_text(encoding="utf-8", errors="replace")
+    public = 0
+    for array_name in PUBLIC_ROSTER_ARRAYS:
+        public += len(extract_roster_array(text, array_name))
+    if public == 0:
+        raise RosterSourceError(
+            "parsed an EMPTY public roster from %s (OPERATIONS_SKILLS/"
+            "RELEASE_SKILLS/CORE_SKILLS) — a relocated or restructured deploy.sh "
+            "must not read green" % deploy_sh
+        )
+    with_canary = public + len(extract_roster_array(text, CANARY_ROSTER_ARRAY))
     return public, with_canary
 
 
@@ -401,13 +474,87 @@ def run_self_test():
             "(e4c) F3 framing 'the full roster of 19 skills' should flag (19 not in authority)"
         )
 
+    # ── (f) FALSIFICATION TEST — the roster derives from the deploy.sh ARRAYS,
+    #    not the filesystem (issue #3578; AC "a regression test fails against the
+    #    pre-fix implementation"). Build a fixture repo whose deploy.sh arrays and
+    #    on-disk skills/ dirs DELIBERATELY DISAGREE: the tree carries the two
+    #    non-roster dirs (`_shared`, `_templates`) plus a stray extra dir and a
+    #    canary named DIFFERENTLY from any hardcoded literal, while the arrays list
+    #    only the true roster. compute_authoritative_counts must return the ARRAY
+    #    population (public 4 / with-canary 5), NOT the filesystem population.
+    #    The pre-fix `skills_dir.iterdir()` walk counts the three non-roster dirs
+    #    (and, lacking the fixture's canary name in its hardcoded constant, the
+    #    canary too) → it returns 8/8 and FAILS (f1)/(f2); the array parse PASSES.
+    #    (f3) re-derives the filesystem count and asserts it DIFFERS from the array
+    #    count, so the fixture genuinely exercises the divergence rather than a
+    #    coincidental equality.
+    canary_fixture_name = "fixture-canary"  # deliberately NOT the real canary literal
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "core" / "deploy").mkdir(parents=True)
+        (root / "core" / "deploy" / "deploy.sh").write_text(
+            "OPERATIONS_SKILLS=(\n"
+            "  alpha\n"
+            "  beta  # trailing comment stripped by the awk-idiom parse\n"
+            ")\n"
+            "RELEASE_SKILLS=(\n"
+            "  gamma\n"
+            ")\n"
+            "CORE_SKILLS=(\n"
+            "  delta\n"
+            ")\n"
+            "CANARY_SKILLS=(\n"
+            "  %s\n"
+            ")\n" % canary_fixture_name,
+            encoding="utf-8",
+        )
+        # Filesystem: the 4 real roster dirs + the canary + THREE dirs that are
+        # NOT array members (a pre-fix walk miscounts all three).
+        for rel in (
+            "operations/skills/alpha",
+            "operations/skills/beta",
+            "release/skills/gamma",
+            "core/skills/delta",
+            "release/skills/%s" % canary_fixture_name,
+            "operations/skills/_shared",
+            "operations/skills/_templates",
+            "core/skills/stray-non-array-dir",
+        ):
+            (root / rel).mkdir(parents=True)
+
+        public_fx, with_canary_fx = compute_authoritative_counts(root)
+        if public_fx != 4:
+            failures.append(
+                "(f1) falsification: public roster must derive from the arrays "
+                "(expected 4 = OPERATIONS+RELEASE+CORE members), got %d — a "
+                "filesystem walk would inflate it with the non-roster "
+                "_shared/_templates/stray dirs" % public_fx
+            )
+        if with_canary_fx != 5:
+            failures.append(
+                "(f2) falsification: with-canary count must be public + "
+                "CANARY_SKILLS members (expected 5), got %d" % with_canary_fx
+            )
+        fs_walk_public = sum(
+            1
+            for module in ("operations", "release", "core")
+            for child in (root / module / "skills").iterdir()
+            if child.is_dir() and child.name != canary_fixture_name
+        )
+        if fs_walk_public == public_fx:
+            failures.append(
+                "(f3) falsification precondition broken: the fixture's filesystem "
+                "walk (%d) must DIFFER from the array count (%d) so the test "
+                "actually detects the divergence" % (fs_walk_public, public_fx)
+            )
+
     if failures:
         sys.stderr.write("self-test FAILED:\n")
         for f in failures:
             sys.stderr.write("  - %s\n" % f)
         return 1
 
-    sys.stdout.write("self-test OK (16 invariants passed)\n")
+    sys.stdout.write("self-test OK (19 invariants passed)\n")
     return 0
 
 
@@ -464,7 +611,11 @@ def main(argv=None):
         return run_self_test()
 
     repo_root = Path(args.repo_root).resolve()
-    public, with_canary = compute_authoritative_counts(repo_root)
+    try:
+        public, with_canary = compute_authoritative_counts(repo_root)
+    except RosterSourceError as exc:
+        sys.stderr.write("ERROR (exit 3): %s\n" % exc)
+        return 3
     valid_counts = {public, with_canary}
 
     # Build the scan work-list: each item is (real_repo_path, content_text,

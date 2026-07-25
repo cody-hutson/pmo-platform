@@ -1122,27 +1122,43 @@ is_supplementary() {
 }
 
 injected_ref_basenames() {
-  # Emit (one per line) the basenames of TEMPLATE_SYNC_MAP targets for $1 that
-  # land directly under the skill's runtime references/ dir. These files are
-  # injected by sync_canonical_templates_to_runtime() and do NOT exist in the
-  # source tree by single-source-of-truth design, so Check 1's source-vs-installed
-  # diff must EXCLUDE them (their canonical comparison is Check 13's job). Reuses
-  # the same entry parse as sync_canonical_templates_to_runtime (:407-411).
-  # Only references/<file> (one path segment) is emitted; nested targets such as
-  # project-initiator's references/templates/<file> are not — that skill carries
-  # no source references/ dir, so Check 1's per-skill block never runs for it.
+  # Emit (one per line, de-duplicated) the diff --exclude tokens for $1's
+  # TEMPLATE_SYNC_MAP targets — the runtime references/ entries injected by
+  # sync_canonical_templates_to_runtime() that do NOT exist in the source tree by
+  # single-source-of-truth design. Check 1's source-vs-installed diff EXCLUDES
+  # these so the injected copies do not read as "Only in installed" drift; their
+  # byte-identity-vs-canonical is Check 13's job. Reuses the same entry parse as
+  # sync_canonical_templates_to_runtime (:407-411).
+  #
+  # For each target the FIRST path segment under references/ is emitted — exactly
+  # the token `diff -rq --exclude=` needs (it matches whole path components):
+  #   - top-level  references/<file>          -> "<file>"    (excludes that file)
+  #   - nested     references/<subdir>/<file>  -> "<subdir>"  (excludes the whole
+  #     injected subdir, e.g. project-initiator's references/templates/). Excluding
+  #     only the leaf basenames would still leave the injected SUBDIR reported as
+  #     "Only in installed" -> the false reference-drift this case otherwise
+  #     produces; the subdir token is what suppresses it. A skill's injected subdir
+  #     is runtime-only
+  #     (single-source design — project-initiator carries no source
+  #     references/templates/), so excluding it masks no genuine source reference;
+  #     Check 13 still verifies each nested injected file byte-identical against its
+  #     canonical, at the full references/<subdir>/<file> target path.
   local skill="$1"
-  local entry e_skill rest target_rel
-  for entry in "${TEMPLATE_SYNC_MAP[@]}"; do
-    e_skill="${entry%%:*}"
-    [[ "$e_skill" == "$skill" ]] || continue
-    rest="${entry#*:}"
-    target_rel="${rest#*:}"
-    case "$target_rel" in
-      references/*/*) continue ;;        # nested (e.g. references/templates/x) — skip
-      references/*) printf '%s\n' "${target_rel#references/}" ;;
-    esac
-  done
+  local entry e_skill rest target_rel sub
+  {
+    for entry in "${TEMPLATE_SYNC_MAP[@]}"; do
+      e_skill="${entry%%:*}"
+      [[ "$e_skill" == "$skill" ]] || continue
+      rest="${entry#*:}"
+      target_rel="${rest#*:}"
+      case "$target_rel" in
+        references/*)
+          sub="${target_rel#references/}"   # "<file>" or "<subdir>/<file>"
+          printf '%s\n' "${sub%%/*}"         # first path segment under references/
+          ;;
+      esac
+    done
+  } | sort -u
 }
 
 is_harness() {

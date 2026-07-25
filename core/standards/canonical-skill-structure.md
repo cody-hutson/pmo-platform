@@ -74,7 +74,7 @@ Additional frontmatter fields are allowed; unknown fields are ignored by enforce
 
 ### Conditional
 
-- `reference/<topic>.md` — REQUIRED per §5 threshold. Multiple reference files may be present; they are bundled into the `.skill` package at `references/` at package-build time.
+- `references/<topic>.md` — REQUIRED per §5 threshold. Multiple reference files may be present; they are bundled into the `.skill` package at `references/` at package-build time.
 
 ### Optional (author discretion)
 
@@ -109,7 +109,7 @@ A non-conforming heading is any line matching `^#{2,3} Mode [A-Za-z0-9]+[:.-] ` 
 
 ## §5 When Reference Files Are REQUIRED
 
-A skill MUST have a non-empty `reference/` subdirectory (≥1 `*.md` file) when ANY of the following three conditions are true (per D-Refs Option B):
+A skill MUST have a non-empty `references/` subdirectory (≥1 `*.md` file) when ANY of the following three conditions are true (per D-Refs Option B):
 
 1. `wc -l SKILL.md` > **400**
 2. `wc -c SKILL.md` > **25600** (25 KB)
@@ -176,7 +176,7 @@ The audit's `has-references-currently` cohort (Finding 1) — five skills whose 
 - `pmo-skill-refiner/`
 - `prompt-builder/`
 
-These are the reference examples for structure + `reference/` subtree patterns until per-skill migration restores the lost-references cohort.
+These are the reference examples for structure + `references/` subtree patterns until per-skill migration restores the lost-references cohort.
 
 ### Post-migration exemplars
 

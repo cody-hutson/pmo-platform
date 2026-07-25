@@ -155,7 +155,7 @@ You are ready to use pmo-platform. Continue with the first-task walkthrough:
 
 → [GETTING_STARTED.md](GETTING_STARTED.md)
 
-For updating to a future release without re-installation, see [UPDATE.md](UPDATE.md). The update mechanism preserves your operator additions to managed config files (allowlists, CLAUDE.md operator-extension area) while refreshing package-managed content.
+For updating to a future release without re-installation, see [UPDATE.md](UPDATE.md). The update mechanism preserves your operator additions to composition-surface managed config files (allowlists, exemption lists) while refreshing package-managed content. (CLAUDE.md is not refreshed by `update.sh` — re-run `setup-workspace.sh` to pick up template changes.)
 
 ---
 
