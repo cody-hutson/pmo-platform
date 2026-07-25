@@ -1955,6 +1955,36 @@ deploy_harness_artifact() {
   fi
 }
 
+deployed_skill_footprint() {
+  # Content manifest ("<sha256>  <abs-path>" lines, LC_ALL=C-sorted) of a skill's
+  # DEPLOYED footprint across both possible targets: the unconditional user-local
+  # mirror ($USER_LOCAL_SKILLS_PATH/<skill>) and — when a Cowork session resolved
+  # — the session copy ($INSTALL_PATH/<skill>). Empty when nothing is deployed
+  # yet. Hashes CONTENT, not mtime, so a byte-identical re-copy yields an
+  # identical manifest.
+  #
+  # WHY (idempotency; #384 v3.90 regression fix): detect_changed_skills is a
+  # STATELESS git tag-diff (last-tag..HEAD), so on a release branch (pre-tag) it
+  # re-lists EVERY skill whose source changed since the last tag on EVERY run —
+  # including a genuine no-op re-run where the deployed mirror is already current.
+  # Reporting that raw list verbatim as "Deployed: N skills" made update.sh flip
+  # EX_NOCHANGE(64) → EX_OK(0) on a no-op (redeploy_skills keys off the skills
+  # field), breaking the #613/#331 contract that a second update.sh reports
+  # "nothing to do". cmd_deploy compares this footprint before/after each skill's
+  # deploy and counts only skills whose on-disk content ACTUALLY changed — the
+  # same actually-changed-not-re-copied principle update.sh Phase 5c already
+  # applies to hooks ("REFRESHED:" vs re-copied-every-run "INSTALLED:").
+  local skill="$1" root
+  local -a roots=("$USER_LOCAL_SKILLS_PATH/$skill")
+  if [[ "${COWORK_AVAILABLE:-false}" == "true" && -n "${INSTALL_PATH:-}" ]]; then
+    roots+=("$INSTALL_PATH/$skill")
+  fi
+  for root in "${roots[@]}"; do
+    [[ -d "$root" ]] || continue
+    find "$root" -type f -exec shasum -a 256 {} + 2>/dev/null
+  done | LC_ALL=C sort
+}
+
 cmd_deploy() {
   # Deploy changed skills/packages/harness artifacts to Cowork install path.
   # E-02, E-03, E-08, E-11: Handles no-changes, deleted skills, invalid names, permissions.
@@ -2077,9 +2107,15 @@ cmd_deploy() {
   # sync_canonical_templates_to_runtime() docstring. Per-skill injection
   # runs inside the deploy loop below.
 
-  # Deploy skills (source module resolved per skill via resolve_skill_module)
+  # Deploy skills (source module resolved per skill via resolve_skill_module).
+  # skills_changed counts skills whose DEPLOYED content actually changed on disk
+  # (see deployed_skill_footprint) — the honest "Deployed: N skills" the summary
+  # reports, so a no-op re-run of a stateless-tag-diff-listed skill does not
+  # falsely flip update.sh off EX_NOCHANGE (#384 v3.90 regression fix).
+  local skills_changed=0
   for skill in ${CHANGED_SKILLS[@]+"${CHANGED_SKILLS[@]}"}; do
-    local module
+    local module __before_fp __after_fp
+    __before_fp=$(deployed_skill_footprint "$skill")
     module=$(resolve_skill_module "$skill")
     local source_dir="$module/skills/$skill"
     local source="$source_dir/SKILL.md"
@@ -2186,6 +2222,15 @@ cmd_deploy() {
     if ! sync_canonical_templates_to_runtime "$skill"; then
       FAILURES+=("$skill (template-inject)")
     fi
+
+    # Idempotency accounting: count this skill only if its deployed footprint
+    # actually changed (a fresh/updated deploy), not when a stateless-tag-diff
+    # re-mirror re-copied byte-identical content (a no-op re-run). See
+    # deployed_skill_footprint for the #613/#331 EX_NOCHANGE rationale.
+    __after_fp=$(deployed_skill_footprint "$skill")
+    if [[ "$__before_fp" != "$__after_fp" ]]; then
+      skills_changed=$((skills_changed + 1))
+    fi
   done
 
   # Deploy packages (packages/ at v2 root; no module nesting per the v2 root
@@ -2231,10 +2276,13 @@ cmd_deploy() {
     done
   fi
 
-  # Summary
+  # Summary. The skills field is skills_changed (actually-changed on disk), NOT
+  # ${#CHANGED_SKILLS[@]} (the stateless git tag-diff list) — update.sh keys off
+  # this field for the EX_NOCHANGE contract, so a no-op re-run that re-mirrors an
+  # already-current skill must report 0 skills, not 1 (#384 v3.90 regression fix).
   local pkg_count=${#CHANGED_PACKAGES[@]:-0}
   local harness_count=${#CHANGED_HARNESS[@]:-0}
-  log "Deployed: ${#CHANGED_SKILLS[@]} skills, $pkg_count packages, $harness_count harness artifacts"
+  log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts"
   if [[ ${#FAILURES[@]} -gt 0 ]]; then
     die "Deployment failures: ${FAILURES[*]}"
   fi
