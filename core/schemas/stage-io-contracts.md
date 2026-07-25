@@ -8,6 +8,7 @@ consumers: every pipeline stage at its boundary; the handoff-coordinator-spec (c
 ---
 <!-- reference-durability: allow-link -->
 # Stage I/O Contracts
+<!-- design-artifact: flow-class=data-flow; name=stage-io-contracts; depicts=release/references/pipeline/README.md -->
 
 ## Purpose
 

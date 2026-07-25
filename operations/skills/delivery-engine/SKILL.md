@@ -47,6 +47,7 @@ assumption with a deferred follow-up.
 **Template-protocol consumption.** When authoring RAID or risk-register templates, consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New operational-tracker templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=delivery-engine; depicts=operations/skills/delivery-engine/SKILL.md -->
 
 This skill has 7 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous across modes.** Most triggers (e.g., "run DoR", "update the RAID") are unambiguous; ambiguity arises for phrases like "check this ticket" or "review the sprint" that could map to multiple modes.
 

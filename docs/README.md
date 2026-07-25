@@ -15,6 +15,10 @@ User-facing documentation for pmo-platform: install, first-task walkthrough, fir
 
 - [module-apis.md](module-apis.md) — consolidated public-API catalog across `core/`, `operations/`, and `release/` modules, with composition patterns and versioning conventions.
 
+## Operating the platform
+
+- [release-record-keeping.md](release-record-keeping.md) — "where's the evidence?" The operator's walk through the release-record surfaces to trace when/where a change shipped and find its proof, plus why the records live in two homes (tracked corpus vs operator-instance runtime).
+
 ## Scripts
 
 - [scripts/setup-workspace.sh](scripts/setup-workspace.sh) — workspace bootstrap (consumed by INSTALL.md).
@@ -22,4 +26,4 @@ User-facing documentation for pmo-platform: install, first-task walkthrough, fir
 
 ## Reading order
 
-A first-time operator can skim ONBOARDING_JOURNEY.md first for the whole-journey map (and to see which host choices are configurable), then reads INSTALL.md, runs the install, reads GETTING_STARTED.md, runs the first task, then works through FIRST_STEPS.md to connect a repo or project and run real work. After that, workspace-setup.md and module-apis.md provide architectural depth on demand. UPDATE.md becomes relevant when the next release ships.
+A first-time operator can skim ONBOARDING_JOURNEY.md first for the whole-journey map (and to see which host choices are configurable), then reads INSTALL.md, runs the install, reads GETTING_STARTED.md, runs the first task, then works through FIRST_STEPS.md to connect a repo or project and run real work. After that, workspace-setup.md and module-apis.md provide architectural depth on demand, and release-record-keeping.md is the reference to reach for when operating the platform — tracing a shipped change back to its evidence. UPDATE.md becomes relevant when the next release ships.

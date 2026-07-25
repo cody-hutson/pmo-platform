@@ -173,6 +173,7 @@ gh pr view <PR> --json state,mergeCommit
 **Phase B5.5 — CHANGELOG.md append (Surface 2 of Layer-1 dual-write):** The Stage 13 chore PR commit includes a CHANGELOG.md append at repo root — Surface 2 of the Layer-1 dual-write mechanism per [`release-notes-standard.md § Part 5`](../standards/release-notes-standard.md). The content is extracted from `release/releases/notes/v<X.Y>_RELEASE_NOTES.md` Section 6a per the §5.3 transform rule (5–15 lines, Keep-a-Changelog 1.1.0 format with `## [v<X.Y>] - YYYY-MM-DD` H2 + `### Added/Changed/...` H3 categories present). Surface 1 (GitHub Releases) was already emitted at Stage 12 Phase B5.5 per [`stage-12-execute.md § Phase B5.5`](stage-12-execute.md); Surface 3 (RELEASE_LOG VERIFIED transition) is in the same Stage 13 chore PR diff per Phase B1.
 
 **Tier-A design artifact — Layer-1 dual-write emit sequence (ASCII flow-block per [`design-artifact-standard.md § 6`](../../../core/standards/design-artifact-standard.md)):**
+<!-- design-artifact: flow-class=agent-process; name=layer-1-dual-write-emit-sequence; depicts=release/references/pipeline/stage-12-execute.md,release/references/pipeline/stage-13-close.md -->
 
 ```
 Stage 12 — Execute (per pipeline/stage-12-execute.md)
@@ -383,3 +384,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 - Any `self-repair/rollback` event (the post-merge regression remediation already in the table above) is the **change_failure_rate** + **mean_time_to_restore** anchor for [`compute-dora-metrics.sh`](../../tools/compute-dora-metrics.sh) per [`dora-telemetry.md`](../standards/dora-telemetry.md) § 2. The DORA window read-model READS that EXISTING event; it writes no DORA metric back (read-model only).
 
 Cutover: audit-trail capture applies to all releases going forward, including the `qc4-06-result` sub-type.
+
+## Related References
+
+- [`../../../docs/release-record-keeping.md`](../../../docs/release-record-keeping.md) — human-process design artifact that depicts this stage's INDEX / DIGEST / NOTES appends and the `RELEASE_LOG` flip to `VERIFIED` when walking an operator through tracing a release record.

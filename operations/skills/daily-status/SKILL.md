@@ -263,6 +263,7 @@ Tier-1 surface-for-approval — the digest makes the held queue visible; it does
 or execute it.
 
 ### Per-mode wiring
+<!-- design-artifact: flow-class=skill-flow; name=daily-status; depicts=operations/skills/daily-status/SKILL.md -->
 
 | Mode | Heartbeat | Intake / reconciliation summary | Held-for-approval |
 |------|-----------|---------------------------------|-------------------|

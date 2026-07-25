@@ -86,6 +86,7 @@ Operate normally per the modes defined below. The handoff format is not required
 for direct user invocation.
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=change-management; depicts=operations/skills/change-management/SKILL.md -->
 
 This skill has 7 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous across modes.** Most triggers (e.g., "change impact", "training plan", "hypercare") are unambiguous; ambiguity arises for phrases like "change readiness" or "are we ready" that could map to Impact, Readiness, or Hypercare.
 

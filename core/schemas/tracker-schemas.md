@@ -8,6 +8,7 @@ consumers: tracker-manager (validate updates, consolidated change summaries); th
 ---
 <!-- reference-durability: allow-link -->
 # Tracker Schemas — PMO Operational Trackers
+<!-- design-artifact: flow-class=data-flow; name=tracker-schemas; depicts=operations/templates/README.md -->
 
 ## Purpose
 Defines the schema for every operational tracker in 04-PMO-Operations/. Used by the Tracker Manager to validate updates, produce consolidated change summaries, and maintain data integrity.

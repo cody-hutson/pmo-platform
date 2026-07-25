@@ -40,9 +40,15 @@ core/skills/*/SKILL.md
 # ── Residual dead-ref coverage — trees formerly OUTSIDE the scan ────────────
 # A dead outbound link whose target was deleted while the referencer is
 # untouched ships green unless the referencer's tree is in whole-corpus scope.
-# These four close that gap:
+# These five close that gap:
 core/ADRs/
 core/deploy/
+# docs/ — install/setup + module-API docs (10 .md today). Formerly gated PR-time
+# only: the repo-root `*.md` glob below is TOP-LEVEL-only, so docs/*.md was never
+# in deploy-time scope. Added for standing parity with the § 12 design-artifact
+# detection scope, which gained `docs/` this release (design-artifact-standard.md
+# § 12.2 harness scans `core operations release docs`). A dir entry -> rglob("*.md").
+docs/
 # Repo-root docs — the `*.md` glob matches TOP-LEVEL *.md only (README.md,
 # CONTRIBUTING.md, SECURITY.md, CHANGELOG.md); NOT `.` (which would rglob the
 # whole repo). CHANGELOG.md's per-release-notes links point into the

@@ -155,6 +155,7 @@ Cutover discipline: Applies to all releases going forward — this stage emits t
 This protocol instantiates the general [Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol) for the Stage 6 (Engineering) ↔ Stage 7 (Dev Testing) boundary. It defines how DT findings route back to Engineering, how Engineering responds, and how DT re-reviews — iterating until the quality gate passes or escalation triggers. Feedback arriving as PR review comments or issue-thread comments enters this loop only from trusted-set authors — the author-association trust boundary ([`release-process.md` § Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol)) gates ingest; an untrusted-authored comment is surfaced to the operator as untrusted third-party content and is never classified into the loop's tiers.
 
 ### Loop Flow
+<!-- design-artifact: flow-class=agent-process; name=dt-engineering-iteration-loop; depicts=release/references/pipeline/stage-06-engineering.md,release/references/pipeline/stage-07-dev-testing.md -->
 
 ```
 Pass 1: DT full review (Phases A–D) → Quality Review Report
@@ -462,6 +463,7 @@ When DT's post-return iteration reaches `PASS` or `CONDITIONAL PASS`, DT posts a
 The Verified Signal augments the original Forward Handoff (it does not replace it). Its `verdict` (enum: `PASS` / `CONDITIONAL PASS`), `DT iterations contributed` (integer), and `Origin` labels applied to newly surfaced findings follow the forward-handoff enum vocabulary so that QA Phase A can extract them with the same parser. QA Pass M+1 entry validation re-checks the original Handoff Payload (the 10 required handoff fields remain authoritative) plus the Verified Signal closures — it does NOT validate the Verified Signal as a standalone handoff payload. The Verified Signal's 6 fields above are the complete contract for the signal itself; the re-entry gate passes when (a) the original Handoff Payload still parses, (b) each listed QA finding ID is marked closed with a resolution commit, and (c) the DT re-review verdict is `PASS` or `CONDITIONAL PASS`.
 
 #### Integration with DT-Eng iteration loop
+<!-- design-artifact: flow-class=agent-process; name=qa-return-to-dt; depicts=release/references/pipeline/stage-07-dev-testing.md,release/references/pipeline/stage-08-qa-testing.md -->
 
 The return path composes with the DT-Eng iteration loop as its QA-initiated variant:
 

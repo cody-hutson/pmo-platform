@@ -41,3 +41,7 @@ Artifacts under `release/releases/` split across two of the three taxonomy class
 Plans and notes are git-tracked because every participant outside the originating session needs them — they are the **shared pipeline substrate**, not a "fallback for non-git users." Hub-state runtime is operator-local because tracking it would produce dozens of micro-commits per release for state with no cross-operator readership benefit; the schema ships as a template so operators can install / lazy-init their runtime instance.
 
 Operator-instance state (per-machine session logs, secrets, operator-customized config, hub-state runtime instance) lives at operator-local paths per [`../../core/standards/public-repo-gitignore-template.md`](../../core/standards/public-repo-gitignore-template.md) + [`../../core/standards/secrets-handling-policy.md`](../../core/standards/secrets-handling-policy.md). The classifications are exhaustive — every artifact maps to exactly one class.
+
+## Related References
+
+- [`../../docs/release-record-keeping.md`](../../docs/release-record-keeping.md) — human-process design artifact that depicts this directory's per-surface (plans / notes / hub-state) classification when walking an operator through tracing a release record.

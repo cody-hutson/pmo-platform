@@ -8,6 +8,7 @@ consumers: pmo-qa-auditor (structural compliance per skill per mode); every skil
 ---
 <!-- reference-durability: allow-link -->
 # Per-Skill Output Contracts
+<!-- design-artifact: flow-class=data-flow; name=per-skill-output-contracts; depicts=core/skills/README.md,operations/skills/README.md,release/skills/README.md -->
 
 **Compliance:** all Skills 1-12 meet the reversibility / evidence-label / G7 failure-mode standards.
 

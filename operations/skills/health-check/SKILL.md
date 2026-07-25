@@ -42,6 +42,7 @@ The skill reads a **canonical source set** — MCP-primary, local-fallback — g
 **Scope resolution:** `--scope <project>` names the project; default is the active project from session context. The skill audits exactly one project per run.
 
 ## Modes
+<!-- design-artifact: flow-class=skill-flow; name=health-check; depicts=operations/skills/health-check/SKILL.md -->
 
 The skill is mode-dispatched. Every mode declares a **4-intent block** and emits the same 5-section output. All eight modes are implemented: modes 1–3 are the foundation drift-core (the v1 slice), modes 4–7 are the extended value-heavier set (the v2 slice), and mode 8 (`rollup`) is the on-demand rollup-invocation mode (the v3 slice). The contract — 4-intent block + 5-section output + `TRACKER_UPDATES:` + the S0–S3 confidence band — is identical across all eight.
 
