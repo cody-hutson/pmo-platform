@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.90 | blast-radius-scan-correctness | 2026-07-25 | — | #3924 | [notes/v3.90_RELEASE_NOTES.md](notes/v3.90_RELEASE_NOTES.md) |
 | v3.89 | template-system-governance-wave-1 | 2026-07-25 | — | #3913 | [notes/v3.89_RELEASE_NOTES.md](notes/v3.89_RELEASE_NOTES.md) |
 | v3.88 | deploy-and-tooling-defect-cleanup | 2026-07-25 | — | #3794 | [notes/v3.88_RELEASE_NOTES.md](notes/v3.88_RELEASE_NOTES.md) |
 | v3.87 | design-artifact-backfill | 2026-07-24 | Design artifacts made findable — every diagram and process flow embedded in the docs now declares itself with a one-line marker (**ADR-089**), the `depicts:` / `flow_class:` frontmatter is promoted to required, and a new §12 adds per-flow-type detection criteria + an enumeration query, so the whole set is listable with one search. The spike's confirm-or-collapse decision **collapsed** 5 of 6 flow-type builds into a declare-sweep (24 embedded-marker declarations across 5 already-covered types; 14 skill packages rebuilt) and kept human-process as the one real build (new `docs/release-record-keeping.md`). `novel` class, MODERATE reversibility. | #3796 | [notes/v3.87_RELEASE_NOTES.md](notes/v3.87_RELEASE_NOTES.md) |

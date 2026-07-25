@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.90] - 2026-07-25
+
+The release-impact analysis tool now returns accurate, path-true consumer counts and flags scripts that hard-code a moved directory's path.
+
+[Full notes](release/releases/notes/v3.90_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.90)
+
 ## [v3.89] - 2026-07-25
 
 <one-sentence ≤140 chars; plain language; agent-search target>
