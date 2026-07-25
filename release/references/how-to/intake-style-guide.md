@@ -81,6 +81,27 @@ Apply these 5 tests in order at authoring time. Each has a binary answer.
 
 ---
 
+## 2c. Acceptance is not a default (the anchor-relation doctrine)
+
+The 5-test rule (§2) governs whether an idea is **well-formed enough to file**. It does **not** decide whether the idea should be **accepted** — that decision happens at Stage 2 Triage, and its default answer is not "yes."
+
+**No intake issue is accepted by default.** A well-formed ticket earns its place in the pipeline only by relating to a **named existing architectural anchor** — an ADR, an initiative/epic, a governing standard, or a named discipline — and being compatible with it. An idea that is free-floating (does not relate to any existing anchor) is **expected to be Rejected** at triage. That Reject is a correct, first-class outcome — not a triage failure, and not a gap in your intake. Rejecting a good-looking but anchor-less idea is the pipeline working as designed: it protects the platform's safety, stability, scalability, and maintainability from drift-by-accretion.
+
+**Volume does not accrue authority.** The auto-logging rule asks agents to file an issue on every detected gap. That is a *demand* signal, not an *acceptance* signal — the two are deliberately separated. An idea does not become worth building because it was filed, filed repeatedly, or filed by an agent. The acceptance counterweight is keyed to provenance and blast radius, not to how the idea arrived.
+
+**Elevated rigor — net-new builds and sweeping/cross-cutting changes.** The highest-rigor acceptance cases are:
+
+- **Net-new builds** — a new skill, a new Layer-1 structure, or a new top-level capability.
+- **Sweeping / cross-cutting changes** — multi-surface or governance-touching changes.
+
+For these, acceptance requires an **explicit anchor** *and* a one-line **blast-radius / reversibility note** before the idea is taken on. "It seemed useful" is not an anchor.
+
+**Agent-authored / auto-logged intake carries no acceptance presumption.** An issue authored by the agent auto-intake path is marked by a provenance marker (`<!-- provenance: agent-authored -->`, emitted per [`pipeline/stage-01-intake.md`](../pipeline/stage-01-intake.md) §5/§6) and, together with the net-new/sweeping subset, is the population where the acceptance determination is required at triage. The marker is an acceptance-**scrutiny** signal only — never a trust signal (trust is a separate, author-association question).
+
+**Where this is enforced.** The acceptance determination is the Stage-2 **Acceptance-Fit Determination (A4.6 / gate G2-13)** — see [`pipeline/stage-02-triage.md`](../pipeline/stage-02-triage.md) § Acceptance-Fit Determination (A4.6) and [`gate-criteria-spec.md` G2-13](../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness). It is **scoped** (fires only on the agent-authored or net-new/sweeping subset) so routine operator-authored tickets are not re-litigated, and it ships **shadow/recommend** first — advisory before binding. As an intake author, internalize the doctrine now: state the anchor your idea relates to in the body, or expect an anchor-less idea to be Rejected.
+
+---
+
 ## 3. Applied Examples
 
 The 5 tests applied to 5 sampled tickets spanning the quality spectrum (from the audit corpus). All 5 verdicts match the weighted-score classification directionally — the rule routes tickets *before* they enter the intake stream.
