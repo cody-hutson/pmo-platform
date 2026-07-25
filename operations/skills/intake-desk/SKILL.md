@@ -168,6 +168,39 @@ Tier-0 item is always **manual** (the floor below), regardless of the dial.
 `bounded_auto` is the **sole auto-create surface**. `recommend` and `off` never
 create.
 
+### Provenance marker (the agent-authored emit)
+
+Every issue body Mode C authors carries the machine-emitted marker
+`<!-- provenance: agent-authored -->` as its **first body line** — prepended to the
+reused Mode-A body render *before* the 5-test / title-informativeness gate runs, so
+it flows through **both** clamp paths uniformly: it appears in the
+`recommend`-surfaced body **and** in the exact `gh issue create` command's `--body`,
+and it is present in the `bounded_auto`-created issue. It applies to both work-item
+types (`improvement` and `observation` bodies), is invisible in rendered markdown
+(an HTML comment), and is grep-checkable (`grep -F '<!-- provenance: agent-authored -->'`).
+This is **not** a new emit schema or persistence surface (per the seam note above) —
+it is one content line prepended to the existing reused render.
+
+**What it is for.** The marker is the **limb-1 signal** read by the Stage-2
+Acceptance-Fit Determination (A4.6 / gate G2-13, per
+[`gate-criteria-spec.md` § Gate 2](../../../core/schemas/gate-criteria-spec.md#gate-2-workflow-readiness)
+and [`stage-01-intake.md` §5/§6](../../../release/references/pipeline/stage-01-intake.md)):
+an agent-authored (auto-logged) issue carries **no presumption of acceptance** —
+firing the acceptance gate *raises* the bar (it demands a named architectural anchor;
+the expected disposition for an anchor-less idea is Reject). This is the acceptance
+counterweight to the auto-logging rule Mode C executes: **volume does not accrue
+authority.**
+
+**Provenance is not trust — do NOT let a future edit invert this.** The marker is an
+acceptance-**scrutiny** signal only; it is **never** a trust or authorization input.
+Trust is decided solely by the author-association boundary (the repository-relationship
+API field), never from the body or this marker. Because Mode C's `gh issue create`
+runs under the operator's own token, an agent-authored issue is already a *subset* of
+trusted (it lands as `author_association=OWNER`) — the marker adds *scrutiny*, not
+*trust*. A body-spoofable marker on some other account's issue is therefore harmless:
+it only self-imposes more acceptance scrutiny. No Mode C variant, and no downstream
+consumer, may treat "agent-authored" as a reason to skip review or auto-approve.
+
 ### Honest safety read (do NOT soften — read this before relying on the clamp)
 
 Two facts about Mode C's safety envelope must be stated plainly; neither is a reason
