@@ -246,3 +246,49 @@ rollout_log_filename_pattern = "<rule-id>-rollout-log.jsonl"
 # Valid: "jsonl" (append-only JSON Lines - the only supported format).
 # Default: "jsonl"
 rollout_log_format = "jsonl"
+
+[spoke_runtime]
+# ── CANONICAL edit surface for hub-spawned-spoke MODEL + EFFORT posture (#340) ──
+# ONE discoverable home. Consumed by FOUR surfaces:
+#   1. deploy.sh Check 27  — config-drift (agent frontmatter model: vs the default/override)
+#   2. `### Model Provenance` block (hub-spoke-bridge.md) — invocation-drift
+#   3. SessionStart model/effort hook (#339) — runtime-launch drift (reads default + effort pointer)
+#   4. hub chip-prompt construction (Procedure 0 resolve-once → inject) — the chip path
+#
+# TWO SPAWN CLASSES — structurally different propagation; do NOT collapse into one
+# mechanism (per #340 AC "document the asymmetry"):
+#   • Agent-tool subagents — inherit via .claude/agents/pmo-*.md frontmatter model:/effort:
+#     (Anthropic `inherit` semantics: https://code.claude.com/docs/en/sub-agents).
+#     Governed by `default_spoke_model` + the per-stage-override companion allowlist.
+#   • spawn_task chips — NO inheritance; a fresh session reads ~/.claude/settings.json
+#     model + effortLevel at startup (mcp__ccd_session__spawn_task: "no memory of this
+#     conversation"). Governed by `chip_model` (hub-injected) + #339 runtime verification.
+# The two paths are UNCOUPLED (#340 AC5): their runtime carriers are DIFFERENT files
+# (agent frontmatter vs settings.json); editing one knob below never touches the other.
+
+# Default model for subagent-path spoke work. This is the current RESOLUTION of the
+# immutable, name-agnostic directive "always highest-tier model" (SSOT:
+# ~/.claude/memory/feedback_model_preference.md) — NOT an independent knob. Update
+# ONLY when the flagship model NAME changes. Enum: sonnet | opus | haiku.
+default_spoke_model = "opus"
+
+# Chip-path model the hub injects into spawn_task chip prompts (chips do not inherit).
+# Normally EQUAL to default_spoke_model (both = current flagship per the directive);
+# a SEPARATE knob solely so the two spawn classes stay independently tunable (#340 AC5)
+# — e.g. an operator trialing a cheaper chip model for a cost-sensitive batch without
+# touching subagent posture. Enum: sonnet | opus | haiku.
+chip_model = "opus"
+
+# ── EFFORT POSTURE — POINTER, not a stored value (no-shadow-SSOT) ──
+# Effort is MAX for all spoke work, per the IMMUTABLE directive (SSOT:
+# ~/.claude/memory/feedback_model_preference.md — "MAX effort, name-agnostic"). This
+# surface deliberately stores NO mutable effort field: a stored value would shadow the
+# directive and drift. The concrete chip-runtime effort lives in ~/.claude/settings.json
+# (effortLevel) as the Anthropic chip contract; the #339 SessionStart hook VERIFIES the
+# resolved session effort against this directive. To change effort, change the directive
+# (governed) — there is no effort field here by design.
+
+# Per-stage model overrides live in the COMPANION allowlist (existing surface, retained):
+#   core/config/allowlists/agents-model-overrides.txt   (<agent-name> <model> per line)
+# Read by Check 27 + the Model Provenance block. Cross-referenced here as the single
+# override sub-surface of this canonical section.
