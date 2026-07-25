@@ -7,6 +7,7 @@ consumers: "authors + Stage-5 placement decisions (apply the UNIVERSAL-PUBLIC / 
 composes_with: [knowledge-architecture.md, universal-vs-release-pipeline-split-rule.md, public-repo-gitignore-template.md, secrets-handling-policy.md, composition-surface-spec.md, depersonalization-spec.md, hub-session-continuity.md]
 reversibility: CHEAP / Confidence HIGH
 ---
+<!-- reference-durability: allow-link -->
 
 # Public-Repo vs. Operator-Instance Taxonomy
 
