@@ -322,7 +322,7 @@ for k in data:
 }
 
 # --- Section 6: Platform detection (must run first; no state mutation) ---
-# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.90 / #303), not a hard fail.
+# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.91 / #303), not a hard fail.
 # CI and #304's cross-platform matrix set PMO_ALLOW_NON_DARWIN=1 so the non-macOS
 # legs can run past this point. Default (env unset) preserves the protective
 # exit 78: the working bash-free cross-platform install is a later arc (#47/#48),

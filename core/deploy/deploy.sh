@@ -1963,7 +1963,7 @@ deployed_skill_footprint() {
   # yet. Hashes CONTENT, not mtime, so a byte-identical re-copy yields an
   # identical manifest.
   #
-  # WHY (idempotency; #384 v3.90 regression fix): detect_changed_skills is a
+  # WHY (idempotency; #384 v3.91 regression fix): detect_changed_skills is a
   # STATELESS git tag-diff (last-tag..HEAD), so on a release branch (pre-tag) it
   # re-lists EVERY skill whose source changed since the last tag on EVERY run —
   # including a genuine no-op re-run where the deployed mirror is already current.
@@ -2111,7 +2111,7 @@ cmd_deploy() {
   # skills_changed counts skills whose DEPLOYED content actually changed on disk
   # (see deployed_skill_footprint) — the honest "Deployed: N skills" the summary
   # reports, so a no-op re-run of a stateless-tag-diff-listed skill does not
-  # falsely flip update.sh off EX_NOCHANGE (#384 v3.90 regression fix).
+  # falsely flip update.sh off EX_NOCHANGE (#384 v3.91 regression fix).
   local skills_changed=0
   for skill in ${CHANGED_SKILLS[@]+"${CHANGED_SKILLS[@]}"}; do
     local module __before_fp __after_fp
@@ -2279,7 +2279,7 @@ cmd_deploy() {
   # Summary. The skills field is skills_changed (actually-changed on disk), NOT
   # ${#CHANGED_SKILLS[@]} (the stateless git tag-diff list) — update.sh keys off
   # this field for the EX_NOCHANGE contract, so a no-op re-run that re-mirrors an
-  # already-current skill must report 0 skills, not 1 (#384 v3.90 regression fix).
+  # already-current skill must report 0 skills, not 1 (#384 v3.91 regression fix).
   local pkg_count=${#CHANGED_PACKAGES[@]:-0}
   local harness_count=${#CHANGED_HARNESS[@]:-0}
   log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts"

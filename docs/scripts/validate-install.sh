@@ -88,7 +88,7 @@
 set -Eeuo pipefail
 
 # --- Section 1: Platform detection (must run first; no state mutation) ---
-# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.90 / #303), not a hard fail.
+# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.91 / #303), not a hard fail.
 # CI and #304's cross-platform matrix set PMO_ALLOW_NON_DARWIN=1 so the non-macOS
 # legs run past this point (relaxing setup-workspace.sh's gate alone is not enough
 # — this second, independent gate must relax too, per Stage-5 REC-3). Default

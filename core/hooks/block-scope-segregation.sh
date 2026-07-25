@@ -57,7 +57,7 @@
 # Mode gating: own .scope-segregation-mode (warn / enforce / off). Initial = warn.
 #   The ENFORCE flip for the fuzzy layer is a SEPARATE operator gate, NOT this
 #   release's default; CD-2's always-block tier fires even in warn mode.
-# Release: v3.90 (cross-platform-install-experience)
+# Release: v3.91 (cross-platform-install-experience)
 
 set -euo pipefail
 

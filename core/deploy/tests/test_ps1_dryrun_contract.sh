@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_ps1_dryrun_contract.sh — v3.90 / #303 regression for the Windows install/
+# test_ps1_dryrun_contract.sh — v3.91 / #303 regression for the Windows install/
 # update -DryRun proxy contract (A6.5 Counter-Design CD-1, Option B).
 #
 # WHY THIS TEST EXISTS (and why it does NOT run PowerShell):

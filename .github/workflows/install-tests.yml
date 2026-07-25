@@ -305,7 +305,7 @@ jobs:
 
   cross-platform:
     name: Cross-platform install/QA (${{ matrix.os }})
-    # #304 (v3.90): the cross-platform install/QA regression matrix. The three
+    # #304 (v3.91): the cross-platform install/QA regression matrix. The three
     # jobs above gate the macOS bash install path; THIS job gates the PORTABLE
     # surface across macOS + Linux + Windows — #299's QA-as-code suite (./qa.sh /
     # python -m qa) and #303's Windows entry-points (install.ps1 / update.ps1
