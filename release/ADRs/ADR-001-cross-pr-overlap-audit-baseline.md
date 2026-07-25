@@ -3,7 +3,7 @@ title: ADR-001 — Cross-PR Overlap Audit baseline policy when open-PR set is em
 status: Accepted
 date: 2026-05-01
 release: file-overlap-audit
-deciders: "cody-hutson (operator) + Stage 5 Solutioning spoke"
+deciders: "Cody Hutson (operator) + Stage 5 Solutioning spoke"
 tags: [audit, baseline, release-ops, file-overlap]
 source_observations:
   - "Operator observation 2026-05-01 — first encounter of the empty open-PR set condition during a cross-PR file-overlap audit. `gh pr list --state open` returned `[]` at the audit-start commit SHA. The single-operator workspace produces bursty open-PR populations (commonly 0 or 1 open at any moment) — the empty-target-population condition is the expected default state between merges, not an exception. Recorded as N=1 of theme `audit-baseline-when-target-population-is-empty` and surfaced into Stage 5 Solutioning as the trigger for this ADR."

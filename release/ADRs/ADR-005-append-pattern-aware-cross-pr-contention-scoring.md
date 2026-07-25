@@ -3,7 +3,7 @@ title: ADR-005 — Append-pattern aware cross-PR contention scoring (extends ADR
 status: Accepted
 date: 2026-05-17
 release: stage-execution-and-process-discipline
-deciders: "cody-hutson (operator) + Stage 5 Solutioning spoke"
+deciders: "Cody Hutson (operator) + Stage 5 Solutioning spoke"
 tags: [audit, baseline, release-ops, file-overlap, contention-scoring]
 source_observations:
   - "The first cross-PR file-overlap audit (2026-05-01, the first ADR-001 application), conducted against audit-baseline SHA 690eaf71 using the hybrid baseline introduced by ADR-001 (20 most-recent merged PRs + 0 open PRs). The audit surfaced 4 HIGH-tier files (score >=3): RELEASE_LOG.md (5 PRs), governance roadmaps/release-process-fitness.md (3), engineering/evals/results/triage-design-rereview-instrumentation.md (3), and CLAUDE.md (3). During Stage 6 Engineering, manual post-hoc classification revealed 3 of the 4 HIGH-tier files were structurally append-pattern (every release / every retrospective / every instrumentation line adds a new entry rather than rewriting existing content) - these almost never conflict at merge time and require no mitigation. The 8-column contention schema (file_path, pr_number, pr_state, pr_title, pr_url, state_timestamp, file_domain, change_type) did not capture the append-vs-overlapping-edit distinction; SUMMARY.md Recommendation 4 surfaced this as a future-audit guidance gap, and the Retrospective Findings section recorded the schema enhancement as a candidate observation pending pattern recurrence. The cutpoint distribution validation (HIGH=4, MEDIUM=5, LOW=97) passed all D-3 thresholds; cutpoints (>=3 / 2 / 1) carried forward unchanged."

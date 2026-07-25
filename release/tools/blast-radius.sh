@@ -14,6 +14,13 @@ readonly SCHEMA_VERSION="1"
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture)
 # ---------------------------------------------------------------------------
 PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+# Deterministic byte-order collation for every sort in this script (#675). A single
+# script-level export is inherited by every subprocess sort — covering the bare sorts
+# (:392 build_scan_list, :624 compute_second_order) and rendering the inline #92 pins
+# (:551, :702) redundant — so no locale-exposed sort can crash on a non-UTF-8 byte under
+# a UTF-8 LANG. Collation-only: it changes tie-order among equal keys, never which rows
+# survive or their counts.
+export LC_ALL=C
 
 # ---------------------------------------------------------------------------
 # Shared schema-v1 emitter (the single home of the output contract). This script
@@ -51,6 +58,7 @@ ARG_ROOT=""
 ARG_NO_COLOR=0
 declare -a ARG_EXCLUDE_ADDITIONAL=()
 ARG_TARGET=""
+ARG_MODE=""   # "" = default doc-reference tracer; "structural" = path-move consumer sweep (#3120)
 
 # ---------------------------------------------------------------------------
 # Default exclusions (hardcoded; --exclude adds to these)
@@ -61,6 +69,7 @@ declare -a DEFAULT_EXCLUSIONS=(
   "projects/"
   "node_modules/"
   ".claude/skills/"
+  ".claude/worktrees/"     # worktree copies are duplicate corpora, not referrers (#3300; mirrors domain-blast-radius.sh)
 )
 
 # Default scanned file types
@@ -109,11 +118,17 @@ blast-radius.sh — File reference fan-out tracer for Stage 5 Solutioning
 
 USAGE
   blast-radius.sh [OPTIONS] <target_file>
+  blast-radius.sh --mode=structural [OPTIONS] <old_path>
 
 OPTIONS
+  --mode=MODE           (default) doc-reference tracer, or 'structural' for the
+                        path-move consumer sweep (who hard-codes an OLD path literal?).
+                        In structural mode <old_path> is a path STRING to search for —
+                        a directory prefix or a single path — and need NOT exist on disk
+                        (the whole point: it was moved away). No basename tokenization.
   --format=FORMAT       Output presenter: json | table | md
                         Default: table if stdout is a tty, json otherwise
-  --depth=N             Recursion depth for second-order detection
+  --depth=N             Recursion depth for second-order detection (default path only)
                         Default: 2; hard cap: $HARD_CAP_DEPTH
   --include-mirrors     Include mirror-pair references in output (filtered by default)
   --root=PATH           Repo root for scanning
@@ -126,8 +141,8 @@ OPTIONS
 EXIT CODES
   0  Success
   1  Internal error
-  2  Bad target (path doesn't exist or is not a regular file)
-  3  Target is under an exclusion glob
+  2  Bad target (default mode: not a regular file; structural mode: empty/outside-repo old path)
+  3  Target is under an exclusion glob (default mode only)
   4  Missing dependency (jq not on PATH)
 
 EXAMPLES
@@ -140,8 +155,11 @@ EXAMPLES
   # Include mirror-pair references (forensic mode)
   blast-radius.sh --include-mirrors .claude/rules/release-process.md
 
+  # Structural/path-move sweep: who hard-codes the OLD release-notes dir path?
+  blast-radius.sh --mode=structural --format=json release/releases/notes
+
 DOCS
-  See release/references/protocols/blast-radius-protocol.md
+  See release/references/protocols/blast-radius-protocol.md (§ 13 for the structural mode)
 EOF
 }
 
@@ -175,6 +193,13 @@ parse_args() {
         ;;
       --include-mirrors)
         ARG_INCLUDE_MIRRORS=1
+        ;;
+      --mode=*)
+        ARG_MODE="${1#--mode=}"
+        ;;
+      --mode)
+        shift
+        ARG_MODE="${1:-}"
         ;;
       --root=*)
         ARG_ROOT="${1#--root=}"
@@ -222,6 +247,15 @@ parse_args() {
     usage >&2
     exit "$EXIT_INTERNAL"
   fi
+
+  # Validate mode (#3120): empty = default doc-reference tracer; structural = path-move sweep.
+  case "$ARG_MODE" in
+    ""|structural) ;;
+    *)
+      err "Invalid --mode value: '$ARG_MODE' (must be 'structural', or omitted for the default doc-reference tracer)"
+      exit "$EXIT_INTERNAL"
+      ;;
+  esac
 
   # Validate depth
   if ! [[ "$ARG_DEPTH" =~ ^[0-9]+$ ]]; then
@@ -489,6 +523,16 @@ find_first_order() {
     t3="$t2"
   fi
 
+  # Basename-uniqueness pre-count (#3291) over the (worktree-excluded, #3300) scan list.
+  # The target carries its own basename once, so bn_count == 1 means the basename is
+  # genuinely unique; bn_count >= 2 means another scanned file shares it. This gates the
+  # basename-shaped match below so a non-unique basename cannot over-count every same-named
+  # file as blast radius. Depends on #3300: with worktree copies present every basename
+  # reads as non-unique, so this classification is only correct on the de-duplicated list.
+  local bn_count
+  bn_count="$(awk -F/ '{print $NF}' "$SCAN_LIST_FILE" | grep -Fxc -- "$t2" 2>/dev/null || true)"
+  [ -z "$bn_count" ] && bn_count=1
+
   local matches_raw="$WORK_DIR/matches-raw.txt"
   : > "$matches_raw"
 
@@ -518,10 +562,24 @@ find_first_order() {
   }
 
   # Collect all match lines: <abs_path>:<line>:<text>
+  # Adaptive uniqueness gate (#3291): T1 (full path) is always path-true and always fires.
+  # The basename-shaped match (T2, and T3 when it has collapsed to the basename for a
+  # 2-component target) is fired ONLY when the basename is unique across the scan list —
+  # preserving today's behavior for the common unique case (AC-2). For a non-unique
+  # basename we match path-anchored only: T3 fires only when it is a genuine
+  # multi-component suffix (never the collapsed-to-basename form), and T2 (bare basename)
+  # is dropped — so a shared basename reports only its path-true consumers (AC-1).
   {
     grep_token "$t1"
-    if [ "$t3" != "$t1" ]; then grep_token "$t3"; fi
-    if [ "$t2" != "$t3" ] && [ "$t2" != "$t1" ]; then grep_token "$t2"; fi
+    if [ "$bn_count" -le 1 ]; then
+      # Unique basename → today's behavior (T1 + T3 + T2).
+      if [ "$t3" != "$t1" ]; then grep_token "$t3"; fi
+      if [ "$t2" != "$t3" ] && [ "$t2" != "$t1" ]; then grep_token "$t2"; fi
+    else
+      # Non-unique basename → path-anchored only: T3 only as a real multi-component
+      # suffix (t3 != t2 guards the shallow-path collapsed-to-basename case); T2 dropped.
+      if [ "$t3" != "$t1" ] && [ "$t3" != "$t2" ]; then grep_token "$t3"; fi
+    fi
   } > "$matches_raw"
 
   # Parse: <abs_path>:<line>:<text> → <rel>\t<line>\t<text>
@@ -555,6 +613,115 @@ find_first_order() {
   # For simplicity, output: <rel>\t<line>\t<text>; downstream aggregator
   # rolls up reference_count.
   cp "$parsed" "$out"
+}
+
+# ---------------------------------------------------------------------------
+# Structural mode (#3120): normalize the OLD-path target for a path-move sweep.
+#
+# UNLIKE resolve_target, this does NOT require an existing regular file — the whole
+# point of the sweep is to find who still hard-codes a path that has MOVED AWAY (and
+# so may no longer exist). It accepts a directory prefix or a single path, strips a
+# leading ./ and REPO_ROOT/, drops one trailing slash (a dir-prefix query matches its
+# sub-paths via grep -F substring regardless), and does NOT reject an excluded target
+# (a moved-FROM path under an excluded tree is a valid query). Sets TARGET_REL.
+# ---------------------------------------------------------------------------
+normalize_structural_target() {
+  local input="$ARG_TARGET"
+  input="${input#./}"
+  if [[ "$input" = /* ]]; then
+    case "$input" in
+      "$REPO_ROOT"/*) input="${input#"$REPO_ROOT"/}" ;;
+      *)
+        err "--mode=structural target is absolute but outside repo root ($REPO_ROOT): $ARG_TARGET"
+        exit "$EXIT_BAD_TARGET"
+        ;;
+    esac
+  fi
+  input="${input%/}"
+  if [ -z "$input" ]; then
+    err "--mode=structural requires a non-empty old-path literal to search for"
+    exit "$EXIT_BAD_TARGET"
+  fi
+  TARGET_REL="$input"
+}
+
+# ---------------------------------------------------------------------------
+# Structural mode (#3120): find every file that hard-codes the OLD path literal.
+#
+# This is the consumer class the default doc-reference tracer and the software
+# import-graph tracer are both blind to — the exact miss that silently broke the
+# Stage-13 GitHub-Release emit for ~5 releases (#230 → RCA #3118). Over the (post-#3300)
+# scan list it greps the OLD-path literal with `grep -F` — NO T1/T2/T3 basename
+# tokenization (a structural consumer hard-codes the full path; basename matching would
+# reintroduce the #3291 over-match class) — and rolls the hits up through the shared
+# schema-v1 library with an EMPTY mirror partner (is_mirror always false). second_order
+# is scoped out ([] / 0): a path-literal consumer sweep is first-order by nature.
+#
+# Field semantics for structural output (mirrors the domain tracer's F4 block):
+#   first_order[].path            — repo-relative path of a file that hard-codes the old path
+#   first_order[].reference_count — count of distinct (file,line) hits of the old-path literal
+#   first_order[].matches[]       — up to 5 {line, snippet} of the hard-coded references
+#   first_order[].is_mirror       — ALWAYS false (no mirror concept for a path sweep)
+#   second_order / second_order_count — [] / 0 (scoped out; sweep is first-order)
+#   stats.total_files_scanned     — the whole doc-corpus denominator (same as the default tracer)
+#
+# Args: $1 = normalized OLD path literal (TARGET_REL).
+# Sets: FIRST_ORDER_* + FILTERED_MIRRORS_* + SECOND_ORDER_* globals build_json consumes.
+# ---------------------------------------------------------------------------
+find_structural_consumers() {
+  local oldpath="$1"
+
+  local matches_raw="$WORK_DIR/structural-matches-raw.txt"
+  : > "$matches_raw"
+
+  # Absolute paths for the whole scan list (no target-exclusion filter — the moved-FROM
+  # path can be referenced anywhere, including in the file that used to hold it).
+  local files_abs="$WORK_DIR/structural-files-abs.txt"
+  awk -v root="$REPO_ROOT/" '{print root $0}' "$SCAN_LIST_FILE" > "$files_abs"
+
+  if [ -s "$files_abs" ]; then
+    # Batched grep (-H forces the filename prefix so single-match files still parse).
+    < "$files_abs" tr '\n' '\0' \
+      | xargs -0 grep -F -H -n -- "$oldpath" 2>/dev/null > "$matches_raw" \
+      || true
+  fi
+
+  # Parse <abs>:<line>:<text> → <rel>\t<line>\t<text> (same reassembly find_first_order
+  # uses; abs paths carry no colon so FS=":" splits cleanly). Bare sort — the script-level
+  # LC_ALL=C export (#675) covers it; no inline pin per CIAC-4.
+  local parsed="$WORK_DIR/structural-parsed.tsv"
+  if [ -s "$matches_raw" ]; then
+    awk -v root="$REPO_ROOT/" '
+      BEGIN { FS=":"; OFS="\t" }
+      {
+        abs = $1
+        line = $2
+        text = $0
+        prefix = abs ":" line ":"
+        idx = index(text, prefix)
+        if (idx == 1) { text = substr(text, length(prefix) + 1) }
+        rel = abs
+        if (substr(rel, 1, length(root)) == root) { rel = substr(rel, length(root) + 1) }
+        print rel, line, text
+      }
+    ' "$matches_raw" \
+      | sort -u -t $'\t' -k1,1 -k2,2n > "$parsed"
+  else
+    : > "$parsed"
+  fi
+
+  # Roll up via the shared schema-v1 library. Empty mirror partner => is_mirror false.
+  local bundle
+  bundle="$(aggregate_matches_v1 "$parsed" "" "$ARG_INCLUDE_MIRRORS")"
+
+  FIRST_ORDER_JSON="$(printf '%s' "$bundle" | jq -c '.first_order')"
+  FIRST_ORDER_COUNT="$(printf '%s' "$bundle" | jq -r '.first_order_count')"
+  FILTERED_MIRRORS_JSON="$(printf '%s' "$bundle" | jq -c '.filtered_mirrors_detail')"
+  FILTERED_MIRRORS_COUNT="$(printf '%s' "$bundle" | jq -r '.filtered_mirrors_count')"
+
+  # second_order scoped out for a path-literal consumer sweep.
+  SECOND_ORDER_JSON="$(jq -n '[]')"
+  SECOND_ORDER_COUNT=0
 }
 
 # ---------------------------------------------------------------------------
@@ -938,19 +1105,29 @@ main() {
   trap 'rm -rf "$WORK_DIR"' EXIT
 
   resolve_root
-  resolve_target
 
   local start_ts end_ts elapsed
   start_ts=$(date +%s)
 
-  build_scan_list
-  detect_mirror_pairs
+  if [ "$ARG_MODE" = "structural" ]; then
+    # Path-move consumer sweep (#3120): a NEW query over the same (post-#3300) scan list.
+    # Reuses build_scan_list / DEFAULT_EXCLUSIONS / SCANNED_TYPES verbatim; the default
+    # doc-tracer path (find_first_order → aggregate → second_order) is NOT touched.
+    normalize_structural_target
+    build_scan_list
+    find_structural_consumers "$TARGET_REL"
+  else
+    # Default doc-reference tracer — unchanged.
+    resolve_target
+    build_scan_list
+    detect_mirror_pairs
 
-  local fo_tsv="$WORK_DIR/first-order.tsv"
-  find_first_order "$TARGET_REL" "$fo_tsv"
-  aggregate_first_order "$fo_tsv" "$TARGET_REL"
+    local fo_tsv="$WORK_DIR/first-order.tsv"
+    find_first_order "$TARGET_REL" "$fo_tsv"
+    aggregate_first_order "$fo_tsv" "$TARGET_REL"
 
-  compute_second_order "$FIRST_ORDER_JSON" "$TARGET_REL"
+    compute_second_order "$FIRST_ORDER_JSON" "$TARGET_REL"
+  fi
 
   end_ts=$(date +%s)
   elapsed=$((end_ts - start_ts))

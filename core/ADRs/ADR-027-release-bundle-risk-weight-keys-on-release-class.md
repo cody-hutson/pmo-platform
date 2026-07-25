@@ -4,7 +4,7 @@ title: ADR-027 — Release-bundle risk-weighting keys on Release Class, not a ne
 status: Accepted
 date: 2026-06-17
 release: 61-bundling-capacity-and-sizing-gates (v2.02)
-deciders: "[OPERATOR_NAME] (decision adopted at the v2.02 Collective Review scope-lock 2026-06-17)"
+deciders: "Cody Hutson (decision adopted at the v2.02 Collective Review scope-lock 2026-06-17)"
 tags: [architecture, release-ops, capacity, risk-weighting, release-class, bundle-composition, parameterize-over-hardcode, reversibility]
 source_observations:
   - "The bundling capacity card asked for risk-weighted capacity — higher-ceremony/Tier-3 items consuming more capacity than routine items — but the platform has NO per-issue Tier-3 field at bundle altitude: the Autonomy Tier (0-3) is per-action not per-issue, and size:* labels are a complexity axis (XS-XL), not a ceremony axis. The literal 'Tier-3 item' framing points at a field that does not exist."

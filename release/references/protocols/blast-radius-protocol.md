@@ -319,3 +319,43 @@ Other surfaces compute gates from `blast-radius.sh` schema-v1 output on a delive
 ### Cutover (introducing-release-exempt)
 
 This section's method-selection home + opt-out record apply to releases entering Stage 5 strictly AFTER this protocol's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). **The introducing release itself is exempt** (reflexive-pipeline-loop discipline — it is itself a pipeline-internal/governance release, so its own Stage-5 A3 takes the markdown-tree DEFAULT). All releases that entered Stage 5 prior to the introducing release are also exempt.
+
+## 13. Structural / path-move mode (`--mode=structural`)
+
+The default tracer answers *"who references this FILE?"* and the domain sibling answers *"who imports this MODULE?"*. Neither answers *"who hard-codes this PATH?"* — the consumer class that a **directory or file move** breaks: a script whose `RELEASE_NOTES_DIR="…/release/releases/notes"` default, a config's path literal, or an allowlist entry that names the OLD path by string. That miss is not hypothetical — the release-notes-folder move silently broke the Stage-13 GitHub-Release emit for ~5 releases before it was root-caused. The structural mode is the instrument that catches this class at design time.
+
+### Invocation
+
+```
+blast-radius.sh --mode=structural [OPTIONS] <old_path>
+```
+
+- `<old_path>` is a **path string to search for**, not a file to resolve. It may be a **directory prefix** (`release/releases/notes` or `release/releases/notes/`), a single file path, or a path that **no longer exists on disk** (it was moved away — the whole point). Unlike the default mode, structural mode does NOT require the target to be an existing regular file and does NOT reject a target under an exclusion (a moved-FROM path under an excluded tree is still a valid query).
+- A directory-prefix input matches any hard-coded reference containing that prefix (via `grep -F` literal-substring match). A trailing slash is normalized off, so `notes/` and `notes` behave identically.
+- The scan runs over the same corpus, `DEFAULT_EXCLUSIONS` (including the `.claude/worktrees/` exclusion), and `SCANNED_TYPES` as the default tracer — it is a NEW query over the SAME scan list, not a new scanner. The default doc-tracer path is untouched.
+
+### Output semantics (schema-v1)
+
+The mode emits the full schema-v1 envelope via the shared library, with three fields carrying structural-specific meaning (mirrors the domain tracer's F4 semantics block):
+
+- `first_order[].path` — a file that **hard-codes the old path literal** (a consumer).
+- `first_order[].reference_count` — count of distinct `(file, line)` hits of the old-path literal in that file.
+- `first_order[].matches[]` — up to 5 `{line, snippet}` of the hard-coded references.
+- `first_order[].is_mirror` — **always `false`** (a path sweep has no mirror concept; a deliberate documented constant, exactly as the software domain does).
+- `second_order` / `stats.second_order_count` — **`[]` / `0`** (scoped out): a path-literal consumer sweep is first-order by nature — "who hard-codes this path?" has no transitive depth-2.
+- `stats.total_files_scanned` — the whole doc-corpus denominator (same as the default tracer — it scans the same list).
+
+Because `grep -F` is a literal-substring match, the mode deliberately **over-includes**: it will surface references that legitimately need no update (a path named in a historical comment, an archived plan, a coincidental substring, prose documenting the OLD layout). That is by design — see the update-or-accept workflow below.
+
+### Update-or-accept workflow (the gate posture)
+
+When a release moves or renames a directory/file, the Stage-5 structural/path-move consumer sweep (Phase A3.3 in [`stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md)) runs `--mode=structural <old-path>` and requires each flagged consumer to carry an explicit **disposition** before the design-handoff gate:
+
+- **updated** — the path was rewritten to the new location, or
+- **accepted** — recorded "not a real consumer, reason: …" (a false positive, a historical mention, an intentionally-retained reference).
+
+A consumer with **neither** disposition is *unreconciled* and is what the gate flags. This is a **soft, reconcilable** gate — never a hard merge-block on a raw literal hit — so a false positive cannot day-one-block a legitimate merge. It rolls out **shadow → warn → enforce**: report-only first (characterize the false-positive rate on real moves), then non-blocking warn, then gate-blocking on any unreconciled consumer once the rate is understood. The gate criterion is **SR-G5** in [`stage-05-solutioning.md`](../pipeline/stage-05-solutioning.md) § 7.2; the extend-vs-sibling architecture and the soft-gate rollout are recorded in [ADR-090](../../../core/ADRs/ADR-090-structural-path-move-mode-extend-vs-sibling.md) (which qualifies the ADR-068 sibling decision with the "same-scanner → extend; different-scanner → sibling" boundary).
+
+### Cutover (introducing-release-exempt)
+
+The Phase A3.3 sweep + SR-G5 gate apply to releases entering Stage 5 strictly AFTER this mode's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>). The introducing release itself is exempt (reflexive-pipeline-loop discipline). The mode ships in **shadow** for its introducing release — available to run, not yet gate-blocking.
