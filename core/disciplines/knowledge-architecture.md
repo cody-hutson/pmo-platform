@@ -11,6 +11,7 @@ glossary_anchor: "umbrella body Glossary (canonical knowledge-tier terms — ver
 <!-- repo-integrity: allow-issue-ref -->
 
 # Knowledge Architecture & Taxonomy
+<!-- design-artifact: flow-class=concept-model; name=knowledge-architecture; depicts=core/disciplines/knowledge-architecture.md -->
 
 This document is the platform's classification of **knowledge types** and the **placement model** stating where each type lives. It composes with — and does **not** restate — [`architecture-overview.md`](../disciplines/architecture-overview.md)'s Layer-1/Layer-2 model and the [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) Governance File Map. Its three contributions are: (1) the 5-tier classification K1–K5 with a deterministic classifier; (2) the net-new **universality axis** drawn orthogonal to the existing authorship axis, proving *custom ≠ contextual*; (3) the **placement model** whose load-bearing concept is the **parameterization seam** — the boundary where CLAUDE.md "Parameterize over hardcode" bites.
 

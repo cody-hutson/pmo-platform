@@ -113,6 +113,7 @@ the Anthropic-produced output under PMO metadata staging rather than self-produc
 near-miss from a PMO template.
 
 ## Wrapper Mode
+<!-- design-artifact: flow-class=skill-flow; name=artifact-generator; depicts=operations/skills/artifact-generator/SKILL.md -->
 
 This skill has two modes. **Generate Mode** (the default, everything below in §Execution
 Flow) produces an artifact *from scratch* from a trigger. **Wrapper Mode** ingests an

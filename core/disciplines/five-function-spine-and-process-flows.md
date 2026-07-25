@@ -7,6 +7,7 @@ status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 ---
 # Five-Function Spine and Cross-Cutting Process Flows
+<!-- design-artifact: flow-class=concept-model; name=five-function-spine; depicts=release/references/pipeline/README.md -->
 
 **Status:** Canonical
 **Owner:** `../disciplines/five-function-spine-and-process-flows.md`

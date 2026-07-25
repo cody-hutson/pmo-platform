@@ -51,6 +51,7 @@ name is kebab-case. These caught real failures in Phases 1–5.
 ---
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=pmo-skill-editor; depicts=release/skills/pmo-skill-editor/SKILL.md -->
 
 This skill has 4 modes. **Trigger-match heuristic auto-routes when the request clearly matches one mode; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "audit this skill", "regression check") are unambiguous; ambiguity arises for phrases like "fix this skill" or "check this skill" that could map to Edit, Regression, or Quality Audit.
 

@@ -87,6 +87,8 @@ Re-verify at any SHA by running [`deploy/tools/cross-module-audit.sh`](deploy/to
 
 This module hosts the shared kernel: the shared skills (`prompt-builder`, `pmo-qa-auditor`, `eval-writer`, and the `pmo-skill-router` suite router), the logical skill registry at [`skills/registry.md`](skills/registry.md) (the single classification source the router reads to route a role-shaped request, per [`ADRs/ADR-035-registry-as-classification-source.md`](ADRs/ADR-035-registry-as-classification-source.md)), the security hook layer under `core/hooks/`, the universal disciplines (decision / discovery / review), the shared schemas, the shared standards (depersonalization-spec, knowledge-architecture, label-taxonomy, etc.), the depersonalized `CLAUDE.md.template`, the deploy infrastructure (`deploy/deploy.sh` + `deploy/tools/`), and the cross-cutting platform ADRs in [`ADRs/`](ADRs/). Release-scope ADRs live separately in [`../release/ADRs/`](../release/ADRs/).
 
+The centralized structural map that depicts this module's place in the platform layout is the design artifact [`diagrams/architecture-platform-structure.md`](diagrams/architecture-platform-structure.md).
+
 ## Future-Extraction Readiness
 
 This module is the **most extractable** — it has zero internal dependencies on other modules and is consumed broadly. Self-containment invariants:

@@ -84,6 +84,7 @@ Operate normally per the modes defined below. The handoff format is not required
 for direct user invocation.
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=comms-writer; depicts=operations/skills/comms-writer/SKILL.md -->
 
 This skill produces **6 primary PMO-unique communication types** (below). Two further types — executive brief and stakeholder email — are **owned-generation** types governed by the own-with-harvest sourcing posture (see [§ Owned-generation types](#owned-generation-types-own-with-harvest)); the 5 PMO-critical rules below bind those too. **Trigger-match heuristic auto-routes when the audience and channel are clearly stated; AskUserQuestion fires only as a fallback when the request is ambiguous.** Most triggers (e.g., "write the exec brief", "draft the agenda") are unambiguous; ambiguity arises for generic phrases like "draft an update" or "put together a message" where audience and channel are not specified.
 

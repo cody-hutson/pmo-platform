@@ -80,6 +80,7 @@ to identify the problem in the critique but install polish in the rewrite;
 the named-problem check catches this.
 
 ## Mode detection
+<!-- design-artifact: flow-class=skill-flow; name=prompt-builder; depicts=core/skills/prompt-builder/SKILL.md -->
 
 Decide which mode you're in **before** doing anything else. The user almost
 never says "I'm in critique mode" — you infer it from what they sent.

@@ -319,3 +319,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 **DORA deployment-frequency + lead-time anchors (read-model note — emits NO new event).** The Phase B `deployment-status/deploy-skill` / `deploy-harness` events emitted above are the source for the DORA **deployment_frequency** count (same-version rows collapse to one deploy OCCASION — never one increment per target) and the **T_DEPLOY** anchor for **lead_time_for_changes** (`MAX(ts_iso)` of the occasion's deploy rows), per [`dora-telemetry.md`](../standards/dora-telemetry.md) § 2.1. Those metrics are a window read-model computed on demand by [`compute-dora-metrics.sh`](../../tools/compute-dora-metrics.sh) over these EXISTING events. **No new emit-table row is added here** — the read-model READS the deploy events; it never writes a DORA metric back into the event log (the OUT-class boundary per the standard § 10 FM3).
 
 Cutover: events occurring on or after the FIRST release entering this stage strictly AFTER this protocol's introducing-release merge SHA. The introducing release itself: exempt (reflexive-pipeline-loop discipline).
+
+## Related References
+
+- [`../../../docs/release-record-keeping.md`](../../../docs/release-record-keeping.md) — human-process design artifact that depicts this stage's `RELEASE_LOG` `DEPLOYED` write (Phase B5) when walking an operator through tracing a release record.

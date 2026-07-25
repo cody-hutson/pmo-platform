@@ -91,6 +91,7 @@ below).
 **Template-protocol consumption.** When authoring eval rubric or judge templates, consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New eval-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../governance/OPERATIONS.md).
 
 ## Mode Selection
+<!-- design-artifact: flow-class=skill-flow; name=eval-writer; depicts=core/skills/eval-writer/SKILL.md -->
 
 This skill has 2 modes — Author (write evals from scratch) and Review (audit existing evals against the framework). **Trigger-match heuristic auto-routes when the intent is clearly one or the other; AskUserQuestion fires only as a fallback when the phrasing is ambiguous (e.g., "work on my evals").** Wrong-mode output is rework-expensive; err toward asking when uncertain.
 
