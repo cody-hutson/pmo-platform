@@ -227,3 +227,4 @@ The policy is verified by a one-pass audit run at **documented-pattern level**, 
 - [`composition-surface-spec.md`](composition-surface-spec.md) — refinement of the CUSTOMIZABLE-PUBLIC class for files with operator-customization seams
 - [`depersonalization-spec.md`](depersonalization-spec.md) — token vocabulary that keeps UNIVERSAL-PUBLIC files free of operator-specific leakage
 - [`hub-session-continuity.md`](hub-session-continuity.md) — consumer that invokes the UNIVERSAL-PUBLIC class for hub-state substrate
+- [`docs/release-record-keeping.md`](../../docs/release-record-keeping.md) — human-process design artifact that depicts this taxonomy's two-homes split when tracing a release record

@@ -384,3 +384,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 - Any `self-repair/rollback` event (the post-merge regression remediation already in the table above) is the **change_failure_rate** + **mean_time_to_restore** anchor for [`compute-dora-metrics.sh`](../../tools/compute-dora-metrics.sh) per [`dora-telemetry.md`](../standards/dora-telemetry.md) § 2. The DORA window read-model READS that EXISTING event; it writes no DORA metric back (read-model only).
 
 Cutover: audit-trail capture applies to all releases going forward, including the `qc4-06-result` sub-type.
+
+## Related References
+
+- [`../../../docs/release-record-keeping.md`](../../../docs/release-record-keeping.md) — human-process design artifact that depicts this stage's INDEX / DIGEST / NOTES appends and the `RELEASE_LOG` flip to `VERIFIED` when walking an operator through tracing a release record.

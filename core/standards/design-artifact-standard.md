@@ -229,7 +229,7 @@ Every design artifact carries bidirectional links between itself and the source 
   - `name` — the canonical kebab-case subject of the artifact (the `<artifact-name>` form from § 4).
   - `depicts` — a comma-separated list of repo-root-relative source paths the artifact depicts (same semantics as the dedicated-file `depicts:` frontmatter below).
   - **Declared region** — the marker bounds the artifact: from the marker line to the next heading of the **same or higher level**. That region *is* the artifact; everything else in the parent doc is ordinary prose. This is the crisp artifact-vs-prose boundary the conformance check in § 12 inspects.
-  - **Discovery query:** `grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release` → each hit is one embedded artifact; parse `flow-class` / `name` / `depicts` from the line. The query is **enum-anchored** (requires a real flow-class value) and field-order-tolerant (`[^>]*`), so the § 9 grammar line above and the bracketed `<one-of-7>` / `<data-flow>` examples do not self-match — the `>` in `[^>]` is what excludes them.
+  - **Discovery query:** `grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release docs` → each hit is one embedded artifact; parse `flow-class` / `name` / `depicts` from the line. The query is **enum-anchored** (requires a real flow-class value) and field-order-tolerant (`[^>]*`), so the § 9 grammar line above and the bracketed `<one-of-7>` / `<data-flow>` examples do not self-match — the `>` in `[^>]` is what excludes them.
   - The marker renders invisibly on GitHub (it is an HTML comment), so it carries the machine payload without altering the human reading surface. The rationale for choosing a section-level marker over a parent-frontmatter index or a heading-convention amendment is recorded in [ADR-089](../ADRs/ADR-089-embedded-design-artifact-declaration-marker.md).
 
 **Doc-link maintenance:** Bidirectional links are subject to [Check 14 / Check 15](../rules/doc-link-maintenance.md) protocols (the workspace's automated link-resolver and warn-log surface). Stale links surface during deploy-time scans and route per the standard finding triage path.
@@ -244,7 +244,7 @@ Every design artifact carries bidirectional links between itself and the source 
   2. `flow_class:` MUST be one of the 7 enum values.
   3. Each depicted source's `## Related References` reciprocates with a link back to the artifact — the § 9 dedicated-file bidirectional contract, covered by Check 14 / Check 15.
 
-**Canonical dedicated-artifact query:** `grep -rl '^depicts:' core operations release` → the dedicated artifact set (location-independent, so it also catches skill `diagrams/` artifacts). See [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection) for the combined dedicated + embedded enumeration harness and the per-flow-type detection criteria.
+**Canonical dedicated-artifact query:** `grep -rl '^depicts:' core operations release docs` → the dedicated artifact set (location-independent, so it also catches skill `diagrams/` artifacts). See [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection) for the combined dedicated + embedded enumeration harness and the per-flow-type detection criteria.
 
 ## § 10. Agent Read/Write + Ownership
 
@@ -316,22 +316,22 @@ Discovery is declaration-based (immune to table-invisibility). The rule below is
 
 ```bash
 # Dedicated artifacts (depicts: frontmatter — § 9)
-grep -rl '^depicts:' core operations release
+grep -rl '^depicts:' core operations release docs
 
 # Embedded artifacts (section-level marker — § 9; enum-anchored + field-order-tolerant so the
 # § 9 grammar line and the bracketed <one-of-7> examples do not self-match — the `>` in [^>] excludes them)
-grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release
+grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release docs
 
 # Per-flow-type count (dedicated + embedded, one row per type)
 for t in architecture data-flow agent-process human-process concept-model skill-flow decision-tree; do
-  d=$(grep -rlE "^flow_class:[[:space:]]+$t\b" core operations release --include='*.md' | wc -l)
-  e=$(grep -rn "design-artifact:[^>]*flow-class=$t\b" core operations release --include='*.md' | wc -l)
+  d=$(grep -rlE "^flow_class:[[:space:]]+$t\b" core operations release docs --include='*.md' | wc -l)
+  e=$(grep -rn "design-artifact:[^>]*flow-class=$t\b" core operations release docs --include='*.md' | wc -l)
   printf "%-16s dedicated=%s embedded=%s total=%s\n" "$t" "$d" "$e" "$((d+e))"
 done
 
 # Enum-validation lint — surface any marker whose flow-class is NOT one of the 7 (the per-type
 # loop above drops an out-of-enum / typo'd flow-class silently; this catches it)
-grep -rnoE '<!-- design-artifact:[^>]*flow-class=[a-z-]+' core operations release --include='*.md' \
+grep -rnoE '<!-- design-artifact:[^>]*flow-class=[a-z-]+' core operations release docs --include='*.md' \
  | grep -vE 'flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' \
  && echo "WARN: out-of-enum flow-class marker(s) above" || echo "enum OK"
 ```
