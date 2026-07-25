@@ -61,6 +61,7 @@ declare -a DEFAULT_EXCLUSIONS=(
   "projects/"
   "node_modules/"
   ".claude/skills/"
+  ".claude/worktrees/"     # worktree copies are duplicate corpora, not referrers (#3300; mirrors domain-blast-radius.sh)
 )
 
 # Default scanned file types
