@@ -439,8 +439,11 @@ assert_no_placeholders() {
 # Each emits one of PASS/FAIL/SKIP via emit_pass/emit_fail/emit_skip with mode=A.
 
 check_a1_platform() {
-  # Already gated at top-of-script; kept for record + per-step output.
-  emit_pass "A1" "INSTALL-PLATFORM" "Darwin $(uname -r)" "A"
+  # Already gated at top-of-script; kept for record + per-step output. Report the
+  # LIVE platform ($(uname -s)) rather than a hardcoded "Darwin" label: under
+  # PMO_ALLOW_NON_DARWIN=1 (#303) this script proceeds on Linux/Windows, where a
+  # hardcoded "Darwin <kernel>" evidence string would mislabel the platform.
+  emit_pass "A1" "INSTALL-PLATFORM" "$(uname -s) $(uname -r)" "A"
 }
 
 check_a2_workspace_layout() {
