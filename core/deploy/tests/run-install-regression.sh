@@ -76,6 +76,10 @@ REGRESSION_MEMBERS=(
   "test_install_exit_propagation.sh"       # install.sh propagates setup-workspace.sh exit codes
   "test_detect_install_path_spaces.sh"     # cowork_install_path with internal spaces resolves
   "test_lib_composition.sh"                # bash-3.2 array-scope contract + manifest count
+  "test_update_nonrepo_root_cwd.sh"        # #382 non-repo-root cwd -> Phase 5 completes; guard intact
+  "test_ps1_dryrun_contract.sh"            # #303 Windows install/update -DryRun proxy contract + gate relaxation
+  "test_qa_module.py"                      # QA-as-code registry: import smoke + finding->check 1:1 coverage
+  "test_doctor.sh"                         # #302 doctor.sh: two-layer install self-diagnosis + read-only + fault-injection
 )
 
 SUITE_PASS=0
@@ -101,8 +105,11 @@ run_member() {
   fi
 
   local out rc
+  # .py members run as standalone self-reporting scripts (python3 <path>), NOT via
+  # pytest: this bash suite (and the CI runner) may not have pytest installed, and
+  # the member contract above is "prints N passed, M failed; exits non-zero on FAIL".
   case "${member}" in
-    *.py)  out="$(python3 -m pytest "${path}" 2>&1)"; rc=$? ;;
+    *.py)  out="$(python3 "${path}" 2>&1)"; rc=$? ;;
     *)     out="$(bash "${path}" 2>&1)"; rc=$? ;;
   esac
   printf '%s\n' "${out}"

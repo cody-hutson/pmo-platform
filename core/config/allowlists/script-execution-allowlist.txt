@@ -129,3 +129,15 @@ core/deploy/extract-roster-needles.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
 ./core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
 core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh
+
+# QA-as-code standalone regression suite (qa.sh) - new in-tree bash CLI
+[PMO_PLATFORM_ROOT]/qa.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/qa.sh
+./qa.sh
+qa.sh
+
+# Operator install self-diagnosis (doctor.sh) - new in-tree bash CLI (#302)
+[PMO_PLATFORM_ROOT]/doctor.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/doctor.sh
+./doctor.sh
+doctor.sh

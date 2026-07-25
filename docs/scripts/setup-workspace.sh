@@ -322,10 +322,22 @@ for k in data:
 }
 
 # --- Section 6: Platform detection (must run first; no state mutation) ---
+# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.91 / #303), not a hard fail.
+# CI and #304's cross-platform matrix set PMO_ALLOW_NON_DARWIN=1 so the non-macOS
+# legs can run past this point. Default (env unset) preserves the protective
+# exit 78: the working bash-free cross-platform install is a later arc (#47/#48),
+# so a silent proceed into the bash-only phases (setup + deploy.sh) would
+# half-install on an unsupported platform. EX_CONFIG(78) is retained for the
+# genuinely-unsupported (un-opted-in) case, per Stage-5 DD-4/REC-3.
 check_platform() {
   if [ "$(uname -s)" != "Darwin" ]; then
+    if [ -n "${PMO_ALLOW_NON_DARWIN:-}" ]; then
+      warn "Non-Darwin platform ($(uname -s)); proceeding under PMO_ALLOW_NON_DARWIN."
+      warn "Cross-platform install is in progress (#47/#48); bash-only phases may not complete."
+      return 0
+    fi
     err "setup-workspace.sh is Darwin-only on current release."
-    err "Cross-platform support deferred per Stage 5 Recommendation #3."
+    err "Set PMO_ALLOW_NON_DARWIN=1 to proceed on non-macOS (CI / cross-platform matrix)."
     err "Current platform: $(uname -s)"
     exit 78
   fi
@@ -1172,6 +1184,26 @@ install_hooks() {
     cp "${primitive_src}" "${primitive_dst}"
     info "INSTALLED: path-leak primitive (block-gh-path-leak dependency)"
     printf 'rm-file:%s\n' "${primitive_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
+  # Co-deploy the shared operator-instance / needle resolver NEXT TO the hooks.
+  # block-scope-segregation.sh (#384) sources it from ${HOOK_DIR}/lib-instance-path.sh
+  # at runtime to resolve the gitignored localized-context needle file (its CD-4
+  # coworker/org/client-project needle scan); the source lib lives at core/deploy/
+  # (shared with deploy.sh + git-pre-commit-pii.sh), which the deployed .claude/hooks/
+  # cannot reach — so without this copy the hook's localized-needle class silently
+  # no-ops. It is a sourced lib, not a registered hook (no block-* name), so the
+  # hook-registry checks correctly ignore it. Mirrors the path-leak primitive co-deploy.
+  local needlelib_src="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  local needlelib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib-instance-path.sh"
+  if [ ! -r "${needlelib_src}" ]; then
+    warn "lib-instance-path.sh not found at ${needlelib_src}; block-scope-segregation localized-needle scan will no-op"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy lib-instance-path.sh → ${needlelib_dst}"
+  else
+    cp "${needlelib_src}" "${needlelib_dst}"
+    info "INSTALLED: lib-instance-path.sh (block-scope-segregation needle resolver)"
+    printf 'rm-file:%s\n' "${needlelib_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
   # Co-deploy the shared jq/dependency resolver into .claude/hooks/lib/. Every security

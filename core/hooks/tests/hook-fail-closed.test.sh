@@ -126,10 +126,12 @@ for h in $JQ_HOOKS; do
                -e 's#/opt/homebrew/bin/jq#/nonexistent/jq-b#g' \
                -e 's#/usr/local/bin/jq#/nonexistent/jq-c#g' \
                "$DEP_LIB" > "$sbox/lib/dep-resolve.sh"
-  # Drive shared-.mode AND own-.autonomy-mode hooks to enforce (no per-hook knowledge;
-  # a hook reads whichever file it uses, the other is inert).
+  # Drive shared-.mode AND every own-mode-file hook to enforce (no per-hook knowledge;
+  # a hook reads whichever file it uses, the others are inert). Own-mode files:
+  # .autonomy-mode (block-autonomy-ceiling), .scope-segregation-mode (block-scope-segregation).
   /usr/bin/printf 'enforce' > "$sbox/.mode"
   /usr/bin/printf 'enforce' > "$sbox/.autonomy-mode"
+  /usr/bin/printf 'enforce' > "$sbox/.scope-segregation-mode"
 
   # (3a) ANTI-VACUOUS PRECONDITION — prove genuine unresolvability via the REAL resolver.
   got="$(PATH=/usr/bin:/bin /bin/bash -c ". '$sbox/lib/dep-resolve.sh' 2>/dev/null; resolve_jq" 2>/dev/null)"

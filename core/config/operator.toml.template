@@ -160,6 +160,12 @@ repo_host = "github"
 # v1 ships GitHub Projects (issues + milestones + a Projects v2 board).
 # Valid: "github" (GitHub issues + Projects) | "jira+github" | "gitlab+jira"
 # Default: "github"
+#
+# DEPRECATED-IN-FAVOR-OF the multi-destination [trackers.<id>] subtables (#384,
+# below). This single scalar is the SINGLE-destination form; declaring [trackers.*]
+# supersedes it with a per-destination scope + routing model. Retained (NOT
+# removed) as the back-compat default: with no [trackers.*] declared, filing
+# resolves to a single `default` destination derived from this value.
 ticketing = "github"
 
 # Knowledge-base adapter — where reference / documentation content is authored
@@ -173,6 +179,56 @@ kb = "markdown"
 # Valid: "claude-code" (Claude Code CLI/Desktop) — other runtimes gated on their tickets.
 # Default: "claude-code"
 ai_tool = "claude-code"
+
+# --- Multi-destination work-tracker config (#384) -------------------------------
+# The [trackers.<id>] NAMED SUBTABLES declare N segregated work-tracker
+# destinations, each with a per-destination sensitivity `scope`. This SUPERSEDES
+# the single-value [adapters].ticketing selector above (kept as a deprecated
+# back-compat alias — see the migration note below). Named subtables (Option B,
+# NOT [[trackers]] array-of-tables) are used deliberately: each subtable is a
+# UNIQUE section name that round-trips UNCHANGED through the setup-workspace.sh
+# write_operator_toml preservation path (two [[trackers]] array blocks would
+# collapse to one corrupt block on re-emit).
+#
+# SHIPPED COMMENTED ON PURPOSE. A fresh install has NO live [trackers.*] section,
+# so it resolves to a single `default` destination = today's single-GitHub
+# behavior with ZERO operator action (the back-compat branch). UNCOMMENT + fill
+# the blocks below only to opt into multi-destination routing + the scope-
+# segregation guardrail.
+#
+# Fields (per destination):
+#   id         — stable identifier (matches the subtable key trackers.<id>).
+#   platform   — github-issues | github-projects | jira | linear | asana | azure-boards
+#   identifier — the destination's concrete address (operator-instance value):
+#                repo "owner/name" (github) | project key (jira) | board/team id.
+#   scope      — public | private  (destination sensitivity). A `scope: public`
+#                destination is content-scanned by the scope-segregation guardrail
+#                (core/hooks/block-scope-segregation.sh); private/PII-marked content
+#                filed to it is refused. `scope: private` permits PII.
+#
+# FAIL-CLOSED ROUTING (CD-1): once ANY [trackers.*] is declared, a private-scope
+# project with an unset PROJECT.md `work_tracker:` MUST NOT fall through to a
+# public destination — filing resolution fails closed (blocks / requires explicit
+# selection) rather than defaulting to public. See core/schemas/project-schema.md
+# (`work_tracker`) + operations/skills/intake-desk/SKILL.md (routing read path).
+#
+# [trackers.work]
+# id         = "work"
+# platform   = "jira"
+# identifier = "PROJ"          # your private Jira project key
+# scope      = "private"
+#
+# [trackers.personal]
+# id         = "personal"
+# platform   = "github-issues"
+# identifier = "owner/public-repo"   # your public GitHub repo (owner/name)
+# scope      = "public"
+#
+# Optional: name the fallback destination explicitly when neither an explicit
+# selection nor a project's `work_tracker:` resolves. Absent → the single-`default`
+# back-compat destination derived from [adapters].ticketing.
+# [trackers]
+# default_id = "personal"
 
 [projects]
 # GitHub Projects (v2) board identifiers — the field / node IDs the pipeline uses

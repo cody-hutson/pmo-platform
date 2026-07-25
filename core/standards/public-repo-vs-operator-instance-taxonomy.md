@@ -57,6 +57,23 @@ The test is **strict necessity**, not optional convenience. Three reasons:
 
 ---
 
+## §2b Destination-sensitivity scope — a distinct axis
+
+The three classes above (§1) classify a **repo ARTIFACT** by whether it ships in the public repo. A separate, orthogonal notion — **destination-sensitivity scope** — classifies a **runtime FILING DESTINATION** (a work-tracker the platform files issues/items to), not an artifact. It is declared per destination in `operator.toml` `[trackers.<id>].scope`:
+
+| Scope value | Meaning | Guardrail behavior |
+|---|---|---|
+| `public` | The filing destination is world-visible (e.g., a public GitHub repo's issues). | Content filed here is scanned; private/PII-marked content is **refused** by the scope-segregation guardrail. |
+| `private` | The filing destination is access-controlled (e.g., a private Jira project / Linear team). | PII is permitted; no content refusal. |
+
+**Do not conflate scope with the §1 classes.** A tracker's `scope` says nothing about whether a *file* is git-tracked — it says whether a *destination* is world-visible. The two axes compose freely: an OPERATOR-INSTANCE artifact (the operator's `operator.toml`) declares a `scope: public` destination; a spoke may file to a `scope: private` destination without any of it touching the public repo. `scope` is a **new semantic registered here**, not a `[OPERATOR_*]` depersonalization token (the `[trackers.*]` field VALUES live only in the gitignored `operator.toml` and are read at runtime — same status as `[adapters].ticketing` — so they need no token; see [`depersonalization-spec.md`](depersonalization-spec.md) §1.3).
+
+**Enforcing mechanism.** [`core/hooks/block-scope-segregation.sh`](../hooks/block-scope-segregation.sh) (a PreToolUse hook; owner shard `core/rules/bypass-mode-readiness/block-scope-segregation.md`) is the filing-time gate. It resolves a filing destination → its `scope`, and on a `scope: public` destination refuses private/PII-marked content. It is **fail-closed** (per the scope-segregation A6.5 adversarial review): a `[trackers.*]`-configured install with an unmapped destination fails closed rather than defaulting to public; a high-confidence identity needle → public is always-blocked regardless of hook mode; and an empty/unparseable content extraction on a mapped-public destination fails closed.
+
+**Coverage boundary (CD-4 — stated, not implied).** The guardrail reuses the existing PII substrate (no new detector), so its coverage is: operator-IDENTITY PII (home-path / phone / personal-email) unconditionally, plus ORGANIZATIONAL/PROJECT content (coworker / employer / **client / project-code / internal-system** names) **only to the extent the operator has declared those needles** in the gitignored localized-context needle file (`core/config/localized-context-needles.txt.example` → the operator-instance `localized-context-needles.txt`; resolved by `lib-instance-path.sh`). Private-project prose that trips no declared needle is NOT detected by content-scan — the CD-1 routing fail-closed (never route a private-scope project to a public destination) is the primary segregation gate; content-scan is defense-in-depth. This residual is deliberate and recorded in [`ADR-091`](../ADRs/ADR-091-scope-segregation-action-gating-hook.md).
+
+---
+
 ## §3 Composition with sibling standards
 
 This standard articulates the public-class axis. Other axes are owned elsewhere — do not restate them here.

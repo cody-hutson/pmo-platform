@@ -1,0 +1,19 @@
+# Scope-Segregation Allowlist — core/hooks/block-scope-segregation.sh BLOCK-SCOPE-SEG-004
+#
+# Known-safe content strings that the scope-segregation guardrail must NOT treat
+# as a private/PII marker when filing to a scope:public destination. This is the
+# false-positive escape: a content LINE that contains any entry below (fixed-string
+# substring, case-sensitive) is exempted from the needle scan.
+#
+# Use sparingly and specifically — an overbroad entry weakens the guardrail. The
+# other two disable paths are coarser: .scope-segregation-mode=off (disable the
+# hook) and CLAUDE_HOOK_BYPASS=1 (per-session operator bypass).
+#
+# Format:
+#   - One fixed-string exemption per line (substring match against a content line).
+#   - Comments start with # (first non-whitespace char); blank lines ignored.
+#
+# Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
+#   ./.claude/hooks/allowlist-add.sh .claude/scope-segregation-allowlist.txt '<string>'
+#
+# ---

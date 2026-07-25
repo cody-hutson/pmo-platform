@@ -1,6 +1,6 @@
 name: Install tests
 
-# gate-efficacy: posture=required  enforcement=branch-protection:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)"  always-reports=yes
+# gate-efficacy: posture=required  enforcement=ci-enforce:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
 #   invariant: install.sh / deploy.sh / setup-workspace.sh and the security hooks
 #              behave correctly end-to-end against /tmp sandboxes — asserted
 #              behaviorally by running the test harnesses (not by file inspection).
@@ -8,7 +8,7 @@ name: Install tests
 #                  install-regression job fails.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
-# Three jobs:
+# Four jobs:
 #
 # shell-tests — runs the full deploy-test harness under core/deploy/tests/
 # against /tmp sandboxes (no writes outside the sandbox roots):
@@ -60,9 +60,20 @@ name: Install tests
 # emission is suppressed here (PMO_REGRESSION_EMIT=0) because CI has no
 # operator-instance event log; the CI job-exit is the authoritative gate.
 #
-# Platform: macOS (setup-workspace.sh hard-fails on non-Darwin per its
-# check_platform gate; the end-to-end test self-skips on Linux too; the hook
-# tests use BSD-tool / macOS-path assumptions consistent with the hook layer).
+# cross-platform — the #304 cross-platform install/QA regression matrix
+# (macos-latest + ubuntu-latest + windows-latest). Where the three jobs above
+# gate the macOS bash install path, this job gates the PORTABLE surface: #299's
+# QA-as-code suite (./qa.sh / python -m qa) and #303's Windows entry-points
+# (install.ps1 / update.ps1 -DryRun). The legs are deliberately TIERED, not
+# symmetric — deploy.sh is macOS-only by design and the bash suites self-skip on
+# non-Darwin, so a symmetric matrix would go vacuously green. Each leg runs only
+# what genuinely exercises on that OS (see the job's own header for the per-OS
+# tier and the CIAC-2 / CIAC-3 mapping).
+#
+# Platform: the first three jobs are macOS-only (setup-workspace.sh hard-fails on
+# non-Darwin per its check_platform gate; the end-to-end test self-skips on Linux
+# too; the hook tests use BSD-tool / macOS-path assumptions consistent with the
+# hook layer). The cross-platform job tiers per-OS (see its header).
 #
 # Security: this workflow does NOT consume any untrusted github.event.*
 # inputs (no issue titles, PR bodies, comment bodies, head refs, etc.).
@@ -291,3 +302,176 @@ jobs:
             exit 1
           fi
           echo "Precision probe OK — broken fixture correctly failed the suite (exit $rc)."
+
+  cross-platform:
+    name: Cross-platform install/QA (${{ matrix.os }})
+    # #304 (v3.91): the cross-platform install/QA regression matrix. The three
+    # jobs above gate the macOS bash install path; THIS job gates the PORTABLE
+    # surface across macOS + Linux + Windows — #299's QA-as-code suite (./qa.sh /
+    # python -m qa) and #303's Windows entry-points (install.ps1 / update.ps1
+    # -DryRun).
+    #
+    # TIERED, not symmetric (the load-bearing gate-honesty decision): deploy.sh is
+    # macOS-only by platform design (BSD stat -f / md5) and the bash deploy-test
+    # suites self-skip on non-Darwin, so a symmetric 3-OS matrix would go
+    # VACUOUSLY GREEN (a check that asserts nothing). Each leg runs ONLY what
+    # genuinely exercises on that OS:
+    #   macOS   (full)     — ./qa.sh + the pytest-free qa-module self-test + the
+    #                        FULL Phase-5 non-repo-root update (#382 regression).
+    #   Linux   (portable) — ./qa.sh + the pytest-free qa-module self-test + the
+    #                        DryRun/portable non-repo-root update (update.sh
+    #                        --dry-run).
+    #   Windows (pwsh)     — install.ps1 -DryRun + python -m qa + update.ps1
+    #                        -DryRun from a non-repo-root cwd + a broken-fixture
+    #                        precision probe (the Windows gate MUST redden on a
+    #                        defect).
+    # The Linux/Windows legs are the honest v1 portable tier; they EXPAND as
+    # deploy.sh OS-portability (#342 / #44) + orchestrate.sh phase decomposition
+    # (#301) land under milestones #47 / #48.
+    #
+    # CIAC-2: ./qa.sh (POSIX legs) AND install.ps1 (Windows leg) are both
+    #         exercised across the three OSes (grep-resolvable in this file).
+    # CIAC-3: the update flow runs from a NON-repo-root cwd on every OS — full
+    #         Phase-5 on macOS, DryRun/portable on Linux/Windows.
+    #
+    # fail-fast: false so one OS's failure never masks the others' verdicts.
+    #
+    # Security: like the jobs above, this job consumes NO untrusted github.event.*
+    # inputs; every run: block is a static invocation on workspace files only.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # #303 opt-in relaxation of the two non-Darwin gates (setup-workspace.sh
+      # check_platform + validate-install.sh). A no-op on macOS (both gates only
+      # fire when uname != Darwin); it lets the Linux leg's update flow proceed.
+      PMO_ALLOW_NON_DARWIN: '1'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # --- POSIX legs (macOS + Linux): #299 QA-as-code ---
+      - name: QA-as-code suite — ./qa.sh (POSIX)
+        if: runner.os != 'Windows'
+        run: ./qa.sh
+
+      - name: QA-module registry self-test — pytest-free (POSIX)
+        # test_qa_module.py self-runs its test_* functions when executed directly
+        # (no pytest needed) — the runner may not have pytest installed.
+        if: runner.os != 'Windows'
+        run: python3 core/deploy/tests/test_qa_module.py
+
+      # --- macOS leg: full Phase-5 non-repo-root update (#382 / CIAC-3 full) ---
+      - name: Update from a non-repo-root cwd — full Phase 5 (macOS)
+        # test_update_nonrepo_root_cwd.sh drives the real setup-workspace.sh +
+        # deploy.sh Phase 5 (Darwin-only); it sandboxes via --workspace-root /
+        # --config-root and never touches the live ~/.claude (R-8).
+        if: runner.os == 'macOS'
+        run: bash core/deploy/tests/test_update_nonrepo_root_cwd.sh
+
+      # --- Linux leg: DryRun/portable non-repo-root update (CIAC-3 portable) ---
+      - name: Update from a non-repo-root cwd — DryRun/portable (Linux)
+        # deploy.sh is macOS-only, so the Linux update path is the DryRun proxy:
+        # update.sh --dry-run reaches Phase 5 (dry-run) WITHOUT invoking deploy.sh.
+        # Asserts it completes from a NON-repo-root cwd (exit 0/64) with the
+        # repo-root guard SILENT — the #382 cross-OS assertion. PMO_ALLOW_NON_DARWIN
+        # (job env) relaxes the Phase-5c setup-workspace.sh platform gate.
+        if: runner.os == 'Linux'
+        run: |
+          set -uo pipefail
+          sbx="$(mktemp -d)"
+          mkdir -p "$sbx/ws" "$sbx/cfg" "$sbx/home" "$sbx/nonrepo"
+          {
+            printf '%s\n' '[meta]' 'schema_version = 1' 'managed_by = "pmo-platform"'
+            printf '%s\n' '[identity]' 'operator_name = "CI Operator"'
+            printf '%s\n' 'operator_email = "ci@example.com"' 'operator_git_email = "ci@example.com"'
+            printf '%s\n' 'operator_github = "ci-handle"' 'operator_phone = ""'
+            printf '%s\n' 'operator_role_title = "CI"' 'operator_organization = "CI"'
+            printf '%s\n' '[paths]'
+            printf 'claude_workspace_root = "%s/ws"\n' "$sbx"
+            printf 'operator_homedir_path = "%s/home"\n' "$sbx"
+            printf '%s\n' 'cowork_install_path = "/tmp/ci-cowork"' 'pmo_platform_repo_name = "pmo-platform"'
+            printf '%s\n' '[platform]' 'work_board = "github"' 'comms_platform = ""'
+          } > "$sbx/cfg/operator.toml"
+          chmod 600 "$sbx/cfg/operator.toml"
+          cd "$sbx/nonrepo" || exit 1
+          set +e
+          out="$(bash "$GITHUB_WORKSPACE/update.sh" --dry-run --workspace-root "$sbx/ws" --config-root "$sbx/cfg" 2>&1)"
+          rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 64 ]; then
+            echo "::error::update.sh --dry-run from a non-repo-root cwd exited $rc (expected 0 or 64) on $(uname -s)"
+            exit 1
+          fi
+          if printf '%s' "$out" | grep -qF "Must run from pmo-platform repo root"; then
+            echo "::error::repo-root guard fired from a non-repo-root cwd -- #382 partial-update regression on $(uname -s)"
+            exit 1
+          fi
+          echo "Linux non-repo-root update DryRun OK (exit $rc; repo-root guard silent)."
+
+      # --- Windows leg: #303 entry-points (pwsh) ---
+      - name: Windows install DryRun — install.ps1 (CIAC-2)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./install.ps1 -DryRun
+
+      - name: QA-as-code module — python -m qa (Windows)
+        # Windows uses `python` (python3 is not reliably aliased) and the qa
+        # module directly (qa.sh's bash shebang + python3 coupling is POSIX-only).
+        #
+        # HOME shim (the #303 Windows compose.py invocation contract): the qa
+        # suite's F4 check drives compose.py resolve_tokens, which reads $HOME
+        # (compose.py:152) to self-heal [OPERATOR_HOMEDIR_PATH]. On Windows $HOME
+        # is unset (%USERPROFILE% is the home var), so — exactly as
+        # lib-dryrun-proxy.ps1 Get-PmoHome does before every Windows compose.py
+        # call — set HOME to the user profile first. Without this, F4 fails with
+        # "resolve_tokens left unresolved: [OPERATOR_HOMEDIR_PATH]". The durable
+        # fix (compose.py falling back to %USERPROFILE%) is owned by the deferred
+        # native-Windows arc (#47 / #48); this shim mirrors #303's call sites.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $profileHome = [System.Environment]::GetFolderPath('UserProfile')
+          if ([string]::IsNullOrEmpty($profileHome)) { $profileHome = $env:USERPROFILE }
+          $env:HOME = $profileHome
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE/core/deploy"
+          python -m qa
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Update from a non-repo-root cwd — DryRun (Windows / CIAC-3)
+        # update.ps1 anchors on $PSScriptRoot, so it must run cleanly from a
+        # non-repo-root cwd (the PowerShell analog of the #382 cwd fix).
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Push-Location $env:RUNNER_TEMP
+          & "$env:GITHUB_WORKSPACE/update.ps1" -DryRun
+
+      - name: Precision probe — a broken Windows fixture MUST fail install.ps1 -DryRun
+        # Gate-honesty proof (DD-5; modeled on the install-regression precision
+        # probe above): run install.ps1 -DryRun against a deliberately-broken clone
+        # (its lib present so the DryRun contract runs, but .version + compose.py
+        # OMITTED so the preflight + compose round-trip fail). If the DryRun proxy
+        # ever went vacuous (always exit 0), this step reddens the PR.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'   # do not throw on the child's non-zero exit
+          $broken = Join-Path $env:RUNNER_TEMP ("broken-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path (Join-Path $broken "core/deploy") -Force | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE/install.ps1" (Join-Path $broken "install.ps1")
+          Copy-Item "$env:GITHUB_WORKSPACE/core/deploy/lib-dryrun-proxy.ps1" (Join-Path $broken "core/deploy/lib-dryrun-proxy.ps1")
+          pwsh -NoProfile -File (Join-Path $broken "install.ps1") -DryRun
+          $probeExit = $LASTEXITCODE
+          if ($probeExit -eq 0) {
+            Write-Output "::error::install.ps1 -DryRun exited 0 on a deliberately-broken fixture (missing .version + compose.py); the Windows DryRun gate is vacuous."
+            exit 1
+          }
+          Write-Output "Precision probe OK — broken Windows fixture correctly failed install.ps1 -DryRun (exit $probeExit)."
+          exit 0
