@@ -178,12 +178,28 @@ check_hooks_runnable() {
       "run ./install.sh to deploy the security hooks under \$WORKSPACE_ROOT/.claude/hooks" "1"
     return
   fi
-  local count=0 missing="" h
+  local count=0 missing="" h base
   for h in "${HOOKS_DIR}"/*.sh; do
     [ -e "${h}" ] || continue
+    base="$(basename "${h}")"
+    # Skip co-deployed SOURCED libraries. setup-workspace.sh install_hooks (#1850)
+    # co-deploys shared primitives NEXT TO the hooks — path-leak-patterns.sh
+    # (block-gh-path-leak dependency) and lib-instance-path.sh (block-scope-
+    # segregation needle resolver). They are SOURCED by hooks at runtime, never
+    # invoked directly, so they carry no +x requirement: path-leak-patterns.sh
+    # ships mode -rw-r--r-- by design. The hook-registry convention ("not a
+    # registered hook — no block-* name") already ignores them; without this skip
+    # doctor's naive *.sh glob FAILs a HEALTHY install with a misleading chmod
+    # remedy (#302). Every real entrypoint (block-* security hooks AND the
+    # notify-/audit-/session-/… lifecycle hooks) is still checked. Shebang is NOT
+    # a discriminator — sourced libs carry one too — so match the sourced-lib
+    # naming patterns, mirroring the install_hooks co-deploy set.
+    case "${base}" in
+      lib-*.sh|*-patterns.sh) continue ;;
+    esac
     count=$((count + 1))
     if [ ! -x "${h}" ]; then
-      missing="${missing:+${missing}, }$(basename "${h}")"
+      missing="${missing:+${missing}, }${base}"
     fi
   done
   if [ "${count}" -eq 0 ]; then

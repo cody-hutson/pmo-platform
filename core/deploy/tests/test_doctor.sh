@@ -89,6 +89,19 @@ build_fixture() {
   printf '#!/usr/bin/env bash\ntrue\n' > "${sbx}/Claude/.claude/hooks/block-alpha.sh"
   printf '#!/usr/bin/env bash\ntrue\n' > "${sbx}/Claude/.claude/hooks/block-beta.sh"
   chmod +x "${sbx}/Claude/.claude/hooks/block-alpha.sh" "${sbx}/Claude/.claude/hooks/block-beta.sh"
+  # #302 regression guard: co-deployed SOURCED libraries live NEXT TO the hooks
+  # (setup-workspace.sh install_hooks, #1850) — path-leak-patterns.sh + lib-*.sh.
+  # They are sourced BY hooks, never invoked directly, so a healthy install ships
+  # them WITHOUT +x (path-leak-patterns.sh is mode -rw-r--r-- in-repo). Seeding
+  # them at mode 644 here makes the healthy baseline (assertion A) exercise the
+  # exact false-positive doctor.sh must NOT raise: check_hooks_runnable requires
+  # +x only on real hook ENTRYPOINTS, not sourced libs. (They carry a shebang, so
+  # this also proves the discriminator is name-based, not shebang-based.)
+  printf '#!/usr/bin/env bash\n# sourced pattern primitive (block-gh-path-leak dep)\n' \
+    > "${sbx}/Claude/.claude/hooks/path-leak-patterns.sh"
+  printf '#!/usr/bin/env bash\n# sourced needle resolver (block-scope-segregation dep)\n' \
+    > "${sbx}/Claude/.claude/hooks/lib-instance-path.sh"
+  chmod 644 "${sbx}/Claude/.claude/hooks/path-leak-patterns.sh" "${sbx}/Claude/.claude/hooks/lib-instance-path.sh"
   printf -- '---\nname: demo-skill\n---\nbody\n' > "${sbx}/.claude/skills/demo-skill/SKILL.md"
 }
 
@@ -139,6 +152,21 @@ assert_line "${OUT}" '^\[PASS\] qa-registry ' "healthy: #299 QA registry PASS (L
 assert_line "${OUT}" 'VERDICT PASS'           "healthy: overall VERDICT PASS"
 # C (part 1): read-only invariant across the healthy run.
 assert_eq "${GIT_BEFORE}" "${GIT_AFTER}"      "read-only: git status --porcelain unchanged (healthy run)"
+
+# A2 — #302 regression guard: the healthy fixture now co-deploys NON-executable
+# sourced libraries (path-leak-patterns.sh + lib-instance-path.sh at mode 644)
+# next to the hooks, exactly as setup-workspace.sh install_hooks does (#1850).
+# doctor must treat them as sourced libs (no +x requirement), NOT as hooks: the
+# hooks check stays PASS, the overall verdict stays PASS (asserted in A), and the
+# report must not name a sourced lib in a chmod remedy. This closes the fixture
+# gap that let the false-positive ship (the old healthy fixture used only +x
+# block-*.sh, never a co-deployed sourced primitive). Assertions run against the
+# section-A run's OUT (that fixture already carries the sourced libs).
+printf '\nA2. #302 sourced-lib false-positive guard (non-exec sourced lib beside hooks)\n'
+assert_line   "${OUT}" '^\[PASS\] hooks '            "sourced-lib: hooks check PASS with non-exec sourced libs present"
+assert_absent "${OUT}" '^\[FAIL\] hooks '            "sourced-lib: hooks check not FAILed by a sourced lib"
+assert_absent "${OUT}" 'path-leak-patterns\.sh'      "sourced-lib: report does not flag path-leak-patterns.sh"
+assert_absent "${OUT}" 'lib-instance-path\.sh'       "sourced-lib: report does not flag lib-instance-path.sh"
 
 # =========================================================================== #
 # B. Per-fault -> matching flag (fresh fixture each time)                      #
