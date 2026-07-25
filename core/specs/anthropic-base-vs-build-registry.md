@@ -30,6 +30,8 @@ registry does NOT prescribe migration, consolidation, or build-vs-buy actions (p
  body AC3 and the audit-class
 output discipline at [review-discipline-principles.md](../disciplines/review-discipline-principles.md)).
 
+**Related artifact (separate, prescriptive — this registry stays observational).** The [skill-consultation map](skill-consultation-map.md) consumes these overlap-posture observations to route run-time capability consultation (which in-house skill covers a capability dimension, and whether an Anthropic counterpart even exists to back up to). That map — not this registry — is the home for any in-house-first / Anthropic-backup prescription; the governing rule is [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md). This pointer is descriptive only and adds no prescription here.
+
 The methodology lives in
 [`platform-health-audit-framework.md`](../../release/references/protocols/platform-health-audit-framework.md);
 this file is the instance.
