@@ -30,4 +30,5 @@ core/rules/bypass-mode-readiness/block-egress.md
 core/rules/bypass-mode-readiness/block-fs-boundary.md
 core/rules/bypass-mode-readiness/block-mcp-writes.md
 core/rules/bypass-mode-readiness/block-rm-prefer-trash.md
+core/rules/bypass-mode-readiness/block-scope-segregation.md
 core/rules/bypass-mode-readiness/block-shell-injection.md

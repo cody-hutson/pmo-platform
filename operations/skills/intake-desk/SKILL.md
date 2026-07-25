@@ -296,6 +296,26 @@ the tracker CLI is unavailable or the user declines auto-create, it returns a
 copy/paste-ready body plus the exact create command, and says the item was not
 auto-filed.
 
+**Destination routing (the multi-destination read path).** When
+`operator.toml` declares `[trackers.<id>]` destinations, the create path resolves
+WHICH destination to file to before building the create command, in this order:
+**(1)** an explicit operator selection for this filing; else **(2)** the active
+project's `PROJECT.md` `work_tracker:` field (see
+[`core/schemas/project-schema.md`](../../../core/schemas/project-schema.md)
+`work_tracker`); else **(3)** the `default` tracker
+(`[trackers].default_id`, or the single back-compat destination derived from
+`[adapters].ticketing`). **Fail-closed (CD-1):** once ANY `[trackers.*]` is
+declared, a private-scope project with an UNSET `work_tracker` MUST NOT fall
+through to a `scope: public` destination — surface the ambiguity and require an
+explicit destination selection (or route to a non-public safe default) rather
+than silently filing private-origin work to a public tracker. When NO
+`[trackers.*]` are declared at all, filing uses today's single-GitHub default
+(zero operator action — back-compat). The scope-segregation guardrail
+(`core/hooks/block-scope-segregation.sh`) is the filing-time enforcing backstop:
+it refuses private/PII-marked content bound for a `scope: public` destination, so
+a mis-routed private item is blocked at the tool call even if the routing above is
+bypassed.
+
 ## Reference files
 
 | File | Read when |

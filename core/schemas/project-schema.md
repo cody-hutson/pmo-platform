@@ -92,6 +92,17 @@ org_structure_type: functional | matrix_weak | matrix_balanced | matrix_strong |
                                            # OPTIONAL — PMBOK org-structure shape; default `functional` when absent.
                                            # Closed enum + `Custom` escape (mirrors delivery_approach). Drives portfolio org-shape rollups.
 
+# Work-tracker routing — NEW — names the destination this project files to
+work_tracker: string                       # OPTIONAL — the id of an operator.toml [trackers.<id>] destination
+                                           # (e.g. work_tracker: work). Names WHERE work items for this project
+                                           # are filed. Filing-resolution order: explicit operator selection >
+                                           # this project's work_tracker > the `default` tracker. FAIL-CLOSED
+                                           # (CD-1): once ANY [trackers.*] is declared, a private-scope project with
+                                           # an UNSET work_tracker MUST NOT fall through to a public destination —
+                                           # resolution fails closed (blocks / requires explicit selection) rather
+                                           # than routing private-origin work to public. Absent + no [trackers.*]
+                                           # declared → the back-compat single-GitHub default (zero operator action).
+
 # Project team roster — NEW; the project-altitude INDEX into the people-graph (ADR-040 owner-ref pattern)
 team_roster:                               # OPTIONAL — list of {person_ref, role_on_project}; REFS ONLY, no inline PII
   - person_ref: ref→Person.person_id       # REQUIRED per entry — resolves to a roster Person (compose, never copy)
@@ -118,6 +129,7 @@ Field presence rules summary:
 | `release_methodology` | ⚪ Optional | when present: same grammar (V17); absent → the release space falls back to `delivery_approach` (new) |
 | `deliverable_type` | ⚪ Optional (legacy) / ✅ Required (forward) | open enum: recognized class OR non-empty lowercase-kebab; additive on legacy files |
 | `org_structure_type` | ⚪ Optional | default `functional` when absent (new) |
+| `work_tracker` | ⚪ Optional | when present, must name a declared `operator.toml` `[trackers.<id>]` id; absent → routing falls back per the resolution order, fail-closed for a private-scope project when `[trackers.*]` are configured (new) |
 | `team_roster` | ⚪ Optional | when present, every entry is `{person_ref → Person.person_id, role_on_project}`; refs only (new) |
 
 ## 4. Field Reference
@@ -265,6 +277,16 @@ Optional. Enum — one of 7 PMBOK organizational-structure archetypes + a `Custo
 **Default.** When absent, consumers treat the project as `functional` (the PMBOK baseline — lowest PM authority, the conservative assumption for portfolio rollups). The default is documented, not silent: a consumer rendering an org-shape rollup states `[ASSUMPTION] org_structure_type absent — defaulting to functional`.
 
 **Consumer use.** Portfolio rollups (`weekly-status-rollup`, `pmo-portfolio-manager`) compare org shape across projects; alignment/escalation consumers read PM-authority level from the value. `[SOURCE]` — PMBOK 6th ed. organizational-structure-influence table (functional → projectized authority spectrum); enum shape mirrors `delivery_approach`.
+
+### `work_tracker`
+
+Optional (introduced by the multi-destination work-tracker capability). Names the **work-tracker destination** this project files work items to — a string that must match the id of a declared `operator.toml` `[trackers.<id>]` subtable (e.g. `work_tracker: work` → `[trackers.work]`). It is the project-altitude routing pointer for the multi-destination tracker model; the tracker's `platform` / `identifier` / `scope` are read from `operator.toml`, never restated here (compose, never copy).
+
+**Filing-resolution order (the routing read path).** A skill that files a work item resolves the destination by: **(1)** an explicit operator selection for this filing, else **(2)** the active project's `work_tracker`, else **(3)** the `default` tracker (`[trackers].default_id`, or the single back-compat destination derived from `[adapters].ticketing`).
+
+**Fail-closed default (CD-1).** Once ANY `[trackers.*]` is declared, resolution is fail-closed for a private-scope project: a project whose scope is private (or unknown) with an UNSET `work_tracker` MUST NOT fall through to a `scope: public` destination — resolution blocks or requires an explicit selection rather than routing private-origin work to public. When NO `[trackers.*]` are declared at all, resolution uses the back-compat single-destination default (today's single-GitHub behavior, zero operator action).
+
+**Consumer use.** `operations/skills/intake-desk/SKILL.md` (the concrete filing driver) reads this field on its create path; `core/hooks/block-scope-segregation.sh` is the filing-time enforcing backstop (refuses private/PII-marked content to a `scope: public` destination). Downstream filing consumers adopt the same resolution rule when their create path is next touched. `[SOURCE]` — the multi-destination-tracker Stage-5 Solutioning DD-6 + A6.5 CD-1.
 
 ### `team_roster`
 

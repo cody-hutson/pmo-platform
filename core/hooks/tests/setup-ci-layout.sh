@@ -111,6 +111,19 @@ else
   log "setup-ci-layout: WARNING path-leak primitive missing at ${PRIMITIVE_SRC}"
 fi
 
+# 1b') Co-locate the shared operator-instance / needle resolver next to the hooks,
+#      mirroring the deployed posture (setup-workspace.sh co-deploys it to .claude/hooks/).
+#      block-scope-segregation.sh (#384) resolves it from ${HOOK_DIR}/lib-instance-path.sh
+#      for its CD-4 localized-needle scan; the source lives at core/deploy/, outside the
+#      hooks dir the loop above copies.
+NEEDLELIB_SRC="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
+if [ -f "${NEEDLELIB_SRC}" ]; then
+  cp "${NEEDLELIB_SRC}" "${HOOKS_DST}/"
+  log "setup-ci-layout: co-located needle resolver -> ${HOOKS_DST}/lib-instance-path.sh"
+else
+  log "setup-ci-layout: WARNING needle resolver missing at ${NEEDLELIB_SRC}"
+fi
+
 # 1c) Co-locate the shared jq/dependency resolver at .claude/hooks/lib/, mirroring the
 #     deployed posture (setup-workspace.sh co-deploys it there). Every security hook
 #     sources it from ${HOOK_DIR}/lib/dep-resolve.sh and fails CLOSED without it

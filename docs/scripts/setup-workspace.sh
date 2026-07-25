@@ -1186,6 +1186,26 @@ install_hooks() {
     printf 'rm-file:%s\n' "${primitive_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the shared operator-instance / needle resolver NEXT TO the hooks.
+  # block-scope-segregation.sh (#384) sources it from ${HOOK_DIR}/lib-instance-path.sh
+  # at runtime to resolve the gitignored localized-context needle file (its CD-4
+  # coworker/org/client-project needle scan); the source lib lives at core/deploy/
+  # (shared with deploy.sh + git-pre-commit-pii.sh), which the deployed .claude/hooks/
+  # cannot reach — so without this copy the hook's localized-needle class silently
+  # no-ops. It is a sourced lib, not a registered hook (no block-* name), so the
+  # hook-registry checks correctly ignore it. Mirrors the path-leak primitive co-deploy.
+  local needlelib_src="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  local needlelib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib-instance-path.sh"
+  if [ ! -r "${needlelib_src}" ]; then
+    warn "lib-instance-path.sh not found at ${needlelib_src}; block-scope-segregation localized-needle scan will no-op"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy lib-instance-path.sh → ${needlelib_dst}"
+  else
+    cp "${needlelib_src}" "${needlelib_dst}"
+    info "INSTALLED: lib-instance-path.sh (block-scope-segregation needle resolver)"
+    printf 'rm-file:%s\n' "${needlelib_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   # Co-deploy the shared jq/dependency resolver into .claude/hooks/lib/. Every security
   # hook sources it from ${HOOK_DIR}/lib/dep-resolve.sh at runtime (GHSA-9cjm-v22x-4x33)
   # and fails CLOSED without it — so a missing copy would make the deployed hooks block

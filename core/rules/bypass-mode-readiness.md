@@ -5,9 +5,9 @@
 
 ## Purpose
 
-Eight PreToolUse hooks enforce security invariants that make it safe to run Claude Code in `bypassPermissions` mode (no prompts). Grounded in a 5-persona adversarial review (Red Team, SRE, Shell Engineer, UX, Governance) that identified 7 Critical and 10 High findings in the initial design.
+Nine PreToolUse hooks enforce security invariants that make it safe to run Claude Code in `bypassPermissions` mode (no prompts). Grounded in a 5-persona adversarial review (Red Team, SRE, Shell Engineer, UX, Governance) that identified 7 Critical and 10 High findings in the initial design.
 
-These eight are the **bypass-mode security hooks**. Other `block-*.sh` scripts in `core/hooks/` are owned by their own discipline docs and are NOT part of this registry — each declares its owner in its own `# hook-owner:` header line. Currently these are `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](skill-deployment.md)), `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md)), and `block-gh-path-leak.sh` + `block-draft-files.sh` (git-workflow discipline — owned by [`core/rules/git-workflow.md`](git-workflow.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc** (its `# hook-owner:` line), so this scoping is enforced, not merely asserted.
+These nine are the **bypass-mode security hooks**. Other `block-*.sh` scripts in `core/hooks/` are owned by their own discipline docs and are NOT part of this registry — each declares its owner in its own `# hook-owner:` header line. Currently these are `block-skill-direct-edit.sh` (skill-edit discipline — owned by [`core/standards/canonical-skill-structure.md`](../standards/canonical-skill-structure.md), operationally surfaced in [`skill-deployment.md`](skill-deployment.md)), `block-fragile-refs.sh` (reference-durability discipline — owned by [`core/standards/reference-durability-standard.md`](../standards/reference-durability-standard.md)), and `block-gh-path-leak.sh` + `block-draft-files.sh` (git-workflow discipline — owned by [`core/rules/git-workflow.md`](git-workflow.md)). The hook-registry completeness check (`deploy.sh --check`) reconciles every `core/hooks/block-*.sh` against its **declared owning doc** (its `# hook-owner:` line), so this scoping is enforced, not merely asserted.
 
 > **This file is GENERATED.** The canonical index `core/rules/bypass-mode-readiness.md` is assembled at deploy time by [`core/deploy/tools/build-hook-registry.py`](../deploy/tools/build-hook-registry.py) from the per-hook source fragments under `core/rules/bypass-mode-readiness/`. Do NOT hand-edit this file — edit the per-hook source (`bypass-mode-readiness/block-<hook>.md`) or a cross-cutting fragment (`bypass-mode-readiness/_header.md`, `bypass-mode-readiness/_cross-cutting.md`) and regenerate. The `deploy.sh --check` index-freshness check fails any stale committed index; the completeness check fails any hook script missing its owner. Per [ADR-030](../ADRs/ADR-030-hook-registry-drop-in-with-generated-index.md).
 
@@ -24,6 +24,7 @@ These eight are the **bypass-mode security hooks**. Other `block-*.sh` scripts i
 | [`block-fs-boundary.sh` (BLOCK-FS-BOUNDARY-001..003)](#block-fs-boundarysh-block-fs-boundary-001003) | Workspace-boundary scoping for Bash file commands beyond settings.deny coverage (cat/head/tail/sed); file-read (cat/head/tail/less/more/base64/xxd/od/hexdump/strings) + file-write (cp/mv/tee/dd) source+target; resolved-path prefix-match against `.claude/fs-boundary-allowlist.txt`; strict-policy on unresolvable tokens |
 | [`block-mcp-writes.sh` (BLOCK-MCP-001)](#block-mcp-writessh-block-mcp-001) | MCP tools matching write-verb pattern, gated by allowlist |
 | [`block-rm-prefer-trash.sh` (BLOCK-TRASH-001..003)](#block-rm-prefer-trashsh-block-trash-001003) | Workspace-scoped deletion containment; `rm`/`rmdir`/`unlink`/`trash`/`osascript` Trash-verb whose resolved path is outside `${HOME}/Claude/` or unresolvable under strict policy; `rm` inside workspace redirects to Trash via auto-detected command |
+| [`block-scope-segregation.sh` (BLOCK-SCOPE-SEG-001..099)](#block-scope-segregationsh-block-scope-seg-001099) | Destination-sensitivity content gate: on a tracker-FILING verb, resolves the filing destination → its `scope` from operator.toml `[trackers.<id>]`, and refuses private/PII-marked content bound for a `scope: public` destination. Reuses the existing PII substrate (`path-leak-patterns.sh` + the git-pre-commit-pii.sh generic patterns + the gitignored localized-context needles) — no new detector. Composes with (does not duplicate) `block-gh-path-leak.sh` (path-needle → gh, Bash-only, public-assumed): this hook adds the full needle set × declared destination-scope × Bash-gh AND MCP filers. |
 | [`block-shell-injection.sh` (BLOCK-SHELL-INJECTION-001..002)](#block-shell-injectionsh-block-shell-injection-001002) | Slash-command argument shell-injection vectors: script-execution followed by chain metachar leading into command verb, or script-execution with command substitution `$(...)` / backtick in argv |
 
 ## `block-autonomy-ceiling.sh` (BLOCK-AUTONOMY-001..099)
@@ -240,6 +241,36 @@ For each target token after the matched verb (flag tokens skipped):
 
 See [`§ Absolute-Path-Aware Verb Anchor`](bypass-mode-readiness.md) — this hook's `extract_target_tokens()` awk script strips the canonical absolute-path prefix before the verb-equality check, atomically coupled with the anchor regex within the hook file. See [`§ Known Limitations`](bypass-mode-readiness.md) for the nested-shell, quoted-path, other-deletion-mechanism, and pre-existing-`/usr/bin/trash` residuals.
 
+## `block-scope-segregation.sh` (BLOCK-SCOPE-SEG-001..099)
+
+| Field | Value |
+|---|---|
+| Hook | `.claude/hooks/block-scope-segregation.sh` |
+| Matcher | Bash, `mcp__.*` |
+| Scope | Destination-sensitivity content gate: on a tracker-FILING verb, resolves the filing destination → its `scope` from operator.toml `[trackers.<id>]`, and refuses private/PII-marked content bound for a `scope: public` destination. Reuses the existing PII substrate (`path-leak-patterns.sh` + the git-pre-commit-pii.sh generic patterns + the gitignored localized-context needles) — no new detector. Composes with (does not duplicate) `block-gh-path-leak.sh` (path-needle → gh, Bash-only, public-assumed): this hook adds the full needle set × declared destination-scope × Bash-gh AND MCP filers. |
+| Mode | Split posture. The **always-block tier** (`BLOCK-SCOPE-SEG-004` — a high-confidence identity/private needle → a `scope: public` destination) fires **mode-independent** (mirrors `git-pre-commit-pii.sh`'s unconditional exit + `block-autonomy-ceiling.sh` `always_block`); `.scope-segregation-mode=off` is its only kill-switch (a warn window must not be a window of irreversible public PII exposure). The **fuzzy / destination-resolution layer** (`001` unmapped-destination fail-closed, `002` empty-extraction fail-closed, `003` primitive-missing fail-closed) is gated by this hook's **OWN** mode file `.scope-segregation-mode` (warn / enforce / off), NOT the shared `.claude/hooks/.mode`; ships **warn-mode-initial**. The ENFORCE flip for the fuzzy layer is a SEPARATE operator gate. Back-compat: with NO `[trackers.*]` declared, an unmapped filing is ALLOWED (single-stream). |
+
+### Rule registry
+
+| Rule ID | Description |
+|---|---|
+| BLOCK-SCOPE-SEG-001 | CD-1 fail-closed routing default — a filing to an UNMAPPED tracker destination while `[trackers.*]` ARE configured. The operator opted into segregation, so an unmapped target's scope is unknown and must not silently pass toward public. Mode-gated (`.scope-segregation-mode`, warn-initial). With NO `[trackers.*]` configured → allowed (back-compat single-stream) |
+| BLOCK-SCOPE-SEG-002 | CD-3 fail-closed content-extraction — on the mapped-`scope: public` branch, the authored content extracted EMPTY / unparseable (common on the MCP surface: Jira ADF description, Smartsheet cell values, Linear description). Cannot verify the content is clean → fail closed. Mode-gated (warn: would-block; enforce: block). UNLIKE `block-gh-path-leak.sh`'s fail-open-on-empty |
+| BLOCK-SCOPE-SEG-003 | Fail-closed primitive-missing — on the mapped-`scope: public` branch, the shared `path-leak-patterns.sh` primitive is unavailable/invalid so the content scan cannot run. Mode-gated (enforce blocks; warn would-blocks) |
+| BLOCK-SCOPE-SEG-004 | CD-2 always-block — private/PII-marked content (operator home-path / phone / personal-email, or a coworker/org/client-project localized needle) bound for a `scope: public` destination. **Always-block, mode-independent** (only `.scope-segregation-mode=off` disables it); the allowlist `.claude/scope-segregation-allowlist.txt` + `CLAUDE_HOOK_BYPASS=1` are the per-match / per-session escapes |
+
+### Posture & coverage — block-scope-segregation.sh
+
+**Payload-triggered (per the ADR-031 precedent), NOT session-detection.** The hook fires on the tool-call payload — the universal signal all hooks use — and evaluates only tracker-FILING verbs (Bash `gh issue create` / `gh api … issues` / `gh issue|pr comment` / `gh project item-*`; the MCP filing-verb subset `create|add|comment|post|insert|update|edit|replace`). It fires on every Bash/MCP call, so the filing-verb early-exit is load-bearing.
+
+**Destination-scope resolution (section-aware).** The `[trackers.<id>]` subtables' `identifier` + `scope` are read within their own section blocks (section-AWARE — unlike `block-autonomy-ceiling.sh`'s section-blind `automation_level` grep — because a subtable's fields are only meaningful inside their `[trackers.<id>]` block). The destination identifier is extracted best-effort from the payload (Bash `--repo` / `repos/owner/name`; MCP common id fields); an unknown shape resolves to unmapped → the CD-1 branch.
+
+**Detector reuse (AC#3 mandate; DD-4 inline-reuse variant).** No new detector: home-path + bare-instance leaks via the shared `path-leak-patterns.sh` `path_leak_scan_line`; phone + personal-email via the two generic PATTERNS inlined from `git-pre-commit-pii.sh` (patterns, not PII — no PII is hardcoded in the tracked hook); coworker/org/client-project needles via the gitignored operator-instance needle file (`lib-instance-path.sh` `pmo_localized_needles`). Extracting a shared `pii-needle-patterns.sh` that both this hook and `git-pre-commit-pii.sh` source is a flagged post-release fast-follow.
+
+**CD-4 coverage boundary (stated honestly, not implied by a green test).** The reused substrate detects operator-IDENTITY PII by default (home-path / phone / personal-email) plus whatever ORGANIZATIONAL/PROJECT needles the operator has declared in the gitignored `localized-context-needles.txt`. Public-filing is therefore guarded for operator-identity PII unconditionally, and for arbitrary private-PROJECT content (client names / project codes / internal-system names) ONLY to the extent the operator has populated the client/project needle class (see `core/config/localized-context-needles.txt.example`). The full invariant — refuse-by-ORIGIN-scope regardless of whether the text trips a needle — is a higher-altitude provenance model surfaced for a future AC revision; this release ships content-scan (per AC#3) with the CD-1 routing fail-closed as the primary gate. Documented in [`ADR-090`](../ADRs/ADR-090-scope-segregation-action-gating-hook.md) + [`public-repo-vs-operator-instance-taxonomy.md`](../standards/public-repo-vs-operator-instance-taxonomy.md) § destination-sensitivity scope.
+
+**Design source.** The multi-destination-tracker Stage-5 Solutioning + its A6.5 adversarial review (the CD-1/CD-2/CD-3/CD-4 fail-closed amendments); recorded in [`ADR-090`](../ADRs/ADR-090-scope-segregation-action-gating-hook.md). It parallels [`ADR-031`](../ADRs/ADR-031-autonomy-ceiling-unified-payload-triggered-hook.md) (payload-trigger over session-detection; own-mode-file shakedown). See [`§ CLAUDE_HOOK_BYPASS Escape Hatch`](bypass-mode-readiness.md) for the operator escape semantics this hook honors.
+
 ## `block-shell-injection.sh` (BLOCK-SHELL-INJECTION-001..002)
 
 | Field | Value |
@@ -314,7 +345,7 @@ All security hooks exit 0 immediately when the env var is set, logging each invo
 
 ## Allowlist Maintenance
 
-Seven allowlists govern specific surfaces:
+Eight allowlists govern specific surfaces:
 
 | File | Surface | Format | Match |
 |---|---|---|---|
@@ -325,15 +356,16 @@ Seven allowlists govern specific surfaces:
 | `.claude/mcp-write-allowlist.txt` | MCP write tools | exact tool names | `grep -Fxq` |
 | `.claude/shell-injection-allowlist.txt` | Legitimate script-execution-plus-metachar patterns | bash glob patterns | shell `case` globbing |
 | `.claude/fs-boundary-allowlist.txt` | `block-fs-boundary.sh` allowed roots | absolute-path strings (NOT bash glob) | resolved-path prefix-match |
+| `.claude/scope-segregation-allowlist.txt` | `block-scope-segregation.sh` known-safe content strings (false-positive escape) | fixed-string substrings | substring match |
 
-These seven are the allowlists the bypass-mode hooks consult. The broader workspace carries additional allowlists owned by other surfaces (e.g. the skill-editor exemption list, the reference-durability allowlist, the doc-link skip list) — those belong to their own discipline docs, not this registry.
+These eight are the allowlists the bypass-mode hooks consult. The broader workspace carries additional allowlists owned by other surfaces (e.g. the skill-editor exemption list, the reference-durability allowlist, the doc-link skip list) — those belong to their own discipline docs, not this registry.
 
 **Adding entries:** Use the atomic-append helper:
 ```bash
 ./.claude/hooks/allowlist-add.sh <allowlist-file> '<entry>'
 ```
 
-The helper validates that the target is one of the 7 known allowlists and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
+The helper validates that the target is one of the 8 known allowlists and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
 
 **Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. Only `.claude/settings*.json` and `.claude/hooks/*` are protected.
 

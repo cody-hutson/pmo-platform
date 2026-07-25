@@ -37,6 +37,7 @@ readonly KNOWN_ALLOWLISTS=(
   "${CLAUDE_DIR}/skill-editor-exemption-list.txt"
   "${CLAUDE_DIR}/shell-injection-allowlist.txt"
   "${CLAUDE_DIR}/fs-boundary-allowlist.txt"
+  "${CLAUDE_DIR}/scope-segregation-allowlist.txt"
 )
 
 usage() {

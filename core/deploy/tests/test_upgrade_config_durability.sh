@@ -177,6 +177,18 @@ pmo_platform_repo_name = "pmo-platform"
 [platform]
 work_board = "github"
 comms_platform = ""
+
+[trackers.work]
+id = "work"
+platform = "jira"
+identifier = "PROJ"
+scope = "private"
+
+[trackers.personal]
+id = "personal"
+platform = "github-issues"
+identifier = "owner/public-repo"
+scope = "public"
 TOML
 chmod 600 "${SBX}/config/operator.toml"
 
@@ -311,6 +323,58 @@ else
   report "operator addition preserved byte-for-byte across real-delta upgrade" 0 \
     "before=[${ADDITION_BEFORE}] after=[${ADDITION_AFTER_G}]"
 fi
+
+# --- Stage 4b (Suite T / INT-1): [trackers.<id>] subtable durability (#384) ---
+# The load-bearing proof that Option B (named subtables) satisfies the #383 round-
+# trip and Option A ([[trackers]] array-of-tables) would NOT: two DISTINCT
+# [trackers.<id>] subtables seeded pre-install must survive the real-delta upgrade
+# round-trip parseable + DISTINCT + field-complete (no collapse into one block, no
+# dropped section, no merged keys).
+printf '\nStage 4b (Suite T / INT-1): [trackers.<id>] subtable durability round-trip\n'
+CFG_TOML="${SBX}/config/operator.toml"
+
+# (a) exactly TWO distinct [trackers.<id>] section headers survived (Option A would
+#     collapse both to a single [trackers] block → count 1 or 0).
+tr_count=$(grep -cE '^\[trackers\.[^]]+\]' "${CFG_TOML}" 2>/dev/null | tr -d ' ')
+if [ "${tr_count}" = "2" ]; then
+  report "two distinct [trackers.<id>] subtables survived round-trip (Option B; not collapsed)" 1
+else
+  report "two distinct [trackers.<id>] subtables survived round-trip (Option B; not collapsed)" 0 \
+    "expected 2 distinct [trackers.*] headers, found ${tr_count}"
+fi
+
+# (b) both named subtables present by name.
+if grep -qE '^\[trackers\.work\]' "${CFG_TOML}" && grep -qE '^\[trackers\.personal\]' "${CFG_TOML}"; then
+  report "both [trackers.work] and [trackers.personal] present after round-trip" 1
+else
+  report "both [trackers.work] and [trackers.personal] present after round-trip" 0 \
+    "one or both subtable headers missing in ${CFG_TOML}"
+fi
+
+# (c) field-complete + DISTINCT values (parsed section-aware): work→jira/PROJ/private,
+#     personal→github-issues/owner/public-repo/public. Distinct field values prove no
+#     key-merge across the two blocks.
+tr_parsed=$(awk '
+  function unq(v){ gsub(/^[ \t]+|[ \t]+$/,"",v); gsub(/^"|"$/,"",v); return v }
+  /^\[/ { intr=(/^\[trackers\.[^]]+\]/); if(intr){ sec=$0 } next }
+  intr && /^[[:space:]]*platform[[:space:]]*=/   { split($0,a,"="); print sec "|platform="   unq(a[2]) }
+  intr && /^[[:space:]]*identifier[[:space:]]*=/ { split($0,a,"="); print sec "|identifier=" unq(a[2]) }
+  intr && /^[[:space:]]*scope[[:space:]]*=/      { split($0,a,"="); print sec "|scope="      unq(a[2]) }
+' "${CFG_TOML}" 2>/dev/null)
+
+check_field() { # desc  needle
+  if printf '%s\n' "${tr_parsed}" | grep -qF "$2"; then
+    report "$1" 1
+  else
+    report "$1" 0 "missing [$2] in parsed trackers: $(printf '%s' "${tr_parsed}" | tr '\n' ';')"
+  fi
+}
+check_field "trackers.work field-complete (jira/PROJ/private)"                 "[trackers.work]|platform=jira"
+check_field "trackers.work identifier survived"                               "[trackers.work]|identifier=PROJ"
+check_field "trackers.work scope=private survived"                            "[trackers.work]|scope=private"
+check_field "trackers.personal field-complete (github-issues/public)"         "[trackers.personal]|platform=github-issues"
+check_field "trackers.personal identifier survived"                           "[trackers.personal]|identifier=owner/public-repo"
+check_field "trackers.personal scope=public survived (distinct from work)"    "[trackers.personal]|scope=public"
 
 # --- Stage 5 (Suite F): non-dry-run NO-OP update (re-run from the SAME source) ---
 printf '\nStage 5 (Suite F): non-dry-run no-op update (re-run from repo-next)\n'

@@ -36,7 +36,7 @@
 # (the macOS system bash), `declare -a` inside a function — or inside a script
 # sourced from a function — makes the array function-local; the caller never
 # sees it. The lib_compose_source_manifest helper IS a function, so any
-# `declare -a` here would silently break all 18 composition-surface installs.
+# `declare -a` here would silently break all 19 composition-surface installs.
 # Plain assignment is global by default in bash 3.2, which is what we need.
 # (Verified: bash 3.2.57(1)-release on Darwin 25.x.)
 
@@ -52,6 +52,7 @@ COMPOSITION_SURFACE_FILES=(
   "core/config/allowlists/ssh-allowlist.txt|hook|raw"
   "core/config/allowlists/mcp-write-allowlist.txt|hook|raw"
   "core/config/allowlists/shell-injection-allowlist.txt|hook|raw"
+  "core/config/allowlists/scope-segregation-allowlist.txt|hook|raw"
   "core/config/allowlists/skip-localized-context-check.txt|hook|raw"
   "core/config/allowlists/skip-release-note-check.txt|hook|raw"
 

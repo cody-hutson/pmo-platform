@@ -53,7 +53,7 @@ All security hooks exit 0 immediately when the env var is set, logging each invo
 
 ## Allowlist Maintenance
 
-Seven allowlists govern specific surfaces:
+Eight allowlists govern specific surfaces:
 
 | File | Surface | Format | Match |
 |---|---|---|---|
@@ -64,15 +64,16 @@ Seven allowlists govern specific surfaces:
 | `.claude/mcp-write-allowlist.txt` | MCP write tools | exact tool names | `grep -Fxq` |
 | `.claude/shell-injection-allowlist.txt` | Legitimate script-execution-plus-metachar patterns | bash glob patterns | shell `case` globbing |
 | `.claude/fs-boundary-allowlist.txt` | `block-fs-boundary.sh` allowed roots | absolute-path strings (NOT bash glob) | resolved-path prefix-match |
+| `.claude/scope-segregation-allowlist.txt` | `block-scope-segregation.sh` known-safe content strings (false-positive escape) | fixed-string substrings | substring match |
 
-These seven are the allowlists the bypass-mode hooks consult. The broader workspace carries additional allowlists owned by other surfaces (e.g. the skill-editor exemption list, the reference-durability allowlist, the doc-link skip list) — those belong to their own discipline docs, not this registry.
+These eight are the allowlists the bypass-mode hooks consult. The broader workspace carries additional allowlists owned by other surfaces (e.g. the skill-editor exemption list, the reference-durability allowlist, the doc-link skip list) — those belong to their own discipline docs, not this registry.
 
 **Adding entries:** Use the atomic-append helper:
 ```bash
 ./.claude/hooks/allowlist-add.sh <allowlist-file> '<entry>'
 ```
 
-The helper validates that the target is one of the 7 known allowlists and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
+The helper validates that the target is one of the 8 known allowlists and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
 
 **Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. Only `.claude/settings*.json` and `.claude/hooks/*` are protected.
 
