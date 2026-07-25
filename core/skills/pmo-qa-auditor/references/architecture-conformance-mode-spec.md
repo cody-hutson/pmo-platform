@@ -177,7 +177,7 @@ must match **≥1 form AND resolve** (reused verbatim from the fitness-audit evi
 |---|---|---|---|
 | CF-1 | resolving `path:line` | `[A-Za-z0-9_./-]+\.(md\|sh\|py\|yml\|yaml\|toml\|json):[0-9]+` | file exists AND line ≤ file length |
 | CF-2 | reproducible command + observed output | a backticked read-only command (`grep`/`git`/`gh`/`ls`/`find`/`wc`) followed by an output marker (`→` or a quoted result) | command is read-only-class; observed output present |
-| CF-3 | resolvable work-item / PR / release ref | `#[0-9]+` or `v[0-9]+\.[0-9]+(\.[0-9]+)?` | resolves via the repo host; version ref exists in the release ledger or tag set |
+| CF-3 | resolvable work-item / PR / release ref | a hash-prefixed issue/PR number (a `#` followed by digits), or a `v`-prefixed release version (`vMAJOR.MINOR`, optionally `.PATCH`) | resolves via the repo host; version ref exists in the release ledger or tag set |
 | CF-4 | commit / SHA-anchored cite | `\b[0-9a-f]{7,40}\b` (optionally `:<path>`) | `git cat-file -e <sha>` succeeds |
 
 **Pre-emit self-check:** re-validate a seeded sample (seed = the run's `${AUDIT_DATE_UTC}`;

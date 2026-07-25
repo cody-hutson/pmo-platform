@@ -102,7 +102,7 @@ confused with F-SEV-05's baseline-EXISTS-but-LOW-confidence case.
 
 ## Family 3 — Fragmentation (the behavioral fixture; SEEDED; exact)
 
-### F-FRAG-01 — two divergent deliveries → exactly one finding + zero issues (AC#4 / AC#8)
+### F-FRAG-01 — two divergent deliveries → exactly one finding + zero issues (AC-4 / AC-8)
 - **Seeded input (architecture datum supplied explicitly):**
   - Release `vX` delivers capability **K** citing architecture **α** (a specific ADR).
   - Release `vY` (`Y > X`) delivers the same capability **K** citing a **divergent** architecture
@@ -116,8 +116,8 @@ confused with F-SEV-05's baseline-EXISTS-but-LOW-confidence case.
   - **ZERO GitHub issues created** — the run is report-only; the finding lands only in the
     findings-register + an `issue-drafts/NNN-*.md` observation, never `gh issue create`.
 - **Ground-truth label (candidate):** one finding · zero issues.
-- **Adjudication note:** this is the AC#4 "seeded fixture of two divergent deliveries yields
-  exactly one fragmentation finding" AND the AC#8 "creates zero new GitHub issues." Deterministic
+- **Adjudication note:** this is the AC-4 "seeded fixture of two divergent deliveries yields
+  exactly one fragmentation finding" AND the AC-8 "creates zero new GitHub issues." Deterministic
   because the architecture datum is seeded — the dedup/counting is exact.
 
 ### F-FRAG-02 — single delivery under a key → zero fragmentation findings
