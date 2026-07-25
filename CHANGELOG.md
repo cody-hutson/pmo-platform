@@ -8,6 +8,24 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.85] - 2026-07-24
+
+Release close-out now verifies the published notes page, rebuilds changed skill packages, and requires a sample for format changes.
+
+[Full notes](release/releases/notes/v3.85_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.85)
+
+## [v3.84] - 2026-07-24
+
+Concurrent releases no longer collide when updating shared release records, and a release without a version number is now a first-class option.
+
+[Full notes](release/releases/notes/v3.84_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.84)
+
+## [v3.83] - 2026-07-22
+
+Adds internal measurement of release close-out quality and ships a session-learning sensor that is present but not yet switched on.
+
+[Full notes](release/releases/notes/v3.83_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.83)
+
 ## [v3.82] - 2026-07-22
 
 Exec briefs state a concrete consequence, status updates cite the entries behind them, and escalations read the stakeholder register.
@@ -171,6 +189,12 @@ Foundation release — the packs aren't read by the skills yet ([#2021](https://
 <one-sentence ≤140 chars; plain language; agent-search target>
 
 [Full notes](release/releases/notes/v3.58_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.58)
+
+## [v3.57] - 2026-07-02
+
+Impact analysis now follows the code import graph for software changes, and git-native releases no longer dead-end at the dry-run halt.
+
+[Full notes](release/releases/notes/v3.57_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.57)
 
 ## [v3.56] - 2026-07-02
 

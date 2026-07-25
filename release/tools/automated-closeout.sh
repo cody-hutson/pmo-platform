@@ -15,18 +15,24 @@
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
+#   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
+#   9.9 ledger_guard       pre-commit §220 I1/I2 read-modify-write guard on the 4 append-only ledgers (#1680)
+#   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
+#   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift)
+#   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
+#   16.5 pattern_scan      optional synthesize-release-learnings.sh --mode pattern-detect (only with --with-pattern-scan)
 #   17 generate_report     structured markdown or JSON close-out report
 #
 # Usage:
@@ -178,8 +184,13 @@ COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
 # Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
 # source of the published-body-vs-stripped-note equality logic; phase 15.6 below
-# invokes it as the post-emit detective assert (warn-mode — never blocks close).
+# invokes it as the post-emit assert. Genuine drift BLOCKS the close (cutoff-gated,
+# sharing deploy.sh Check 47's cutoff so the two surfaces cannot disagree); the
+# capability-absent and artifact-missing exits stay non-blocking.
 DRIFT_CHECK_TOOL="$SCRIPT_DIR/check-release-body-drift.sh"
+# Shared with deploy.sh Check 47 — see phase 15.6 for why the close-path block is
+# cutoff-gated at all. Same complete-token default; __none__ is the opt-out.
+DRIFT_CHECK_CUTOFF="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-v3.78}"
 # NOTE (#667 Finding 6): phase_append_release_index no longer invokes the
 # deterministic INDEX generator (core/deploy/tools/generate_release_index.py).
 # The full-regenerate path could re-sort/reorder unrelated rows (the churn root),
@@ -246,6 +257,13 @@ MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
                          # phase_publish_github_release binds the Release --target
                          # to it and asserts the tag points at it.
 
+# .skill packages rebuilt by phase_rebuild_skill_packages (Phase 9.95): one
+# "packages/<skill>.skill" + "packages/<skill>.skill.sha256" pair per skill whose
+# source (or an injected canonical) changed in the release diff. Populated there,
+# consumed by phase_commit_chore_pr's files=() staging array + its post-commit
+# staging-completeness assertion. Empty on a release that touches no skill source.
+REBUILT_PACKAGES=()
+
 # Phase outcomes (PASS / FAIL / SKIPPED / N/A / DRY-RUN / MANUAL)
 # Bash 3.2 (macOS default) lacks associative arrays — use parallel indexed arrays
 # keyed by phase name. Lookup is O(n) but phase count is small (<20).
@@ -256,7 +274,7 @@ PHASE_DETAILS=()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
-  /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
+  /usr/bin/sed -n '2,83p' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -1032,7 +1050,7 @@ PY
   return 0
 }
 
-# ─── Phase 8.5: append_reversions (#1679 — machine-readable re-version ledger) ─
+# ─── Phase 8.5: append_reversions (#1679; SLIM #3109 — orphan-tag recovery record) ─
 #
 # Appends row(s) to RELEASE_REVERSIONS.md — the append-only re-version ledger —
 # ONE row per ABANDONED version, ONLY when this release re-versioned mid-pipeline.
@@ -1056,10 +1074,65 @@ PY
 # abandoned_tag_pushed maps to `unrecoverable` only via an explicit pre-instrumentation
 # marker, never inferred here.
 #
+# SLIM (#3109): only a `tag-orphaned` disposition is RECORDED going forward — a `none`
+# abandoned version (no orphan tag; the common defer-to-merge path, or a version that is
+# canonical for a live sibling row) is gated out AFTER the probe, so an all-`none`
+# re-version records N/A and writes nothing. Historical `none`/`unrecoverable` rows are
+# retained (append-only). The ledger is an orphan-tag recovery record — the input the
+# recovery-doctrine reaper reads — not a collision-rate telemetry surface.
+#
 # Idempotent: a (slug, abandoned_version) row already present is skipped. Append is
 # chronological-recent-first (below the `|---` separator), matching the sibling
 # corpus surfaces. The consumer (recovery doctrine) transitions disposition/reaped_ref
 # in place; this producer ONLY appends.
+
+# reversion_disposition <abandoned_version> — ground the disposition by probing origin
+# for the abandoned tag. Echoes "<disposition>|<abandoned_tag_pushed>". Read-only.
+reversion_disposition() {
+  local abv="$1" on_origin
+  on_origin="$(git ls-remote --tags "${REMOTE_NAME:-origin}" "refs/tags/${abv}" 2>/dev/null | /usr/bin/grep -c "refs/tags/${abv}$" 2>/dev/null || true)"; on_origin="${on_origin:-0}"
+  if [[ "$on_origin" -gt 0 ]]; then
+    # Present on origin. If it is the canonical Tag of a live RELEASE_LOG row, it
+    # belongs to a sibling (never reap) => disposition none. Otherwise an orphan
+    # of THIS release awaiting the reaper => tag-orphaned.
+    if /usr/bin/grep -qE "^\| ${abv} \|" "$RELEASE_LOG" 2>/dev/null \
+       || /usr/bin/grep -qE "\| \`?${abv}\`? \| (VERIFIED|DEPLOYED) \|" "$RELEASE_LOG" 2>/dev/null; then
+      /usr/bin/printf 'none|false\n'
+    else
+      /usr/bin/printf 'tag-orphaned|true\n'
+    fi
+  else
+    /usr/bin/printf 'none|false\n'
+  fi
+}
+
+# reversion_classify <slug> <abandoned_version> — THE single decision point for whether a
+# row gets written. Echoes "<outcome>|<disposition>|<tag_pushed>" where outcome is:
+#   present — a (slug, abandoned_version) row already exists (idempotency skip)
+#   gated   — disposition=none: no orphan tag, so SLIM (#3109) records nothing
+#   record  — disposition=tag-orphaned: a row IS written
+#
+# PARITY (#3109 F-01, the #2539 dry-run/apply parity-gap class): the dry-run preview and
+# the apply loop BOTH route through this helper, so the preview counts exactly the rows
+# apply will write. The two paths previously duplicated the predicate — the SLIM gate was
+# added to the apply loop only, and the preview kept counting every abandoned version. A
+# dry-run that misstates the mutation defeats the governance control it exists to provide
+# (RELEASE_PROTOCOL.md § Dry-Run Protocol), so the predicate lives in ONE place. Read-only
+# in every branch (a `git ls-remote` probe + greps), hence safe to run in dry-run mode.
+reversion_classify() {
+  local slug="$1" abv="$2" d
+  if /usr/bin/grep -qE "^\| ${slug} \| ${abv} \|" "$RELEASE_REVERSIONS" 2>/dev/null; then
+    /usr/bin/printf 'present|none|false\n'
+    return 0
+  fi
+  d="$(reversion_disposition "$abv")"
+  if [[ "${d%%|*}" == "none" ]]; then
+    /usr/bin/printf 'gated|%s\n' "$d"
+  else
+    /usr/bin/printf 'record|%s\n' "$d"
+  fi
+}
+
 phase_append_reversions() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
@@ -1115,38 +1188,46 @@ print(" → ".join(parts))
 PY
 )"
 
+  # (4) Classify EVERY abandoned version through the one shared decision point, before
+  #     either path acts. `reversion_classify` applies the idempotency skip and the SLIM
+  #     gate (#3109) and is read-only, so dry-run and apply necessarily agree on the row
+  #     count — the parity the two duplicated predicates used to break (F-01).
+  local to_write="" gated_list="" present_list=""
+  local n_write=0 gated=0 n_present=0
+  local abv cls outcome rest
+  while IFS= read -r abv; do
+    [[ -z "$abv" ]] && continue
+    cls="$(reversion_classify "$slug" "$abv")"
+    outcome="${cls%%|*}"; rest="${cls#*|}"   # rest = "<disposition>|<tag_pushed>"
+    case "$outcome" in
+      record)  n_write=$((n_write+1));   to_write="${to_write}${abv}|${rest}"$'\n' ;;
+      gated)   gated=$((gated+1));       gated_list="${gated_list}${abv}," ;;
+      *)       n_present=$((n_present+1)); present_list="${present_list}${abv}," ;;
+    esac
+  done <<<"$abandoned_list"
+  gated_list="${gated_list%,}"; present_list="${present_list%,}"
+
   if [[ "$MODE" == "dry-run" ]]; then
-    local n_rows; n_rows="$(/usr/bin/printf '%s\n' "$abandoned_list" | /usr/bin/grep -c . 2>/dev/null || true)"; n_rows="${n_rows:-0}"
-    mark_phase "append_reversions" "DRY-RUN" "would append ${n_rows} row(s) to RELEASE_REVERSIONS.md for slug '$slug' (abandoned: $(/usr/bin/printf '%s' "$abandoned_list" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//'); final $rv_final)"
+    # Preview the POST-gate count — the rows apply will actually write. Reporting the raw
+    # abandoned-version count here is what broke parity on the dominant `none` path.
+    local detail="would append ${n_write} row(s) to RELEASE_REVERSIONS.md for slug '$slug' (final $rv_final)"
+    if [[ "$n_write" -eq 0 && "$gated" -gt 0 ]]; then
+      detail="${detail} — re-version left no orphan tag, nothing to record (SLIM #3109)"
+    elif [[ "$n_write" -eq 0 ]]; then
+      detail="${detail} — all abandoned-version rows for $slug already present (idempotent)"
+    fi
+    [[ "$gated" -gt 0 ]] && detail="${detail}; gated ${gated} (no orphan tag: ${gated_list})"
+    [[ "$n_present" -gt 0 ]] && detail="${detail}; already present ${n_present} (${present_list})"
+    mark_phase "append_reversions" "DRY-RUN" "$detail"
     return 0
   fi
 
-  # (4) Apply — one row per abandoned version, idempotent on (slug, abandoned_version),
-  #     disposition grounded by a tag probe. Each abandoned version is processed in turn.
+  # (5) Apply — write exactly the rows classified `record` above (no re-probe; the
+  #     disposition/tag_pushed carried through from the shared classifier).
   local date_str; date_str="$(date_today)"
-  local appended=0 abv
-  while IFS= read -r abv; do
+  local appended=0 disp tag_pushed
+  while IFS='|' read -r abv disp tag_pushed; do
     [[ -z "$abv" ]] && continue
-    # Idempotency: skip if (slug, abandoned_version) row already present.
-    if /usr/bin/grep -qE "^\| ${slug} \| ${abv} \|" "$RELEASE_REVERSIONS" 2>/dev/null; then
-      continue
-    fi
-    # disposition grounding: probe origin for the abandoned tag.
-    local on_origin disp tag_pushed
-    on_origin="$(git ls-remote --tags "${REMOTE_NAME:-origin}" "refs/tags/${abv}" 2>/dev/null | /usr/bin/grep -c "refs/tags/${abv}$" 2>/dev/null || true)"; on_origin="${on_origin:-0}"
-    if [[ "$on_origin" -gt 0 ]]; then
-      # Present on origin. If it is the canonical Tag of a live RELEASE_LOG row, it
-      # belongs to a sibling (never reap) => disposition none. Otherwise an orphan
-      # of THIS release awaiting the reaper => tag-orphaned.
-      if /usr/bin/grep -qE "^\| ${abv} \|" "$RELEASE_LOG" 2>/dev/null \
-         || /usr/bin/grep -qE "\| \`?${abv}\`? \| (VERIFIED|DEPLOYED) \|" "$RELEASE_LOG" 2>/dev/null; then
-        disp="none"; tag_pushed="false"
-      else
-        disp="tag-orphaned"; tag_pushed="true"
-      fi
-    else
-      disp="none"; tag_pushed="false"
-    fi
     # Hand-append below the first `|---` separator (chronological-recent-first).
     /usr/bin/python3 - "$RELEASE_REVERSIONS" "$slug" "$abv" "$rv_final" "$rv_seq_disp" "$tag_pushed" "$rv_sha" "$rv_collided" "$rv_stage" "$disp" "$rv_residual" "$date_str" <<'PY'
 import sys
@@ -1165,13 +1246,24 @@ with open(path, "w", encoding="utf-8") as f:
     f.write("\n".join(out) + "\n")
 PY
     appended=$((appended+1))
-  done <<<"$abandoned_list"
+  done <<<"$to_write"
 
   if [[ "$appended" -eq 0 ]]; then
-    mark_phase "append_reversions" "SKIPPED" "all abandoned-version rows for $slug already present (idempotent)"
+    # SLIM (#3109): separate an all-`none` re-version (gated — no orphan tag to record)
+    # from a true idempotent re-run (its rows already present). The former is N/A — not a
+    # PASS-with-rows and not the stale "already present" SKIPPED.
+    if [[ "$gated" -gt 0 ]]; then
+      mark_phase "append_reversions" "N/A" "re-version left no orphan tag — not recorded (SLIM #3109)"
+    else
+      mark_phase "append_reversions" "SKIPPED" "all abandoned-version rows for $slug already present (idempotent)"
+    fi
     return 0
   fi
-  mark_phase "append_reversions" "PASS" "appended ${appended} re-version row(s) for $slug (final $rv_final)"
+  # Surface the gated count so a PARTIALLY-gated fan-out (mixed orphan + none) is
+  # observable in the report rather than silently under-reported as a plain append.
+  local pass_detail="appended ${appended} re-version row(s) for $slug (final $rv_final)"
+  [[ "$gated" -gt 0 ]] && pass_detail="${pass_detail}; gated ${gated} (no orphan tag: ${gated_list})"
+  mark_phase "append_reversions" "PASS" "$pass_detail"
   return 0
 }
 
@@ -1626,9 +1718,156 @@ phase_ledger_guard() {
   return 0
 }
 
+# ─── Phase 9.95: rebuild_skill_packages (#3322 — .skill package rebuild) ──────
+#
+# Fold the .skill package rebuild into the Stage-13 chore PR so a release that
+# changes a skill's source (or an injected canonical) ships the rebuilt package
+# ATOMICALLY with the corpus, BEFORE Milestone close — closing the post-close
+# orphan-rebuild gap (a package rebuilt after close cannot attach to the closed
+# milestone). Placed downstream of ledger_guard so a guard FAIL (exit 3) aborts
+# before this phase mutates the packages/ working tree.
+#
+# Detection = union of two rules over the release diff:
+#   (a) direct source — any changed path matching ^(core|operations|release)/
+#       skills/<skill>/ → <skill> (covers SKILL.md, references/**, scripts/**,
+#       evals/** — everything build-skill-packages.sh's `cp -R` carries).
+#   (b) injected canonical — any changed path under core/standards/ or
+#       operations/templates/ whose basename is the middle field of a
+#       TEMPLATE_SYNC_MAP entry → every skill in field 1 of a matching entry.
+#       Load-bearing: template-*.md inject into a package at build time with no
+#       skills/ path of their own, so editing a canonical stales the package
+#       while touching zero skills/ path.
+# The TEMPLATE_SYNC_MAP is read from deploy.sh AT RUNTIME (never copied) via the
+# same awk window build-skill-packages.sh:34–36 uses — single-sourced.
+#
+# R8 (zip non-determinism): the .skill archive embeds per-entry mtimes, so a
+# content-identical rebuild differs at the byte level. Stage a rebuilt package
+# ONLY when its content-manifest sidecar (packages/<skill>.skill.sha256) shows a
+# working-tree change (or the skill is newly-tracked); otherwise discard the
+# mtime-only churn with `git checkout --`. The .skill bytes are NEVER compared.
+#
+# Staging: this phase WRITES + populates REBUILT_PACKAGES=(); it does not `git
+# add` (write/stage separation — commit_chore_pr stages via files=()).
+# --no-merge: pre-commit phase; does NOT defer (the chore PR is still created, so
+# the rebuild must ride its commit) — hence no NO_MERGE guard here and no entry
+# in either deferral list.
+
+# changed_skills_from_paths — pure function: read newline-separated changed paths
+# on stdin, emit the deduped candidate skill set (one per line) per rules (a)+(b).
+# Offline: its only external read is deploy.sh's TEMPLATE_SYNC_MAP.
+changed_skills_from_paths() {
+  local deploy_sh="$REPO_ROOT/core/deploy/deploy.sh"
+  # (b) reverse TEMPLATE_SYNC_MAP: canonical-basename -> skills. Read the map from
+  # deploy.sh at runtime — same awk window as build-skill-packages.sh:34–36.
+  local map=""
+  if [[ -f "$deploy_sh" ]]; then
+    map="$(/usr/bin/awk '/^TEMPLATE_SYNC_MAP=\(/,/^\)/' "$deploy_sh" 2>/dev/null \
+      | /usr/bin/grep -E '^[[:space:]]*"[^"]+:[^"]+:[^"]+"' \
+      | /usr/bin/sed 's/^[[:space:]]*"//; s/"$//; s/[[:space:]]*#.*//' || true)"
+  fi
+  local path base entry m_skill m_canonical
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    # (a) direct source
+    if [[ "$path" =~ ^(core|operations|release)/skills/([^/]+)/ ]]; then
+      /usr/bin/printf '%s\n' "${BASH_REMATCH[2]}"
+    fi
+    # (b) injected canonical
+    case "$path" in
+      core/standards/*|operations/templates/*)
+        base="$(/usr/bin/basename "$path")"
+        while IFS= read -r entry; do
+          [[ -z "$entry" ]] && continue
+          m_skill="${entry%%:*}"
+          m_canonical="${entry#*:}"; m_canonical="${m_canonical%%:*}"
+          [[ "$m_canonical" == "$base" ]] && /usr/bin/printf '%s\n' "$m_skill"
+        done <<< "$map"
+        ;;
+    esac
+  done | /usr/bin/sort -u | /usr/bin/grep -vE '^$' || true
+}
+
+phase_rebuild_skill_packages() {
+  local builder="$REPO_ROOT/core/deploy/tools/build-skill-packages.sh"
+
+  # Resolve the release-diff path set: MERGE_SHA first-parent diff, else the
+  # release PR's file list. D-4d: if BOTH yield an empty set, staleness is
+  # undeterminable → FAIL loud (never SKIP — a silent SKIP re-opens the gap).
+  local changed=""
+  if [[ -n "$MERGE_SHA" ]]; then
+    changed="$($GIT -C "$REPO_ROOT" diff --name-only "${MERGE_SHA}^1" "${MERGE_SHA}" 2>/dev/null || true)"
+  fi
+  if [[ -z "$changed" ]]; then
+    changed="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json files --jq '.files[].path' 2>/dev/null || true)"
+  fi
+  if [[ -z "$changed" ]]; then
+    mark_phase "rebuild_skill_packages" "FAIL" "release diff base unresolvable (MERGE_SHA empty + gh pr view fallback empty) — .skill staleness undeterminable; re-run --apply once the release-PR merge SHA resolves, or rebuild + stage the affected package(s) per core/rules/skill-deployment.md before closing"
+    return 3
+  fi
+
+  # Detection (rules a+b). || true keeps set -e safe on a zero-candidate diff.
+  local candidates
+  candidates="$(/usr/bin/printf '%s\n' "$changed" | changed_skills_from_paths || true)"
+
+  if [[ -z "$candidates" ]]; then
+    mark_phase "rebuild_skill_packages" "N/A" "no skill source or injected canonical changed in the release diff — no package to rebuild (0 deferred)"
+    return 0
+  fi
+
+  local names count
+  names="$(/usr/bin/printf '%s' "$candidates" | /usr/bin/tr '\n' ' ' | /usr/bin/sed 's/ *$//')"
+  count="$(/usr/bin/printf '%s\n' "$candidates" | /usr/bin/grep -c . || true)"
+
+  # Dry-run: enumerate only (a --dry-run creates no chore branch + no diff).
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "rebuild_skill_packages" "DRY-RUN" "would rebuild ${count} package(s): ${names}"
+    return 0
+  fi
+
+  # Apply: rebuild, then sidecar-gate the staging set (R8).
+  if [[ ! -x "$builder" ]]; then
+    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh not executable at $builder"
+    return 3
+  fi
+
+  # Guarded call (M3-3): the builder runs set -euo pipefail + exit 1 on failure;
+  # the subshell isolates its set -e so its exit does not abort this script
+  # before mark_phase runs. Word-split $candidates into per-skill args.
+  if ! ( /bin/bash "$builder" $candidates ) >/dev/null 2>&1; then
+    mark_phase "rebuild_skill_packages" "FAIL" "build-skill-packages.sh failed for one of: ${names} — package(s) not rebuilt; close blocked (re-run after resolving the build error)"
+    return 3
+  fi
+
+  # R8 content-sidecar gate: stage a package ONLY when its .sha256 sidecar shows a
+  # working-tree change (real content drift) OR the skill is newly-tracked;
+  # otherwise revert the mtime-only zip churn so it cannot enter the commit.
+  REBUILT_PACKAGES=()
+  local skill pkg sidecar sidecar_changed pkg_untracked
+  for skill in $candidates; do
+    pkg="packages/${skill}.skill"
+    sidecar="packages/${skill}.skill.sha256"
+    sidecar_changed="$($GIT -C "$REPO_ROOT" diff --name-only -- "$sidecar" 2>/dev/null || true)"
+    pkg_untracked="$($GIT -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$pkg" "$sidecar" 2>/dev/null || true)"
+    if [[ -n "$sidecar_changed" || -n "$pkg_untracked" ]]; then
+      REBUILT_PACKAGES+=("$pkg" "$sidecar")
+    else
+      # Content-identical rebuild — discard mtime-only churn (never compare bytes).
+      $GIT -C "$REPO_ROOT" checkout -- "$pkg" "$sidecar" 2>/dev/null || true
+    fi
+  done
+
+  if [[ ${#REBUILT_PACKAGES[@]} -eq 0 ]]; then
+    mark_phase "rebuild_skill_packages" "PASS" "${count} skill(s) rebuilt (${names}); all content-identical by sidecar — nothing to stage (0 deferred)"
+    return 0
+  fi
+
+  mark_phase "rebuild_skill_packages" "PASS" "rebuilt + staged ${#REBUILT_PACKAGES[@]} package file(s) for: ${names} (content-sidecar drift; 0 deferred)"
+  return 0
+}
+
 phase_commit_chore_pr() {
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
+    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_REVERSIONS.md (if re-versioned) RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) packages/<skill>.skill + .sha256 (per rebuilt skill) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
   fi
 
@@ -1640,11 +1879,15 @@ phase_commit_chore_pr() {
     "release/releases/notes/${VERSION}_RELEASE_NOTES.md"
     "CHANGELOG.md"
     ".version"
-  )
+    "${REBUILT_PACKAGES[@]:-}"      # .skill packages + .sha256 sidecars staged by
+  )                                 # phase_rebuild_skill_packages (Phase 9.95); empty
+                                    # on a release that touches no skill source.
 
   # Stage only files that actually exist + have changes
   local staged=0
   for f in "${files[@]}"; do
+    [[ -z "$f" ]] && continue       # "${ARR[@]:-}" on an empty array yields one
+                                    # empty element under bash 3.2 + set -u
     if [[ -f "$REPO_ROOT/$f" ]]; then
       $GIT -C "$REPO_ROOT" add "$f" 2>/dev/null || true
       staged=1
@@ -1658,6 +1901,21 @@ phase_commit_chore_pr() {
 
   local commit_msg="chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG"
   if $GIT -C "$REPO_ROOT" commit -m "$commit_msg" >/dev/null 2>&1; then
+    # Staging-completeness assertion (#3322 E9): every path phase_rebuild_skill_
+    # packages reported as staged MUST be in the commit just created. Reads the
+    # COMMIT, not the phase's own report — the phase does not certify itself.
+    # Structurally general: catches the same omission for any future phase that
+    # populates REBUILT_PACKAGES.
+    local _committed _missing="" _rp
+    _committed="$($GIT -C "$REPO_ROOT" diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
+    for _rp in "${REBUILT_PACKAGES[@]:-}"; do
+      [[ -z "$_rp" ]] && continue
+      /usr/bin/printf '%s\n' "$_committed" | /usr/bin/grep -qxF "$_rp" || _missing="${_missing}${_rp} "
+    done
+    if [[ -n "$_missing" ]]; then
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: rebuilt package(s) NOT in the chore commit — ${_missing% }; the chore PR would ship a stale package while every phase reported PASS"
+      return 3
+    fi
     mark_phase "commit_chore_pr" "PASS" "committed: $commit_msg"
     return 0
   fi
@@ -2153,6 +2411,37 @@ phase_publish_github_release() {
   return 3
 }
 
+# _drift_block_in_scope <version> — is <version> inside the body-drift gate's
+# cutoff scope? (Helper for Phase 15.6 below.) Replicates deploy.sh Check 47's
+# predicate EXACTLY rather than approximating it with a version compare:
+# enumerate RELEASE_LOG rows in FILE order (date-ascending, NOT version-ordered),
+# latch on the first row whose version PREFIX-matches the cutoff, and treat the
+# contiguous suffix from there to EOF as in scope. A semantic or lexical version
+# compare would diverge from Check 47 on exactly the rows where ordering matters,
+# reintroducing the two-surfaces-disagree defect this change exists to remove.
+# Returns 0 (in scope, block eligible) / 1 (out of scope, warn only).
+# Out of scope on: the __none__ opt-out, an unreadable LOG, or a version carrying
+# no LOG row. The last case is unreachable on the close path (preflight already
+# asserts this version's DEPLOYED row exists); defaulting it OUT means a missing
+# row can never manufacture a block.
+_drift_block_in_scope() {
+  local _v="$1"
+  if [[ "$DRIFT_CHECK_CUTOFF" == "__none__" ]]; then return 1; fi
+  if [[ ! -f "$RELEASE_LOG" ]]; then return 1; fi
+  local _rows _row _past=0
+  _rows="$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG" 2>/dev/null \
+    | /usr/bin/awk -F ' \\| ' '{
+        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v); print v
+      }')" || _rows=""
+  while IFS= read -r _row; do
+    if [[ -z "$_row" ]]; then continue; fi
+    if [[ "$_past" -eq 0 && "$_row" == "$DRIFT_CHECK_CUTOFF"* ]]; then _past=1; fi
+    if [[ "$_past" -eq 0 ]]; then continue; fi
+    if [[ "$_row" == "$_v" ]]; then return 0; fi
+  done <<<"$_rows"
+  return 1
+}
+
 # ─── Phase 15.6: check_release_body_drift (post-emit §5.1 drift assert) ──────────
 #
 # DETECTIVE-ONLY post-emit verification that the just-published Release body
@@ -2164,14 +2453,33 @@ phase_publish_github_release() {
 # This phase COEXISTS with phase_lint_release_notes (§3.2 note-content close
 # gate): that phase lints the in-repo note file (network-free, BLOCKS close on a
 # this-version finding); THIS phase compares the published Release body against
-# the note (network-dependent, NEVER blocks). Distinct concerns, distinct phases.
+# the note (network-dependent). Distinct concerns, distinct phases.
 #
-# WARN-MODE / non-blocking by design (reflexive-pipeline-loop discipline): the
-# drift check is the detective backstop, NOT a close gate — a drift finding or a
-# tool-edge-case (CRLF / GitHub body normalization) must not hard-block a close,
-# least of all v2.37's own close (which rides the path it hardens). So this phase
-# ALWAYS returns 0; exit codes from the tool map to PASS / WARN / N/A only.
-# Detective-only: it never re-emits the Release (auto-remediation is out of scope).
+# BLOCKING ON GENUINE DRIFT ONLY. Tool exit 1 (the published body differs from the
+# frontmatter-stripped note) marks FAIL and returns non-zero, which the dispatch
+# tail turns into a report-and-exit. This RECONCILES the implementation to the
+# governance surface that already specifies it — stage-13-close.md's Phase B5.6
+# states "A failure blocks closure: the canonical note is corrected first, then all
+# surfaces re-emit from it per §5.6" — it does not escalate past it. The prior
+# "close NOT blocked" marks were the drifted half of that pair.
+#
+# EXIT 2 (a needed capability is absent) and EXIT 3 (no published Release / no note
+# to compare) STAY NON-BLOCKING, deliberately. Those are the mid-close timing
+# states: Surface 1 not yet published, or the note not yet on origin/main. Blocking
+# them is the reflexive-pipeline-loop pathology — a close failing itself for a
+# timing reason rather than a defect. Keeping them non-blocking is what makes the
+# blocking arm safe to ship in the release that introduces it.
+#
+# CUTOFF-GATED (shares deploy.sh Check 47's RELEASE_BODY_DRIFT_CHECK_CUTOFF). The
+# block applies only to versions in the same scope Check 47 scans. Close-out is
+# re-runnable against an OLDER version — a §5.6 re-emit, or a historical-row
+# backfill — and without the gate such a re-run would hard-block on drift that
+# Check 47 deliberately exempts. With it, the standing gate and the close gate are
+# consistent BY CONSTRUCTION rather than by coincidence. A drift finding outside
+# the cutoff scope is still surfaced, as a non-blocking WARN.
+#
+# Still detective-only in the remediation sense: it never re-emits the Release
+# (auto-remediation would raise an autonomy-tier decision, out of scope).
 phase_check_release_body_drift() {
   # --no-merge (#2919): this detective phase compares the just-published Surface 1
   # Release body against the in-repo note. Under --no-merge publish_github_release
@@ -2188,7 +2496,7 @@ phase_check_release_body_drift() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "check_release_body_drift" "DRY-RUN" "would assert published Release body == frontmatter-stripped in-repo note for $VERSION (detective-only; warn-mode; per release-notes-standard.md §5.1)"
+    mark_phase "check_release_body_drift" "DRY-RUN" "would assert published Release body == frontmatter-stripped in-repo note for $VERSION (per release-notes-standard.md §5.1; genuine drift BLOCKS close when $VERSION is at/after cutoff $DRIFT_CHECK_CUTOFF)"
     return 0
   fi
 
@@ -2201,13 +2509,25 @@ phase_check_release_body_drift() {
   local drift_out drift_exit=0
   drift_out="$(REPO="$REPO_SLUG" "$DRIFT_CHECK_TOOL" "$VERSION" --quiet 2>&1)" || drift_exit=$?
 
+  # Blocking flag, set ONLY by the genuine-drift arm below when $VERSION is inside
+  # the shared cutoff scope. Every other arm leaves it 0 and the phase returns 0.
+  local drift_blocking=0
+
   case "$drift_exit" in
     0)
       mark_phase "check_release_body_drift" "PASS" "published Release body matches the frontmatter-stripped in-repo note for $VERSION (§5.1 invariant holds)"
       ;;
     1)
-      # DRIFT — warn-mode: surface it, do NOT block the close (return 0 below).
-      mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. Detective-only (warn-mode); close NOT blocked. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      # DRIFT — the genuine defect. Blocks the close for an in-scope version;
+      # surfaced as a non-blocking WARN for a version the standing gate exempts
+      # (a §5.6 re-emit or a historical backfill re-run), so this phase and
+      # deploy.sh Check 47 never disagree about the same version.
+      if _drift_block_in_scope "$VERSION"; then
+        drift_blocking=1
+        mark_phase "check_release_body_drift" "FAIL" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; close BLOCKED per stage-13-close.md Phase B5.6. Correct the canonical note first, then re-emit every surface from it per §5.6 (gh release edit) or release-executor Mode F. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      else
+        mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. NOT blocking: $VERSION is outside the body-drift cutoff scope (cutoff $DRIFT_CHECK_CUTOFF), which deploy.sh Check 47 also exempts. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      fi
       ;;
     2)
       # N/A — a capability needed to compare is absent. Exit 2 now spans gh
@@ -2222,13 +2542,19 @@ phase_check_release_body_drift() {
       if [[ "$pub_result" != "PASS" ]]; then
         mark_phase "check_release_body_drift" "N/A" "no published Release / note to compare for $VERSION (Surface 1 not emitted this run: publish phase=$pub_result)"
       else
-        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (warn-mode; close NOT blocked). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (non-blocking: an artifact-missing state, not a drift finding — see the exit 2/3 rationale above). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
       fi
       ;;
     *)
-      mark_phase "check_release_body_drift" "WARN" "body-drift check returned unexpected exit $drift_exit for $VERSION (warn-mode; close NOT blocked)"
+      mark_phase "check_release_body_drift" "WARN" "body-drift check returned unexpected exit $drift_exit for $VERSION (non-blocking: only the genuine-drift exit blocks; an unexpected exit is a tool-contract anomaly, not a §5.1 finding)"
       ;;
   esac
+
+  # Non-zero ONLY on gated genuine drift; the dispatch tail maps that to
+  # generate_report + a non-zero close-out exit.
+  if [[ "$drift_blocking" -eq 1 ]]; then
+    return 1
+  fi
   return 0
 }
 
@@ -2311,7 +2637,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -2454,14 +2780,16 @@ self_test() {
   REPO_ROOT="$_bv_saved_root"; MODE="$_bv_saved_mode"; VERSION="$_bv_saved_version"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
-  # Test 1c: phase_append_reversions (#1679) — offline, hermetic. Drives the phase
-  # against a sandbox RELEASE_REVERSIONS + RELEASE_LOG and asserts the N/A common
-  # path, the round-trip derivation (the set-minus-is-wrong fix), the multi-abandoned
-  # fan-out, idempotency, and the dry-run no-write — plus a query self-check that the
-  # numerator grep counts every row it writes (the dotted/leading-digit/uppercase-slug
-  # AC verification). The tag probe is offline: the sandbox REPO_ROOT is not a git
-  # repo, so `git ls-remote` fails => on_origin=0 => disposition `none` (the expected
-  # value for every post-instrumentation fixture).
+  # Test 1c: phase_append_reversions (#1679; SLIM #3109) — offline, hermetic. Drives the
+  # phase against a sandbox RELEASE_REVERSIONS + RELEASE_LOG and asserts the SLIM gate:
+  # a disposition=none re-version is NOT recorded (records N/A, writes no row) across the
+  # round-trip derivation (the set-minus-is-wrong fix), the multi-abandoned fan-out, a
+  # re-run (no accretion), and a historical-none-row immutability check; a tag-orphaned
+  # re-version DOES record exactly one row with abandoned_tag_pushed=true. The none-path
+  # tag probe is offline: the sandbox REPO_ROOT is not a git repo, so `git ls-remote`
+  # fails => on_origin=0 => disposition `none`. The positive (g) fixture installs a `git`
+  # shim to force the probe positive, and also covers the dry-run no-write + orphan-row
+  # idempotency.
   local _rv_saved_root="$REPO_ROOT" _rv_saved_mode="$MODE" _rv_saved_version="$VERSION"
   local _rv_saved_slug="$STATE_MILESTONE_SLUG" _rv_saved_log="$RELEASE_LOG" _rv_saved_rev="$RELEASE_REVERSIONS"
   local _rv_saved_spec="$REVERSION_SPEC"
@@ -2485,51 +2813,152 @@ EOF
   _rv_rows="$(/usr/bin/grep -cE '^\| [A-Za-z0-9.-]+ \| v' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
   [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: phase_append_reversions N/A path must write no rows, got $_rv_rows"; failures=$((failures+1)); }
 
-  # (b) round-trip v2.12 → v2.14 → v2.12 (final v2.12) → exactly ONE row,
-  #     abandoned_version=v2.14, final_version=v2.12 (the set-minus-is-wrong fix).
+  # Deterministic tag probe: the phase's `git ls-remote` runs in the invoker's cwd (which
+  # may be a real repo where an abandoned version IS a live tag), so grounding cannot be
+  # left to a "sandbox is offline" assumption — under SLIM the disposition VALUE decides
+  # the outcome. Install a `git` shim keyed on _selftest_lsremote_hit: 0 => probe returns
+  # empty (disposition=none, the gated path); 1 => probe reports the abandoned tag PRESENT
+  # (disposition=tag-orphaned). Unset after the block.
+  # _selftest_lsremote_only pins the hit to ONE version, so a single fan-out can mix a
+  # tag-orphaned and a `none` abandoned version (the (h) mixed fixture); it takes
+  # precedence over the all-or-nothing _selftest_lsremote_hit flag when set.
+  local _selftest_lsremote_hit=0 _selftest_lsremote_only=""
+  git() {
+    if [[ "$1" == "ls-remote" ]]; then
+      # $4 is the "refs/tags/<v>" refspec; emit a matching ref line only on a hit.
+      local _st_v="${4##refs/tags/}"
+      if [[ -n "$_selftest_lsremote_only" ]]; then
+        [[ "$_st_v" == "$_selftest_lsremote_only" ]] && /usr/bin/printf '2222222222222222222222222222222222222222\t%s\n' "$4"
+      else
+        [[ "$_selftest_lsremote_hit" == "1" ]] && /usr/bin/printf '2222222222222222222222222222222222222222\t%s\n' "$4"
+      fi
+      return 0
+    fi
+    command git "$@"
+  }
+
+  # (b) round-trip v2.12 → v2.14 → v2.12 (final v2.12): the set-minus-is-wrong derivation
+  #     still yields the single abandoned v2.14, but disposition grounds to `none`, so the
+  #     SLIM gate suppresses it → N/A, ZERO rows (the gate is what changes the outcome).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   STATE_MILESTONE_SLUG="round-trip-release"
   REVERSION_SPEC="v2.12|v2.12 -> v2.14 -> v2.12|deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|sibling@v2.14|S12|branch named v2.12"
   phase_append_reversions >/dev/null 2>&1
-  [[ "$(get_phase append_reversions)" == PASS\|* ]] || { echo "FAIL: phase_append_reversions round-trip should PASS, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: round-trip none-path must be N/A under the SLIM gate, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
   _rv_rows="$(/usr/bin/grep -cE '^\| round-trip-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
-  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: round-trip must yield exactly 1 row, got $_rv_rows"; failures=$((failures+1)); }
-  /usr/bin/grep -qE '^\| round-trip-release \| v2\.14 \| v2\.12 \|' "$RELEASE_REVERSIONS" || { echo "FAIL: round-trip row must be abandoned=v2.14 final=v2.12 (set-minus-is-wrong fix)"; failures=$((failures+1)); }
-  /usr/bin/grep -qE '^\| round-trip-release \| v2\.12 \|' "$RELEASE_REVERSIONS" && { echo "FAIL: round-trip must NOT record v2.12 as abandoned (it is the final)"; failures=$((failures+1)); }
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: round-trip none-path must write 0 rows (gated), got $_rv_rows"; failures=$((failures+1)); }
 
-  # (c) multi-abandoned: v1.18 → v1.19 → v1.20 (final v1.20) → TWO rows (v1.18, v1.19)
+  # (c) multi-abandoned v1.18 → v1.19 → v1.20 (final v1.20): both abandoned versions ground
+  #     to `none` → both gated → N/A, ZERO rows (fan-out composes with the gate).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   STATE_MILESTONE_SLUG="multi-abandoned-release"
   REVERSION_SPEC="v1.20|v1.18 -> v1.19 -> v1.20|cafebabecafebabecafebabecafebabecafebabe|a@v1.18,b@v1.19|S12|legacy branch"
   phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: multi-abandoned none-path must be N/A under the SLIM gate, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
   _rv_rows="$(/usr/bin/grep -cE '^\| multi-abandoned-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
-  [[ "$_rv_rows" -eq 2 ]] || { echo "FAIL: multi-abandoned must yield 2 rows (v1.18,v1.19), got $_rv_rows"; failures=$((failures+1)); }
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: multi-abandoned none-path must write 0 rows (both gated), got $_rv_rows"; failures=$((failures+1)); }
 
-  # (d) idempotency — re-run the round-trip spec → no new row, SKIPPED
+  # (d) re-run the round-trip none-path → still N/A, still 0 rows. The gate writes nothing,
+  #     so there is nothing to be idempotent about: it is stable and accretes no row across
+  #     re-runs (orphan-row idempotency is covered on the positive (g) fixture).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   STATE_MILESTONE_SLUG="round-trip-release"
   REVERSION_SPEC="v2.12|v2.12 -> v2.14 -> v2.12|deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|sibling@v2.14|S12|branch named v2.12"
   phase_append_reversions >/dev/null 2>&1
-  [[ "$(get_phase append_reversions)" == SKIPPED\|* ]] || { echo "FAIL: phase_append_reversions re-run must be SKIPPED (idempotent), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: re-run of a none-path must stay N/A, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
   _rv_rows="$(/usr/bin/grep -cE '^\| round-trip-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
-  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: idempotent re-run must not duplicate the round-trip row, got $_rv_rows"; failures=$((failures+1)); }
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: re-run of a gated none-path must not accrete a row, got $_rv_rows"; failures=$((failures+1)); }
 
-  # (e) dry-run → DRY-RUN, no write
+  # (e) immutability: the SLIM gate NEVER disturbs a pre-existing historical `none` row.
+  #     Seed one, run a fresh none-path re-version (different slug) → N/A + 0 new rows for
+  #     that slug + the historical row still present (append-only history is preserved).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  MODE="dry-run"; STATE_MILESTONE_SLUG="dry-run-release"
-  REVERSION_SPEC="v3.01|v3.00 -> v3.01|0000000000000000000000000000000000000000|x@v3.00|S12|—"
+  /usr/bin/printf '| legacy-none-release | v0.90 | v0.92 | v0.90 → v0.92 | false | 1111111111111111111111111111111111111111 | s@v0.90 | S12 | none | historical | — | 2026-06-01 |\n' >> "$RELEASE_REVERSIONS"
+  STATE_MILESTONE_SLUG="immutability-release"
+  REVERSION_SPEC="v5.02|v5.01 -> v5.02|3333333333333333333333333333333333333333|z@v5.01|S12|—"
   phase_append_reversions >/dev/null 2>&1
-  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: phase_append_reversions should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
-  /usr/bin/grep -qE '^\| dry-run-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: dry-run must NOT write a row"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: fresh none-path must be N/A, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| immutability-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: gated none-path must write 0 rows for its slug, got $_rv_rows"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| legacy-none-release \| v0\.90 \|.*\| none \|' "$RELEASE_REVERSIONS" || { echo "FAIL: SLIM gate must preserve the pre-existing historical none row (append-only immutability)"; failures=$((failures+1)); }
 
-  # (f) query self-check (the AC: collision rate measurable) — every written row is
-  #     counted by the numerator grep, INCLUDING a dotted + leading-digit + uppercase
-  #     slug (the FMF-2 class). Append such a row directly and assert the count rises.
+  # (f) DRY-RUN on the `none` path — restores the coverage Stage-5 design §3 named as
+  #     "(e) dry-run: re-assert to the gated behavior". THE parity fixture: the preview must
+  #     report the rows apply ACTUALLY writes (0), not the raw abandoned-version count. It is
+  #     asserted as an explicit preview-then-apply comparison, because the escape it guards
+  #     (#3109 F-01, the #2539 parity-gap class) is invisible to any single-mode assertion —
+  #     and invisible on the tag-orphaned path (g.1), where the two counts coincide.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; STATE_MILESTONE_SLUG="dryrun-none-release"
+  REVERSION_SPEC="v7.02|v7.01 -> v7.02|7777777777777777777777777777777777777777|x@v7.01|S12|—"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: none-path dry-run should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == *"would append 0 row(s)"* ]] || { echo "FAIL: none-path dry-run must preview 0 rows (SLIM gate), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| dryrun-none-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: none-path dry-run must NOT write a row"; failures=$((failures+1)); }
+  #     …now apply the SAME spec: 0 rows written => preview == actual.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   MODE="apply"
-  /usr/bin/printf '| v1.03-Bundle-AND-related | v1.03 | unrecoverable | v1.03 → (unknown) | unknown | (unrecoverable) | — | pre-merge | unrecoverable | lost | — | 2026-06-02 |\n' >> "$RELEASE_REVERSIONS"
-  local _rv_total; _rv_total="$(/usr/bin/grep -cE '^\| [A-Za-z0-9.-]+ \| v' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_total="${_rv_total:-0}"
-  # rows so far: 1 round-trip + 2 multi-abandoned + 1 dotted/uppercase = 4
-  [[ "$_rv_total" -eq 4 ]] || { echo "FAIL: numerator grep must count all 4 written rows incl. dotted/uppercase slug, got $_rv_total"; failures=$((failures+1)); }
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == N/A\|* ]] || { echo "FAIL: none-path apply must be N/A, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| dryrun-none-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 0 ]] || { echo "FAIL: none-path dry-run predicted 0 rows but apply wrote $_rv_rows (dry-run/apply parity broken)"; failures=$((failures+1)); }
+
+  # (g) POSITIVE — the tag-orphaned path (the sole disposition still recorded). Flip the
+  #     shim so the probe reports the abandoned tag PRESENT on origin; the sandbox
+  #     RELEASE_LOG has no canonical row for it, so the phase grounds tag-orphaned +
+  #     abandoned_tag_pushed=true. Covers dry-run no-write, the positive write, and
+  #     orphan-row idempotency.
+  _selftest_lsremote_hit=1
+  # (g.1) dry-run of the orphan spec → DRY-RUN preview, no row written.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; STATE_MILESTONE_SLUG="orphan-release"
+  REVERSION_SPEC="v4.02|v4.01 -> v4.02|abcabcabcabcabcabcabcabcabcabcabcabcabca|w@v4.01|S12|branch named v4.01"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: orphan dry-run should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: orphan dry-run must NOT write a row"; failures=$((failures+1)); }
+  # (g.2) apply the orphan spec → PASS, exactly 1 row, abandoned_tag_pushed=true, disposition=tag-orphaned.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="apply"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == PASS\|* ]] || { echo "FAIL: tag-orphaned path should PASS, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| orphan-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: tag-orphaned path must write exactly 1 row, got $_rv_rows"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \| v4\.01 \| v4\.02 \|' "$RELEASE_REVERSIONS" || { echo "FAIL: tag-orphaned row must be abandoned=v4.01 final=v4.02"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \|.*\| true \|' "$RELEASE_REVERSIONS" || { echo "FAIL: tag-orphaned row must carry abandoned_tag_pushed=true"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| orphan-release \|.*\| tag-orphaned \|' "$RELEASE_REVERSIONS" || { echo "FAIL: tag-orphaned row must carry disposition=tag-orphaned"; failures=$((failures+1)); }
+  # (g.3) re-run apply → SKIPPED (idempotent), still exactly 1 row.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == SKIPPED\|* ]] || { echo "FAIL: tag-orphaned re-run must be SKIPPED (idempotent), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| orphan-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: tag-orphaned idempotent re-run must not duplicate the row, got $_rv_rows"; failures=$((failures+1)); }
+
+  # (h) MIXED fan-out — ONE tag-orphaned + ONE `none` abandoned version in the same
+  #     re-version. Neither the all-`none` nor the all-orphan fixture can see a preview that
+  #     counts pre-gate: only the mixed case makes "2 predicted / 1 written" observable.
+  #     Pin the probe to v8.01 so v8.02 grounds `none`.
+  _selftest_lsremote_hit=0; _selftest_lsremote_only="v8.01"
+  # (h.1) dry-run must predict exactly 1 (the orphan), not 2, and write nothing.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; STATE_MILESTONE_SLUG="mixed-release"
+  REVERSION_SPEC="v8.03|v8.01 -> v8.02 -> v8.03|8888888888888888888888888888888888888888|y@v8.01|S12|—"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == DRY-RUN\|* ]] || { echo "FAIL: mixed dry-run should DRY-RUN preview, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == *"would append 1 row(s)"* ]] || { echo "FAIL: mixed dry-run must preview 1 row (1 orphan + 1 gated), got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| mixed-release \|' "$RELEASE_REVERSIONS" && { echo "FAIL: mixed dry-run must NOT write a row"; failures=$((failures+1)); }
+  # (h.2) apply the SAME spec → exactly 1 row, and it is the ORPHAN (v8.01), not the gated
+  #       v8.02; the PASS detail surfaces the gated version so the fan-out is observable.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="apply"
+  phase_append_reversions >/dev/null 2>&1
+  [[ "$(get_phase append_reversions)" == PASS\|* ]] || { echo "FAIL: mixed apply should PASS, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _rv_rows="$(/usr/bin/grep -cE '^\| mixed-release \|' "$RELEASE_REVERSIONS" 2>/dev/null || true)"; _rv_rows="${_rv_rows:-0}"
+  [[ "$_rv_rows" -eq 1 ]] || { echo "FAIL: mixed dry-run predicted 1 row but apply wrote $_rv_rows (dry-run/apply parity broken)"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| mixed-release \| v8\.01 \|.*\| tag-orphaned \|' "$RELEASE_REVERSIONS" || { echo "FAIL: mixed apply must record the tag-orphaned v8.01 row"; failures=$((failures+1)); }
+  /usr/bin/grep -qE '^\| mixed-release \| v8\.02 \|' "$RELEASE_REVERSIONS" && { echo "FAIL: mixed apply must NOT record the gated none v8.02"; failures=$((failures+1)); }
+  [[ "$(get_phase append_reversions)" == *"gated 1"* ]] || { echo "FAIL: mixed apply PASS detail must surface the gated count, got '$(get_phase append_reversions)'"; failures=$((failures+1)); }
+  _selftest_lsremote_only=""
+  unset -f git
 
   /bin/rm -rf "$_rv_tmp" 2>/dev/null || true
   REPO_ROOT="$_rv_saved_root"; MODE="$_rv_saved_mode"; VERSION="$_rv_saved_version"
@@ -3420,7 +3849,7 @@ STUB
   fi
 
   # Test 7: usage block extractable
-  if ! /usr/bin/sed -n '2,77p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
+  if ! /usr/bin/sed -n '2,83p' "${BASH_SOURCE[0]}" | /usr/bin/grep -q "Usage:"; then
     echo "FAIL: usage block extraction"; failures=$((failures+1))
   fi
 
@@ -3453,6 +3882,118 @@ STUB
     failures=$((failures+1))
   fi
 
+  # Test 10: corpus append-ledger merge-immunity (#3108, AC1). Two release
+  # branches each PREPEND a distinct row into the same top-of-ledger region — the
+  # concurrent Stage-13 append shape. Under a `merge=union` driver the second-to-
+  # merge reconcile auto-resolves with ZERO conflict markers and keeps BOTH rows
+  # (the #117 version-slot-loss blocker removed); the SAME merge WITHOUT the driver
+  # CONFLICTS, proving the driver is load-bearing (not a vacuous green). A third
+  # control merges a state-bearing status column under union and asserts it
+  # CORRUPTS (the transitioned row is duplicated) — locking in WHY RELEASE_LOG and
+  # RELEASE_REVERSIONS are EXCLUDED from the union set (Stage-5 empirical Test B).
+  # Hermetic: scratch git repos under mktemp; seeds its OWN .gitattributes, so it
+  # exercises the driver behavior independent of the repo's root file; no network.
+  if [[ -x "$GIT" ]]; then
+    local _ua_tmp; _ua_tmp="$(/usr/bin/mktemp -d -t union-attr-selftest.XXXXXX)"
+    local _ua_attr _ua_dir
+
+    # (a)+(b) additive ledger: build once with the driver, once without.
+    for _ua_attr in union none; do
+      _ua_dir="$_ua_tmp/$_ua_attr"; /bin/mkdir -p "$_ua_dir"
+      # `) || true` neutralizes the intentional non-zero exit of the non-union
+      # merge (it conflicts by design) under the script's `set -e` — same guard
+      # the #1680/#1682 scratch-git subshells above use.
+      ( cd "$_ua_dir"
+        $GIT init -q -b main . >/dev/null 2>&1 || { $GIT init -q . >/dev/null 2>&1; $GIT checkout -q -b main >/dev/null 2>&1; }
+        /usr/bin/printf '%s\n' '| Version | Milestone | Date |' '|---|---|---|' '| v9.79 | prior | 2026-01-01 |' > ledger.md
+        if [[ "$_ua_attr" == union ]]; then /usr/bin/printf 'ledger.md merge=union\n' > .gitattributes; fi
+        $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1
+        $GIT -c user.email=t@t -c user.name=t commit -qm seed >/dev/null 2>&1
+        $GIT checkout -q -b relA >/dev/null 2>&1
+        /usr/bin/printf '%s\n' '| Version | Milestone | Date |' '|---|---|---|' '| v9.80 | branchA | 2026-02-01 |' '| v9.79 | prior | 2026-01-01 |' > ledger.md
+        $GIT -c user.email=t@t -c user.name=t commit -qam A >/dev/null 2>&1
+        $GIT checkout -q main >/dev/null 2>&1; $GIT checkout -q -b relB >/dev/null 2>&1
+        /usr/bin/printf '%s\n' '| Version | Milestone | Date |' '|---|---|---|' '| v9.81 | branchB | 2026-03-01 |' '| v9.79 | prior | 2026-01-01 |' > ledger.md
+        $GIT -c user.email=t@t -c user.name=t commit -qam B >/dev/null 2>&1
+        $GIT checkout -q relA >/dev/null 2>&1
+        $GIT -c user.email=t@t -c user.name=t merge -q --no-edit relB >/dev/null 2>&1
+      ) || true
+    done
+
+    # (a) union → CLEAN auto-merge: no conflict markers, BOTH rows kept exactly once
+    if /usr/bin/grep -qE '^(<<<<<<<|=======|>>>>>>>)' "$_ua_tmp/union/ledger.md" 2>/dev/null; then
+      echo "FAIL: #3108 union driver must auto-resolve a two-branch additive append with NO conflict markers"; failures=$((failures+1))
+    fi
+    if [[ "$(/usr/bin/grep -c 'v9.80' "$_ua_tmp/union/ledger.md" 2>/dev/null)" != "1" \
+       || "$(/usr/bin/grep -c 'v9.81' "$_ua_tmp/union/ledger.md" 2>/dev/null)" != "1" ]]; then
+      echo "FAIL: #3108 union merge must keep BOTH concurrent rows exactly once (take-both, never drop a release's row)"; failures=$((failures+1))
+    fi
+
+    # (b) CONTROL — same merge WITHOUT the driver MUST conflict (driver is load-bearing)
+    if ! /usr/bin/grep -qE '^(<<<<<<<|=======|>>>>>>>)' "$_ua_tmp/none/ledger.md" 2>/dev/null; then
+      echo "FAIL: #3108 control — a default (non-union) merge of the same concurrent append MUST conflict; a green here means the test proves nothing"; failures=$((failures+1))
+    fi
+
+    # (c) EXCLUSION control — a state-bearing status column under union CORRUPTS:
+    #     each branch transitions a DIFFERENT row DEPLOYED->VERIFIED; union takes
+    #     both sides -> the rows duplicate with contradictory status. This is why
+    #     RELEASE_LOG / RELEASE_REVERSIONS are EXCLUDED. If this stops corrupting,
+    #     the exclusion premise changed and must be re-evaluated.
+    local _ua_log="$_ua_tmp/logexcl"; /bin/mkdir -p "$_ua_log"
+    ( cd "$_ua_log"
+      $GIT init -q -b main . >/dev/null 2>&1 || { $GIT init -q . >/dev/null 2>&1; $GIT checkout -q -b main >/dev/null 2>&1; }
+      /usr/bin/printf '%s\n' '| Version | State |' '|---|---|' '| v9.79 | DEPLOYED |' '| v9.78 | DEPLOYED |' > LOG.md
+      /usr/bin/printf 'LOG.md merge=union\n' > .gitattributes
+      $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1
+      $GIT -c user.email=t@t -c user.name=t commit -qm seed >/dev/null 2>&1
+      $GIT checkout -q -b relA >/dev/null 2>&1
+      /usr/bin/printf '%s\n' '| Version | State |' '|---|---|' '| v9.79 | VERIFIED |' '| v9.78 | DEPLOYED |' > LOG.md
+      $GIT -c user.email=t@t -c user.name=t commit -qam A >/dev/null 2>&1
+      $GIT checkout -q main >/dev/null 2>&1; $GIT checkout -q -b relB >/dev/null 2>&1
+      /usr/bin/printf '%s\n' '| Version | State |' '|---|---|' '| v9.79 | DEPLOYED |' '| v9.78 | VERIFIED |' > LOG.md
+      $GIT -c user.email=t@t -c user.name=t commit -qam B >/dev/null 2>&1
+      $GIT checkout -q relA >/dev/null 2>&1
+      $GIT -c user.email=t@t -c user.name=t merge -q --no-edit relB >/dev/null 2>&1
+    ) || true
+    if [[ "$(/usr/bin/grep -c 'v9.79' "$_ua_log/LOG.md" 2>/dev/null)" -lt 2 ]]; then
+      echo "FAIL: #3108 exclusion control — union on a state-bearing status column MUST duplicate the transitioned row (Test B corruption); if it no longer does, re-evaluate the RELEASE_LOG/RELEASE_REVERSIONS exclusion"; failures=$((failures+1))
+    fi
+
+    /bin/rm -rf "$_ua_tmp" 2>/dev/null || true
+  else
+    echo "  (skipped #3108 union-merge self-test — git not executable at $GIT)" >&2
+  fi
+
+  # Test 11: changed_skills_from_paths + files=() composition (#3322 — offline,
+  # hermetic; catches the P1 staging omission in CI before any live close).
+  local _csp_out
+  # (a) direct source — a references/ path stales the whole skill (cp -R), and a
+  #     non-skill path emits nothing.
+  _csp_out="$(/usr/bin/printf '%s\n' 'core/skills/eval-writer/references/release-notes-eval-rubric.md' 'release/releases/RELEASE_LOG.md' | changed_skills_from_paths || true)"
+  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
+    echo "FAIL: changed_skills_from_paths must detect eval-writer from a core/skills/eval-writer/ path (rule a direct-source)"; failures=$((failures+1))
+  fi
+  if /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'RELEASE_LOG.md'; then
+    echo "FAIL: changed_skills_from_paths must NOT emit a non-skill path"; failures=$((failures+1))
+  fi
+  # (b) injected canonical — template-taxonomy.md maps to eval-writer per the
+  #     deploy.sh TEMPLATE_SYNC_MAP (read at runtime); stales it with zero skills/ path.
+  _csp_out="$(/usr/bin/printf '%s\n' 'core/standards/template-taxonomy.md' | changed_skills_from_paths || true)"
+  if ! /usr/bin/printf '%s\n' "$_csp_out" | /usr/bin/grep -qx 'eval-writer'; then
+    echo "FAIL: changed_skills_from_paths must detect eval-writer from core/standards/template-taxonomy.md (rule b reverse TEMPLATE_SYNC_MAP)"; failures=$((failures+1))
+  fi
+  # negative — a non-skill, non-canonical path set yields nothing.
+  _csp_out="$(/usr/bin/printf '%s\n' 'CHANGELOG.md' 'core/disciplines/knowledge-architecture.md' | changed_skills_from_paths || true)"
+  if [[ -n "$_csp_out" ]]; then
+    echo "FAIL: changed_skills_from_paths must emit nothing for non-skill/non-canonical paths, got '$_csp_out'"; failures=$((failures+1))
+  fi
+  # files=() composition (P1 regression guard) — the commit phase MUST expand
+  # "${REBUILT_PACKAGES[@]:-}" in its files=() array, else a rebuilt package is
+  # silently dropped from the chore commit.
+  if ! declare -f phase_commit_chore_pr | /usr/bin/grep -qF '"${REBUILT_PACKAGES[@]:-}"'; then
+    echo "FAIL: phase_commit_chore_pr files=() must expand \"\${REBUILT_PACKAGES[@]:-}\" (P1 staging-omission guard)"; failures=$((failures+1))
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -3461,7 +4002,7 @@ STUB
   echo "self-test: PASS" >&2
   echo "  validate_version + extract_major validated" >&2
   echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
-  echo "  phase_append_reversions validated (#1679 — N/A common path / round-trip 1-row / multi-abandoned fan-out / idempotency / dry-run / dotted+uppercase-slug numerator)" >&2
+  echo "  phase_append_reversions validated (#1679; SLIM #3109 — N/A common path / none-path SLIM gate → N/A no-row across round-trip + multi-abandoned fan-out + re-run + historical-none immutability / tag-orphaned positive → 1 row abandoned_tag_pushed=true / dry-run no-write + orphan-row idempotency); dry-run<=>apply parity validated on the GATED paths (F-01 — none-path preview 0 == apply 0; mixed orphan+none preview 1 == apply 1, orphan recorded, gated surfaced)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP)" >&2
@@ -3471,12 +4012,14 @@ STUB
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
+  echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
   echo "  usage block extractable" >&2
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
+  echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
   exit 0
 }
 
@@ -3581,6 +4124,7 @@ phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
 phase_ledger_guard || { generate_report; exit 3; }                    # Phase 9.9 — pre-commit §220 I1/I2 read-modify-write guard (#1680)
+phase_rebuild_skill_packages || { generate_report; exit 3; }          # Phase 9.95 — .skill package rebuild into the chore commit (#3322; content-sidecar-gated)
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
@@ -3589,7 +4133,7 @@ phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
-phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (detective-only; warn-mode never blocks)
+phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
 

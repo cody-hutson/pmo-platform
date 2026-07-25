@@ -17,7 +17,7 @@ Validates:
   (c) INDEX surface row count >= LOG entry count.
   (d) Frontmatter `type:` field matches filename type-suffix (Tier 3
       discriminator coherence per release-corpus-schema.md).
-  (e) Note-content lint (release-notes-standard.md §3.2 checks 9-13):
+  (e) Note-content lint (release-notes-standard.md §3.2 checks 9-14):
       - 9: Section 6a present with >=1 bullet or 'No user-visible' placeholder
       - 10: Banned-jargon scan (§2.4 deny-list)
       - 11: 'Why it matters:' beat present per Section 6a bullet
@@ -31,8 +31,21 @@ Validates:
             Floored at NOTE_LINK_CUTOVER (forward-only) so the historical notes
             that carry the Section-6b ](../RELEASE_LOG.md) template link are not
             retroactively failed.
+      - 14: Schema/format sample block (ADVISORY, flag-gated). For a release
+            DECLARED schema/format-changing by the Stage-13 closer via
+            --sample-block-advisory <version>, the note body must carry >=1
+            fenced sample block positioned outside the Section 6a bullet span,
+            or the '<!-- sample-block: n/a - <reason> -->' escape marker.
+            Whether a release is schema/format-changing is DECLARED, not
+            detected: the authoritative source is the release plan's File
+            Change Matrix, not the note (a note that omits the sample block
+            also omits the vocabulary that would betray the omission).
+            Check 14 therefore does NOT run without the flag, is NOT part of
+            the corpus-wide Check 20 run, and its findings NEVER contribute to
+            the blocking exit status (see ADVISORY_PREFIX).
       Checks 9-12 floored at the lowest live version family (v1.x) per
-      NOTE_CONTENT_CUTOVER; check 13 floored at NOTE_LINK_CUTOVER.
+      NOTE_CONTENT_CUTOVER; check 13 floored at NOTE_LINK_CUTOVER; check 14 has
+      no floor (a declared release is by definition current).
 
 This validator handles the schema/structural checks that go beyond link
 resolution. (The doc-link primitive `check-doc-links.py` covers cross-link
@@ -50,6 +63,8 @@ Usage:
     python3 core/deploy/tools/lint_release_corpus.py --check index
     python3 core/deploy/tools/lint_release_corpus.py --check type-coherence
     python3 core/deploy/tools/lint_release_corpus.py --check note-content
+    python3 core/deploy/tools/lint_release_corpus.py --check note-content \
+        --sample-block-advisory v<version>
 
 Exit codes: 0 = pass, 1 = content findings (one or more checks failed),
 3 = path-resolution failure (a required corpus dir/file did not resolve —
@@ -198,6 +213,35 @@ BANNED_JARGON_REGEX = [
 # carrying this prefix to exit 3 (path-config error) per the #459 fail-loud
 # contract — distinct from content findings (exit 1) and clean (exit 0).
 CORPUS_PATH_UNRESOLVED_PREFIX = "CORPUS-PATH-UNRESOLVED"
+
+# Sentinel prefix for ADVISORY findings (release-notes-standard.md §3.2 check
+# 14). Advisories are PRINTED but NEVER contribute to the blocking exit status:
+# main() partitions findings on this prefix exactly as it partitions on
+# CORPUS_PATH_UNRESOLVED_PREFIX above. Two properties are load-bearing and must
+# survive any future edit:
+#
+#   (1) Advisories go to STDOUT in the findings list — never to stderr with
+#       exit 0. All four callers capture the lint with `2>&1` but only INSPECT
+#       the buffer when the exit code is non-zero, so a stderr advisory on a
+#       clean run would be silently swallowed. An invisible advisory is not a
+#       check.
+#   (2) An advisory line cites the VERSION KEY and the BARE FILENAME only —
+#       never the repo-root-relative note path. The close-out callers scope
+#       findings to the closing version by grepping the output for
+#       "release/releases/notes/<V>_RELEASE_NOTES.md" whenever the exit code is
+#       non-zero; an advisory carrying that path would FALSE-BLOCK a close any
+#       time an unrelated legacy finding made the exit non-zero.
+ADVISORY_PREFIX = "ADVISORY"
+
+# Check 14 recognizers. The escape marker mirrors the existing
+# `<!-- impact:foundational -->` convention (an honest marker beats a
+# decorative block, per the standard's fabricate-or-omit rule). The fence
+# recognizer allows leading whitespace so a fence nested INSIDE a Section 6a
+# bullet is still detected — that nesting is precisely the placement §2.8
+# prohibits, so a column-zero-only match would miss the case the check exists
+# to flag.
+SAMPLE_BLOCK_NA_RE = re.compile(r"<!--\s*sample-block:\s*n/a\b", re.IGNORECASE)
+FENCE_RE = re.compile(r"^[ \t]*```")
 
 
 def _rel(path: Path) -> str:
@@ -536,9 +580,114 @@ def check_note_content() -> list[str]:
     return findings
 
 
+def _find_note_for_version(version: str) -> Path | None:
+    """Resolve the note whose version KEY equals `version` (folder-agnostic).
+
+    Mirrors check_note_content()'s discovery idiom: rglob so the foldered
+    notes/v1|v2|v3/… layout is reached, and key off path.name via
+    VERSION_KEY_RE so the folder never participates in the match.
+    """
+    want = version if version.startswith("v") else f"v{version}"
+    for path in sorted(NOTES_DIR.rglob("v*.md")):
+        m = VERSION_KEY_RE.match(path.name)
+        if m and m.group(0) == want:
+            return path
+    return None
+
+
+def _section_6a_span(body: str) -> tuple[int, int] | None:
+    """1-based inclusive line span of Section 6a's CONTENT within `body`.
+
+    Uses the same header regexes as extract_section_6a(); returns None when the
+    section is absent or empty.
+    """
+    lines = body.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if SECTION_6A_HEADER_RE.match(line):
+            start = i + 1
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for i in range(start, len(lines)):
+        if NEXT_H2_RE.match(lines[i]):
+            end = i
+            break
+    if end <= start:
+        return None
+    return (start + 1, end)
+
+
+def check_sample_block(version: str) -> list[str]:
+    """Check 14 (ADVISORY): schema/format sample block for a DECLARED release.
+
+    Runs ONLY when the Stage-13 closer passes --sample-block-advisory, because
+    "is this release schema/format-changing?" is not answerable from the note —
+    it is answerable from the release plan's File Change Matrix. Every finding
+    carries ADVISORY_PREFIX, so main() keeps it out of the exit decision.
+
+    Emits the version key + bare filename ONLY (never the repo-root-relative
+    note path) per invariant (2) on ADVISORY_PREFIX — a path in an advisory
+    would false-block a close through the callers' version-scoping grep.
+    """
+    if not NOTES_DIR.exists():
+        # check_note_content() already emits CORPUS-PATH-UNRESOLVED for this
+        # condition (and the flag is only honoured alongside it), so re-emitting
+        # here would duplicate the line without adding signal. Exit 3 still wins.
+        return []
+
+    path = _find_note_for_version(version)
+    if path is None:
+        return [
+            f"{ADVISORY_PREFIX}: NOTE-SAMPLE-BLOCK-UNRESOLVED — no release note resolves for "
+            f"declared version key '{version}'; check 14 could not evaluate "
+            f"(release-notes-standard.md §3.2 check 14)"
+        ]
+
+    text = path.read_text(encoding="utf-8")
+    name = path.name  # bare filename ONLY — see ADVISORY_PREFIX invariant (2)
+
+    if SAMPLE_BLOCK_NA_RE.search(text):
+        return []
+
+    body = extract_body(text)
+    fence_lines = [n for n, line in enumerate(body.splitlines(), start=1) if FENCE_RE.match(line)]
+
+    if not fence_lines:
+        return [
+            f"{ADVISORY_PREFIX}: NOTE-SAMPLE-BLOCK-MISSING — {version} ({name}) is declared "
+            f"schema/format-changing but its note body carries no fenced sample block and no "
+            f"'<!-- sample-block: n/a - <reason> -->' marker "
+            f"(release-notes-standard.md §2.8 / §3.2 check 14)"
+        ]
+
+    span = _section_6a_span(body)
+    if span is not None and all(span[0] <= n <= span[1] for n in fence_lines):
+        return [
+            f"{ADVISORY_PREFIX}: NOTE-SAMPLE-BLOCK-MISPLACED — {version} ({name}) carries its only "
+            f"fenced block(s) inside the Section 6a span; §2.8 requires the sample block outside "
+            f"Section 6a (Section 6b, or its own section after 6a) because a fence terminates the "
+            f"bullet check 11 scans (release-notes-standard.md §2.8 / §3.2 check 14)"
+        ]
+
+    return []
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--check", choices=["all", "filename", "schema", "index", "type-coherence", "note-content"], default="all", help="Which check(s) to run")
+    p.add_argument(
+        "--sample-block-advisory",
+        metavar="VERSION",
+        default=None,
+        help=(
+            "Declare the release schema/format-changing and run check 14 (ADVISORY) against its "
+            "note. Supplied by the Stage-13 closer from the release plan's File Change Matrix. "
+            "Findings are printed but never affect the exit status; omitted by every existing "
+            "call site, so default behaviour is unchanged."
+        ),
+    )
     args = p.parse_args()
 
     findings: list[str] = []
@@ -552,6 +701,10 @@ def main() -> int:
         findings.extend(check_type_coherence())
     if args.check in ("all", "note-content"):
         findings.extend(check_note_content())
+    # Check 14 is flag-gated: absent --sample-block-advisory this branch never
+    # runs, so every existing call site is byte-identically unaffected.
+    if args.sample_block_advisory and args.check in ("all", "note-content"):
+        findings.extend(check_sample_block(args.sample_block_advisory))
 
     for f in findings:
         print(f)
@@ -564,7 +717,12 @@ def main() -> int:
     # is present, exit 3 regardless of other findings.
     if any(f.startswith(CORPUS_PATH_UNRESOLVED_PREFIX) for f in findings):
         return 3
-    return 1 if findings else 0
+    # ADVISORY findings (check 14) are excluded from the exit decision — they
+    # are reported, never blocking. Absent the flag no advisory can exist, so
+    # this predicate is identical to the prior `1 if findings else 0` on every
+    # existing call site.
+    blocking = [f for f in findings if not f.startswith(ADVISORY_PREFIX)]
+    return 1 if blocking else 0
 
 
 if __name__ == "__main__":

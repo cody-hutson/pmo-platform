@@ -294,3 +294,53 @@ default_delivery_approach = "Scrum"
 # Valid: "off" | "recommend" | "bounded_auto"
 # Default: "recommend" (on — drafts/surfaces for your review; nothing auto-written).
 automation_level = "recommend"
+
+[session_retro]
+# Per-session self-retrospective — the SESSION-grained half of the platform's
+# learning capture (the other two grains are the decision moment and the release).
+# Read by BOTH the `session-retro` skill (emit / no-op) and the optional `Stop`
+# hook `session-retro-trigger.sh` (fire / skip).
+#
+# SHIPPED INERT. `enabled = false` below means the automatic trigger does nothing
+# on this instance, even though the hook is registered — turning it on is a
+# deliberate operator edit, not something a platform update does to you. You can
+# always run the retro by asking for it ("run the session retro"); that path
+# ignores every setting in this block except the sampling threshold, which it
+# also overrides.
+#
+# WHY SAMPLING MATTERS: the event log is append-only and permanent. A row emitted
+# for a session that taught nothing can never be deleted, only redacted, and it
+# permanently dilutes the cross-session pattern signal this surface exists to
+# produce. "Almost per session" is a ceiling with a floor under it, not "always".
+#
+# ACTIVATION IS TWO STEPS (the warn-then-enforce shakedown the platform uses for
+# every new runtime hook):
+#   1. enabled = true   -> the hook starts evaluating, still does not interrupt
+#   2. mode = "enforce" -> after the warn window, the hook actually runs the retro
+
+# Master switch for the AUTOMATIC trigger. false = the Stop hook is a no-op.
+# Valid: true | false          Default: false (inert — activation is your call)
+enabled = false
+
+# Hook posture. "off" never fires. "warn" evaluates the threshold and records the
+# verdict without interrupting the session (the shakedown posture). "enforce"
+# actually asks the agent to run the retro at the session boundary.
+# Valid: "off" | "warn" | "enforce"        Default: "warn"
+mode = "warn"
+
+# Which sessions clear the threshold:
+#   "all"              — every session, including trivial ones (accepts the noise)
+#   "almost_all"       — skip ONLY sessions that are trivial on BOTH axes below
+#                        (a long conversation with few tools still runs; so does a
+#                        short burst of heavy tool work)
+#   "significant_only" — run only when BOTH floors below are met
+# Valid: "all" | "almost_all" | "significant_only"     Default: "almost_all"
+sample = "almost_all"
+
+# The two triviality floors. [CALIBRATE-AFTER-3] — these are starting values, not
+# measured ones: no session-size distribution exists yet, because this is the
+# release that begins collecting it. Tune them after a warn window of real
+# sessions by comparing the recorded fire/skip verdicts against your own read of
+# which sessions were worth reflecting on.
+min_tool_calls = 12
+min_turns = 4

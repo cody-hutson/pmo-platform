@@ -7,6 +7,7 @@ status: Active
 version: v12.08
 last_reviewed: 2026-05-24
 ---
+<!-- reference-durability: allow-link -->
 
 # Release Notes — Voice & Terminology Guardrails
 
@@ -127,7 +128,7 @@ CHEAP / HIGH confidence. The doc is reference-only — Mode E and pmo-qa-auditor
 - [`release-notes-standard.md`](release-notes-standard.md) — parent contract (this doc extends §2.4 + §2.5)
 - [`release-corpus-schema.md`](release-corpus-schema.md) — frontmatter schema (`components:` field used here)
 - [`release/skills/release-executor/SKILL.md`](../../skills/release-executor/SKILL.md) — Mode E consumer; reads this doc at Step 1 Input validation
-- [`core/skills/eval-writer/references/release-notes-eval-rubric.md`](../../../core/skills/eval-writer/references/release-notes-eval-rubric.md) — sibling rubric covering the 12 lint checks
+- [`core/skills/eval-writer/references/release-notes-eval-rubric.md`](../../../core/skills/eval-writer/references/release-notes-eval-rubric.md) — sibling rubric covering the 14 lint checks
 - [`core/skills/pmo-qa-auditor/SKILL.md`](../../../core/skills/pmo-qa-auditor/SKILL.md) — G4 enforcement consumer
 
 ## 8. Version History

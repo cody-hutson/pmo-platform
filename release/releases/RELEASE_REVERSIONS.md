@@ -1,10 +1,14 @@
 <!-- reference-durability: allow-version-ref -->
 # RELEASE_REVERSIONS
 
-Machine-readable re-version ledger. A re-version is a release that **changed its
-version mid-pipeline** (`vX claimed → abandoned → reshipped as vY`) — the collision
-class the version-claim-determinism capability exists to prevent, made queryable so
-the collision rate is measurable over time.
+Machine-readable re-version **orphan-tag recovery record**. A re-version is a release
+that **changed its version mid-pipeline** (`vX claimed → abandoned → reshipped as vY`) —
+the collision class the version-claim-determinism capability exists to prevent. This
+records the rare recoverable case: an abandoned version whose git tag was pushed before
+the version was abandoned (`disposition=tag-orphaned`), which the recovery-doctrine
+reaper reads to find the orphan tag to clean up.
+
+> Provenance: narrowed to an orphan-tag recovery record per #3109 (was a collision-rate telemetry surface, #1679). The producer records only `tag-orphaned` re-versions going forward — a `disposition=none` re-version (no tag cut, the common defer-to-merge path) is no longer written; the historical `none`/`unrecoverable` rows below are retained under the append-only contract.
 
 This ledger is the fourth release-corpus surface beside RELEASE_LOG (the per-release
 audit trail), RELEASE_INDEX (the release index), and RELEASE_DIGEST (the version-family
@@ -106,38 +110,6 @@ DERIVATION — abandoned_versions from a claim sequence (handles the round-trip 
   Each member of the abandoned set is one row.
 ```
 
-## Collision rate (the measurable AC)
-
-The collision rate is `(re-version count) / (release count)` over a window. Both
-counts are grep-able from the corpus. The numerator slug class includes `.`, a
-leading digit, and uppercase so every real slug shape is counted — a version-prefixed
-slug (`v1.03-bundle-and-related`, dotted) and a milestone-derived slug
-(`05-ROLE-sustain-coverage-router`, leading digit + uppercase) both match. The
-denominator counts ALL releases including the version-less ones (a version-less
-release is itself frequently a collision outcome, so it must not be dropped):
-
-```bash
-# Re-version rows (the collision history) — one per abandoned version:
-grep -E '^\| [A-Za-z0-9.-]+ \| ' release/releases/RELEASE_REVERSIONS.md | grep -v -- '---'
-
-# Re-version count (rows) — numerator. The [A-Za-z0-9.-] class matches dotted,
-# leading-digit, and uppercase slugs (every shape the live corpus carries):
-RX=$(grep -cE '^\| [A-Za-z0-9.-]+ \| v' release/releases/RELEASE_REVERSIONS.md)
-
-# Release count — denominator. Anchor on the trailing State + Date columns (every
-# RELEASE_LOG release row has them), NOT a digit-led Version, so the 7 version-less
-# releases are NOT dropped:
-REL=$(grep -cE '\| (VERIFIED|DEPLOYED) \| [0-9]{4}-[0-9]{2}-[0-9]{2} \|$' release/releases/RELEASE_LOG.md)
-
-echo "re-version rate = $RX abandoned-version rows / $REL releases"
-
-# What the recovery reaper must act on (orphan / unrecoverable dispositions).
-# Pipe-split fields (leading `|` makes field 1 empty): 2=slug 3=abandoned_version
-# 10=disposition. Match the disposition column by its position in the data rows:
-awk -F'|' '$10 ~ /tag-orphaned|unrecoverable/ {gsub(/ /,"",$2); gsub(/ /,"",$3); print $2, $3, $10}' \
-  release/releases/RELEASE_REVERSIONS.md
-```
-
 ## Evidence-grounding (why every historical `disposition` is `none` or `unrecoverable`)
 
 Every post-instrumentation abandoned version below is a **live tag of the SIBLING
@@ -154,6 +126,7 @@ are lost, and it is recorded `unrecoverable` (the reaper reads, never reaps it).
 
 | slug | abandoned_version | final_version | claimed_versions | abandoned_tag_pushed | merge_sha | collided_with | resolved_at_stage | disposition | residual_labels | reaped_ref | date |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| pipeline-telemetry-tail | v3.80 | v3.83 | v3.80 → v3.83 | false | 4dcf8298c33b79bffc6efebebb7b53bafd631869 | close-out-reliability-hardening@v3.80, version-identity-and-parser-ssot@v3.81, governance-doc-reconciliation@v3.82 | S12 | none | branch release/v3.80-pipeline-telemetry-tail + 14 commit subjects retain as-authored v3.80 | — | 2026-07-23 |
 | governance-doc-reconciliation | v3.81 | v3.82 | v3.80 → v3.81 → v3.82 | false | a0fe5e61de1894239133c18e55f9d1da63819f86 | close-out-reliability-hardening@v3.80,92-version-identity-and-parser-ssot@v3.81 | Stage-12-A.5.6c | none | branch name release/v3.81-governance-doc-reconciliation + on-branch commit subjects retain the as-authored v3.80/v3.81 provisional labels (pre-merge relabel; no v3.80 or v3.81 tag cut by this release); plan file renamed to v3.82-governance-doc-reconciliation_RELEASE_PLAN.md with the body H1 + Version line still reading v3.81 | — | 2026-07-22 |
 | governance-doc-reconciliation | v3.80 | v3.82 | v3.80 → v3.81 → v3.82 | false | a0fe5e61de1894239133c18e55f9d1da63819f86 | close-out-reliability-hardening@v3.80,92-version-identity-and-parser-ssot@v3.81 | Stage-12-A.5.6c | none | branch name release/v3.81-governance-doc-reconciliation + on-branch commit subjects retain the as-authored v3.80/v3.81 provisional labels (pre-merge relabel; no v3.80 or v3.81 tag cut by this release); plan file renamed to v3.82-governance-doc-reconciliation_RELEASE_PLAN.md with the body H1 + Version line still reading v3.81 | — | 2026-07-22 |
 | 92-version-identity-and-parser-ssot | v3.80 | v3.81 | v3.80 → v3.81 | false | e1bcb48fa4ba55cf6f6ce8403fdd76864054eb9d | close-out-reliability-hardening@v3.80 | Stage-12-A.5.6c | none | branch name release/v3.80-version-identity-and-parser-ssot + the on-branch commit subjects retain the as-authored v3.80 provisional label (pre-merge relabel; no v3.80 tag cut) | — | 2026-07-22 |

@@ -84,6 +84,7 @@ CORE_SKILLS=(
   pmo-qa-auditor
   pmo-skill-router
   prompt-builder
+  session-retro
   skill-compliance-auditor
 )
 
@@ -2834,11 +2835,22 @@ cmd_check() {
   # the shared deploy-check.mode cohort). Reads a CHECK-SPECIFIC mode file
   # "<check_id>.mode" from the same operator-instance base (and legacy
   # .claude/hooks/ fallback) as the shared MODE_FILE; if that file is absent or
-  # carries an invalid value, FALLS BACK to the shared $DEPLOY_CHECK_MODE. Echoes
-  # the resolved mode (enforce|warn|off). This lets one check graduate
-  # warn→enforce independently of the ~12-check shared-mode cohort without
-  # touching any other check's behavior — every other check keeps reading
-  # $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged.
+  # carries an invalid value, FALLS BACK to the caller-supplied default (2nd arg,
+  # itself defaulting to the shared $DEPLOY_CHECK_MODE). Echoes the resolved mode
+  # (enforce|warn|off). This lets one check graduate warn→enforce independently
+  # of the ~12-check shared-mode cohort without touching any other check's
+  # behavior — every other check keeps reading $DEPLOY_CHECK_MODE directly and is
+  # byte-for-byte unchanged.
+  #
+  #   resolve_check_mode "<check_id>"              # fallback = shared mode
+  #   resolve_check_mode "<check_id>" "<default>"  # fallback = caller's default
+  #
+  # The OPTIONAL second argument exists so a check can ship a COMMITTED posture
+  # (e.g. release-body-drift ships `enforce`) without cloning a bespoke default
+  # block per check — a mode file cannot carry a shipped posture, because mode
+  # files are operator-instance runtime state and are NOT committed (see the
+  # decoupling contract below). Omitting the argument reproduces the pre-existing
+  # behavior exactly, so every single-argument call site is unchanged.
   #
   # Decoupling contract (per the g1-enforcement mode-decoupling scope): the
   # g1-enforcement check (Check 22) resolves its mode via this helper from a
@@ -2848,6 +2860,7 @@ cmd_check() {
   # Mode files are operator-instance runtime state and are NOT committed.
   resolve_check_mode() {
     local _check_id="$1"
+    local _default="${2:-$DEPLOY_CHECK_MODE}"
     local _check_mode_file="$(pmo_instance_path)/${_check_id}.mode"
     [[ -f "$_check_mode_file" ]] || _check_mode_file=".claude/hooks/${_check_id}.mode"
     if [[ -f "$_check_mode_file" ]]; then
@@ -2857,8 +2870,9 @@ cmd_check() {
         enforce|warn|off) printf '%s' "$_cm"; return 0 ;;
       esac
     fi
-    # No check-specific file (or invalid value) → fall back to the shared mode.
-    printf '%s' "$DEPLOY_CHECK_MODE"
+    # No check-specific file (or invalid value) → fall back to the caller default
+    # (which is the shared mode unless the caller supplied its own).
+    printf '%s' "$_default"
   }
 
   # flag_g1_enforcement — Check 22 (G1 enforcement) gating emit. Identical
@@ -2877,6 +2891,36 @@ cmd_check() {
         ;;
       warn)
         log "  WARN:  $check_id — $detail (warn-mode; flip g1-enforcement.mode to 'enforce' after the shakedown window)"
+        local _ts
+        _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        local _detail_escaped="${detail//\\/\\\\}"
+        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
+        ;;
+    esac
+  }
+
+  # flag_release_body_drift — Check 47 (release-body drift) gating emit. Identical
+  # semantics to flag_warn_or_issue, EXCEPT it switches on the check-specific
+  # $RELEASE_BODY_DRIFT_MODE (resolved at Check 47 start via resolve_check_mode
+  # "release-body-drift" with an ENFORCE default) rather than the shared
+  # $DEPLOY_CHECK_MODE. In enforce-mode → FAIL (increments ISSUES); in warn-mode →
+  # WARN + jsonl, no ISSUES increment; in off-mode → silent.
+  #
+  # Unlike flag_g1_enforcement (whose warn branch advertises a pending graduation),
+  # this check ships ENFORCE. A warn here therefore means an operator deliberately
+  # dialed it DOWN with a local release-body-drift.mode, or the shared cohort is
+  # off — the message says so rather than pointing at a shakedown that is over.
+  flag_release_body_drift() {
+    local check_id="$1"
+    local detail="$2"
+    case "$RELEASE_BODY_DRIFT_MODE" in
+      enforce)
+        log "  FAIL:  $check_id — $detail"
+        ISSUES=$((ISSUES + 1))
+        ;;
+      warn)
+        log "  WARN:  $check_id — $detail (warn-mode; this check ships ENFORCE — a local release-body-drift.mode dialed it down)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         local _detail_escaped="${detail//\\/\\\\}"
@@ -5343,37 +5387,87 @@ cmd_check() {
   # resolves to N/A (never FAIL), so a disconnected deploy.sh --check run does
   # not red-fail here — the tool itself also returns exit 2 (N/A) in that case.
   #
-  # CUTOVER-SCOPED + DORMANT-BY-DEFAULT: like Check 32's published-Release
-  # sub-check, the drift assertion runs only for LOG rows at/after a SEPARATE,
-  # later $c47_cutoff (RELEASE_BODY_DRIFT_CHECK_CUTOFF), which defaults to the
-  # __none__ sentinel — so the network-dependent check is DORMANT until an
-  # operator opts in. This (a) avoids retroactively warning on legitimate
-  # historical rows whose Release bodies predate the §5.1 transform, and (b)
-  # honors the reflexive-pipeline-loop discipline — the introducing release
-  # closes under pre-merge rules and is NOT bound by its own check.
+  # CUTOVER-SCOPED, ARMED BY DEFAULT: like Check 32's published-Release sub-check,
+  # the drift assertion runs only for LOG rows at/after a SEPARATE, later
+  # $c47_cutoff (RELEASE_BODY_DRIFT_CHECK_CUTOFF). That cutoff now carries a
+  # COMMITTED default instead of the __none__ sentinel, so the check runs on a
+  # clean checkout with no operator opt-in. The cutoff still scopes the assertion
+  # FORWARD — historical rows whose Release bodies predate the §5.1 transform are
+  # never retroactively flagged. __none__ remains an ACCEPTED value: an operator
+  # who exports it explicitly disables the assertion. The escape hatch is retained;
+  # it is simply no longer the default.
   #
-  # Warn-mode initial per .claude/hooks/deploy-check.mode (Checks 8/9/10/14/15/18-
-  # 23/25-29/31/32 precedent); flip-to-enforce after a >=3-day warn-log review with
-  # zero false positives (GitHub body normalization edge cases — CRLF / trailing
-  # newline — are the calibration target; the tool already trims a trailing nl).
-  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+  # WHY THE CUTOFF MUST BE A COMPLETE VERSION TOKEN: the cutover test below is a
+  # positional PREFIX GLOB, not a semantic version compare. It LATCHES on the first
+  # prefix-matching row and then takes the contiguous file-order suffix — and LOG
+  # file order is date-ascending, NOT version-ordered. A partial token (say "v3.8")
+  # would silently match every sibling sharing that prefix and widen scope by an
+  # order of magnitude. The committed default is therefore a complete token.
+  #
+  # HOW THE VALUE WAS CHOSEN: it names the EARLIEST already-merged release whose
+  # published body this very tool verified equal to its note — found by walking the
+  # LOG backward from the tail until the first drifted row, and anchoring one row
+  # later. Anchoring instead at the §5.1 transform's own introducing release was
+  # REJECTED: that range contains known-drifted historical bodies, so the armed gate
+  # would red-fail on day one, and the only way to keep it green would be a
+  # permanent exempt list naming the exact defect class the gate exists to catch.
+  # Those historical rows are tracked as a separate carry-forward instead. The
+  # consequence to state plainly: this gate's coverage of history is nil and grows
+  # only as releases accrue.
+  #
+  # SHIPPED ENFORCE (not warn-mode-initial): findings route through
+  # flag_release_body_drift, which switches on $RELEASE_BODY_DRIFT_MODE — resolved
+  # via resolve_check_mode "release-body-drift" with an ENFORCE default. A mode file
+  # CANNOT carry this posture: mode files are operator-instance runtime state and
+  # are NOT committed (see resolve_check_mode's contract), so a mode-file flip would
+  # leave a clean checkout resolving to the shared warn. An operator can still dial
+  # DOWN locally with a release-body-drift.mode of warn|off, and a shared
+  # deploy-check.mode of `off` remains the global kill-switch.
+  #
+  # REFLEXIVE-PIPELINE-LOOP — why an armed cutoff does not gate its own introducing
+  # release, even though that release IS in scope. "Anchor the cutoff after this
+  # release's merge SHA" is structurally unreachable for a gate that scans anything:
+  # the latch takes the contiguous file-order suffix, so ANY cutoff naming an
+  # existing row also covers every future row, and the only cutoffs that exempt the
+  # introducing release name a version that does not exist yet — and therefore scan
+  # zero rows. The obligation is discharged by the EXIT-CODE CONTRACT below instead:
+  # the mid-close states (Surface 1 not yet published; note not yet on origin/main)
+  # both return tool exit 3, which maps to N/A and NEVER to a finding. A release can
+  # fail its own close here only by publishing a genuinely drifted body — which is
+  # the gate working, not a loop. Both shipped emit paths derive the body from the
+  # note by the same §5.1 transform, so that path is closed by construction.
+  # Recorded here because this is where a future maintainer looks; do not re-derive.
+  #
+  # FRESHNESS PRESUMPTION (accepted residual, sharper under enforce): the tool reads
+  # the canonical note from the LOCAL origin/main remote-tracking ref, and this check
+  # performs NO fetch — a self-fetch would violate the tool's detective-only posture.
+  # A content-stale origin/main can therefore yield a false finding, which under
+  # enforce is a FAIL rather than a harmless WARN. Run `git fetch origin` immediately
+  # before an enforcing `deploy.sh --check`.
+  #
+  # Ship ENFORCE by default; a shared-cohort `off` still suppresses this check.
+  local _c47_default="enforce"
+  if [[ "$DEPLOY_CHECK_MODE" == "off" ]]; then _c47_default="off"; fi
+  RELEASE_BODY_DRIFT_MODE="$(resolve_check_mode "release-body-drift" "$_c47_default")"
+  if [[ "$RELEASE_BODY_DRIFT_MODE" != "off" ]]; then
     log "Check 47: Release-body drift (published Release body == frontmatter-stripped in-repo note)"
     local c47_log="release/releases/RELEASE_LOG.md"
     local c47_tool="release/tools/check-release-body-drift.sh"
-    # Separate, later cutover for this network-dependent assertion. Sentinel
-    # __none__ => no row is in scope (the drift check is dormant by default).
-    local c47_cutoff="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-__none__}"
+    # Separate, later cutover for this network-dependent assertion. The default is
+    # a COMMITTED, complete version token (see the block comment above); exporting
+    # the __none__ sentinel is the operator's explicit opt-OUT.
+    local c47_cutoff="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-v3.78}"
 
     if [[ "$c47_cutoff" == "__none__" ]]; then
-      log "  N/A:   release-body drift check dormant (RELEASE_BODY_DRIFT_CHECK_CUTOFF unset) — opt in by setting it to the first §5.1-transform release"
+      log "  N/A:   release-body drift check explicitly disabled by an operator override (RELEASE_BODY_DRIFT_CHECK_CUTOFF=__none__) — unset it to restore the committed cutoff"
     elif [[ ! -x "$c47_tool" ]]; then
-      flag_warn_or_issue "release-body-drift" \
+      flag_release_body_drift "release-body-drift" \
         "drift tool not executable: $c47_tool — cannot assert the §5.1 published-body invariant"
     elif ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
       # gh-guard: offline/unauth => N/A (never FAIL), mirroring Check 32/39.
       log "  N/A:   release-body drift check skipped (gh offline/unauthenticated) — reuses Check 32/39 gh-guard SKIP semantics"
     elif [[ ! -f "$c47_log" ]]; then
-      flag_warn_or_issue "release-body-drift" \
+      flag_release_body_drift "release-body-drift" \
         "$c47_log not found; cannot enumerate logged releases for the §5.1 drift check"
     else
       # Enumerate post-cutover release versions from the LOG (LOG file order).
@@ -5400,7 +5494,7 @@ cmd_check() {
         _d47_out=$("$c47_tool" "$_v47" --quiet 2>&1) || _d47_exit=$?
         case "$_d47_exit" in
           0) : ;;  # MATCH — no finding
-          1)       # DRIFT — warn (never FAIL)
+          1)       # DRIFT — a genuine finding; gated by $RELEASE_BODY_DRIFT_MODE
             c47_output+="${_v47}: published Release body != frontmatter-stripped in-repo note (§5.1 drift)"$'\n'
             c47_findings=$((c47_findings + 1))
             ;;
@@ -5416,7 +5510,7 @@ cmd_check() {
       if [[ $c47_findings -eq 0 ]]; then
         log "  OK:    all $c47_targets logged release(s) on/after $c47_cutoff have a published Release body matching their in-repo note (§5.1 invariant holds)"
       else
-        flag_warn_or_issue "release-body-drift" \
+        flag_release_body_drift "release-body-drift" \
           "$c47_findings §5.1 body-drift finding(s) across $c47_targets logged release(s) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
         printf '%s' "$c47_output" | head -10 | sed 's/^/         /'
         if [[ $c47_findings -gt 10 ]]; then
@@ -6042,6 +6136,29 @@ cmd_check() {
             c37_other_count=$((c37_other_count + 1))
             ;;
         esac
+      done
+      # (a2) Opt-in arm: a NON-`block-*` hook (a trigger/notifier rather than a
+      #      guard) is scanned IFF it declares an owner. Declaring is the opt-in —
+      #      a hook with no `# hook-owner:` line is skipped here rather than
+      #      flagged, because the forward invariant in (a) is scoped to the
+      #      guard set and widening it would retro-fail the pre-existing
+      #      notifier/helper scripts that never declared one. What this arm DOES
+      #      assert: once a hook declares an owner, that owner must resolve on
+      #      disk — so a declaration cannot rot into decoration.
+      local c37_any
+      for c37_any in core/hooks/*.sh; do
+        [[ -e "$c37_any" ]] || continue
+        case "$c37_any" in core/hooks/block-*.sh) continue ;; esac   # covered by (a)
+        local c37_abase; c37_abase="$(basename "$c37_any" .sh)"
+        local c37_aowner
+        c37_aowner="$(sed -n -E 's/^# hook-owner:[[:space:]]+//p' "$c37_any" | head -1)"
+        [[ -n "$c37_aowner" ]] || continue                            # not opted in
+        if [[ ! -f "$c37_aowner" ]]; then
+          flag_warn_or_issue "hook-registry-completeness" "$c37_abase declares owner '$c37_aowner', but that owner doc is missing on disk"
+          c37_violations=$((c37_violations + 1))
+        else
+          c37_other_count=$((c37_other_count + 1))
+        fi
       done
       # (b) Reverse: every bypass-mode per-hook source maps back to a script that
       #     declares it as its owner (preserves the source⇄script bijection).
