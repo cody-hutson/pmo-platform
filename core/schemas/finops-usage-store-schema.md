@@ -1,11 +1,11 @@
 ---
 title: FinOps Usage Store Schema — Agent Token-Spend Runtime Store
-purpose: The canonical data contract for the operator-local Agent-FinOps usage store — the JSONL record kinds, fields, versioning, write-discipline, and summation invariant for per-session and per-subagent token counts extracted from local Claude Code session data. C2 (#3910) extends this with the roll-up record kind at v1.1.0.
+purpose: The canonical data contract for the operator-local Agent-FinOps usage store — the JSONL record kinds, fields, versioning, write-discipline, and summation invariant for per-session and per-subagent token counts extracted from local Claude Code session data. The C2 attribution slice extends this with the roll-up record kind at v1.1.0.
 type: schema
 status: ACTIVE
 schema_version: "1.0.0"
-reversibility: MODERATE / HIGH confidence (consumed by C2 #3910 + the downstream agent-finops-intelligence milestone; additive extension is backward-compatible, a breaking field change is a major bump + a downstream coordination event)
-consumers: "finops-usage-extractor (producer); C2 #3910 attribution/roll-up (extends v1.1.0 rollup record); the agent-finops-intelligence milestone — estimation #3911, reporting #3912, calibration #3329 (version-pin >= v1.1.0)"
+reversibility: MODERATE / HIGH confidence (consumed by the C2 attribution slice + the downstream agent-finops-intelligence milestone; additive extension is backward-compatible, a breaking field change is a major bump + a downstream coordination event)
+consumers: "finops-usage-extractor (producer); the C2 attribution/roll-up slice (extends v1.1.0 rollup record); the agent-finops-intelligence milestone — estimation, reporting, calibration (version-pin >= v1.1.0)"
 ---
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->
@@ -13,7 +13,7 @@ consumers: "finops-usage-extractor (producer); C2 #3910 attribution/roll-up (ext
 
 # FinOps Usage Store Schema
 
-> Frozen **v1.0.0** data contract (parent epic #1494 · slice C1 #3909). C2 (#3910) extends it additively to v1.1.0 (`rollup`). This doc is the schema authority; the `finops-usage-extractor` skill is the producer.
+> Frozen **v1.0.0** data contract for Agent token-spend FinOps (slice C1, the data foundation). The C2 attribution slice extends it additively to v1.1.0 (`rollup`). This doc is the schema authority; the `finops-usage-extractor` skill is the producer.
 
 ## Purpose + Scope
 
@@ -31,7 +31,7 @@ JSONL — one JSON object per line, discriminated by a top-level `record` field.
 
 ## Versioning
 
-`schema_version` travels in the `meta` record (semver). **v1.0.0 (C1, this doc) freezes** the `meta`, `session`, and `subagent` record kinds and their field sets, and reserves `provider` (optional). **C2 (#3910) adds v1.1.0:** the `rollup` record kind (additive; existing kinds unchanged). An additive change is a minor bump; a breaking change to a frozen kind is a major bump plus a coordination event across the downstream `agent-finops-intelligence` consumers, which pin `schema_version >= 1.1.0`.
+`schema_version` travels in the `meta` record (semver). **v1.0.0 (C1, this doc) freezes** the `meta`, `session`, and `subagent` record kinds and their field sets, and reserves `provider` (optional). **C2 adds v1.1.0:** the `rollup` record kind (additive; existing kinds unchanged). An additive change is a minor bump; a breaking change to a frozen kind is a major bump plus a coordination event across the downstream `agent-finops-intelligence` consumers, which pin `schema_version >= 1.1.0`.
 
 ## Store write-discipline
 

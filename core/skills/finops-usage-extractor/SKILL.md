@@ -4,9 +4,10 @@ description: >
   Extracts per-session and per-subagent agent token-spend from local Claude Code session data
   into the operator-local, git-ignored FinOps usage store (schema authority:
   core/schemas/finops-usage-store-schema.md). Exact message.usage counts are primary; the
-  context-budget-auditor (#16) ceil(words/0.75) heuristic is the fallback for usage-less records
-  only. Read-only on the source transcripts — writes only the resolved store. Distinct from #16,
-  which measures STATIC corpus footprint; this measures RUNTIME session spend. Use to populate or
+  context-budget-auditor skill's ceil(words/0.75) heuristic is the fallback for usage-less
+  records only. Read-only on the source transcripts — writes only the resolved store. Distinct
+  from context-budget-auditor, which measures STATIC corpus footprint; this measures RUNTIME
+  session spend. Use to populate or
   refresh token-usage data for FinOps reporting. Triggers: "extract token usage", "refresh the
   finops store", "how much token spend", "populate the usage store", "run the finops extractor".
 version: v3.93
@@ -19,13 +20,13 @@ delivery_approach: advisory
 
 ## Purpose
 
-Read-only extraction of runtime token spend from local Claude Code session transcripts into the operator-local usage store defined by `core/schemas/finops-usage-store-schema.md`. It sums each session's exact `message.usage` token dimensions (input / output / cache-write with tier split / cache-read) plus tool-use request counts and the cost-determining `service_tier`, and normalizes them into a versioned JSONL derived cache. Exact source counts are authoritative; the context-budget-auditor (#16) `ceil(words/0.75)` heuristic is the fallback for records that lack `message.usage`.
+Read-only extraction of runtime token spend from local Claude Code session transcripts into the operator-local usage store defined by `core/schemas/finops-usage-store-schema.md`. It sums each session's exact `message.usage` token dimensions (input / output / cache-write with tier split / cache-read) plus tool-use request counts and the cost-determining `service_tier`, and normalizes them into a versioned JSONL derived cache. Exact source counts are authoritative; the context-budget-auditor skill's `ceil(words/0.75)` heuristic is the fallback for records that lack `message.usage`.
 
-This skill measures **runtime session spend** — distinct from #16, which measures **static corpus footprint**. It reuses #16's estimation *method* (the word→token fallback), not its scanner.
+This skill measures **runtime session spend** — distinct from context-budget-auditor, which measures **static corpus footprint**. It reuses that skill's estimation *method* (the word→token fallback), not its scanner.
 
 ## Scope (C1)
 
-Extraction + normalization only. This slice (#3909) freezes the store schema at **v1.0.0** (`meta` / `session` / `subagent` record kinds; `provider` reserved-optional). Attribution (subagent→agent→session→work-item) and work-item roll-up are C2 (#3910), which extends the schema additively to v1.1.0 (`rollup`). The skill is deliberately thin at C1 (a script wrapper); C2 thickens the same skill with attribution logic.
+Extraction + normalization only. This slice (C1) freezes the store schema at **v1.0.0** (`meta` / `session` / `subagent` record kinds; `provider` reserved-optional). Attribution (subagent→agent→session→work-item) and work-item roll-up are the C2 slice, which extends the schema additively to v1.1.0 (`rollup`). The skill is deliberately thin at C1 (a script wrapper); C2 thickens the same skill with attribution logic.
 
 ## Usage
 
@@ -41,9 +42,9 @@ The optional plan-gated provider connector (`scripts/provider-usage-connector.sh
 
 ## Dependencies
 
-- **`jq`** (REQUIRED) — the extractor parses session JSONL with `jq` throughout. Missing `jq` is a hard preflight failure (**exit 5**). Note: #16 (context-budget-auditor) is pure-bash; `jq` is a genuinely new runtime dependency here, hence the explicit declaration + preflight.
+- **`jq`** (REQUIRED) — the extractor parses session JSONL with `jq` throughout. Missing `jq` is a hard preflight failure (**exit 5**). Note: context-budget-auditor is pure-bash; `jq` is a genuinely new runtime dependency here, hence the explicit declaration + preflight.
 - **`git`** (REQUIRED) — the fail-closed store guard uses `git check-ignore` to refuse writing a store path that is inside a repository but not git-ignored. Missing `git` fails the same preflight (**exit 5**).
-- **`bash`** — bash-3.2-safe integer arithmetic (the reused #16 heuristic is already bash-3.2-safe).
+- **`bash`** — bash-3.2-safe integer arithmetic (the reused context-budget-auditor heuristic is already bash-3.2-safe).
 
 ## Read-only posture
 
