@@ -1,0 +1,10 @@
+[
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000001", "work_item": "milestone:v9.9", "work_item_kind": "milestone", "attribution_tier": "branch-milestone" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000002", "work_item": "milestone:v9.9", "work_item_kind": "milestone", "attribution_tier": "branch-milestone" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000003", "work_item": "#4242", "work_item_kind": "issue", "attribution_tier": "issue-event-keyed" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000004", "work_item": "milestone:v9.9", "work_item_kind": "milestone", "attribution_tier": "hub-state-lineage" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000005", "work_item": "unattributed", "work_item_kind": "unattributed", "attribution_tier": "unattributed" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000006", "work_item": "unattributed", "work_item_kind": "unattributed", "attribution_tier": "unattributed" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000007", "work_item": "multi-branch", "work_item_kind": "multi-branch", "attribution_tier": "unattributed" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000008", "work_item": "#5151", "work_item_kind": "issue", "attribution_tier": "pr-resolved" }
+]
