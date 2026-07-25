@@ -590,7 +590,7 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 
 ## Skill 7: PMO QA Auditor (Meta — Quality Gate)
 
-### Modes (4 Total)
+### Modes (9 Total)
 
 | Mode | Trigger | Output Focus |
 |------|---------|--------------|
@@ -598,6 +598,21 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 | (B) Cross-Skill Coherence Review | Multiple skill outputs related to same topic or artifact | Consistency, contradiction detection, missing connections |
 | (C) Push-to-Resolve Audit | Ad-hoc quality gate (triggered by PPM Agent or Delivery Engine) | Structural + content + actionability audit |
 | (D) Document Management Compliance | Periodic audit of operational documents (RAID, decisions, milestones) | Naming, dating, ownership, archival compliance |
+| (E) Platform Health Audit | "platform health audit", base-vs-build drift check, quarterly / drift-watch scheduled task | Observational base-vs-build drift + Failure-Mode Detector Battery → dated audit folder (no gate verdict) |
+| (F) Release-Process Fitness Audit | "release-process fitness audit", a process-fitness cadence event or the 90-day sentinel | 13-dimension pipeline fitness (1–5) + UNTRACKED / PARTIAL / ALREADY-TRACKED classification → dated audit folder |
+| (G) Dev Testing | "dev-test this PR", Stage-7 Dev Testing spoke (PR + release plan) | Stage-7 Quality Review Report (eval-assertion ladder; PASS / CONDITIONAL PASS / FAIL) posted as a PR comment |
+| (H) Acceptance Review | "acceptance review this PR", Stage-8 QA invocation (PR + issue AC) | Per-criterion Stage-8 six-value verdicts + acceptance score → Acceptance Report |
+| (I) As-Built Architecture-Conformance Audit | "as-built architecture-conformance audit", an architecture-conformance cadence event or the 90-day sentinel | Observational audit of delivered work (release record) vs the architecture baseline — conformance-drift + candidate cross-release fragmentation → dated audit folder + committed conformance-summary surface (no gate verdict; auto-files nothing) |
+
+> **Output-contract scope.** The `### Output Contract` gate-table below frames the **gate-table
+> modes (A–D)** — the consumer/reviewer modes that emit the QA Audit Report header + a gate
+> results table. The **producer / stage modes (E–I)** each emit their own output contract
+> documented in `pmo-qa-auditor/SKILL.md § Mode-specific output variations`, not this gate
+> table: E/F/I emit a **dated on-disk audit folder** under the observational audit-class
+> discipline (I additionally overwrites the committed
+> `release/releases/architecture-conformance-summary.md` hand-off surface consumed by
+> health-check); G emits the Stage-7 Quality Review Report as a PR comment; H emits the
+> Stage-8 Acceptance Report. None of E–I emits a PASS/FAIL gate verdict.
 
 ### Output Contract
 

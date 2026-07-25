@@ -17,6 +17,8 @@ reversibility: CHEAP / Confidence HIGH
 
 This document is the **composition view** of the PMO platform. It composes three layers — Skill Ownership (which skill executes), Governance Composition (which docs constrain), Per-Stage Execution Blueprint (how the layers compose at each of the 13 stages) — into a single reference for downstream consumers. It is intentionally cite-not-duplicate: where existing files already define the authoritative table (e.g., [`stage-to-skill-mode-mapping.md`](../../release/references/specs/stage-to-skill-mode-mapping.md), [`schemas/gate-criteria-spec.md`](../schemas/gate-criteria-spec.md), [`schemas/stage-io-contracts.md`](../schemas/stage-io-contracts.md)), the per-stage blocks cite those sources by anchor rather than restate them. Honors [`architecture-overview.md` Key Principles § 1 "One source, one truth"](../disciplines/architecture-overview.md). Three foundational design choices — cardinality model, cite-not-duplicate citation discipline, cross-reference pattern with the function-spine companion document — are recorded in [`../ADRs/ADR-003-operating-model-composition.md`](../ADRs/ADR-003-operating-model-composition.md). Future authors revisiting any of these choices should consult ADR-003 before re-designing.
 
+This document is the **current** composition view. Its **target-state evolution** — the three-actor target operating model (orchestrator / specialist skill / free AI agent) bound by governance-as-contract, toward which this composition is evolving — is stated as a forward-looking target architecture (not current state) in [`actor-model-and-governance-as-contract.md`](actor-model-and-governance-as-contract.md).
+
 ---
 
 ## Skill Ownership

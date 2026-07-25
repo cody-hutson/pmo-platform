@@ -71,6 +71,8 @@ mode_full:
 
 `full` runs every other mode's checks — `timeline`, `attribution`, `comms`, `raid`, and `sources` — and merges their findings into one 5-section report. (`plan <name>` is excluded from the `full` sweep because it requires a named-plan argument; `full` audits the project, not a single named plan.) It is the default when `/health-check` is invoked with no mode.
 
+**Architecture-conformance surfacing step (compose-not-absorb).** As part of the `full` sweep, `full` **reads the committed** `release/releases/architecture-conformance-summary.md` hand-off surface (the tracked headline `pmo-qa-auditor` Mode I overwrites on each run) and surfaces a **platform-context** conformance flag — never re-running the platform audit itself (that is the ADR-019 *absorb* anti-pattern; [`core/ADRs/ADR-019-specialists-compose-not-absorb.md`](../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)). health-check audits a single project; this flag is **platform-altitude context, not project drift**, and is labeled as such. Because the consumed artifact is **committed** (ships in the repo, present on every clone), the flag delivers signal on any instance — not only the one that produced the audit. The read contract is in [`references/conformance-surface.md`](references/conformance-surface.md); the seam mirrors `rollup`'s composition of `weekly-status-rollup`.
+
 ### Mode 2 — `timeline` (v1)
 
 ```yaml
@@ -185,7 +187,14 @@ Every run opens with a header line carrying: timestamp · mode · scope (project
 
 so every consumer knows the coverage envelope (ADR-051 §4). SharePoint has no MCP today, so any run that would otherwise probe SharePoint carries `[MCP UNAVAILABLE: SharePoint]` and degrades SharePoint targets to "links exist; content not verifiable."
 
-### `## Auto-Actionable` emits `TRACKER_UPDATES:`
+### The architecture-conformance flag (full mode — platform-context)
+
+In `full` mode only, the run also surfaces a **platform-altitude** architecture-conformance flag composed from the committed `release/releases/architecture-conformance-summary.md` surface (see the `full`-mode surfacing step + [`references/conformance-surface.md`](references/conformance-surface.md)). It renders in two places, always **explicitly labeled platform-context, not project drift**:
+
+- **Run-header line** — when the committed summary shows open conformance-drift / cross-release-fragmentation flags, the header carries `[ARCH-CONFORMANCE: <N drift · M fragmentation-candidate> — platform-context]`.
+- **A labeled `## Unknowns` row** — one row citing the committed summary as its source, marked "platform-altitude context, not this project's drift," pointing to the latest audit folder. When the committed surface is still in its seeded **AWAITING FIRST RUN** state (or absent), the `## Unknowns` row is a coverage note ("architecture-conformance audit has not run on this instance — platform-context unavailable"), mirroring the skill's contract-absent posture — it never fabricates a conformance read and never crashes.
+
+This flag is **never** promoted to `## Auto-Actionable` (it is platform-scope, single-source, and not a project-drift action) and health-check **never** writes to the committed summary — Mode I is its sole producer.
 
 Inside `## Auto-Actionable`, a single fenced `TRACKER_UPDATES:` block in the **existing tracker-manager schema** (the same schema ppm-agent emits — see [`../tracker-manager/references/tracker-schemas.md`](../tracker-manager/references/tracker-schemas.md); this skill authors no new contract). Format:
 
@@ -262,6 +271,7 @@ This skill consumes governed reference docs by role-name (duplicate-source-disci
 |---|---|---|
 | [`references/mode-intents.md`](references/mode-intents.md) | this skill | The queryable 4-intent declarations per mode (all 8 modes; v1/v2/v3 slices, all implemented). |
 | [`references/rollup-mode.md`](references/rollup-mode.md) | this skill | The `rollup` mode (mode 8) sub-mode specs + the rollup-contract field mapping + the compose-not-absorb / bridge-file boundary. |
+| [`references/conformance-surface.md`](references/conformance-surface.md) | this skill | The `full`-mode architecture-conformance surfacing contract — the committed `release/releases/architecture-conformance-summary.md` read shape, the platform-context render rules, and the compose-not-absorb boundary with `pmo-qa-auditor` Mode I. |
 | [`references/evidence-matrix.md`](references/evidence-matrix.md) | this skill | The MCP + local source map per mode + the drift-resolution rule (citing ADR-051). |
 | [`references/confidence-framework.md`](references/confidence-framework.md) | this skill | The finding → confidence + S0–S3 band mapping (citing `staleness-confidence-standard.md`). |
 | [`core/specs/staleness-confidence-standard.md`](../../../core/specs/staleness-confidence-standard.md) | core (ADR-043) | The canonical 4-band depth scale this skill projects onto. Consumed, never forked. |
@@ -337,6 +347,14 @@ These domain-specific anti-patterns coexist with `## Guardrails (Platform)` (pla
 - **Root cause:** The composition looks like the most tangible output of a "portfolio rollup," and inlining the aggregation feels more direct than a cross-skill invocation; the owner-skill boundary is invisible at the moment of writing the field set, so absorbing it reads as "just finishing the job."
 - **Mitigation:** Audit rollup-entity freshness natively (the drift finding), then **invoke `weekly-status-rollup` Section 6** for the actual PORTFOLIO.md composition and re-home its staged proposal under `08-Generated/_health-check/`, surfaced in `## Rollup-Diffs` (tiered, staged, never a direct write). Compose-not-absorb (ADR-019); the aggregation logic stays single-sourced in its owner.
 - **Principal response vs. junior response:** Principal writes "per-project rollup entities audited for freshness; PORTFOLIO.md composition routed to weekly-status-rollup Section 6, proposal staged in 08-Generated/_health-check/ — not written [MODERATE · confidence: HIGH]" and stops at the staged proposal. Junior re-derives the Health-Indicators table inside health-check, stages a proposal that disagrees with what weekly-status-rollup would produce, and the two rollup surfaces drift apart.
+
+### Conformance flag wired to the git-ignored audit folder instead of the committed surface — HAND
+
+- **Signature (observable signal):** the `full`-mode architecture-conformance surfacing step reads the **git-ignored** `analysis/architecture-conformance-YYYY-MM-DD/SUMMARY.md` directly, so on any clone / instance / CI run where `pmo-qa-auditor` Mode I has not recently run, the folder is absent and the flag renders the coverage note *every time* — the integration "passes" structurally while delivering no real conformance signal off the producing instance.
+- **Conditional:** do NOT wire this deployed consumer to the producer's git-ignored operator-instance folder, because health-check runs anywhere and that folder does not ship — the flag then satisfies its integration requirement *vacuously* (always the degradation path). Read the **committed** `release/releases/architecture-conformance-summary.md` surface instead — it ships in the repo, present on every clone.
+- **Root cause:** producer (Mode I → git-ignored `<OPERATOR_INSTANCE_ANALYSIS_PATH>`) and consumer (health-check, deployed everywhere) coupled through an ephemeral, non-committed handoff; the "graceful degradation" then becomes the common path, not the exception.
+- **Mitigation:** consume the committed hand-off surface (`release/releases/architecture-conformance-summary.md`) per [`references/conformance-surface.md`](references/conformance-surface.md); the git-ignored folder is the operator's deep read-once artifact, not the deployed consumer's coupling point. Degrade only when the committed surface is genuinely in its seeded `AWAITING FIRST RUN` state — a real, distinguishable condition, not the default.
+- **Principal response vs. junior response:** Principal asks "where does the consumer run vs. where the producer writes?", catches the git-ignored boundary, and reads the committed surface so the flag works off-instance. Junior wires the latest-folder read, passes the fixture on the producing instance, and ships a flag that is blank everywhere else.
 
 ## Shared Behavioral Rules
 
