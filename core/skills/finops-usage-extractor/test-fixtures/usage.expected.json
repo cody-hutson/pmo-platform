@@ -1,0 +1,41 @@
+[
+  {
+    "session_id": "00000000-0000-4000-8000-000000000001",
+    "tokens": {
+      "input": 160,
+      "output": 90,
+      "cache_creation": { "total": 100, "ephemeral_1h": 35, "ephemeral_5m": 65 },
+      "cache_read": 300
+    },
+    "tool_use": { "web_search_requests": 3, "web_fetch_requests": 1 },
+    "token_source": "exact",
+    "heuristic_turns": 0,
+    "subagent_count": 0
+  },
+  {
+    "session_id": "00000000-0000-4000-8000-000000000002",
+    "tokens": {
+      "input": 4,
+      "output": 0,
+      "cache_creation": { "total": 0, "ephemeral_1h": 0, "ephemeral_5m": 0 },
+      "cache_read": 0
+    },
+    "tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "token_source": "heuristic",
+    "heuristic_turns": 1,
+    "subagent_count": 0
+  },
+  {
+    "session_id": "00000000-0000-4000-8000-000000000003",
+    "tokens": {
+      "input": 38,
+      "output": 19,
+      "cache_creation": { "total": 0, "ephemeral_1h": 0, "ephemeral_5m": 0 },
+      "cache_read": 0
+    },
+    "tool_use": { "web_search_requests": 0, "web_fetch_requests": 0 },
+    "token_source": "exact",
+    "heuristic_turns": 0,
+    "subagent_count": 1
+  }
+]

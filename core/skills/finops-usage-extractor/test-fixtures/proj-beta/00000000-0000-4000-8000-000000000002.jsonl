@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"00000000-0000-4000-8000-000000000002","uuid":"u2","parentUuid":null,"isSidechain":false,"timestamp":"2020-02-01T00:00:01Z","cwd":"/synthetic/ws/beta","gitBranch":null,"message":{"role":"user","content":"legacy session, no usage block"}}
+{"type":"assistant","sessionId":"00000000-0000-4000-8000-000000000002","uuid":"a2b","parentUuid":"u2","isSidechain":false,"timestamp":"2020-02-01T00:00:02Z","cwd":"/synthetic/ws/beta","gitBranch":null,"message":{"role":"assistant","model":"claude-opus-4-8","content":[{"type":"text","text":"one two three"}]}}
