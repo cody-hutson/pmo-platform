@@ -322,10 +322,22 @@ for k in data:
 }
 
 # --- Section 6: Platform detection (must run first; no state mutation) ---
+# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.90 / #303), not a hard fail.
+# CI and #304's cross-platform matrix set PMO_ALLOW_NON_DARWIN=1 so the non-macOS
+# legs can run past this point. Default (env unset) preserves the protective
+# exit 78: the working bash-free cross-platform install is a later arc (#47/#48),
+# so a silent proceed into the bash-only phases (setup + deploy.sh) would
+# half-install on an unsupported platform. EX_CONFIG(78) is retained for the
+# genuinely-unsupported (un-opted-in) case, per Stage-5 DD-4/REC-3.
 check_platform() {
   if [ "$(uname -s)" != "Darwin" ]; then
+    if [ -n "${PMO_ALLOW_NON_DARWIN:-}" ]; then
+      warn "Non-Darwin platform ($(uname -s)); proceeding under PMO_ALLOW_NON_DARWIN."
+      warn "Cross-platform install is in progress (#47/#48); bash-only phases may not complete."
+      return 0
+    fi
     err "setup-workspace.sh is Darwin-only on current release."
-    err "Cross-platform support deferred per Stage 5 Recommendation #3."
+    err "Set PMO_ALLOW_NON_DARWIN=1 to proceed on non-macOS (CI / cross-platform matrix)."
     err "Current platform: $(uname -s)"
     exit 78
   fi

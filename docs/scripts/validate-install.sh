@@ -88,10 +88,21 @@
 set -Eeuo pipefail
 
 # --- Section 1: Platform detection (must run first; no state mutation) ---
+# Non-Darwin is a SOFT, opt-in-bypassable gate (v3.90 / #303), not a hard fail.
+# CI and #304's cross-platform matrix set PMO_ALLOW_NON_DARWIN=1 so the non-macOS
+# legs run past this point (relaxing setup-workspace.sh's gate alone is not enough
+# — this second, independent gate must relax too, per Stage-5 REC-3). Default
+# (unset) preserves the protective exit 78; EX_CONFIG(78) is retained for the
+# genuinely-unsupported (un-opted-in) case. Runs before the log helpers are
+# defined, so it uses printf directly.
 if [ "$(uname -s)" != "Darwin" ]; then
-  printf 'ERROR: Darwin-only on current release.\n' >&2
-  printf 'Cross-platform support is deferred.\n' >&2
-  exit 78
+  if [ -n "${PMO_ALLOW_NON_DARWIN:-}" ]; then
+    printf 'WARN: non-Darwin platform (%s); proceeding under PMO_ALLOW_NON_DARWIN.\n' "$(uname -s)" >&2
+  else
+    printf 'ERROR: Darwin-only on current release.\n' >&2
+    printf 'Set PMO_ALLOW_NON_DARWIN=1 to proceed on non-macOS (CI / cross-platform matrix).\n' >&2
+    exit 78
+  fi
 fi
 
 # --- Section 2: Constants + defaults ---
