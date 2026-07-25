@@ -14,6 +14,13 @@ readonly SCHEMA_VERSION="1"
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture)
 # ---------------------------------------------------------------------------
 PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+# Deterministic byte-order collation for every sort in this script (#675). A single
+# script-level export is inherited by every subprocess sort — covering the bare sorts
+# (:392 build_scan_list, :624 compute_second_order) and rendering the inline #92 pins
+# (:551, :702) redundant — so no locale-exposed sort can crash on a non-UTF-8 byte under
+# a UTF-8 LANG. Collation-only: it changes tie-order among equal keys, never which rows
+# survive or their counts.
+export LC_ALL=C
 
 # ---------------------------------------------------------------------------
 # Shared schema-v1 emitter (the single home of the output contract). This script
