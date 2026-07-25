@@ -58,7 +58,7 @@ projects/
 
 ## Change Description Protocol
 
-A `## Change Description` section is embedded in every release plan FILE (`release/releases/plans/vX.Y_RELEASE_PLAN.md`) to provide an operator-readable, git-resident, pre-merge summary of what the release delivers. The section is authored by the Stage 6 release-engineering spoke as part of PR creation and is visible at Stage 9 Plan Review in the PR diff.
+A `## Change Description` section is embedded in every release plan FILE (`release/releases/plans/<slug>_RELEASE_PLAN.md` while in flight; renamed to the `vX.Y` form at the Stage-12 claim per § Versioning) to provide an operator-readable, git-resident, pre-merge summary of what the release delivers. The section is authored by the Stage 6 release-engineering spoke as part of PR creation and is visible at Stage 9 Plan Review in the PR diff.
 
 **Distinct artifact.** This section is NOT the user-facing release note (which lives at `release/releases/notes/vX.Y_RELEASE_NOTES.md`, authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](../references/standards/release-notes-standard.md)). The Change Description targets the operator at pre-merge time with engineering-OK voice; the release note targets non-technical platform users at post-merge time with voice-constrained framing per the release-notes standard. Both artifacts ship per release; they reference each other but do not substitute.
 
