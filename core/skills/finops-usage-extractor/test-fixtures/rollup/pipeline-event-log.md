@@ -1,4 +1,9 @@
+<!-- repo-integrity: allow-issue-ref -->
 # Pipeline Event Log — SYNTHETIC FIXTURE
+
+<!-- The #4242 / #9999 tokens in the rows below are FABRICATED synthetic issue numbers
+     (test oracle data), not references to real repository issues. -->
+
 
 Fabricated Surface-B data for `rollup-attribution.sh --self-test`. No real values.
 The T1 (issue-event-keyed) resolver reads decision/gate-outcome/escalation rows whose

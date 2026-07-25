@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-093 — FinOps usage attribution — session→work-item mapping convention, cross-file spoke linkage, and the unattributed bucket
+title: ADR-094 — FinOps usage attribution — session→work-item mapping convention, cross-file spoke linkage, and the unattributed bucket
 status: Accepted
 date: 2026-07-25
 release: agent-finops-foundation (v3.93)
@@ -13,11 +13,11 @@ source_observations:
   - "C2 r2 Collective Review (operator ADJUST->lean): an adversarial design review accepted six Major fixes. Load-bearing for this ADR: (a) no substrate join key reaches issue grain — the pipeline event log has no session_id/git_branch column and the hub sessions log has no work-item column, so reliable issue-grain is not deliverable from local data and is deferred; (b) the conservation identity is a tautology and cannot be the correctness proof; (c) a network gh call in the default resolver breaks the store's derived-cache determinism, so PR-resolve must be opt-in."
 ---
 
-# ADR-093 — FinOps usage attribution: session→work-item mapping convention, cross-file spoke linkage, and the unattributed bucket
+# ADR-094 — FinOps usage attribution: session→work-item mapping convention, cross-file spoke linkage, and the unattributed bucket
 
 ## Status
 
-**Accepted.** Authored at the C2 Stage 6 per the Stage-6 ADR-authoring precedent (ADR-092 / ADR-031). This is the second of the two-ADR split for the agent-finops-foundation milestone: ADR-092 owns D-DataHome (where the store lives, what owns its schema, how git-ignore is enforced); this ADR owns D-AttributionConvention (how a session maps to a work item). The decision was ratified by the workspace owner at the Stage-4 D-Gate and carried through the r2 Collective Review scope-lock; the r2 revision sharpened the grain claim (milestone-reliable, issue-best-effort) and the correctness proof (ground-truth fixtures) without changing the decision's shape.
+**Accepted.** Authored at the C2 Stage 6 per the Stage-6 ADR-authoring precedent (ADR-093 / ADR-031). This is the second of the two-ADR split for the agent-finops-foundation milestone: ADR-093 owns D-DataHome (where the store lives, what owns its schema, how git-ignore is enforced); this ADR owns D-AttributionConvention (how a session maps to a work item). The decision was ratified by the workspace owner at the Stage-4 D-Gate and carried through the r2 Collective Review scope-lock; the r2 revision sharpened the grain claim (milestone-reliable, issue-best-effort) and the correctness proof (ground-truth fixtures) without changing the decision's shape.
 
 ## Context
 
@@ -56,5 +56,5 @@ The roll-up phase needs a session→work-item map, but local session data carrie
 
 ## Related ADRs
 
-- ADR-092 — the sibling FinOps usage-store data-home ADR (the first of the two-ADR split for this milestone; same release branch). This ADR owns the attribution convention; ADR-092 owns the data home and schema authority.
+- ADR-093 — the sibling FinOps usage-store data-home ADR (the first of the two-ADR split for this milestone; same release branch). This ADR owns the attribution convention; ADR-093 owns the data home and schema authority.
 - ADR-031 — autonomy-ceiling unified payload-triggered hook (the Stage-6 ADR-authoring + own-lifecycle precedent both FinOps ADRs follow).

@@ -1,4 +1,8 @@
+<!-- repo-integrity: allow-issue-ref -->
 # finops-usage-extractor — synthetic roll-up / attribution fixtures
+
+> The `#4242` / `#5151` / `#9999` tokens below and in the sibling fixtures are **fabricated
+> synthetic issue numbers** (test oracle data), not references to real repository issues.
 
 These files are **fabricated** and used only by `rollup-attribution.sh --self-test`. They
 contain **no real extracted values** — every `session_id`, `git_branch`, `cwd`, worktree,
