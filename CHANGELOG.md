@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.91] - 2026-07-25
+
+Windows can now install and update the platform without a bash prerequisite (dry-run today), a new doctor command diagnoses install problems, and work-tracking supports multiple destinations with a guardrail that keeps private content out of public trackers.
+
+[Full notes](release/releases/notes/v3.91_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.91)
+
 ## [v3.90] - 2026-07-25
 
 The release-impact analysis tool now returns accurate, path-true consumer counts and flags scripts that hard-code a moved directory's path.
