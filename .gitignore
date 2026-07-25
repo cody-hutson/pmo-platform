@@ -51,6 +51,15 @@ flip-scan-needles.txt
 **/people-roster.yaml
 !**/people-roster-template.yaml
 
+# FinOps usage store (#3909) — operator-instance runtime token-spend data. Usage
+# records carry gitBranch / cwd (operator home path) / work-item identifiers, so on a
+# PUBLIC repo they must never commit. Canonical home is the operator-instance dir
+# (already ignored by personal/ + pmo-instance/ above); these defensive stems also
+# block a stray copy anywhere in the tree. Runtime enforcement is the extractor's
+# resolve-time git check-ignore guard (fail-closed); these patterns are defense-in-depth.
+**/pmo-instance/finops/
+**/finops/usage.jsonl
+
 # Secret files (per core/standards/secrets-handling-policy.md §3)
 # Categories C3 (MCP tokens) and C5 (project-specific) may land in .env;
 # .example / .template / .sample variants ARE tracked (public-facing schemas).
