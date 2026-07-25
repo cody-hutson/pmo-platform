@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.92] - 2026-07-25
+
+A new architecture-conformance audit checks delivered work against the platform's own architecture, alongside a cross-chain index that maps every management chain to its governing model, flow, and gate, and a consolidated actor-model baseline.
+
+[Full notes](release/releases/notes/v3.92_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.92)
+
 ## [v3.91] - 2026-07-25
 
 Windows can now install and update the platform without a bash prerequisite (dry-run today), a new doctor command diagnoses install problems, and work-tracking supports multiple destinations with a guardrail that keeps private content out of public trackers.

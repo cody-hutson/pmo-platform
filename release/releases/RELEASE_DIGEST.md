@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.92 (2026-07-25) — Architecture baseline: a consolidated actor-model + governance-as-contract statement, a cross-chain index, and a standing as-built conformance audit that checks delivered work against the platform's own architecture
+
 ### v3.91 (2026-07-25) — Cross-platform install foundation: Windows entry-points, a doctor command, and safer multi-destination tracking
 
 ### v3.90 (2026-07-25) — <headline — populated by operator at chore PR review>
