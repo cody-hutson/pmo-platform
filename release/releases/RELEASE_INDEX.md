@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.91 | 46-cross-platform-install-experience | 2026-07-25 | — | #3925 | [notes/v3.91_RELEASE_NOTES.md](notes/v3.91_RELEASE_NOTES.md) |
 | v3.90 | blast-radius-scan-correctness | 2026-07-25 | — | #3924 | [notes/v3.90_RELEASE_NOTES.md](notes/v3.90_RELEASE_NOTES.md) |
 | v3.89 | template-system-governance-wave-1 | 2026-07-25 | — | #3913 | [notes/v3.89_RELEASE_NOTES.md](notes/v3.89_RELEASE_NOTES.md) |
 | v3.88 | deploy-and-tooling-defect-cleanup | 2026-07-25 | — | #3794 | [notes/v3.88_RELEASE_NOTES.md](notes/v3.88_RELEASE_NOTES.md) |
