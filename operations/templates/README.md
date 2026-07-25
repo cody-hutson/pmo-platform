@@ -28,6 +28,8 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 | `stakeholder-register-template.csv` | Stakeholder | PMBOK 7 |
 | `raci-template.md` | Stakeholder | PMBOK 7 (RAEW / RAS variants referenced) |
 | `key-terms-glossary-template.csv` | Stakeholder | PMBOK 7 |
+| `change-impact-matrix-template.md` | Stakeholder | PMBOK 7 |
+| `training-plan-template.md` | Stakeholder | PMBOK 7 |
 | `change-log-template.md` | Project Work | PMBOK 7 (Waterfall change-control log) |
 | `lessons-learned-template.md` | Project Work | PMBOK 7 (PRINCE2 lessons log) |
 | `daily-status-log-template.md` | Measurement | PMBOK 7 |
