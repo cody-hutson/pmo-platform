@@ -1,10 +1,12 @@
 # release/releases/plans/ — release plan files
 
-Per-release Stage 4 release plans live here, one file per release: `vX.Y_RELEASE_PLAN.md`.
+Per-release Stage 4 release plans live here, one file per release. A plan's filename binds its identity in **two phases, separated in time** (the plan-file analogue of the two-phase version claim in [`../../governance/RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Versioning): it is authored **slug-primary / pre-claim** (`<slug>_RELEASE_PLAN.md`, keyed to the milestone/theme slug) while the release is in flight, and — for a `versioned` release — is renamed to its **versioned** form (`vX.Y_RELEASE_PLAN.md`) only at the Stage-12 atomic claim (per ADR-092; the rename + `{{RELEASE_VERSION}}` content resolution are performed by `../../tools/claim-version.sh` on the CAS-win path).
 
 ## File naming
 
-`vX.Y_RELEASE_PLAN.md` where `vX.Y` is the release version matching the GitHub Milestone slug suffix (e.g., `v1.0_RELEASE_PLAN.md` for Milestone `v1.0-initial`).
+- **Pre-claim / in-flight** (no `RELEASE_LOG.md` row yet): `<slug>_RELEASE_PLAN.md`, where `<slug>` is the milestone/theme slug (e.g., `release-identity-and-plan-naming_RELEASE_PLAN.md`). The concrete version is not yet known — the file carries no version stem, and in-file version references use the `{{RELEASE_VERSION}}` placeholder. This is the universal pre-claim form for **both** identity modes.
+- **Post-claim, `versioned`**: `vX.Y_RELEASE_PLAN.md`, where `vX.Y` is the version won at the Stage-12 claim (e.g., `v3.60_RELEASE_PLAN.md`). The slug-named pre-claim file is `git mv`'d to this form at the claim.
+- **Post-claim, `version-less`**: stays `<slug>_RELEASE_PLAN.md` and resolves to `_unversioned/` (records `(none)` — no version is ever claimed).
 
 ## Directory layout — major-version subfolders
 
@@ -16,21 +18,22 @@ plans/
 ├── v1/                  ← every v1.x release plan
 ├── v2/                  ← every v2.x release plan
 ├── v3/                  ← every v3.x release plan
-└── _unversioned/        ← version-less-by-design plans (see disposition rule)
+└── _unversioned/        ← un-versioned plans: pre-claim OR version-less-by-design (see disposition rule)
 ```
 
-Only `README.md` lives at the top level. New releases file their plan under the subfolder for their major version (`plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md`).
+`README.md` lives at the top level, alongside any **pre-claim / in-flight** plans (slug-keyed, no `RELEASE_LOG.md` row yet — work in progress). Once a release is claimed, a `versioned` release's plan is filed under the subfolder for its major version (`plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md`) via the Stage-12 `git mv`; a `version-less` release's plan resolves to `_unversioned/`.
 
 ### Disposition rule (which subfolder a file belongs to)
 
 Every plan and note resolves to exactly one subfolder by this rule, applied in order:
 
+0. **Pre-claim / in-flight** (slug-keyed filename, no `RELEASE_LOG.md` row yet — the release is in flight and has not reached the Stage-12 claim) → **stays at the plans/ top level**, slug-keyed, pending the claim. This is the universal pre-claim home for both identity modes; the file has no version stem to subfolder on yet. At the Stage-12 claim, a `versioned` release advances to rule 1 (via `git mv` to `v<MAJOR>/`), a `version-less` release to rule 2 (`_unversioned/`).
 1. **Version-prefixed filename** (`vX.Y…_RELEASE_PLAN.md`) → `v<MAJOR>/` taken from the filename's major (`v3.45…` → `v3/`).
-2. **Version-less filename** (milestone-number-prefixed like `22-ticket-information-architecture_RELEASE_PLAN.md`, or theme-named like `architecture-altitude-discipline_RELEASE_PLAN.md`) — the version binds only at the Stage 12 atomic claim, so these files carry no version stem. Resolve the **shipping release's major** by matching the filename's milestone/theme slug against its row in [`../RELEASE_LOG.md`](../RELEASE_LOG.md):
+2. **Version-less filename** (milestone-number-prefixed like `22-ticket-information-architecture_RELEASE_PLAN.md`, or theme-named like `architecture-altitude-discipline_RELEASE_PLAN.md`) whose release has **shipped** (has a `RELEASE_LOG.md` row) — the version binds only at the Stage 12 atomic claim, so these files carry no version stem. Resolve the **shipping release's major** by matching the filename's milestone/theme slug against its row in [`../RELEASE_LOG.md`](../RELEASE_LOG.md):
    - If the slug appears in a **version-keyed** LOG row (e.g. `22-ticket-information-architecture` is the Milestone cell of the `v2.27` row) → file under that major (`v2/`).
    - If the slug appears only in a **version-less LOG row** (the release shipped VERIFIED with Tag `(none)` and never claimed a version) → file under `_unversioned/`.
 
-`_unversioned/` is the single bucket for genuinely version-less releases; no plan or note is ever stranded at the top level. When a version-less release is later assigned a version, move its plan/note from `_unversioned/` into the matching `v<MAJOR>/` subfolder with `git mv` and re-run `../../../core/deploy/tools/generate_release_index.py` to refresh the INDEX links.
+`_unversioned/` is the bucket for **un-versioned** plans and notes — both a genuinely version-less shipped release (rule 2, second bullet) and a pre-claim plan an author chooses to stage there rather than at the top level are legitimate residents. When a version-less (or pre-claim) release is later assigned a version, move its plan/note into the matching `v<MAJOR>/` subfolder with `git mv` (the Stage-12 stamp pass does this for a `versioned` claim) and re-run `../../../core/deploy/tools/generate_release_index.py` to refresh the INDEX links. **Grandfathering:** the cutover is forward-only — existing `vX.Y_RELEASE_PLAN.md` files are not renamed to the slug form.
 
 ### Tooling contract
 

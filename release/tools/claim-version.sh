@@ -71,6 +71,15 @@ source "${CLAIM_REPO_ROOT}/release/tools/version-grammar.sh" ""
 CLAIM_REPO="${CLAIM_REPO:-}"
 MAX_ATTEMPTS_DEFAULT=5
 
+# Claim-time plan-file stamping (post-CAS; ADR-092). When --stamp-slug is passed,
+# the CAS-win path resolves {{RELEASE_VERSION}} in the pre-claim plan (+ any
+# --stamp-file artifacts) and git-mv's the slug-named plan to its versioned home
+# plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md. Absent --stamp-slug the stamping pass is
+# skipped ENTIRELY — behavior is byte-identical to the pre-stamp script for every
+# existing caller (backward-compatible; the CAS arithmetic/retry is untouched).
+STAMP_SLUG="${STAMP_SLUG:-}"
+STAMP_FILES=()
+
 # ---------------------------------------------------------------------------
 # Host I/O seams (the ONLY place GitHub/git mechanism lives).
 #
@@ -156,6 +165,18 @@ _host_push_tag() {
 #   remote; the remote tag belongs to the writer who won). Best-effort.
 _host_delete_local_tag() {
   git tag -d "$1" >/dev/null 2>&1 || true
+}
+
+# _host_commit_push <commit_msg> <repo_rel_path>...  — stage the given repo-relative
+#   paths, commit the follow-on claim-time STAMP commit, and push it to the current
+#   branch. The ONLY git-mutating seam of the stamp pass (ADR-092); the self-test
+#   overrides it so the substitution + rename are exercised with no real remote.
+#   NEVER --force (the stamp is a create/forward commit, never a history rewrite).
+_host_commit_push() {
+  local msg="$1"; shift
+  git -C "$CLAIM_REPO_ROOT" add -- "$@" || return 1
+  git -C "$CLAIM_REPO_ROOT" commit -m "$msg" >/dev/null 2>&1 || return 1
+  git -C "$CLAIM_REPO_ROOT" push origin HEAD >/dev/null 2>&1 || return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -441,6 +462,97 @@ _format_version() {
 }
 
 # ---------------------------------------------------------------------------
+# Claim-time plan-file stamping (post-CAS) — ADR-092.
+#
+# The plan-file/branch identity is SLUG-primary until the version is won; the
+# concrete number binds only on the CAS-win path. This is the plan-file analogue of
+# the tag's defer-to-claim (ADR-036): filesystem identity (filename, branch) stays
+# slug-keyed and only file CONTENT carries the {{RELEASE_VERSION}} placeholder,
+# resolved to the WON tag here. The pass runs ONLY when --stamp-slug was supplied
+# AND ONLY after atomic_claim() returns OK, so the free recompute-retry loop never
+# re-stamps — a lost candidate is never written to any filename or file body.
+# ---------------------------------------------------------------------------
+
+# _resolve_preclaim_plan <slug>  — echo the path to the pre-claim plan file, or fail.
+#   Searches the two canonical pre-claim homes: the plans/ top level and _unversioned/.
+_resolve_preclaim_plan() {
+  local slug="$1"
+  local plans_dir="${CLAIM_REPO_ROOT}/release/releases/plans"
+  local c
+  for c in "${plans_dir}/${slug}_RELEASE_PLAN.md" "${plans_dir}/_unversioned/${slug}_RELEASE_PLAN.md"; do
+    [[ -f "$c" ]] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
+# _preflight_stamp <slug>  — read-only PRE-CAS validation (the "before the CAS"
+#   checkable half). Mutates NOTHING. Fails — so the caller HALTs BEFORE claiming a
+#   number it cannot stamp — when the stamp manifest is broken: the pre-claim plan
+#   must resolve, carry >=1 {{RELEASE_VERSION}} token, and plans/ must be writable.
+_preflight_stamp() {
+  local slug="$1" plan
+  plan="$(_resolve_preclaim_plan "$slug")" || {
+    printf 'claim-version: stamp pre-flight — no pre-claim plan %s_RELEASE_PLAN.md under release/releases/plans/\n' "$slug" >&2
+    return 1
+  }
+  grep -q '{{RELEASE_VERSION}}' "$plan" || {
+    printf 'claim-version: stamp pre-flight — plan %s carries no {{RELEASE_VERSION}} token to resolve\n' "$plan" >&2
+    return 1
+  }
+  local plans_dir="${CLAIM_REPO_ROOT}/release/releases/plans"
+  [[ -d "$plans_dir" && -w "$plans_dir" ]] || {
+    printf 'claim-version: stamp pre-flight — plans dir %s missing or not writable\n' "$plans_dir" >&2
+    return 1
+  }
+  return 0
+}
+
+# _stamp_release_identity <tag> <slug> <merge_sha>  — POST-CAS claim-time stamp.
+#   Runs ONLY on the CAS-win path, with the WON <tag>. Resolves {{RELEASE_VERSION}}
+#   -> <tag> in the pre-claim plan's CONTENT (+ any --stamp-file artifacts, repo-
+#   relative), git-mv's the slug-named plan to plans/v<MAJOR>/<tag>_RELEASE_PLAN.md,
+#   and commits+pushes the follow-on stamp via _host_commit_push (the same post-
+#   merge-commit pattern Stage 13 uses for RELEASE_LOG/INDEX rows). A stamp failure
+#   HALTs and surfaces "tag claimed, stamp manually" — it NEVER un-claims the tag.
+_stamp_release_identity() {
+  local tag="$1" slug="$2" merge_sha="$3"
+  local plan
+  plan="$(_resolve_preclaim_plan "$slug")" || {
+    printf 'claim-version: stamp — pre-claim plan for slug %q vanished post-claim\n' "$slug" >&2
+    return 1
+  }
+  local vM _vN _vP
+  read -r vM _vN _vP <<<"$(version_parse "$tag")" || {
+    printf 'claim-version: stamp — cannot parse won tag %q\n' "$tag" >&2
+    return 1
+  }
+  local dest_dir="${CLAIM_REPO_ROOT}/release/releases/plans/v${vM}"
+  local dest="${dest_dir}/${tag}_RELEASE_PLAN.md"
+  mkdir -p "$dest_dir" || return 1
+  # Resolve {{RELEASE_VERSION}} in CONTENT — extra --stamp-file artifacts first
+  # (repo-relative to CLAIM_REPO_ROOT), then the plan itself.
+  local f abs tmp
+  local extra_rel=()
+  for f in "${STAMP_FILES[@]+"${STAMP_FILES[@]}"}"; do
+    abs="${CLAIM_REPO_ROOT}/${f}"
+    [[ -f "$abs" ]] || { printf 'claim-version: stamp — --stamp-file %q not found under repo root\n' "$f" >&2; return 1; }
+    tmp="$(mktemp)"
+    sed "s/{{RELEASE_VERSION}}/${tag}/g" "$abs" > "$tmp" && cat "$tmp" > "$abs" || { rm -f "$tmp"; return 1; }
+    rm -f "$tmp"
+    extra_rel+=("$f")
+  done
+  tmp="$(mktemp)"
+  sed "s/{{RELEASE_VERSION}}/${tag}/g" "$plan" > "$tmp" && cat "$tmp" > "$plan" || { rm -f "$tmp"; return 1; }
+  rm -f "$tmp"
+  # Bind the FILENAME identity: git mv the slug-named plan to its versioned path.
+  git -C "$CLAIM_REPO_ROOT" mv -- "$plan" "$dest" || return 1
+  # Follow-on stamp commit (+push) of the renamed plan and any stamped extras.
+  local commit_paths=("release/releases/plans/v${vM}/${tag}_RELEASE_PLAN.md")
+  commit_paths+=("${extra_rel[@]+"${extra_rel[@]}"}")
+  _host_commit_push "stamp: bind ${tag} release identity (plan rename + {{RELEASE_VERSION}} resolve) [SHA ${merge_sha:0:12}]" "${commit_paths[@]}" || return 1
+}
+
+# ---------------------------------------------------------------------------
 # Adapter operation: atomic_claim(version, release_ref) + the caller loop.
 #
 # claim_version <merge_sha> <bump_class> [<patch_base>] [<message>]
@@ -481,6 +593,14 @@ claim_version() {
       return 1
     }
 
+    # --- STEP 2.7: stamp pre-flight (read-only; only when --stamp-slug given) ---
+    # Validate the stamp manifest BEFORE the CAS so we never claim a number we
+    # cannot stamp. Mutates nothing (the recompute-retry loop stays free).
+    [[ -n "${STAMP_SLUG:-}" ]] && { _preflight_stamp "$STAMP_SLUG" || {
+      printf 'claim-version: HALT — stamp pre-flight failed (broken manifest); not claiming\n' >&2
+      return 1
+    }; }
+
     local msg="$message"
     [[ -n "$msg" ]] || msg="${tag} — release SHA = merge ${merge_sha:0:12}"
 
@@ -489,6 +609,13 @@ claim_version() {
 
     # --- STEP 4: discriminate the outcome ---
     if [[ $push_rc -eq 0 ]]; then
+      # WON the compare-and-swap. Post-CAS: stamp the claim-time identity with the
+      # WON tag (only when --stamp-slug given). A stamp failure HALTs — the tag is
+      # authoritative and is NEVER un-claimed; stamp manually on failure.
+      [[ -n "${STAMP_SLUG:-}" ]] && { _stamp_release_identity "$tag" "$STAMP_SLUG" "$merge_sha" || {
+        printf 'claim-version: HALT — %s claimed but stamp failed; stamp manually (tag authoritative)\n' "$tag" >&2
+        return 1
+      }; }
       printf '%s\n' "$tag"                       # WON the compare-and-swap
       return 0
     fi
@@ -525,10 +652,18 @@ _usage() {
   cat >&2 <<'EOF'
 Usage:
   claim-version.sh --sha <merge_sha> --bump <major|minor|patch> \
-      [--patch-base <vX.Y>] [--message <m>] [--max-attempts N] [--dry-run]
+      [--patch-base <vX.Y>] [--message <m>] [--max-attempts N] \
+      [--stamp-slug <slug>] [--stamp-file <repo-rel-path>]... [--dry-run]
   claim-version.sh --self-test
 
 On success prints the claimed tag to stdout; non-zero exit on HALT.
+
+--stamp-slug <slug>  When set, on the CAS-win path resolve {{RELEASE_VERSION}} in
+    the pre-claim plan release/releases/plans/<slug>_RELEASE_PLAN.md (post-CAS,
+    with the WON tag) and git-mv it to plans/v<MAJOR>/vX.Y_RELEASE_PLAN.md
+    (ADR-092). Absent this flag the stamping pass is skipped entirely.
+--stamp-file <path>  Optional, repeatable. Additional repo-relative token-bearing
+    file(s) whose {{RELEASE_VERSION}} is resolved in the same stamp commit.
 EOF
 }
 
@@ -541,6 +676,8 @@ _main() {
       --patch-base)   patch_base="$2"; shift 2;;
       --message)      message="$2"; shift 2;;
       --max-attempts) MAX_ATTEMPTS="$2"; shift 2;;
+      --stamp-slug)   STAMP_SLUG="$2"; shift 2;;
+      --stamp-file)   STAMP_FILES+=("$2"); shift 2;;
       --dry-run)      dry_run=1; shift;;
       -h|--help)      _usage; exit 0;;
       *) printf 'claim-version: unknown arg %q\n' "$1" >&2; _usage; exit 2;;
@@ -643,6 +780,10 @@ _claim_self_test() {
   _host_latest_release()       { cat "$(_st_f latest)"       2>/dev/null || true; }
   _host_origin_tags()          { cat "$(_st_f origin_tags)"  2>/dev/null || true; }
   _host_release_log_deployed() { cat "$(_st_f log_deployed)" 2>/dev/null || true; }
+  # stamp seam: record the follow-on stamp commit message; never a real add/commit/
+  # push. The REAL _stamp_release_identity still runs (git mv + sed on a sandbox
+  # tree), so U-11/U-13 exercise the substitution + rename hermetically.
+  _host_commit_push()          { printf '%s\n' "$1" >> "$(_st_f stamp_commits)"; return 0; }
 
   # fetch stub: returns the configured rc; ALSO applies a programmed "tip advance"
   # the first time the attempt-count crosses the advance threshold (simulates a
@@ -740,6 +881,30 @@ _claim_self_test() {
   # set -e — many fixtures EXPECT non-zero, so this guard is required).
   _ct_run()    { REPLY_RC=0; REPLY="$("$@" 2>/dev/null)" || REPLY_RC=$?; }
   _ct_run_err(){ REPLY_RC=0; REPLY="$("$@" 2>&1 1>/dev/null)" || REPLY_RC=$?; }
+
+  # _st_stamp_sandbox <slug>  — create a fresh temp git repo carrying a pre-claim
+  #   plan with the {{RELEASE_VERSION}} token; echo its root. Lets the REAL
+  #   _stamp_release_identity git mv/sed run hermetically (the _host_commit_push
+  #   stub records instead of pushing). Signing is disabled so the seed commit never
+  #   depends on the operator's gpg config, and a fresh init carries no hooks.
+  _st_stamp_sandbox() {
+    local slug="$1" root
+    root="$(mktemp -d "${TMPDIR:-/tmp}/claim-version-stamp.XXXXXX")"
+    mkdir -p "$root/release/releases/plans"
+    printf '%s\n' '---' 'version: {{RELEASE_VERSION}}' 'type: plan' '---' \
+      '# Release Plan {{RELEASE_VERSION}}' 'Body cites {{RELEASE_VERSION}} once more.' \
+      > "$root/release/releases/plans/${slug}_RELEASE_PLAN.md"
+    git -C "$root" init -q
+    git -C "$root" config user.email "selftest@example.invalid"
+    git -C "$root" config user.name "claim-version-selftest"
+    git -C "$root" config commit.gpgsign false
+    git -C "$root" config tag.gpgsign false
+    git -C "$root" add -A
+    git -C "$root" commit -qm "seed" >/dev/null 2>&1
+    printf '%s\n' "$root"
+  }
+  # _st_stamp_n  — count of recorded stamp commits.
+  _st_stamp_n() { awk 'NF{n++} END{print n+0}' "$(_st_f stamp_commits)" 2>/dev/null || echo 0; }
 
   local out rc err
 
@@ -882,8 +1047,67 @@ _claim_self_test() {
   printf '%s' "$cs10b" | grep -qx 'v2.39' || _ct_fail "U-10 claimed_set must INCLUDE v2.39 (stray present)"
   printf '%s' "$cs10b" | grep -qx 'v3.20' && _ct_fail "U-10 claimed_set must EXCLUDE genuine stray v3.20"
 
+  # ---- U-11: claim-time stamp resolves {{RELEASE_VERSION}} + renames the plan ----
+  # Unit-exercise the REAL _stamp_release_identity on a sandbox git tree (only the
+  # _host_commit_push seam is stubbed): the slug plan is renamed to its versioned
+  # home and the token is resolved to the won tag in the body.
+  _t_label="U-11 claim-time stamp (substitute + rename)"
+  {
+    local _sb11; _sb11="$(_st_stamp_sandbox "widget-feature")"
+    local _save11="$CLAIM_REPO_ROOT"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb11"; STAMP_FILES=()
+    _ct_run _stamp_release_identity "v3.99" "widget-feature" "deadbeefcafe1234"
+    CLAIM_REPO_ROOT="$_save11"
+    _ct_eq "$REPLY_RC" "0" "U-11 stamp returns 0"
+    [[ -f "$_sb11/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" ]] || _ct_fail "U-11 plan must be renamed to plans/v3/v3.99_RELEASE_PLAN.md"
+    [[ -f "$_sb11/release/releases/plans/widget-feature_RELEASE_PLAN.md" ]] && _ct_fail "U-11 slug-named plan must be gone after the git mv"
+    grep -q 'v3\.99' "$_sb11/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" 2>/dev/null || _ct_fail "U-11 body must carry the resolved version v3.99"
+    grep -q '{{RELEASE_VERSION}}' "$_sb11/release/releases/plans/v3/v3.99_RELEASE_PLAN.md" 2>/dev/null && _ct_fail "U-11 no {{RELEASE_VERSION}} token may survive"
+    _ct_eq "$(_st_stamp_n)" "1" "U-11 exactly one stamp commit"
+    rm -rf "$_sb11"
+  }
+
+  # ---- U-12: no --stamp-slug -> stamping pass is skipped entirely ----
+  # With STAMP_SLUG empty, claim_version behaves byte-identically to U-1 and does
+  # NO stamp (backward-compatibility: every existing caller is unaffected).
+  _t_label="U-12 no stamp-slug -> pass skipped"
+  _ct_setup latest="v2.08" published="v2.06 v2.06.1 v2.07 v2.08" \
+            origin="v2.06 v2.06.1 v2.07 v2.08" plan="ok"
+  : > "$(_st_f stamp_commits)"
+  STAMP_SLUG=""
+  _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-12 exit 0"
+  _ct_eq "$out" "v2.09" "U-12 returns v2.09 (unchanged from no-stamp behavior)"
+  _ct_eq "$(_st_stamp_n)" "0" "U-12 no stamp commit when --stamp-slug absent"
+
+  # ---- U-13: collision-then-win stamps ONCE with the WON tag (never the lost one) --
+  # The collision-safety proof (the crux). Attempt 1 computes v2.16 and is REJECTED;
+  # the tip advances; attempt 2 recomputes to v2.17 and wins. The stamp fires exactly
+  # ONCE, renaming to plans/v2/v2.17_RELEASE_PLAN.md — NEVER v2.16 (the lost candidate
+  # is never written). Runs the REAL _stamp_release_identity on a sandbox tree.
+  _t_label="U-13 stamp binds the WON tag, once (collision-safe)"
+  {
+    local _sb13; _sb13="$(_st_stamp_sandbox "widget-x")"
+    local _save13="$CLAIM_REPO_ROOT"
+    _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+              plan="$(printf 'collision\nok')" advance="1|v2.16|v2.14 v2.15 v2.16"
+    : > "$(_st_f stamp_commits)"
+    CLAIM_REPO_ROOT="$_sb13"; STAMP_SLUG="widget-x"; STAMP_FILES=()
+    _ct_run claim_version "deadbeefcafe" "minor" "" ""; out="$REPLY"; rc="$REPLY_RC"
+    STAMP_SLUG=""; CLAIM_REPO_ROOT="$_save13"
+    _ct_eq "$rc" "0" "U-13 exit 0"
+    _ct_eq "$out" "v2.17" "U-13 returns v2.17 (recomputed against advanced tip)"
+    [[ -f "$_sb13/release/releases/plans/v2/v2.17_RELEASE_PLAN.md" ]] || _ct_fail "U-13 plan must be stamped to v2/v2.17_RELEASE_PLAN.md (the WON tag)"
+    [[ -f "$_sb13/release/releases/plans/v2/v2.16_RELEASE_PLAN.md" ]] && _ct_fail "U-13 the LOST candidate v2.16 must NEVER be stamped"
+    [[ -f "$_sb13/release/releases/plans/widget-x_RELEASE_PLAN.md" ]] && _ct_fail "U-13 slug plan must be gone after the win-path stamp"
+    grep -q 'v2\.17' "$_sb13/release/releases/plans/v2/v2.17_RELEASE_PLAN.md" 2>/dev/null || _ct_fail "U-13 body must carry the resolved won version v2.17"
+    _ct_eq "$(_st_stamp_n)" "1" "U-13 exactly ONE stamp commit (only on the win)"
+    rm -rf "$_sb13"
+  }
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-10 incl. real-RELEASE_LOG-parser(State=\$8), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-13 incl. real-RELEASE_LOG-parser(State=\$8), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
