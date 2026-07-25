@@ -1,6 +1,6 @@
 name: Install tests
 
-# gate-efficacy: posture=required  enforcement=branch-protection:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
+# gate-efficacy: posture=required  enforcement=ci-enforce:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
 #   invariant: install.sh / deploy.sh / setup-workspace.sh and the security hooks
 #              behave correctly end-to-end against /tmp sandboxes — asserted
 #              behaviorally by running the test harnesses (not by file inspection).

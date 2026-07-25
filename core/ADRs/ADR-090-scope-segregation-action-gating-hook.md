@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-090 — Scope-segregation PreToolUse hook — destination-sensitivity content gate (payload-triggered, fail-closed)
-status: Proposed
+status: Accepted
 date: 2026-07-25
 release: 46-cross-platform-install-experience (v3.90)
 deciders: "Workspace owner (to ratify at the v3.90 Collective Review scope-lock); design resolved at #384 Stage-5 Solutioning + its A6.5 adversarial review"
@@ -17,9 +17,9 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at #384 Stage 6 per the Stage-6 ADR-authoring precedent
-(ADR-031 / ADR-007 / ADR-028). To be ratified by the workspace owner at the v3.90
-Collective Review scope-lock. It references issues as bare `#N` with the file-level
+**Accepted.** Authored at #384 Stage 6 per the Stage-6 ADR-authoring precedent
+(ADR-031 / ADR-007 / ADR-028). Ratified by the workspace owner at the v3.90
+Collective Review scope-lock (Stage 9 GO, 2026-07-25). It references issues as bare `#N` with the file-level
 `allow-issue-ref` marker above.
 
 ## Context
