@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-090 — Scope-segregation PreToolUse hook — destination-sensitivity content gate (payload-triggered, fail-closed)
+title: ADR-091 — Scope-segregation PreToolUse hook — destination-sensitivity content gate (payload-triggered, fail-closed)
 status: Accepted
 date: 2026-07-25
 release: 46-cross-platform-install-experience (v3.90)
@@ -13,7 +13,7 @@ source_observations:
   - "#383 durable round-trip (setup-workspace.sh write_operator_toml): operator-added sections are preserved by UNIQUE section name; a [[trackers]] array-of-tables collapses to one corrupt block on re-emit, but [trackers.<id>] named subtables round-trip unchanged (traced, and covered by the INT-1 durability test)."
 ---
 
-# ADR-090 — Scope-segregation PreToolUse hook: destination-sensitivity content gate
+# ADR-091 — Scope-segregation PreToolUse hook: destination-sensitivity content gate
 
 ## Status
 
