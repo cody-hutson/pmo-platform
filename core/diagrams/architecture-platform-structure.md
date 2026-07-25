@@ -90,7 +90,11 @@ pmo-platform/                      ← modular-monolith repository root
 ├── .github/                       ← CI workflows (depersonalization, issue-ref, dead-file,
 │                                     reference-durability, secret-scanning, SAST, CodeQL)
 ├── install.sh                     ← idempotent fresh-clone bootstrap
+├── install.ps1                    ← Windows (PowerShell) counterpart of install.sh
 ├── update.sh                      ← version-update entry point
+├── update.ps1                     ← Windows (PowerShell) counterpart of update.sh
+├── doctor.sh                      ← read-only operator install self-diagnosis / health check
+├── qa.sh                          ← standalone QA-as-code regression suite (install/update checks)
 ├── CHANGELOG.md                   ← Keep a Changelog 1.1.0 format
 ├── LICENSE                        ← Business Source License 1.1
 ├── SECURITY.md                    ← security policy + contact

@@ -69,6 +69,12 @@ pmo-platform/
 ├── core/         # Shared kernel (hooks, schemas, disciplines, deploy infra)
 ├── docs/         # User-facing docs (INSTALL, GETTING_STARTED, workspace-setup, module-apis)
 ├── packages/     # .skill distribution artifacts per module
+├── install.sh    # Install (macOS/Linux) — idempotent bootstrap
+├── install.ps1   # Install (Windows, PowerShell)
+├── update.sh     # Update  (macOS/Linux)
+├── update.ps1    # Update  (Windows, PowerShell)
+├── doctor.sh     # Install health-check / diagnostics
+├── qa.sh         # QA-as-code regression suite
 ├── CHANGELOG.md  # Keep a Changelog 1.1.0 format
 ├── LICENSE       # BSL 1.1
 └── README.md     # This file
