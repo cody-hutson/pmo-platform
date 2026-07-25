@@ -114,3 +114,30 @@ def test_qa_sh_exits_zero_and_emits_a_report() -> None:
     assert proc.returncode == 0, f"qa.sh exited {proc.returncode}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
     assert "QA-as-code Regression Report" in proc.stdout
     assert "**Verdict:** PASS" in proc.stdout
+
+
+# ----- standalone runner (dual-mode) -----------------------------------------
+# Runs under `python3 -m pytest` (local dev) AND as a plain `python3 <path>`
+# script. run-install-regression.sh invokes .py members as standalone scripts
+# (its member contract: "prints N passed, M failed; exits non-zero on FAIL"),
+# and the CI runner may not have pytest installed — so this file self-runs its
+# test_* functions when executed directly, needing no pytest.
+
+def _run_standalone() -> int:
+    fns = [obj for name, obj in globals().items()
+           if name.startswith("test_") and callable(obj)]
+    fns.sort(key=lambda f: f.__code__.co_firstlineno)
+    passed = failed = 0
+    for fn in fns:
+        try:
+            fn()
+            passed += 1
+        except Exception as err:  # noqa: BLE001 — a failing assertion is a test FAIL
+            failed += 1
+            print(f"  FAIL: {fn.__name__}: {err!r}")
+    print(f"test_qa_module.py: {passed} passed, {failed} failed")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(_run_standalone())

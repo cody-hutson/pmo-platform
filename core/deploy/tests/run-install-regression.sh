@@ -103,8 +103,11 @@ run_member() {
   fi
 
   local out rc
+  # .py members run as standalone self-reporting scripts (python3 <path>), NOT via
+  # pytest: this bash suite (and the CI runner) may not have pytest installed, and
+  # the member contract above is "prints N passed, M failed; exits non-zero on FAIL".
   case "${member}" in
-    *.py)  out="$(python3 -m pytest "${path}" 2>&1)"; rc=$? ;;
+    *.py)  out="$(python3 "${path}" 2>&1)"; rc=$? ;;
     *)     out="$(bash "${path}" 2>&1)"; rc=$? ;;
   esac
   printf '%s\n' "${out}"
