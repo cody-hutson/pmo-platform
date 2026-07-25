@@ -2,7 +2,7 @@
 title: Structural Audit Cadence
 purpose: When-to-re-run cadence policy for the structural audit axis (event-bound triggers + 90-day fallback)
 type: protocol
-related: AUDIT_FRAMEWORK.md (how-to-run methodology, Session 1 Structural & Behavioral Audit — core/standards/), process-fitness-cadence.md (sibling process-fitness axis), platform-health-audit-framework.md (sibling Anthropic Base-vs-Build axis — §2), analysis-workspace-standard.md (analysis-folder output convention — core/standards/)
+related: AUDIT_FRAMEWORK.md (how-to-run methodology, Session 1 Structural & Behavioral Audit — core/standards/), process-fitness-cadence.md (sibling process-fitness axis), platform-health-audit-framework.md (sibling Anthropic Base-vs-Build axis — §2), architecture-conformance-cadence.md (sibling architecture-conformance axis), analysis-workspace-standard.md (analysis-folder output convention — core/standards/)
 effective-date: 2026-06-29
 scope: The structural audit axis only — Diátaxis conformance / NARA naming / ISO 15489 / orphan files / cross-reference integrity. Not the process-fitness axis (see process-fitness-cadence.md) and not the Anthropic Base-vs-Build axis (see platform-health-audit-framework.md §2).
 owner: PMO Cowork Platform Team
@@ -19,15 +19,16 @@ This protocol defines **when to re-run** the **structural audit** — the recurr
 
 **Continuous-vs-periodic layering.** Cross-reference integrity (one structural dimension) is already covered **continuously between audits** by the link-check CI gate; this 90-day cadence is the **periodic deep** structural audit across *all* structural dimensions (Diátaxis typing, naming conformance, orphan detection, plus cross-references). `[INFERRED]` The two are complementary, not redundant: CI catches a single broken link the moment it lands; the periodic audit catches structural drift the CI gate does not test (mis-typed docs, naming-convention erosion, accumulated orphans).
 
-**Axis boundary.** This is one of **three sibling audit-cadence axes** (see §7):
+**Axis boundary.** This is one of **four sibling audit-cadence axes** (see §7):
 
 | Axis | Cadence doc | Conformance frame |
 |---|---|---|
 | **Structural** (this doc) | `structural-audit-cadence.md` | Diátaxis · NARA · ISO 15489 · ADR · Keep-a-Changelog |
 | Process-fitness | `process-fitness-cadence.md` | PMBOK 7 · DORA · Stage-Gate · ITIL 4 · Lean · CD |
 | Anthropic Base-vs-Build | `platform-health-audit-framework.md` §2 | Anthropic skill-catalog overlap |
+| Architecture-conformance | `architecture-conformance-cadence.md` | Delivered work vs platform architecture (ADR corpus · cross-chain index · architecture-overview) |
 
-The three axes are deliberately separate — distinct benchmark rosters, distinct triggers — and mutually cross-referenced so the full audit surface is discoverable from any one of them.
+The four axes are deliberately separate — distinct benchmark rosters, distinct triggers — and mutually cross-referenced so the full audit surface is discoverable from any one of them.
 
 ---
 
@@ -101,12 +102,13 @@ The cadence runs as a **HYBRID** of manual event-triggers and an automated stale
 
 ---
 
-## §7 Cross-References (3-Axis Set)
+## §7 Cross-References (4-Axis Set)
 
-This cadence is one axis of a three-axis audit-cadence set; all three mutually cross-reference:
+This cadence is one axis of a four-axis audit-cadence set; all four mutually cross-reference:
 
 - **Sibling — process-fitness axis:** [`process-fitness-cadence.md`](process-fitness-cadence.md) (PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD).
 - **Sibling — Anthropic Base-vs-Build axis:** [`platform-health-audit-framework.md`](platform-health-audit-framework.md) §2 (Anthropic skill-catalog overlap cadence).
+- **Sibling — architecture-conformance axis:** [`architecture-conformance-cadence.md`](architecture-conformance-cadence.md) (delivered work vs the platform architecture baseline — the retrospective complement to the forward per-ticket architecture-fit gate).
 - **Methodology (how-to-run):** [`AUDIT_FRAMEWORK.md`](../../../core/standards/AUDIT_FRAMEWORK.md) Session 1 — the Structural & Behavioral Audit dimensions this cadence schedules.
 - **Output convention:** [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) — the analysis-folder home, frontmatter, and sunset rule.
 - **Continuous complement:** the link-check CI gate is the continuous between-audit detector for the cross-reference-integrity dimension (§1 layering note).

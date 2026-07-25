@@ -1,7 +1,7 @@
 ---
 name: pmo-qa-auditor
 description: >
-  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit (dated process-audit artifact) · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "fitness-audit the release pipeline."
+  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit (dated process-audit artifact) · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts) · As-built architecture-conformance audit (delivered-work drift + cross-release fragmentation). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "fitness-audit the release pipeline", "as-built architecture-conformance audit."
 version: v3.68
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
@@ -35,8 +35,11 @@ vocabularies, each defined by its governing contract: Mode E's observational pos
 verdicts); Mode F's UNTRACKED / PARTIAL / ALREADY-TRACKED tracking-state classification
 (PARTIAL carries a mandatory tracked-remainder note naming the sibling and the uncovered
 scope) and its recorded 1–5 dimension scores; Mode G's Stage-7 report verdicts; Mode H's
-Stage-8 six-value per-criterion enum (PARTIAL carries the mandatory unmet-remainder note).
-A PARTIAL-family value outside those defined vocabularies remains the cop-out this
+Stage-8 six-value per-criterion enum (PARTIAL carries the mandatory unmet-remainder note);
+Mode I's observational conformance-drift / cross-release-fragmentation / conformant /
+no-governing-baseline classification (no verdicts) with recorded 1–5 dimension scores and an
+orthogonal severity-axis × confidence-tag model (severity is never diluted by low baseline
+confidence). A PARTIAL-family value outside those defined vocabularies remains the cop-out this
 principle forbids.
 
 **Specific, located findings.** Every finding includes: (1) the exact location in the output
@@ -83,6 +86,11 @@ This skill's modes are enumerated in the Mode Selection table below. **Trigger-m
 > - **Mode G — Dev Testing**: a PR + release plan go in; the Stage-7 quality report
 >   comes out **as a PR comment on the PR under review** (this mode's declared
 >   external write surface, bounded to that PR).
+> - **Mode I — As-Built Architecture-Conformance Audit**: the release record + the
+>   architecture baseline go in; a dated on-disk audit folder comes out (Mode E's
+>   audit-class observational discipline) **plus** a committed overwrite of the
+>   `release/releases/architecture-conformance-summary.md` hand-off surface (the tracked
+>   headline health-check consumes off-instance). Auto-files nothing.
 >
 > All other modes emit within the invoking surface (in-chat; when pipeline-dispatched,
 > the spoke's sub-task comment).
@@ -109,6 +117,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "release-process fitness audit", "run the fitness audit", "fitness-audit the release pipeline", "classify these audit findings", "deep-dive finding <ID> from <audit-folder>", or the process-fitness cadence invocation (a §2 T1–T3 event or the 90-day sentinel) | Mode F — Release-Process Fitness Audit |
 | "dev-test this PR", "run dev testing on PR #N", "run the DT ladder", "Stage 7 quality review", a PR reference + release plan path provided | Mode G — Dev Testing |
 | "acceptance review this PR", "acceptance-review #N against its AC", "grade the acceptance criteria", "per-criterion acceptance verdicts", Stage-8 QA invocation | Mode H — Acceptance Review |
+| "as-built architecture-conformance audit", "architecture-conformance audit", "audit delivered work against the architecture", "cross-release fragmentation check", "conformance-drift audit", or the architecture-conformance cadence invocation (a §2 event or the 90-day staleness sentinel) | Mode I — As-Built Architecture-Conformance Audit |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -132,6 +141,8 @@ When the heuristic is ambiguous, call the `AskUserQuestion` tool with:
     description: "Stage-7 spec-conformance review of a PR against the release plan — runs the structural→contract→content-quality→integration eval ladder and posts the quality report as a PR comment."
   - option: "Acceptance Review"
     description: "Per-criterion verdicts against a GitHub Issue's acceptance criteria under the Stage-8 six-value enum, with fitness assessment and acceptance score."
+  - option: "As-Built Architecture-Conformance Audit"
+    description: "Observational audit of delivered work (the release record) against the architecture baseline (ADR corpus primary; cross-chain index + architecture-overview secondary) — detects conformance-drift + cross-release fragmentation (candidate-grade), emits a dated audit folder + a committed conformance-summary surface; auto-files nothing."
 
 Await the user's selection; use it as the mode.
 
@@ -700,6 +711,79 @@ See `references/acceptance-review-mode-spec.md` for the consumption map, the
 fitness-beyond-literal-AC rubric, the ad-hoc invocation contract, the evidence
 discipline, and the Mode A vs Mode H routing boundary.
 
+### Mode I — As-Built Architecture-Conformance Audit
+
+**Trigger**: "as-built architecture-conformance audit", "architecture-conformance audit",
+"audit delivered work against the architecture", "cross-release fragmentation check",
+"conformance-drift audit", or the architecture-conformance cadence invocation (a §2 event or
+the 90-day staleness sentinel) per
+`../../../release/references/protocols/architecture-conformance-cadence.md` — the when-to-run
+authority; this mode is the how-to-run. "Platform health audit" (registry corpus) → Mode E;
+"release-process fitness audit" (pipeline vs external frames) → Mode F; this mode audits
+DELIVERED WORK against the platform's OWN internal architecture.
+
+**Scope**: the retrospective, cross-release complement to the forward per-ticket
+architecture-fit gate. It reads the release record, reconstructs delivered items per release,
+maps each to its governing architecture baseline, and detects two drift classes: (1)
+**conformance-drift** (a delivery diverged from the architecture/ADR it was meant to follow)
+and (2) **cross-release fragmentation** (related deliveries under divergent architectures) —
+the class the per-ticket forward gate is structurally blind to.
+
+**Input**: the release record (`release/releases/RELEASE_LOG.md` + `release/releases/notes/`)
+and the architecture baseline (the ADR corpus **primary**; `cross-chain-architecture-map.md`
++ `architecture-overview.md` + `actor-model-and-governance-as-contract.md` **secondary**). Not
+a pasted skill output.
+
+**Mutation posture — OBSERVE-only** (Mode E's discipline): writes the git-ignored dated audit
+folder + a committed overwrite of `release/releases/architecture-conformance-summary.md` (the
+hand-off surface, §7b of the mode-spec) + the in-chat echo. It **never** creates a GitHub
+issue, mutates the backlog/registry, or edits any other tracked file. Findings are
+observations until operator triage — the mode auto-files nothing.
+
+**Process** (schemas + detail in `references/architecture-conformance-mode-spec.md` — cited,
+not restated):
+1. Load the dimension rubric + severity banding
+   (`references/architecture-conformance-dimension-rubric.md` — the single source of the
+   dimension set, 1–5 anchors, severity bands, the `no-governing-baseline` cap, and the
+   fragmentation threshold) and record the `baseline_sha` / `baseline_date` freshness anchor.
+2. Reconstruct the per-release delivered-item set from the release record (mode-spec §2):
+   `{version, issue, touched surface, mechanism prose}`. An unparseable entry reports
+   INDETERMINATE with the missing input named — never a silently-empty release. **Stated
+   limitation**: the release record carries delivered-item identity + mechanism prose, NOT
+   which architecture each delivery followed — architecture-followed is inferred only where an
+   ADR citation makes it citable.
+3. Map each item to its governing architecture surface — **ADR first (primary, discriminating);
+   the cross-chain index by chain-name as a secondary routing aid**; `no-governing-baseline`
+   when neither resolves (a coverage signal, not a defect) (mode-spec §3).
+4. Score dimensions 1–4 per item (conformance-drift) and run the capability-key grouping for
+   dimension 5 (cross-release fragmentation — a **candidate-grade heuristic**, bounded by
+   ADR-citation visibility; NOT deterministic) (mode-spec §4). Classify each finding
+   conformance-drift / cross-release-fragmentation / conformant / no-governing-baseline.
+5. Apply the two-factor confidence/severity model (mode-spec §5): severity on its own axis
+   (CRITICAL/HIGH/MEDIUM/LOW × blast radius) + an orthogonal baseline-confidence tag — a
+   HIGH-severity divergence under a LOW-confidence baseline is surfaced as HIGH/LOW, never
+   diluted. `no-governing-baseline` is capped at MEDIUM **severity** and its **volume** is
+   bounded separately (aggregate into one coverage-gap row; fire only on load-bearing
+   surfaces).
+6. Validate evidence citations (CF-1..CF-4, seeded sample, mode-spec §6); fix failures before
+   emitting; record the aggregate rate.
+7. Emit the dated audit folder at
+   `<OPERATOR_INSTANCE_ANALYSIS_PATH>/architecture-conformance-${AUDIT_DATE_UTC}/`
+   (operator-instance, git-ignored; `${AUDIT_DATE_UTC}` = `date -u +%Y-%m-%d` at run time) —
+   `SUMMARY.md`, `findings-register.md` (+ the `## Fragmentation Groups` table + the single
+   `## Coverage Gap` aggregate row), `issue-drafts/NNN-kebab-name.md` in observation format
+   (mode-spec §7a) — AND overwrite the committed `release/releases/architecture-conformance-summary.md`
+   headline (mode-spec §7b).
+8. Observational-discipline self-check — scan for prescriptive verbs (`recommend`, `migrate`,
+   `consolidate`, `should`); rewrite before emitting (Mode E/F step-7 parallel).
+
+**Does NOT auto-file.** A run on a drift/fragmentation fixture creates **zero** GitHub issues —
+findings are report-only, surfaced for human routing (issue AC: report-only capability).
+
+See `references/architecture-conformance-mode-spec.md` (machinery),
+`references/architecture-conformance-dimension-rubric.md` (dimensions + banding SSOT), and
+`../../../release/references/protocols/architecture-conformance-cadence.md` (when-to-run).
+
 ## Output format
 
 Every QA auditor response follows this structure:
@@ -887,6 +971,27 @@ assessment, Stage-7 escape log, lane distribution, overall verdict
 (operator-rendered at Phase E), plus the Tier-3 machine-readable acceptance
 block. In-pipeline the instance is posted on the Stage-8 sub-task; ad-hoc it
 is emitted in-chat.
+
+### Mode I — As-Built Architecture-Conformance Audit Output
+
+Mode I does NOT emit a gate table, a PASS/FAIL verdict, or the QA Audit Report header
+(observational audit-class, like Modes E/F). It produces **three** surfaces:
+
+1. the **dated audit folder** at
+   `<OPERATOR_INSTANCE_ANALYSIS_PATH>/architecture-conformance-${AUDIT_DATE_UTC}/`
+   (operator-instance, git-ignored) — `SUMMARY.md` (scorecard + `baseline_sha`/`baseline_date`
+   anchor + the stated fragmentation confidence bound), `findings-register.md` (the `{item,
+   baseline, classification, severity, confidence, evidence, root-cause}` rows + the
+   `## Fragmentation Groups` table + the single `## Coverage Gap` aggregate row), and
+   `issue-drafts/NNN-kebab-name.md` in observation format; schemas: mode-spec §7a;
+2. a committed overwrite of **`release/releases/architecture-conformance-summary.md`** — the
+   tracked headline hand-off surface health-check consumes off-instance (mode-spec §7b);
+3. the **in-chat SUMMARY echo**: baseline anchor + audit date, per-release and rolling
+   conformance posture, classification counts (conformant / drift / fragmentation-candidate /
+   no-baseline), the fragmentation-group count + its candidate-grade confidence bound, the
+   coverage-gap count, the evidence-bar rate, and a pointer to the folder + the committed
+   surface. No prescriptive verbs; observation drafts carry reversibility tiers; there is no
+   gate verdict to tier.
 
 ## Reversibility Discipline
 
