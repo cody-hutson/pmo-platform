@@ -181,7 +181,7 @@ A [Task](../specs/terminology-glossary.md#term-task) (sub-task GitHub Issue) is 
 | Session handoff state | `projects/_config/SESSION_STATE.md` | Operator's current-session context | Sessions |
 | Active behavioral corrections | `projects/_config/CORRECTIONS.md` | Short-term operator preference overrides | Sessions until explicit removal |
 | User-durable memory | User auto-memory store | Cross-project user preferences + feedback | Conversations |
-| Release working state | `release/releases/plans/vX.Y_RELEASE_PLAN.md` | Current release's plan + deviation log + verification evidence | Sessions within a release |
+| Release working state | `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-primary / pre-claim; renamed to `vX.Y_RELEASE_PLAN.md` at the Stage-12 claim) | Current release's plan + deviation log + verification evidence | Sessions within a release |
 | Cross-release audit trail | `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` | Shipped releases' permanent record | Forever |
 | Project operating state | `projects/<project>/PROJECT.md` | Active project context | Project lifetime |
 | Portfolio state | `projects/_config/PORTFOLIO.md` | Cross-project health | Continuously |
@@ -209,7 +209,7 @@ A [Task](../specs/terminology-glossary.md#term-task) (sub-task GitHub Issue) is 
 2. **Assignment:** Operator (human, Role) + Hub Agent (Claude session, Role) + Spoke Agents (one per sub-task, each embodying the stage's Persona from `release-personas.md`).
 3. **Tracking:** Each Issue has Stage / Status / Decision-Date GitHub Project fields + `sub-task` label on sub-tasks + the Milestone.
 4. **Handoff:** Stage 4 output (release plan on ) → scaffolding → Stage 5 spoke prompts (Procedure 3) → Spoke sub-task comments → Collective Review (for this release, because ≥2 issues with Solutioning activated) → Stage 6 Engineering.
-5. **State persistence:** Release plan committed as `release/releases/plans/vX.Y_RELEASE_PLAN.md` at Engineering Commit 0; session handoff via `SESSION_STATE.md`; audit trail via `RELEASE_LOG.md` after merge.
+5. **State persistence:** Release plan committed as `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-primary / pre-claim — renamed to `vX.Y_RELEASE_PLAN.md` at the Stage-12 claim, ADR-092) at Engineering Commit 0; session handoff via `SESSION_STATE.md`; audit trail via `RELEASE_LOG.md` after merge.
 
 ### Example B — Operational PMO delivery ([PROJECT_KEY] Implementation hypercare)
 

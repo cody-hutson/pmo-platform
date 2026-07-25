@@ -1,11 +1,11 @@
 ---
 schema_version: "v1.0"
-milestone: "vX.Y-<milestone-slug>"
+milestone: "<milestone-slug>"
 created_at: "<ISO 8601 UTC of first session emit>"
 last_updated: "<ISO 8601 UTC of most recent session emit>"
 ---
 
-# Hub Sessions — vX.Y
+# Hub Sessions — <milestone-slug>
 
 <!--
 SURFACE C (OPTIONAL) — hub session boundaries.
@@ -14,7 +14,7 @@ Canonical schema: core/standards/hub-session-continuity.md § 3.3.
 CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md):
   THIS .template file is CUSTOMIZABLE-PUBLIC (tracked in pmo-platform).
   The RUNTIME INSTANCE the hub writes to is OPERATOR-INSTANCE — it lives at
-  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/sessions.md and is NOT git-tracked.
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/sessions.md and is NOT git-tracked.
 
   Surface C is OPTIONAL and informational only — it is NOT load-bearing for
   the Resume Procedure. Surfaces A (pending-approvals) and B (the
@@ -24,7 +24,7 @@ CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md)
 HUB INSTALL CONTRACT:
   If the operator chooses to maintain Surface C (operator preference; not
   hub-mandatory), the hub copies this template to
-  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/sessions.md on first session emit
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/sessions.md on first session emit
   and appends a row per session boundary.
 
 TABLE BELOW IS APPEND-ONLY. Rows are NOT mutated in-place.
