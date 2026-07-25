@@ -57,7 +57,17 @@ phase_deploy_skills() {
     orchestrate_log_info "Deploying skills via core/deploy/deploy.sh --deploy"
   fi
 
-  if bash "${ORCHESTRATE_DEPLOY_SCRIPT}" --deploy; then
+  # deploy.sh reads repo files cwd-relative (its deliberate "run from repo root"
+  # contract); invoked here by absolute path it would otherwise inherit the
+  # caller's cwd. A non-repo-root caller (update.sh Phase 5 / install.sh Phase 2)
+  # then trips deploy.sh's repo-root guard -> partial-update failure (#382).
+  # Establish cwd=repo-root in a SUBSHELL (ORCHESTRATE_DIR is BASH_SOURCE-derived,
+  # so this is independent of the caller's cwd) so the sourcing caller's own cwd is
+  # never mutated; fail closed if the repo root cannot be resolved. deploy.sh's
+  # guard and its cwd-relative source-reading contract stay unchanged.
+  local _repo_root
+  _repo_root="$(cd "${ORCHESTRATE_DIR}/../.." 2>/dev/null && pwd || echo "")"
+  if [ -n "${_repo_root}" ] && ( cd "${_repo_root}" && bash "${ORCHESTRATE_DEPLOY_SCRIPT}" --deploy ); then
     if [ "${quiet}" -eq 0 ]; then
       orchestrate_log_info "Skill deployment complete."
     fi

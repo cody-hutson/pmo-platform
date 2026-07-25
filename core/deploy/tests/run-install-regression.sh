@@ -76,6 +76,7 @@ REGRESSION_MEMBERS=(
   "test_install_exit_propagation.sh"       # install.sh propagates setup-workspace.sh exit codes
   "test_detect_install_path_spaces.sh"     # cowork_install_path with internal spaces resolves
   "test_lib_composition.sh"                # bash-3.2 array-scope contract + manifest count
+  "test_update_nonrepo_root_cwd.sh"        # #382 non-repo-root cwd -> Phase 5 completes; guard intact
 )
 
 SUITE_PASS=0
