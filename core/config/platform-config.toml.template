@@ -169,3 +169,80 @@ type_mapping_overrides = {}
 # Valid: non-negative integer count of releases observed since last calibration.
 # Default: 0
 releases_since_calibration = 0
+
+[failure_mode_detectors]
+# Operator/portfolio-specific threshold seeds for the pmo-qa-auditor Failure-Mode
+# Detector Battery (D1-D8). Two detectors read an absolute threshold from this
+# section at evaluation time: D6 (breadth burnout) and D8 (trust erosion). The
+# other six detectors carry their thresholds inline in the battery and read
+# nothing here. The detector definitions, signatures, and threshold semantics are
+# canonical in core/skills/pmo-qa-auditor/references/failure-mode-detectors.md -
+# this section is the single NUMERIC home for the two config-referenced thresholds;
+# the reference cites them by key and does NOT restate these values.
+#
+# Resolution + fallback: values resolve via the 5-rung Platform-Config Resolution
+# Protocol (global default here -> portfolio -> program -> project -> individual).
+# A detector whose key cannot be resolved is un-evaluable and reports INDETERMINATE
+# for that axis (never silently clean), per the reference's resolution note.
+
+# D6 (breadth burnout) - the maximum sustainable count of concurrent ACTIVE
+# workstreams. D6 fires when the concurrent-active count exceeds this ceiling AND
+# a >=15-point depth-metric decline occurs window-over-window (conjunction; the
+# 15-point band is D4's, carried inline in the reference). This absolute ceiling
+# is operator/portfolio-specific and is NOT canonicalized in the reference.
+# Calibration policy: MEDIUM-confidence seed - set a per-portfolio value via a
+# Layer-2 override; recalibrate the seed from observed audit-window breadth data
+# if it proves mis-set. NOT tied to [calibration].releases_since_calibration (that
+# counter is the release-velocity loop; this is an audit-window threshold).
+# Valid: a positive integer (count of concurrent active workstreams).
+# Default: 5
+concurrency_ceiling = 5
+
+# D8 (trust erosion) - the walk-back / retraction rate floor, expressed as a
+# 0.0-1.0 fraction of claims. D8 fires when the walk-back rate rises
+# window-over-window OR exceeds this floor; a persistent rise escalates at the
+# hand-off boundary. This absolute rate floor is operator/portfolio-specific and
+# is NOT canonicalized in the reference.
+# Calibration policy: MEDIUM-confidence seed - set a per-portfolio value via a
+# Layer-2 override; recalibrate the seed from observed audit-window walk-back data
+# if it proves mis-set. NOT tied to [calibration].releases_since_calibration.
+# Valid: a decimal fraction in [0.0, 1.0].
+# Default: 0.15
+walk_back_rate_floor = 0.15
+
+[progressive_rollout]
+# Persistence surface for the release-executor progressive-rollout outcome-log
+# (the "rollout-log"). release-executor progressive rollout persists each
+# shadow/warn would-fail hit to a per-rule append-only log so an operator can
+# review a rule's hit-rate before advancing it shadow -> warn -> enforce. The
+# dispatch model, the log fields (ts, rule-id, cycle, verdict, reason, release),
+# and the shadow/warn/enforce semantics are canonical in
+# release/skills/release-executor/references/progressive-rollout.md - this section
+# is the config home for the log's LOCATION + FORMAT only; the reference cites
+# these keys by role and owns the behavioral contract.
+#
+# Log rotation is deliberately NOT configured here: the rollout-logs are
+# append-only and rotation folds into the platform's existing warn-log rotation
+# follow-up per the reference (do not add a per-file rotation scheme here).
+
+# Directory (repo-relative) where per-rule rollout-logs are written. Reuses the
+# established core/hooks/ location + the per-rule *-log.jsonl convention the
+# platform's warn-mode hooks already use, so an operator drains these logs with
+# the same muscle-memory.
+# Valid: a repo-relative directory path string.
+# Default: "core/hooks"
+rollout_log_dir = "core/hooks"
+
+# Per-rule rollout-log filename pattern. The "<rule-id>" placeholder is replaced
+# with the rule or gate id that produced the hit (one log per rule). The
+# "-rollout-log" suffix (rather than "-warn-log") signals the line carries a
+# "cycle" field spanning both shadow and warn.
+# Valid: a filename pattern string containing the "<rule-id>" placeholder and a
+#        ".jsonl" extension.
+# Default: "<rule-id>-rollout-log.jsonl"
+rollout_log_filename_pattern = "<rule-id>-rollout-log.jsonl"
+
+# On-disk log format. Append-only JSON Lines - one JSON object per would-fail hit.
+# Valid: "jsonl" (append-only JSON Lines - the only supported format).
+# Default: "jsonl"
+rollout_log_format = "jsonl"
