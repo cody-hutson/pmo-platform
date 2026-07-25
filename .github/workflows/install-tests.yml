@@ -424,9 +424,22 @@ jobs:
       - name: QA-as-code module — python -m qa (Windows)
         # Windows uses `python` (python3 is not reliably aliased) and the qa
         # module directly (qa.sh's bash shebang + python3 coupling is POSIX-only).
+        #
+        # HOME shim (the #303 Windows compose.py invocation contract): the qa
+        # suite's F4 check drives compose.py resolve_tokens, which reads $HOME
+        # (compose.py:152) to self-heal [OPERATOR_HOMEDIR_PATH]. On Windows $HOME
+        # is unset (%USERPROFILE% is the home var), so — exactly as
+        # lib-dryrun-proxy.ps1 Get-PmoHome does before every Windows compose.py
+        # call — set HOME to the user profile first. Without this, F4 fails with
+        # "resolve_tokens left unresolved: [OPERATOR_HOMEDIR_PATH]". The durable
+        # fix (compose.py falling back to %USERPROFILE%) is owned by the deferred
+        # native-Windows arc (#47 / #48); this shim mirrors #303's call sites.
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $profileHome = [System.Environment]::GetFolderPath('UserProfile')
+          if ([string]::IsNullOrEmpty($profileHome)) { $profileHome = $env:USERPROFILE }
+          $env:HOME = $profileHome
           $env:PYTHONPATH = "$env:GITHUB_WORKSPACE/core/deploy"
           python -m qa
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
