@@ -77,6 +77,7 @@ REGRESSION_MEMBERS=(
   "test_detect_install_path_spaces.sh"     # cowork_install_path with internal spaces resolves
   "test_lib_composition.sh"                # bash-3.2 array-scope contract + manifest count
   "test_update_nonrepo_root_cwd.sh"        # #382 non-repo-root cwd -> Phase 5 completes; guard intact
+  "test_qa_module.py"                      # QA-as-code registry: import smoke + finding->check 1:1 coverage
 )
 
 SUITE_PASS=0
