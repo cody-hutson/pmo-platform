@@ -150,8 +150,8 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | 4 | `release/releases/plans/<slug>_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
 | 5 | `gh issue list --milestone "<name>" --label sub-task --state all --limit 500 --json number,title,state,labels,projectItems` | Per-stage sub-task states + GitHub Projects field anchors | YES |
 | 6 | `grep "\| v<X.Y> \|" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md` | Release-scoped decision history (D-class verdicts, scope-lock, gate outcomes, escalations) | YES |
-| 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/pending-approvals.md` | Queued approvals awaiting current session | YES — if exists |
-| 8 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/sessions.md` | Session lineage (informational) | OPTIONAL |
+| 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md` | Queued approvals awaiting current session | YES — if exists |
+| 8 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/sessions.md` | Session lineage (informational) | OPTIONAL |
 | 9 | Drift check: cross-reference event-log decisions vs. release plan deviation log vs. sub-task closure states | Surface inconsistencies before acting | YES |
 
 **Step 6 grep semantics:** Pipe-delimited version match avoids false positives for substring versions (e.g., `v1.2` matching `v1.23`). The leading and trailing pipe characters bracket the `version` field per `pipeline-event-log.md` table schema.
@@ -227,7 +227,7 @@ After operator renders a decision in a Decision Briefing, the hub MUST:
 
 ## 7. Durable-State Contract for the Queued-Approval Mechanism
 
-**Substrate:** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/pending-approvals.md` (Surface A per § 3.1 — operator-instance runtime instance, per [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3) is the persistence target for the queued-resumption mechanism.
+**Substrate:** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md` (Surface A per § 3.1 — operator-instance runtime instance, per [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3) is the persistence target for the queued-resumption mechanism.
 
 ### 7.1 Contract Elements
 
@@ -250,7 +250,7 @@ After operator renders a decision in a Decision Briefing, the hub MUST:
 When hub is running autonomously (e.g., scheduled trigger) and reaches an approval gate with NO active main-thread session, hub:
 
 1. Computes the pending-approval row per Surface A schema.
-2. Appends the row to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/pending-approvals.md` (creating the per-release directory + the file from the tracked template at `release/releases/hub-state/pending-approvals.md.template` if first row, substituting milestone slug into frontmatter).
+2. Appends the row to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md` (creating the per-release directory + the file from the tracked template at `release/releases/hub-state/pending-approvals.md.template` if first row, substituting milestone slug into frontmatter).
 3. NO commit — the runtime instance is operator-instance per [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3 and lives outside the git-tracked surface. Persistence happens via the local file write; durability across hub sessions comes from the operator's machine-local state.
 4. Suspends the work-item that generated the approval (per the mechanism's "queued resumption" semantics).
 5. Next main-thread session start triggers Resume Procedure → operator sees queued approvals → renders verdict → hub resumes work-item.
