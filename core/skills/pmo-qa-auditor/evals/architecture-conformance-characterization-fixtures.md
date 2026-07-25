@@ -90,7 +90,7 @@ must NEVER lower a high severity.
 | F-SEV-01 | 1 | governed chain / ADR-load-bearing | HIGH | CRITICAL | HIGH |
 | F-SEV-02 | 1 | single skill/doc | HIGH | HIGH | HIGH |
 | F-SEV-03 | 2 | load-bearing | HIGH | HIGH | HIGH |
-| F-SEV-04 | 2 | single non-load-bearing | MEDIUM | HIGH | MEDIUM tag |
+| F-SEV-04 | 2 | single non-load-bearing | MEDIUM | MEDIUM | MEDIUM tag |
 | F-SEV-05 (orthogonality) | 1 | load-bearing | **LOW** | **CRITICAL** (NOT demoted) | **LOW** |
 | F-SEV-06 (no-baseline cap) | n/a (no baseline) | load-bearing | LOW | **MEDIUM (capped)** | LOW · `coverage-signal` |
 
@@ -144,7 +144,7 @@ FAIL.
 | ID | Citation | Form | Expected |
 |---|---|---|---|
 | F-EV-01 | `core/ADRs/ADR-019-specialists-compose-not-absorb.md:1` | CF-1 | PASS (resolve) |
-| F-EV-02 | `grep -c "^### Mode" core/skills/pmo-qa-auditor/SKILL.md → 9` | CF-2 | PASS |
+| F-EV-02 | `grep -c "^\*\*Trigger\*\*" core/skills/pmo-qa-auditor/SKILL.md → 9` | CF-2 | PASS |
 | F-EV-03 | `LIVE:` a resolvable release version ref (e.g. a tagged `vX.Y`) | CF-3 | PASS |
 | F-EV-04 | a 7–40 hex commit SHA resolvable via `git cat-file -e` | CF-4 | PASS |
 | F-EV-NEG-01 | `core/does-not-exist.md:999` | CF-1 | **FAIL** (no resolve) — negative control |
