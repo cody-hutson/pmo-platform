@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.88] - 2026-07-25
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.88_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.88)
+
 ## [v3.87] - 2026-07-24
 
 Design diagrams and process flows embedded in the docs are now labeled with a findable marker, so the full set can be listed and checked for gaps.
