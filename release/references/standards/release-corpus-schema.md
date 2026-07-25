@@ -57,6 +57,8 @@ The `type:` field discriminates artifact classes for the schema validator and fo
 | `audit-plan` | `vX.Y-{audit-name}_RELEASE_PLAN.md` under `releases/plans/` | All 6 | — |
 | `abandoned-plan` | Any plan moved to `releases/archive/plans/` | All 6; add `status: abandoned` and `abandonment-reason` in body | INDEX rows; DIGEST per-version-family entries |
 
+**Pre-claim naming lifecycle (additive — the filename patterns above are the *shipped-corpus* form).** The `vX.Y…` filename patterns are the **post-claim** canonical form: a shipped release *is* version-named, and these are the names the corpus carries. While a release is **in flight (pre-claim)**, its plan is authored **slug-primary** — `release/releases/plans/<slug>_RELEASE_PLAN.md`, carrying no version stem, with in-file version references held as the `{{RELEASE_VERSION}}` placeholder. For a `versioned` release the plan is renamed to its `vX.Y_RELEASE_PLAN.md` shipped-corpus form at the Stage-12 atomic claim (the CAS-win rename + placeholder resolution, per ADR-092); a `version-less` release keeps the slug form. This is the corpus-schema projection of the two-phase identity binding in [`../../governance/RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Versioning — the shipped-corpus filenames above are unchanged.
+
 Validator MUST discriminate by `type:` value and apply the type-specific required-fields subset before flagging missing-field errors.
 
 ### Links shape

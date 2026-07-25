@@ -2,24 +2,24 @@
 
 ## Purpose
 
-This template defines the standard structure for PMO platform release plans. The release-planner skill (Mode B) generates release plans following this template. Release plans are committed to the release branch at `release/releases/plans/vX.Y_RELEASE_PLAN.md`.
+This template defines the standard structure for PMO platform release plans. The release-planner skill (Mode B) generates release plans following this template. Release plans are committed to the release branch at `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-primary / pre-claim — no version stem; the version binds at the Stage-12 claim, when the file is renamed to `vX.Y_RELEASE_PLAN.md` per ADR-092).
 
 ## Template
 
 ```markdown
-# Release Plan: vX.Y — [Release Title]
+# Release Plan: <slug> — [Release Title]
 
 ## Header
 
 | Field | Value |
 |-------|-------|
-| **Version** | vX.Y |
+| **Version** | {{RELEASE_VERSION}} |
 | **Date Created** | YYYY-MM-DD (Day) |
 | **Release Manager** | [Name or "Agent-assisted"] |
 | **Status** | Draft / In Review / Approved / Executing / Completed / Rolled Back |
-| **Branch** | release/vX.Y-[description] |
+| **Branch** | release/<slug> |
 | **PR** | #[PR number] (populated at Stage 6) |
-| **Milestone** | vX.Y |
+| **Milestone** | <slug> |
 
 ## Scope
 
@@ -283,7 +283,7 @@ Layer 2 file propagation targets for Stage 12/13:
 ### Cross-references
 
 - Release plan: this file, top section
-- Milestone: vX.Y-title
+- Milestone: <slug>
 - User-facing release notes: [`release/releases/notes/vX.Y_RELEASE_NOTES.md`](release/releases/notes/vX.Y_RELEASE_NOTES.md) (authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](../../../references/standards/release-notes-standard.md))
 ```
 

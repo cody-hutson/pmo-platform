@@ -6,7 +6,7 @@ status: ACTIVE
 source: ""
 parallel_to: "agent-handoff-framework.md (sibling K1 standard defining cross-agent handoff contracts; this standard scopes cross-session continuity within a single hub role), hub-action-tracking.md (sibling K1 standard defining action-item schema; rides on this standard's release-scoped substrate convention), pipeline-event-log-schema.md (REUSED by Surface B without schema extension; closed-enum discipline preserved), hub-spoke-bridge.md § Procedure 0b (thin procedural cross-reference pointing to this standard for full schema + behavior)"
 reversibility: MODERATE / HIGH confidence (file creation + cross-reference reversible via git revert until downstream consumers — queued-approval mechanism, action-item tracking — build against the schema at their Stage 6)
-consumers: "Queued-approval mechanism (consumes Surface A pending-approvals.md schema for queued-approval persistence + Resume Procedure Step 7 for main-thread surfacing); hub-action-tracking standard (consumes the file-based markdown substrate convention — templates at release/releases/hub-state/*.template, runtime instance at <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/ — for action-item-list placement); agent-handoff framework (composes-with — Agent Handoff Framework's disposition state machine T2 trigger may reference this standard's session-boundary semantics); hub-spoke-bridge.md Procedure 0b (thin procedural binding to Resume Procedure)"
+consumers: "Queued-approval mechanism (consumes Surface A pending-approvals.md schema for queued-approval persistence + Resume Procedure Step 7 for main-thread surfacing); hub-action-tracking standard (consumes the file-based markdown substrate convention — templates at release/releases/hub-state/*.template, runtime instance at <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/ — for action-item-list placement); agent-handoff framework (composes-with — Agent Handoff Framework's disposition state machine T2 trigger may reference this standard's session-boundary semantics); hub-spoke-bridge.md Procedure 0b (thin procedural binding to Resume Procedure)"
 version: ""
 ---
 <!-- reference-durability: allow-link -->
@@ -17,7 +17,7 @@ version: ""
 
 This standard defines how a NEW hub session reconstructs the in-flight state of an active release without operator hand-holding. Three concerns: (1) WHAT state the hub persists across sessions, (2) WHERE that state lives (file paths + schema), (3) HOW a fresh session reads and validates it before routing new work.
 
-The parent issue framed the gap as "a new hub is a shift change with no shift notes." That framing overstates the missing infrastructure — three persistence surfaces already exist per [`hub-spoke-bridge.md` Framework Alignment row 20 (State Persistence)](../../release/references/how-to/hub-spoke-bridge.md): the release plan file at `release/releases/plans/vX.Y_RELEASE_PLAN.md`, sub-task comments, and `projects/_config/SESSION_STATE.md`. The actual gap has three parts that this standard closes: (1) NO codified startup read-order knitting the existing surfaces into a coherent context-rebuild; (2) NO release-scoped durable substrate for the queued-approval mechanism; (3) NO explicit drift-detection between hub state and operator decisions across sessions.
+The parent issue framed the gap as "a new hub is a shift change with no shift notes." That framing overstates the missing infrastructure — three persistence surfaces already exist per [`hub-spoke-bridge.md` Framework Alignment row 20 (State Persistence)](../../release/references/how-to/hub-spoke-bridge.md): the release plan file at `release/releases/plans/<slug>_RELEASE_PLAN.md`, sub-task comments, and `projects/_config/SESSION_STATE.md`. The actual gap has three parts that this standard closes: (1) NO codified startup read-order knitting the existing surfaces into a coherent context-rebuild; (2) NO release-scoped durable substrate for the queued-approval mechanism; (3) NO explicit drift-detection between hub state and operator decisions across sessions.
 
 **Scope.** Hub state persistence across SESSION boundaries within a single release. Cross-RELEASE state lives in workspace-level surfaces (`SESSION_STATE.md` for workspace handoff, `SWAP_HANDOFF.md` for cross-account handoff) and is out of scope here. Cross-AGENT handoffs (skill-to-skill, spoke-to-spoke, stage-to-stage) are owned by [`agent-handoff-framework.md`](agent-handoff-framework.md). Action-item schemas (deferred edits, follow-ups, reminders) are owned by [`hub-action-tracking.md`](hub-action-tracking.md) (sibling standard) and ride on the substrate convention this standard defines.
 
@@ -29,7 +29,7 @@ Per Stage 5 D-2 verdict on the hub-session-continuity sub-task: the persistence 
 
 ## 2. Persistence Format
 
-**Verdict:** File-based markdown — schema templates tracked at `release/releases/hub-state/*.template`; runtime instance written to the operator-instance path `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/`. The split-class treatment is governed by [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3 — templates ship as CUSTOMIZABLE-PUBLIC so operators have the schema to seed first emit; the runtime instance is OPERATOR-INSTANCE because hub-state mutates on every routing decision (10–50+ writes per release) and tracking the runtime would create release-branch noise with no cross-operator readership benefit.
+**Verdict:** File-based markdown — schema templates tracked at `release/releases/hub-state/*.template`; runtime instance written to the operator-instance path `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/`. The split-class treatment is governed by [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3 — templates ship as CUSTOMIZABLE-PUBLIC so operators have the schema to seed first emit; the runtime instance is OPERATOR-INSTANCE because hub-state mutates on every routing decision (10–50+ writes per release) and tracking the runtime would create release-branch noise with no cross-operator readership benefit.
 
 **Rationale (composition with existing infrastructure):** File-based markdown composes directly with [`pipeline-event-log.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md) (append-only, schema-validated, `append-pipeline-event.sh` writer per [`pipeline-event-log-schema.md`](../../release/references/standards/pipeline-event-log-schema.md)) — both Surface A (pending-approvals) and Surface B (pipeline-event-log) write to operator-instance paths, so the persistence surfaces converge on the same Layer-classification. Hub state is NOT a new file format; it is a release-scoped instantiation of the established workspace pattern.
 
@@ -47,9 +47,9 @@ Per Stage 5 D-2 verdict on the hub-session-continuity sub-task: the persistence 
 | Single-operator-PMO fit | matches workspace scale | overkill |
 | **Verdict** | **PREFERRED** | rejected |
 
-**Layer classification:** **Templates** ship at Layer 1 (`release/releases/hub-state/*.template` — tracked under `pmo-platform/`). **Runtime instance** lives at Layer 2 (`<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/` — operator-local). The split avoids dozens of micro-commits per release for state with no cross-operator readership. Per [`operations-bridge.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/operations-bridge.md), the existing Layer 2 `projects/_config/SESSION_STATE.md` is preserved for workspace-level handoff (cross-release, ephemeral, Cowork-owned). The three surfaces are complementary — hub-state runtime is release-scoped + operator-local + durable across hub sessions; SESSION_STATE is workspace-scoped + ephemeral.
+**Layer classification:** **Templates** ship at Layer 1 (`release/releases/hub-state/*.template` — tracked under `pmo-platform/`). **Runtime instance** lives at Layer 2 (`<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/` — operator-local). The split avoids dozens of micro-commits per release for state with no cross-operator readership. Per [`operations-bridge.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/operations-bridge.md), the existing Layer 2 `projects/_config/SESSION_STATE.md` is preserved for workspace-level handoff (cross-release, ephemeral, Cowork-owned). The three surfaces are complementary — hub-state runtime is release-scoped + operator-local + durable across hub sessions; SESSION_STATE is workspace-scoped + ephemeral.
 
-**Directory creation discipline:** The template directory `release/releases/hub-state/` (with `*.template` files) is created at this standard's landing and lives in pmo-platform. Per-release runtime subdirectories at `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/` are created LAZILY by the hub on first surface emit (the hub copies the template, substitutes the milestone slug into the frontmatter, and appends the first row). Hubs do NOT pre-create empty per-release runtime directories.
+**Directory creation discipline:** The template directory `release/releases/hub-state/` (with `*.template` files) is created at this standard's landing and lives in pmo-platform. Per-release runtime subdirectories at `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/` are created LAZILY by the hub on first surface emit (the hub copies the template, substitutes the milestone slug into the frontmatter, and appends the first row). Hubs do NOT pre-create empty per-release runtime directories.
 
 ## 3. State Schema
 
@@ -58,14 +58,14 @@ Hub state partitions across THREE surfaces by concern.
 ### 3.1 Surface A: Pending-Approval Queue (NEW substrate for queued approvals)
 
 **Template (tracked):** [`release/releases/hub-state/pending-approvals.md.template`](../../release/releases/hub-state/pending-approvals.md.template)
-**Runtime instance (operator-local):** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/pending-approvals.md`
+**Runtime instance (operator-local):** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md`
 
 **Frontmatter (YAML):**
 
 ```yaml
 ---
 schema_version: "v1.0"
-milestone: "vX.Y-<milestone-slug>"
+milestone: "<milestone-slug>"
 created_at: "<ISO 8601 UTC of first row enqueue>"
 last_updated: "<ISO 8601 UTC of most recent row mutation>"
 last_session_id: "<worktree>__<ISO-start>__<short-sha>"
@@ -120,7 +120,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 ### 3.3 Surface C: Hub Session Boundaries (OPTIONAL lightweight log)
 
 **Template (tracked):** [`release/releases/hub-state/sessions.md.template`](../../release/releases/hub-state/sessions.md.template)
-**Runtime instance (operator-local):** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/sessions.md` (created lazily on first session emit; OPTIONAL)
+**Runtime instance (operator-local):** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/sessions.md` (created lazily on first session emit; OPTIONAL)
 
 **Purpose:** Informational audit trail for cross-session lineage. NOT load-bearing for resume — release-scoped surfaces A + B are the load-bearing continuity mechanism. Surface C exists for operator-facing session-boundary inspection.
 
@@ -147,7 +147,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | 1 | `CLAUDE.md` + `.claude/rules/` (all 7 files) | Workspace governance baseline | YES |
 | 2 | `projects/_config/SESSION_STATE.md` (Layer 2) | Workspace-level session handoff (cross-release context) | YES — if exists |
 | 3 | `gh api repos/[OPERATOR_GITHUB]/pmo-platform/milestones?state=open --paginate` | Identify active milestone(s) | YES |
-| 4 | `release/releases/plans/vX.Y_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
+| 4 | `release/releases/plans/<slug>_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
 | 5 | `gh issue list --milestone "<name>" --label sub-task --state all --limit 500 --json number,title,state,labels,projectItems` | Per-stage sub-task states + GitHub Projects field anchors | YES |
 | 6 | `grep "\| v<X.Y> \|" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md` | Release-scoped decision history (D-class verdicts, scope-lock, gate outcomes, escalations) | YES |
 | 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/v<X.Y>/pending-approvals.md` | Queued approvals awaiting current session | YES — if exists |
@@ -263,8 +263,10 @@ When § 7.2 Step 2 reads *"creating the per-release directory + the file from th
 
 ```bash
 # Inputs:
-#   MILESTONE   — e.g., "v1.2-initial"
-#   VERSION     — e.g., "v1.2"
+#   MILESTONE   — the milestone/theme slug (slug-primary / pre-claim), e.g.,
+#                 "release-identity-and-plan-naming". The runtime hub-state dir
+#                 is created DURING the release (pre-claim) and is keyed on this
+#                 slug, never on the version (which is not bound until the claim).
 #   SURFACE     — "pending-approvals" | "action-items" | "sessions"
 #   SOURCE_REPO — repo root (where release/releases/hub-state/*.template lives)
 
@@ -274,21 +276,22 @@ When § 7.2 Step 2 reads *"creating the per-release directory + the file from th
 HUB_STATE_PATH="$(read_operator_toml_field paths.operator_instance_hub_state_path)"
 [ -z "${HUB_STATE_PATH}" ] && HUB_STATE_PATH="${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/hub-state"
 
-RUNTIME_DIR="${HUB_STATE_PATH}/${VERSION}"
+RUNTIME_DIR="${HUB_STATE_PATH}/${MILESTONE}"   # slug-keyed (pre-claim; the version is not bound yet)
 RUNTIME_FILE="${RUNTIME_DIR}/${SURFACE}.md"
 TEMPLATE_FILE="${SOURCE_REPO}/release/releases/hub-state/${SURFACE}.md.template"
 
 if [ ! -f "${RUNTIME_FILE}" ]; then
   mkdir -p "${RUNTIME_DIR}"
   cp "${TEMPLATE_FILE}" "${RUNTIME_FILE}"
-  # Substitute milestone slug + version into frontmatter (created_at,
-  # last_updated set to current UTC).
+  # Substitute the milestone slug into the frontmatter + header + runtime-path
+  # markers (created_at, last_updated set to current UTC). Pre-claim, the template
+  # is keyed on the slug placeholder <milestone-slug> — there is no version to
+  # substitute (it binds only at the Stage-12 claim; ADR-092).
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   sed -i.bak \
-    -e "s|vX.Y-<milestone-slug>|${MILESTONE}|g" \
+    -e "s|<milestone-slug>|${MILESTONE}|g" \
     -e "s|<ISO 8601 UTC of first row enqueue>|${NOW}|g" \
     -e "s|<ISO 8601 UTC of most recent row mutation>|${NOW}|g" \
-    -e "s|vX.Y|${VERSION}|g" \
     "${RUNTIME_FILE}"
   rm -f "${RUNTIME_FILE}.bak"
 fi
