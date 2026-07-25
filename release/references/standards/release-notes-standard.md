@@ -42,6 +42,7 @@ The note is NOT:
 - One file per release, no patches
 - Filename version matches the Milestone version exactly (e.g., `v1.03_RELEASE_NOTES.md`)
 - No subfolders; notes are flat in `releases/notes/`
+- **PLAN-filename note (#3307):** the corpus linter (`core/deploy/tools/lint_release_corpus.py` `CANONICAL_FILENAME_RE`) admits the three-component patch form `vX.Y.Z` for a release **PLAN** filename (e.g., `v3.65.1_RELEASE_PLAN.md` for a hotfix that carries its own plan). This concerns the **plan** filename only — it does **not** alter the "one note file per release, no patches" **notes-content** policy above: a hotfix emits no separate `_RELEASE_NOTES.md` file.
 - Frontmatter schema: see [release-corpus-schema.md](release-corpus-schema.md). Required fields (6): `version`, `date`, `type`, `issues`, `pr`, `links`. Optional fields (7): `reversibility-tier`, `themes`, `summary`, `requires_action`, `breaking`, `components`, `followups`. Five of the seven optional fields exist specifically to make the release-notes corpus searchable by agents — see [release-corpus-schema.md §Field-utility notes for agent search](release-corpus-schema.md#field-utility-notes-for-agent-search).
 
 ---

@@ -87,45 +87,39 @@ NOTES_DIR = WORKSPACE_ROOT / "release" / "releases" / "notes"
 INDEX_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_INDEX.md"
 LOG_PATH = WORKSPACE_ROOT / "release" / "releases" / "RELEASE_LOG.md"
 
+# Coordinated regex (#2548 slug-primary pre-claim + #3307 vX.Y.Z patch form) — authored
+# as ONE union expression per CIAC-3. It accepts:
+#   (1) the versioned form v<MAJOR>.<MINOR>[.<PATCH>][<letter>][-<N>][-<slug>] — the
+#       prior form PLUS the optional third (patch) component #3307 admits
+#       (e.g. v3.65.1_RELEASE_PLAN.md);
+#   (2) the slug-primary pre-claim form <slug>_RELEASE_PLAN.md (kebab-case: a
+#       lowercase-alnum start, then lowercase-alnum/hyphen) — every in-flight release is
+#       slug-keyed before the Stage-12 claim (#2548, ADR-092), so the pre-claim form is
+#       admitted GENERALLY rather than per-release-allowlisted.
+# It still rejects genuinely malformed names (v3.65.1.2, v3.65., v3.65.1.): the version
+# branch has no trailing/extra dot, and the slug branch excludes '.' entirely. This
+# GENERALIZES the former enumerated theme-plan allowlist entries (now regex-matched);
+# only the 3 true grandfathered exceptions (non-_RELEASE_* suffixes) + README remain in
+# FILENAME_ALLOWLIST below.
 CANONICAL_FILENAME_RE = re.compile(
-    r"^v[0-9]+\.[0-9]+[a-z]?(-[0-9]+)?(-[0-9a-z][-0-9a-z]*)?_(RELEASE_PLAN|RELEASE_NOTES)\.md$"
+    r"^(?:v[0-9]+\.[0-9]+(?:\.[0-9]+)?[a-z]?(-[0-9]+)?(-[0-9a-z][-0-9a-z]*)?"
+    r"|[0-9a-z][-0-9a-z]*)_(RELEASE_PLAN|RELEASE_NOTES)\.md$"
 )
 
 FILENAME_ALLOWLIST = {
-    # Grandfathered exceptions (pre-convention phase/analysis artifacts).
+    # Grandfathered exceptions — pre-convention phase/analysis artifacts whose suffix
+    # is NOT _RELEASE_PLAN / _RELEASE_NOTES, so the canonical regex structurally cannot
+    # match them (they are not release plans/notes). These stay allowlisted by name.
     "v11.01-Z_PHASE_PLAN.md",
     "v11.01-I_PHASE_PLAN.md",
     "v10.3_retrospective_validation.md",
     # Plans README (index for the plans/ directory, not a release plan).
     "README.md",
-    # Version-less-by-design release plans: theme-named at authoring time per the
-    # theme-named-branch convention (the version binds only at the Stage 12 atomic
-    # claim, so a plan authored ahead of its release legitimately has no version
-    # stem). These are intentional, not naming drift — the canonical regex requires
-    # a vX.Y prefix these files do not yet carry. Allowlisted with rationale rather
-    # than renamed (renaming would invent a version the plan never claimed and break
-    # every reference to the theme slug).
-    "15-generated-vs-source-provenance_RELEASE_PLAN.md",
-    "16-knowledge-management-discipline_RELEASE_PLAN.md",
-    "22-ticket-information-architecture_RELEASE_PLAN.md",
-    "38-governance-cross-reference-currency_RELEASE_PLAN.md",
-    "60-audit-cadence-and-learning_RELEASE_PLAN.md",
-    "72-closeout-output-determinism_RELEASE_PLAN.md",
-    "adapter-config-foundation_RELEASE_PLAN.md",
-    "architecture-altitude-discipline_RELEASE_PLAN.md",
-    "ci-gate-trustworthiness-and-parallel-pr-safety_RELEASE_PLAN.md",
-    "corpus-durability-enforcement_RELEASE_PLAN.md",
-    "cross-reference-integrity-ci_RELEASE_PLAN.md",
-    "cross-release-impact-model_RELEASE_PLAN.md",
-    "declarative-gating-model_RELEASE_PLAN.md",
-    "domain-aware-stage5-design_RELEASE_PLAN.md",
-    "field-lifecycle-and-cmdb-automation_RELEASE_PLAN.md",
-    "intake-elicitation-skill_RELEASE_PLAN.md",
-    "memory-to-corpus-codification_RELEASE_PLAN.md",
-    "parallel-launch-quota-budget-gate_RELEASE_PLAN.md",
-    "platform-self-measurement-and-quality-method_RELEASE_PLAN.md",
-    "public-flip-depersonalization-enforcement_RELEASE_PLAN.md",
-    "release-version-claim-determinism_RELEASE_PLAN.md",
+    # NOTE: the former per-plan theme-named entries were REMOVED here — the coordinated
+    # CANONICAL_FILENAME_RE above now admits the slug-primary pre-claim form GENERALLY
+    # (#2548), so those entries became dead (regex-matched) and are pruned per the
+    # register-or-remove discipline. New slug-keyed pre-claim plans need no allowlist
+    # entry; they match the regex.
 }
 
 CUTOVER_RELEASES = {"v11.04b-3", "v11.04b-3-doc-cleanup"}
