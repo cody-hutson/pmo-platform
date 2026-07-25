@@ -1,1 +1,1 @@
-ID,Type,Title,Description,Impact,Probability,Severity,Owner,Status,Mitigation,Date Identified,Date Resolved,Resolution,Source
+RAID_ID,RAID Category,Description,Impact,Owner,Priority,Status,Action Plan,Due Date,Date Opened,Date Closed,Closure Comments,Tags,source_ref,Section
