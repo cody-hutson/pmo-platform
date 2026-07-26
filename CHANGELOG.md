@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.94] - 2026-07-26
+
+Four new checks harden how the pipeline accepts, builds, and extends work — and stop trusting the stated author of an issue body.
+
+[Full notes](release/releases/notes/v3.94_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.94)
+
 ## [v3.93] - 2026-07-25
 
 <one-sentence ≤140 chars; plain language; agent-search target>

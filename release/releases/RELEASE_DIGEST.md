@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.94 (2026-07-26) — Intake and gate hardening: a Stage-2 acceptance-fit gate (reject-by-default for agent-authored / net-new-sweeping items), an issue-body author-association trust boundary, a module skill-consultation forcing function, and an extend-before-create gate at Stage 5
+
 ### v3.93 (2026-07-25) — <headline — populated by operator at chore PR review>
 
 ### v3.92 (2026-07-25) — Architecture baseline: a consolidated actor-model + governance-as-contract statement, a cross-chain index, and a standing as-built conformance audit that checks delivered work against the platform's own architecture
