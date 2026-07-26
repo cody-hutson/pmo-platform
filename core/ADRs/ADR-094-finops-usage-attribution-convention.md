@@ -4,7 +4,7 @@
 title: ADR-094 — FinOps usage attribution — session→work-item mapping convention, cross-file spoke linkage, and the unattributed bucket
 status: Accepted
 date: 2026-07-25
-release: agent-finops-foundation (v3.93)
+release: agent-finops-foundation (v3.94)
 deciders: "Workspace owner (ratified D-AttributionConvention option A at the Stage-4 D-Gate, 2026-07-25; carried through the r2 Collective Review scope-lock with the operator ADJUST->lean directive, 2026-07-25). Design resolved at the C2 Stage-5 Solutioning (r1 + r2 revision)."
 tags: [architecture, finops, token-spend, attribution, roll-up, work-item, hub-spoke, derived-cache, reversibility, deferred-scope]
 source_observations:
