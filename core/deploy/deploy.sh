@@ -7638,6 +7638,62 @@ cmd_check() {
   fi
 
 
+  # Check 59 — Master-enable hook-class ↔ D-R9 security-registry reconcile [#310]
+  #
+  # #310 gives every core/hooks/block-*.sh a `readonly MASTER_ENABLE_CLASS=<workflow|security>`
+  # declaration at its master-activation gate call site, and core/hooks/lib/master-enable.sh
+  # honors it: a `workflow` hook goes inert under master-OFF; a `security` hook NEVER does
+  # (D-R9, ratified SECURITY-EXCLUDED — the security/floor class is public-surface-safety
+  # paramount; a silently-disabled egress/PII/credential guard → an IRREVERSIBLE leaked
+  # commit/PR on a public repo). This check reconciles each hook's DECLARED class against the
+  # ratified D-R9 security/floor registry below, so a future edit cannot silently reclassify a
+  # security hook as workflow (the one error this slice cannot ship). It also asserts every
+  # block-*.sh declares a valid class (no missing / typo'd tag). The registry here IS the
+  # machine-readable D-R9 contract; its human-readable home is
+  # core/rules/bypass-mode-readiness/_cross-cutting.md § Master Activation Layer.
+  # git-pre-commit-pii.sh is out of scope by construction (not a block-* name; own mode, no
+  # master gate). Read-only; reversibility CHEAP. Warn-mode initial per the
+  # bypass-mode-readiness.md §Shakedown precedent (flip the shared deploy-check.mode to
+  # 'enforce' after the shakedown window).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 59: Master-enable hook-class ↔ D-R9 security-registry reconcile (#310) (warn-mode initial; enforce-flip deferred)"
+    # The ratified D-R9 security/floor set — these hooks MUST declare `security` so master-OFF
+    # can never make them inert. Space-padded for whole-word membership test; bash-3.2 portable.
+    local c59_secset=" block-credential-reads block-destructive block-rm-prefer-trash block-egress block-gh-path-leak block-scope-segregation block-shell-injection "
+    local c59_findings=0 c59_seen=0 c59_script
+    if [[ ! -d core/hooks ]]; then
+      log "  SKIP:  core/hooks absent (greenfield/partial checkout)"
+    else
+      for c59_script in core/hooks/block-*.sh; do
+        [[ -e "$c59_script" ]] || continue
+        c59_seen=$((c59_seen + 1))
+        local c59_base; c59_base="$(basename "$c59_script" .sh)"
+        local c59_class; c59_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c59_script" | head -1)"
+        if [[ -z "$c59_class" ]]; then
+          flag_warn_or_issue "master-enable-class" "$c59_base declares no MASTER_ENABLE_CLASS — every block-*.sh must declare its master-activation class (workflow|security) at the gate call site (#310)"
+          c59_findings=$((c59_findings + 1)); continue
+        fi
+        case "$c59_class" in
+          workflow|security) ;;
+          *) flag_warn_or_issue "master-enable-class" "$c59_base declares MASTER_ENABLE_CLASS='$c59_class' — must be 'workflow' or 'security'"
+             c59_findings=$((c59_findings + 1)); continue ;;
+        esac
+        # The load-bearing D-R9 assertion: a security/floor hook must declare `security`.
+        case "$c59_secset" in
+          *" $c59_base "*)
+            if [[ "$c59_class" != "security" ]]; then
+              flag_warn_or_issue "master-enable-class" "D-R9 VIOLATION: security/floor hook $c59_base declares '$c59_class' but MUST declare 'security' — master-OFF must NEVER silently disable it (public-surface security is paramount)"
+              c59_findings=$((c59_findings + 1))
+            fi
+            ;;
+        esac
+      done
+      if [[ $c59_findings -eq 0 ]]; then
+        log "  OK:    master-enable-class — $c59_seen block-*.sh hooks declare a valid class; all 7 D-R9 security/floor hooks declare 'security'"
+      fi
+    fi
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
