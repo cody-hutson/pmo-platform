@@ -13,7 +13,7 @@ description: >
   refresh token-usage data, or to attribute and roll it up, for FinOps reporting. Triggers: "extract token usage", "refresh the
   finops store", "how much token spend", "run the finops extractor",
   "roll up token usage", "attribute token spend", "which work item spent the tokens".
-version: v3.94
+version: v3.95
 license: BUSL-1.1
 delivery_approach: advisory
 ---

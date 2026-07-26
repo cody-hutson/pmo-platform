@@ -4,7 +4,7 @@
 title: ADR-095 — FinOps usage store — operator-local data home, tracked-schema authority, git-ignore enforcement
 status: Accepted
 date: 2026-07-25
-release: agent-finops-foundation (v3.94)
+release: agent-finops-foundation (v3.95)
 deciders: "Workspace owner (ratified D-DataHome option A at the Stage-4 D-Gate, 2026-07-25; carried unchanged through the r2 Collective Review scope-lock, 2026-07-25). Design resolved at #3909 Stage-5 Solutioning (r1 + r2 revision)."
 tags: [architecture, finops, token-spend, data-store, schema, git-ignore, operator-instance, security, reversibility, derived-cache]
 source_observations:
