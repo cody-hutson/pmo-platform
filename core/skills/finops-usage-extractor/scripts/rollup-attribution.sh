@@ -182,9 +182,42 @@ build_issue_event_list() {
     | jq -R -s 'split("\n") | map(select(length>0) | split("\t")) | map({worktree:.[0], issue:.[1], ts:.[2]})'
 }
 
+# ── FM-2 count-once overlap map (hub<->spoke file boundary). Returns a JSON object keyed by
+#    HUB session_id → the summed tokens (+ collision `count`) of every in-transcript
+#    `subagent` (sidechain) record whose identity (subagent_id) matches a standalone
+#    `session` record's session_id. Such a record means the same spoke spend is embedded
+#    BOTH inside the hub session's whole-file total AND as its own standalone session; the
+#    standalone session is authoritative, so the roll-up deducts the overlapping sidechain
+#    copy from the hub's contribution (counted once, not twice). On the current separate-file
+#    hub-spoke model a subagent_id is a sidechain-root uuid within the hub file, never a
+#    standalone file stem, so the map is empty ({}) by construction — the guard is inert but
+#    present so a future harness change that double-emits a spoke is caught, not silent (a
+#    non-empty map surfaces as coverage.count_once_overlap). ──
+build_count_once_overlap_map() {
+  local store_file="$1"
+  [ -r "$store_file" ] || { printf '{}'; return 0; }
+  jq -s '
+    [ .[] | select(.record=="session") | .session_id ] as $sids
+    | [ .[] | select(.record=="subagent") | . as $sub
+        | select(any($sids[]; . == $sub.subagent_id)) ]
+    | group_by(.session_id)
+    | map({ key: .[0].session_id,
+            value: { input:   (map(.tokens.input // 0) | add),
+                     output:  (map(.tokens.output // 0) | add),
+                     cc_total:(map(.tokens.cache_creation.total // 0) | add),
+                     cc_1h:   (map(.tokens.cache_creation.ephemeral_1h // 0) | add),
+                     cc_5m:   (map(.tokens.cache_creation.ephemeral_5m // 0) | add),
+                     cread:   (map(.tokens.cache_read // 0) | add),
+                     ws:      (map(.tool_use.web_search_requests // 0) | add),
+                     wf:      (map(.tool_use.web_fetch_requests // 0) | add),
+                     count:   length } })
+    | from_entries' "$store_file" 2>/dev/null || printf '{}'
+}
+
 # ── The resolver + roll-up jq program. Input: slurped session records. Args: the two
-#    hub-state maps. Output (with --arg mode "resolve"): one resolution object per
-#    session. Output (mode "rollup"): the rollup + coverage records. ──
+#    hub-state maps ($wt_milestone, $issue_events) + the FM-2 count-once overlap map
+#    ($overlap_by_session). Output: one resolution object per session (tokens net of the
+#    count-once deduction). ──
 read -r -d '' JQ_RESOLVE <<'JQEOF' || true
 def tok(t): (t.input // 0) + (t.output // 0) + ((t.cache_creation.total) // 0) + (t.cache_read // 0);
 def base($p): ($p // "") | split("/") | last;
@@ -213,6 +246,15 @@ def t1_issue($cwd; $start; $end):
 | base($cwd) as $wt
 | ($s.started_utc) as $start
 | ($s.ended_utc) as $end
+# FM-2 count-once (hub<->spoke file boundary). $overlap_by_session maps a HUB session_id
+# to the summed tokens of any in-transcript sidechain `subagent` record whose identity
+# (subagent_id) collides with a standalone `session` record — i.e. the same spoke spend
+# embedded BOTH inside this hub session's whole-file total AND as its own standalone
+# session. On a collision the standalone session is authoritative, so the overlapping
+# sidechain copy is excluded from THIS session's roll-up contribution (counted once, not
+# twice). Empty ({}) on the current separate-file hub-spoke model (no such collision
+# arises) — the deduction is then a no-op, but the guard is always applied.
+| ($overlap_by_session[$s.session_id] // {input:0,output:0,cc_total:0,cc_1h:0,cc_5m:0,cread:0,ws:0,wf:0,count:0}) as $ov
 # Bind all tier candidates at top level (in scope in every branch below — avoids
 # relying on condition-bound variables, which jq does not carry into `then`).
 | (t1_issue($cwd; $start; $end)) as $t1
@@ -244,15 +286,17 @@ def t1_issue($cwd; $start; $end):
 | { session_id: $s.session_id, work_item: $res.work_item, work_item_kind: $res.work_item_kind,
     attribution_tier: $res.attribution_tier, reproducible: $res.reproducible,
     attribution_basis: $res.attribution_basis, branch: $branch,
-    tokens: { input: ($tk.input // 0), output: ($tk.output // 0),
-              cache_creation: { total: (($tk.cache_creation.total) // 0),
-                                ephemeral_1h: (($tk.cache_creation.ephemeral_1h) // 0),
-                                ephemeral_5m: (($tk.cache_creation.ephemeral_5m) // 0) },
-              cache_read: ($tk.cache_read // 0) },
-    tool_use: { web_search_requests: (($s.tool_use.web_search_requests) // 0),
-                web_fetch_requests: (($s.tool_use.web_fetch_requests) // 0) },
+    # tokens net of the count-once deduction ($ov, zero unless a collision was detected).
+    tokens: { input: (($tk.input // 0) - $ov.input), output: (($tk.output // 0) - $ov.output),
+              cache_creation: { total: ((($tk.cache_creation.total) // 0) - $ov.cc_total),
+                                ephemeral_1h: ((($tk.cache_creation.ephemeral_1h) // 0) - $ov.cc_1h),
+                                ephemeral_5m: ((($tk.cache_creation.ephemeral_5m) // 0) - $ov.cc_5m) },
+              cache_read: (($tk.cache_read // 0) - $ov.cread) },
+    tool_use: { web_search_requests: ((($s.tool_use.web_search_requests) // 0) - $ov.ws),
+                web_fetch_requests: ((($s.tool_use.web_fetch_requests) // 0) - $ov.wf) },
     token_source: ($s.token_source // "exact"),
-    total: tok($tk) }
+    overlap_excluded: $ov.count,
+    total: (tok($tk) - ($ov.input + $ov.output + $ov.cc_total + $ov.cread)) }
 JQEOF
 
 # ── Roll-up jq: input = slurped resolution records (post T-PR pass). Output = rollup
@@ -316,6 +360,9 @@ def tooluse_of($a): { web_search_requests:$a.ws, web_fetch_requests:$a.wf };
                    else 0 end ) } ) | from_entries ) as $tierdist
 | ( [ $all[] | select(.work_item_kind=="unattributed") ] | length ) as $unattr_sessions
 | ( $all | length ) as $nsess
+# FM-2 count-once: total # of colliding sidechain subagents excluded across all sessions.
+# 0 on the current separate-file model; a non-zero value is fail-visible for operator review.
+| ( [ $all[] | .overlap_excluded // 0 ] | add // 0 ) as $count_once_overlap
 | { record: "coverage",
     attributed_token_fraction: rnd($attr_frac),
     unattributed_token_fraction: rnd($unattr_frac),
@@ -325,6 +372,7 @@ def tooluse_of($a): { web_search_requests:$a.ws, web_fetch_requests:$a.wf };
     tier_distribution: $tierdist,
     unattributed_session_rate: ( if $nsess>0 then rnd($unattr_sessions/$nsess) else 0 end ),
     pr_resolved_present: ( $all | any(.attribution_tier=="pr-resolved") ),
+    count_once_overlap: $count_once_overlap,
     health: ( if $unattr_frac <= 0.25 then "OK" elif $unattr_frac <= 0.50 then "WARN" else "FAIL" end ) } as $coverage
 | ( $rollups2[] ), $coverage
 JQEOF
@@ -373,11 +421,13 @@ do_emit() {
     printf 'FATAL (exit 3): FinOps store unreadable: %s (run extract-usage.sh first)\n' "$store_file" >&2
     exit 3
   fi
-  local hub_dir log wt_map ev_list
+  local hub_dir log wt_map ev_list overlap_map
   hub_dir="$(resolve_hub_state_dir)"
   log="$(resolve_event_log)"
   wt_map="$(build_worktree_milestone_map "$hub_dir")"
   ev_list="$(build_issue_event_list "$log")"
+  overlap_map="$(build_count_once_overlap_map "$store_file")"
+  [ -n "$overlap_map" ] || overlap_map='{}'
 
   local sessions resolutions rolled tmp
   sessions="$(mktemp "${TMPDIR:-/tmp}/finops-sess.XXXXXX")"
@@ -386,8 +436,9 @@ do_emit() {
 
   jq -c 'select(.record=="session")' "$store_file" > "$sessions" 2>/dev/null
 
-  # Pass 1: resolve each session (LOCAL-ONLY).
+  # Pass 1: resolve each session (LOCAL-ONLY), net of the FM-2 count-once deduction.
   jq -s -c --argjson wt_milestone "$wt_map" --argjson issue_events "$ev_list" \
+     --argjson overlap_by_session "$overlap_map" \
      "$JQ_RESOLVE" "$sessions" > "$resolutions" 2>/dev/null
 
   # Pass 2 (opt-in): T-PR network upgrade for unattributed fix/feat.
@@ -407,12 +458,13 @@ do_emit() {
   mv -f "$tmp" "$store_file"
 
   rm -f "$sessions" "$resolutions" "$rolled"
-  local nroll ncov health
+  local nroll ncov health overlap
   nroll="$(jq -s '[.[]|select(.record=="rollup")]|length' "$store_file" 2>/dev/null)"
   ncov="$(jq -s '[.[]|select(.record=="coverage")]|length' "$store_file" 2>/dev/null)"
   health="$(jq -r 'select(.record=="coverage")|.health' "$store_file" 2>/dev/null | head -1)"
-  printf 'finops-usage-extractor rollup: %s (%s rollup record(s), %s coverage; health=%s)\n' \
-    "$store_file" "${nroll:-?}" "${ncov:-?}" "${health:-?}" >&2
+  overlap="$(jq -r 'select(.record=="coverage")|.count_once_overlap' "$store_file" 2>/dev/null | head -1)"
+  printf 'finops-usage-extractor rollup: %s (%s rollup record(s), %s coverage; health=%s; count-once-overlap=%s)\n' \
+    "$store_file" "${nroll:-?}" "${ncov:-?}" "${health:-?}" "${overlap:-0}" >&2
 }
 
 # ── Self-test: ground-truth oracle + conservation + coverage + idempotence, against
@@ -441,6 +493,7 @@ self_test() {
   res="$(mktemp "${TMPDIR:-/tmp}/finops-st-res.XXXXXX")"
   jq -c 'select(.record=="session")' "$st/usage.jsonl" > "$sessions" 2>/dev/null
   jq -s -c --argjson wt_milestone "$wt_map" --argjson issue_events "$ev_list" \
+     --argjson overlap_by_session "$(build_count_once_overlap_map "$st/usage.jsonl")" \
      "$JQ_RESOLVE" "$sessions" > "$res" 2>/dev/null
   # Opt-in T-PR with the stub so the pr-resolved fixture resolves deterministically (no gh).
   if [ -f "$fx_prstub" ]; then
@@ -526,6 +579,38 @@ self_test() {
   local sv
   sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"
   [ "$sv" = "1.1.0" ] && echo "  PASS: meta.schema_version bumped to 1.1.0" || { echo "FAIL: meta.schema_version != 1.1.0 (got $sv)"; fail=1; }
+
+  # (I) FM-2 count-once (hub<->spoke file boundary). A spoke that appears BOTH as an
+  #     in-transcript sidechain `subagent` inside a hub session AND as its own standalone
+  #     `session` must be counted EXACTLY ONCE: the standalone session is authoritative and
+  #     the overlapping sidechain contribution is excluded from the hub's roll-up
+  #     contribution (not double-summed); the collision surfaces in coverage.count_once_overlap.
+  #     Ground-truth against the dedicated overlap fixture + oracle.
+  local co_dir="$FIXTURES_DIR/count-once"
+  local co_store="$co_dir/usage.jsonl" co_oracle="$co_dir/count-once.expected.json"
+  if [ -f "$co_store" ] && [ -f "$co_oracle" ]; then
+    local co_st want_wi want_once want_naive want_overlap got_total got_overlap
+    co_st="$(mktemp -d "${TMPDIR:-/tmp}/finops-roll-countonce.XXXXXX")"
+    cp "$co_store" "$co_st/usage.jsonl"
+    # Isolate from operator hub-state / event-log (non-existent paths -> empty surfaces);
+    # both fixture sessions resolve via T2 (release branch -> milestone:v9.9).
+    STORE="$co_st" FINOPS_HUB_STATE_DIR="$co_st/.no-hub" FINOPS_PIPELINE_EVENT_LOG="$co_st/.no-log" \
+      do_emit "$co_st" 0 >/dev/null 2>&1
+    want_wi="$(jq -r '.work_item' "$co_oracle")"
+    want_once="$(jq -r '.count_once_rollup_total' "$co_oracle")"
+    want_naive="$(jq -r '.naive_double_count_total' "$co_oracle")"
+    want_overlap="$(jq -r '.count_once_overlap' "$co_oracle")"
+    got_total="$(jq -s --arg wi "$want_wi" '[.[]|select(.record=="rollup" and .work_item==$wi)|(.tokens.input+.tokens.output+.tokens.cache_creation.total+.tokens.cache_read)]|add // 0' "$co_st/usage.jsonl")"
+    got_overlap="$(jq -s '[.[]|select(.record=="coverage")|.count_once_overlap]|first // 0' "$co_st/usage.jsonl")"
+    if [ "$got_total" = "$want_once" ] && [ "$got_total" != "$want_naive" ] && [ "$got_overlap" = "$want_overlap" ]; then
+      echo "  PASS: FM-2 count-once ($want_wi total=$got_total counted once — not the $want_naive double-count; coverage.count_once_overlap=$got_overlap)"
+    else
+      echo "FAIL: FM-2 count-once — $want_wi total=$got_total (want $want_once, must differ from naive $want_naive); count_once_overlap=$got_overlap (want $want_overlap)"; fail=1
+    fi
+    rm -rf "$co_st"
+  else
+    echo "FAIL: FM-2 count-once fixture missing ($co_store / $co_oracle)"; fail=1
+  fi
 
   rm -f "$sessions" "$res"
   rm -rf "$st"

@@ -42,3 +42,23 @@ work_item_kind, attribution_tier)` the resolver must reproduce (the `…008` row
 opt-in PR-resolve outcome the self-test applies via the stub). This is the CIAC-1 primary
 attribution-correctness check; the conservation identity (`Σ rollup == Σ session`) is the
 secondary plumbing check.
+
+## `count-once/` — FM-2 hub↔spoke count-once guard fixture
+
+`count-once/usage.jsonl` is a dedicated synthetic store that models the FM-2 cross-file
+overlap class: the same spoke spend appearing **both** as an in-transcript sidechain
+`subagent` inside a hub session **and** as its own standalone `session`. It carries a hub
+session (`…cc01`, whole-file total `140/70`, on `release/v9.9-synthetic-alpha`), a
+`subagent` record inside it whose `subagent_id` is the spoke's id (`…cc02`, `100/50`), and
+the spoke's own standalone `session` (`…cc02`, `100/50`, same branch). Both resolve to
+`milestone:v9.9`.
+
+`count-once/count-once.expected.json` is the oracle: the spoke's `150` tokens must be
+counted **exactly once** — the standalone session is authoritative, so the roll-up excludes
+the overlapping sidechain copy from the hub's contribution. The correct `milestone:v9.9`
+roll-up total is **210** (hub-own `60` + spoke `150`), **not** the naive double-count **360**
+(hub whole-file `210` + standalone `150`), and the collision surfaces as
+`coverage.count_once_overlap = 1`. On the current separate-file hub-spoke model this overlap
+never actually arises (a `subagent_id` is a sidechain-root uuid within the hub file, never a
+standalone session-file stem), so the guard is inert in practice — the fixture forces the
+collision to prove the guard is present and fail-visible for any future harness regression.
