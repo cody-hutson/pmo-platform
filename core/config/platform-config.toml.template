@@ -292,3 +292,37 @@ chip_model = "opus"
 #   core/config/allowlists/agents-model-overrides.txt   (<agent-name> <model> per line)
 # Read by Check 27 + the Model Provenance block. Cross-referenced here as the single
 # override sub-surface of this canonical section.
+
+[security_hooks]
+# ── MASTER ACTIVATION for the core/hooks/block-* PreToolUse hook layer (#310) ──
+# Opt-in, default OFF: a fresh public clone imposes NO workflow guards until the
+# operator opts in (at install via docs/scripts/setup-workspace.sh, or by setting
+# master_enabled here in the durable individual surface
+# ~/.config/pmo-platform/platform-config.toml). The operator VALUE lives in that
+# XDG file (Operator-instance category — update.sh never touches it, so the choice
+# survives a version upgrade); this in-repo template ships the OFF schema default.
+# Read by core/hooks/lib/master-enable.sh with a jq-free grep reader; precedence
+# inside each hook is: CLAUDE_HOOK_BYPASS → master_enabled → per-hook .mode → rule.
+#
+# SECURITY SCOPE (D-R9, ratified SECURITY-EXCLUDED — public-surface security is
+# paramount): master_enabled=false disables ONLY the workflow-class hooks
+# (block-draft-files, block-fragile-refs, block-fs-boundary, block-mcp-writes,
+# block-skill-direct-edit, and the mode-gated ceiling of block-autonomy-ceiling).
+# The security/floor-class hooks (block-credential-reads, block-destructive,
+# block-rm-prefer-trash, block-egress, block-gh-path-leak, block-scope-segregation,
+# block-shell-injection) and the block-autonomy-ceiling Tier-0 always-block floor
+# ALWAYS enforce and are NEVER silently disabled by master-OFF — the failure mode
+# (a silently-disabled egress/PII hook → a leaked commit/PR on a PUBLIC repo) is
+# irreversible. CLAUDE_HOOK_BYPASS remains the operator's per-session, audit-logged
+# escape for the always-enforce set.
+# Valid: true | false.  Default: false.
+master_enabled = false
+
+# R9 security-scope OVERRIDE. false (default + recommended) = the security/floor-class
+# hooks are NOT disabled by master_enabled=false (per the D-R9 scope above). Setting
+# true is an explicit, logged operator acknowledgment that those hooks may ALSO go
+# inert under master-OFF — a public-surface-safety downgrade. Never silently defaulted
+# true. (A security hook still honors its OWN per-hook .mode/.scope-segregation-mode/
+# git-pre-commit-pii.mode independently of this knob.)
+# Valid: true | false.  Default: false.
+security_class_master_optout = false
