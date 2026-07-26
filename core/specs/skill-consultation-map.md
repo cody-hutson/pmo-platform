@@ -4,7 +4,7 @@ purpose: Prescriptive capability-dimension → in-house-first support-skill + go
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-framework_version_anchor: v3.93
+framework_version_anchor: v3.94
 consumers: "release/governance/release-process.md § Capability-Consultation Self-Check (release is the first wired consumer; the map itself is module-agnostic)"
 composes_with: anthropic-base-vs-build-registry.md, framework-catalog.md
 adr: core/ADRs/ADR-023-skill-sourcing-coupling-posture.md
