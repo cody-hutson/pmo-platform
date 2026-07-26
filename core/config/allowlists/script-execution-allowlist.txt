@@ -141,3 +141,21 @@ qa.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/doctor.sh
 ./doctor.sh
 doctor.sh
+
+# finops-usage-extractor scripts (#3909) — new in-tree bash CLIs (local-session usage
+# parser + OFF-by-default provider connector). All four invocation forms per tool.
+[PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/extract-usage.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/extract-usage.sh
+./core/skills/finops-usage-extractor/scripts/extract-usage.sh
+core/skills/finops-usage-extractor/scripts/extract-usage.sh
+[PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/provider-usage-connector.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/provider-usage-connector.sh
+./core/skills/finops-usage-extractor/scripts/provider-usage-connector.sh
+core/skills/finops-usage-extractor/scripts/provider-usage-connector.sh
+
+# finops-usage-extractor roll-up + attribution CLI (the C2 attribution/roll-up slice) —
+# new in-tree bash CLI. All four invocation forms.
+[PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/rollup-attribution.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/rollup-attribution.sh
+./core/skills/finops-usage-extractor/scripts/rollup-attribution.sh
+core/skills/finops-usage-extractor/scripts/rollup-attribution.sh

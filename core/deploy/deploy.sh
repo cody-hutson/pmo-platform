@@ -81,6 +81,7 @@ CORE_SKILLS=(
   adr-helper
   context-budget-auditor
   eval-writer
+  finops-usage-extractor
   pmo-qa-auditor
   pmo-skill-router
   prompt-builder

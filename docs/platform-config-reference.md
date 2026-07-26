@@ -67,6 +67,16 @@ A ceiling can only LOWER a per-action autonomy, never raise one. The irreducible
 | `work_board` | **DEPRECATED ALIAS** | Kept as a deprecation alias (no current reader); superseded by `[adapters].ticketing`. It ships in the template and `setup-workspace.sh` generates it into operator configs, so it is deprecated-not-removed to preserve a clean migration path. New consumers should read `[adapters].ticketing`. |
 | `comms_platform` | active | Team-comms surface comms-writer defaults to. Values: `""` (none) · `slack` · `teams` · `email`. Default `""`. |
 
+### `[paths]` — operator-instance data homes
+
+Each field resolves an `<OPERATOR_INSTANCE_*_PATH>` token to an operator-local, git-ignored location: set = explicit override, empty = the canonical default under `${claude_workspace_root}/personal/pmo-instance/`. The full token vocabulary + defaults are canonical in [`core/standards/depersonalization-spec.md`](../core/standards/depersonalization-spec.md) §4.
+
+| Field | What it resolves | Default |
+|---|---|---|
+| `operator_instance_finops_store_path` | the Agent-FinOps runtime token-spend store (`usage.jsonl`) — per-session/per-subagent usage records the `finops-usage-extractor` skill writes; git-ignored operator-instance data (never commits on the public repo) | `${claude_workspace_root}/personal/pmo-instance/finops` |
+
+Other `[paths]` fields (`operator_instance_hub_state_path`, `…_evals_results_path`, etc.) follow the same override-or-default resolution; see the depersonalization-spec §4 vocabulary table for the complete set.
+
 ## 4. platform-config.toml fields (platform behavior)
 
 > Canonical: [`core/schemas/platform-config-schema.md`](../core/schemas/platform-config-schema.md) + the field comments in [`core/config/platform-config.toml.template`](../core/config/platform-config.toml.template).

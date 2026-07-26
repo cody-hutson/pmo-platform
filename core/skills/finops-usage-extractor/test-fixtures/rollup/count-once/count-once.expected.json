@@ -1,0 +1,7 @@
+{
+  "work_item": "milestone:v9.9",
+  "count_once_rollup_total": 210,
+  "naive_double_count_total": 360,
+  "count_once_overlap": 1,
+  "note": "FM-2 count-once ground truth. The synthetic spoke bbbbbbbb-0000-4000-8000-00000000cc02 appears BOTH as an isSidechain subagent inside hub session bbbbbbbb-0000-4000-8000-00000000cc01 (embedded in the hub's whole-file total 140/70) AND as its own standalone session (100/50). Its 150 tokens (input 100 + output 50) must be counted EXACTLY ONCE in the milestone:v9.9 roll-up: the standalone session is authoritative, and the overlapping sidechain contribution is excluded from the hub session's roll-up contribution (140/70 -> 40/20). Correct count-once total = hub-own 60 + spoke 150 = 210. Naive double-counting (summing the hub whole-file 210 + standalone 150 with no reconciliation) = 360. The roll-up must surface the collision as coverage.count_once_overlap = 1."
+}

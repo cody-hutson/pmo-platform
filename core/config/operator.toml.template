@@ -138,6 +138,15 @@ operator_instance_intake_sweep_runlog_path = ""
 # pipeline-event-log.md / calibration-data.md / iteration-log.md surfaces here.
 operator_instance_evals_results_path = ""
 
+# Resolves <OPERATOR_INSTANCE_FINOPS_STORE_PATH>.
+# Default: ${claude_workspace_root}/personal/pmo-instance/finops
+# Consumer: core/schemas/finops-usage-store-schema.md — the Agent-FinOps runtime
+# token-spend store (per-session/per-subagent usage records extracted from local
+# Claude Code session data by the finops-usage-extractor skill). Git-ignored
+# operator-instance data: records carry gitBranch / cwd / work-item identifiers
+# and MUST never commit on the public repo.
+operator_instance_finops_store_path = ""
+
 [adapters]
 # Host-adapter selectors — the four external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,

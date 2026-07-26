@@ -94,13 +94,14 @@ One row per deployed CI. The CI population is the **deployed roster** resolved f
 | [`adr-helper`](adr-helper/SKILL.md) | core | core | active | RELATES_TO decision-discipline | platform-maintainer | — | — |
 | [`context-budget-auditor`](context-budget-auditor/SKILL.md) | core | core | active | RELATES_TO eval-writer · RELATES_TO pmo-qa-auditor | platform-maintainer | — | — |
 | [`eval-writer`](eval-writer/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
+| [`finops-usage-extractor`](finops-usage-extractor/SKILL.md) | core | core | active | RELATES_TO context-budget-auditor | platform-maintainer | — | — |
 | [`pmo-qa-auditor`](pmo-qa-auditor/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
 | [`prompt-builder`](prompt-builder/SKILL.md) | core | core | active | — | platform-maintainer | — | — |
 | [`session-retro`](session-retro/SKILL.md) | core | core | active | RELATES_TO decision-discipline | platform-maintainer | — | — |
 | [`skill-compliance-auditor`](skill-compliance-auditor/SKILL.md) | core | core | active | RELATES_TO eval-writer | platform-maintainer | — | — |
 | [`pmo-skill-router`](pmo-skill-router/SKILL.md) | router | core | active | — | platform-maintainer | — | — |
 
-> **Roster note.** The catalog holds **51 deployed CIs** (resolved from the `deploy.sh` per-module arrays — 29 operations + 14 release + 8 core; the count is owned by `deploy.sh` Check 5 / 5(c), not stored here). Of these, the **19-row routing view** (`kind == role-Specialist` — 13 operations + 6 release) is the surface the `pmo-skill-router` classifies against; the other 32 CIs (function-skills, core, the router itself) are catalogued but are **not** routing targets. The 19-row routing view reached its full role-Specialist roster at v2.15 GA; ADR-038 (v2.20) expanded the catalog to all CIs while leaving that routing view unchanged.
+> **Roster note.** The catalog holds **52 deployed CIs** (resolved from the `deploy.sh` per-module arrays — 29 operations + 14 release + 9 core; the count is owned by `deploy.sh` Check 5 / 5(c), not stored here). Of these, the **19-row routing view** (`kind == role-Specialist` — 13 operations + 6 release) is the surface the `pmo-skill-router` classifies against; the other 33 CIs (function-skills, core, the router itself) are catalogued but are **not** routing targets. The 19-row routing view reached its full role-Specialist roster at v2.15 GA; ADR-038 (v2.20) expanded the catalog to all CIs while leaving that routing view unchanged.
 
 ## Routing view
 
