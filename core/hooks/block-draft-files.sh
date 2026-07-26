@@ -50,6 +50,16 @@ case "$TOOL_NAME" in Write|Edit|MultiEdit) ;; *) exit 0 ;; esac
 
 [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ] && exit 0
 
+# --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
+# .mode read (precedence: bypass -> master -> .mode -> rule). CLASS=workflow: master-OFF
+# makes this hook inert (exit 0). Fail-toward-current-behavior: a missing lib does NOT
+# gate, so the hook keeps its existing .mode enforcement (a read failure never disables a
+# guard). Read jq-free from the durable XDG platform-config.toml [security_hooks]. ---
+readonly MASTER_ENABLE_CLASS="workflow"
+readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
+if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
+if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
+
 FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
 CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
 [ -z "$FILE_PATH" ] && exit 0

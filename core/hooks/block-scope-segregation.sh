@@ -163,6 +163,17 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
   exit 0
 fi
 
+# --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
+# .scope-segregation-mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook
+# inert — the security/floor class always enforces (public-surface security is paramount;
+# a silently disabled public-PII->public-destination guard -> an IRREVERSIBLE leak). It
+# goes inert ONLY on the operator's explicit, logged security_class_master_optout=true.
+# Fail-toward-current-behavior: a missing lib does NOT gate. Read jq-free from the XDG config. ---
+readonly MASTER_ENABLE_CLASS="security"
+readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
+if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
+if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
+
 # --- DEPENDENCY GATE (mode-aware fail-closed — GHSA-9cjm-v22x-4x33). A control that
 # cannot parse its input must not block SOFTER than a rule match would: enforce fails
 # CLOSED (exit 2); warn/off degrade to a non-blocking note (a warn-mode match itself

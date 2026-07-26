@@ -5096,12 +5096,26 @@ cmd_check() {
     log "Check 27: Designated-model config for hub-spawned spokes (release/.claude/agents/pmo-*.md)"
     # Per the layout §1.4 agent definitions live under release/.claude/agents/.
     local c26_agents_dir="release/.claude/agents"
-    local c26_overrides="release/.claude/agents-model-overrides.txt"
     # Fallback to workspace .claude/agents/ for backwards-compatibility during
     # transition window if the operator workspace has not yet been updated.
     [[ -d "$c26_agents_dir" ]] || c26_agents_dir=".claude/agents"
+    # Companion per-stage-override allowlist (#340): canonical read location is the
+    # DEPLOYED instance surface — composition-surface-manifest.sh installs the source
+    # core/config/allowlists/agents-model-overrides.txt to the instance base as an
+    # `instance`-tier file. The prior release/.claude and .claude paths are retained
+    # as back-compat fallbacks for a workspace not yet re-deployed. This reconciles the
+    # read-path-vs-deploy-path seam so operator per-stage overrides placed in the
+    # deployed file are visible to this check.
+    local c26_overrides="$(pmo_instance_path)/agents-model-overrides.txt"
+    [[ -f "$c26_overrides" ]] || c26_overrides="release/.claude/agents-model-overrides.txt"
     [[ -f "$c26_overrides" ]] || c26_overrides=".claude/agents-model-overrides.txt"
-    local c26_default_model="opus"
+    # Default spoke model: read the canonical platform-config [spoke_runtime] surface
+    # (#340) via the rung-reader; fall back to the documented "opus" literal when the
+    # field is unresolved at every rung (resolver Rule-2 consumer-default). This
+    # de-hardcodes the prior literal so the default and the Model Provenance block read
+    # ONE source (both prior detection anchors converge, neither eliminated).
+    local c26_default_model="$(resolve_platform_config default_spoke_model)"
+    [ -n "$c26_default_model" ] || c26_default_model="opus"
     local c26_findings=0
     local c26_output=""
     local c26_files_scanned=0
@@ -7670,6 +7684,62 @@ cmd_check() {
     fi
   fi
 
+
+  # Check 60 — Master-enable hook-class ↔ D-R9 security-registry reconcile [#310]
+  #
+  # #310 gives every core/hooks/block-*.sh a `readonly MASTER_ENABLE_CLASS=<workflow|security>`
+  # declaration at its master-activation gate call site, and core/hooks/lib/master-enable.sh
+  # honors it: a `workflow` hook goes inert under master-OFF; a `security` hook NEVER does
+  # (D-R9, ratified SECURITY-EXCLUDED — the security/floor class is public-surface-safety
+  # paramount; a silently-disabled egress/PII/credential guard → an IRREVERSIBLE leaked
+  # commit/PR on a public repo). This check reconciles each hook's DECLARED class against the
+  # ratified D-R9 security/floor registry below, so a future edit cannot silently reclassify a
+  # security hook as workflow (the one error this slice cannot ship). It also asserts every
+  # block-*.sh declares a valid class (no missing / typo'd tag). The registry here IS the
+  # machine-readable D-R9 contract; its human-readable home is
+  # core/rules/bypass-mode-readiness/_cross-cutting.md § Master Activation Layer.
+  # git-pre-commit-pii.sh is out of scope by construction (not a block-* name; own mode, no
+  # master gate). Read-only; reversibility CHEAP. Warn-mode initial per the
+  # bypass-mode-readiness.md §Shakedown precedent (flip the shared deploy-check.mode to
+  # 'enforce' after the shakedown window).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 60: Master-enable hook-class ↔ D-R9 security-registry reconcile (#310) (warn-mode initial; enforce-flip deferred)"
+    # The ratified D-R9 security/floor set — these hooks MUST declare `security` so master-OFF
+    # can never make them inert. Space-padded for whole-word membership test; bash-3.2 portable.
+    local c60_secset=" block-credential-reads block-destructive block-rm-prefer-trash block-egress block-gh-path-leak block-scope-segregation block-shell-injection "
+    local c60_findings=0 c60_seen=0 c60_script
+    if [[ ! -d core/hooks ]]; then
+      log "  SKIP:  core/hooks absent (greenfield/partial checkout)"
+    else
+      for c60_script in core/hooks/block-*.sh; do
+        [[ -e "$c60_script" ]] || continue
+        c60_seen=$((c60_seen + 1))
+        local c60_base; c60_base="$(basename "$c60_script" .sh)"
+        local c60_class; c60_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c60_script" | head -1)"
+        if [[ -z "$c60_class" ]]; then
+          flag_warn_or_issue "master-enable-class" "$c60_base declares no MASTER_ENABLE_CLASS — every block-*.sh must declare its master-activation class (workflow|security) at the gate call site (#310)"
+          c60_findings=$((c60_findings + 1)); continue
+        fi
+        case "$c60_class" in
+          workflow|security) ;;
+          *) flag_warn_or_issue "master-enable-class" "$c60_base declares MASTER_ENABLE_CLASS='$c60_class' — must be 'workflow' or 'security'"
+             c60_findings=$((c60_findings + 1)); continue ;;
+        esac
+        # The load-bearing D-R9 assertion: a security/floor hook must declare `security`.
+        case "$c60_secset" in
+          *" $c60_base "*)
+            if [[ "$c60_class" != "security" ]]; then
+              flag_warn_or_issue "master-enable-class" "D-R9 VIOLATION: security/floor hook $c60_base declares '$c60_class' but MUST declare 'security' — master-OFF must NEVER silently disable it (public-surface security is paramount)"
+              c60_findings=$((c60_findings + 1))
+            fi
+            ;;
+        esac
+      done
+      if [[ $c60_findings -eq 0 ]]; then
+        log "  OK:    master-enable-class — $c60_seen block-*.sh hooks declare a valid class; all 7 D-R9 security/floor hooks declare 'security'"
+      fi
+    fi
+  fi
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then

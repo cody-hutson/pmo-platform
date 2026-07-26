@@ -162,7 +162,7 @@ Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canar
 - [`core/CLAUDE.md.template`](../core/CLAUDE.md.template) — depersonalized workspace-root template.
 - [`core/config/`](../core/config/) — settings templates + allowlist configuration.
 
-**Security hooks** ([`core/hooks/`](../core/hooks/), 10 PreToolUse hooks + 1 SessionStart hook):
+**Security hooks** ([`core/hooks/`](../core/hooks/), 10 PreToolUse hooks + 3 SessionStart hooks):
 
 - [`block-credential-reads.sh`](../core/hooks/block-credential-reads.sh) — block Read-tool access to credential files.
 - [`block-destructive.sh`](../core/hooks/block-destructive.sh) — block destructive git / rm operations.

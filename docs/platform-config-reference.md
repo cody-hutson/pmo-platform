@@ -1,5 +1,7 @@
 # Platform Config Reference — pmo-platform
 
+<!-- reference-durability: allow-link -->
+
 > Human-readable catalog of every platform configuration field: what it does, what values it takes, its default, and where to set it. This is a **derived navigation surface** — the canonical schema is [`core/schemas/platform-config-schema.md`](../core/schemas/platform-config-schema.md). On any field change, update the schema first; this catalog follows.
 
 <!-- platform-config-reference.md is a derived catalog. Canonical detail: core/schemas/platform-config-schema.md + the field comments in core/config/platform-config.toml.template + core/config/operator.toml.template. -->
@@ -95,6 +97,47 @@ A ceiling can only LOWER a per-action autonomy, never raise one. The irreducible
 | Field | What it tracks | Allowed values | Default |
 |---|---|---|---|
 | `releases_since_calibration` | releases accrued toward a CALIBRATE-AFTER-3 re-calibration | non-negative integer | `0` |
+
+### `[failure_mode_detectors]`
+
+Operator/portfolio-specific threshold seeds for the `pmo-qa-auditor` Failure-Mode Detector Battery. Only two detectors read a config threshold; the other six carry their thresholds inline. Canonical detector definitions: `core/skills/pmo-qa-auditor/references/failure-mode-detectors.md`.
+
+| Field | What it tunes | Allowed values | Default |
+|---|---|---|---|
+| `concurrency_ceiling` | the max sustainable count of concurrent active workstreams above which detector **D6** (breadth burnout) fires (in conjunction with a depth-metric decline) | a positive integer | `5` |
+| `walk_back_rate_floor` | the walk-back / retraction rate floor above which detector **D8** (trust erosion) fires | a decimal in `[0.0, 1.0]` | `0.15` |
+
+### `[progressive_rollout]`
+
+Persistence surface (LOCATION + FORMAT only) for the `release-executor` progressive-rollout outcome-log. The behavioral contract is canonical in `release/skills/release-executor/references/progressive-rollout.md`.
+
+| Field | What it tunes | Allowed values | Default |
+|---|---|---|---|
+| `rollout_log_dir` | directory (repo-relative) where per-rule rollout-logs are written | a repo-relative directory path | `core/hooks` |
+| `rollout_log_filename_pattern` | per-rule rollout-log filename pattern (the `<rule-id>` placeholder is replaced with the emitting rule/gate id) | a filename pattern with the `<rule-id>` placeholder + `.jsonl` | `<rule-id>-rollout-log.jsonl` |
+| `rollout_log_format` | on-disk log format (append-only JSON Lines) | `jsonl` | `jsonl` |
+
+### `[spoke_runtime]`
+
+The **single canonical, operator-discoverable edit surface** for hub-spawned-spoke model + effort posture. Change the default spoke model here (one edit, one place), then run `./deploy.sh --check` to confirm no drift across consumers (Check 27).
+
+| Field | What it tunes | Allowed values | Default |
+|---|---|---|---|
+| `default_spoke_model` | the default model for **subagent-path** spoke work (Agent-tool subagents; inherited via agent-definition frontmatter). The canonical entry point for the spoke-model default. | `sonnet` · `opus` · `haiku` | `opus` |
+| `chip_model` | the model the hub injects into `spawn_task` **chip-path** prompts (chips do not inherit; normally equal to `default_spoke_model`, a separate knob only so the two spawn classes stay independently tunable) | `sonnet` · `opus` · `haiku` | `opus` |
+
+**Effort posture is a pointer, not a field.** Effort is MAX for all spoke work per the immutable model-preference directive; the section stores no `effort` value (a stored value would shadow that directive and drift). To change effort, change the directive. **Per-stage model overrides** live in the companion `core/config/allowlists/agents-model-overrides.txt` (`<agent-name> <model>` per line), read by Check 27 alongside this default.
+
+### `[security_hooks]`
+
+Master activation for the `core/hooks/block-*` PreToolUse hook layer. **Opt-in, default OFF:** a fresh public clone imposes no *workflow* guards until the operator opts in — at install (`docs/scripts/setup-workspace.sh` prompts, default OFF) or by setting `master_enabled` here. The durable value lives in the individual-tier XDG file `~/.config/pmo-platform/platform-config.toml`, which `update.sh` never overwrites, so the choice survives version upgrades. Read by `core/hooks/lib/master-enable.sh`; precedence inside each hook is `CLAUDE_HOOK_BYPASS` → `master_enabled` → per-hook `.mode` → rule.
+
+**Security scope (D-R9).** Master-OFF governs the **workflow-class** hooks only (`block-draft-files`, `block-fragile-refs`, `block-fs-boundary`, `block-mcp-writes`, `block-skill-direct-edit`, and the mode-gated ceiling of `block-autonomy-ceiling`). The **security/floor-class** hooks (`block-credential-reads`, `block-destructive`, `block-rm-prefer-trash`, `block-egress`, `block-gh-path-leak`, `block-scope-segregation`, `block-shell-injection`) plus the `block-autonomy-ceiling` Tier-0 floor and `git-pre-commit-pii` ALWAYS enforce and are never silently disabled by master-OFF — public-surface security is paramount (a silently-disabled egress/PII guard → an irreversible leaked commit/PR). `CLAUDE_HOOK_BYPASS` remains the per-session, audit-logged escape.
+
+| Field | What it tunes | Allowed values | Default |
+|---|---|---|---|
+| `master_enabled` | whether the **workflow-class** `block-*` hooks are active. `false` = a fresh clone's workflow hooks are inert (opt-in); security/floor-class hooks enforce regardless | `true` · `false` | `false` |
+| `security_class_master_optout` | explicit, logged operator acknowledgment that the security/floor-class hooks may ALSO go inert under `master_enabled = false` — a public-surface-safety downgrade. Never silently defaulted true | `true` · `false` | `false` |
 
 ## 5. Consumer examples (how the platform reads these)
 

@@ -51,6 +51,29 @@ All security hooks exit 0 immediately when the env var is set, logging each invo
 
 **Important:** Each Claude invocation is a fresh process — the env var must be set per-launch. Closing Claude and reopening without the env var restores full enforcement.
 
+## Master Activation Layer (opt-in, durable)
+
+A durable master switch governs whether the `block-*` hook layer is active, so a fresh public clone imposes no *workflow* guards until the operator opts in, and the choice survives `update.sh`.
+
+**State home (durable, update-safe):** `[security_hooks].master_enabled` in the individual-tier XDG file `~/.config/pmo-platform/platform-config.toml` (honors `PMO_PLATFORM_CONFIG_ROOT`). This is an Operator-instance-category surface `update.sh` never overwrites, so the value survives version upgrades. The in-repo `core/config/platform-config.toml.template` ships the schema **default OFF** — a fresh clone with no XDG value resolves OFF. The installer (`docs/scripts/setup-workspace.sh`) writes the opt-in value at install time, default OFF; declining leaves the workflow hooks inert.
+
+**How it is read:** each hook sources `core/hooks/lib/master-enable.sh` (co-deployed to `.claude/hooks/lib/` beside `dep-resolve.sh`) with a guarded source plus a single `master_enable_gate <class>` call, placed immediately after the hook's `CLAUDE_HOOK_BYPASS` check and before its `.mode` read. The reader is jq-free and section-aware. **Fail-toward-current-behavior:** if the lib is missing, the hook does NOT gate — it keeps its existing `.mode` enforcement. A hook that cannot read master state never silently disables itself; this is the deliberate opposite of the fail-closed dependency posture — "cannot read master state" must never equal "guard off".
+
+**Runtime precedence inside each hook (highest first):** `CLAUDE_HOOK_BYPASS` (per-session) → **master-enable** (durable) → `.mode` / own-mode (per-hook dial) → rule evaluation.
+
+**Security scope (the load-bearing invariant).** Master-OFF governs the **workflow-class** hooks only. Two classes are declared at each hook's gate call site:
+
+| Class | Hooks | master-OFF behavior |
+|---|---|---|
+| **workflow** | `block-draft-files`, `block-fragile-refs`, `block-fs-boundary`, `block-mcp-writes`, `block-skill-direct-edit`, and the mode-gated ceiling of `block-autonomy-ceiling` | hook goes inert (`exit 0`) |
+| **security / floor** | `block-credential-reads`, `block-destructive`, `block-rm-prefer-trash`, `block-egress`, `block-gh-path-leak`, `block-scope-segregation`, `block-shell-injection`, plus the `block-autonomy-ceiling` Tier-0 always-block floor and `git-pre-commit-pii` | ALWAYS enforce — never silently disabled |
+
+The security/floor class always enforces because the failure mode — a silently-disabled egress / PII / credential guard leading to a leaked commit or PR on a public repo — is irreversible. The only way a security/floor hook goes inert under master-OFF is the operator's explicit, logged `[security_hooks].security_class_master_optout = true` (a public-surface-safety downgrade the operator consciously accepts). `CLAUDE_HOOK_BYPASS` remains the operator's per-session, audit-logged escape for the always-enforce set. A security/floor hook still honors its OWN per-hook mode dial (`.mode` / `.scope-segregation-mode` / `git-pre-commit-pii.mode`) independently of the master switch.
+
+**Class-declaration integrity.** Each hook declares its class at the gate call site (`readonly MASTER_ENABLE_CLASS=...`) — self-documenting at the edit surface, with no central name-list to drift. A `deploy.sh --check` reconcile check asserts the declared classes match the always-enforce / security registry, so a security hook cannot be silently reclassified as workflow.
+
+**Scope of this layer.** The master switch governs every `core/hooks/block-*.sh` hook, including the non-registry hooks owned by their own discipline docs (`block-skill-direct-edit`, `block-fragile-refs`, `block-gh-path-leak`, `block-draft-files`) — each carries the same gate at its own call site. This layer governs hook *activation*; per-session runtime-config verification (session-launch model/effort posture) is a sibling concern owned by its own hook and documentation, and layers onto this same `CLAUDE_HOOK_BYPASS` / `.mode` precedence chain.
+
 ## Allowlist Maintenance
 
 Eight allowlists govern specific surfaces:

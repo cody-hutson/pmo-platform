@@ -17,6 +17,8 @@
 # the index is generated, the fragments are concatenated into it. The #109 Tier-A
 # backfill skipped all 11 by design (generated content, §5 carve-out), so the gate
 # skips them too (else they would each read as a false missing-frontmatter finding).
+# The later verify-session-config workflow-hook fragment joins the same carve-out
+# (a per-hook assembly input concatenated into the generated index).
 #
 # 1 generated index:
 core/rules/bypass-mode-readiness.md
@@ -32,3 +34,6 @@ core/rules/bypass-mode-readiness/block-mcp-writes.md
 core/rules/bypass-mode-readiness/block-rm-prefer-trash.md
 core/rules/bypass-mode-readiness/block-scope-segregation.md
 core/rules/bypass-mode-readiness/block-shell-injection.md
+# 1 non-block workflow-hook fragment (co-documented in the registry; not a security
+#   hook — same generated-content §5 carve-out: an assembly input, no frontmatter):
+core/rules/bypass-mode-readiness/verify-session-config.md
