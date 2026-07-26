@@ -169,3 +169,160 @@ type_mapping_overrides = {}
 # Valid: non-negative integer count of releases observed since last calibration.
 # Default: 0
 releases_since_calibration = 0
+
+[failure_mode_detectors]
+# Operator/portfolio-specific threshold seeds for the pmo-qa-auditor Failure-Mode
+# Detector Battery (D1-D8). Two detectors read an absolute threshold from this
+# section at evaluation time: D6 (breadth burnout) and D8 (trust erosion). The
+# other six detectors carry their thresholds inline in the battery and read
+# nothing here. The detector definitions, signatures, and threshold semantics are
+# canonical in core/skills/pmo-qa-auditor/references/failure-mode-detectors.md -
+# this section is the single NUMERIC home for the two config-referenced thresholds;
+# the reference cites them by key and does NOT restate these values.
+#
+# Resolution + fallback: values resolve via the 5-rung Platform-Config Resolution
+# Protocol (global default here -> portfolio -> program -> project -> individual).
+# A detector whose key cannot be resolved is un-evaluable and reports INDETERMINATE
+# for that axis (never silently clean), per the reference's resolution note.
+
+# D6 (breadth burnout) - the maximum sustainable count of concurrent ACTIVE
+# workstreams. D6 fires when the concurrent-active count exceeds this ceiling AND
+# a >=15-point depth-metric decline occurs window-over-window (conjunction; the
+# 15-point band is D4's, carried inline in the reference). This absolute ceiling
+# is operator/portfolio-specific and is NOT canonicalized in the reference.
+# Calibration policy: MEDIUM-confidence seed - set a per-portfolio value via a
+# Layer-2 override; recalibrate the seed from observed audit-window breadth data
+# if it proves mis-set. NOT tied to [calibration].releases_since_calibration (that
+# counter is the release-velocity loop; this is an audit-window threshold).
+# Valid: a positive integer (count of concurrent active workstreams).
+# Default: 5
+concurrency_ceiling = 5
+
+# D8 (trust erosion) - the walk-back / retraction rate floor, expressed as a
+# 0.0-1.0 fraction of claims. D8 fires when the walk-back rate rises
+# window-over-window OR exceeds this floor; a persistent rise escalates at the
+# hand-off boundary. This absolute rate floor is operator/portfolio-specific and
+# is NOT canonicalized in the reference.
+# Calibration policy: MEDIUM-confidence seed - set a per-portfolio value via a
+# Layer-2 override; recalibrate the seed from observed audit-window walk-back data
+# if it proves mis-set. NOT tied to [calibration].releases_since_calibration.
+# Valid: a decimal fraction in [0.0, 1.0].
+# Default: 0.15
+walk_back_rate_floor = 0.15
+
+[progressive_rollout]
+# Persistence surface for the release-executor progressive-rollout outcome-log
+# (the "rollout-log"). release-executor progressive rollout persists each
+# shadow/warn would-fail hit to a per-rule append-only log so an operator can
+# review a rule's hit-rate before advancing it shadow -> warn -> enforce. The
+# dispatch model, the log fields (ts, rule-id, cycle, verdict, reason, release),
+# and the shadow/warn/enforce semantics are canonical in
+# release/skills/release-executor/references/progressive-rollout.md - this section
+# is the config home for the log's LOCATION + FORMAT only; the reference cites
+# these keys by role and owns the behavioral contract.
+#
+# Log rotation is deliberately NOT configured here: the rollout-logs are
+# append-only and rotation folds into the platform's existing warn-log rotation
+# follow-up per the reference (do not add a per-file rotation scheme here).
+
+# Directory (repo-relative) where per-rule rollout-logs are written. Reuses the
+# established core/hooks/ location + the per-rule *-log.jsonl convention the
+# platform's warn-mode hooks already use, so an operator drains these logs with
+# the same muscle-memory.
+# Valid: a repo-relative directory path string.
+# Default: "core/hooks"
+rollout_log_dir = "core/hooks"
+
+# Per-rule rollout-log filename pattern. The "<rule-id>" placeholder is replaced
+# with the rule or gate id that produced the hit (one log per rule). The
+# "-rollout-log" suffix (rather than "-warn-log") signals the line carries a
+# "cycle" field spanning both shadow and warn.
+# Valid: a filename pattern string containing the "<rule-id>" placeholder and a
+#        ".jsonl" extension.
+# Default: "<rule-id>-rollout-log.jsonl"
+rollout_log_filename_pattern = "<rule-id>-rollout-log.jsonl"
+
+# On-disk log format. Append-only JSON Lines - one JSON object per would-fail hit.
+# Valid: "jsonl" (append-only JSON Lines - the only supported format).
+# Default: "jsonl"
+rollout_log_format = "jsonl"
+
+[spoke_runtime]
+# ── CANONICAL edit surface for hub-spawned-spoke MODEL + EFFORT posture (#340) ──
+# ONE discoverable home. Consumed by FOUR surfaces:
+#   1. deploy.sh Check 27  — config-drift (agent frontmatter model: vs the default/override)
+#   2. `### Model Provenance` block (hub-spoke-bridge.md) — invocation-drift
+#   3. SessionStart model/effort hook (#339) — runtime-launch drift (reads default + effort pointer)
+#   4. hub chip-prompt construction (Procedure 0 resolve-once → inject) — the chip path
+#
+# TWO SPAWN CLASSES — structurally different propagation; do NOT collapse into one
+# mechanism (per #340 AC "document the asymmetry"):
+#   • Agent-tool subagents — inherit via .claude/agents/pmo-*.md frontmatter model:/effort:
+#     (Anthropic `inherit` semantics: https://code.claude.com/docs/en/sub-agents).
+#     Governed by `default_spoke_model` + the per-stage-override companion allowlist.
+#   • spawn_task chips — NO inheritance; a fresh session reads ~/.claude/settings.json
+#     model + effortLevel at startup (mcp__ccd_session__spawn_task: "no memory of this
+#     conversation"). Governed by `chip_model` (hub-injected) + #339 runtime verification.
+# The two paths are UNCOUPLED (#340 AC5): their runtime carriers are DIFFERENT files
+# (agent frontmatter vs settings.json); editing one knob below never touches the other.
+
+# Default model for subagent-path spoke work. This is the current RESOLUTION of the
+# immutable, name-agnostic directive "always highest-tier model" (SSOT:
+# ~/.claude/memory/feedback_model_preference.md) — NOT an independent knob. Update
+# ONLY when the flagship model NAME changes. Enum: sonnet | opus | haiku.
+default_spoke_model = "opus"
+
+# Chip-path model the hub injects into spawn_task chip prompts (chips do not inherit).
+# Normally EQUAL to default_spoke_model (both = current flagship per the directive);
+# a SEPARATE knob solely so the two spawn classes stay independently tunable (#340 AC5)
+# — e.g. an operator trialing a cheaper chip model for a cost-sensitive batch without
+# touching subagent posture. Enum: sonnet | opus | haiku.
+chip_model = "opus"
+
+# ── EFFORT POSTURE — POINTER, not a stored value (no-shadow-SSOT) ──
+# Effort is MAX for all spoke work, per the IMMUTABLE directive (SSOT:
+# ~/.claude/memory/feedback_model_preference.md — "MAX effort, name-agnostic"). This
+# surface deliberately stores NO mutable effort field: a stored value would shadow the
+# directive and drift. The concrete chip-runtime effort lives in ~/.claude/settings.json
+# (effortLevel) as the Anthropic chip contract; the #339 SessionStart hook VERIFIES the
+# resolved session effort against this directive. To change effort, change the directive
+# (governed) — there is no effort field here by design.
+
+# Per-stage model overrides live in the COMPANION allowlist (existing surface, retained):
+#   core/config/allowlists/agents-model-overrides.txt   (<agent-name> <model> per line)
+# Read by Check 27 + the Model Provenance block. Cross-referenced here as the single
+# override sub-surface of this canonical section.
+
+[security_hooks]
+# ── MASTER ACTIVATION for the core/hooks/block-* PreToolUse hook layer (#310) ──
+# Opt-in, default OFF: a fresh public clone imposes NO workflow guards until the
+# operator opts in (at install via docs/scripts/setup-workspace.sh, or by setting
+# master_enabled here in the durable individual surface
+# ~/.config/pmo-platform/platform-config.toml). The operator VALUE lives in that
+# XDG file (Operator-instance category — update.sh never touches it, so the choice
+# survives a version upgrade); this in-repo template ships the OFF schema default.
+# Read by core/hooks/lib/master-enable.sh with a jq-free grep reader; precedence
+# inside each hook is: CLAUDE_HOOK_BYPASS → master_enabled → per-hook .mode → rule.
+#
+# SECURITY SCOPE (D-R9, ratified SECURITY-EXCLUDED — public-surface security is
+# paramount): master_enabled=false disables ONLY the workflow-class hooks
+# (block-draft-files, block-fragile-refs, block-fs-boundary, block-mcp-writes,
+# block-skill-direct-edit, and the mode-gated ceiling of block-autonomy-ceiling).
+# The security/floor-class hooks (block-credential-reads, block-destructive,
+# block-rm-prefer-trash, block-egress, block-gh-path-leak, block-scope-segregation,
+# block-shell-injection) and the block-autonomy-ceiling Tier-0 always-block floor
+# ALWAYS enforce and are NEVER silently disabled by master-OFF — the failure mode
+# (a silently-disabled egress/PII hook → a leaked commit/PR on a PUBLIC repo) is
+# irreversible. CLAUDE_HOOK_BYPASS remains the operator's per-session, audit-logged
+# escape for the always-enforce set.
+# Valid: true | false.  Default: false.
+master_enabled = false
+
+# R9 security-scope OVERRIDE. false (default + recommended) = the security/floor-class
+# hooks are NOT disabled by master_enabled=false (per the D-R9 scope above). Setting
+# true is an explicit, logged operator acknowledgment that those hooks may ALSO go
+# inert under master-OFF — a public-surface-safety downgrade. Never silently defaulted
+# true. (A security hook still honors its OWN per-hook .mode/.scope-segregation-mode/
+# git-pre-commit-pii.mode independently of this knob.)
+# Valid: true | false.  Default: false.
+security_class_master_optout = false

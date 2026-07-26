@@ -1245,6 +1245,28 @@ install_hooks() {
     printf 'rm-file:%s\n' "${posawk_dst}" >> "${ROLLBACK_OPS_FILE}"
   fi
 
+  # Co-deploy the master-activation gate lib into .claude/hooks/lib/. Every block-* hook
+  # sources it from ${HOOK_DIR}/lib/master-enable.sh at runtime (#310) to resolve the
+  # durable opt-in master-enable state (default OFF). A MISSING copy is
+  # fail-toward-current-behavior — the hook keeps its existing .mode enforcement, never
+  # silently disabled — so this is a SOFT dependency (unlike the HARD dep-resolve.sh);
+  # but without it the opt-in default-OFF cannot take effect. Sourced lib, not a registered
+  # hook (no block-* name) → the hook-registry checks correctly ignore it. Mirrors the
+  # dep-resolve.sh co-deploy above; reached by every flow (fresh / rebootstrap / the
+  # refresh-hooks path update.sh delegates to), so a hook update keeps this lib fresh too.
+  local masterlib_src="${SOURCE_REPO}/core/hooks/lib/master-enable.sh"
+  local masterlib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/master-enable.sh"
+  if [ ! -r "${masterlib_src}" ]; then
+    warn "master-enable.sh not found at ${masterlib_src}; block-* master-activation gate will fail-toward-current-behavior (hooks keep enforcing)"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy master-enable.sh → ${masterlib_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    cp "${masterlib_src}" "${masterlib_dst}"
+    info "INSTALLED: master-enable.sh (block-* master-activation gate)"
+    printf 'rm-file:%s\n' "${masterlib_dst}" >> "${ROLLBACK_OPS_FILE}"
+  fi
+
   install_mode_template_if_missing ".mode.template" ".mode"
   install_mode_template_if_missing "deploy-check.mode.template" "deploy-check.mode"
 
@@ -1266,6 +1288,89 @@ install_hooks() {
   fi
 
   json_set_bool "${ARTIFACTS_FILE}" "hooks_installed" "true"
+}
+
+# --- Section 15b: Security-hook master-activation opt-in (#310) ---
+# Install-time opt-in for the core/hooks/block-* PreToolUse hook layer. DEFAULT OFF: a fresh
+# public clone imposes no WORKFLOW guards until the operator opts in. The choice is written
+# to the durable XDG platform-config.toml [security_hooks].master_enabled — an
+# Operator-instance surface update.sh never overwrites, so it survives version upgrades
+# (AC-3). Per D-R9 the security/floor-class hooks (credential-read, egress, PII-leak,
+# destructive-git, rm-guard, scope-segregation, shell-injection) ALWAYS enforce regardless
+# of this toggle; it governs the workflow-class hooks only. Idempotent: an already-set value
+# is PRESERVED (never re-prompted or clobbered), so a rebootstrap cannot reset a prior opt-in.
+configure_hook_activation() {
+  local cfg="${CONFIG_ROOT}/platform-config.toml"
+
+  # Already configured? Preserve the operator's durable choice (AC-3) — never re-prompt or
+  # clobber. master_enabled is a unique key across the schema, so a flat grep is sufficient.
+  if [ -f "${cfg}" ] && grep -qE '^[[:space:]]*master_enabled[[:space:]]*=' "${cfg}" 2>/dev/null; then
+    local cur
+    cur="$(grep -E '^[[:space:]]*master_enabled[[:space:]]*=' "${cfg}" | head -1 | sed -E 's/.*=[[:space:]]*//; s/[[:space:]]*#.*//; s/[[:space:]]*$//')"
+    info "PRESERVED (operator-state): [security_hooks].master_enabled = ${cur} (hook activation unchanged)"
+    return 0
+  fi
+
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would prompt for: workflow security-hook activation (default OFF), then write [security_hooks].master_enabled to ${cfg}"
+    return 0
+  fi
+
+  # Prompt — default OFF. Non-interactive / EOF → OFF (the public-safe default).
+  local response=""
+  printf '\n' >&2
+  printf 'Activate the pmo-platform WORKFLOW security hooks now?\n' >&2
+  printf '  The always-enforce security/floor hooks (credential-read, egress, PII-leak,\n' >&2
+  printf '  destructive-git, rm-guard, scope-segregation, shell-injection) are ALWAYS active\n' >&2
+  printf '  and are NOT affected by this choice. This governs only the opt-in WORKFLOW hooks\n' >&2
+  printf '  (draft-files, fragile-refs, fs-boundary, mcp-writes, skill-edit, autonomy-ceiling).\n' >&2
+  printf '  Default is OFF; you can flip it anytime in\n' >&2
+  printf '  %s ([security_hooks].master_enabled).\n' "${cfg}" >&2
+  printf '  Activate workflow hooks now? (y/N): ' >&2
+  if ! read -r response; then response="N"; fi
+
+  local value="false"
+  case "${response}" in
+    y|Y|yes|YES|Yes) value="true" ;;
+    *)               value="false" ;;
+  esac
+
+  write_security_hooks_config "${cfg}" "${value}"
+  info "Hook activation set: [security_hooks].master_enabled = ${value} (${cfg})"
+}
+
+# write_security_hooks_config FILE VALUE — set [security_hooks].master_enabled = VALUE in the
+# durable XDG platform-config.toml, creating the file + section if absent and preserving any
+# other content. bash-3.2 portable; no TOML library (the field is a flat scalar).
+write_security_hooks_config() {
+  local cfg="$1" value="$2"
+  local dir
+  dir="$(dirname "${cfg}")"
+  mkdir -p "${dir}" 2>/dev/null || true
+  if [ ! -f "${cfg}" ]; then
+    {
+      printf '# pmo-platform — platform-config.toml (operator-instance VALUES; XDG individual rung).\n'
+      printf '# Written by docs/scripts/setup-workspace.sh; update.sh never overwrites this file\n'
+      printf '# (Operator-instance category), so values set here survive version upgrades.\n\n'
+      printf '[security_hooks]\n'
+      printf 'master_enabled = %s\n' "${value}"
+    } > "${cfg}"
+    printf 'rm-file:%s\n' "${cfg}" >> "${ROLLBACK_OPS_FILE}"
+    return 0
+  fi
+  if grep -qE '^[[:space:]]*\[security_hooks\][[:space:]]*$' "${cfg}" 2>/dev/null; then
+    # Section present, master_enabled absent (guaranteed by the caller's early-return) —
+    # insert the key immediately after the section header.
+    local tmp
+    tmp="$(mktemp)"
+    awk -v val="${value}" '
+      { print }
+      /^[[:space:]]*\[security_hooks\][[:space:]]*$/ && !ins { print "master_enabled = " val; ins=1 }
+    ' "${cfg}" > "${tmp}" && mv "${tmp}" "${cfg}"
+  else
+    { printf '\n[security_hooks]\nmaster_enabled = %s\n' "${value}"; } >> "${cfg}"
+  fi
+  return 0
 }
 
 # --- Section 15b: Composition-surface file install ---
@@ -1674,6 +1779,7 @@ fresh_install() {
   resolve_all_tokens
   substitute_templates
   install_hooks
+  configure_hook_activation
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
@@ -1698,6 +1804,7 @@ rebootstrap() {
   resolve_all_tokens
   substitute_templates
   install_hooks
+  configure_hook_activation
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster

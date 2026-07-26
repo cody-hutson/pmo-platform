@@ -154,6 +154,22 @@ else
   log "setup-ci-layout: WARNING positional classifier missing at ${POSAWK_SRC}"
 fi
 
+# 1e) Co-locate the master-activation gate lib at .claude/hooks/lib/, mirroring the deployed
+#     posture (setup-workspace.sh co-deploys it there, #310). Every block-*.sh sources it from
+#     ${HOOK_DIR}/lib/master-enable.sh to resolve the durable opt-in master-enable state. WITHOUT
+#     this the CI sandbox would diverge from a correct install (the hooks would fall back to
+#     fail-toward-current-behavior and CI would never exercise the real gate) — the same
+#     CI-fidelity class the dep-resolve / positional co-locations above exist to prevent. The
+#     test-runner establishes master ON so the rule-tests run against active hooks.
+MASTERLIB_SRC="${HOOKS_SRC}/lib/master-enable.sh"
+if [ -f "${MASTERLIB_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${MASTERLIB_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located master-activation gate -> ${HOOKS_DST}/lib/master-enable.sh"
+else
+  log "setup-ci-layout: WARNING master-activation gate missing at ${MASTERLIB_SRC}"
+fi
+
 # 2) Copy tests + runner (skip this setup script — it is not a test file).
 log "setup-ci-layout: copying tests -> ${TESTS_DST}"
 for tf in "${TESTS_SRC}"/*.sh; do

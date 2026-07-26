@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.94 | intake-and-gate-protocol-hardening | 2026-07-26 | — | #4030 | [notes/v3.94_RELEASE_NOTES.md](notes/v3.94_RELEASE_NOTES.md) |
 | v3.93 | release-identity-and-plan-naming | 2026-07-25 | — | #4029 | [notes/v3.93_RELEASE_NOTES.md](notes/v3.93_RELEASE_NOTES.md) |
 | v3.92 | architecture-baseline | 2026-07-25 | — | #3923 | [notes/v3.92_RELEASE_NOTES.md](notes/v3.92_RELEASE_NOTES.md) |
 | v3.91 | 46-cross-platform-install-experience | 2026-07-25 | — | #3925 | [notes/v3.91_RELEASE_NOTES.md](notes/v3.91_RELEASE_NOTES.md) |
