@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-093 — FinOps usage store — operator-local data home, tracked-schema authority, git-ignore enforcement
+title: ADR-095 — FinOps usage store — operator-local data home, tracked-schema authority, git-ignore enforcement
 status: Accepted
 date: 2026-07-25
 release: agent-finops-foundation (v3.94)
@@ -13,7 +13,7 @@ source_observations:
   - "#3944 r2 Collective Review (operator ADJUST->lean): adversarial design review accepted 3 Major fixes pre-freeze. Load-bearing for this ADR: the git-ignore control was fail-OPEN (a custom store path resolving inside the repo but not matching a .gitignore pattern would commit on a PUBLIC repo). The fix is a resolve-time git check-ignore runtime guard that makes the fail-closed property enforced, not asserted."
 ---
 
-# ADR-093 — FinOps usage store: operator-local data home, tracked-schema authority, git-ignore enforcement
+# ADR-095 — FinOps usage store: operator-local data home, tracked-schema authority, git-ignore enforcement
 
 ## Status
 
