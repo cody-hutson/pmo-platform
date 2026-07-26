@@ -126,6 +126,17 @@ The **single canonical, operator-discoverable edit surface** for hub-spawned-spo
 
 **Effort posture is a pointer, not a field.** Effort is MAX for all spoke work per the immutable model-preference directive; the section stores no `effort` value (a stored value would shadow that directive and drift). To change effort, change the directive. **Per-stage model overrides** live in the companion `core/config/allowlists/agents-model-overrides.txt` (`<agent-name> <model>` per line), read by Check 27 alongside this default.
 
+### `[security_hooks]`
+
+Master activation for the `core/hooks/block-*` PreToolUse hook layer. **Opt-in, default OFF:** a fresh public clone imposes no *workflow* guards until the operator opts in — at install (`docs/scripts/setup-workspace.sh` prompts, default OFF) or by setting `master_enabled` here. The durable value lives in the individual-tier XDG file `~/.config/pmo-platform/platform-config.toml`, which `update.sh` never overwrites, so the choice survives version upgrades. Read by `core/hooks/lib/master-enable.sh`; precedence inside each hook is `CLAUDE_HOOK_BYPASS` → `master_enabled` → per-hook `.mode` → rule.
+
+**Security scope (D-R9).** Master-OFF governs the **workflow-class** hooks only (`block-draft-files`, `block-fragile-refs`, `block-fs-boundary`, `block-mcp-writes`, `block-skill-direct-edit`, and the mode-gated ceiling of `block-autonomy-ceiling`). The **security/floor-class** hooks (`block-credential-reads`, `block-destructive`, `block-rm-prefer-trash`, `block-egress`, `block-gh-path-leak`, `block-scope-segregation`, `block-shell-injection`) plus the `block-autonomy-ceiling` Tier-0 floor and `git-pre-commit-pii` ALWAYS enforce and are never silently disabled by master-OFF — public-surface security is paramount (a silently-disabled egress/PII guard → an irreversible leaked commit/PR). `CLAUDE_HOOK_BYPASS` remains the per-session, audit-logged escape.
+
+| Field | What it tunes | Allowed values | Default |
+|---|---|---|---|
+| `master_enabled` | whether the **workflow-class** `block-*` hooks are active. `false` = a fresh clone's workflow hooks are inert (opt-in); security/floor-class hooks enforce regardless | `true` · `false` | `false` |
+| `security_class_master_optout` | explicit, logged operator acknowledgment that the security/floor-class hooks may ALSO go inert under `master_enabled = false` — a public-surface-safety downgrade. Never silently defaulted true | `true` · `false` | `false` |
+
 ## 5. Consumer examples (how the platform reads these)
 
 Three wired examples ship with the adapter-config-foundation release:
