@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.96] - 2026-07-26
+
+A new finops-usage-extractor skill measures agent token spend from local session data and attributes it to the owning work item.
+
+[Full notes](release/releases/notes/v3.96_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.96)
+
 ## [v3.95] - 2026-07-26
 
 Operators can now set runtime posture — the Stage-2 backlog-decision surface, security-hook activation, and spoke model/effort — through canonical config that survives updates, and the config keys v2.00's features already referenced now exist with documented defaults.
