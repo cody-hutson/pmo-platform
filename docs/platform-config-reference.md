@@ -1,5 +1,7 @@
 # Platform Config Reference — pmo-platform
 
+<!-- reference-durability: allow-link -->
+
 > Human-readable catalog of every platform configuration field: what it does, what values it takes, its default, and where to set it. This is a **derived navigation surface** — the canonical schema is [`core/schemas/platform-config-schema.md`](../core/schemas/platform-config-schema.md). On any field change, update the schema first; this catalog follows.
 
 <!-- platform-config-reference.md is a derived catalog. Canonical detail: core/schemas/platform-config-schema.md + the field comments in core/config/platform-config.toml.template + core/config/operator.toml.template. -->

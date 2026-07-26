@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify-session-config.sh — SessionStart hook (WORKFLOW-CLASS, non-blocking notifier).
 # hook-owner: core/config/platform-config.toml.template
-# (the canonical [spoke_runtime] model/effort surface — ADR-094 — this hook is its
+# (the canonical [spoke_runtime] model/effort surface — ADR-093 — this hook is its
 #  runtime-launch verification arm; the owner path must resolve as a file for the
 #  deploy.sh Check 37 hook-registry-completeness reconcile, so the section/ADR
 #  context lives here in prose, not on the machine-parsed owner line.)
@@ -46,7 +46,7 @@
 #
 # EXPECTED VALUES (read canonically — NO hardcoded model constant):
 #   model  — the accept-set { default_spoke_model, chip_model } read from the
-#            canonical `platform-config.toml [spoke_runtime]` surface (ADR-094) the
+#            canonical `platform-config.toml [spoke_runtime]` surface (ADR-093) the
 #            SAME way deploy.sh's resolve_platform_config reads it. Accept EITHER
 #            (the hook cannot distinguish a chip session from a subagent at launch).
 #            The `opus` used when a field is unresolved at every rung is the
@@ -55,7 +55,7 @@
 #   effort — the immutable, name-agnostic directive value `max` (SSOT: the operator
 #            model-preference memory directive). [spoke_runtime] deliberately stores
 #            NO effort field (a stored value would shadow-SSOT and drift, per
-#            ADR-094 §Decision point 2) — the expected constant IS the directive.
+#            ADR-093 §Decision point 2) — the expected constant IS the directive.
 #
 # Structure copies block-skill-direct-edit.sh (header / PATH-pin / payload-parse /
 # log-write / precedence) with the deltas a non-blocking SessionStart notifier
@@ -88,7 +88,7 @@ readonly MASTER_ENABLE_CLASS="workflow"
 readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
 readonly DEP_LIB="${HOOK_DIR}/lib/dep-resolve.sh"
 # The immutable, name-agnostic effort directive value (no stored config field —
-# no-shadow-SSOT per ADR-094). The expected-effort constant IS the directive.
+# no-shadow-SSOT per ADR-093). The expected-effort constant IS the directive.
 readonly EXPECTED_EFFORT="max"
 
 _vsc_ts() { "$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown; }
@@ -135,7 +135,7 @@ if [ -r "$DEP_LIB" ] && . "$DEP_LIB" 2>/dev/null && command -v resolve_jq >/dev/
   JQ="$(resolve_jq)"
 fi
 
-# --- canonical [spoke_runtime] reader (ADR-094 / #340). Reads the SAME field
+# --- canonical [spoke_runtime] reader (ADR-093 / #340). Reads the SAME field
 # names from the SAME canonical surface as deploy.sh's resolve_platform_config,
 # mirroring its rung-1 idiom (in-repo template FLOOR, XDG individual OVERRIDE) —
 # the deployed hook cannot source the ~6k-line deploy.sh, and #310's master-enable
@@ -166,7 +166,7 @@ _vsc_resolve_platform_config() {
 }
 
 expected_default="$(_vsc_resolve_platform_config default_spoke_model)"
-[ -n "$expected_default" ] || expected_default="opus"   # resolver Rule-2 consumer-fallback (ADR-094 / Check 27)
+[ -n "$expected_default" ] || expected_default="opus"   # resolver Rule-2 consumer-fallback (ADR-093 / Check 27)
 expected_chip="$(_vsc_resolve_platform_config chip_model)"
 [ -n "$expected_chip" ] || expected_chip="opus"
 

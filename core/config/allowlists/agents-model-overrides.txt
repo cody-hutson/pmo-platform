@@ -2,7 +2,7 @@
 # platform-config.toml [spoke_runtime] (default_spoke_model + chip_model; effort
 # posture is the immutable feedback_model_preference directive, pointer-only).
 # THIS file is its per-stage-override companion (subagent path) — read by
-# deploy.sh Check 27 alongside that canonical default. See ADR-094.
+# deploy.sh Check 27 alongside that canonical default. See ADR-093.
 #
 # Per-stage model overrides for hub-spawned spokes (Stage 5 ADR Dimension 5).
 #
