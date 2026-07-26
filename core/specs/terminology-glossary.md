@@ -248,7 +248,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 - **Definition:** A scope-boxed grouping of Work Items that ship together as a single release; identified by a version number (e.g., `v1.2`) and tracked as a GitHub Milestone.
 - **Real-world PMO equivalent:** PMBOK "Milestone" (significant point or event) generalized to "scope boundary" — a checkpoint that gathers multiple deliverables and marks a release boundary.
-- **Platform equivalent:** GitHub Milestones labeled `vX.Y-description`; every release Issue is assigned a Milestone at Stage 3 Bundle.
+- **Platform equivalent:** GitHub Milestones labeled with the release `<slug>` (slug-named at Stage 3 Bundle — no version stem; the version binds only at the Stage-12 claim); every release Issue is assigned a Milestone at Stage 3 Bundle.
 - **Authoritative file:** `.claude/rules/release-process.md` + `core/disciplines/github-projects-guide.md`.
 - **Consumers:** Release-process stages 3/4/9/12/13, release-planner skill, RELEASE_LOG.md.
 
@@ -256,7 +256,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 - **Definition:** A deployment-boxed event that ships a set of Work Items to production — the act of merging the release branch to `main`, tagging, and deploying.
 - **Real-world PMO equivalent:** PMBOK "Deployment" event / SAFe "Release" (release of value, often PI-ending).
-- **Platform equivalent:** Git tag `vX.Y`, the merged PR, the `release/releases/plans/vX.Y_RELEASE_PLAN.md` file, the RELEASE_LOG.md entry. 1 Milestone = 1 Release per current convention.
+- **Platform equivalent:** Git tag `vX.Y` (bound at the Stage-12 claim), the merged PR, the release-plan file (authored slug-primary / pre-claim as `release/releases/plans/<slug>_RELEASE_PLAN.md`, renamed to `vX.Y_RELEASE_PLAN.md` at the claim — ADR-092), the RELEASE_LOG.md entry. 1 Milestone = 1 Release per current convention.
 - **Authoritative file:** `.claude/rules/release-process.md` § Lifecycle.
 - **Consumers:** Stage 12 Execute, Stage 13 Close, `deploy.sh`, RELEASE_LOG.md.
 

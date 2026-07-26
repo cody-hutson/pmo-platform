@@ -16,13 +16,13 @@ reversibility: CHEAP / Confidence HIGH
 - Feature (with tracked issue): `feature/#N-description` (e.g., `feature/16-github-feature-strategy`)
 - Feature (cross-cutting, no single parent issue): `feature/description`
 - Fix: `fix/description`
-- Release: `release/vX.Y-description`
+- Release: `release/<slug>` (slug-primary / pre-claim — the milestone/theme slug, no version stem; the version binds only at the Stage-12 claim, never in the branch name; ADR-092)
 - Branch names: lowercase, hyphenated, descriptive
 - **Deprecated:** `feature/imp-XXX-description` — legacy from IMPROVEMENTS.md bridge era. Use `feature/#N-description` with the GitHub issue number.
 - **Note:** Branch naming is for readability and traceability only. It does NOT create a GitHub Development sidebar link. The `closes #N` keyword in the PR body is the mechanism that links PRs to issues.
 
 ## Commit Messages
-- Format: `vX.Y: Description of change` for release commits
+- Format: `<slug>: Description of change` (or `release(<slug>): …`) for release commits — slug-primary / pre-claim (the release branch carries no version stem; the version binds at the Stage-12 claim, ADR-092)
 - Format: `fix: Description` or `feat: Description` for non-release commits
 - Include issue reference when applicable: `feat: Description (#N)`
 - **Deprecated:** `IMP-XXX` references in commit messages. Use `#N` (GitHub issue number).
@@ -93,7 +93,7 @@ This is the worktree projection of the Layer-1 (Engineering) / Layer-2 (Operatio
 1. Create feature branch from main
 2. Make changes, commit with descriptive messages
 3. Push branch: `git push -u origin [branch]`
-4. Create PR: `gh pr create --title "..." --body "..." --milestone "vX.Y" --label "label1,label2" --assignee "@me" --reviewer "OPERATOR" --project "PMO Pipeline"`
+4. Create PR: `gh pr create --title "..." --body "..." --milestone "<slug>" --label "label1,label2" --assignee "@me" --reviewer "OPERATOR" --project "PMO Pipeline"` (milestones are slug-named)
    - **Single-collaborator deployment — reviewer field expected empty:** GitHub silently no-ops a self-review request (`gh pr edit --add-reviewer <self>` or `--reviewer <self>`) when the PR author is the requested reviewer; the field simply stays empty. Do NOT treat an empty reviewer on a release PR as a pre-merge gap or Stage 12 blocker. The operator's Stage 9 GO decision IS the review-discipline artifact; the reviewer field is a routing convenience, not the discipline itself. Revisit only if the repository gains a second collaborator.
 5. PR body MUST include `closes #N` for each issue the PR resolves
    - Multi-issue PRs: `closes #N, closes #M` (one keyword per issue)
@@ -130,14 +130,14 @@ type(scope): summary  (#N[, #M])
 | Element | Rule | Lets a reader decode |
 |---|---|---|
 | `type` | REQUIRED. One of the closed set `release` · `feat` · `fix` · `chore` · `docs` · `refactor` · `ci` · `test` · `revert`. Same vocabulary as the `feat:` / `fix:` prefixes in §Commit Messages above. | the change class (the "chore / fix / feat" question) |
-| `scope` | REQUIRED for release-pipeline PRs — the version, e.g. `v1.06`. Otherwise a short component slug (`ci`, `release-notes`, a skill name). Omit only for a genuinely repo-wide change, leaving `type: summary`. | the milestone / area |
+| `scope` | REQUIRED for release-pipeline PRs — the milestone/release identifier: the **slug pre-claim** for the release PR (e.g. `release-identity-and-plan-naming`), or the version once it is claimed for a post-claim Stage-13 chore PR (e.g. `v1.06`). Otherwise a short component slug (`ci`, `release-notes`, a skill name). Omit only for a genuinely repo-wide change, leaving `type: summary`. | the milestone / area |
 | `summary` | REQUIRED. Concise and imperative. | the description |
 | `(#N)` | OPTIONAL. Trailing issue/PR reference(s), **reference-only**. | the work item |
 
 Worked examples, one per type:
 
-- `release(v1.06): Solutioning protocols — finding-disposition framework`
-- `chore(v1.06): Stage 13 close-out — INDEX + DIGEST + NOTES (#N)`
+- `release(release-identity-and-plan-naming): Solutioning protocols — finding-disposition framework` (release PR — slug-primary / pre-claim)
+- `chore(v1.06): Stage 13 close-out — INDEX + DIGEST + NOTES (#N)` (post-claim close-out chore — version bound)
 - `feat(git-workflow): add a governed PR-title convention + CI gate (#N)`
 - `fix(ci): reference-durability always-run so the required check reports`
 - `docs(release-notes): correct the v1.05 deployment date`
@@ -148,7 +148,7 @@ Worked examples, one per type:
 
 **Title `#N` is reference-only.** GitHub's auto-close parser scans the title as well as the body, so a `#N` in a title must never follow a close-family verb (`close` / `closes` / `fix` / `fixes` / `resolve` / `resolves`, and their tenses) — that would auto-close the issue straight from the title. Close-family verbs + `#N` stay confined to the body's dedicated Issue References block, exactly as the Parser-clean PR body discipline above requires; the title carries only the bare `(#N)` form.
 
-**Enforcement.** The CI workflow `pr-title-convention.yml` validates the title on PR open/edit, mirroring the `pr-body-parser-clean.yml` body gate. It ships **warn-mode initial** — a non-conforming title is reported in the run summary but does not block the merge — giving the legacy bare `vX.Y: …` release shorthand a transition window; the canonical release form is `release(vX.Y): …`. Auto-generated titles (`Revert …`, `Merge …`) and bot authors are exempt. A title that legitimately cannot conform declares an override by adding `<!-- pr-title-convention: allow -->` anywhere in the PR body.
+**Enforcement.** The CI workflow `pr-title-convention.yml` validates the title on PR open/edit, mirroring the `pr-body-parser-clean.yml` body gate. It ships **warn-mode initial** — a non-conforming title is reported in the run summary but does not block the merge — giving the legacy bare `vX.Y: …` release shorthand a transition window; the canonical release-PR form is `release(<slug>): …` (slug-primary / pre-claim). Auto-generated titles (`Revert …`, `Merge …`) and bot authors are exempt. A title that legitimately cannot conform declares an override by adding `<!-- pr-title-convention: allow -->` anywhere in the PR body.
 
 ## Reference Durability
 

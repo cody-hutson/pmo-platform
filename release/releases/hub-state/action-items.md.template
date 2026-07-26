@@ -1,12 +1,12 @@
 ---
 schema_version: "v1.0"
-milestone: "vX.Y-<milestone-slug>"
+milestone: "<milestone-slug>"
 created_at: "<ISO 8601 UTC of first row enqueue>"
 last_updated: "<ISO 8601 UTC of most recent row mutation>"
 last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 ---
 
-# Action Items — vX.Y
+# Action Items — <milestone-slug>
 
 <!--
 Hub-tracked action-item ledger (AI-NNN).
@@ -15,16 +15,17 @@ Canonical schema: core/standards/hub-action-tracking.md § 2.
 CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md):
   THIS .template file is CUSTOMIZABLE-PUBLIC (tracked in pmo-platform).
   The RUNTIME INSTANCE the hub writes to is OPERATOR-INSTANCE — it lives at
-  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md and is NOT
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/action-items.md and is NOT
   git-tracked. Reason: action items mutate on every routing decision and
   every resolution event; carry-forward semantics live in the
   hub-action-tracking standard, not in the runtime substrate file itself.
 
 HUB INSTALL CONTRACT:
   On first action-item emit for a release, the hub copies this template
-  to <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md (creating
-  the per-release directory lazily), substitutes vX.Y/milestone slug
-  into the frontmatter, and appends the first AI-NNN row.
+  to <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/action-items.md (creating
+  the per-release directory lazily, keyed on the milestone slug),
+  substitutes the milestone slug into the frontmatter, and appends the
+  first AI-NNN row.
 
 HARD GATE: per core/standards/hub-action-tracking.md, Stage 13 Close fails
 if any row remains status=open at release close. Cross-release carry-forward

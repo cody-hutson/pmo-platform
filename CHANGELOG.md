@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.93] - 2026-07-25
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.93_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.93)
+
 ## [v3.92] - 2026-07-25
 
 A new architecture-conformance audit checks delivered work against the platform's own architecture, alongside a cross-chain index that maps every management chain to its governing model, flow, and gate, and a consolidated actor-model baseline.

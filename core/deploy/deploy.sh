@@ -7624,6 +7624,53 @@ cmd_check() {
     fi
   fi
 
+  # Check 59 — Slug-primary release-identity conformance (pre-claim window; warn-mode initial) [#3107]
+  #
+  # Rejects a concrete vX.Y bound into the in-flight release/* branch name or the
+  # new-on-branch plan filename BEFORE the Stage-12 claim (the slug-primary mandate;
+  # #2548 + ADR-092). It is the pre-CLAIM naming-conformance twin of the pre-MERGE
+  # version-freeness gate (Check 41): same window, same claim-oracle family. WINDOW-
+  # GATED — in scope only on a release/* branch whose in-flight plan still carries the
+  # unresolved {{RELEASE_VERSION}} token (pre-claim); it SKIPs cleanly off a release
+  # branch or once the release is claimed (post-claim vX.Y is legitimate). The single
+  # discriminator between a version-primary IN-FLIGHT plan (FAIL) and a post-claim
+  # RENAMED vX.Y plan (no-fire) is that claim-state oracle — both are new-on-branch
+  # vX.Y files; only the token tells them apart. Offline-safe off a release branch (no
+  # gh, no origin/main needed to SKIP); on a release branch it diffs origin/main.
+  # Fail-loud: a git/context failure exits 3 rather than reading green. Warn-mode
+  # initial per bypass-mode-readiness.md §Shakedown (defaults to the shared
+  # DEPLOY_CHECK_MODE=warn; flip via an identity-conformance.mode file after the
+  # >=3-day warn-log review). The introducing release is itself exempt (reflexive-
+  # pipeline loop) — and its own identity is slug-primary, so it PASSES regardless.
+  # Concrete Check number (NOT a {{CHECK_NUM}} token): Check 57's roster contract
+  # requires a concrete integer in the def-block + emitter (AC5 is carved to #3713).
+  # Read-only; reversibility CHEAP (additive; git revert).
+  # Primitive: core/deploy/tools/check-identity-conformance.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 59: Slug-primary release-identity conformance (pre-claim window; warn-mode initial; enforce-flip deferred)"
+    local c59_script="core/deploy/tools/check-identity-conformance.py"
+    if [[ ! -f "$c59_script" ]]; then
+      flag_warn_or_issue "identity-conformance" "primitive script missing: $c59_script"
+    else
+      local c59_mode c59_out c59_exit=0
+      c59_mode=$(resolve_check_mode "identity-conformance")
+      c59_out=$(/usr/bin/python3 "$c59_script" --root . 2>&1) || c59_exit=$?
+      if [[ $c59_exit -eq 3 ]]; then
+        flag_warn_or_issue "identity-conformance" "input failure (exit 3): $(echo "$c59_out" | head -1) — release-identity conformance is unverifiable (fetch origin/main)"
+      elif [[ $c59_exit -eq 0 ]]; then
+        log "  OK:    identity-conformance — $(echo "$c59_out" | head -1)"
+      elif [[ $c59_exit -eq 1 ]]; then
+        if [[ "$c59_mode" == "enforce" ]]; then
+          log "  FAIL:  identity-conformance — $(echo "$c59_out" | head -1)"; ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "identity-conformance" "$(echo "$c59_out" | head -1) (warn-mode; flip identity-conformance.mode to 'enforce' after the >=3-day warn-log review)"
+        fi
+      else
+        flag_warn_or_issue "identity-conformance" "check errored (exit $c59_exit): $(echo "$c59_out" | head -1)"
+      fi
+    fi
+  fi
+
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
