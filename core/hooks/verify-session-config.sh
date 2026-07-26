@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # verify-session-config.sh — SessionStart hook (WORKFLOW-CLASS, non-blocking notifier).
-# hook-owner: core/config/platform-config.toml.template [spoke_runtime] (ADR-094 verification arm)
+# hook-owner: core/config/platform-config.toml.template
+# (the canonical [spoke_runtime] model/effort surface — ADR-094 — this hook is its
+#  runtime-launch verification arm; the owner path must resolve as a file for the
+#  deploy.sh Check 37 hook-registry-completeness reconcile, so the section/ADR
+#  context lives here in prose, not on the machine-parsed owner line.)
 #
 # Verifies the active session's resolved MODEL + EFFORT posture at launch against
 # the workspace directive, catching runtime drift (a session launched
