@@ -58,7 +58,7 @@ projects/
 
 ## Change Description Protocol
 
-A `## Change Description` section is embedded in every release plan FILE (`release/releases/plans/vX.Y_RELEASE_PLAN.md`) to provide an operator-readable, git-resident, pre-merge summary of what the release delivers. The section is authored by the Stage 6 release-engineering spoke as part of PR creation and is visible at Stage 9 Plan Review in the PR diff.
+A `## Change Description` section is embedded in every release plan FILE (`release/releases/plans/<slug>_RELEASE_PLAN.md` while in flight; renamed to the `vX.Y` form at the Stage-12 claim per § Versioning) to provide an operator-readable, git-resident, pre-merge summary of what the release delivers. The section is authored by the Stage 6 release-engineering spoke as part of PR creation and is visible at Stage 9 Plan Review in the PR diff.
 
 **Distinct artifact.** This section is NOT the user-facing release note (which lives at `release/releases/notes/vX.Y_RELEASE_NOTES.md`, authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](../references/standards/release-notes-standard.md)). The Change Description targets the operator at pre-merge time with engineering-OK voice; the release note targets non-technical platform users at post-merge time with voice-constrained framing per the release-notes standard. Both artifacts ship per release; they reference each other but do not substitute.
 
@@ -124,6 +124,8 @@ The mode is **orthogonal to bundle size** — all four combinations (`versioned`
 ### Phase 1 — Plan time: declare the bump-class + provisional-display version (the FLOOR)
 
 The release plan declares a **bump-class** — one of `major`, `minor`, `patch` — and a **provisional-display version** for human readability. This is *intent to bump*: it binds **no concrete `vX.Y`**. It sets the **floor** the eventually-claimed number must satisfy. The bump-class is the operator's semantic signal, chosen by the change's nature; the **Bump-Class Selection Guide** below maps change types to bump-classes. The provisional-display version is a label, not a reservation — the concrete number is not known until Phase 2.
+
+The **same "binds no concrete value" discipline extends beyond the tag to the release's other monotonic identifiers** — the **plan-file name** and the **branch name**. For a `versioned` release both are **slug-primary** while the release is in flight (`release/<slug>`, `release/releases/plans/<slug>_RELEASE_PLAN.md`), and in-file version references are carried as the `{{RELEASE_VERSION}}` placeholder; none of the three binds a concrete `vX.Y` at plan time. They bind only at Phase 2's atomic claim, where the CAS-win path renames the plan to `vX.Y_RELEASE_PLAN.md` and resolves the placeholder to the won number (ADR-092). For a `version-less` release the plan and branch stay slug-primary permanently — there is no number to bind, and the rename never fires. This **composes with** the release-identity mode precondition above (it is the plan-file/branch projection of the same defer-to-claim rule the tag already obeys); it does not collapse the `{versioned, version-less}` enum.
 
 ### Phase 2 — Claim time (at the merge): compute next-free ≥ floor, then claim atomically
 

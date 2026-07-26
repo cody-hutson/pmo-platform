@@ -7637,8 +7637,55 @@ cmd_check() {
     fi
   fi
 
+  # Check 59 — Slug-primary release-identity conformance (pre-claim window; warn-mode initial) [#3107]
+  #
+  # Rejects a concrete vX.Y bound into the in-flight release/* branch name or the
+  # new-on-branch plan filename BEFORE the Stage-12 claim (the slug-primary mandate;
+  # #2548 + ADR-092). It is the pre-CLAIM naming-conformance twin of the pre-MERGE
+  # version-freeness gate (Check 41): same window, same claim-oracle family. WINDOW-
+  # GATED — in scope only on a release/* branch whose in-flight plan still carries the
+  # unresolved {{RELEASE_VERSION}} token (pre-claim); it SKIPs cleanly off a release
+  # branch or once the release is claimed (post-claim vX.Y is legitimate). The single
+  # discriminator between a version-primary IN-FLIGHT plan (FAIL) and a post-claim
+  # RENAMED vX.Y plan (no-fire) is that claim-state oracle — both are new-on-branch
+  # vX.Y files; only the token tells them apart. Offline-safe off a release branch (no
+  # gh, no origin/main needed to SKIP); on a release branch it diffs origin/main.
+  # Fail-loud: a git/context failure exits 3 rather than reading green. Warn-mode
+  # initial per bypass-mode-readiness.md §Shakedown (defaults to the shared
+  # DEPLOY_CHECK_MODE=warn; flip via an identity-conformance.mode file after the
+  # >=3-day warn-log review). The introducing release is itself exempt (reflexive-
+  # pipeline loop) — and its own identity is slug-primary, so it PASSES regardless.
+  # Concrete Check number (NOT a {{CHECK_NUM}} token): Check 57's roster contract
+  # requires a concrete integer in the def-block + emitter (AC5 is carved to #3713).
+  # Read-only; reversibility CHEAP (additive; git revert).
+  # Primitive: core/deploy/tools/check-identity-conformance.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 59: Slug-primary release-identity conformance (pre-claim window; warn-mode initial; enforce-flip deferred)"
+    local c59_script="core/deploy/tools/check-identity-conformance.py"
+    if [[ ! -f "$c59_script" ]]; then
+      flag_warn_or_issue "identity-conformance" "primitive script missing: $c59_script"
+    else
+      local c59_mode c59_out c59_exit=0
+      c59_mode=$(resolve_check_mode "identity-conformance")
+      c59_out=$(/usr/bin/python3 "$c59_script" --root . 2>&1) || c59_exit=$?
+      if [[ $c59_exit -eq 3 ]]; then
+        flag_warn_or_issue "identity-conformance" "input failure (exit 3): $(echo "$c59_out" | head -1) — release-identity conformance is unverifiable (fetch origin/main)"
+      elif [[ $c59_exit -eq 0 ]]; then
+        log "  OK:    identity-conformance — $(echo "$c59_out" | head -1)"
+      elif [[ $c59_exit -eq 1 ]]; then
+        if [[ "$c59_mode" == "enforce" ]]; then
+          log "  FAIL:  identity-conformance — $(echo "$c59_out" | head -1)"; ISSUES=$((ISSUES + 1))
+        else
+          flag_warn_or_issue "identity-conformance" "$(echo "$c59_out" | head -1) (warn-mode; flip identity-conformance.mode to 'enforce' after the >=3-day warn-log review)"
+        fi
+      else
+        flag_warn_or_issue "identity-conformance" "check errored (exit $c59_exit): $(echo "$c59_out" | head -1)"
+      fi
+    fi
+  fi
 
-  # Check 59 — Master-enable hook-class ↔ D-R9 security-registry reconcile [#310]
+
+  # Check 60 — Master-enable hook-class ↔ D-R9 security-registry reconcile [#310]
   #
   # #310 gives every core/hooks/block-*.sh a `readonly MASTER_ENABLE_CLASS=<workflow|security>`
   # declaration at its master-activation gate call site, and core/hooks/lib/master-enable.sh
@@ -7656,40 +7703,40 @@ cmd_check() {
   # bypass-mode-readiness.md §Shakedown precedent (flip the shared deploy-check.mode to
   # 'enforce' after the shakedown window).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 59: Master-enable hook-class ↔ D-R9 security-registry reconcile (#310) (warn-mode initial; enforce-flip deferred)"
+    log "Check 60: Master-enable hook-class ↔ D-R9 security-registry reconcile (#310) (warn-mode initial; enforce-flip deferred)"
     # The ratified D-R9 security/floor set — these hooks MUST declare `security` so master-OFF
     # can never make them inert. Space-padded for whole-word membership test; bash-3.2 portable.
-    local c59_secset=" block-credential-reads block-destructive block-rm-prefer-trash block-egress block-gh-path-leak block-scope-segregation block-shell-injection "
-    local c59_findings=0 c59_seen=0 c59_script
+    local c60_secset=" block-credential-reads block-destructive block-rm-prefer-trash block-egress block-gh-path-leak block-scope-segregation block-shell-injection "
+    local c60_findings=0 c60_seen=0 c60_script
     if [[ ! -d core/hooks ]]; then
       log "  SKIP:  core/hooks absent (greenfield/partial checkout)"
     else
-      for c59_script in core/hooks/block-*.sh; do
-        [[ -e "$c59_script" ]] || continue
-        c59_seen=$((c59_seen + 1))
-        local c59_base; c59_base="$(basename "$c59_script" .sh)"
-        local c59_class; c59_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c59_script" | head -1)"
-        if [[ -z "$c59_class" ]]; then
-          flag_warn_or_issue "master-enable-class" "$c59_base declares no MASTER_ENABLE_CLASS — every block-*.sh must declare its master-activation class (workflow|security) at the gate call site (#310)"
-          c59_findings=$((c59_findings + 1)); continue
+      for c60_script in core/hooks/block-*.sh; do
+        [[ -e "$c60_script" ]] || continue
+        c60_seen=$((c60_seen + 1))
+        local c60_base; c60_base="$(basename "$c60_script" .sh)"
+        local c60_class; c60_class="$(sed -n -E 's/^[[:space:]]*readonly[[:space:]]+MASTER_ENABLE_CLASS="?([a-z]+)"?.*/\1/p' "$c60_script" | head -1)"
+        if [[ -z "$c60_class" ]]; then
+          flag_warn_or_issue "master-enable-class" "$c60_base declares no MASTER_ENABLE_CLASS — every block-*.sh must declare its master-activation class (workflow|security) at the gate call site (#310)"
+          c60_findings=$((c60_findings + 1)); continue
         fi
-        case "$c59_class" in
+        case "$c60_class" in
           workflow|security) ;;
-          *) flag_warn_or_issue "master-enable-class" "$c59_base declares MASTER_ENABLE_CLASS='$c59_class' — must be 'workflow' or 'security'"
-             c59_findings=$((c59_findings + 1)); continue ;;
+          *) flag_warn_or_issue "master-enable-class" "$c60_base declares MASTER_ENABLE_CLASS='$c60_class' — must be 'workflow' or 'security'"
+             c60_findings=$((c60_findings + 1)); continue ;;
         esac
         # The load-bearing D-R9 assertion: a security/floor hook must declare `security`.
-        case "$c59_secset" in
-          *" $c59_base "*)
-            if [[ "$c59_class" != "security" ]]; then
-              flag_warn_or_issue "master-enable-class" "D-R9 VIOLATION: security/floor hook $c59_base declares '$c59_class' but MUST declare 'security' — master-OFF must NEVER silently disable it (public-surface security is paramount)"
-              c59_findings=$((c59_findings + 1))
+        case "$c60_secset" in
+          *" $c60_base "*)
+            if [[ "$c60_class" != "security" ]]; then
+              flag_warn_or_issue "master-enable-class" "D-R9 VIOLATION: security/floor hook $c60_base declares '$c60_class' but MUST declare 'security' — master-OFF must NEVER silently disable it (public-surface security is paramount)"
+              c60_findings=$((c60_findings + 1))
             fi
             ;;
         esac
       done
-      if [[ $c59_findings -eq 0 ]]; then
-        log "  OK:    master-enable-class — $c59_seen block-*.sh hooks declare a valid class; all 7 D-R9 security/floor hooks declare 'security'"
+      if [[ $c60_findings -eq 0 ]]; then
+        log "  OK:    master-enable-class — $c60_seen block-*.sh hooks declare a valid class; all 7 D-R9 security/floor hooks declare 'security'"
       fi
     fi
   fi

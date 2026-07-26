@@ -123,7 +123,7 @@ Stage 3 (Bundle) produces a versioned Milestone for Stage 4 (Planning) to plan a
 
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
-| Versioned Milestone | GitHub Milestone (vX.Y) with assigned issues | YES | Bundle approval — Tier 3 (Stage 3 Phase B) | Summary | GitHub Milestone with issues + version + due date | `gh milestone view vX.Y` returns Milestone with ≥1 issue assigned |
+| Milestone | GitHub Milestone (`<slug>`) with assigned issues | YES | Bundle approval — Tier 3 (Stage 3 Phase B) | Summary | GitHub Milestone with issues + due date (slug-named; the version is not bound until the Stage-12 claim) | `gh milestone view <slug>` returns Milestone with ≥1 issue assigned |
 | Dependency graph | Structured section in Stage 3 sub-task comment | YES | NO | Detail | "Output for Stage 4" section on Stage 3 sub-task | All `#N` dependency refs validated; no circular deps; compatible states per Gate 3 G3-04 |
 | Capacity assessment | Structured section in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Capacity heuristics applied per Stage 3 Bundle sizing |
 | Bundle rationale | Text in Stage 3 sub-task comment | YES | NO | Summary | "Output for Stage 4" section on Stage 3 sub-task | Rationale text present per Gate 3 G3-06 |
@@ -144,7 +144,7 @@ Stage 4 (Planning) produces a release plan for Stage 5 (Solutioning) when activa
 
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
-| Release plan | MD file on release branch | YES | Plan approval — Tier 3 (Stage 4 Phase B) | Detail | `release/releases/plans/vX.Y_RELEASE_PLAN.md` committed | File present on release branch; Implementation Sequence + File Change Matrix + Risk Register + Verification Plan + Rollback Strategy sections present |
+| Release plan | MD file on release branch | YES | Plan approval — Tier 3 (Stage 4 Phase B) | Detail | `release/releases/plans/<slug>_RELEASE_PLAN.md` committed (slug-primary / pre-claim; renamed to `vX.Y_RELEASE_PLAN.md` at the Stage-12 claim) | File present on release branch; Implementation Sequence + File Change Matrix + Risk Register + Verification Plan + Rollback Strategy sections present |
 | Stage Applicability Matrix | Table in release plan | YES | Routing decision — Tier 3 (Stage 4 Phase B) | Summary | Release plan §Stage Applicability Matrix | Stage 5 marked ACTIVATE or SKIPPED with rationale |
 | Risk register | Table in release plan | YES | NO | Detail | Release plan §Risk Register | All risks have ID + tier/confidence + mitigation + owner |
 | Re-review delta | Structured section at HEAD of Stage 5 sub-task comment | YES (post-cutover, CONDITIONAL on activation) | C3 → operator decision Tier 0 — Tier 3 (Phase 1) | Detail | Stage 5 sub-task comment, BEFORE "Output for Stage 6" | Delta-only when Stage 4 re-review ≤7 days AND no new blast-radius context (D2 + D3 columns only); FULL re-review when >7 days OR new context OR operator-requested. Validated per [`triage-design-rereview.md`](../../release/references/standards/triage-design-rereview.md) § 6. |
@@ -192,7 +192,7 @@ Stage 6 (Engineering) produces committed changes on the release branch + the PR 
 
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
-| Committed changes on release branch | Commits on `release/vX.Y-<slug>` | YES | NO | Detail | Git commits on the release branch | Every release-scoped issue has ≥1 commit referencing its `#N` — Gate 6 **G6-02** (commits link source issues) |
+| Committed changes on release branch | Commits on `release/<slug>` | YES | NO | Detail | Git commits on the release branch (slug-primary / pre-claim) | Every release-scoped issue has ≥1 commit referencing its `#N` — Gate 6 **G6-02** (commits link source issues) |
 | Pull request | GitHub PR | YES | NO | Summary | PR opened for the release branch | PR exists — Gate 6 **G6-01** (`gh pr list --head <branch>` returns ≥1) |
 | PR body (parser-clean) | PR body (metadata sections) | YES | NO | Detail | PR body: implementation summary + per-issue status | Parses without a BLOCKING/parse-error signal — Gate 6 **G6-03** |
 | Verification evidence | PR-body section (per-issue PASS/FAIL) | YES | NO | Evidence | PR body `Verification Evidence` section | Per-issue PASS/FAIL present — Gate 6 **G6-04** |

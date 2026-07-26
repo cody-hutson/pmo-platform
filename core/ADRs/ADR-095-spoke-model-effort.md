@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: "ADR-093 — Canonical spoke model/effort edit surface (platform-config.toml [spoke_runtime]): an additive canonical entry point that supersedes-in-part the prior 'two surfaces by design / no single global-override surface' stance; the two Anthropic-owned runtime carriers (agent-definition frontmatter, settings.json) are preserved as derived/verified representations"
+title: "ADR-095 — Canonical spoke model/effort edit surface (platform-config.toml [spoke_runtime]): an additive canonical entry point that supersedes-in-part the prior 'two surfaces by design / no single global-override surface' stance; the two Anthropic-owned runtime carriers (agent-definition frontmatter, settings.json) are preserved as derived/verified representations"
 status: Accepted
 date: 2026-07-25
 release: v3.93-runtime-config-and-posture
@@ -15,13 +15,13 @@ source_observations:
   - "resolve_platform_config (deploy.sh) is a scalar-only TOML reader; it does NOT parse inline tables, so per-stage overrides cannot fold into a [spoke_runtime] inline table without a new parser — the existing `<agent> <model>` allowlist line-format that Check 27 already parses is retained as the companion (reuse-first)."
 ---
 
-# ADR-093 — Canonical spoke model/effort edit surface (`platform-config.toml [spoke_runtime]`)
+# ADR-095 — Canonical spoke model/effort edit surface (`platform-config.toml [spoke_runtime]`)
 
 ## Status
 
 Accepted — operator-ratified at the v3.93 / `56-runtime-config-and-posture` Collective Review scope-lock (2026-07-25), which locked the integrated `[spoke_runtime]` (#340) + `[security_hooks]` (#310) design and explicitly authorized this ADR to be authored during #340 Engineering with the next-free number, reversing the prior "two surfaces by design" stance. Authored at Stage 6 per the Stage-6 ADR-authoring precedent established by ADR-062 (substrate-vs-canonical), ADR-028 (operations-consume-core), and ADR-090 (structural-path-move mode). Stage 5 (#340's Solutioning output) produced the decision kernel; Engineering authored this record as release-branch content and closes it before Stage-6 exit.
 
-Numbered 093 — the next-free slot in the one global `ADR-NNN` sequence. This record was authored with a higher provisional slot above the then-concurrent in-flight release-branch claims; when a concurrent release merged ADR-092 to `main` and 093 was confirmed free, the `adr-number-integrity` CI job — the merge-time backstop — forced the reconciliation and the hub re-numbered this record to 093. This ADR is referenced downstream **by slug**, never by its number — the number is an authoring-time assignment, not a stable cross-reference handle.
+Numbered 095 — the next-free slot in the one global `ADR-NNN` sequence. This record was authored with a provisional slot above the then-concurrent in-flight release-branch claims; as concurrent releases merged ADR-093 and ADR-094 to `main`, the `adr-number-integrity` CI job — the merge-time backstop — forced the reconciliation and the hub re-numbered this record to 095 at the Stage-12 main-merge. This ADR is referenced downstream **by slug**, never by its number — the number is an authoring-time assignment, not a stable cross-reference handle.
 
 This decision is extended or reversed only by a **successor / superseding ADR** (Nygard `Superseded` / `Deprecated`, citing the successor) — never by an in-place edit of this record.
 

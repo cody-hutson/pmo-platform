@@ -1,12 +1,12 @@
 ---
 schema_version: "v1.0"
-milestone: "vX.Y-<milestone-slug>"
+milestone: "<milestone-slug>"
 created_at: "<ISO 8601 UTC of first row enqueue>"
 last_updated: "<ISO 8601 UTC of most recent row mutation>"
 last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 ---
 
-# Pending Approvals — vX.Y
+# Pending Approvals — <milestone-slug>
 
 <!--
 SURFACE A — queued-approval substrate.
@@ -15,7 +15,7 @@ Canonical schema: core/standards/hub-session-continuity.md § 3.1.
 CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md):
   THIS .template file is CUSTOMIZABLE-PUBLIC (tracked in pmo-platform).
   The RUNTIME INSTANCE the hub writes to is OPERATOR-INSTANCE — it lives at
-  <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/pending-approvals.md and is NOT
+  <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md and is NOT
   git-tracked. Reason: pending approvals mutate on every routing decision
   (10-50+ writes per release); tracking the runtime instance produces
   release-branch noise with no cross-operator readership benefit. Audit
@@ -24,9 +24,10 @@ CLASSIFICATION (per core/standards/public-repo-vs-operator-instance-taxonomy.md)
 
 HUB INSTALL CONTRACT:
   On first pending-approval emit for a release, the hub copies this
-  template to <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/pending-approvals.md
-  (creating the per-release directory lazily), substitutes vX.Y/milestone
-  slug into the frontmatter, and appends the first PA-NNN row.
+  template to <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md
+  (creating the per-release directory lazily, keyed on the milestone slug),
+  substitutes the milestone slug into the frontmatter, and appends the
+  first PA-NNN row.
 
 TABLE BELOW IS APPEND-ONLY. Rows mutate IN-PLACE only to update status +
 resolved_at + resolution. Field semantics per the canonical schema spec.

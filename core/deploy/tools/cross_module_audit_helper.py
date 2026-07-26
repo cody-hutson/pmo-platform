@@ -119,7 +119,7 @@ DEPLOY_INFRASTRUCTURE_PATHS = (
 KNOWN_PROSE_DISJUNCTIONS = {
     "release/issue",
     "release/deployment",
-    "release/vX.Y-description",  # branch-naming convention in core/rules/git-workflow.md
+    "release/<slug>",  # branch-naming convention in core/rules/git-workflow.md (slug-primary / pre-claim)
 }
 
 # Patterns indicating code-import context (cross-ref-type classification).

@@ -20,7 +20,9 @@ and test" phase — you prepare everything for deployment but never deploy.
 ## Operating Principles
 
 **Read-only.** You never modify governance files, skills, or project artifacts. The only file
-you write is the release plan file (`release/releases/plans/[version]_RELEASE_PLAN.md`). All
+you write is the release plan file — authored **slug-primary / pre-claim** at
+`release/releases/plans/<slug>_RELEASE_PLAN.md` (the version binds only at the Stage-12
+claim, when the file is renamed to `vX.Y_RELEASE_PLAN.md`; ADR-092). All
 other changes are the release-executor's responsibility.
 
 **Protocol-referenced, not protocol-duplicating.** You read `release/governance/RELEASE_PROTOCOL.md`
@@ -65,7 +67,7 @@ Otherwise, call the `AskUserQuestion` tool with:
   - option: "Backlog Analysis"
     description: "Read-only backlog review — dependency graph, suggested bundles, priority recommendations. Produces no plan file."
   - option: "Release Planning"
-    description: "Author a versioned release plan at `release/releases/plans/[version]_RELEASE_PLAN.md` — bundle selection, dependency ordering, risk register."
+    description: "Author a release plan at `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-primary / pre-claim) — bundle selection, dependency ordering, risk register."
   - option: "Dry Run"
     description: "Generate diff previews against an existing release plan — no files written outside the release plan's Dry-Run Record section."
   - option: "Pattern Review"
@@ -189,7 +191,7 @@ Emit the G3-07 section under each bundle entry (when bundle has ≥1 dependency 
    Classify each in-bundle edge into the four §Category 4 artifact-relationship types (GENERATES / DEPENDS_ON / BLOCKS / SUPERSEDES) per `references/dependency-analysis.md` § Artifact-Relationship Classification, and emit the `### Artifact Relationship Graph` H3 under the `## Dependency Graph` H2 (table per `references/release-plan-template.md`; empty-state positive-signal body when the classifier yields zero edges). Also populate the `Edge Type` column on the `### Topologically Sorted Sequence` table. This artifact-relationship axis is **orthogonal** to the FS/SS scheduling type the Critical Path reads — the CPM forward-pass (Step 5c) never consumes the artifact-relationship type, so the typed graph is a provably additive output.
 
 6. Produce cross-file impact assessment using the File Contention Map per the format in `references/release-plan-template.md`. Always emit the `### File Contention Map` section when the bundle has ≥2 issues (emit table-header + `No file contention detected` body when all files map to NONE — explicit positive signal that contention was checked).
-7. Write the plan to `release/releases/plans/[version]_RELEASE_PLAN.md`.
+7. Write the plan to `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-primary / pre-claim — no version stem; the version binds at the Stage-12 claim).
 8. Present summary to user for review.
 
 **Plan format:** Follow the structure in `references/release-plan-template.md` and the section anchor map in `### Mode B Output Format` below.
@@ -369,7 +371,8 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 ### Mode B writes files beyond the release plan — TRIG
 
 - **Signature (observable signal):** A Mode B invocation's file-write activity targets
-  files other than `release/releases/plans/[version]_RELEASE_PLAN.md` — for example,
+  files other than the release plan file (`release/releases/plans/<slug>_RELEASE_PLAN.md`
+  pre-claim, or its post-claim `vX.Y_RELEASE_PLAN.md`) — for example,
   writes to CLAUDE.md, OPERATIONS.md, a skill's SKILL.md, or any other governance or
   reference file.
 - **Conditional:** do NOT modify any file other than the release plan file during Mode B
@@ -380,10 +383,13 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 - **Root cause:** "While I'm here, let me also update..." — scope creep from efficiency
   framing. Fixing a typo in the protocol while writing the plan feels helpful; it
   violates the read-only contract that makes planner/executor separation trustworthy.
-- **Mitigation:** Before every file write during Mode B, verify the target path matches
-  `release/releases/plans/[version]_RELEASE_PLAN.md`; reject any other target with
+- **Mitigation:** Before every file write during Mode B, verify the target is the release
+  plan file — the slug-keyed pre-claim form `release/releases/plans/<slug>_RELEASE_PLAN.md`
+  (or, post-claim, `release/releases/plans/vX.Y_RELEASE_PLAN.md` after the Stage-12 rename);
+  reject any other target with
   an explicit skill-scope-violation flag; open an IMP issue for any governance update
-  observed during planning rather than executing it in-band.
+  observed during planning rather than executing it in-band. (No hard version-only reject —
+  the pre-claim plan legitimately carries no version stem.)
 - **Principal response vs. junior response:** Principal enforces the boundary and opens
   follow-on IMP issues for observed drift. Junior writes opportunistic edits to
   governance files, which then conflict with the downstream release-executor run that
@@ -391,10 +397,13 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ### Version number auto-determined without user confirmation gate — OUT
 
-- **Signature (observable signal):** Mode B release plan is written to
-  `releases/plans/[version]_RELEASE_PLAN.md` with a version number populated in the
-  filename and frontmatter, but the conversation shows no user response between the
-  auto-determination step and the plan write — no explicit acknowledgment or override.
+- **Signature (observable signal):** Mode B release plan finalizes a concrete version —
+  a `vX.Y` bound into the frontmatter or into the filename (a premature
+  `releases/plans/vX.Y_RELEASE_PLAN.md` instead of the slug-keyed pre-claim
+  `releases/plans/<slug>_RELEASE_PLAN.md`) — but the conversation shows no user response
+  between the auto-determination step and the plan write — no explicit acknowledgment or
+  override. (At plan time the version is a bump-class intent + provisional-display label,
+  not a claim; the concrete number binds only at the Stage-12 CAS — ADR-092.)
 - **Conditional:** do NOT finalize a version number in a release plan file when the
   version was auto-computed and the user has not explicitly confirmed it, because
   version numbers are the release's permanent identifier — written into RELEASE_LOG.md,

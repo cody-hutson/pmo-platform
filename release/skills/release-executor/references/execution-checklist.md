@@ -14,7 +14,7 @@ All items must be verified PASS before execution begins. Any FAIL blocks executi
 | 2 | **PR metadata complete** | `gh pr view [PR#] --json milestone,labels,assignees,projectItems` | Milestone set, labels present, assignee set, project linked | Return to Stage 6 (Engineering) to add metadata |
 | 3 | **No merge conflicts** | `gh pr view [PR#] --json mergeable` | mergeable = MERGEABLE | Resolve conflicts on release branch; re-request review |
 | 4 | **CI checks passing** | `gh pr checks [PR#]` | All required checks pass | Fix failing checks; do not merge |
-| 5 | **Release plan reviewed** | Release plan file exists at `release/releases/plans/vX.Y_RELEASE_PLAN.md` | Plan exists and has "Status: Approved" | Return to Stage 9 |
+| 5 | **Release plan reviewed** | Release plan file exists at `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-keyed pre-claim — at pre-execution the version has not yet bound; Step 2 Tag is where it binds, when the plan is renamed to `vX.Y_RELEASE_PLAN.md` per ADR-092) | Plan exists and has "Status: Approved" | Return to Stage 9 |
 | 6 | **Rollback plan documented** | Rollback section in release plan | Rollback strategy specified per issue and whole-release | Document rollback before proceeding |
 | 7 | **Deployment targets identified** | Operational Deployment Manifest in release plan | All Layer 2 targets listed with mechanism | Add manifest before proceeding |
 | 8 | **Communication plan** | Stage 12 communication requirements reviewed | Stakeholders notified of deployment window (if applicable) | Draft and send notification |
