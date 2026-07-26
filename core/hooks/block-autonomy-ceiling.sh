@@ -418,6 +418,18 @@ if [ -n "$ABS_TARGET" ]; then
   esac
 fi
 
+# --- Master-activation gate (#310) — layer 2. CLASS=workflow, but DELIBERATELY placed
+# HERE — after the STEP-1 Tier-0 always-block floor (BLOCK-AUTONOMY-001/002) and before
+# the mode-gated STEP-2 ceiling check — so master-OFF disables ONLY the mode-gated ceiling,
+# NEVER the irreducible floor (D-R9: the Tier-0 floor is always-enforce, like the security
+# class; a governance-file / cross-domain-bridge write stays blocked even under master-OFF).
+# Precedence for this hook: bypass -> floor -> master -> .autonomy-mode -> ceiling.
+# Fail-toward-current-behavior: a missing lib does NOT gate. ---
+readonly MASTER_ENABLE_CLASS="workflow"
+readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
+if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
+if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
+
 # --------------------------------------------------------------------------
 # STEP 2 — CEILING CHECK (mode-gated; permissive default)
 # --------------------------------------------------------------------------

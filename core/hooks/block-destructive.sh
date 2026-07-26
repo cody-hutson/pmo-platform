@@ -100,6 +100,17 @@ if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
   exit 0
 fi
 
+# --- Master-activation gate (#310) — layer 2, AFTER CLAUDE_HOOK_BYPASS and BEFORE the
+# .mode read. CLASS=security (D-R9): master-OFF NEVER makes this hook inert — the
+# security/floor class always enforces (public-surface security is paramount; a silently
+# disabled guard -> an IRREVERSIBLE leaked commit/PR). It goes inert ONLY on the operator's
+# explicit, logged security_class_master_optout=true. Fail-toward-current-behavior: a
+# missing lib does NOT gate. Read jq-free from the durable XDG platform-config.toml. ---
+readonly MASTER_ENABLE_CLASS="security"
+readonly MASTER_LIB="${HOOK_DIR}/lib/master-enable.sh"
+if [ -r "$MASTER_LIB" ]; then . "$MASTER_LIB" 2>/dev/null || true; fi
+if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MASTER_ENABLE_CLASS"; fi
+
 # --- DEPENDENCY GATE (fail CLOSED: a security control that cannot evaluate its input
 # must DENY, never allow — GHSA-9cjm-v22x-4x33). Runs AFTER the bypass short-circuit. ---
 if [ -z "$JQ" ]; then
