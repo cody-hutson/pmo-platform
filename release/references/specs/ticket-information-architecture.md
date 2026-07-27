@@ -270,7 +270,7 @@ Milestones assign issues to versioned releases. Set at Stage 3 (Bundle).
 | Body says P2, label implies P3 | Update the label to match body |
 | Projects field says "Done" but body AC not met | Revert field to previous state, investigate |
 | Milestone says v1.03 but body Dependencies not met | Flag to operator — do not auto-resolve |
-| Body cites `FS+0d #X`, native `blocked-by` missing `#X` | Auto-resolve — agent calls GraphQL `addIssueDependency` to add `#X` to native (body wins). No operator action required. Per § Native Dependencies. |
+| Body cites `FS+0d #X`, native `blocked-by` missing `#X` | Auto-resolve — agent calls GraphQL `addBlockedBy` to add `#X` to native (body wins). No operator action required. Per § Native Dependencies. |
 | Native has `blocked-by: #Y`, body Dependencies field does NOT cite `#Y` | Flag drift to operator — do NOT auto-modify body (body remains authoritative). Operator decides: (a) add `#Y` to body if intended, (b) remove from native if the UI edit was inadvertent. Per § Native Dependencies. |
 | Body cites typed non-FS-zero-lag dep (`SS #Z`, `FS+3d #W`, etc.) NOT in native | No action — non-FS-zero-lag types are body-only by design (native API lacks expressivity for these). Informational; not a conflict. Per § Native Dependencies. |
 
@@ -329,7 +329,7 @@ This reframes the original literal AC#4 ("intent stays in sync regardless of whi
 
 | Stage | Trigger | Action |
 |---|---|---|
-| 2 (Triage) | After G2-04 dependency validation passes (Phase A) | Substep **A3.5 native-mirror** — for each body `FS+0d #N`, call GraphQL `addIssueDependency`; for each existing native dep not in body, flag drift |
+| 2 (Triage) | After G2-04 dependency validation passes (Phase A) | Substep **A3.5 native-mirror** — for each body `FS+0d #N`, call GraphQL `addBlockedBy`; for each existing native dep not in body, flag drift |
 | 5 (Solutioning) | If a spoke refines body Dependencies field as part of AC refinement | Re-trigger A3.5 mirror logic |
 | 6 (Engineering) | Parent issue decomposed into sub-tasks with sub-task-to-sub-task `FS+0d` body deps | Sub-task native deps populated via mirror |
 | 13 (Close) | QC4 verification (parity-check) | Re-run mirror as parity-check; report drift findings in Verification Evidence |
@@ -353,7 +353,7 @@ FUNCTION mirror_body_to_native(issue_number):
 
   # 5. Add missing (body wins)
   FOR target IN to_add:
-    addIssueDependency(blocked_issue=issue_number, blocking_issue=target)
+    addBlockedBy(blocked_issue=issue_number, blocking_issue=target)
 
   # 6. Surface drift (body remains authoritative; no auto-modify)
   FOR target IN drift:
@@ -374,7 +374,7 @@ The algorithm is **idempotent** — re-running with the same body state produces
 
 ### Native API — Token Scope + Invocation Pattern
 
-Native dependency mutations require GraphQL `addIssueDependency` / `removeIssueDependency`. Token scope `repo` is sufficient for most operations; project-scoped semantics may require `gh auth refresh -s project` per the [`upstream-reference-catalog.md` entry `github-issue-dependencies`](../../../core/standards/upstream-reference-catalog.md).
+Native dependency mutations require GraphQL `addBlockedBy` / `removeBlockedBy`. Token scope `repo` is sufficient for most operations; project-scoped semantics may require `gh auth refresh -s project` per the [`upstream-reference-catalog.md` entry `github-issue-dependencies`](../../../core/standards/upstream-reference-catalog.md).
 
 Invocation pattern via `gh`:
 
@@ -382,7 +382,7 @@ Invocation pattern via `gh`:
 # Add native dep — issue #N is blocked by issue #M
 gh api graphql -f query='
   mutation($blocked: ID!, $blocking: ID!) {
-    addIssueDependency(input: {issueId: $blocked, blockingIssueId: $blocking}) {
+    addBlockedBy(input: {issueId: $blocked, blockingIssueId: $blocking}) {
       issue { id }
     }
   }' -F blocked="$BLOCKED_ID" -F blocking="$BLOCKING_ID"
@@ -390,9 +390,21 @@ gh api graphql -f query='
 
 Issue node IDs are resolved via `gh api graphql -f query='{ repository(owner: "{OWNER}", name: "{REPO_NAME}") { issue(number: <N>) { id } } }'` (where `{OWNER}/{REPO_NAME}` is the operator's fork of `{REPO}`).
 
+**REST fallback.** The same edge is writable over REST, which the mirror tool falls back to when the GraphQL call fails:
+
+```bash
+# Add native dep — issue #N is blocked by issue #M (REST form)
+gh api -X POST "repos/{OWNER}/{REPO_NAME}/issues/<N>/dependencies/blocked_by" \
+  -F issue_id="$BLOCKING_DATABASE_ID"
+```
+
+The two surfaces take **different id spaces**: GraphQL takes the node id resolved above, REST takes the numeric **database** id (`gh api repos/{OWNER}/{REPO_NAME}/issues/<M> --jq .id`). They are not interchangeable, and passing the wrong one mis-targets rather than erroring — resolve each per surface.
+
+**Verify the mutation name against the schema before relying on it.** The write field named in this spec was previously wrong (`addIssueDependency`, a field that has never existed on the `Mutation` type), and the tool built from this spec inherited the error and mirrored nothing while reporting only ordinary per-edge failures. The input shape was correct throughout; only the field name was wrong, which is what made it survive review. A no-write introspection check — `native-dep-mirror.py --verify-write-surface` — is the cheap guard, and it is worth running whenever this section is edited.
+
 ### Cap Handling
 
-When `addIssueDependency` returns a "dependency cap reached" error (issue has 50 native blocked-by entries):
+When `addBlockedBy` returns a "dependency cap reached" error (issue has 50 native blocked-by entries):
 
 - Flag to operator
 - Suspend further native mirroring for that issue until operator resolves
