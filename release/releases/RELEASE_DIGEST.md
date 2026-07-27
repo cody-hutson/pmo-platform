@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.97 (2026-07-27) — Portability is now a first-class engineering value
+
 ### v3.96 (2026-07-26) — Measure and attribute agent token spend from local session data
 
 ### v3.95 (2026-07-26) — Runtime posture is now operator-configurable: the Stage-2 backlog-decision surface, security-hook activation, and spoke model/effort all resolve from canonical config that survives updates, and v2.00's referenced config keys now exist with defaults
