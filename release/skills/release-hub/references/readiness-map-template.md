@@ -57,7 +57,7 @@ An emission with the briefing and no map is **complete**. An emission with the m
 | # | Invariant | Check |
 |---|---|---|
 | TH-1 | No literal hex outside the `<style>` block | `sed '/<style>/,/<\/style>/d' <file> \| grep -coE '#[0-9a-fA-F]{6}'` → `0` |
-| TH-2 | Light and dark declare the same key set | each `--token:` appears exactly twice (16 tokens, 2× each) |
+| TH-2 | Light and dark declare the same key set | each `--token:` appears exactly twice (18 tokens, 2× each) |
 
 ## 4. Self-containment predicate
 
@@ -156,14 +156,14 @@ Placeholders are `{{…}}`. `REPEAT` blocks emit one element per data row.
     --ok:#1f7a4d; --okbg:#e6f4ec; --okln:#9ed3b6;
     --warn:#a8600a; --warnbg:#fbeeda; --warnln:#e6c187;
     --bad:#b3261e; --badbg:#fbe6e4; --badln:#e8a9a4;
-    --neutbg:#eef1f5;
+    --neutbg:#eef1f5; --neutln:#c9ced6; --neut:#5b6169;
   }
   @media (prefers-color-scheme: dark){svg{
     --ink:#e7eaee; --muted:#9aa3ad; --line:#3a4048; --panel:#1a1d21; --panelln:#333941; --card:#22262b;
     --ok:#5fcf98; --okbg:#173026; --okln:#2f5c46;
     --warn:#e6a94e; --warnbg:#332616; --warnln:#5e4a26;
     --bad:#f08a82; --badbg:#331d1c; --badln:#5e3330;
-    --neutbg:#24282d;
+    --neutbg:#24282d; --neutln:#3a4048; --neut:#9aa3ad;
   }}
   .mut{fill:var(--muted)} .b{font-weight:700} .sb{font-weight:600}
   text{fill:var(--ink)}
