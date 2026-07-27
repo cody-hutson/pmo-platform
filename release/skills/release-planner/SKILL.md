@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run. Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "review the backlog", "plan the release", "bundle the release", "dry run", "show me the diffs", "what's in v[X.Y]."
-version: v2.00
+version: v2.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -132,6 +132,29 @@ This artifact-relationship axis is **orthogonal to the FS/SS/FF/SF scheduling ax
 **Step 4.5 — G3-07 cross-milestone sequence validation:**
 
 For each suggested bundle, run the G3-07 check per `core/schemas/gate-criteria-spec.md` § Gate 3. Construct the milestone-position map per the Milestone-Position Resolution algorithm (`position:` override → `due_on` ascending → milestone `number` ascending). For each candidate bundle, enumerate all dependency edges owned by in-bundle issues; compute violations; render the G3-07 result. **Always emit the `### G3-07` section under each bundle entry when the bundle has ≥1 dependency edge (any type — same-milestone, cross-milestone resolved, cross-milestone exception-registered, or cross-milestone violation). Emit `G3-07 Status: PASS — N dependency edge(s) checked, 0 cross-milestone violations` body when the bundle has dep edges but zero unresolved cross-milestone violations — explicit positive signal that the gate ran, analogous to the File Contention Map `No file contention detected` empty-state. Suppress the section entirely only when the bundle has zero dependency edges (no check possible).** Edges registered in the candidate milestone's `## Dependency Exceptions` block PASS as governed exceptions.
+
+**Step 4.6 — Cross-epic ownership read (backlog-altitude ownership):**
+
+Step 4.5 asks "is this edge sequenced correctly **across milestones**?" This step asks a different question of the same issue graph: **"is this card's work already owned by another open epic?"** Same read-only substrate, different question. It is the ownership half of the backlog read — consumed by the milestone-readiness pre-flight as its backlog-altitude ownership group, which sequences and rolls up these findings and owns none of the logic below. Run per card in the candidate bundle:
+
+**(a) Candidate-epic narrowing — a scoping filter that emits NO finding.** Read the card's `project:` labels; resolve the set of OPEN issues sharing at least one of them that are epic-shaped (an `[Epic]` / `[Initiative]`-prefixed title, an `epic:` or `type:epic` label, or at least one native sub-issue child). This bounds the reads in (b) and (c) to one project's epics rather than the whole open backlog. **A shared `project:` label is a filter, never an ownership claim** — roughly half the open backlog carries one, spread across only about nine distinct label values, so a `project:`-only predicate fires on essentially every card in a themed milestone. Never emit a finding from (a) alone.
+
+**(b) Native sub-issue parent — finding.** Read the card's child→parent edge **directly**:
+
+```
+gh api graphql -f query='query { repository(owner:"{owner}", name:"{repo}") {
+  issue(number:{N}) { number parent { number title } } } }'
+```
+
+The parent field is **not** on the REST issue payload, and `gh issue view --json parent` fails with `Unknown JSON field: "parent"` — that is the CLI's field set, not the data. Reading the CLI's failure as "this card has no parent" makes the predicate structurally incapable of ever firing while appearing green (see the failure-mode entry below). When the resolved parent is an open epic other than the card's own milestone container, emit an ownership finding naming that epic.
+
+**(c) Epic-composition pull-in — finding.** For each candidate epic from (a), read its body and extract the issue numbers enumerated in its composition / scope / pull-in table. A milestone card appearing in another open epic's composition table is a **double-home** — emit an ownership finding naming that epic. This is the load-bearing predicate in practice: native parent coverage is real but partial (a minority of open issues carry a parent edge, concentrated in older organized work), and an epic routinely claims scope in its body before the native edges are wired. (b) strengthens as the native graph populates; (c) works today.
+
+**(d) Finding bound.** A finding requires a **card-specific ownership edge** — (b), (c), or a similarity hit against a specific named OPEN issue under another epic. Never emit an ownership finding from a shared `project:` label alone. This adopts the platform's existing weak-signal escalation bound: a single weak signal is logged, not escalated.
+
+**(e) Output and boundary.** Per finding, emit `{card, owning_epic, predicate, evidence}` plus the recommended action — **rehome the card to the named epic**. **Recommend-only:** this skill names the owning epic and stops. It never de-bundles a card, re-parents an issue, edits a milestone, or closes anything — a rehome is an operator action. Ownership is distinct from subsumption: the subsumption protocol terminates in *closing* the subsumed issue, whereas a rehome closes nothing and moves live work to a different parent. Do not route an ownership finding through the subsumption protocol.
+
+**Cutover discipline:** Applies to all bundle analyses and readiness runs going forward.
 
 5. Present a prioritized view with rationale. See [`references/output-templates.md` § Mode A — Backlog Analysis output](references/output-templates.md) for the output-format example.
 
@@ -290,6 +313,7 @@ Mode B narrative: declare the per-release posture in the D-Gate block; when the 
 - Does not execute file changes (release-executor's job)
 - Does not transition issues to closed status (release-executor's job)
 - Does not update RELEASE_LOG.md (release-executor's job)
+- Does not act on a cross-epic ownership finding — it names the owning epic and stops. Re-parenting a card, de-bundling it from its milestone, or closing it is an operator action, never this skill's (Step 4.6e)
 
 ## Reversibility Discipline
 
@@ -453,6 +477,61 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 - **Root cause:** Cross-milestone validation requires consulting milestone-position state EXTERNAL to the candidate bundle — the per-issue gate loop checks dep-state (G3-01) and within-bundle cycles (G3-02), both of which feel like "the dependency check is done." The milestone-sequence dimension is a separate consultation step that is mechanically easy to skip when bundle composition looks clean.
 - **Mitigation:** Before emitting any Mode A bundle or writing any Mode B plan, construct the milestone-position map per the Milestone-Position Resolution algorithm (`gate-criteria-spec.md § Gate 3`); for each dep edge owned by in-bundle issues, compute violations; surface the violation table; halt on `FAIL` until operator selects remediation or registers exception per the exception-acceptance protocol.
 - **Principal response vs. junior response:** Principal runs the cross-milestone check, surfaces the specific edges with milestone-positions and gap distance, and proposes which remediation path fits each violation (resequence vs. bundle vs. remove vs. exception-with-rationale). Junior ships the bundle suggestion because dep-states all read "Approved" and within-bundle order looks coherent; the sequence violation surfaces at Stage 6 Engineering when the implementing agent discovers the target issue isn't yet shipped.
+
+### Native-parent predicate implemented against the CLI field set — INPUT
+
+- **Signature (observable signal):** the cross-epic ownership read's native-parent
+  predicate (Step 4.6b) is implemented as `gh issue view --json parent` or a REST
+  issue-payload field read; the call returns `Unknown JSON field: "parent"` (or a null
+  field for every card), and the ownership read reports "no ownership findings" on every
+  bundle it has ever run against — a permanently green check with no positive detection
+  in its history.
+- **Conditional:** do NOT implement the native-parent predicate as a REST or CLI
+  issue-payload field read, because the sub-issue parent edge is not exposed on that
+  payload — the predicate would return "no parent" for every card in the repository and
+  pass vacuously forever while appearing to run, which is strictly worse than an absent
+  check because a green gate reads as a passing gate.
+- **Root cause:** the sub-issue graph is exposed parent→child on the REST payload but
+  child→parent only through GraphQL, so the CLI's error is a **field-set limitation that
+  reads like a data absence** — and a single-sample probe run against a card that
+  genuinely has no parent confirms the wrong conclusion, making the mistake
+  self-validating.
+- **Mitigation:** read the edge via the GraphQL `parent` field on `Issue` per Step 4.6b.
+  Validate the predicate with a **positive control** — a card known to be a native child
+  must be detected — never only a negative. Any population probe must carry a control and
+  **state its sampling order**: ordering an issue sample by creation date biases the
+  result hard in both directions (recently-filed issues are largely unparented; older
+  organized issues are heavily parented), so a 100-issue slice is not the population and
+  two honestly-run samples can disagree by an order of magnitude.
+- **Principal response vs. junior response:** Principal probes the whole population with a
+  positive control, finds the CLI cannot see the field, and reads the edge where it
+  actually lives. Junior ships the CLI form, the check returns clean on every release
+  forever, and nobody notices — because nothing distinguishes "no ownership problems"
+  from "this predicate cannot fire."
+
+### Shared `project:` label emitted as an ownership finding — OUT
+
+- **Signature (observable signal):** the cross-epic ownership read emits a rehome-class
+  finding whose only evidence is that the card and some epic share a `project:` label;
+  the readiness run flags most or all of a themed milestone's cards as already-owned.
+- **Conditional:** do NOT emit an ownership finding from a shared `project:` label alone,
+  because the label is a **filter** — roughly half the open backlog sits inside one,
+  across only about nine distinct values — so a `project:`-only predicate fires on nearly
+  every card in a themed milestone, and a gate that always fires is a gate the operator
+  learns to override.
+- **Root cause:** the label is the cheapest ownership-shaped signal available and it
+  *reads* like a claim ("this card belongs to project X"); the narrowing step and the
+  finding step consume the same field, so collapsing the two is one line away and looks
+  like a simplification rather than a defect.
+- **Mitigation:** keep Step 4.6(a) narrowing strictly separate from the 4.6(b)/(c)
+  findings — the label bounds the candidate set and emits nothing. Require a
+  card-specific edge (native parent, composition pull-in, or a named similar open issue
+  under another epic) before any finding, per the Step 4.6(d) bound.
+- **Principal response vs. junior response:** Principal reports "narrowed to 12 candidate
+  epics; one card carries a card-specific ownership edge — an open epic enumerates it in
+  its composition table." Junior reports every card in the milestone as already-owned, the
+  operator dismisses the whole group as noise, and the one real double-home is lost inside
+  the false positives.
 
 ### Bundle output omits File Contention Map — OUT
 
