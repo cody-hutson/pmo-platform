@@ -1,6 +1,6 @@
 ---
 title: Build-Philosophy Charter
-purpose: The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability, Security) plus two cross-cutting disciplines (read-before-edit, track-all-edits), and a philosophy × surface coverage matrix that maps each value to the artifact already enforcing it across every toolkit surface (skills, agents, hub/spokes, hooks, slash-commands). Names and routes; does not restate. An empty matrix cell is a named gap, not a silent omission.
+purpose: The platform's first-class engineering values (Scalability, Best-Practice-per-Domain, Maintainability, Simplicity, Stability, Security, Portability) plus two cross-cutting disciplines (read-before-edit, track-all-edits), and a philosophy × surface coverage matrix that maps each value to the artifact already enforcing it across every toolkit surface (skills, agents, hub/spokes, hooks, slash-commands). Names and routes; does not restate. An empty matrix cell is a named gap, not a silent omission.
 type: reference
 kind: disciplines
 status: Canonical
@@ -39,7 +39,7 @@ the act that surfaces the toolkit's governance gaps.
 
 ## §The build philosophies
 
-Six first-class values, plus two cross-cutting disciplines. (The disciplines are listed
+Seven first-class values, plus two cross-cutting disciplines. (The disciplines are listed
 separately because they apply to *every* domain and surface, rather than being a
 best-practice of one domain.)
 
@@ -51,6 +51,7 @@ best-practice of one domain.)
 | 4 | **Simplicity** | Smallest change that achieves the goal; surgical edits; no presumptive feature build (YAGNI, with malleability work exempted). |
 | 5 | **Stability** | Reversibility-tiered decisions; drift guards and canaries; version-skew + tamper detection; no silent failure. |
 | 6 | **Security** | Controls fail closed when they cannot evaluate their rule; untrusted input is validated and output is context-encoded at its sink; injection surfaces are denied by construction. |
+| 7 | **Portability** | The governed core binds to an external system only through an adapter; the external system's model lives inside that adapter and never redefines a governed concept; host mechanism never leaks into host-agnostic capability text. Litmus: does the governed concept survive a substrate swap? |
 | D1 | **Read-before-edit** *(cross-cutting discipline)* | Read the target artifact fully before editing it; the specifier vouches, not just the executor. |
 | D2 | **Track-all-edits** *(cross-cutting discipline)* | No ungoverned changes — every change to a governed surface routes through issue → plan → PR, with the diff/history as the audit trail. |
 
