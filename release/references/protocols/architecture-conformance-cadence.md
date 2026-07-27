@@ -32,7 +32,7 @@ and the baseline-continuity rule. Read the mode-spec + rubric for the how; read 
 cadence. `[INFERRED]` Splitting cadence from machinery keeps each layer independently editable —
 a new trigger never forces a machinery edit, and vice versa.
 
-**Axis boundary.** This is one of **four sibling audit-cadence axes** (see §7):
+**Axis boundary.** This is one of **five sibling audit-cadence axes** (see §7):
 
 | Axis | Cadence doc | Conformance frame |
 |---|---|---|
@@ -40,8 +40,9 @@ a new trigger never forces a machinery edit, and vice versa.
 | Process-fitness | `process-fitness-cadence.md` | PMBOK 7 · DORA · Stage-Gate · ITIL 4 · Lean · CD |
 | Structural | `structural-audit-cadence.md` | Diátaxis · NARA · ISO 15489 · ADR · Keep-a-Changelog |
 | Anthropic Base-vs-Build | `platform-health-audit-framework.md` §2 | Anthropic skill-catalog overlap |
+| Decision-health | `decision-audit-cadence.md` | How the hub and spokes decide — hub decision invariants · named decision failure modes · decision-conduct disciplines |
 
-The four axes are deliberately separate — distinct benchmark rosters, distinct triggers — and
+The five axes are deliberately separate — distinct benchmark rosters, distinct triggers — and
 mutually cross-referenced so the full audit-cadence surface is discoverable from any one of
 them.
 
@@ -165,13 +166,14 @@ registration.
 
 ---
 
-## §7 Cross-References (4-Axis Set)
+## §7 Cross-References (5-Axis Set)
 
-This cadence is one axis of a four-axis audit-cadence set; all four mutually cross-reference:
+This cadence is one axis of a five-axis audit-cadence set; all five mutually cross-reference:
 
 - **Sibling — process-fitness axis:** [`process-fitness-cadence.md`](process-fitness-cadence.md) (PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD).
 - **Sibling — structural axis:** [`structural-audit-cadence.md`](structural-audit-cadence.md) (Diátaxis / NARA / ISO 15489 / ADR / Keep-a-Changelog).
 - **Sibling — Anthropic Base-vs-Build axis:** [`platform-health-audit-framework.md`](platform-health-audit-framework.md) §2 (Anthropic skill-catalog overlap cadence).
+- **Sibling — decision-health axis:** [`decision-audit-cadence.md`](decision-audit-cadence.md) (how the hub and spokes decide — the retrospective complement to the forward per-decision gates).
 - **Machinery (how-to-run):** [`architecture-conformance-mode-spec.md`](../../../core/skills/pmo-qa-auditor/references/architecture-conformance-mode-spec.md) — the run mechanics this cadence schedules.
 - **Content SSOT (what-is-scored):** [`architecture-conformance-dimension-rubric.md`](../../../core/skills/pmo-qa-auditor/references/architecture-conformance-dimension-rubric.md) — the dimension set + severity banding + fragmentation threshold.
 - **Output convention:** [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) — the analysis-folder home, frontmatter, and sunset rule.

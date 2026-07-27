@@ -19,7 +19,7 @@ This protocol defines **when to re-run** the **structural audit** — the recurr
 
 **Continuous-vs-periodic layering.** Cross-reference integrity (one structural dimension) is already covered **continuously between audits** by the link-check CI gate; this 90-day cadence is the **periodic deep** structural audit across *all* structural dimensions (Diátaxis typing, naming conformance, orphan detection, plus cross-references). `[INFERRED]` The two are complementary, not redundant: CI catches a single broken link the moment it lands; the periodic audit catches structural drift the CI gate does not test (mis-typed docs, naming-convention erosion, accumulated orphans).
 
-**Axis boundary.** This is one of **four sibling audit-cadence axes** (see §7):
+**Axis boundary.** This is one of **five sibling audit-cadence axes** (see §7):
 
 | Axis | Cadence doc | Conformance frame |
 |---|---|---|
@@ -27,8 +27,9 @@ This protocol defines **when to re-run** the **structural audit** — the recurr
 | Process-fitness | `process-fitness-cadence.md` | PMBOK 7 · DORA · Stage-Gate · ITIL 4 · Lean · CD |
 | Anthropic Base-vs-Build | `platform-health-audit-framework.md` §2 | Anthropic skill-catalog overlap |
 | Architecture-conformance | `architecture-conformance-cadence.md` | Delivered work vs platform architecture (ADR corpus · cross-chain index · architecture-overview) |
+| Decision-health | `decision-audit-cadence.md` | How the hub and spokes decide — hub decision invariants · named decision failure modes · decision-conduct disciplines |
 
-The four axes are deliberately separate — distinct benchmark rosters, distinct triggers — and mutually cross-referenced so the full audit surface is discoverable from any one of them.
+The five axes are deliberately separate — distinct benchmark rosters, distinct triggers — and mutually cross-referenced so the full audit surface is discoverable from any one of them.
 
 ---
 
@@ -102,13 +103,14 @@ The cadence runs as a **HYBRID** of manual event-triggers and an automated stale
 
 ---
 
-## §7 Cross-References (4-Axis Set)
+## §7 Cross-References (5-Axis Set)
 
-This cadence is one axis of a four-axis audit-cadence set; all four mutually cross-reference:
+This cadence is one axis of a five-axis audit-cadence set; all five mutually cross-reference:
 
 - **Sibling — process-fitness axis:** [`process-fitness-cadence.md`](process-fitness-cadence.md) (PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD).
 - **Sibling — Anthropic Base-vs-Build axis:** [`platform-health-audit-framework.md`](platform-health-audit-framework.md) §2 (Anthropic skill-catalog overlap cadence).
 - **Sibling — architecture-conformance axis:** [`architecture-conformance-cadence.md`](architecture-conformance-cadence.md) (delivered work vs the platform architecture baseline — the retrospective complement to the forward per-ticket architecture-fit gate).
+- **Sibling — decision-health axis:** [`decision-audit-cadence.md`](decision-audit-cadence.md) (how the hub and spokes decide — the retrospective complement to the forward per-decision gates).
 - **Methodology (how-to-run):** [`AUDIT_FRAMEWORK.md`](../../../core/standards/AUDIT_FRAMEWORK.md) Session 1 — the Structural & Behavioral Audit dimensions this cadence schedules.
 - **Output convention:** [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) — the analysis-folder home, frontmatter, and sunset rule.
 - **Continuous complement:** the link-check CI gate is the continuous between-audit detector for the cross-reference-integrity dimension (§1 layering note).

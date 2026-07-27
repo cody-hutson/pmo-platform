@@ -26,9 +26,9 @@ The framework ships alongside the
 The framework is integrated into pmo-qa-auditor as **Mode E — Platform Health Audit** (§4) —
 operationalized at this release.
 
-### Sibling cadence axes (4-axis audit-cadence set)
+### Sibling cadence axes (5-axis audit-cadence set)
 
-This framework's §2 cadence is the **Anthropic Base-vs-Build axis** — one of four sibling audit-cadence axes. The other three cover the **process-fitness** axis (PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD frame conformance — [process-fitness-cadence.md](process-fitness-cadence.md)), the **structural** axis (Diátaxis / NARA / ISO 15489 / orphan files / cross-reference integrity — [structural-audit-cadence.md](structural-audit-cadence.md)), and the **architecture-conformance** axis (delivered work vs the platform architecture baseline — ADR corpus / cross-chain index / architecture-overview — [architecture-conformance-cadence.md](architecture-conformance-cadence.md)). Each axis carries a distinct benchmark roster and distinct triggers; the four mutually cross-reference so the full audit-cadence surface is discoverable from any one of them.
+This framework's §2 cadence is the **Anthropic Base-vs-Build axis** — one of five sibling audit-cadence axes. The other four cover the **process-fitness** axis (PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD frame conformance — [process-fitness-cadence.md](process-fitness-cadence.md)), the **structural** axis (Diátaxis / NARA / ISO 15489 / orphan files / cross-reference integrity — [structural-audit-cadence.md](structural-audit-cadence.md)), the **architecture-conformance** axis (delivered work vs the platform architecture baseline — ADR corpus / cross-chain index / architecture-overview — [architecture-conformance-cadence.md](architecture-conformance-cadence.md)), and the **decision-health** axis (how the hub and spokes decide — hub decision invariants / named decision failure modes / decision-conduct disciplines — [decision-audit-cadence.md](decision-audit-cadence.md)). Each axis carries a distinct oracle roster and distinct triggers; the five mutually cross-reference so the full audit-cadence surface is discoverable from any one of them.
 
 ---
 
