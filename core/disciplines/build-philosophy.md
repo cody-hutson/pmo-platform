@@ -66,8 +66,8 @@ the value does not apply to that surface.
 |---|---|---|---|---|---|
 | **Scalability** | `knowledge-architecture` · `universal-vs-localized-context` · ADR-006/007 | **GAP** | `methodology-parameterization-v1` | `composition-surface` boundary | **GAP** |
 | **BP — coding** | `domain-best-practices/software` *(skill-wired)* | thin | (Stage-5/7 review) | `software §Security` · `dep-resolve` · `hook-fail-closed.test` | n/a |
-| **BP — governance** | `domain-best-practices/governance` *(skill-wiring pending)* · `decision-discipline` | thin | `release-process` | n/a | n/a |
-| **BP — process** | `domain-best-practices/process` *(skill-wiring pending)* · (`discovery`/`decision`/`review` disciplines · `ticket-architecture-reconciliation`) | thin | pipeline `stage-*` · `release-process` | n/a | n/a |
+| **BP — governance** | `domain-best-practices/governance` *(skill-wired — `pmo-program-manager` · `release-planner`)* · `decision-discipline` | thin | `release-process` | n/a | n/a |
+| **BP — process** | `domain-best-practices/process` *(skill-wired — `pmo-scrum-master` · `pmo-release-train-engineer`)* · (`discovery`/`decision`/`review` disciplines · `ticket-architecture-reconciliation`) | thin | pipeline `stage-*` · `release-process` | n/a | n/a |
 | **BP — change** | `framework-catalog` + `change-management/references` suite *(skill-self-bundled — no shared guide; ADR-057)* | thin | (Stage-5 design-consume) | n/a | n/a |
 | **Maintainability** | `duplicate-source-discipline` · `reference-durability-standard` · `framework-corpus-discipline` | **GAP** | cite-not-duplicate (ADR-003) · extend-before-create (SR-G6 §7.2) | Check 9/11/13 · `doc-link-maintenance-protocol` | rules-mirror (Check 9) |
 | **Simplicity** | `software.md` §YAGNI · `principal-standard-checklist` | thin (ADR-020) | `release-process` Tier-1 `[ADJUST]` | minimal by design | **GAP** |
@@ -100,11 +100,11 @@ The newly-added **Security** row (value 6, per [ADR-081](../ADRs/ADR-081-securit
 
 The **Portability** row (value 7, per [ADR-098](../ADRs/ADR-098-portability-seventh-first-class-value.md)) extends this backlog on both thin columns at once: its **Agents** and **Slash-commands** cells are GAP (neither surface is inside the `Check 42` scan set, so a host tool prescribed as *the* mechanism in an agent definition or a command prompt is invisible), and its **Hub / Spokes** cell is thin — `Check 42` scans the pipeline and governance *spec text*, but no design-time gate scores the work under design for adapter-boundary conformance. Its **Skills** cell is populated by a real enforcer: `Check 42` covers every `SKILL.md` and skill `references/` file, so Portability — like Security before it — is introduced *with* a working detector rather than as a naming-only row.
 
-The three **BP-domain-guide × Skills** cells are a distinct case from the empty cells
+The three **BP-domain-guide × Skills** cells were a distinct case from the empty cells
 above: they named an enforcer (`domain-best-practices/{software,governance,process}.md`)
-that no skill consumed. The **software** guide is now skill-wired — the five
-software-domain specialists cite it as their design-time anchor; the **governance** and
-**process** guides remain authored with skill-wiring pending (so marked in the matrix).
+that no skill consumed. That case is now **closed** — each guide is both shipped *and*
+skill-wired, cited as a design-time anchor by its consuming skills: five for software,
+eight for governance, four for process. No BP-domain guide remains authored-but-unconsumed.
 
 ## §Enforcer citations
 
