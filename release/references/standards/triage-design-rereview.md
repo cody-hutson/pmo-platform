@@ -77,7 +77,7 @@ Each requirement is classified as exactly one of three states. The classificatio
 
 ### Premise-problem types (PT — taxonomy for C3 classifications)
 
-Every C3 classification declares one PT. Citation discipline per PT is strict; soft language (`seems like`, `may have`, `possibly`) in any PT-1 / PT-2 citation auto-routes the rejection to Tier 0b in Phase 2 (see § 10).
+Every C3 classification declares one PT **or one § 11 lens class**. The PT taxonomy types *premise-problem* C3s — a premise that is structurally invalid — and routes the Tier 0 workflow (§ 9 / § 10); the § 11 lens types *warrant* and *placement* C3s and routes to an operator-judgment disposition, **never** Tier 0. Citation discipline per PT is strict; soft language (`seems like`, `may have`, `possibly`) in any PT-1 / PT-2 citation auto-routes the rejection to Tier 0b in Phase 2 (see § 10).
 
 | PT | Name | Trigger | Citation discipline |
 |---|---|---|---|
@@ -366,6 +366,124 @@ Premise-problem types where citation criteria are interpretive: PT-3 evaluates w
 ### Notification queue
 
 Tier 0a returns are aggregated into a notification queue accessible at session start. Operator reviews at session start, can override any Tier 0a decision (`override + proceed with deviation` retroactively re-classifies the rejection).
+
+---
+
+## § 11 Premise-Provenance & Abstraction-Altitude Lens
+
+A C3 in § 3 asks *"is this requirement's premise structurally invalid?"*. This section asks two different
+questions about the work item as a whole: **is the problem real** (warrant), and **is the solution at the
+abstraction the live architecture should own** (placement). Neither is a staleness signal — the premise may be
+entirely intact — so neither is a PT, and neither routes Tier 0.
+
+**Unit of analysis: the card** (the work item), NOT the requirement. D1 / D2 / D3 evaluate every requirement; this
+lens classifies the item once. Do not apply it per-AC.
+
+**Invocation: consumer-invoked, not always-fires.** This section is a capability a named consumer invokes; it adds
+no obligation to the § 1 artifact, the § 6 delta procedure, or the § 8 instrumentation, and it changes no existing
+schema field. First consumer: the `release-hub` Mode R milestone-readiness checklist, group 9. Omission when no
+consumer invokes it is the correct non-ceremony signal.
+
+**Why this is a sibling of the PT taxonomy rather than a member of it.** Three reasons, each independently
+sufficient: (1) every PT projects onto the structural staleness band by definition (Tier 0 fires only on a
+premise-level finding), whereas a warrant or placement finding leaves the premise intact and sits **off** the
+staleness scale entirely; (2) a PT triggers the § 9 Tier 0 workflow, which STOPS work and HOLDS the sub-task,
+whereas these findings must reach the operator as a judgment call they may legitimately answer "proceed anyway";
+(3) the platform already types an abstraction-altitude premise challenge as a named sibling finding rather than a
+PT (the adversarial reviewer's `Premise-Altitude-Finding`). Extending the PT enum to carry a warrant or placement
+cause is the rejected alternative.
+
+### § 11.1 PV — problem-evidence provenance (the pull-vs-push classifier)
+
+Classify the card's problem statement into exactly one class. The classification is **total** — every card lands in
+exactly one bucket, so a card citing no evidence is classified, never silently defaulted.
+
+| Class | Trigger | Citation discipline (strict) |
+|---|---|---|
+| **PV-A** | **Observed-pain (pull).** The problem statement cites a **witnessed instance** in this platform or deployment where the absence actually bit. | MUST cite the instance concretely: a named run/milestone + date, a `file:line` of the defective artifact, a commit SHA / merged PR, or a named prior release outcome. A generic "this would help" is NOT observed pain. |
+| **PV-B** | **Framework-driven (push).** The problem is derived from completing a **named external** delivery- or governance-framework's artifact, ceremony, or role set — not from a witnessed instance. | MUST name the external framework AND the specific artifact/ceremony/role whose absence motivates the card. |
+| **PV-C** | **Article-imported (push).** The problem is imported from an external article, post, talk, or vendor document. | MUST cite the external source. |
+| **PV-D** | **Unsourced (push).** The problem statement cites no evidence of any class. | MUST record "no problem-evidence citation found" plus the sections searched. |
+
+**PV-B is scoped to EXTERNAL frameworks.** A card citing the platform's **own** governed corpus — an ADR, a
+discipline, a standard, an initiative roadmap — is citing this platform's architecture, not an external push: it is
+**PV-A** when it also names a witnessed instance, and **PV-D** when it names none. Without this bound the class
+fires on essentially every governance card, and a gate that always fires is a gate the operator learns to override.
+
+**The finding is bundle-level, not card-level.** Classify every card, then compute
+`push = |PV-B| + |PV-C| + |PV-D|`. A bundle is **push-dominant** when `push ≥ ½` of its cards. **Push-dominance is
+the finding**; a single push-classified card is **logged, not escalated** — framework-derived work can be entirely
+legitimate. (This is the existing weak-signal escalation bound applied to a new signal: a single weak signal alone
+is logged, not escalated.) The `≥ ½` threshold is `[RECOMMENDED]` / `[CALIBRATE-AFTER-3]`, grounded on the one
+observed instance (5 of 7 cards push-classified in the originating milestone).
+
+**Relationship to the upstream acceptance gate (cite, do not duplicate).** The Stage-2 Triage Acceptance-Fit
+determination (§ A4.6 / gate G2-13) asks a related but distinct question — *does the idea relate to a named
+architectural anchor?* — **per issue**, on a **scoped subset** (agent-authored or component-reshaping cards; it
+passes trivially otherwise), with pre-cutover issues grandfathered. This lens asks about **problem provenance**
+across **every** card and reports a **bundle-level** property. A card can anchor perfectly to a named epic and
+still be framework-push. The two compose; neither re-runs the other.
+
+### § 11.2 AL — abstraction-altitude band mismatch
+
+Compare the band the card's stated remediation **implies** against the band the **nearest existing platform seam**
+implies. The band vocabulary is **not defined here** — it is the `point-fix` / `extend-seam` / `new-abstraction`
+ladder owned by the design-exploration standard's altitude axis, cited verbatim.
+
+**Three steps, in order:**
+
+1. **Name the nearest existing seam.** Search the platform's extension surfaces — the `operator.toml [adapters]`
+   selectors, a module boundary, a config surface — exactly as the design-review seam-composition check mandates.
+   Name the nearest seam found, or state that the search found none.
+2. **Is there a band mismatch?** If the card's implied band equals the seam-implied band (or the cited seam-search
+   concludes none fits), record `AL-FIT` with the seam searched — a positive verification, not a silent pass — and
+   stop.
+3. **Emit the mismatch with its direction.**
+
+| Outcome | Trigger | Citation discipline (strict) |
+|---|---|---|
+| **AL-FIT** | Implied band matches the seam-implied band, or a cited seam-search concludes none fits. | MUST record the seam(s) searched. A bare "fine" is not a verification. |
+| **AL-LOW** | **Authored below** — the remediation implies `point-fix` where an existing seam implies `extend-seam`. | MUST name the nearest seam AND why the remedy does not compose with it. |
+| **AL-HIGH** | **Authored above** — the remediation implies `new-abstraction` where an existing seam implies `extend-seam`. | MUST name the seam the new abstraction would duplicate. |
+
+A bare "this is at the wrong level" **without** the named seam and the direction is not a finding — it is the
+unexamined-altitude assertion this lens exists to catch, and it is rejected on the same grounds the design-review
+seam-composition check rejects an uncited "no seam exists".
+
+**Scope exclusion — the methodology-archetype sub-case is NOT this lens's.** When the too-low subject is a named
+delivery- or governance-methodology's archetype content — its vocabulary, ceremonies, artifacts, roles, or
+hierarchy — such that the correct home is a config-selected methodology pack behind the `delivery_approach`
+selector, the finding belongs to the **methodology-neutrality** check that already owns it, and this lens emits
+nothing. Test it against the published archetype enum, **including its `Custom` row**, which absorbs
+operator-invented and non-canonical variants; a framework absent from the enum therefore still routes to the
+methodology check rather than falling here by default.
+
+**Distinct from hierarchy altitude.** This lens's altitude is the **abstraction/seam** axis. The
+work-organization hierarchy ladder (Portfolio → Program → Project → Milestone/Workstream → Work Item) is a
+different axis with a different owner; do not conflate them.
+
+### § 11.3 Routing
+
+A § 11 finding is a **C3 typed by its lens class** (`PV-*` or `AL-*`), carrying **no PT**. It routes to an
+**operator-judgment disposition** in the invoking consumer's disposition vocabulary — never to the § 9 Tier 0
+escalation block, never to the § 10 phased-authority arc, and never to an autonomous return.
+
+- The finding is **recommend-only**: the classifier names the evidence class or the band mismatch and stops. It
+  does not re-triage, re-label, de-bundle, edit, or close the card.
+- § 11 findings sit **off the staleness-confidence scale** — warrant and placement are not staleness depths. Do
+  not assign them a staleness band.
+- § 11 findings are **not** Phase-1 instrumented; the § 8 schema is scoped to the Tier-0 population.
+
+### § 11.4 Boundaries
+
+| Boundary | Relationship | Action |
+|---|---|---|
+| The **PT taxonomy** (§ 3) | Sibling, not parent. PTs type structural-premise causes; § 11 types warrant and placement. | Do not add a warrant or placement cause to the PT enum. |
+| The **altitude band vocabulary** (design-exploration standard, altitude axis) | § 11.2 **consumes** the three bands. | Cite; author no second band vocabulary. |
+| The **design-review seam-composition gate** | Same question, **later anchor** — it grades an authored design at design review; § 11.2 grades the card as written, upstream. | Compose; § 11.2 does not gate a design. |
+| The **methodology-neutrality check** | Owns the methodology-archetype sub-case of altitude. | Cite and exclude per § 11.2. |
+| The **Stage-2 acceptance-fit determination** | Upstream, per-issue, scoped, architectural-anchoring axis. | Cite; § 11.1 does not re-run it. |
+| The **hierarchy/backlog altitude ladder** | A different altitude axis with its own owner. | Do not conflate. |
 
 ---
 
