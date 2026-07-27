@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-098 — Portability as the seventh first-class build-philosophy value"
-status: Proposed
+status: Accepted — ratified at the operator's Stage 9 plan-review gate; the flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
 date: 2026-07-27
 release: build-philosophy-corpus
 deciders: "operator (D-ValueShape rendered at Stage-4 Plan Review; value name rendered at Stage-5 Collective Review) + Stage-5 Principal Engineer design spoke + hub adversarial design review"
@@ -17,7 +17,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Engineering alongside the charter amendment it records. Ratified by the operator at the Collective Review scope-lock, at which point this status flips to **Accepted**. The deciding gates already ran — D-ValueShape (value-or-discipline shape) was rendered at Plan Review and the value's *name* was rendered at Collective Review — so this record documents decisions the operator fixed, and the deep plan review verifies implementation conformance rather than re-deciding the elevation. Status conformance is verified against this field, not against the intent stated here.
+**Accepted**, ratified by the operator at the **Stage 9 plan-review gate**. Authored at Engineering alongside the charter amendment it records, and carried into plan review as `Proposed`; the deep review verified implementation conformance rather than re-deciding the elevation, because the deciding gates had already run — D-ValueShape (value-or-discipline shape) was rendered at Plan Review, and the value's *name* was rendered at Collective Review. Status conformance is verified against the `status:` frontmatter field, never assumed from milestone closure or inferred from the intent stated here.
 
 ## Context
 
