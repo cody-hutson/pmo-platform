@@ -4110,7 +4110,12 @@ cmd_check() {
   # (append-pipeline-event.sh) — drift indicates a direct edit that bypassed
   # schema validation.
   # Sub-checks:
-  # 19a presence — log file + write-log file + schema doc all exist
+  # 19a presence — THREE distinct outcomes, split by ownership class (#4051):
+  #     · tracked schema doc unresolvable → fail-loud as a PATH-RESOLUTION
+  #       FAILURE (asserted first + unconditionally; deterministic in CI)
+  #     · operator-instance log/write-log absent → SKIP, no flag, no drift claim
+  #       (legitimately absent on a fresh install and in CI)
+  #     · all three present → 19b + 19c assert
   # 19b row-count parity — data-row count in log file == data-line count in
   #     write-log (one write-log line per appended row; both grow together)
   # 19c header preserved — log file header row matches the schema header
@@ -4121,17 +4126,40 @@ cmd_check() {
   # the EXPECTED state, NOT drift.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 19: Pipeline-event-log integrity"
-    local c19_log="$(pmo_instance_path)/pipeline-event-log.md"
-    local c19_write_log="$(pmo_instance_path)/pipeline-event-log-write.log"
-    local c19_schema="release/standards/pipeline-event-log-schema.md"
+    # Class A — operator-instance runtime state. Resolved through the SHARED
+    # resolver in lib-instance-path.sh (sourced above), which is the same surface
+    # append-pipeline-event.sh writes through, so the reader and the writer of
+    # these two files can never disagree about where they live (#4051).
+    local c19_evals_dir="$(pmo_evals_results_path)"
+    local c19_log="$c19_evals_dir/pipeline-event-log.md"
+    local c19_write_log="$c19_evals_dir/pipeline-event-log-write.log"
+    # Class B — tracked repo doc. Committed, so it resolves in every checkout.
+    local c19_schema="release/references/standards/pipeline-event-log-schema.md"
 
-    # 19a — presence
+    # 19a — presence, split by OWNERSHIP CLASS into three distinct outcomes.
+    #
+    # Class B is asserted FIRST and UNCONDITIONALLY. The schema is a tracked
+    # file, so its absence is a repo defect or a stale literal — never a benign
+    # state — and it is deterministic in CI. Nesting it behind the Class A branch
+    # (as the pre-#4051 flat if/elif chain did) makes it unreachable wherever the
+    # operator instance is absent, which is exactly how a dead literal survived
+    # 175 runs while the check read as a benign warning.
+    if [[ ! -f "$c19_schema" ]]; then
+      flag_warn_or_issue "pipeline-event-log-integrity" \
+        "path-resolution failure: event-log schema did not resolve at $c19_schema — this is a BROKEN CONTROL (stale literal or relocated doc), not a missing artifact; 19c cannot be validated against its source (per #459 fail-loud, as at Checks 18/20)"
+    fi
+
+    # Class A absence is a SKIP with NO flag_* call and no drift claim: the event
+    # log is operator-instance state, legitimately absent on a fresh install and
+    # in CI, so hard-failing would break both. The emission is deliberately
+    # DISTINCT from the fail-loud above — collapsing the two into one warn is what
+    # made "this control is disabled" typographically identical to "there is
+    # nothing to check yet". The resolved path is printed so a mis-resolution is
+    # visible even on the SKIP path.
     if [[ ! -f "$c19_log" ]]; then
-      flag_warn_or_issue "pipeline-event-log-integrity" "log file missing: $c19_log"
+      log "  SKIP:  no event log at $c19_log (operator-instance state — fresh install / CI; nothing to assert)"
     elif [[ ! -f "$c19_write_log" ]]; then
-      flag_warn_or_issue "pipeline-event-log-integrity" "write-log missing: $c19_write_log"
-    elif [[ ! -f "$c19_schema" ]]; then
-      flag_warn_or_issue "pipeline-event-log-integrity" "schema doc missing: $c19_schema"
+      log "  SKIP:  no write-log at $c19_write_log (operator-instance state — fresh install / CI; nothing to assert)"
     else
       # 19b — row-count parity
       # Data rows start with '| YYYY-' (ISO timestamp begins with a digit).
