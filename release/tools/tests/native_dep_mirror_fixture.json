@@ -118,6 +118,66 @@
       "expect_eligible": [5],
       "expect_to_add": [5],
       "expect_drift": []
+    },
+    {
+      "name": "unlabelled-prose-section-mirrors-nothing",
+      "_note": "Prose-attribution defect. A Dependencies section of free-form sentences ending in an epic reference. Pre-fix the whole section fell through the legacy bare-ref shim and planned the parent epic as a native blocker, while missing every real edge. Prose asserts no direction, so nothing is mirror-eligible.",
+      "body": "### Dependencies\n\n**Gated on** the host-decision **spike** and on the instrumentation stories (emit autonomous seams; stable join-key + emission gate). Composes the coverage-scorecard **task**. Part of epic **#1189**.\n\n### Acceptance Criteria\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": [],
+      "expect_unattributed": []
+    },
+    {
+      "name": "epic-ref-trailing-a-labelled-blocked-by-segment",
+      "_note": "The labelled-body variant, and the worse case: a CORRECT `Blocked by:` label plus a trailing epic reference. Segments run to the next RECOGNIZED label, so pre-fix the epic was swallowed by the still-open Blocked by: segment and a well-formed body ALSO produced a false blocker. Authoring discipline alone could not avoid this; the epic label is required independently of the prose rule.",
+      "body": "### Dependencies\nBlocked by: #4024, #4025, #4026\nPart of epic **#1189**.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [4024, 4025, 4026],
+      "expect_to_add": [4024, 4025, 4026],
+      "expect_drift": [],
+      "expect_unattributed": []
+    },
+    {
+      "name": "prose-refs-reported-as-unattributed",
+      "_note": "Real dependencies stated only in prose: nothing is mirrored (no direction asserted) but the refs are REPORTED rather than dropped in silence, so the author can relabel them under `Blocked by:`. Reporting beats both alternatives — inventing an edge, or discarding the intent wordlessly.",
+      "body": "### Dependencies\nGated on the host-decision spike #4024 and the instrumentation work in #4025.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": [],
+      "expect_unattributed": [4024, 4025]
+    },
+    {
+      "name": "directional-heading-confers-direction-on-prose",
+      "_note": "Guards against over-correction. `### Depends on` states the direction in the heading, so prose beneath it IS a real blocked-by list. The prose rule must suppress only genuinely directionless runs; an ambiguous `### Dependencies` heading over the same sentence confers nothing (see the paired negative case).",
+      "body": "### Depends on\nNeeds the parser work in #201 to land first.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [201],
+      "expect_to_add": [201],
+      "expect_drift": [],
+      "expect_unattributed": []
+    },
+    {
+      "name": "ambiguous-heading-over-identical-prose-confers-nothing",
+      "_note": "Paired negative for the directional-heading case: byte-identical prose under the ambiguous `### Dependencies` container yields no edge, and the ref surfaces as unattributed. The heading is the only difference, which is what makes the pair a control.",
+      "body": "### Dependencies\nNeeds the parser work in #201 to land first.\n",
+      "native_blocked_by": [],
+      "expect_eligible": [],
+      "expect_to_add": [],
+      "expect_drift": [],
+      "expect_unattributed": [201]
+    },
+    {
+      "name": "bare-token-run-without-list-markers-stays-blocked-by",
+      "_note": "Backward-compat guard for the legacy shim's other shape: bare tokens with no bullet markers. The prose rule keys on the presence of prose words, not on list syntax, so this run is still the legacy blocked-by form.",
+      "body": "### Dependencies\n#46, #47\n",
+      "native_blocked_by": [],
+      "expect_eligible": [46, 47],
+      "expect_to_add": [46, 47],
+      "expect_drift": [],
+      "expect_unattributed": []
     }
   ]
 }
