@@ -4,9 +4,14 @@
 Companion to the tool's built-in `--self-test`. Verifies the deterministic mirror
 core (body typed-dep parse → FS+0d eligibility → to_add/drift diff) against a
 FROZEN fixture of representative issue bodies + native blocked-by sets, asserting
-the per-case (eligible, to_add, drift) the Model A contract designs. Network I/O
-(gh issue read, GraphQL blockedBy read, addIssueDependency write) is out of scope
-— this exercises the pure functions, which is where the mirror's correctness lives.
+the per-case (eligible, to_add, drift) the Model A contract designs, plus
+`expect_unattributed` where a case exercises the prose-reporting path.
+
+Network I/O (gh issue read, GraphQL blockedBy read, addBlockedBy / REST write) is
+out of scope — this exercises the pure functions, which is where the mirror's
+correctness lives. The one network-dependent invariant that pure fixtures cannot
+cover, "does the write mutation still exist upstream", has its own no-write smoke
+check: `native-dep-mirror.py --verify-write-surface`.
 
 Run:  python3 release/tools/tests/test_native_dep_mirror.py
 Exit: 0 = all cases pass, 1 = one or more assertions failed.
@@ -56,8 +61,21 @@ def main() -> int:
                 f"{name}: drift {drift} != expected {case['expect_drift']}"
             )
 
+        # Optional per-case: refs found in a Dependencies section under no direction
+        # label. Present only on cases that exercise the prose-reporting path, so an
+        # older fixture without the key is not retro-asserted against.
+        if "expect_unattributed" in case:
+            unattributed = mod.unattributed_refs(case["body"])
+            if unattributed != case["expect_unattributed"]:
+                failures.append(
+                    f"{name}: unattributed {unattributed} != expected "
+                    f"{case['expect_unattributed']}"
+                )
+
+    n_unattributed = sum(1 for c in cases if "expect_unattributed" in c)
     print(f"native-dep-mirror frozen fixtures: N={len(cases)} case(s)")
     print(f"  cases asserting (eligible, to_add, drift) per Model A contract: {len(cases)}")
+    print(f"  cases additionally asserting unattributed-ref reporting: {n_unattributed}")
 
     if failures:
         print("\nTEST FAIL:", file=sys.stderr)

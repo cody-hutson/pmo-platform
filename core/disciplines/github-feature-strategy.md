@@ -68,7 +68,7 @@ Single-operator PMO platform with Claude Code as primary contributor. The 13-sta
 
 **Source:** Stage 5 design; operator-rendered ACCEPT at Collective Review 2026-05-22 per the release plan AC4. Reverses two prior defers: ADR-2 (v-pretriage, 2026-03-30) and ADR-4 (2026-05-15).
 
-**Context:** Native GitHub Issue Dependencies reached GA in August 2025 (50-per-issue cap; GraphQL mutations `addIssueDependency` / `removeIssueDependency`). The prior-defer rationale named three prerequisites — agent capability for sync, write-permission expansion, conflict-resolution rules — all three of which this release lands as substrate work paired with the CPM consumer (critical-path analysis).
+**Context:** Native GitHub Issue Dependencies reached GA in August 2025 (50-per-issue cap; GraphQL mutations `addBlockedBy` / `removeBlockedBy`). The prior-defer rationale named three prerequisites — agent capability for sync, write-permission expansion, conflict-resolution rules — all three of which this release lands as substrate work paired with the CPM consumer (critical-path analysis).
 
 **Rationale:** Three architectural concerns drive Model A:
 1. **Body-as-authority invariant** (per `ticket-information-architecture.md § Conflict Resolution`): bidirectional auto-sync would invert or make ambiguous the body's authoritative status. One-way mirror preserves the invariant.

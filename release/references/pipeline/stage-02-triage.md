@@ -148,13 +148,13 @@ After A3 dependency state validation passes (G2-04 PASS — no Rejected/invalid 
 |---|---|
 | Trigger | After A3 returns PASS (G2-04 passes); within Phase A, before A4 feasibility quick-check |
 | Trust precondition (A0) | REQUIRED **for trusted-authored bodies only.** For an **UNTRUSTED-BODY** (tagged at A0), do NOT auto-invoke `native-dep-mirror.py`: the body-declared `FS+0d` deps are surfaced to the operator and mirrored only on **explicit confirmation** — an untrusted body must not auto-mutate native state (the same state-mutation-behind-confirmation posture as the Reject-close carve-out). Fail-safe: unresolvable association ⇒ untrusted ⇒ held. The hold is persisted via the A0 UNTRUSTED-BODY tag in the triage decision comment (§6 Outputs) so the Stage-5 A3.5 re-trigger honors it. |
-| Eligible body deps | `FS+0d #N` only (default / untyped). Non-FS-zero-lag types (`SS`, `FF`, `SF`, `FS±Nd`) are body-only by design — not mirrored. |
-| Action — body cites `#X` not in native | Call GraphQL `addIssueDependency` to add `#X` to native `blocked-by` (body wins; auto-resolve) |
+| Eligible body deps | `FS+0d #N` only (default / untyped). Non-FS-zero-lag types (`SS`, `FF`, `SF`, `FS±Nd`) are body-only by design — not mirrored. **A dependency must be stated under a direction label** (`Blocked by:` / `Depends on:` / `Requires`) to be mirrored. A reference sitting in unlabelled prose asserts no direction and is NOT mirrored; it is reported as an unattributed ref for relabelling. An epic / `Part of` reference is a sub-issue parent relationship, never a dependency, and is excluded in every position. |
+| Action — body cites `#X` not in native | Call GraphQL `addBlockedBy` to add `#X` to native `blocked-by` (body wins; auto-resolve) |
 | Action — native has `#Y` not in body | Flag drift in A6 triage summary for operator review at Phase B; do NOT auto-modify body (body remains authoritative) |
-| Cap handling | If `addIssueDependency` returns "dependency cap reached" (50/issue), flag to operator; suspend further mirror writes for this issue; body remains authoritative without native projection |
+| Cap handling | If `addBlockedBy` returns "dependency cap reached" (50/issue), flag to operator; suspend further mirror writes for this issue; body remains authoritative without native projection |
 | Idempotency | Re-running A3.5 with the same body state is a no-op modulo API eventual consistency |
 | Token scope | `repo` typically sufficient. If GraphQL mutation returns 401/403 / scope error: escalate per CER Resolve failure-handling — operator runs `gh auth refresh -s project` (see B2a failure-handling block precedent) |
-| Invocation (tracked tool) | This procedure is promoted to the tracked tool `release/tools/native-dep-mirror.py` (AS2 per the agent-script promotion framework). Invoke it at this step rather than re-deriving the algorithm: `python3 release/tools/native-dep-mirror.py --issue <N>` (or `--milestone <title>` for a batch; `--dry-run` plans without writing; `--self-test` runs the fixture suite). The pseudocode below is the tool's specification of record. |
+| Invocation (tracked tool) | This procedure is promoted to the tracked tool `release/tools/native-dep-mirror.py` (AS2 per the agent-script promotion framework). Invoke it at this step rather than re-deriving the algorithm: `python3 release/tools/native-dep-mirror.py --issue <N>` (or `--milestone <title>` for a batch; `--dry-run` plans without writing; `--self-test` runs the fixture suite; `--verify-write-surface` introspects the write API without writing). The pseudocode below is the tool's specification of record. |
 
 **Mirror algorithm (pseudocode — the tracked tool's specification of record; the tool implements it, invoked once per issue at A3.5):**
 
@@ -168,7 +168,7 @@ FUNCTION mirror_body_to_native(issue_number):
   drift  = set(native_blocked_by) - set(mirror_eligible.target)
 
   FOR target IN to_add:
-    addIssueDependency(blocked=issue_number, blocking=target)   # body wins
+    addBlockedBy(blocked=issue_number, blocking=target)   # body wins
   FOR target IN drift:
     flag_drift_in_a6_summary(issue=issue_number, native_extra=target)
 ```

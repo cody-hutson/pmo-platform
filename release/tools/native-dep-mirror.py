@@ -20,8 +20,18 @@ release/references/specs/ticket-information-architecture.md § Native Dependenci
     one semantic and cannot express them, so they are NEVER mirrored. (Direction-
     blind parsing of `Blocks:` / `Relates to:` targets was the #662 Blocker —
     it inverted edges and wrote false native blocked-by dependencies.)
-  - to_add  = eligible body deps NOT present in native blocked-by → add via
-    GraphQL addIssueDependency (body wins; auto-resolve).
+  - UNLABELLED PROSE IS NOT A DEPENDENCY CLAIM. A Dependencies section whose text
+    carries no direction label yields NO mirror-eligible edge: prose states no
+    direction, so asserting one is invention. The bare-`#N` backward-compat shim
+    applies ONLY to the legacy bare-ref list form it was written for (`- #46`),
+    never to free-form sentences. Such refs are reported as `unattributed` so a
+    real dependency stated only in prose surfaces for relabelling instead of being
+    silently dropped. An epic / parent reference is a sub-issue relationship, not a
+    dependency, and is never mirror-eligible in EITHER position — unlabelled prose
+    ("Part of epic #N") or trailing a still-open `Blocked by:` segment.
+  - to_add  = eligible body deps NOT present in native blocked-by → add via the
+    GraphQL `addBlockedBy` mutation, falling back to the REST dependencies
+    endpoint when that call fails (body wins; auto-resolve).
   - drift   = native blocked-by NOT present in eligible body deps → FLAGGED for
     operator review; body is NOT auto-modified (body remains authoritative).
   - Idempotent: re-running with the same body state is a no-op (modulo the API's
@@ -50,10 +60,20 @@ Usage:
   # Fixture self-test (no network; exercises the deterministic core):
   python3 native-dep-mirror.py --self-test
 
+  # Write-surface smoke check — introspect the schema, write nothing, exit
+  # non-zero if the mirror has no usable write path at all:
+  python3 native-dep-mirror.py --verify-write-surface
+
 Exit codes:
   0 — mirror completed (or dry-run plan produced) with no add failures
-  1 — one or more native add operations failed (operator awareness; non-gating)
-  2 — API / network / scope failure resolving repo or reading issue/native deps
+  1 — one or more native add operations failed on an EDGE-level cause (dep cap,
+      per-issue permission, transient API); operator awareness, non-gating
+  2 — API / network / scope failure resolving repo or reading issue/native deps,
+      OR a CONTRACT-level write failure (the write surface itself is broken —
+      e.g. the mutation field is absent from the schema AND the REST fallback
+      also failed). A contract breach is deliberately NOT reported as exit 1:
+      conflating "this API no longer exists" with "this one edge failed" is what
+      let a dead write path run unnoticed across releases.
 """
 
 import argparse
@@ -110,16 +130,29 @@ DEP_HEADING_ALIASES = [
 #   "blocked_by" — current IS blocked-by #N        → mirror-eligible (the only kind)
 #   "blocks"     — current BLOCKS #N (reciprocal)   → NOT a current-issue blocked-by
 #   "relates"    — non-blocking relationship        → never mirrored
-# A `#N` appearing before any label (an unlabeled leading run, e.g. the legacy
-# bullet-list `### Dependencies\n- #46` form) is treated as "blocked_by" — that bare
-# form has always meant "this issue depends on #N" (backward-compat with the legacy
-# fixtures and the spec's untyped-`#N`→blocked-by default).
+# A `#N` appearing before any label (an unlabeled run) is treated as "blocked_by"
+# ONLY when that run is the legacy bare-ref list form the shim was written for —
+# `### Dependencies\n- #46`, i.e. list items or bare tokens with no prose. Free-form
+# sentences are attributed "unlabeled" and mirrored NOWHERE: prose asserts no
+# direction, and defaulting it to blocked_by manufactures a dependency the author
+# never stated. See _is_bare_ref_run / _attribute_segments.
 SEGMENT_LABELS: List[Tuple[str, str]] = [
     # label-kind, regex matching the label token (case-insensitive, colon-tolerant)
     ("blocked_by", r"Blocked\s*by"),
     ("blocked_by", r"Depends\s*on"),
     ("blocked_by", r"Requires"),               # placeholder "Requires #N first"
     ("blocks",     r"Blocks"),
+    # Epic / parent membership. These MUST be labels, not prose: an epic ref is a
+    # sub-issue parent relationship, never a dependency. Without a label here, a
+    # trailing "Part of epic #N" is swallowed by a still-open `Blocked by:` segment
+    # (segments run to the next RECOGNIZED label) and the epic becomes a false
+    # blocker even in a correctly-labelled body. Longest-first: `Part of epic`
+    # precedes bare `Part of` so it wins at the same start position.
+    ("relates",    r"Part\s*of\s*(?:the\s*)?epic"),
+    ("relates",    r"Part\s*of"),
+    ("relates",    r"Sub-?issue\s*of"),
+    ("relates",    r"Epic"),
+    ("relates",    r"Umbrella"),
     ("relates",    r"Relates\s*to"),
     ("relates",    r"Relates"),
     ("relates",    r"Related"),
@@ -162,6 +195,40 @@ DEP_TOKEN_RE = re.compile(
     r"#(?P<target>\d[\d,]*\d|\d)\b"
 )
 
+# Legacy bare-ref-run discriminator. An unlabeled run inherits the blocked_by
+# backward-compat shim ONLY when it is the form that shim was written for — list
+# items or bare dependency tokens. Prose is excluded because a sentence asserts no
+# direction; the shim was a concession to a specific legacy SYNTAX, and letting it
+# swallow arbitrary prose is what turns "Part of epic #N" into a native blocker.
+_LIST_MARKER_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+_PROSE_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+
+# Section headings that are themselves directional. `### Depends on` / `### Blocked
+# by` state the direction in the heading, so an unlabeled run beneath one is a real
+# blocked_by list even in prose form. `Dependencies` / `Relationships` are ambiguous
+# containers and confer no direction.
+DIRECTIONAL_HEADINGS = {"depends on", "blocked by"}
+
+
+def _is_bare_ref_run(text: str) -> bool:
+    """True when an unlabeled run is the legacy bare-`#N` list form, not prose.
+
+    Strips one leading list marker per line, removes every dependency token, then
+    asks whether any prose word survives. `- #46\\n- FS #47` reduces to punctuation
+    → True (legacy list). "Gated on the spike. Part of epic #1189." keeps its words
+    → False (prose). A run carrying no dep token at all is False — nothing to mirror
+    either way, so the cheaper answer is also the correct one.
+    """
+    if not DEP_TOKEN_RE.search(text):
+        return False
+    residue_lines = [
+        _LIST_MARKER_RE.sub("", line, count=1)
+        for line in text.splitlines()
+        if line.strip()
+    ]
+    residue = DEP_TOKEN_RE.sub(" ", "\n".join(residue_lines))
+    return not _PROSE_WORD_RE.search(residue)
+
 
 @dataclass
 class BodyDep:
@@ -196,9 +263,23 @@ class BodyDep:
 def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
     """Return the first '### <alias>' section body (suffix-tolerant; first-match-wins).
 
+    Thin wrapper over extract_section_with_alias for callers that need only the
+    section text. Kept as-is so the pre-existing call signature stays stable.
+    """
+    found = extract_section_with_alias(body, aliases)
+    return None if found is None else found[1]
+
+
+def extract_section_with_alias(
+    body: str, aliases: List[str]
+) -> Optional[Tuple[str, str]]:
+    """Return (matched_alias, section_body) for the first '### <alias>' section.
+
     Mirrors bundle-issues-parser.py extract_section semantics: prefix-anchored,
     suffix-tolerant heading match (a trailing parenthetical/colon does not defeat
-    it); section ends at the next H2/H3 heading or a two-blank-line gap.
+    it); section ends at the next H2/H3 heading or a two-blank-line gap. The matched
+    alias is returned because a directional heading (`### Depends on`) confers
+    direction on an otherwise unlabeled run — see DIRECTIONAL_HEADINGS.
     """
     if not body:
         return None
@@ -214,30 +295,48 @@ def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
         end_h2 = re.search(r"^##\s+", rest, re.MULTILINE)
         end_blank = re.search(r"\n\s*\n\s*\n", rest)
         cands = [c.start() for c in (end_h3, end_h2, end_blank) if c is not None]
-        return rest[: min(cands)] if cands else rest
+        return heading, (rest[: min(cands)] if cands else rest)
     return None
 
 
-def _attribute_segments(section: str) -> List[Tuple[str, str]]:
+def _attribute_segments(
+    section: str, heading_direction: Optional[str] = None
+) -> List[Tuple[str, str]]:
     """Slice a Dependencies section into (kind, text) segments by labeled marker.
 
-    Walks the section left-to-right, finding each segment label (Blocked by / Blocks
-    / Relates to / …); the text from one label up to the next is attributed to that
-    label's kind. Any leading text BEFORE the first label is attributed "blocked_by"
-    (the legacy bare-`#N` bullet-list form — `### Dependencies\n- #46` — has always
-    meant "this issue depends on #46"). Segment slicing is whitespace/newline-blind,
-    so it handles BOTH the single-line `A · B · C` form and the multi-line form.
+    Walks the section left-to-right; the text from one label up to the next carries
+    that label's kind. Segment slicing is whitespace/newline-blind, so it handles
+    BOTH the single-line `A · B · C` form and the multi-line form.
+
+    An UNLABELED run — no label anywhere, or the leading text before the first
+    label — is attributed by EVIDENCE rather than by default:
+      1. `heading_direction` set (the section heading was itself `Depends on` /
+         `Blocked by`) → that direction. The heading is the label.
+      2. else the run is the legacy bare-ref list form (_is_bare_ref_run) →
+         "blocked_by". The historical shim, held to the syntax it was written for.
+      3. else → "unlabeled". Prose states no direction, so no edge is emitted; the
+         refs inside are reported via unattributed_refs rather than dropped silently.
+
+    Case 3 is the fix for prose being mirrored as blocked_by. Both entry paths (the
+    no-labels-at-all branch and the leading-run branch) route through the same
+    decision, because the defect reproduced through each of them independently.
     """
+
+    def _unlabeled_kind(text: str) -> str:
+        if heading_direction:
+            return heading_direction
+        return "blocked_by" if _is_bare_ref_run(text) else "unlabeled"
+
     segments: List[Tuple[str, str]] = []
     matches = list(_SEGMENT_LABEL_RE.finditer(section))
     if not matches:
-        # No labels at all → whole section is the legacy blocked-by list.
-        return [("blocked_by", section)]
-    # Leading run before the first label → legacy blocked-by (bare `#N`).
+        # No labels at all → the whole section is one unlabeled run.
+        return [(_unlabeled_kind(section), section)]
+    # Leading run before the first label.
     if matches[0].start() > 0:
         lead = section[: matches[0].start()]
         if lead.strip():
-            segments.append(("blocked_by", lead))
+            segments.append((_unlabeled_kind(lead), lead))
     for i, m in enumerate(matches):
         kind = next(
             (_LABEL_KIND_BY_GROUP[g] for g in _LABEL_KIND_BY_GROUP if m.group(g)),
@@ -277,6 +376,42 @@ def _parse_token(m: "re.Match") -> Optional[Tuple[str, int, int]]:
     return dep_type, offset, target
 
 
+def _segments_for_body(body: str) -> List[Tuple[str, str]]:
+    """Resolve a body to its attributed Dependencies segments ([] when absent).
+
+    Single seam shared by parse_body_dependencies and unattributed_refs, so the two
+    can never disagree about how a given run was attributed.
+    """
+    found = extract_section_with_alias(body, DEP_HEADING_ALIASES)
+    if found is None:
+        return []
+    alias, section = found
+    heading_direction = (
+        "blocked_by" if alias.strip().lower() in DIRECTIONAL_HEADINGS else None
+    )
+    return _attribute_segments(section, heading_direction)
+
+
+def unattributed_refs(body: str) -> List[int]:
+    """Issue refs sitting in unlabeled PROSE — parsed, but claimed by no direction.
+
+    These are deliberately NOT mirrored (prose asserts no direction), but they are
+    also not nothing: a section that names real dependencies only in prose produces
+    a non-empty list here and an empty eligible set, which is precisely the shape
+    worth warning about. Reporting beats both alternatives — inventing a blocked_by
+    edge, or discarding the author's intent without a word.
+    """
+    out: Set[int] = set()
+    for kind, seg_text in _segments_for_body(body):
+        if kind != "unlabeled":
+            continue
+        for m in DEP_TOKEN_RE.finditer(seg_text):
+            parsed = _parse_token(m)
+            if parsed is not None:
+                out.add(parsed[2])
+    return sorted(out)
+
+
 def parse_body_dependencies(body: str) -> List[BodyDep]:
     """Parse the body Dependencies section into DIRECTIONAL typed edges.
 
@@ -285,21 +420,21 @@ def parse_body_dependencies(body: str) -> List[BodyDep]:
     each `#N` carries the direction of its segment:
       - Blocked by: / Depends on: / Requires → BodyDep(direction="blocked_by")
       - Blocks:                                → BodyDep(direction="blocks") (reciprocal)
-      - Relates to: / sibling / pairs / …      → NOT emitted (non-blocking prose)
+      - Relates to: / sibling / pairs / epic /
+        Part of / …                            → NOT emitted (non-blocking prose)
+      - unlabeled PROSE                        → NOT emitted (no direction asserted;
+                                                 surfaced via unattributed_refs)
     Only "blocked_by" FS+0d edges are mirror-eligible (see BodyDep.is_mirror_eligible)
     — this is the #662 fix that stops `Blocks:` and `Relates to:` targets from being
     written as inverted / false native blocked-by edges. Each matched token is
     normalized (missing type → "FS"; missing offset → 0) and de-duplicated by
     (type, offset_days, target, direction).
     """
-    section = extract_section_aliased(body, DEP_HEADING_ALIASES)
-    if section is None:
-        return []
     seen: Set[Tuple[str, int, int, str]] = set()
     deps: List[BodyDep] = []
-    for kind, seg_text in _attribute_segments(section):
-        if kind == "relates":
-            continue  # non-blocking relationship — never mirrored
+    for kind, seg_text in _segments_for_body(body):
+        if kind in ("relates", "unlabeled"):
+            continue  # non-blocking, or no direction asserted — never mirrored
         for m in DEP_TOKEN_RE.finditer(seg_text):
             parsed = _parse_token(m)
             if parsed is None:
@@ -341,6 +476,15 @@ def compute_mirror_plan(
 
 
 # ---- GitHub API surface (gh CLI; stdlib subprocess only) ----------------------
+
+# The GraphQL mutation that adds a native blocked-by edge. Named as a constant so
+# the preflight introspection and the mutation string can never drift apart — the
+# dead-write-path incident was exactly a name the code asserted and nothing checked.
+# The historical value `addIssueDependency` has NEVER existed on the Mutation type;
+# the input shape (issueId + blockingIssueId) was always right, only the field name
+# was wrong.
+NATIVE_DEP_MUTATION = "addBlockedBy"
+
 
 class GhError(RuntimeError):
     """A gh invocation failed (network / scope / not-found)."""
@@ -390,7 +534,7 @@ def fetch_milestone_issues(repo: str, milestone: str) -> List[Dict]:
 
 
 def resolve_issue_node_id(repo: str, number: int) -> str:
-    """Resolve an issue's GraphQL node ID (required by addIssueDependency)."""
+    """Resolve an issue's GraphQL node ID (required by the addBlockedBy mutation)."""
     owner, name = repo.split("/", 1)
     query = (
         'query($owner:String!,$name:String!,$num:Int!){'
@@ -433,17 +577,172 @@ def read_native_blocked_by(repo: str, number: int) -> Set[int]:
     return {int(line) for line in out.split() if line.strip().lstrip("-").isdigit()}
 
 
-def add_native_dependency(blocked_id: str, blocking_id: str) -> None:
-    """Add a native dependency: `blocked_id` is blocked-by `blocking_id`."""
+def resolve_issue_database_id(repo: str, number: int) -> int:
+    """Resolve an issue's REST database id — the REST fallback's `issue_id`.
+
+    This is NOT the GraphQL node id. The two id spaces are not interchangeable and
+    the REST dependencies endpoint takes the numeric database id; passing a node id
+    (or an issue NUMBER, which also looks plausible) mis-targets silently rather
+    than erroring. Kept as a separate named function so the distinction is visible
+    at every call site.
+    """
+    out = _gh(["api", f"repos/{repo}/issues/{number}", "--jq", ".id"])
+    raw = out.strip()
+    if not raw.isdigit():
+        raise GhError(f"could not resolve database id for issue #{number}: {raw!r}")
+    return int(raw)
+
+
+def add_dependency_graphql(blocked_node_id: str, blocking_node_id: str) -> None:
+    """Primary write path — the addBlockedBy mutation (GraphQL node ids)."""
     mutation = (
         'mutation($blocked:ID!,$blocking:ID!){'
-        'addIssueDependency(input:{issueId:$blocked,blockingIssueId:$blocking}){'
+        f'{NATIVE_DEP_MUTATION}(input:{{issueId:$blocked,blockingIssueId:$blocking}}){{'
         'issue{id}}}'
     )
     _gh([
         "api", "graphql", "-f", f"query={mutation}",
-        "-F", f"blocked={blocked_id}", "-F", f"blocking={blocking_id}",
+        "-F", f"blocked={blocked_node_id}", "-F", f"blocking={blocking_node_id}",
     ])
+
+
+def add_dependency_rest(repo: str, blocked_number: int, blocking_db_id: int) -> None:
+    """Fallback write path — the REST dependencies endpoint (database id)."""
+    _gh([
+        "api", "-X", "POST",
+        f"repos/{repo}/issues/{blocked_number}/dependencies/blocked_by",
+        "-F", f"issue_id={blocking_db_id}",
+    ])
+
+
+def mutation_field_exists(field: str) -> Optional[bool]:
+    """Does `field` exist on the GraphQL Mutation type?
+
+    True / False, or None when introspection itself failed (offline, no scope) —
+    None is 'unknown', deliberately distinct from False ('confirmed absent'), so an
+    unreachable API is never mistaken for a renamed one.
+    """
+    query = 'query{__type(name:"Mutation"){fields(includeDeprecated:true){name}}}'
+    try:
+        out = _gh([
+            "api", "graphql", "-f", f"query={query}",
+            "--jq", ".data.__type.fields[].name",
+        ])
+    except GhError:
+        return None
+    return field in set(out.split())
+
+
+def _is_already_present(err: str) -> bool:
+    """True when the API is reporting the edge already exists (idempotent success).
+
+    The mirror's documented contract is that re-running against unchanged body state
+    is a no-op. to_add is a set difference, so this normally cannot fire — but the
+    native surface is eventually consistent, so a just-written edge can still be
+    missing from the read. Counting that as a failure would make a correct mirror
+    look broken.
+    """
+    low = err.lower()
+    return "already been taken" in low or "already exists" in low
+
+
+def classify_add_failure(err: str, graphql_available: Optional[bool]) -> str:
+    """Classify an add failure as "contract" (surface broken) or "edge" (this edge).
+
+    Deliberately conservative: only DEFINITE evidence of surface breakage escalates
+    to contract — the preflight confirming the mutation is absent, or the API naming
+    an undefined field. Everything else (dep cap, per-issue permission, transient
+    5xx) is edge-level and stays non-gating.
+
+    This split is the actual fix for the dead-write-path incident. The old code had
+    one undifferentiated failure bucket, so "this API no longer exists" and "this
+    one edge failed" were indistinguishable — and because the mirror is non-gating
+    by design, the former was absorbed as routine noise across releases.
+    """
+    low = err.lower()
+    if graphql_available is False:
+        return "contract"
+    if "undefinedfield" in low or "doesn't exist on type" in low:
+        return "contract"
+    return "edge"
+
+
+class NativeDepWriter:
+    """Writes native blocked-by edges: GraphQL primary, REST fallback.
+
+    Holds the per-run preflight result and memoizes id lookups, so a milestone run
+    introspects the schema once rather than once per edge. The two surfaces use
+    different id spaces (node id vs database id), which is why resolution is lazy —
+    the REST database id is only fetched if GraphQL actually fails.
+    """
+
+    def __init__(self, repo: str) -> None:
+        self.repo = repo
+        self.graphql_available: Optional[bool] = None
+        self._checked = False
+        self._node_ids: Dict[int, str] = {}
+        self._db_ids: Dict[int, int] = {}
+
+    def preflight(self) -> Optional[bool]:
+        """Introspect the write surface once; warn loudly if the primary is gone."""
+        if self._checked:
+            return self.graphql_available
+        self._checked = True
+        self.graphql_available = mutation_field_exists(NATIVE_DEP_MUTATION)
+        if self.graphql_available is False:
+            print(
+                f"native-dep-mirror: CONTRACT WARNING — GraphQL mutation "
+                f"`{NATIVE_DEP_MUTATION}` is ABSENT from the schema. The primary "
+                f"write path is dead; falling back to REST for every edge. Correct "
+                f"the mutation name before trusting future runs "
+                f"(`--verify-write-surface` checks this without writing).",
+                file=sys.stderr,
+            )
+        elif self.graphql_available is None:
+            print(
+                "native-dep-mirror: could not introspect the GraphQL schema "
+                "(offline or missing scope) — attempting the primary path anyway.",
+                file=sys.stderr,
+            )
+        return self.graphql_available
+
+    def _node_id(self, number: int) -> str:
+        if number not in self._node_ids:
+            self._node_ids[number] = resolve_issue_node_id(self.repo, number)
+        return self._node_ids[number]
+
+    def _db_id(self, number: int) -> int:
+        if number not in self._db_ids:
+            self._db_ids[number] = resolve_issue_database_id(self.repo, number)
+        return self._db_ids[number]
+
+    def add(self, blocked_number: int, blocking_number: int) -> str:
+        """Write one edge. Returns the surface used: "graphql" | "rest" | "exists".
+
+        Raises GhError with a "<surface>: <error>" trail only when BOTH paths fail.
+        """
+        self.preflight()
+        errors: List[str] = []
+        if self.graphql_available is not False:
+            try:
+                add_dependency_graphql(
+                    self._node_id(blocked_number), self._node_id(blocking_number)
+                )
+                return "graphql"
+            except GhError as e:
+                if _is_already_present(str(e)):
+                    return "exists"
+                errors.append(f"graphql: {e}")
+        try:
+            add_dependency_rest(
+                self.repo, blocked_number, self._db_id(blocking_number)
+            )
+            return "rest"
+        except GhError as e:
+            if _is_already_present(str(e)):
+                return "exists"
+            errors.append(f"rest: {e}")
+        raise GhError("; ".join(errors))
 
 
 # ---- Per-issue mirror ---------------------------------------------------------
@@ -455,13 +754,30 @@ class MirrorResult:
     native_blocked_by: List[int]
     to_add: List[int]          # planned / executed adds
     added: List[int] = field(default_factory=list)        # successfully added
-    add_failures: List[Dict] = field(default_factory=list)  # {target, error}
+    add_failures: List[Dict] = field(default_factory=list)  # {target, error, kind}
     drift: List[int] = field(default_factory=list)         # native-extra (flag only)
+    unattributed: List[int] = field(default_factory=list)  # prose refs, no direction
+    surfaces: Dict[str, int] = field(default_factory=dict)  # graphql/rest/exists tally
     dry_run: bool = False
 
+    @property
+    def has_contract_failure(self) -> bool:
+        """Any failure attributable to the write SURFACE rather than one edge."""
+        return any(f.get("kind") == "contract" for f in self.add_failures)
 
-def mirror_issue(repo: str, number: int, body: str, dry_run: bool) -> MirrorResult:
-    """Execute (or plan, when dry_run) the A3.5 mirror for one issue."""
+
+def mirror_issue(
+    repo: str,
+    number: int,
+    body: str,
+    dry_run: bool,
+    writer: Optional[NativeDepWriter] = None,
+) -> MirrorResult:
+    """Execute (or plan, when dry_run) the A3.5 mirror for one issue.
+
+    `writer` is threaded in by the caller so a milestone run shares one preflight
+    and one id cache across every issue; omitted, a private writer is created.
+    """
     body_deps = parse_body_dependencies(body)
     native = read_native_blocked_by(repo, number)
     to_add, drift = compute_mirror_plan(body_deps, native)
@@ -471,19 +787,26 @@ def mirror_issue(repo: str, number: int, body: str, dry_run: bool) -> MirrorResu
         native_blocked_by=sorted(native),
         to_add=to_add,
         drift=drift,
+        unattributed=unattributed_refs(body),
         dry_run=dry_run,
     )
     if dry_run or not to_add:
         return res
-    blocked_id = resolve_issue_node_id(repo, number)
+    if writer is None:
+        writer = NativeDepWriter(repo)
     for target in to_add:
         try:
-            blocking_id = resolve_issue_node_id(repo, target)
-            add_native_dependency(blocked_id, blocking_id)
+            surface = writer.add(number, target)
             res.added.append(target)
+            res.surfaces[surface] = res.surfaces.get(surface, 0) + 1
         except GhError as e:
-            # Non-gating: log the failure, continue with remaining deps.
-            res.add_failures.append({"target": target, "error": str(e)})
+            # Non-gating for edge-level causes; classified so a surface-level
+            # breakage is NOT absorbed as routine per-edge noise.
+            res.add_failures.append({
+                "target": target,
+                "error": str(e),
+                "kind": classify_add_failure(str(e), writer.graphql_available),
+            })
     return res
 
 
@@ -500,13 +823,22 @@ def emit_text(results: List[MirrorResult]) -> str:
             lines.append(f"  would add:                  {r.to_add or '(none)'}")
         else:
             lines.append(f"  added:                      {r.added or '(none)'}")
-            if r.add_failures:
-                for f in r.add_failures:
-                    lines.append(f"  ADD FAILED #{f['target']}: {f['error']}")
+            if r.surfaces:
+                tally = ", ".join(f"{k}={v}" for k, v in sorted(r.surfaces.items()))
+                lines.append(f"  write surface:              {tally}")
+            for f in r.add_failures:
+                tag = "CONTRACT" if f.get("kind") == "contract" else "EDGE"
+                lines.append(f"  ADD FAILED [{tag}] #{f['target']}: {f['error']}")
         if r.drift:
             lines.append(
                 f"  DRIFT (native-extra, flag only): {r.drift} "
                 "— body authoritative; operator-mediated reconciliation"
+            )
+        if r.unattributed:
+            lines.append(
+                f"  WARNING unattributed refs:  {r.unattributed} — present in the "
+                "Dependencies section but under no direction label, so NOT mirrored. "
+                "Relabel under `Blocked by:` if these are real dependencies."
             )
     return "\n".join(lines)
 
@@ -586,9 +918,15 @@ Stuff.
     check("dedup identical edge", len(parse_body_dependencies(dup)), 1)
     check("dedup eligible", mirror_eligible_targets(parse_body_dependencies(dup)), {300})
 
-    # 8. No false match on bare '#' or non-issue hashes inside prose.
-    noise = "### Dependencies\nSee the C# notes and issue #401 only.\n"
-    check("prose noise → #401 only", mirror_eligible_targets(parse_body_dependencies(noise)), {401})
+    # 8. No false match on bare '#' or non-issue hashes ('C#') inside a segment.
+    #    Deliberately placed under an explicit label so this fixture asserts TOKEN
+    #    matching ONLY; direction is cases 16-20's subject. Pre-fix this body was
+    #    unlabelled prose expecting {401}, which quietly encoded the very default
+    #    being removed here — prose read as a blocked-by claim. The C#-must-not-match
+    #    intent is preserved exactly; only the direction assumption is dropped.
+    noise = "### Dependencies\nBlocked by: the C# notes and issue #401 only.\n"
+    check("token match skips 'C#', finds #401",
+          mirror_eligible_targets(parse_body_dependencies(noise)), {401})
 
     # ---- #662 Blocker fixtures (segment-directional / real-format / comma-safe) ----
     # The live improvement.yml `Dependencies` field renders as a labeled-segment line.
@@ -679,6 +1017,104 @@ Stuff.
     check("legacy bullet-list blocked-by",
           mirror_eligible_targets(parse_body_dependencies(legacy)), {46, 47})
 
+    # ---- Dead-write-path + prose-attribution regression fixtures ---------------
+    # Two defects found on a live release run. Both are recurrences of the class the
+    # module header records — an edge asserted that the body never stated — which is
+    # why they are frozen as fixtures rather than point-fixed.
+
+    # 16. THE PROSE DEFECT. A Dependencies section of free-form sentences that names
+    #     an epic. Pre-fix this planned `would add: [1189]`: the parent epic written
+    #     as a native blocker (an epic is a sub-issue parent, not a dependency),
+    #     while every real edge was missed. No label anywhere → nothing eligible.
+    body_prose_epic = (
+        "### Dependencies\n\n"
+        "**Gated on** the host-decision **spike** and on the instrumentation "
+        "stories (emit autonomous seams; stable join-key + emission gate) — "
+        "building on a 5/8-empty, mis-keyed stream is premature. Composes the "
+        "coverage-scorecard **task**. Part of epic **#1189**.\n\n"
+        "### Acceptance Criteria\n"
+    )
+    deps_prose = parse_body_dependencies(body_prose_epic)
+    check("prose section → no eligible edges",
+          mirror_eligible_targets(deps_prose), set())
+    check("prose epic ref is NOT a blocker",
+          1189 in mirror_eligible_targets(deps_prose), False)
+    to_add_prose, _ = compute_mirror_plan(deps_prose, native_blocked_by=set())
+    check("prose section → no native write", to_add_prose, [])
+
+    # 17. THE LABELLED-BODY VARIANT — the worse case, and the reason the epic label
+    #     is needed independently of the prose rule. A CORRECT `Blocked by:` label
+    #     plus a trailing epic ref: pre-fix the epic was swallowed by the still-open
+    #     Blocked by: segment (segments run to the next RECOGNIZED label), so a
+    #     well-formed body ALSO produced a false blocker. Authoring discipline alone
+    #     could not have avoided this.
+    body_labelled_epic = (
+        "### Dependencies\n"
+        "Blocked by: #4024, #4025, #4026\n"
+        "Part of epic **#1189**.\n"
+    )
+    check("labelled body keeps its real edges",
+          mirror_eligible_targets(parse_body_dependencies(body_labelled_epic)),
+          {4024, 4025, 4026})
+    check("trailing epic excluded from an open Blocked by: segment",
+          1189 in mirror_eligible_targets(parse_body_dependencies(body_labelled_epic)),
+          False)
+
+    # 18. Unattributed refs are REPORTED, never silently dropped. A section naming
+    #     real dependencies only in prose yields no edges AND a non-empty warning —
+    #     the shape that says "an author meant something here; relabel it".
+    body_prose_refs = (
+        "### Dependencies\n"
+        "Gated on the host-decision spike #4024 and the instrumentation work "
+        "in #4025.\n"
+    )
+    check("prose refs → nothing mirrored",
+          mirror_eligible_targets(parse_body_dependencies(body_prose_refs)), set())
+    check("prose refs → surfaced for relabelling",
+          unattributed_refs(body_prose_refs), [4024, 4025])
+    check("labelled section reports no unattributed refs",
+          unattributed_refs(body_labelled_epic), [])
+
+    # 19. A DIRECTIONAL HEADING is itself the label. `### Depends on` states the
+    #     direction, so prose beneath it IS a blocked-by list — the prose rule must
+    #     not over-correct and discard these.
+    check("directional heading confers direction",
+          mirror_eligible_targets(parse_body_dependencies(
+              "### Depends on\nNeeds the parser work in #201 to land first.\n")),
+          {201})
+    check("ambiguous heading confers none",
+          mirror_eligible_targets(parse_body_dependencies(
+              "### Dependencies\nNeeds the parser work in #201 to land first.\n")),
+          set())
+
+    # 20. Bare-token runs without list markers remain the legacy blocked-by form.
+    check("bare token run stays blocked-by",
+          mirror_eligible_targets(parse_body_dependencies("### Dependencies\n#46, #47\n")),
+          {46, 47})
+
+    # 21. THE DEAD WRITE PATH. The mutation name is a constant the preflight
+    #     introspects, so the query string and the smoke check cannot disagree.
+    #     `addIssueDependency` never existed on the Mutation type; the input shape
+    #     (issueId + blockingIssueId) was always correct.
+    check("write mutation is the real field", NATIVE_DEP_MUTATION, "addBlockedBy")
+    check("dead mutation name is gone",
+          NATIVE_DEP_MUTATION == "addIssueDependency", False)
+
+    # 22. FAILURE CLASSIFICATION — the split that stops a broken write surface from
+    #     being absorbed as routine per-edge noise under the non-gating posture.
+    check("undefined-field error → contract",
+          classify_add_failure("Field 'x' doesn't exist on type 'Mutation'", True),
+          "contract")
+    check("confirmed-absent mutation → contract",
+          classify_add_failure("some transient blip", False), "contract")
+    check("dep-cap error → edge",
+          classify_add_failure("dependency cap reached (50)", True), "edge")
+    check("unknown introspection does not force contract",
+          classify_add_failure("connection reset", None), "edge")
+    check("already-present is idempotent success, not failure",
+          _is_already_present("Validation failed: Target issue has already been taken"),
+          True)
+
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)
         for f in failures:
@@ -686,6 +1122,40 @@ Stuff.
         return 1
     print("SELF-TEST OK")
     return 0
+
+
+# ---- Write-surface smoke assertion -------------------------------------------
+
+def verify_write_surface() -> int:
+    """Smoke assertion: does the mirror still have its primary write path?
+
+    Writes nothing. Exits non-zero when the mutation the tool depends on is absent
+    from the schema — precisely the failure the tool previously could not tell apart
+    from routine per-edge noise. Cheap enough to run in CI, which is the point: an
+    upstream rename should turn a check red rather than quietly degrade releases.
+
+    "Unknown" (introspection unreachable) exits non-zero too. A check that cannot
+    see the schema has not verified anything, and reporting that as a pass would
+    reintroduce the exact silence this guard exists to remove.
+    """
+    present = mutation_field_exists(NATIVE_DEP_MUTATION)
+    if present is True:
+        print(f"WRITE SURFACE OK: Mutation.{NATIVE_DEP_MUTATION} present")
+        return 0
+    if present is None:
+        print(
+            "WRITE SURFACE UNKNOWN: schema introspection failed (offline or missing "
+            "scope). Inconclusive — not a pass.",
+            file=sys.stderr,
+        )
+        return 2
+    print(
+        f"WRITE SURFACE BROKEN: Mutation.{NATIVE_DEP_MUTATION} is ABSENT from the "
+        f"schema. The mirror's primary write path cannot work and every edge would "
+        f"fall through to the REST fallback. Re-check the upstream mutation name.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 # ---- Main --------------------------------------------------------------------
@@ -700,10 +1170,15 @@ def main() -> int:
     parser.add_argument("--output-format", choices=["text", "json"], default="text")
     parser.add_argument("--self-test", action="store_true",
                         help="Run deterministic fixtures (no network)")
+    parser.add_argument("--verify-write-surface", action="store_true",
+                        help="Introspect the write surface and exit; writes nothing")
     args = parser.parse_args()
 
     if args.self_test:
         return run_self_test()
+
+    if args.verify_write_surface:
+        return verify_write_surface()
 
     if not args.issue and not args.milestone:
         print("ERROR: provide --issue N or --milestone TITLE (or --self-test)",
@@ -720,12 +1195,16 @@ def main() -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
 
+    # One writer per run: a single preflight and a shared id cache across issues.
+    writer = None if args.dry_run else NativeDepWriter(repo)
     results: List[MirrorResult] = []
     api_error = False
     for raw in raw_issues:
         try:
             results.append(
-                mirror_issue(repo, raw["number"], raw.get("body") or "", args.dry_run)
+                mirror_issue(
+                    repo, raw["number"], raw.get("body") or "", args.dry_run, writer
+                )
             )
         except GhError as e:
             print(f"ERROR: issue #{raw.get('number')}: {e}", file=sys.stderr)
@@ -737,6 +1216,16 @@ def main() -> int:
         print(emit_text(results))
 
     if api_error:
+        return 2
+    if any(r.has_contract_failure for r in results):
+        # Exit 2, not 1: a broken write SURFACE is an API failure, not the
+        # non-gating per-edge condition exit 1 denotes.
+        print(
+            "ERROR: at least one add failed at the CONTRACT level — the native "
+            "write surface itself is broken, not a single edge. Run "
+            "`--verify-write-surface` to confirm.",
+            file=sys.stderr,
+        )
         return 2
     if any(r.add_failures for r in results):
         return 1
