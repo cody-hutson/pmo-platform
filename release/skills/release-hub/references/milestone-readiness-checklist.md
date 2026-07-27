@@ -5,7 +5,7 @@ Elaborates the `## Composition` contract in [`../SKILL.md`](../SKILL.md). The SK
 this file is the worked checklist, composition map, disposition table, and output schema. **Every check
 is owned by a composed skill/spec — the hub sequences and rolls up; it implements no check here.**
 
-## The seven checklist groups
+## The nine checklist groups
 
 | # | Group | Sub-checks | Owning skill / spec (composed) |
 |---|---|---|---|
@@ -95,7 +95,8 @@ recommend dispositions, mutate nothing).
 
 Mode R is a strict superset of the per-issue Stage-4 Phase A0 re-review: it runs the same PT-1..4 at
 milestone scope **and** adds the milestone-level checks Phase A0 never did (`2c` cross-milestone leaks,
-`3b` bundle currency, `6` coherence, `7` methodology-neutrality + structural-cascade, `8` backlog-altitude ownership). Because the output uses the C1/C2/C3 + PT schema, Phase A0 becomes a
+`3b` bundle currency, `6` coherence, `7` methodology-neutrality + structural-cascade, `8` backlog-altitude ownership,
+`9` problem-validity + abstraction-altitude). Because the output uses the C1/C2/C3 + PT schema, Phase A0 becomes a
 **cache-read** of Mode R's findings rather than re-running them. The cache-read wiring in
 `stage-04-planning.md` is a separate governed step; until it ships, Mode R runs standalone and emits the
 briefing.
