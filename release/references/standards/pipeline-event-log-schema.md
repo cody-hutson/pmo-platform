@@ -47,7 +47,7 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | 7 | `subject` | string | reference to the entity acted upon | `#N`, `milestone:#N`, `release-level`, `sub-task:#N` |
 | 8 | `reversibility` | enum: `CHEAP` / `MODERATE` / `EXPENSIVE` / `IRREVERSIBLE` | reversibility tier per [reversibility-protocol.md](../../../core/specs/reversibility-protocol.md) | `EXPENSIVE` |
 | 9 | `outcome` | enum: `resolved` / `pending` / `escalated` / `superseded` | terminal state of the event | `resolved` |
-| 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or pipe-escaped key:value pairs; longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
+| 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or `; `-separated key:value pairs (pipe grammar per § 4.3a); longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
 
 ## 3. Event-Type Enum (12 values) with Subtypes
 
@@ -68,14 +68,14 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 
 Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` rejects unknown subtypes with non-zero exit. Adding a subtype requires a governance change per `release/governance/release-process.md` § Inter-Stage Feedback Protocol Tier 2 / Tier 3.
 
-**`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing` / `session-retro`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. The `session-retro` provenance value marks a delta the per-session retro surfaced retrospectively rather than one captured live at the decision moment; the row is otherwise identical, so the existing look-back read-model needs no change to see it. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, pipe-free per § 4.3):
+**`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing` / `session-retro`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. The `session-retro` provenance value marks a delta the per-session retro surfaced retrospectively rather than one captured live at the decision moment; the row is otherwise identical, so the existing look-back read-model needs no change to see it. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
 | 2026-06-29T14:00:00Z | v2.39 | 4 | decision | recommendation-choice-delta | hub | milestone:#N | CHEAP | resolved | rec:bundle-A+B; chose:bundle-A-only; delta:diverged; why:B-blocked-on-dep; via:stage4-bundle |
 | 2026-06-29T14:00:01Z | v2.39 | 5 | decision | recommendation-choice-delta | spoke:#N | #N | CHEAP | resolved | rec:new-subtype; chose:new-subtype; delta:aligned; via:stage5-design |
 ```
 
-**`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, pipe-free per § 4.3):
+**`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
 | 2026-06-13T14:00:00Z | v1.12 | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
@@ -89,7 +89,7 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 
 **Explicit zero-state.** A session that produced no learning emits a `no-learning` row rather than nothing, so "the retro ran and found nothing" is distinguishable from "the retro never ran" — the same discipline as `delta:aligned` above and the release-synthesis explicit-N/A markers (§ 11.3). A `no-learning` row carries `session:` + `reason:` and deliberately carries **no `theme:`**, so it contributes no cluster signal.
 
-**PII (§ 4.2 applies unchanged, and bites hardest here).** The retro reflects over session content, so every payload field is an ABSTRACTION, never a quotation: no verbatim operator text, no external-stakeholder names, no Cowork-owned Layer 2 content, no transcript excerpt. `learning:` states the pattern, not the utterance that revealed it. Examples (≤ 300 chars, pipe-free per § 4.3):
+**PII (§ 4.2 applies unchanged, and bites hardest here).** The retro reflects over session content, so every payload field is an ABSTRACTION, never a quotation: no verbatim operator text, no external-stakeholder names, no Cowork-owned Layer 2 content, no transcript excerpt. `learning:` states the pattern, not the utterance that revealed it. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
 | 2026-07-22T22:10:00Z | v3.80 | 6 | session-retro | operator-feedback | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:correction; theme:read-before-edit; domain:corpus-edit; learning:operator redirected a pattern-sweep toward per-file reading |
@@ -126,8 +126,41 @@ Disallowed:
 ### 4.3 Payload format
 
 - ≤ 300 characters per row (single-row PIPE_BUF safety on POSIX append)
-- Compact JSON (`{"key":"value"}`) OR pipe-escaped key:value pairs (`key:value; key:value`)
+- Compact JSON (`{"key":"value"}`) OR `; `-separated key:value pairs (`key:value; key:value`); pipe grammar per § 4.3a
 - Longer content → pointer to existing surface (e.g., `comment:https://github.com/{REPO}/issues/<N>#issuecomment-N`)
+
+### 4.3a Payload pipe grammar (multi-value fields)
+
+The `payload` cell is the **last of the 10 columns**, so a stray delimiter inside it
+appends spurious trailing fields; it can never shift a pre-payload column. Readers
+split on the canonical delimiter `" | "` (space-pipe-space).
+
+**Row-integrity invariant.** A payload is admissible iff the assembled row is exactly
+one physical line and splits into exactly 10 fields under `" | "`.
+
+| Form | Status |
+|---|---|
+| `\\|` (backslash-escaped) | **Canonical multi-value separator.** Admitted. |
+| `\|` (bare, unescaped) | **Reserved.** Rejected. |
+| `" \| "` (space-delimited) | Rejected — it *is* the column delimiter. |
+| payload ending in `" \|"` | Rejected — forms the delimiter at the row-trailing junction. |
+| newline / carriage return | Rejected — a row is one physical line. |
+
+**Why escaped and not bare.** The log is a markdown table. A bare `|` renders a
+spurious cell break, and one consumer (`rollup-attribution.sh`) splits on a bare `|`
+rather than on `" | "`, truncating the payload. `\|` is safe on both the parsing and
+the rendering axis; bare `|` is safe on neither.
+
+**Separator selection.** Use `\|` for multi-value *lists* (`triggers:[T1\|T2\|T3]`).
+Do **not** repurpose `/`: it is already a value character inside payloads
+(`verdict: <UPDATE>/<PRESERVE>/<N/A>`), so a `/` list separator would be ambiguous.
+Key:value pairs remain `; `-separated.
+
+**Authoring a payload convention.** A convention block that renders enum alternatives
+in `{a|b}` notation MUST either escape them (`{a\|b}`) or state the runtime form
+(`chose:spoke`). Enforcement: `append-pipeline-event.sh` § 4.3a guard + `--self-test`.
+
+Rationale and alternatives: ADR-099.
 
 ### 4.4 One row per event
 

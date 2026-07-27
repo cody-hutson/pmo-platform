@@ -428,6 +428,28 @@ if [[ "$SELF_TEST" == "true" ]]; then
     die "self-test: actor rejection check failed (bogus accepted)"
   fi
 
+  # ─── Payload row-integrity: positive (multi-value) ───
+  _pi_ok() { case "$1" in *$'\n'*|*$'\r'*) return 1;; esac
+             case "$1 |" in *" | "*) return 1;; esac
+             case "${1//\\|/}" in *"|"*) return 1;; esac; return 0; }
+  _pi_ok 'triggers:[T1\|T2\|T3]; files_swept:4; verdict:UPDATE' \
+    || die "self-test: escaped multi-value payload rejected (§ 4.3a positive case)"
+  _pi_ok 'projects_to:calibration-data.md; verdict:Approved' \
+    || die "self-test: pipe-free payload rejected"
+  # ─── Payload row-integrity: negative (malformed) ───
+  if _pi_ok 'triggers:[T1 | T2]';  then die "self-test: space-delimited pipe accepted (delimiter)"; fi
+  if _pi_ok 'triggers:[T1] |';     then die "self-test: trailing ' |' accepted (row-junction split)"; fi
+  if _pi_ok 'triggers:[T1|T2]';    then die "self-test: bare pipe accepted (reserved)"; fi
+  if _pi_ok "$(printf 'a\nb')";    then die "self-test: newline payload accepted"; fi
+  # ─── Arity invariant (the predicate's reason for existing) ───
+  # Asserts the INVARIANT, not merely the predicate: a future edit that drifts
+  # the predicate away from the delimiter contract fails here rather than
+  # shipping green.
+  _arity() { printf '%s\n' "| t | v | 5 | decision | scope-lock | hub | #1 | CHEAP | resolved | $1 |" \
+             | /usr/bin/awk -F ' \\| ' '{print NF}'; }
+  [[ "$(_arity 'triggers:[T1\|T2\|T3]')" -eq 10 ]] || die "self-test: escaped payload broke row arity"
+  [[ "$(_arity 'triggers:[T1 | T2]')"    -eq 11 ]] || die "self-test: arity oracle miscalibrated"
+
   # Append a sentinel row, then revert
   TEST_ROW="| ${TS_TEST} | v2.07a-selftest | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;will-be-reverted |"
   TEST_WRITE_LINE="${TS_TEST}	selftest-sha	hub	decision:scope-lock"
@@ -488,10 +510,28 @@ if [[ ${#PAYLOAD} -gt 300 ]]; then
   die "Payload exceeds 300 char limit (got ${#PAYLOAD}); use a pointer to existing surface instead"
 fi
 
-# Reject pipe character in payload (would corrupt markdown table)
-if [[ "$PAYLOAD" == *"|"* ]]; then
-  die "Payload contains '|' (pipe character) — reserved as column separator; escape or replace before append"
-fi
+# ─── Payload row-integrity guard (§ 4.3a) ────────────────────────────────────
+# Admissibility is defined by the ROW-INTEGRITY INVARIANT, not a character
+# blacklist: the assembled row must be exactly one physical line splitting into
+# exactly 10 fields under the canonical delimiter " | ". The payload MAY carry
+# the escaped multi-value separator '\|'. It may NOT introduce anything that
+# changes the assembled row's field arity or line count.
+case "$PAYLOAD" in
+  *$'\n'*|*$'\r'*)
+    die "Payload contains a newline or CR — a row must be exactly one physical line" ;;
+esac
+# Test the payload IN ITS ROW CONTEXT: the row appends a trailing ' |', so a
+# payload ending in ' |' forms the delimiter at the junction and splits the row.
+case "${PAYLOAD} |" in
+  *" | "*)
+    die "Payload contains the column delimiter ' | ' (or ends with ' |') — reserved as the column separator; use '\\|' for a multi-value separator (see pipeline-event-log-schema.md § 4.3a)" ;;
+esac
+# Bare '|' stays reserved. Strip escaped separators, then reject any survivor.
+_p_unescaped="${PAYLOAD//\\|/}"
+case "$_p_unescaped" in
+  *"|"*)
+    die "Payload contains an unescaped '|' — the bare pipe stays reserved; write the multi-value separator as '\\|' (see pipeline-event-log-schema.md § 4.3a)" ;;
+esac
 
 # ─── Build row ───────────────────────────────────────────────────────────────
 
