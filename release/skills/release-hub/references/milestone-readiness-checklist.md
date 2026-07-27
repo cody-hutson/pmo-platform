@@ -17,6 +17,7 @@ is owned by a composed skill/spec — the hub sequences and rolls up; it impleme
 | **6** | Bundle coherence | Release Outcome Statement present · coherent theme (not bin-packed) · size band 15–25 pts | `bundle-composition-doctrine` |
 | **7** | Methodology-neutrality & structural-cascade | `7a` **methodology-neutrality** — does the work hardcode a methodology archetype into the methodology-neutral toolkit, vs. ship it as a config-selected pack? · `7b` **structural-cascade** — if the work proposes a rename/restructure, compute its blast radius and reconcile it against the agreed operational-taxonomy direction (meaning lives in frontmatter, not folder location) | `bundle-composition-doctrine` (frame-pluggability) + [`ADR-033`](../../../../core/ADRs/ADR-033-methodology-conditional-skill-activation.md) |
 | **8** | Backlog-altitude ownership & subsumption | `8a` **candidate-epic narrowing** — resolve the open epics sharing the card's `project:` label (a scoping filter; **emits no finding on its own**) · `8b` **native parent** — is the card a native sub-issue child of a candidate epic (read the card's child→parent edge directly) · `8c` **epic-composition pull-in** — is the card enumerated in a candidate epic's composition / pull-in table · `8d` **cross-epic similarity** — re-read group 5 `5b`'s similarity hits for the *ownership* signal (a similar OPEN issue under another epic), citing that owner rather than re-running similarity | `release-planner` (its backlog read **extended to cross-epic ownership** — owns `8a`–`8c`) + group 5 `5b`'s existing similarity owner (owns `8d`) |
+| **9** | Problem-validity & abstraction-altitude | `9a` **problem-validity** — classify each card's problem-evidence provenance (`PV-A` observed-pain · `PV-B` framework-driven · `PV-C` article-imported · `PV-D` unsourced); a single push-classified card is **logged, not escalated** — the finding is bundle-level **push-dominance** (`PV-B`+`PV-C`+`PV-D` ≥ ½ the cards) · `9b` **abstraction-altitude** — does the card's stated remediation sit at the abstraction band the live architecture should own? Compare the card's implied band against the nearest platform seam's (`point-fix` / `extend-seam` / `new-abstraction`) and emit the mismatch direction (too-low / too-high). **EXCLUDES the methodology-archetype sub-case, which is group `7a`'s** (see the routing rule below). Distinct from group 8's *backlog* altitude (the hierarchy ladder) — this is *abstraction* altitude (seam bands). | [`triage-design-rereview`](../../../references/standards/triage-design-rereview.md) **§ 11** (its premise re-review **extended** with the premise-provenance + abstraction-altitude lens), which cites [`design-exploration.md`](../../../references/standards/design-exploration.md) §2 for the band vocabulary |
 
 Groups 1 + 5 = the **triage-analysis capability** (a planned EXTEND on `intake-desk` + `delivery-engine`);
 until it ships, the hub chains `intake-desk` + `delivery-engine` directly. Groups 3 + 4 + the PT-2 of group 5
@@ -30,6 +31,17 @@ plus group 5 `5b`'s existing similarity owner for `8d` — a **compose-only** ba
 **zero inline logic** (ADR-019, as above): the group cites the composed owner's rule, it does not restate it.
 A finding requires a **card-specific** ownership edge (`8b`, `8c`, or a named similar open issue under another epic
 via `8d`); a shared `project:` label alone is never a finding.
+Group 9 = `triage-design-rereview` **§ 11** (its premise re-review **extended** with the premise-provenance +
+abstraction-altitude lens) — a **compose-only** problem-validity and altitude gate carrying **zero inline logic**
+([ADR-019](../../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)): the group cites the composed owner's
+classes and citation discipline, it does not restate them. **The `7a` ↔ `9b` routing rule (one property, checked
+once, so exactly one group claims any finding):** route to **`7a`** iff the too-low subject is a named
+delivery/governance **methodology archetype** — an entry in, or a `Custom`-row candidate for,
+[`methodology-archetype-matrix.md`](../../../references/specs/methodology-archetype-matrix.md) § 3 — whose correct
+home is a config-selected pack behind the `delivery_approach` selector
+([ADR-033](../../../../core/ADRs/ADR-033-methodology-conditional-skill-activation.md)); route to **`9b`** for every
+other band mismatch. `9b` emits nothing when `7a` claims the finding. A card that trips both carries two findings and
+one disposition (per the precedence ladder below).
 
 ## Output schema (per requirement)
 
@@ -54,6 +66,7 @@ Each finding maps to one disposition; the milestone verdict is GO only when none
 | Group 6 fail | **RE-BUNDLE** (the unit itself isn't coherent) | NO-GO — re-bundle |
 | Group 7 fail (neutrality / cascade — C3) | **RE-CONFIRM** (architecture premise moved → re-validate the neutrality design or reconcile the cascade blast-radius) | NO-GO pending operator |
 | Group 8 fail (ownership / double-home — C3) | **DROP-OR-REHOME** (the work is live but mis-homed → move the card to its owning epic; **recommend-only** — Mode R names the owning epic and stops, it never de-bundles or re-parents) | NO-GO until rehomed → re-evaluate |
+| Group 9 fail (problem-validity / abstraction-altitude — C3) | **RE-CONFIRM** (the premise needs operator re-validation before the release spends on it — for `9a`, is the problem real enough to fund?; for `9b`, is this the abstraction the live architecture should own? **recommend-only** — Mode R names the evidence class or the band mismatch and stops; it never re-triages, re-labels, de-bundles, or edits the card) | NO-GO pending operator |
 
 **Disposition-set invariant (the fit test).** The set is **closed** — every finding carries a value from the table
 above, never an ad-hoc label. Closed means *a finite named vocabulary*, not a fixed cardinality: **a new checklist
@@ -61,6 +74,10 @@ group maps onto an existing disposition unless it introduces a materially distin
 thing for the operator to DO, with a different destination. Group 7 mapped (a neutrality/cascade C3 *is* a moved
 architecture premise → **RE-CONFIRM**). Group 8 did not: moving live work to its owning epic is neither a fix-in-place,
 nor a re-validation, nor the removal of already-completed work, nor a re-bundle — so it added **DROP-OR-REHOME**.
+Group 9 mapped: a problem-validity or abstraction-altitude C3 **is** a premise the operator must re-validate before
+the release spends on it — neither a fix-in-place, nor the removal of completed work, nor a relocation, nor a
+re-bundle — so it takes the existing **RE-CONFIRM**, exactly as group 7 (the methodology-neutrality *sub-case* of
+altitude) did.
 The table above is the **authoritative** enumeration; the two `SKILL.md` restatements (Mode R Process roll-up ·
 Output Contract requirement 4) are mirrors that must agree with it.
 
