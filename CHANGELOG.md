@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.97] - 2026-07-27
+
+Portability becomes the platform's seventh first-class engineering value, giving work that connects to outside systems a named standard to be reviewed against.
+
+[Full notes](release/releases/notes/v3.97_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.97)
+
 ## [v3.96] - 2026-07-26
 
 A new finops-usage-extractor skill measures agent token spend from local session data and attributes it to the owning work item.
