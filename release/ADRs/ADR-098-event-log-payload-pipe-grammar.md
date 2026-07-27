@@ -1,5 +1,5 @@
 ---
-title: "ADR-099 — Event-log payload pipe grammar (escaped `\\|` as the canonical multi-value separator)"
+title: "ADR-098 — Event-log payload pipe grammar (escaped `\\|` as the canonical multi-value separator)"
 status: Proposed
 date: 2026-07-27
 release: decision-telemetry-emission (#295) (v3.97 provisional; bound at Stage 12)
@@ -13,7 +13,7 @@ source_observations:
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-099 — Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator)
+# ADR-098 — Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator)
 
 ## Status
 
