@@ -135,15 +135,21 @@ parse_schema_enum() {
 #   EVENT_TYPES   — space-separated list of valid event types
 #   SUBTYPES_LINES — one "type<TAB>subtype subtype …" line per type (looked up by
 #                    validate_subtype via a tab-anchored grep)
-# `iteration` carries no literal subtype line — its subtypes are a PREFIX pattern.
+# `iteration` carries a line with an EMPTY subtype field: it contributes TYPE
+# membership only. Its subtypes stay PREFIX-validated (`dt-eng-pass-N` /
+# `qa-dt-pass-N`) by validate_subtype's short-circuit, which fires BEFORE the
+# table lookup — so the empty field is never read.
 
 # Static fallback (used only when the schema file is unreadable, e.g. invoked
-# outside the repo tree); kept in lockstep with § 3.
+# outside the repo tree). Its membership is asserted against § 3 BIDIRECTIONALLY
+# by --self-test, so a one-sided edit to either site fails the self-test rather
+# than shipping silently.
 _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
   "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored recommendation-choice-delta" \
   "escalation	tier-0 tier-1 tier-2 tier-3" \
   "self-repair	retry escalate rollback" \
+  "iteration	" \
   "scope-change	tier-1-adjust tier-2-scope-change tier-3-plan-rejection redaction" \
   "re-review	phase-a0-row phase-0.5-row" \
   "deployment-status	deploy-skill deploy-harness deploy-package deploy-rules-mirror deploy-helper" \
@@ -229,6 +235,18 @@ starts_with_any() {
   return 1
 }
 
+# Flatten a "type<TAB>subtype subtype …" table into comparable enum tokens:
+# one bare `type` token per row (so a type-level divergence is visible even when
+# the type carries zero literal subtypes) plus one `type/subtype` token per member.
+# Sorted for comm(1). LC_ALL=C pins collation so sort and comm cannot disagree.
+enum_tokens() {
+  /usr/bin/awk -F'\t' 'NF {
+      print $1
+      n = split($2, a, " ")
+      for (i = 1; i <= n; i++) if (a[i] != "") print $1 "/" a[i]
+    }' | LC_ALL=C /usr/bin/sort -u
+}
+
 validate_subtype() {
   local event_type="$1"
   local subtype="$2"
@@ -303,6 +321,65 @@ if [[ "$SELF_TEST" == "true" ]]; then
   seed_if_absent
   echo "self-test: resolved LOG_FILE=$LOG_FILE"
   echo "self-test: enum source=$([[ -n "$_schema_rows" ]] && echo schema-§3-data-driven || echo static-fallback) ($(printf '%s\n' $EVENT_TYPES | grep -c . ) event types)"
+
+  # ── § 3 ↔ static-fallback lockstep, asserted in BOTH directions ──────────
+  # Direction 1 (§ 3 -> mirror): a member § 3 admits that the mirror does not.
+  # Direction 2 (mirror -> § 3): a member the mirror admits that § 3 does not.
+  # Evaluable ONLY when the schema is readable. When it is not, the assertion is
+  # reported SKIP and the self-test proceeds: the fallback exists for AVAILABILITY,
+  # so failing closed here would defeat the mechanism under test. The SKIP is an
+  # EXPLICIT zero-state, never a silent pass.
+  _mirror_tokens="$(printf '%s\n' "$_FALLBACK_SUBTYPES_LINES" | enum_tokens)"
+  if [[ -n "$_schema_rows" ]]; then
+    _schema_tokens="$(printf '%s\n' "$_schema_rows" | /usr/bin/sed 's/|/\t/' | enum_tokens)"
+    _lock_missing="$(LC_ALL=C /usr/bin/comm -23 <(printf '%s\n' "$_schema_tokens") <(printf '%s\n' "$_mirror_tokens"))"
+    _lock_extra="$(LC_ALL=C /usr/bin/comm -13 <(printf '%s\n' "$_schema_tokens") <(printf '%s\n' "$_mirror_tokens"))"
+    if [[ -n "$_lock_missing" || -n "$_lock_extra" ]]; then
+      echo "ERROR: self-test: § 3 <-> static-fallback lockstep BROKEN" >&2
+      if [[ -n "$_lock_missing" ]]; then
+        echo "  in § 3 but MISSING from _FALLBACK_SUBTYPES_LINES (add these):" >&2
+        printf '    %s\n' $_lock_missing >&2
+      fi
+      if [[ -n "$_lock_extra" ]]; then
+        echo "  in _FALLBACK_SUBTYPES_LINES but ABSENT from § 3 (remove, or add to § 3):" >&2
+        printf '    %s\n' $_lock_extra >&2
+      fi
+      echo "  § 3 and the mirror are a two-site obligation: both change in ONE commit." >&2
+      exit 1
+    fi
+    echo "self-test: § 3 <-> static-fallback lockstep OK ($(printf '%s\n' "$_schema_tokens" | /usr/bin/grep -c .) enum tokens, both directions)"
+  else
+    echo "self-test: § 3 <-> static-fallback lockstep SKIP (schema unreadable) — degraded-availability path; equality not evaluable"
+  fi
+
+  # ── Forced-fallback path: run the FULL self-test out-of-tree ─────────────
+  # Copying the script two levels deep in a throwaway tree makes its REPO_ROOT
+  # resolve there, so SCHEMA_FILE cannot be found and the static-fallback branch
+  # is genuinely TAKEN (not simulated). The child's log is redirected into the
+  # same temp tree, so the operator-instance log is never touched — and the
+  # redirect additionally exercises seed_if_absent on a fresh instance, which
+  # nothing else covers. _APE_SELFTEST_FALLBACK_CHILD bounds recursion at depth 1.
+  if [[ -z "${_APE_SELFTEST_FALLBACK_CHILD:-}" ]]; then
+    _ft_tmp="$(/usr/bin/mktemp -d)" || die "self-test: cannot create forced-fallback temp tree" 2
+    trap '/bin/rm -rf "$_ft_tmp"' EXIT
+    /bin/mkdir -p "$_ft_tmp/release/tools" || die "self-test: cannot populate forced-fallback temp tree" 2
+    /bin/cp "${BASH_SOURCE[0]}" "$_ft_tmp/release/tools/append-pipeline-event.sh" \
+      || die "self-test: cannot copy script into forced-fallback temp tree" 2
+    if ! _ft_out="$(_APE_SELFTEST_FALLBACK_CHILD=1 EVALS_RESULTS_PATH="$_ft_tmp/evals" \
+                    "$_ft_tmp/release/tools/append-pipeline-event.sh" --self-test 2>&1)"; then
+      echo "ERROR: self-test: forced-fallback run FAILED" >&2
+      printf '%s\n' "$_ft_out" >&2
+      exit 1
+    fi
+    # Liveness assertion: the child MUST have taken the fallback branch. Without
+    # this, a change to the REPO_ROOT resolution rule would silently turn the
+    # whole probe into a no-op that still passes.
+    case "$_ft_out" in
+      *"enum source=static-fallback"*) : ;;
+      *) die "self-test: forced-fallback run did NOT take the fallback branch — probe is a no-op" ;;
+    esac
+    echo "self-test: forced-fallback path PASS (out-of-tree child; enum source=static-fallback)"
+  fi
 
   # Snapshot
   PRE_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
