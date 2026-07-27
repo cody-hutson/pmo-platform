@@ -118,13 +118,15 @@ If the trigger is ambiguous, ask one disambiguating question naming the candidat
 
 ## Output Contract
 
-Every output declares its **audience** and frames accordingly: **operator/exec** leads with the GO/NO-GO and the so-what; **engineering** leads with the per-finding evidence (the composed verdict, the specific issue, the PT type). Six requirements hold on every Mode R emission:
+Every output declares its **audience** and frames accordingly: **operator/exec** leads with the GO/NO-GO and the so-what; **engineering** leads with the per-finding evidence (the composed verdict, the specific issue, the PT type). Six requirements hold on every emission — **Mode R and Mode O alike**. Requirements 2, 3, 4, and 6 are Mode-R-scoped: they bind a Mode R emission and are inapplicable (not waived) on a Mode O emission. Requirements 1 and 5 bind **both** modes:
 1. the audience is named and the framing matches it;
 2. every finding is sourced to its composed skill/spec — no free-floating readiness assertions;
 3. the per-requirement output uses the **C1 / C2 / C3 + PT-1..4 schema** (so Stage-4 Phase A0 can consume it as a cache-read — the "replaces Phase A0" contract);
 4. each finding carries a **disposition** from {FIX-FIRST, RE-CONFIRM, DROP-OR-TRIM, RE-BUNDLE} — **recommendations only** (read-only mode): Mode R names the fix, it never executes it;
-5. the milestone verdict carries a **reversibility tier + confidence** (`## Reversibility Discipline`);
+5. **every decision-class emission — in either mode — carries a reversibility tier + confidence**, on the emission itself and not only inside the artifact it describes (`## Reversibility Discipline` holds the per-artifact tier assignments; [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md) holds the vocabulary and the label format);
 6. the emission carries a **terminal next-action route** (Readiness Disposition → Next Action) — on **GO**, the explicit `release-hub Mode O on <milestone>` invocation that orchestrates the release; on **NO-GO**, the per-finding dispositions framed AS the gating cleanup checklist plus the named **R → cleanup → re-run R → Mode O** loop. An emission that ends at the bare verdict is incomplete.
+
+**What requirement 5 counts as decision-class (the emission-time test).** Before an operator-facing turn leaves, ask one question: *does this turn ask the operator to decide, approve, authorize, or act?* If yes, it is decision-class and carries the label. The hub's decision-class emissions are — in **Mode R**, the milestone GO/NO-GO verdict and each per-finding disposition; in **Mode O**, every Decision Briefing decision item (Procedure 4), every gate presentation at Stage 9 GO/NO-GO and Stage 12 Execute (Procedure 5), every scope-change or scope-lock recommendation (Collective Review; Procedure 6 early merge), every recovery or resume plan after a failed, blocked, or interrupted spoke, and every state-write or memory-eviction the operator is asked to ratify. **That list is the floor, not the ceiling** — an unlisted turn that asks the operator to decide, approve, authorize, or act is decision-class too. A turn that only *reports* is not: a status read, a recorded determination the framework computes by rule (`## Domain-Specific Failure Modes` — "Rendering a rule-determined call as an operator gate"), or a routing step the approved plan already authorizes carries no label, and labeling it is ceremony. Label format: `[TIER · confidence: LEVEL]` — tier from `CHEAP` / `MODERATE` / `EXPENSIVE` / `IRREVERSIBLE`, confidence from `HIGH` / `MEDIUM` / `LOW`. **Reasoning about reversibility in prose does not satisfy requirement 5; the explicit tier + confidence label does.**
 
 **Recommend-only boundary (the read-only contract).** Mode R's dispositions are recommendations, not authorizations to act. The disposition labels (FIX-FIRST, RE-BUNDLE, …) name fix *types*, not commands Mode R executes — Mode R mutates no state: it creates no issue or milestone, rewrites no description, sizes nothing, files nothing, posts no comment. Any transition from *recommending* a disposition to *acting* on it requires, in order: (1) the CLAUDE.md **Skill-boundary-transparency** notice (name the mode/contract being exceeded + the authorization basis), (2) **explicit operator authorization** for the specific action, and (3) **descent to the base agent** — Mode R itself never crosses into execution. This is the contract the `## Domain-Specific Failure Modes` entry "Mode R mutates state despite its read-only contract" guards.
 
@@ -143,7 +145,7 @@ Every grounded claim carries an evidence-quality label (`[SOURCE]` / `[INFERRED]
 
 ## Reversibility Discipline
 
-This skill produces **decision-class outputs** — the Mode R readiness verdict and its per-finding dispositions. Per [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md):
+This skill produces **decision-class outputs in both modes** — the Mode R readiness verdict and its per-finding dispositions, and Mode O's Decision Briefing items, gate presentations, scope-change recommendations, and recovery plans (the `## Output Contract` requirement 5 enumeration). Per [`reversibility-protocol.md`](../../../core/specs/reversibility-protocol.md):
 - **Mode R verdict + dispositions:** **CHEAP** · confidence per-call. The briefing mutates no state; the operator acts on the dispositions. State the tier, proceed.
 - **Mode O:** up to Stage 9, **MODERATE** (sub-tasks/branches; git-revertable); Stage 12 deploy, **EXPENSIVE → IRREVERSIBLE** — owned by the spawned `pmo-release-manager` tail behind the operator's Stage-9/12 gate; the hub **never self-authorizes** the merge/deploy.
 
@@ -160,7 +162,7 @@ Hard rejections — the suite-wide standard plus the role's own:
 - **Mode R state mutation** — Mode R is read-only and mutates nothing; creating or editing an issue / milestone / comment / size (or any state) from within a Mode R run is a hard rejection. Dispositions are recommend-only; the recommend→act transition requires the Skill-boundary-transparency notice + explicit operator authorization + descent to base agent (`## Output Contract`; FM "Mode R mutates state despite its read-only contract").
 - **Question flooding** — more than 5 clarifying questions. Use `[ASSUMPTION – CONFIRM]`.
 - **Unmarked recommended dates** — any agent-recommended date carries `[RECOMMENDED]`; day-of-week labels validated.
-- **Missing reversibility tier on decision-class items** — every readiness verdict carries a reversibility tier + confidence. Outputs missing tiers fail pmo-qa-auditor G4.
+- **Missing reversibility tier on decision-class items** — every decision-class emission in either mode carries a reversibility tier + confidence, per `## Output Contract` requirement 5. Outputs missing tiers fail pmo-qa-auditor G4.
 
 ## What This Skill Does NOT Do
 
