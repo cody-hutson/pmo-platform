@@ -1022,7 +1022,7 @@ This table shows which structural checks apply per skill. Use this to conduct sy
 | **G5: Follow-up Routing** | ✓ (max depth 2) | ✓ (max depth 2) | N/A (no routing) | ✓ ([COMMS] only) | ✓ ([DELIVERY], [CHANGE]) | N/A (no routing) | N/A (auditor role) | N/A (editor role) | N/A (review findings routed via register) |
 | **G6: Dual Output** | ✓ (artifacts + metadata) | ✓ (RAID + metadata) | Email/Teams exempt | ✓ (RAID + metadata) | ✓ (RAID + metadata) | ✓ (RAID + metadata) | N/A (auditor role) | ✓ (change log + .skill) | N/A (no RAID dual-output; findings are the artifact) |
 | **Dual-Framing Bridge** | N/A | ✓ (if milestone context) | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| **Mode Identification** | N/A | ✓ (7 modes) | ✓ (8 types) | ✓ (6 modes) | ✓ (5 modes) | ✓ (5 modes) | ✓ (4 modes) | ✓ (4 modes) | ✓ (4 modes — per pack + cross-cutting) |
+| **Mode Identification** | N/A | ✓ (7 modes) | ✓ (8 types) | ✓ (6 modes) | ✓ (5 modes) | ✓ (5 modes) | ✓ (10 modes — A–J) | ✓ (4 modes) | ✓ (4 modes — per pack + cross-cutting) |
 | **Risk Matrix** | ✓ (top risks) | N/A | N/A | N/A | ✓ (6 dimensions) | N/A | N/A | N/A | N/A (findings register serves the function) |
 | **Readiness Gate** | N/A (implicit health) | ✓ (gate results) | ✓ (explicit READY/NOT READY) | N/A (implicit readiness) | N/A (risk matrix as proxy) | N/A (implicit in gap analysis) | ✓ (PASS/FAIL per gate) | N/A | ✓ (PASS/CONDITIONAL/FAIL verdict) |
 | **Artifact Target Location** | N/A | ✓ (system + section) | ✓ (Confluence path if applicable) | ✓ (Confluence → [Active Project] → CM) | N/A (integration to FDD, etc.) | N/A (updates existing artifacts) | N/A | ✓ (master plan location) | N/A (findings consumed by implementation-planner) |
