@@ -66,6 +66,9 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    `core/standards/hub-session-continuity.md` § 3.2 — that table is the ONLY
    mapping source; this playbook does not restate it. For AI-NNN status
    transitions the mapping source is `core/standards/hub-action-tracking.md` § 3.
+   For the autonomous `self-repair/*` seams (retry / escalate / rollback) the
+   mapping source is `core/disciplines/autonomous-execution-model.md` § Emission,
+   which also owns their emit points — this is the same step, not a second procedure.
 3. Set `--subject` to the decision's scope (`milestone:#N` / `issue:#N` / `sub-task:#N`)
    and open `--payload` with the release-stable token `ms:#<milestone-number>;`
    (see § 4a.2 Join-key note).
@@ -207,6 +210,7 @@ when their gate fires.
 | action-item-close | 7 | decision | action-item-resolved | operator | CONDITIONAL |
 | 7a-attestation | 7 | decision | empirical-verification-finding | operator | CONDITIONAL |
 | orphan-cleanup-apply | 7 | decision | d-class | operator | CONDITIONAL |
+| self-repair | 4 | self-repair | retry | hub | CONDITIONAL |
 <!-- EMISSION-CONTRACT:END -->
 
 **Why exactly three `MUST` rows.** The partition predicate is *structural guarantee in a
