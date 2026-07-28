@@ -701,7 +701,7 @@ When closing a skipped sub-task in Step 5 above, post this comment before closin
 
 **Trigger:** Operator asks "what's next?" or a spoke completes.
 
-**Hub-direct ≡ spoke (routing mirror).** When routing elects to run a stage hub-direct instead of spawning a spoke (a permitted choice), the hub-direct run binds to the **identical** canonical Phase checklist the spoke would have — see the Hub-Direct ≡ spoke equivalence clause in Procedure 1. Hub-direct is a spawn-vs-inline choice, never a rigor choice; the completion gate (Check 48) is execution-path-agnostic.
+**Hub-direct ≡ spoke (routing mirror).** When routing elects to run a stage hub-direct instead of spawning a spoke (a permitted choice), the hub-direct run binds to the **identical** canonical Phase checklist the spoke would have — see the Hub-Direct ≡ spoke equivalence clause in Procedure 1. Hub-direct is a spawn-vs-inline choice, never a rigor choice; the completion gate (Check 48) is execution-path-agnostic. The choice itself emits `decision`/`delegation` per the orchestration playbook Procedure 4a **when the delegation merit test in `decision-discipline.md` § 3.1 fires** — a context-boundary, budget-forced, or recovery fork; routine template routing emits nothing, and that silence is the correct signal, not a gap.
 
 **Steps:**
 1. List all sub-tasks across all issues in the Milestone
