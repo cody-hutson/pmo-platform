@@ -243,6 +243,15 @@ This band is **orthogonal to the four bands the delivery-engine reference set al
 
 Five orthogonal bands, each owned by its topical doc. **None of the other four measures forecast quality, and §8.3 measures nothing the other four measure** — a team can be schedule-🟢 while under-estimating by 40% (it padded the schedule) and schedule-🔴 while estimating perfectly (it was blocked). Neither predicts the other.
 
+**Band-ownership determination (normative — the [ADR-065](../../../../core/ADRs/ADR-065-health-rag-band-canonical-home.md) two-branch test).** ADR-065 scopes exactly four project-health indicators — **Schedule/SPI, Budget/CPI, Risk, and Scope** — to a single canonical shared home. It does **not** claim every RAG band on the platform, as the three sibling bands in the table above (which it leaves undisturbed) demonstrate. Its posture therefore resolves to a two-branch test that any new band must be routed through:
+
+| Branch | Predicate | Required posture | This doc's instance |
+|---|---|---|---|
+| **1** | The band is an **instance of one of the four canonical indicators** | **Adopt by reference; never restate the values** | **§7** — milestone variance adopts the canonical Schedule (SPI) band by reference |
+| **2** | The band measures something **no canonical indicator owns** | **Owned by its topical doc**, carrying (a) a distinct name, (b) an explicit orthogonality statement, and (c) boundary anchoring to existing in-corpus values | **§8.3** |
+
+**Verdict: Branch 2.** The falsification test is applied against the nearest incumbent, Schedule/SPI: it measures *schedule earned against schedule planned at a point in time* — a progress signal — whereas calibration bias measures *the systematic multiplier between an estimate and its realized outcome across a closed window* — a forecast-quality signal. They dissociate in **both** directions, as stated above. Budget/CPI is cost-denominated rather than sizing; Risk and Scope are not ratio metrics at all. **No canonical indicator owns this measurement**, so §8.3 owns it here and discharges all three Branch-2 obligations: (a) the naming guard above, (b) the orthogonality table above, and (c) the boundary anchoring above. Creating a **new shared band document** instead is the option ADR-065 itself already rejected under reuse-first — the bar for a new governance file is *necessary*, not *plausible* — and it is rejected here for that same recorded reason.
+
 **Window-size anchoring (normative).** The window floor and the confidence qualifier **adopt `sprint-defaults.md` §3.1's Velocity Stabilization Timeline verbatim**, and are consistent with the platform-wide calibration-availability rule in `core/schemas/gate-evaluation-spec.md` § Layer 3 ("< 3 records → *Insufficient calibration data*"). No private threshold is minted.
 
 | Window (completed iterations) | Confidence word (`sprint-defaults.md` §3.1, verbatim) | §8 posture |
