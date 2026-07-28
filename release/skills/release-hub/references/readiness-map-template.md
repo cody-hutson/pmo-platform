@@ -131,7 +131,7 @@ Two layouts. **Layout B is the default**; Layout A activates only when ≥1 cros
 | | Layout A (cross-milestone edge present) | Layout B (no edge) |
 |---|---|---|
 | Issue panel | `x=24 w=500` | `x=24 w=852` |
-| Cross-milestone panel | `x=560 w=316` | omitted; the rail's group-2 row reads `PASS` |
+| Cross-milestone panel | `x=560 w=316` | omitted; the rail's group-2 status still derives from `2a`–`2c` |
 
 **Height formula:** `height = 300 + 46 * issueCount + 22 * groupCount`.
 
