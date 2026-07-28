@@ -414,6 +414,101 @@ PMBOK/RACI discipline requires exactly one Accountable per workstream row. This 
 
 ---
 
+## Tracker 10: Sprint Tracker
+**File pattern:** `[Project]_Sprint_Tracker.md`
+**Update tier:** Tier 2 (operational — auto-write within `cascade_scope`)
+**Update sources:** Delivery Engine Mode F — **LG-5 Dev Complete (DoD) exit PASS** at `T(8→9)` (item close); **end-of-sprint review** (team close)
+
+The per-project **sprint / iteration tracker** for Scrum, XP, and Hybrid-iterative projects (the iteration-cadence tracker named in the § Methodology Variation matrix below), and the **capture surface for the estimate/actual pairs** that feed the estimation-calibration loop. [`estimation-standards.md`](../../operations/skills/delivery-engine/references/estimation-standards.md) **§ 8 owns the method** — the estimation ratio, the calibration-bias / calibration-spread pair, the bias band, the window floor, and every threshold. **This schema is § 8's INPUT contract and mints no threshold, no band, and no derived figure**; it defines only what is written down, by whom, and when. Its template is [`sprint-tracker-template.md`](../../operations/templates/sprint-tracker-template.md).
+
+**Grain note (normative).** This tracker carries **two grains by design** — *iteration-grain* (`## Current Sprint`, `## Sprint History`) and *item-grain* (`## Estimate-Actual Pairs`, `## Capture Exceptions`) — alongside the existing *person-grain* `## Capacity Planning` block. The grains are **never pooled**: an item-grain population and an iteration-grain population are different units, and a single combined population is prohibited (§ 8.1 rule 1).
+
+**Boundary (normative) — the release-pipeline throughput instrument is neither read nor written.** Every figure in this tracker is a **delivery-team** measurement. The release pipeline's own delivered-versus-planned throughput field, owned by [`release-velocity-tracking.md`](../../release/references/standards/release-velocity-tracking.md) § 8, is a **different concept that merely shares a shape** — that standard states the two never share a value, and names `estimation-standards.md` as the owner of the team-altitude figure. What this tracker reuses from that standard is its **conventions, by citation**: explicit-N/A (§ 5), grandfather-no-backfill (§ 10), the N = 3 calibration trigger (§ 6), and the parser-safety invariant (§ 12). **Cite the convention; share no value.** No routine defined here reads or writes that field.
+
+### Structure
+
+Six H2 sections; four carry the calibration path.
+
+| Section | Grain | Rows | Role in the calibration path |
+|---|---|---|---|
+| `## Current Sprint` | iteration | single | Existing. Outside the calibration path. |
+| `## Sprint History` | iteration | one per closed iteration | **F3** — delivered-versus-planned. |
+| `## Estimate-Actual Pairs` | item | one per (item × close ordinal) | **F1 + F2** — re-scored size and elapsed time. |
+| `## Capture Exceptions` | item | one per item close that produced no pair | The **positive negative-record** that makes a no-capture countable. |
+| `## Capacity Planning` | person | one per team member | Existing. Outside the calibration path. |
+| `## Velocity Trend` | iteration | narrative | Existing. Outside the calibration path. |
+
+### Sprint History — F3 (delivered-versus-planned, iteration grain)
+
+Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, `Completed`, `Velocity`, `Carryover`, `Notes`. Two columns are added:
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Window Key | String | Yes | Free text — the iteration identifier | The window this iteration constitutes. Joins to `## Estimate-Actual Pairs` → `Window Key`, and is the key the § 8 window and its documented outlier exclusion are applied against. |
+| Planned Items | Integer | Yes | ≥ 0 | Count of work **items** committed into the iteration — the **coverage denominator**. Pair count is rendered against it so the survivorship gap is visible rather than silent. Items, not points: deriving it from `Committed` would silently change the denominator's unit. |
+
+**F3 mapping (normative — no new column).** `estimate` = `Committed`; `actual` = `Completed`; `Signal Family` = `F3`; grain = iteration. The existing **`Velocity` column is the team's own narrative figure and is NOT the calibration ratio** — do not overload it, and do not compute F3 from it.
+
+### Estimate-Actual Pairs — F1 + F2 (item grain)
+
+**Format:** Markdown table — one row per **(item × close ordinal)**.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Item Ref | String | Yes | Free text — the work item's stable reference (ticket / item id) | Identity, never reassigned. The key `Estimate` and `Actual` are joined on at report time. |
+| Signal Family | Enum | Yes | `F1` \| `F2` \| `F3` — **only `F1` and `F2` are valid in this section** | The § 8.1 family. The enum domain is § 8.5's verbatim, so the two documents carry one vocabulary; `F3` is iteration-grain and is carried by `## Sprint History`, never by a row here. Families are never pooled (§ 8.1 rule 1). |
+| Estimate | Number | Yes | `> 0` | **Frozen at `ADD`** — written when the item is admitted to execution at the LG-4 DoR exit PASS — and **never rewritten at close**. F1: the committed story-point figure (the § 5 range **midpoint**). F2: the § 2 committed-horizon budget, in **business days**. `Estimate = 0` is invalid: the ratio is undefined, so the row is rejected rather than stored. |
+| Estimate Phase | Enum | Yes | `Initial concept` \| `Approved concept` \| `Requirements defined` \| `Design complete` \| `Build underway` | The § 1 cone row the estimate was made at. Required — § 8.4's realized-versus-claimed comparison is not computable without it, so a row missing it is incomplete rather than partially usable. |
+| Start Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The item's **LG-4 DoR exit PASS** date. **Written once, at the first admission. `REACTIVATE` does not reset it** — see § Cumulative Elapsed below. |
+| Actual | Number | Yes | `≥ 0` | F1: the **blind** re-score assigned at close (see Capture Rule 5). F2: equal to `Elapsed`. **Never zero-filled to stand in for a missing value** — a synthesized zero is indistinguishable from a genuinely zero-effort item and would drag the window's bias toward 0. |
+| Actual Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The **LG-5 Dev Complete (DoD) exit PASS** date for this close ordinal. Same field semantics as Tracker 7's `Actual Date` (achieved date, populated on completion) — adopted, not re-coined. |
+| Elapsed | Integer | Yes for `F2`; No for `F1` | ≥ 0, **business days** | Business days from the **first** `Start Date` to this row's `Actual Date`. **Cumulative across every reopen pass** — see § Cumulative Elapsed below. On an F2 row `Actual` MUST equal `Elapsed`; a disagreement is a validation failure, not a value to reconcile silently. |
+| Window Key | String | Yes | Free text — the iteration identifier | The iteration this close lands in. Joins to `## Sprint History` → `Window Key`. |
+| Close Ordinal | Integer | Yes | ≥ 1 | `1` on the first close; **incremented by 1 on each `REACTIVATE` → reclose**. With `Item Ref` it forms the row key, and it is what makes a reopen a **visible second row** rather than an overwrite. Only the **last non-excluded** ordinal counts toward the window's `N`. |
+| Evidence Grade | Enum | Yes | `[SOURCE]` \| `[INFERRED]` \| `[ASSUMPTION – CONFIRM]` | Adopted verbatim from § 8.5. **F1 is capped at `[INFERRED]`** — a re-score is itself an estimate. **F2 is `[SOURCE]`** — it is derived from two recorded gate verdicts rather than asserted. |
+| Excluded Reason | String | No | Present **if and only if** the row is excluded: `superseded-by-reclose` \| `superseded-by-re-estimate` \| `unit-change-pending-re-anchor` \| a documented outlier reason | Why this row does not count toward the window's `N`. An excluded row is **retained, never deleted** — append-only, the same posture as Tracker 6's `superseded` rule and the Tracker 5 archive rule. Deleting it would destroy the rework signal, which is the most informative thing a reopen carries. |
+
+**No per-person attribution — by construction.** This table carries no person, assignee, or owner column, and none may be added. Per-person estimate-accuracy analysis is therefore **unrepresentable in the schema**, not merely discouraged.
+
+### Cumulative Elapsed — the reopen-then-reclose closure (normative)
+
+**`Elapsed` accumulates across every pass — first `Start Date` → the final DoD — and is NEVER reset on `REACTIVATE`.**
+
+This is the rule the schema exists to enforce. If the clock restarted on reopen, a team could close an item early, reopen it, and reclose it, **manufacturing two short cycle times out of one long item** while every recorded figure stayed internally consistent. **No downstream consumer can detect that** — a consumer reading this tracker sees only numbers, with no way to distinguish one 20-day item from two 10-day items. The lever is therefore closed **here, at the capture surface, or nowhere.**
+
+Three column semantics enforce it, so the rule is structural rather than an implementer's instinct:
+
+1. **`Start Date` is write-once.** It is set at the first LG-4 DoR exit PASS. `REACTIVATE` is a `MODIFY` that does **not** include `Start Date` in its `fields:` map; a `REACTIVATE` or reclose instruction that carries `Start Date` is **rejected**, not applied.
+2. **`Elapsed` is derived, never asserted.** It is computed as business days from the item's first `Start Date` to the current row's `Actual Date`. Because `Start Date` cannot move, `Elapsed` at ordinal *n+1* is necessarily **greater than or equal to** `Elapsed` at ordinal *n*.
+3. **`Close Ordinal` makes the accumulation checkable.** A monotonicity check falls out of the two rules above and **fails closed**: for any `Item Ref`, `Elapsed` must be non-decreasing in `Close Ordinal`, and every ordinal must share one `Start Date`. A decrease, or two different `Start Date` values on one `Item Ref`, is a **defect Mode F surfaces** — never a value that is silently accepted, and never a row that is silently dropped.
+
+### Capture Exceptions
+
+The **positive record of a close that produced no pair.** Silence is the failure mode this section exists to foreclose: an item that closes with nothing written is invisible, and an invisible gap cannot be counted, reported, or fixed.
+
+| Field | Type | Required | Valid Values | Description |
+|-------|------|----------|-------------|-------------|
+| Item Ref | String | Yes | Free text | The item that closed without producing a pair. |
+| Window Key | String | Yes | Free text — the iteration identifier | The iteration the close landed in. Joins to `## Sprint History` → `Window Key`. |
+| Close Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The LG-5 exit-PASS date of the close that produced no pair. |
+| Exception Reason | Enum | Yes | `no-estimate-of-record` \| `estimate-not-in-window` \| `item-descoped-at-close` \| `unit-change-pending-re-anchor` | **Closed set.** A closed set is what makes the exception population countable and lets coverage be rendered as a fraction; free text would not. A close fitting none of the four is a **defect Mode F surfaces**, never a silent skip and never a coerced fifth meaning. |
+
+### Capture Rules (normative)
+
+1. **Item trigger.** Capture fires when Delivery Engine Mode F renders an **LG-5 exit verdict** at `T(8→9)`. `PASS` → capture; `CONDITIONAL PASS` → capture (the increment is accepted); **`FAIL` or `NO-EVIDENCE` → no capture and no exception** — the item is still open and the gate will fire again. Capture binds to the **verdict**, never to a "done" claim.
+2. **Iteration trigger.** The `## Sprint History` row is written at Mode F's **end-of-sprint review**, and **after** every item capture for that `Window Key` has landed. Writing it first would let `Completed` and the pair count disagree with no way to tell which is stale.
+3. **Exactly-one rule (fails closed).** Every LG-5 exit PASS produces **exactly one of**: a row in `## Estimate-Actual Pairs`, **or** a row in `## Capture Exceptions`. Zero rows is a defect Mode F surfaces; two rows is a defect Mode F surfaces. **A silent no-capture is never a valid outcome.**
+4. **Never partial, never zero-filled.** A pair row carries the **full** required field set or is **not written at all** (a `Capture Exception` is written instead). `Estimate = 0` is invalid. A missing `Actual` is never filled with `0`.
+5. **Blind re-score (F1).** The close instruction's `fields:` map carries **`Actual` and `Actual Date` only — it does not carry `Estimate`**, so the write path has no reason to load the original figure. The re-score elicitation **MUST NOT render the `Estimate` column**. `Estimate` and `Actual` are joined at **read** time on `Item Ref`. The honest limit: this tracker is a flat markdown table, so a determined reader can still look — these rules make anchoring a deliberate act off the specified path, not the default, and the § 8.7 `[INFERRED]` cap plus the F2/F3 corroboration rule are the compensating controls.
+6. **`REACTIVATE`.** Retain the prior row and set its `Excluded Reason` to `superseded-by-reclose`; the next LG-5 exit PASS writes a **new row** at `Close Ordinal` *n+1*. Only the last non-excluded row counts toward `N` — counting every close would measure one estimate against two actuals.
+7. **Elapsed is cumulative.** Per § Cumulative Elapsed above. This rule is not negotiable at implementation time: it is the one lever no downstream consumer can detect.
+8. **Re-estimate on reopen.** A re-estimate **never overwrites** the frozen `Estimate`. Write a new row at ordinal *n+1* carrying the new figure and exclude the prior with `superseded-by-re-estimate`. Overwriting would drive the ratio toward 1.00 by construction.
+9. **Window immutability.** A reclose after its window has closed lands in the **new** window; the prior window is **never recomputed**. The prior window records a `Capture Exception` with `estimate-not-in-window`, so the coverage loss is visible rather than silent.
+10. **Unit re-anchoring.** A pair spanning a story-point re-anchoring is excluded (`unit-change-pending-re-anchor`) — comparing a pre- and post-anchor figure compares two different units.
+11. **Forward-only.** **Never backfill a historical pair.** A reconstructed estimate is not the estimate that was made, and a backfilled population is exactly the survivorship-biased one § 8.7 V2 warns about. Capture is grandfathered forward from the point this surface lands, per `release-velocity-tracking.md` § 10's convention.
+
+---
+
 ## Raw→Tracked Provenance
 
 Every **extracted** tracker entry (a decision, action, risk, or meeting derived from raw evidence)
@@ -509,7 +604,7 @@ The tracker schemas above are the superset — which trackers are populated, and
 
 | Archetype | Variation | Applies to | Notes |
 |---|---|---|---|
-| **Scrum** | Sprint-burndown + sprint-velocity trackers are primary health trackers; populated at sprint-cadence (daily burndown updates, velocity at sprint close). Risk register reviewed at sprint retro. Decisions tracker keyed to sprint boundaries. | `sprint-burndown.md`, `sprint-velocity.md`, `risks.md`, `decisions.md` | [SOURCE] Scrum Guide 2020 — sprint-scale health metrics. |
+| **Scrum** | Sprint-burndown + sprint-velocity trackers are primary health trackers; populated at sprint-cadence (daily burndown updates, velocity at sprint close). Risk register reviewed at sprint retro. Decisions tracker keyed to sprint boundaries. | `sprint-burndown.md`, `sprint-velocity.md`, `sprint-tracker.md`, `risks.md`, `decisions.md` | [SOURCE] Scrum Guide 2020 — sprint-scale health metrics. |
 | **Kanban** | Flow-efficiency + cycle-time + throughput trackers are primary; no sprint-burndown. Populated continuously as work moves through board columns. Risk register reviewed at service-delivery-review cadence (typically bi-weekly). | `flow-efficiency.md`, `cycle-time.md`, `throughput.md`, `risks.md` | [SOURCE] Kanban Method — flow metrics over velocity. |
 | **XP** | Inherits Scrum sprint trackers PLUS engineering-health trackers: CI-health, test-coverage, pair-rotation, refactor-frequency. Populated continuously (CI-driven) + iteration-cadence (pair-rotation review). | `sprint-burndown.md`, `ci-health.md`, `test-coverage.md`, `pair-rotation.md` | [SOURCE] XP engineering practices — governance-level requirements. |
 | **Waterfall** | Milestone + phase-gate trackers are primary; no sprint-scale trackers. Populated at phase-gate cadence (sparse updates between gates). Change-control log is required tracker; replaces iteration-cadence decisions tracker. | `milestone-status.md`, `phase-gate-log.md`, `change-control-log.md`, `risks.md` | [SOURCE] PMBOK predictive-lifecycle reporting. |
