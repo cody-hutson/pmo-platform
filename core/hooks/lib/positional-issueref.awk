@@ -20,16 +20,21 @@
 #   -v issuere=<ISSUEREF_RE>    the bare-issue-ref regex, passed in (kept byte-identical
 #                              to the three callers — this file does NOT own the regex).
 #   -v hexcolor=<HEXCOLOR_RE>  companion hex-color mask regex, passed in (kept byte-identical
-#                              to the three callers — this file does NOT own it either). Two
+#                              to the three callers — this file does NOT own it either). Three
 #                              ERE branches (no lookbehind available): (a) a # + a run of
 #                              hex-legal chars containing >=1 hex letter [A-Fa-f] (e.g. #28A745,
 #                              #FFF); (b) a colon-prefixed hex run `:#<3-8 hex digits>` — the
 #                              CSS/Mermaid color-value form (e.g. color:#155724), which catches
-#                              PURE-DIGIT hex colors that branch (a) cannot see. Masked to spaces
+#                              PURE-DIGIT hex colors that branch (a) cannot see; (c) the regex
+#                              CHARACTER-CLASS hex form `#[<hex ranges>]` + optional {n}/{n,m}
+#                              quantifier (e.g. #[0-9a-fA-F]{6}) — the char after # is `[`, so
+#                              neither (a) nor (b) fires and the leading `#[0` would otherwise
+#                              read as a bracketed ref (issue #4182). Masked to spaces
 #                              BEFORE the issue-ref test so a hex color's numeric prefix (#28) is
 #                              never mis-read as a bare issue ref (#314-companion fix, issue #2068).
 #                              A prose issue ref (#NN / `#NN` / "See #NN") never carries a hex
-#                              letter and is never colon-abutted, so it is never masked.
+#                              letter, is never colon-abutted, and carries no X-Y range inside
+#                              brackets (branch (c) requires one), so it is never masked.
 #   -v refline=<N>             reference-block header file-line number (0 = no block in file).
 #   -v minwords=<MIN>          minimum non-reference words for an in-block ref to count as
 #                              self-describing (= MIN_SELFDESCRIBE_WORDS, currently 3).
