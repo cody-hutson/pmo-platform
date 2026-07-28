@@ -1,8 +1,8 @@
 ---
-title: "ADR-098 — Event-log payload pipe grammar (escaped `\\|` as the canonical multi-value separator)"
+title: "ADR-099 — Event-log payload pipe grammar (escaped `\\|` as the canonical multi-value separator)"
 status: Proposed
 date: 2026-07-27
-release: decision-telemetry-emission (#295) (v3.97 provisional; bound at Stage 12)
+release: decision-telemetry-emission (#295) (v3.98 provisional; bound at Stage 12)
 deciders: "Operator rendered D-1 (WIDEN, fork A) at the Wave-1 Decision Briefing; the Stage 5 Solutioning spoke (#4056) selected the mechanism (candidate A2) after falsifying the hub's original candidate rule against all 8 consumers; Stage 6 Engineering (#4057) authored it; operator ratifies at the Stage 9 plan-review gate"
 tags: [release-ops, telemetry, event-log, schema, payload-grammar, validation, guard, observability, ssot]
 source_observations:
@@ -13,7 +13,7 @@ source_observations:
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-098 — Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator)
+# ADR-099 — Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator)
 
 ## Status
 

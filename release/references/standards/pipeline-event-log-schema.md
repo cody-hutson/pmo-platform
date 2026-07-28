@@ -160,7 +160,7 @@ Key:value pairs remain `; `-separated.
 in `{a|b}` notation MUST either escape them (`{a\|b}`) or state the runtime form
 (`chose:spoke`). Enforcement: `append-pipeline-event.sh` § 4.3a guard + `--self-test`.
 
-Rationale and alternatives: ADR-098.
+Rationale and alternatives: ADR-099.
 
 ### 4.4 One row per event
 
