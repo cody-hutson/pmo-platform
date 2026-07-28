@@ -436,19 +436,50 @@ do_emit() {
   [ -n "$overlap_map" ] || overlap_map='{}'
 
   # ── Store-shape preflight (schema v1.2.0). A pre-v1.2.0 store carries `cwd`, not
-  #    `worktree`; the resolver's worktree join would then resolve to null, every session
-  #    would fall through to `unattributed`, and the roll-up over that set would emit an
-  #    EMPTY result that the coverage record certifies as health=OK / 100% attributed
-  #    (attr_frac short-circuits to 1 when the grand total is 0). Fail loudly instead of
-  #    silently zeroing an operator's roll-up. This is the STORE-skew guard; CODE skew
-  #    (resolver not updated with the schema) is caught by --self-test's ground-truth
-  #    oracle. Exit 3 is the existing "store unreadable" code — a store the resolver
-  #    cannot read is exactly that; no new exit code, no contract change. ──
-  local n_sess n_wt
+  #    `worktree`; the resolver's worktree join would then resolve to null, that session
+  #    would fall through to `unattributed`, and its spend would vanish from the roll-up
+  #    while the run still exits 0. Fail loudly instead of silently under-reporting an
+  #    operator's roll-up. This is the STORE-skew guard; CODE skew (resolver not updated
+  #    with the schema) is caught by --self-test's ground-truth oracle. Exit 3 is the
+  #    existing "store unreadable" code — a store the resolver cannot read is exactly
+  #    that; no new exit code, no contract change.
+  #
+  #    THE PREDICATE GATES ON THE PRESENCE OF ANY LEGACY RECORD, NOT ON THE ABSENCE OF ALL
+  #    CURRENT ONES. The worktree join is evaluated PER RECORD, so a single legacy record is
+  #    enough to lose its own T1/T3 attribution — a store is unsafe to roll up the moment ONE
+  #    such record exists. Asking instead "do ZERO records carry worktree?" (the earlier
+  #    shape) let one current record disarm the guard for the whole store, so a MIXED store
+  #    rolled up at exit 0 with a silently under-reported attributed fraction: the exact
+  #    fail-open this preflight exists to prevent, one layer down. `has("worktree")` is the
+  #    discriminator — a CURRENT record whose source carried no cwd holds an explicit
+  #    `worktree: null` (key present) and is correctly NOT legacy; the resolver routes it to
+  #    `unattributed` on purpose, with a basis. ──
+  local n_sess n_legacy probe_rc=0
   n_sess="$(jq -s '[.[]|select(.record=="session")]|length' "$store_file" 2>/dev/null)"
-  n_wt="$(jq -s '[.[]|select(.record=="session" and has("worktree"))]|length' "$store_file" 2>/dev/null)"
-  if [ "${n_sess:-0}" -gt 0 ] && [ "${n_wt:-0}" -eq 0 ]; then
-    printf 'FATAL (exit 3): FinOps store predates schema v1.2.0 — session records carry no `worktree` field.\n' >&2
+  probe_rc=$(( probe_rc + $? ))
+  n_legacy="$(jq -s '[.[]|select(.record=="session" and (has("worktree")|not))]|length' "$store_file" 2>/dev/null)"
+  probe_rc=$(( probe_rc + $? ))
+  # FAIL CLOSED: the shape probe must never itself read as a pass. If jq aborted or returned
+  # anything but a count, the store's shape is UNKNOWN — which is not the same as clean, and
+  # the old `${n:-0}` default silently converted exactly that case into "no legacy records".
+  if [ "$probe_rc" -ne 0 ] \
+     || ! printf '%s' "$n_sess"   | grep -qE '^[0-9]+$' \
+     || ! printf '%s' "$n_legacy" | grep -qE '^[0-9]+$'; then
+    printf 'FATAL (exit 3): FinOps store shape could not be determined: %s\n' "$store_file" >&2
+    printf 'The store-shape preflight could not read the store (jq probe failed, or returned a non-count).\n' >&2
+    printf 'Refusing to roll up a store of unknown shape. The store is a derived cache; rebuild it,\n' >&2
+    printf 'then re-run the roll-up:\n' >&2
+    printf '  bash %s/extract-usage.sh --rebuild\n' "$SCRIPT_DIR" >&2
+    exit 3
+  fi
+  if [ "$n_legacy" -gt 0 ]; then
+    if [ "$n_legacy" -eq "$n_sess" ]; then
+      printf 'FATAL (exit 3): FinOps store predates schema v1.2.0 — session records carry no `worktree` field.\n' >&2
+    else
+      printf 'FATAL (exit 3): FinOps store is MIXED — %s of %s session record(s) predate schema v1.2.0 (no `worktree` field).\n' "$n_legacy" "$n_sess" >&2
+      printf 'The v1.2.0 records would roll up normally while the legacy ones silently drop out, so the run\n' >&2
+      printf 'would report an UNDER-COUNTED attributed fraction as if it were healthy.\n' >&2
+    fi
     printf 'The store is a derived cache; rebuild it, then re-run the roll-up:\n' >&2
     printf '  bash %s/extract-usage.sh --rebuild\n' "$SCRIPT_DIR" >&2
     exit 3
@@ -657,6 +688,56 @@ self_test() {
     echo "FAIL: legacy-store preflight — pre-v1.2.0 store was NOT refused (exit $lg_rc, want 3)"; fail=1
   fi
   rm -rf "$lg_st"
+
+  # (K) MIXED-STORE preflight — a store carrying BOTH a legacy session record (no `worktree`)
+  #     and current ones (with `worktree`) must be REFUSED with exit 3, exactly like the wholly
+  #     legacy store in (J). The worktree join is evaluated PER RECORD, so ONE legacy record
+  #     loses its own T1/T3 attribution while every other record resolves normally: the run
+  #     would otherwise complete at exit 0 with a silently UNDER-COUNTED attributed fraction —
+  #     the same fail-open (J) guards against, one layer down, and invisible because the store
+  #     still looks healthy. This case is what forces the predicate to gate on the PRESENCE OF
+  #     ANY legacy record rather than the ABSENCE OF ALL current ones.
+  #     Paired with a no-false-positive half: a wholly CURRENT store must NOT be refused —
+  #     without it the guard could be "fixed" by refusing everything, which passes the first
+  #     half and breaks every green path.
+  #     do_emit runs in a SUBSHELL in both halves: its `exit 3` must not terminate the self-test.
+  local mx_st mx_rc mx_legacy mx_current cur_st cur_rc
+  mx_st="$(mktemp -d "${TMPDIR:-/tmp}/finops-roll-mixed.XXXXXX")"
+  # Downgrade exactly ONE session record (…001) to the pre-v1.2.0 shape; the other seven keep
+  # `worktree`. One legacy record is the minimal trigger and the case the old predicate missed.
+  jq -c 'if .record=="session" and (.session_id | endswith("1"))
+         then (.cwd = "/synthetic/ws/" + .worktree | del(.worktree)) else . end' \
+     "$fx_store" > "$mx_st/usage.jsonl" 2>/dev/null
+  # Assert the constructed fixture really IS mixed BEFORE asserting on the guard — a silently
+  # no-op downgrade would otherwise let this test "pass" against a store it never mixed.
+  mx_legacy="$(jq -s '[.[]|select(.record=="session" and (has("worktree")|not))]|length' "$mx_st/usage.jsonl" 2>/dev/null)"
+  mx_current="$(jq -s '[.[]|select(.record=="session" and has("worktree"))]|length' "$mx_st/usage.jsonl" 2>/dev/null)"
+  if [ "${mx_legacy:-0}" -lt 1 ] || [ "${mx_current:-0}" -lt 1 ]; then
+    echo "FAIL: mixed-store fixture is not actually mixed (legacy=${mx_legacy:-0}, current=${mx_current:-0}) — test would not be exercising the guard"; fail=1
+  else
+    ( STORE="$mx_st" FINOPS_HUB_STATE_DIR="$fx_hub" FINOPS_PIPELINE_EVENT_LOG="$fx_log" \
+        do_emit "$mx_st" 0 >/dev/null 2>&1 )
+    mx_rc=$?
+    if [ "$mx_rc" -eq 3 ]; then
+      echo "  PASS: mixed-store preflight ($mx_legacy legacy + $mx_current v1.2.0 record(s) refused, exit 3)"
+    else
+      echo "FAIL: mixed-store preflight — a store with $mx_legacy legacy + $mx_current v1.2.0 session record(s) was NOT refused (exit $mx_rc, want 3); its legacy spend would silently drop out of the roll-up"; fail=1
+    fi
+  fi
+  rm -rf "$mx_st"
+
+  # (K2) No false positive — a wholly CURRENT (v1.2.0) store must roll up normally (exit 0).
+  cur_st="$(mktemp -d "${TMPDIR:-/tmp}/finops-roll-current.XXXXXX")"
+  cp "$fx_store" "$cur_st/usage.jsonl"
+  ( STORE="$cur_st" FINOPS_HUB_STATE_DIR="$fx_hub" FINOPS_PIPELINE_EVENT_LOG="$fx_log" \
+      do_emit "$cur_st" 0 >/dev/null 2>&1 )
+  cur_rc=$?
+  if [ "$cur_rc" -eq 0 ]; then
+    echo "  PASS: preflight does not fire on a wholly v1.2.0 store (exit 0, green path intact)"
+  else
+    echo "FAIL: preflight FALSE POSITIVE — wholly v1.2.0 store was refused (exit $cur_rc, want 0)"; fail=1
+  fi
+  rm -rf "$cur_st"
 
   rm -f "$sessions" "$res"
   rm -rf "$st"
