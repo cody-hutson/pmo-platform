@@ -1,0 +1,112 @@
+{
+  "actual_tokens": null,
+  "basis": [
+    {
+      "attribution_tier": "branch-milestone",
+      "figure": "100,000",
+      "is_median": false,
+      "key": "12 pts / novel",
+      "provenance": "[SOURCE: exact message.usage]",
+      "rate": null,
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "tokens": 100000,
+      "work_item": "milestone:v9.90"
+    },
+    {
+      "attribution_tier": "branch-milestone",
+      "figure": "110,000",
+      "is_median": false,
+      "key": "14 pts / novel",
+      "provenance": "[SOURCE: exact message.usage]",
+      "rate": null,
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "tokens": 110000,
+      "work_item": "milestone:v9.91"
+    },
+    {
+      "attribution_tier": "hub-state-lineage",
+      "figure": "~120,000",
+      "is_median": false,
+      "key": "16 pts / novel",
+      "provenance": "[INFERRED: ceil(words/0.75) fallback]",
+      "rate": null,
+      "tier_label": "deterministic join, local",
+      "token_source": "heuristic",
+      "tokens": 120000,
+      "work_item": "milestone:v9.92"
+    },
+    {
+      "attribution_tier": "branch-milestone",
+      "figure": "140,000",
+      "is_median": false,
+      "key": "20 pts / novel",
+      "provenance": "[SOURCE: exact message.usage]",
+      "rate": null,
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "tokens": 140000,
+      "work_item": "milestone:v9.93"
+    },
+    {
+      "attribution_tier": "branch-milestone",
+      "figure": "900,000",
+      "is_median": false,
+      "key": "18 pts / novel",
+      "provenance": "[SOURCE: exact message.usage]",
+      "rate": null,
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "tokens": 900000,
+      "work_item": "milestone:v9.94"
+    }
+  ],
+  "best_effort_token_fraction": 0,
+  "confidence": "MEDIUM",
+  "confidence_caps": [],
+  "confidence_rule": "R4",
+  "delta_tokens": null,
+  "dispersion": {
+    "mad": 20000,
+    "rmad": 0.1667
+  },
+  "estimate_tokens": 120000,
+  "estimate_usd": null,
+  "estimated_utc": "2026-07-28T12:52:19Z",
+  "excluded": null,
+  "excluded_count": 7,
+  "generator_version": "v3.96",
+  "leave_one_out": false,
+  "matching": {
+    "attempted": null,
+    "key": "(class=novel, points 8-24, tolerance ±8)",
+    "local": true,
+    "target": {
+      "class": "novel",
+      "points": 16,
+      "tolerance": 8,
+      "type": null,
+      "work_item": null
+    },
+    "tier": "E2",
+    "tier_name": "class + points"
+  },
+  "mean_tokens_not_used": 274000,
+  "mode": "estimate",
+  "n_comparables": 5,
+  "n_min": 3,
+  "pct_error": null,
+  "range": {
+    "max": 900000,
+    "min": 100000
+  },
+  "reproducible": true,
+  "rolled_up": true,
+  "schema_version": "1.2.0",
+  "store_generator_version": "v9.9-fixture",
+  "suppression": null,
+  "token_source": "mixed",
+  "unit_mode": "volume",
+  "usd_rate": null
+}
