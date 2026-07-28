@@ -169,6 +169,9 @@ jobs:
         # earlier free-text column read as terminal — a SILENT PASS of the gate.
         # Includes a negative control asserting the bare-pipe form still mis-reads
         # the fixture, so the suite cannot drift into passing vacuously.
+        # Also exercises the § 4a.3 hub-state resolver (extracted verbatim from
+        # orchestration-playbook.md) so the routing-point read sites keep finding
+        # the ledger the canonical writer actually creates.
         # Offline + deterministic (mktemp fixtures; no network, no gh, no writes
         # to any operator-instance path). Gates on exit code.
         run: bash release/tools/tests/test_action_item_gate_predicate.sh

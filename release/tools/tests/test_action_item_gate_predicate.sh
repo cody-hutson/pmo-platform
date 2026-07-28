@@ -29,6 +29,14 @@ set -uo pipefail
 #        could drift into passing against a predicate that never split
 #        correctly in the first place; it proves the fixtures can detect the
 #        defect they are looking for.
+#   (G5) § 4a.3 RESOLVER — the ledger path the routing points read must be the
+#        one the writer creates. The resolver is extracted verbatim from
+#        orchestration-playbook.md and exercised slug-only / version-only /
+#        both, then run end-to-end into the predicate. Carries its own negative
+#        control: a hardcoded VERSION-keyed read returns NOT-RECORDED against
+#        the writer's slug-keyed ledger — the failure the four prose read sites
+#        would have hit post-cutover (routing points render "no action items"
+#        while rows are open, then Procedure 7a BLOCKs at close).
 #
 # Offline + deterministic: fixtures are built in a mktemp dir from the real
 # 13-field schema in release/releases/hub-state/action-items.md.template.
@@ -231,6 +239,75 @@ if grep -qE "awk -F' \\\\\| '" "$PRED"; then
   bad "predicate uses -F' \\| ' — awk reduces this to ERE alternation; use ' [|] '"
 else
   ok "predicate avoids the unsafe -F' \\| ' spelling"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "G5 — § 4a.3 hub-state resolver (read sites find what the writer creates)"
+# ---------------------------------------------------------------------------
+# The four prose read sites used to hardcode the VERSION-keyed ledger path while
+# the canonical writer creates only the SLUG-keyed one. Post-cutover that reads a
+# path that never exists: the routing-point scans render "no action items" while
+# open rows exist, and Procedure 7a — which DOES resolve — then BLOCKs at close.
+# Extract the resolver verbatim from the playbook and exercise both directions.
+PLAYBOOK="$REPO_ROOT/release/skills/release-hub/references/orchestration-playbook.md"
+RES_RAW="$WORK/resolver-raw.sh"
+awk '
+  /^HS="<OPERATOR_INSTANCE_HUB_STATE_PATH>"$/ { grab=1 }
+  grab && /^```$/                             { grab=0 }
+  grab                                        { print }
+' "$PLAYBOOK" > "$RES_RAW"
+
+if [ ! -s "$RES_RAW" ]; then
+  bad "could not extract the § 4a.3 resolver from orchestration-playbook.md"
+else
+  ok "extracted the § 4a.3 resolver verbatim from the playbook"
+  # Substitute the operator-instance token with a sandbox root. This is exactly
+  # what deploy-time token resolution does; the resolver LOGIC is untouched.
+  HSROOT="$WORK/hub-state"
+  RES="$WORK/resolver.sh"
+  sed "s#<OPERATOR_INSTANCE_HUB_STATE_PATH>#$HSROOT#" "$RES_RAW" > "$RES"
+
+  SLUG="decision-telemetry-emission"
+  VER="v3.98"
+
+  resolve() {  # resolve <slug-dir-exists> <version-dir-exists> -> resolved DIR
+    rm -rf "$HSROOT"; mkdir -p "$HSROOT"
+    [ "$1" = yes ] && mkdir -p "$HSROOT/$SLUG"
+    [ "$2" = yes ] && mkdir -p "$HSROOT/$VER"
+    ( MILESTONE_SLUG="$SLUG"; RELEASE_VERSION="$VER"
+      # shellcheck disable=SC1090
+      . "$RES"; printf '%s' "$DIR" )
+  }
+
+  got="$(resolve yes no)"
+  [ "$got" = "$HSROOT/$SLUG" ] \
+    && ok "writer's slug-keyed dir only -> resolver finds it" \
+    || bad "slug-only: expected $HSROOT/$SLUG, got $got"
+
+  got="$(resolve no yes)"
+  [ "$got" = "$HSROOT/$VER" ] \
+    && ok "legacy version-keyed dir only -> read-only fallback finds it" \
+    || bad "version-only: expected $HSROOT/$VER, got $got"
+
+  got="$(resolve yes yes)"
+  [ "$got" = "$HSROOT/$SLUG" ] \
+    && ok "both present -> slug wins (writer's form is canonical)" \
+    || bad "both: expected $HSROOT/$SLUG, got $got"
+
+  # End-to-end: the routing-point scan must find the ledger the writer creates.
+  rm -rf "$HSROOT"; mkdir -p "$HSROOT/$SLUG"
+  { echo "$HDR"; echo "$SEP"; row AI-020 'post-cutover slug-keyed ledger' open; } \
+    > "$HSROOT/$SLUG/action-items.md"
+  RESOLVED="$( MILESTONE_SLUG="$SLUG"; RELEASE_VERSION="$VER"
+               # shellcheck disable=SC1090
+               . "$RES"; printf '%s' "$DIR" )"
+  expect "resolver + predicate end-to-end on the writer's ledger" "$RESOLVED" UNRESOLVED 1 1
+
+  # NEGATIVE CONTROL — the pre-fix hardcoded version-keyed read finds nothing,
+  # so the routing point would render "no action items" while a row is open and
+  # Procedure 7a would BLOCK at close. Proves this fixture is load-bearing.
+  expect "CONTROL hardcoded version-keyed read misses it" "$HSROOT/$VER" NOT-RECORDED 0 0
 fi
 
 # ---------------------------------------------------------------------------
