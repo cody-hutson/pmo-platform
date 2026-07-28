@@ -2,7 +2,7 @@
 # finops-usage-extractor — roll-up + attribution module (slice C2).
 #
 # Reads the operator-local FinOps usage store produced by extract-usage.sh (slice
-# C1, frozen v1.0.0) and writes the additive v1.1.0 `rollup` + `coverage` records:
+# C1) and writes the additive v1.2.0 `rollup` + `coverage` records:
 # it resolves each `session` record to its owning work item, rolls per-session token
 # spend up to that work item (honoring C1's summation invariant), and emits a
 # run-level attribution-health `coverage` record. The store schema authority is
@@ -32,7 +32,7 @@
 #   bash rollup-attribution.sh [--emit] [--resolve-prs] [--self-test]
 #     --emit         (DEFAULT) resolve + roll up the store in place: strip any prior
 #                    rollup/coverage records, append fresh ones, bump meta schema_version
-#                    to 1.1.0. Idempotent over an unchanged store (byte-identical body
+#                    to 1.2.0. Idempotent over an unchanged store (byte-identical body
 #                    modulo the rolled_up_utc metadata). Session/subagent lines untouched.
 #     --resolve-prs  OPT-IN: additionally resolve fix/feat branches via `gh` (network,
 #                    non-reproducible). Absent → those sessions degrade to `unattributed`.
@@ -220,7 +220,10 @@ build_count_once_overlap_map() {
 #    count-once deduction). ──
 read -r -d '' JQ_RESOLVE <<'JQEOF' || true
 def tok(t): (t.input // 0) + (t.output // 0) + ((t.cache_creation.total) // 0) + (t.cache_read // 0);
-def base($p): ($p // "") | split("/") | last;
+# NOTE (schema v1.2.0): the former `def base($p)` basename adapter is GONE. The store now
+# persists `session.worktree` (the basename) directly — basename derivation moved to the
+# PRODUCER (extract-usage.sh) as the data-minimization control. The T1/T3 join key is now
+# literally identical on both sides, which is what base() was approximating all along.
 def parse_milestone($b):
   # test-guard the capture: a bare `capture` on a non-matching string yields EMPTY,
   # and binding `... as $v` to an empty stream would silently drop the whole session.
@@ -230,20 +233,18 @@ def parse_milestone($b):
     else null end ;
 def is_fixfeat($b): ($b // "") | test("^(?:fix|feat)/") ;
 
-# T1: an issue-event whose worktree == basename(cwd) and ts within the session window.
-def t1_issue($cwd; $start; $end):
-  base($cwd) as $wt
-  | ( [ $issue_events[]
-        | select(.worktree == $wt)
-        | select( ($start == null) or ($end == null) or (.ts >= $start and .ts <= $end) )
-        | .issue ] | first ) ;
+# T1: an issue-event whose worktree == session.worktree and ts within the session window.
+def t1_issue($wt; $start; $end):
+  ( [ $issue_events[]
+      | select(.worktree == $wt)
+      | select( ($start == null) or ($end == null) or (.ts >= $start and .ts <= $end) )
+      | .issue ] | first ) ;
 
 .[]
 | . as $s
 | ($s.tokens // {}) as $tk
 | ($s.git_branch) as $branch
-| ($s.cwd) as $cwd
-| base($cwd) as $wt
+| ($s.worktree) as $wt
 | ($s.started_utc) as $start
 | ($s.ended_utc) as $end
 # FM-2 count-once (hub<->spoke file boundary). $overlap_by_session maps a HUB session_id
@@ -257,9 +258,14 @@ def t1_issue($cwd; $start; $end):
 | ($overlap_by_session[$s.session_id] // {input:0,output:0,cc_total:0,cc_1h:0,cc_5m:0,cread:0,ws:0,wf:0,count:0}) as $ov
 # Bind all tier candidates at top level (in scope in every branch below — avoids
 # relying on condition-bound variables, which jq does not carry into `then`).
-| (t1_issue($cwd; $start; $end)) as $t1
+| (t1_issue($wt; $start; $end)) as $t1
 | (parse_milestone($branch)) as $t2v
-| ($wt_milestone[$wt]) as $t3v
+# Null-guard the T3 object index: `{...}[null]` is a jq HARD error ("Cannot index object
+# with null"), and do_emit runs this program with 2>/dev/null and an untested exit status,
+# so an abort here would silently yield an EMPTY roll-up that the coverage record then
+# certifies as health=OK / 100% attributed. A session whose source carried no cwd has a
+# null worktree; it must fall through to `unattributed`, not abort the whole run.
+| (if $wt == null then null else $wt_milestone[$wt] end) as $t3v
 | ( if ($s.branch_switch == true) then
       { work_item: "multi-branch", work_item_kind: "multi-branch",
         attribution_tier: "unattributed", reproducible: true,
@@ -413,7 +419,7 @@ apply_pr_resolve() {
 }
 
 # ── Core: resolve + roll up an existing store in place (strip prior rollup/coverage,
-#    append fresh; bump meta schema_version to 1.1.0). Atomic tmp -> mv. ──
+#    append fresh; bump meta schema_version to 1.2.0). Atomic tmp -> mv. ──
 do_emit() {
   local store_dir="$1" resolve_prs="$2"
   local store_file="$store_dir/usage.jsonl"
@@ -449,9 +455,9 @@ do_emit() {
   # Pass 3: roll up → rollup rows + coverage.
   jq -s -c "$JQ_ROLLUP" "$resolutions" > "$rolled" 2>/dev/null
 
-  # Rewrite store: meta(schema_version=1.1.0) + verbatim session/subagent + rollup/coverage.
+  # Rewrite store: meta(schema_version=1.2.0) + verbatim session/subagent + rollup/coverage.
   tmp="$store_file.tmp"
-  jq -c 'select(.record=="meta") | .schema_version="1.1.0" | .generator_version=$gv' \
+  jq -c 'select(.record=="meta") | .schema_version="1.2.0" | .generator_version=$gv' \
      --arg gv "$(generator_version)" "$store_file" > "$tmp" 2>/dev/null
   jq -c 'select(.record=="session" or .record=="subagent")' "$store_file" >> "$tmp" 2>/dev/null
   cat "$rolled" >> "$tmp"
@@ -575,10 +581,10 @@ self_test() {
   [ "${nsess_after:-0}" = "${nsess_before:-x}" ] && echo "  PASS: session records preserved verbatim (count $nsess_after)" \
     || { echo "FAIL: session record count changed ($nsess_before -> $nsess_after)"; fail=1; }
 
-  # (H) meta bumped to 1.1.0.
+  # (H) meta bumped to 1.2.0.
   local sv
   sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"
-  [ "$sv" = "1.1.0" ] && echo "  PASS: meta.schema_version bumped to 1.1.0" || { echo "FAIL: meta.schema_version != 1.1.0 (got $sv)"; fail=1; }
+  [ "$sv" = "1.2.0" ] && echo "  PASS: meta.schema_version bumped to 1.2.0" || { echo "FAIL: meta.schema_version != 1.2.0 (got $sv)"; fail=1; }
 
   # (I) FM-2 count-once (hub<->spoke file boundary). A spoke that appears BOTH as an
   #     in-transcript sidechain `subagent` inside a hub session AND as its own standalone
