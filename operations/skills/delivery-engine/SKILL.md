@@ -2,7 +2,7 @@
 name: delivery-engine
 description: >
   Operational backbone for backlog health through release readiness. Modes: Backlog scan · Ticket insight · DoR gate · Sprint planning · Execution control · DoD gate · RAID updates. Use for sprint planning, backlog review, quality gates, or velocity tracking across Agile and Waterfall governance. Triggers: "run DoR on this", "run DoD on this", "check this backlog", "plan the sprint", "velocity check", "is this release ready", "update the RAID log."
-version: v3.41
+version: v3.42
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -69,7 +69,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "ticket insight", "what does this ticket mean", "similar tickets to", "ticket analysis" | Mode B — Ticket Insight & Similarity |
 | "run DoR", "DoR gate", "definition of ready", "is this ticket ready" | Mode C — Refinement Manager (DoR Gate) |
 | "plan the sprint", "sprint planning", "next sprint", "sprint scope" | Mode D — Sprint Planning |
-| "execution control", "is this on track", "velocity check", "execution status" | Mode E — Execution Control Tower |
+| "execution control", "is this on track", "velocity check", "execution status", "calibration report", "estimation calibration", "how accurate are our estimates", "are we over/under-estimating" | Mode E — Execution Control Tower |
 | "run DoD", "DoD gate", "definition of done", "is this release ready", "release readiness" | Mode F — DoD & Release Readiness Gate |
 | "update the RAID", "RAID log", "RAID entry", "log this decision", "milestone update" | Mode G — RAID / Decision / Milestone Artifact Update |
 
@@ -248,7 +248,9 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
    per-stage variance), read `references/lifecycle-stages.md` for the §2 per-stage
    entry/exit criteria, the §4 five-model terminology grid + §4.1 model resolution, and
    the §5.2 universal per-transition enforcement, and run the **Stage-Tracking sub-protocol**
-   below.
+   below. When a team's **estimation calibration** is in scope — a calibration-report request, an
+   iteration/window close, or a retrospective reading estimate accuracy — run the
+   **Estimation-Calibration Report sub-protocol** below.
 2. Identify emerging risks: scope creep (new items added mid-sprint), velocity
    degradation, blocker accumulation. For a slip or regression that has already
    surfaced, **invoke the RCA method** (`core/disciplines/root-cause-analysis.md`) to
@@ -263,6 +265,18 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
    - **Compute per-stage variance + RAG** when a per-stage schedule baseline exists: per-stage milestone variance (SPI) over the stage's planned window, banded with the canonical Milestone-Variance RAG **owned by `references/estimation-standards.md` §7** — cite the threshold by role (do not restate the band values); name the active 🟢/🟡/🔴 zone via §7's `WHEN…THEN…` decision-rule format. Name it "per-stage milestone variance (SPI)" / "stage slip" — **never "Schedule Variance"**. When no per-stage baseline exists, emit `per-stage variance: not computable — no stage baseline` and flag the missing baseline as a planning gap — never fabricate a RAG.
    - **Negative-path defaults are explicit, never silent:** absent `delivery_approach` → canonical names + caveat; unknown current stage → earliest-met stage + `[ASSUMPTION – CONFIRM]`; no per-stage baseline → "not computable"; out-of-grid archetype (XP/PRINCE2/Custom-null) → canonical names + outside-grid note.
    - **Facilitation-technique surfacing — retro/standup hook (silent-by-default).** When the execution-control input references a **retrospective or stand-up** to be facilitated, the same corpus consult as Mode D step 3.5 applies — match the in-scope activity against `core/standards/facilitation-techniques/README.md` and surface at most one fitting, non-contraindicated `[RECOMMENDED]` technique under the identical three-condition gate (`when_to_use` matches AND `methodology_compatibility` fits `delivery_approach` AND `when_NOT_to_use` not triggered). The **retrospective** domain file (`core/standards/facilitation-techniques/retrospective.md`) is now **seeded (v2.33) and active**: when a retrospective is in scope, consult it and surface at most one fitting technique — e.g., `[RECOMMENDED] Start/Stop/Continue — fast action-first retro that yields a tracked action set; ~20–30 min, whole team + facilitator.` (route the resulting actions to the Mode G RAID namespace). The **stand-up** domain file remains deferred (see the corpus index domain manifest), so the stand-up path stays silent until it ships — that path is the documented extension point, not yet an active surface. As in Mode D, **never block** the retro on a suggestion — it is an additive note, never a gate.
+
+   **Estimation-Calibration Report sub-protocol (team × signal family × window).** The retrospective read of estimate accuracy, rendered from `estimation-standards.md` §8 under its **§8.6.2 reporting contract**. **Read-only**: this sub-protocol renders §8's outputs and writes no value into §8 or any doc that inherits from it. Where Mode D's advisory acts at estimate-composition time, this reads at reflection time. Invoked from step 1.
+   - **Resolve the unit of analysis.** One **team**, one **signal family** (`F1` / `F2` / `F3` — **never pooled**, §8.1 rule 1), one **window** of completed iterations per §8.3's window table. Render one section per family; each family carries its own `N`, bias, spread, and band.
+   - **Render coverage FIRST, always.** `N` completed iterations + the pair count **against the iteration's planned item count** + the §3.1 confidence word. Coverage renders at **any** `N` — it is computable when nothing else is, and it is §8.7 V2's survivorship control, so it is *more* useful when the sample is thin, not less. Never suppress the whole report for want of a band.
+   - **Render bias.** `B` + its **direction word** + its 🟢/🟡/🔴 band, citing **§8.3 by role**. **Restate no boundary value** — the band's boundaries have one home and the report is a consumer, not an owner.
+   - **Render spread on a SEPARATE labelled row.** `S` + its realized-precision phase (§8.4) + whether that phase is **wider** than the declared `Estimate Phase`. **No colour — a sentence** (§8.4 is explicit that spread is expressed as a sentence, never a colour). **Label both rows with their units — `calibration bias (central multiplier)` and `calibration spread (range ratio)`** — so a reader cannot read two adjacent ratios as one composite health figure. Only `B` is banded; the visual asymmetry is the design, not an omission.
+   - **Render trend** across consecutive windows as **`improving` / `stable` / `degrading`** — adopted verbatim from `core/schemas/gate-evaluation-spec.md` § Layer 3, **not a new enum**. When the trend is **`stable` while the band is 🟡 or 🔴 across ≥ 2 consecutive windows**, do not report `stable` as a neutral word: state that **the signal is being produced and not acted on**. An advisory nobody acts on is observationally identical to a working loop, and this is the only place that difference becomes visible.
+   - **Render the inflation flag** when `B` trends toward 1.00 **while** points-per-item trends up — name it **"inflation, not calibration"** (`sprint-defaults.md` §3.2 rule 4's already-mandatory throughput cross-check, and §8.7 V4's Goodhart residual). `B` → 1.00 is exactly what success looks like, which is why the cross-check renders beside the bias rather than in place of it.
+   - **Discordance rule.** When F1 and/or F2 read 🟢 while **F3 reads 🔴** in the same window, state that **survivorship is the first hypothesis** and that the F1/F2 greens are **uncorroborated**. F3's denominator is the *plan*, not the closed set, so it is structurally immune to the bias that inflates F1/F2 — which is exactly why it is the control (§8.7 V2).
+   - **Negative-path defaults are explicit, never silent (fails closed).** Below §8.3's window floor, each suppressed element states **its own** binding reason — `Bias: not computable — N iteration(s) of history (< 3); do not use for forecasting` · `Spread: not computable — requires the same ≥ 3-iteration window` · `Trend: not computable — requires ≥ 2 banded windows` — each in the corpus's `<element>: not computable — <reason>` form, carrying §8.3's reason clause verbatim behind the report's own element label (Mode D, which emits the metric rather than a report element, carries §8.3's `estimation bias:` string unaltered) — because the three constraints differ and a reader needs to know which one binds to know what to do next. Add the quantified `[RECOMMENDED] accrue <§8.3 floor − N> more completed iteration(s) before reading a band`, and carry the confidence word even here (it is the *reason* the band is withheld). **NEVER a colour, NEVER a greyed or provisional band, NEVER a blank cell, and NEVER a fourth colour for "unknown"** — a colour in the colour column reads as a verdict, and below the floor **no verdict exists**.
+   - **Standing header (normative).** Every rendered report carries a line stating that **cross-team comparison is prohibited and why** — story points are team-relative (`sprint-defaults.md` §3.2 rule 3), so two teams' figures are not commensurable. A per-team report is trivially placed beside another one; the header is what makes that misuse visible at the point of reading.
+   - **MUST NOT render:** a cross-team comparison · a per-person figure (§3.2 rule 5) · a portfolio rollup (§8 scopes it out and builds no rollup hook) · a **single collapsed accuracy number** · or **any figure summing, averaging, or differencing `B` and `S`** (§8.2 — they are different units with opposite remedies, and a collapsed figure names no lever).
 3. Produce a mid-sprint health check:
    - **On track**: items progressing as planned
    - **At risk**: items that may not complete — with specific reason and remediation.
@@ -279,7 +293,10 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
 7. Read `references/capacity-model.md` §9 Demand-Supply Gap RAG Thresholds when an at-risk assessment hinges on whether committed demand exceeds effective supply — a Red reading (ratio > 1.00) is a forcing function to surface a de-commit / re-scope / re-baseline decision, not a status note
 
 **Output**: Sprint health snapshot, item-level status, risk items, scope changes,
-recommended adjustments, drafted escalations.
+recommended adjustments, drafted escalations, and — when estimation calibration is in scope —
+the **Estimation-Calibration Report** (coverage · calibration bias + its band · calibration
+spread + its realized-precision phase · trend · inflation flag), **or** its `not computable`
+block. The report renders in one of those two forms or not at all; it never renders empty.
 
 ### Mode F — DoD & Release Readiness Gate
 
@@ -970,6 +987,42 @@ structural conformance and content quality.
   a defect to fix before the plan ships. Junior renders it only when the numbers are
   interesting, the day-one no-data state renders nothing at all, and a loop that has never once
   emitted a figure looks exactly like a healthy one.
+
+### Calibration band rendered below the window floor — OUT
+
+- **Signature (observable signal):** An Estimation-Calibration Report renders a 🟢/🟡/🔴 band —
+  or a greyed, provisional, asterisked, or fourth-colour "unknown" band — for a window carrying
+  fewer completed iterations than §8.3's floor; or it renders one blanket "insufficient data"
+  line in place of the three distinct per-element reasons; or it suppresses the whole report,
+  taking the coverage figure down with it.
+- **Conditional:** do NOT render a band, in any colour or shade, when the window is below
+  §8.3's floor — and do NOT suppress the report wholesale — because the below-floor case is
+  precisely the case where **no verdict exists**, and anything occupying the colour column
+  reads as a verdict. A greyed band is not a smaller claim than a green one; it is the same
+  claim rendered quieter. Suppressing the report instead discards **coverage**, which is
+  computable at any `N` and is the one figure that gets *more* useful as the sample thins
+  (§8.7 V2).
+- **Root cause:** A report with an empty band column looks broken, so the pull is to fill it —
+  with grey, with a provisional colour, or with a defaulted GREEN — and each of those reads to
+  a downstream reader as a computed result rather than an absent one. The corpus is
+  unambiguous here and it is the pattern to copy: every negative path in this reference set
+  emits an explicit **string**, and not one of them emits a colour.
+- **Mitigation:** Below the floor, render §8.3's `not computable` string verbatim for bias, the
+  distinct per-element reasons for spread and trend, the quantified accrue-recommendation, and
+  the confidence word that explains *why* the band is withheld — and render **coverage
+  normally**. Never default the band to GREEN, never mint a fourth colour, never leave the cell
+  blank. Above the floor, cite §8.3's band **by role** and restate no boundary value: the report
+  is a band consumer, and a restated boundary is a second home that will drift from the first.
+- **Principal response vs. junior response:** Principal renders `N = 2` as coverage plus three
+  named not-computable reasons plus "accrue one more completed iteration before reading a
+  band," and the team knows exactly what it has and what it needs. Junior renders a grey dot in
+  the band column, someone reads it as "roughly fine," and a two-iteration artifact quietly
+  becomes a forecasting input.
+- **Distinctness (do NOT merge):** this is the **band-rendered-without-basis** axis — a
+  *reporting* failure at the negative path, on the Mode E report surface. It is distinct from
+  the **OUT** entry above (a Mode D emission omitting its prior→adjusted basis, or omitting the
+  block entirely) and from the **INPUT** entry (a figure consumed without its window
+  qualifiers). All entries stay; do not merge.
 
 ## Shared Behavioral Rules
 
