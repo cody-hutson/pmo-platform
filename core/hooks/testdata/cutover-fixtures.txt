@@ -112,6 +112,24 @@ CLEAN	ISSUEREF-POS	0|41|    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856
 # never written `word:#NN` in the corpus; a self-describing #N after prose still flags.
 FLAG	ISSUEREF-POS	0|10|The fix for the palette bug lives in #90002 here now.
 
+# ─── Regex character-class hex form (issue #4182): `#[0-9a-fA-F]{6}` is a PATTERN, not a ref ──
+# Second instance of the #2068 false-positive class. A durable-corpus file that DOCUMENTS a hex
+# verification command carries the regex character-class form. The char after `#` is `[`, so
+# neither the letter-bearing branch nor the colon-prefixed branch fires, and ISSUEREF_RE reads
+# the leading `#[0` as a bracketed ref (`#[42]` is itself a legal ref shape). The third mask
+# branch covers it, gated on a well-formed hex RANGE (X-Y) between the brackets. Rows:
+# (1) POSITIVE — the real readiness-map-template.md:59 shape; must now be CLEAN.
+# (2) NEGATIVE — a genuine bare ref in the SAME table-cell position; must still FLAG. This pair
+#     is the proof the widening is precise rather than permissive.
+# (3) PRECISION GUARD — a BRACKETED ref, the shape closest to a character class and the one a
+#     broad `#[...]` widening would swallow; it carries no X-Y range, so it must still FLAG.
+# (4) MIXED — the class form AND a real ref on one line; masking is span-local, so it must FLAG.
+# Synthetic high-range issue numbers (not real refs), per the convention above.
+CLEAN	ISSUEREF-POS	0|59|| TH-1 | No literal hex outside the `<style>` block | `sed '/<style>/,/<\/style>/d' <file> \| grep -coE '#[0-9a-fA-F]{6}'` → `0` |
+FLAG	ISSUEREF-POS	0|59|| TH-1 | No literal hex outside the `<style>` block | see #90002 for the rule |
+FLAG	ISSUEREF-POS	0|59|| TH-1 | The bracketed ref #[90002] is a reference, not a character class |
+FLAG	ISSUEREF-POS	0|59|| TH-1 | `grep -coE '#[0-9a-fA-F]{6}'` per #90002 | `0` |
+
 # ─── Class U (raw github.com/.../{issues,pull,milestone} URL) ────────────────
 # A raw GitHub issue/PR/milestone URL is durability-ladder rung-6 — it rots on any
 # repository move/migration. The URL class asserts the regex's CONTENT-match precision

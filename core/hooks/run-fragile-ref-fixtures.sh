@@ -35,11 +35,15 @@ URL_RE='github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/(issues|pull|milestone)s?([/
 REFBLOCK_RE='^#{1,6}[[:space:]]+([Ii]ssue [Rr]eferences|[Rr]eferences|[Pp]rovenance|[Ss]ources?)[[:space:]]*:?[[:space:]]*$'
 ISSUEREF_RE='#\[?[0-9]+\]?'
 # Companion hex-color mask — byte-identical to block-fragile-refs.sh + reference-durability.yml
-# (the #314 anti-drift contract now covers both paired constants). Two ERE branches: letter-
-# bearing hex run, OR colon-prefixed CSS hex `:#<3-8 hex digits>` (catches pure-digit colors
-# like color:#155724). Masked to spaces in the shared classifier before the ISSUEREF_RE test so
-# hex-color prefixes (#28) are not read as issue refs (#2068). ISSUEREF_RE itself is unchanged.
-HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*)'
+# (the #314 anti-drift contract now covers both paired constants). Three ERE branches: letter-
+# bearing hex run; colon-prefixed CSS hex `:#<3-8 hex digits>` (catches pure-digit colors
+# like color:#155724); and the regex CHARACTER-CLASS hex form `#[<hex ranges>]` + optional
+# {n}/{n,m} quantifier (#[0-9a-fA-F]{6}), where the char after # is `[` so neither other branch
+# fires and the leading `#[0` reads as a bracketed ref (issue #4182). That third branch requires
+# a well-formed hex range (X-Y) between the brackets, so a genuine bracketed ref (#[42], no
+# range) is still flagged. Masked to spaces in the shared classifier before the ISSUEREF_RE test
+# so hex-color prefixes (#28) are not read as issue refs (#2068). ISSUEREF_RE itself is unchanged.
+HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*|#[[][0-9A-Fa-f-]*[0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f-]*[]]([{][0-9]+(,[0-9]+)?[}])?)'
 MIN_SELFDESCRIBE_WORDS=3
 
 # matches_class — returns 0 (match) / 1 (no match) for a given class + content line.
