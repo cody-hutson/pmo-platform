@@ -143,17 +143,20 @@ DIR="$HS/$MILESTONE_SLUG"                       # canonical (write target)
 Writers ALWAYS use the slug form. Readers probe slug then version so pre-cutover
 releases remain readable. The fallback is read-only — never create the version form.
 
-### 4a.4 — Cutover (introducing-release-exempt)
+### 4a.4 — When a revision takes effect (splits by load path)
 
-The cutover splits by **load path**, because this file and the Procedure 7a gate reach the
-hub differently.
+The effective moment splits by **load path**, because this file and the Procedure 7a gate
+reach the hub differently.
 
-**This playbook (Procedure 4a and § 4a.1) — introducing-release-exempt.** It applies to
-releases entering **Stage 4** strictly AFTER the introducing release's deploy SHA recorded
-in `release/releases/RELEASE_LOG.md`. **The introducing release is itself exempt**: this
-file reaches the hub only through the Stage-12 deployed mirror, so it cannot fire on the
-release that ships it (reflexive-pipeline-loop discipline). Releases already in flight are
-grandfathered.
+**This playbook (Procedure 4a and § 4a.1) — effective at the next deploy.** This file
+reaches the hub only through the Stage-12 deployed mirror, never from the repo tree. A
+revision therefore binds releases entering **Stage 4** after the deploy that publishes it
+(the deploy row recorded in `release/releases/RELEASE_LOG.md`), while a release already
+past Stage 4 keeps the text it started under. The release carrying the revision runs on
+the previously deployed copy for its whole run, so its own Procedure 4a obligations do
+not fire. That is a structural property of the load path rather than a granted exemption:
+an unpublished edit is unreachable by the hub, so no mechanism exists by which a revision
+could bind the release that ships it.
 
 **The Procedure 7a predicate — live on merge, no exemption.** `hub-spoke-bridge.md` is not
 deployed; it loads from the repo tree, so the revised gate is in force from the merge,
