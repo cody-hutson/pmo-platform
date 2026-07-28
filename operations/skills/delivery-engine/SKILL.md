@@ -191,6 +191,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
    - **Range validation — reject point estimates.** Apply `estimation-standards.md` §5: any single-point estimate (story-point or velocity figure) is REJECTED and returned as a range, no tighter than the item's Cone-of-Uncertainty band (§1) for its current lifecycle phase. State the phase and the band that set the width. If the lifecycle phase is unknown, default to the **widest applicable band** and label the phase `[ASSUMPTION – CONFIRM]` — never silently accept the point.
    - **Focus factor — apply to raw capacity.** Apply the `capacity-model.md` §1 multiplicative chain reading the §3 canonical focus factor (FF = 0.65, valid range 0.60–0.75). If an input asserts raw or 100% capacity, flag it and present the **focus-adjusted** capacity instead, naming the factor applied (and `CS(N)` when N > 1 concurrent projects). Never plan against un-focus-factored capacity.
    - **Planning-horizon validation.** Apply `estimation-standards.md` §2: flag any item carrying a **point commitment beyond the committed horizon** (the current iteration) and downgrade it to a forecast range (or to theme/epic magnitude per the horizon). A point figure committed two or more iterations out is not accepted.
+   - **Estimation-calibration advisory — surface, never apply.** Apply `estimation-standards.md` §8 under its **§8.6.1 consumer contract**, which is **read-only**: consume only `B`, its **direction word**, its **band**, `S`, the **realized-precision phase**, `N`, and the **confidence word**. Compose the advisory and **render it — never apply it, and never write any value back.** `estimation-standards.md` §3, `sprint-defaults.md` §1.2, and `capacity-model.md` are **read-only to this path**: a focus-factor move is surfaced as a `[RECOMMENDED]` proposal **inside §3's valid range** requiring a governed edit (issue → plan → PR), **never performed here** — §3's Consumers note makes the focus factor a value two other docs inherit *by role* without restating it, so an automated write there would propagate into both with **no diff trail in either**. Emit `B` with its direction word, its 🟢/🟡/🔴 band cited from **§8.3 by role** (**never restate a boundary value**), `N`, and the §3.1 confidence word; emit `S` on a **separate labelled line** with its realized-precision phase. **At most ONE bias lever per emission** — 🟢 → none; 🟡 → the `[RECOMMENDED]` multiplier proposal, and do **not** change the §3 focus factor at this band; 🔴 → a `[RECOMMENDED]` re-baseline, which **supersedes** the multiplier (a lever applied twice on one signal biases the plan in the opposite direction). **Run the corroboration test BEFORE the `[RECOMMENDED]` line is composed, not after**: never fire a lever on an **F1-only 🔴** without F2 or F3 corroboration (§8.7 V3 + the §8.7 evidence-quality bar). Never apply a bias when the band is 🟢 or the figure is `not computable`; never pool signal families (§8.1 rule 1); never collapse `B` and `S` into one figure (§8.2).
 3.5. **Facilitation-technique surfacing (silent-by-default — at most one suggestion per activity).** A sprint-planning input can carry up to **two distinct facilitation-shaped activities** — an *estimation* (sizing) activity and an *iteration/release-planning* (goal-setting + scope-cut) activity — which may co-occur in one session. Each is a separate activity with its own domain file, and each surfaces **at most one** technique under the identical three-condition gate; the two are evaluated independently, so a session that is both sizing and scope-cutting may surface one estimation card AND one planning card (never two from the same activity).
    - **Estimation activity** (story-point assignment, backlog sizing, a sizing session) → consult `core/standards/facilitation-techniques/README.md` for the estimation domain (`core/standards/facilitation-techniques/estimation.md`).
    - **Iteration/release-planning activity** (setting the iteration goal, or cutting candidate scope to fit capacity — distinct from sizing items) → consult `core/standards/facilitation-techniques/README.md` for the planning domain (`core/standards/facilitation-techniques/planning.md`). This is the goal-setting + scope-bucketing facilitation layer; it is **not** the sizing layer (that is the estimation activity above) and **not** the value/Cost-of-Delay ranking the tech-debt slice already gets (`references/tech-debt-classification.md`) — MoSCoW buckets by must-have-ness, not by economic value.
@@ -218,6 +219,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
    - **Tech-debt classification + ranking**: for every tech-debt item in scope, apply `tech-debt-classification.md` —
      **(a) classify** into a Fowler quadrant (§1: Reckless/Prudent × Deliberate/Inadvertent); when intent/awareness is not determinable, emit `quadrant: unclassified — intent/awareness not determinable; classify before prioritizing` and **exclude it from the ranked fill** (never default-to-a-quadrant), and route a Reckless/Inadvertent *pattern* to RAID; **(b) quantify CoD** with a confidence tier (§2: score the canonical CoD components — Value / Time-Criticality / RR\|OE — referenced by role from `intake-governance.md` §2, **never re-derived**; attach HIGH/MEDIUM/LOW — when inputs are not measurable, score at LOW from context, **never fabricate a HIGH number and never skip CoD**); **(c) sort the tech-debt slice by (quadrant × CoD)** (§3 lexicographic rule: CoD descending primary, quadrant urgency as the tie-break within a CoD band — Reckless/Deliberate surfaces first when CoD is high); name it "tech-debt rank / (quadrant × CoD) sort" — **never "debt score"**; and **(d) fill the under-floor deficit** with the top-ranked items up to the floor, consuming `tech-debt-capacity.md`'s floor → ranking contract (floor % / allocation ratio / under-floor deficit / aged-item set) **by role — do NOT re-derive the floor**; an aged item (>90d, from the §2 aged-item set) ranks by its (quadrant × CoD) like any item (aging raises Time-Criticality → CoD, no separate aging-weight). When `tech-debt-capacity.md`'s floor/deficit have not been computed, still produce the ranking but state the fill target is unknown and recommend running the capacity-floor check first.
    - **Milestone variance + RAG**: when a milestone schedule baseline exists, compute milestone variance as SPI and assign its 🟢/🟡/🔴 RAG per `estimation-standards.md` §7, **citing the threshold**. Name it "milestone variance (SPI)" / "milestone slip" — never "Schedule Variance". When no baseline exists, emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; do not fabricate a RAG.
+   - **Estimation calibration + advisory — the block is MANDATORY; silence is a defect, not a pass**: render **exactly one** calibration block per signal family, and open every one of them with the literal token **`estimation calibration`**, per `estimation-standards.md` §8.6.1. The block carries, in this order: **coverage** — `N` completed iterations, the pair count **against the iteration's planned item count**, and the §3.1 confidence word (coverage renders at **any** `N`; it is the survivorship control per §8.7 V2 and is most useful when the sample is thin); **calibration bias** — `B` + its **direction word** + its 🟢/🟡/🔴 band, cited from **§8.3 by role** with **no boundary value restated**; **calibration spread** on a **separate labelled line** — `S` + its realized-precision phase + whether that phase is **wider** than the declared `Estimate Phase`, expressed as a **sentence, never a colour** (§8.4); the **single active `[RECOMMENDED]` lever**, rendering **prior → adjusted** plus its **basis** (`B`, the signal family, `N`, the confidence word, and the lever name) — an operator-visible estimate that differs from the figure the team produced **without** that basis is a defect; and the **inflation flag** when `B` trends toward 1.00 **while** points-per-item trends up (`sprint-defaults.md` §3.2 rule 4's already-mandatory cross-check) — rendered **in this same block, never in a separate artifact**, so the correction and its own falsifier travel together. **Label the two figures with their units — `B` is a central multiplier, `S` is a range ratio — so they cannot be read as one composite**; a summed, averaged, differenced, or otherwise collapsed "accuracy" figure is **prohibited** (§8.2, and the §8.3 naming guard). The adjusted figure is a **RANGE, never a point** (§5 binds unconditionally). **When the figures are not computable** — no §8 data at all, or `N` below §8.3's window floor — **the block still renders**, carrying §8.3's negative-path string verbatim (`estimation bias: not computable — N iteration(s) of history (< 3); do not use for forecasting`) plus a quantified `[RECOMMENDED] accrue <§8.3 floor − N> more completed iteration(s) before reading a band`. Never a colour, a greyed or provisional band, a blank cell, or a defaulted GREEN on the negative path. **An emission carrying no calibration block at all is a DEFECT** — its absence is indistinguishable in output from a working loop that had nothing to say, so the **absence of the `estimation calibration` token is the detectable failure signature**, and a check over the emission **fails closed**: token present → the block is graded; token absent → FAIL, never a pass.
    - **Carryover handling**: items carried from prior sprint with reason and risk
    - **Risk items**: items with dependencies, items without estimates, items with
      incomplete AC (should have been caught in DoR but might slip through)
@@ -232,7 +234,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
 6. Produce the dual-framing bridge (if co-managed): if any sprint items map to waterfall milestones, note
    the milestone impact and produce both framings
 
-**Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), the **tech-debt rank** — each tech-debt item with its Fowler quadrant (or `unclassified`) and its CoD value + HIGH/MEDIUM/LOW confidence tier, the slice sorted by (quadrant × CoD), and the top-ranked items filling the under-floor deficit up to the floor (or a deferred-fill note + recommendation when the floor/deficit are not computed), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation, a Reckless/Inadvertent pattern, and a declared PM floor-override).
+**Output**: Sprint plan, capacity model (including the tech-debt allocation ratio + 🟢/🟡/🔴 floor-RAG, with the under-floor warning on 🔴), aged-tech-debt flags with escalate/reclassify dispositions, rework-rate alert (or `not computable` when no rework-capture source), the **tech-debt rank** — each tech-debt item with its Fowler quadrant (or `unclassified`) and its CoD value + HIGH/MEDIUM/LOW confidence tier, the slice sorted by (quadrant × CoD), and the top-ranked items filling the under-floor deficit up to the floor (or a deferred-fill note + recommendation when the floor/deficit are not computed), scope options (if needed), sprint goal, milestone bridge (if applicable and co-managed), RAID entries for any planning risks (including any aged-debt escalation, a Reckless/Inadvertent pattern, and a declared PM floor-override), and the **estimation-calibration block** — coverage, calibration bias + its band, calibration spread + its realized-precision phase, and the single active `[RECOMMENDED]` lever with its prior → adjusted and basis, **or** the `not computable` rendering. The calibration block is a **declared deliverable of this mode**, not an optional flourish: an output that omits it entirely is incomplete.
 
 ### Mode E — Execution Control Tower
 
@@ -273,7 +275,7 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
    recommendation must include the drafted escalation message (3–5 sentences: context,
    specific ask, deadline). Recommendations without drafts violate push-to-resolve.
 5. Recommend adjustments: re-scope, re-assign, escalate, or accept risk
-6. When reporting velocity or capacity, apply `references/estimation-standards.md` velocity-as-range enforcement (§5) — express velocity and any derived figure as a range, never a point value
+6. When reporting velocity or capacity, apply `references/estimation-standards.md` velocity-as-range enforcement (§5) — express velocity and any derived figure as a range, never a point value. **Then apply §8's spread lever (§8.6.1 Lever 2):** when the team's **realized-precision phase** (§8.4) is **wider** than the phase the estimates were actually made at (the pair's declared `Estimate Phase`), **widen the emitted range to the realized §1 band** and **name both phases**. This changes the range's **WIDTH, never its centre**, and **mutates nothing** — it makes §1's existing cone rule bind at the team's *measured* precision rather than its *claimed* precision. **`S` MUST NOT be fed through a multiplier**: it is a **range ratio** — a ratio of extremes with no centre and no direction — so multiplying by it injects a bias into a team that has none (§8.2, Team B), which is the one failure that makes the loop actively harmful. Apply the §8.6.1 read-only posture here as in Mode D: nothing on this path writes a stored value
 7. Read `references/capacity-model.md` §9 Demand-Supply Gap RAG Thresholds when an at-risk assessment hinges on whether committed demand exceeds effective supply — a Red reading (ratio > 1.00) is a forcing function to surface a de-commit / re-scope / re-baseline decision, not a status note
 
 **Output**: Sprint health snapshot, item-level status, risk items, scope changes,
@@ -873,6 +875,101 @@ structural conformance and content quality.
   the floor) and from the *raw-capacity / point-estimate* entry (un-focus-factored capacity and
   point estimates) and the *gate-advance* / *stage-skip* entries (transition-validation failures).
   All entries stay; do not merge.
+
+### Calibration bias applied without its confidence word or window size — INPUT
+
+- **Signature (observable signal):** A Mode D advisory renders a bare `B = 1.20` — or `B` with
+  only its band — carrying **no `N`**, **no §3.1 confidence word**, and **no direction word**;
+  or it renders a `B` computed over a window that closed several iterations ago with the same
+  authority as one that closed yesterday, with no window identifier on the emission.
+- **Conditional:** do NOT emit a calibration bias without its `N`, its confidence word, its
+  direction word, and its window identity when the window is at the `Emerging pattern` end of
+  §8.3's window table or is not the most recent one, because a bias at `N = 3` is a
+  three-iteration signal that §8.7 V1 says warrants re-check before any governed change — and a
+  reader who cannot see `N`, the confidence word, or the window's recency cannot tell an
+  `Emerging pattern` from a `High confidence` baseline, or a current advisory from a stale one.
+  The digits look identical; only the qualifiers separate them.
+- **Root cause:** The band and the multiplier are the visually interesting part of the emission
+  and the qualifiers read as boilerplate, so under output pressure the figure ships and its
+  window context is dropped. §8.3's Confidence-qualifier rule is explicit that a band emitted
+  without its confidence word is **not a valid §8 output**, but the emission still *looks*
+  complete without it — which is what makes this the input-side twin of the incumbent
+  velocity-window entry above.
+- **Mitigation:** Treat `{B, direction word, band, N, confidence word}` as an **atomic emission
+  unit** — compose them together or emit none of them. Read the confidence word from §8.3's
+  window table by role (never restate the window rows), carry the window's identifier so
+  recency is inspectable rather than assumed, and apply §8.7's evidence-quality bar at the point
+  the lever is composed: an **F1-only 🔴 requires F2 or F3 corroboration** before any lever
+  fires.
+- **Principal response vs. junior response:** Principal emits the figure with its full
+  qualifier set, names the window it came from, and states that a 🔴 at the `Emerging pattern`
+  end warrants re-check at the next window before any governed focus-factor proposal. Junior
+  emits `B = 1.20 🟡`, the team applies it as though it were a stable baseline, and a
+  three-iteration artifact silently becomes the team's planning multiplier.
+
+### Calibration spread fed through a multiplier — PROC
+
+- **Signature (observable signal):** The advisory applies `S` — or some figure derived from `S`
+  — multiplicatively to an estimate: an emission recommending "apply ×1.67" where 1.67 is the
+  **spread**, a single blended "accuracy" factor combining `B` and `S`, or a range whose
+  **centre** moved when only its width should have.
+- **Conditional:** do NOT feed `S` through a multiplier — ever, and most damagingly when the
+  team's `B` is at or near 1.00 — because `S = max(R) ÷ min(R)` is a **ratio of extremes with
+  no centre and no direction**, so there is no correct value to multiply by: applying it to a
+  zero-bias, high-scatter team **injects a systematic bias where none existed** and leaves that
+  team strictly worse than before the loop ran (§8.2, Team B).
+- **Root cause:** `B` and `S` are both dimensionless ratios near 1, printed side by side, and a
+  multiplier is the lever the emission has just used for `B` — so the wrong operation is applied
+  to the right number by pattern-matching on the shape of the figure rather than on its
+  dimension. The failure is silent: the emission is well-formed, the arithmetic succeeds, and
+  nothing errors.
+- **Mitigation:** Bind the lever to the figure by **dimension, not by shape**. `B` is a
+  **central multiplier** and changes an estimate's **value**; `S` is a **range ratio** and
+  changes an estimate's **width** and nothing else. `S`'s only governed lever is §8.4's
+  cone-phase equivalence → widen the emitted §5 range to the realized band (Mode E step 6);
+  its other remedies are decompose smaller or advance the cone phase. Label the two figures
+  with their unit words in every emission so the dimensional difference is visible at the point
+  of use, and never derive a single scalar from both.
+- **Principal response vs. junior response:** Principal reads `B = 1.00, S = 2.60` as "no
+  systematic bias, large scatter — widen the range, decompose smaller; a multiplier is useless
+  here," and says so. Junior sees two ratios, reports "poor estimation accuracy," recommends a
+  correction factor, and hands a well-calibrated team a bias it did not have.
+- **Distinctness (do NOT merge):** this is the **wrong-lever-for-the-dimension** axis — an
+  in-mode *processing* failure. It is distinct from the **INPUT** entry above (a figure consumed
+  without its window qualifiers) and from the **OUT** entry below (a correct adjustment whose
+  justification was not rendered). All entries stay; do not merge.
+
+### Estimate silently adjusted — prior value and basis not rendered — OUT
+
+- **Signature (observable signal):** A Mode D plan emits a capacity or scope figure that differs
+  from the one the team produced, with **no prior → adjusted pair** and **no basis line** naming
+  `B`, the signal family, `N`, the confidence word, and the lever; or a §5 range that **widened**
+  under the spread lever with no statement of the realized and declared phases that widened it;
+  or — the load-bearing case — a Mode D emission carrying **no calibration block at all**, so a
+  loop that produced nothing is indistinguishable from a loop that had nothing to say.
+- **Conditional:** do NOT emit an operator-visible figure that differs from the team's own, and
+  do NOT omit the calibration block, when a §8 figure exists **or** when it does not, because an
+  unexplained difference is an unauditable one — a reader cannot tell an advisory the team
+  accepted from an adjustment the agent applied — and an absent block reads exactly like a
+  passing check. **Absence is the failure signature**, which is why the block is mandatory in
+  both the positive and the negative path.
+- **Root cause:** The adjustment and the report of the adjustment are two separate acts, and the
+  first is the one that feels like the work. On the negative path the pull is stronger still:
+  with no data there is nothing interesting to say, so the line is dropped as noise — and
+  dropping it produces an output that satisfies every other check while delivering nothing.
+  This is the *absence-read-as-success* shape, on this surface.
+- **Mitigation:** Render **prior → adjusted + basis + band** on any operator-visible figure that
+  differs from its input, including a range whose width changed. Render the calibration block on
+  **every** Mode D capacity model and **every** Mode E velocity report, opening it with the
+  literal token `estimation calibration`, so a presence probe over the emission decides
+  rendered-versus-absent mechanically and **fails closed** — token absent is a FAIL, never a
+  pass. On the negative path emit §8.3's `not computable` string verbatim plus the quantified
+  accrue-recommendation; never a colour, never a blank, never silence.
+- **Principal response vs. junior response:** Principal renders the block in all three states —
+  figures present, below the window floor, and no §8 data at all — and treats a missing block as
+  a defect to fix before the plan ships. Junior renders it only when the numbers are
+  interesting, the day-one no-data state renders nothing at all, and a loop that has never once
+  emitted a figure looks exactly like a healthy one.
 
 ## Shared Behavioral Rules
 
