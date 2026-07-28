@@ -425,8 +425,12 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
    else ($rollups | map(select(.work_item == $target_wi)) | .[0] // null) end) as $target_row
 | (if $target_row == null then null else ($target_row | four_leaf) end) as $actual
 | (if ($actual == null or $estimate == null) then null else ($estimate - $actual) end) as $delta_tokens
+# NOTE: `pct1` already converts a FRACTION to a 1-dp percentage (x1000, round, /10).
+# Multiplying by 100 first double-scales it — a -87.2% error renders as -8722.2%,
+# which is arithmetically wrong while still looking like a plausible percentage.
+# Asserted against an independently-computed value by SE-11.
 | (if ($actual == null or $estimate == null or $actual == 0) then null
-   else ((($estimate - $actual) / $actual) * 100 | pct1) end) as $pct_error
+   else ((($estimate - $actual) / $actual) | pct1) end) as $pct_error
 
 # ---- USD (only ever rendered when a provider record supplies its own rate) ----
 | (if ($unit_mode == "usd" and $estimate != null) then (($estimate * $usd_rate) * 100 | round) / 100 else null end) as $usd_est
@@ -496,7 +500,9 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
                + (if $usd_est != null then ["Derived cost: $\($usd_est)   (rate $\($usd_rate) / token, DERIVED from the store's own provider record; inherits the estimate's confidence)"] else [] end)
           end )
       + [ "",
-          "Basis: median of \($n) comparable(s) matched on \($L.key), tier \($L.tier).",
+          (if $suppression == "INSUFFICIENT-COMPARABLES"
+           then "Sub-threshold rows found (n=\($n)) — listed for diagnosis, NOT a basis; no median was computed and no estimate was emitted:"
+           else "Basis: median of \($n) comparable(s) matched on \($L.key), tier \($L.tier)." end),
           (if $L.basis_kind == "rate"
            then "| work item | tokens | tokens/pt | key | attribution tier | token source |"
            else "| work item | tokens | key | attribution tier | token source |" end),
@@ -508,13 +514,17 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
             then "| \(.work_item) | \(.figure) | \((.rate // 0) | floor | commafy) | \(.key) | \(.attribution_tier) — \(.tier_label) | \(.provenance) |"
             else "| \(.work_item) | \(.figure) | \(.key) | \(.attribution_tier) — \(.tier_label) | \(.provenance) |" end ) )
       + [ "",
-          "Dispersion: MAD \(if $mad == null then "n/a" else ($mad | floor | commafy) end) (rMAD \(if $rm == null then "n/a" else ($rm | r4) end)).  Best-effort token fraction: \($M.best_effort_token_fraction).  Reproducible: \($reproducible).",
-          "Comparison (NOT used): arithmetic mean = \(if $mean_tokens == null then "n/a" else ($mean_tokens | floor | commafy) end) tokens"
+          (if $suppression == "INSUFFICIENT-COMPARABLES" then null
+           else "Dispersion: MAD \(if $mad == null then "n/a" else ($mad | floor | commafy) end) (rMAD \(if $rm == null then "n/a" else ($rm | r4) end)).  Best-effort token fraction: \($M.best_effort_token_fraction).  Reproducible: \($reproducible)." end),
+          (if $suppression == "INSUFFICIENT-COMPARABLES" then null
+           else "Comparison (NOT used): arithmetic mean = \(if $mean_tokens == null then "n/a" else ($mean_tokens | floor | commafy) end) tokens"
             + (if ($mean_tokens != null and $med != null and $med > 0 and $L.basis_kind != "rate")
                then " — \((($mean_tokens / $med) * 100 | round) / 100)x the median. Median is used because token spend is right-skewed; one long item moves a mean without widening it [SOURCE: dora-telemetry.md:45]."
-               else "." end),
-          "Confidence: \($conf_label) via rule \($base.rule) on (n=\($n), rMAD=\(if $rm == null then "n/a" else ($rm | r4) end))"
-            + (if ($caps | length) > 0 then ", capped by \($caps | map("\(.cap)->\(.to)") | join(", "))." else " (no caps applied)." end),
+               else "." end) end),
+          (if $suppression == "INSUFFICIENT-COMPARABLES"
+           then "Confidence: n/a — DECLINED at rule \($base.rule) (n=\($n) < N_min=\($nmin)). A confidence label is not emitted for a figure that does not exist."
+           else "Confidence: \($conf_label) via rule \($base.rule) on (n=\($n), rMAD=\(if $rm == null then "n/a" else ($rm | r4) end))"
+            + (if ($caps | length) > 0 then ", capped by \($caps | map("\(.cap)->\(.to)") | join(", "))." else " (no caps applied)." end) end),
           "Provenance: token_source=\($tsrc)" + (if $tsrc == "exact" then " — all comparables exact; figures rendered bare with an exact-source tag." else " (\($nheur) of \($n) comparables carry non-exact turns) — figures marked ~." end),
           "Thresholds: N_min=\($nmin) [SOURCE gate-evaluation-spec.md:95-96]; rMAD bands 0.25/0.50 [SOURCE finops-attribution-convention.md:75-77]; 0.75 [RECOMMENDED].",
           "Grounding honesty: no usage distribution exists to calibrate these bands against — data hygiene forbids reading the operator-local store from the public repo, and no committed store exists. The rMAD band edges are proposed values, not measurements. [CALIBRATE-AFTER-3]",
@@ -879,6 +889,18 @@ self_test() {
     else
       bad "SE-3 N_MIN: the 2-comparable case did not decline cleanly (an 'Estimate:' line or a missing decline message)"
     fi
+    #    A decline must not print median-shaped statistics either. A "Dispersion:
+    #    MAD … (rMAD …)" line under a decline reads as a computed-but-hedged
+    #    figure — precisely the false precision the floor exists to prevent — so
+    #    the sub-threshold rows render as diagnosis, explicitly NOT as a basis.
+    if grep -aqE '^Dispersion: |^Comparison \(NOT used\)|^Basis: median of ' "$T2"; then
+      bad "SE-3 N_MIN: the declined render printed median-shaped statistics (Dispersion / mean-comparison / 'Basis: median of') — a decline must not imply a computed figure"
+    elif grep -aq 'NOT a basis; no median was computed' "$T2" \
+         && grep -aq 'Confidence: n/a — DECLINED at rule R1' "$T2"; then
+      ok "SE-3 N_MIN: the declined render prints NO dispersion, NO mean-comparison and NO confidence label — the sub-threshold rows are labelled diagnosis, not a basis"
+    else
+      bad "SE-3 N_MIN: the declined render is missing the explicit not-a-basis / confidence-n-a wording"
+    fi
   fi
   local T3="$wd/thin3.txt"
   mkdir -p "$wd/thin3"
@@ -1120,6 +1142,11 @@ self_test() {
       bad "SE-11 DELTA: arithmetic broken — estimate($dest) - delta($ddel) != actual($dact)"
     elif [ "$dconf" = "null" ]; then
       bad "SE-11 DELTA: the delta carries no confidence label"
+    elif [ "$(jq -n --argjson e "$dest" --argjson a "$dact" --argjson p "$dpct" \
+               '((((($e - $a) / $a) * 1000) | round) / 10) == $p' 2>/dev/null)" != "true" ]; then
+      # Independently recomputed, not read back from the same expression: a
+      # double-scaled percentage (x100 twice) still looks like a percentage.
+      bad "SE-11 DELTA: pct_error $dpct% does not match the independently computed (estimate-actual)/actual — check for a double-scaled percentage"
     else
       ok "SE-11 DELTA: estimate=$dest actual=$dact delta=$ddel pct_error=$dpct% confidence=$dconf (target excluded from its own basis)"
     fi
