@@ -50,7 +50,7 @@ this release ──(HARD, cross-release)──▶ the decision-audit-and-learnin
 
 | Card | Repro result | Control | Verdict |
 |---|---|---|---|
-| #3704 | multi-value `triggers` payload with a bare pipe → `ERROR: Payload contains '|'`, exit 1 | single-value `triggers:[T1]` → exit 0 | **admit-still-valid** |
+| #3704 | multi-value `triggers` payload with a bare pipe → `ERROR: Payload contains '\|'`, exit 1 | single-value `triggers:[T1]` → exit 0 | **admit-still-valid** |
 | #3712 | forced-fallback + `--event-type iteration` → `ERROR: Invalid event_type: 'iteration'`, exit 1 | schema-readable, same row → exit 0 | **admit-still-valid** |
 
 **#3712 compounding factor, empirically confirmed.** `--self-test` prints `enum source=static-fallback (11 event types)` on the fallback path and `enum source=schema-§3-data-driven (12 event types)` on the schema path — **and returns PASS on both**. The self-test *displays* the divergence and never *asserts* on it. That is the toothless-guard shape, and it names the minimal fix.
