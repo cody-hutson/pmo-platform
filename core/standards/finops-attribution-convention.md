@@ -11,7 +11,7 @@ consumers: "finops-usage-extractor rollup-attribution.sh (producer); the agent-f
 
 # FinOps Usage Attribution Convention
 
-> Defines HOW a usage `session` record maps to its owning work item, and how subagent spend chains to its agent and session. The `rollup` and `coverage` RECORD SHAPES live in [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) (v1.1.0); THIS doc owns the mapping ALGORITHM. The two concerns are split on purpose — the schema doc is the shape; this standard is the resolution.
+> Defines HOW a usage `session` record maps to its owning work item, and how subagent spend chains to its agent and session. The `rollup` and `coverage` RECORD SHAPES live in [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) (v1.2.0); THIS doc owns the mapping ALGORITHM. The two concerns are split on purpose — the schema doc is the shape; this standard is the resolution.
 
 ## Purpose + Scope
 
@@ -39,9 +39,9 @@ For a single-branch session, first match wins:
 
 | Tier | Rule | Grain | Determinism / source | `attribution_tier` |
 |---|---|---|---|---|
-| **T1 — issue-event key** (best-effort issue-grain) | The session emitted a `decision` / `gate-outcome` / `escalation` event whose Surface-B first-event `payload` carries `session:<composite>` where the composite's worktree component equals `basename(session.cwd)`, **and** that row's `subject`/`actor` names an issue `#N`, **and** the event `ts` ∈ `[started_utc, ended_utc]` → `#N` | issue `#N` | deterministic **where the key exists**; narrow (decision-emitting sessions only); fuzzy (worktree+time reconstruction, not id equality); LOCAL | `issue-event-keyed` |
+| **T1 — issue-event key** (best-effort issue-grain) | The session emitted a `decision` / `gate-outcome` / `escalation` event whose Surface-B first-event `payload` carries `session:<composite>` where the composite's worktree component equals **`session.worktree`** (the persisted worktree basename; v1.2.0 replaced `session.cwd`), **and** that row's `subject`/`actor` names an issue `#N`, **and** the event `ts` ∈ `[started_utc, ended_utc]` → `#N` | issue `#N` | deterministic **where the key exists**; narrow (decision-emitting sessions only); fuzzy (worktree+time reconstruction, not id equality); LOCAL | `issue-event-keyed` |
 | **T2 — release/chore branch** (RELIABLE milestone-grain — the default workhorse) | `git_branch ∈ {release/vX.Y-<slug>, chore/vX.Y-stage-N-<slug>, chore/vX.Y-<slug>}` → parse `vX.Y` → `milestone:vX.Y` | `milestone:vX.Y` | **deterministic; LOCAL-ONLY** (no join, no network) | `branch-milestone` |
-| **T3 — hub-state lineage** (milestone-grain corroboration) | `basename(session.cwd)` matches a Surface-C `worktree` row under `<hub-state>/vX.Y/sessions.md` **and** `[started_utc, ended_utc]` falls inside that release's pipeline-event window → `milestone:vX.Y` | `milestone:vX.Y` | deterministic join where hub-state is present; LOCAL | `hub-state-lineage` |
+| **T3 — hub-state lineage** (milestone-grain corroboration) | **`session.worktree`** matches a Surface-C `worktree` row under `<hub-state>/vX.Y/sessions.md` **and** `[started_utc, ended_utc]` falls inside that release's pipeline-event window → `milestone:vX.Y` | `milestone:vX.Y` | deterministic join where hub-state is present; LOCAL | `hub-state-lineage` |
 | **T4 — unattributed** (TERMINAL) | no issue-event key, no parseable branch, no lineage hit (auto `claude/*` / `agent-*`, `git_branch:null`) → `unattributed` with an `attribution_basis` naming the reason | `unattributed` | **fail-visible by construction** | `unattributed` |
 | **[OPT-IN] T-PR — fix/feat PR-resolve** (OFF by default; requires `--resolve-prs`) | `git_branch ∈ {fix/<slug>, feat/<slug>}` → merged-PR → closing-issue via `gh` → `#N` | issue `#N` | **heuristic; NETWORK; non-reproducible** → gated + stamped | `pr-resolved` |
 
@@ -63,7 +63,7 @@ For a single-branch session, first match wins:
 
 The correctness contract is a **ground-truth labeled-fixture** check, NOT a conservation identity:
 
-- **Ground-truth attribution (PRIMARY).** Each synthetic `session` fixture carries a **known** `(work_item, attribution_tier)` label in a sidecar oracle the resolver does not read. The resolver's per-session resolution MUST reproduce the known mapping, tier by tier (a `release/vX.Y-<slug>` fixture → `(milestone:vX.Y, branch-milestone)`; a decision-emitting fixture with a matching event-log payload → `(#N, issue-event-keyed)`; a `cwd`-joinable fixture with hub-state but an unparseable branch → `(milestone:vX.Y, hub-state-lineage)`; an auto-`claude/*` / null-branch fixture with no hit → `(unattributed, unattributed)`; a `branch_switch` fixture → `(multi-branch, …)`; and, in the opt-in suite, a `fix/<slug>` fixture with a stubbed merged-PR→issue → `(#N, pr-resolved)`). This is the check a wrong resolver **fails**.
+- **Ground-truth attribution (PRIMARY).** Each synthetic `session` fixture carries a **known** `(work_item, attribution_tier)` label in a sidecar oracle the resolver does not read. The resolver's per-session resolution MUST reproduce the known mapping, tier by tier (a `release/vX.Y-<slug>` fixture → `(milestone:vX.Y, branch-milestone)`; a decision-emitting fixture with a matching event-log payload → `(#N, issue-event-keyed)`; a **`worktree`**-joinable fixture with hub-state but an unparseable branch → `(milestone:vX.Y, hub-state-lineage)`; an auto-`claude/*` / null-branch fixture with no hit → `(unattributed, unattributed)`; a `branch_switch` fixture → `(multi-branch, …)`; and, in the opt-in suite, a `fix/<slug>` fixture with a stubbed merged-PR→issue → `(#N, pr-resolved)`). This is the check a wrong resolver **fails**.
 - **Conservation (SECONDARY plumbing).** `Σ rollup.tokens` (including `unattributed` and `multi-branch`) `== Σ session.tokens` over all records, and per-row `rollup.tokens == Σ session.tokens over rollup.session_ids`. This is **necessary but NOT sufficient** — it holds for ANY assignment (including the degenerate "route everything to `unattributed`"), so it proves conservation, not attribution correctness. It is retained as an independent guard on the summation invariant, but it is not the correctness proof.
 
 ## Coverage metric + health threshold
@@ -81,7 +81,7 @@ Every roll-up run emits one `coverage` record (shape in the schema doc) — the 
 ## Cross-file linkage — what is reliably linkable vs unattributed
 
 - **Reliably → milestone-grain:** any spoke whose `git_branch` is `release/vX.Y-*` / `chore/vX.Y-*` (T2, deterministic, local). Content spokes (engineering, dev-test, QA, execute, close) build on the release branch → this is the common case.
-- **Reliably → milestone-grain (corroboration):** any session whose `basename(cwd)` joins a hub-state `worktree` row (T3).
+- **Reliably → milestone-grain (corroboration):** any session whose **`session.worktree`** joins a hub-state `worktree` row (T3).
 - **Best-effort → issue-grain:** a decision-emitting session with a matching event-log payload (T1), or an opt-in PR resolve (T-PR).
 - **Lands in `unattributed` (honest gap):** write-nothing auto-`claude/*` spokes with no hub-state worktree row and no unique temporal resolution. Fail-visible, never dropped.
 - **Deterministic upgrade (deferred, out of scope):** a thin additive hub-emitted spawn-ledger marker — the hub logs each spoke's worktree / session id ↔ work item at spawn into a hub-state row — collapses the issue-grain gap and enables a reliable role split. It is a hub-session-continuity / hub-spoke-bridge change, not part of this convention's file set, and is routed to the agent-finops-intelligence milestone.
@@ -94,7 +94,7 @@ The skill's `SKILL.md` carries the full domain-specific failure-mode entries (5-
 
 | Reference | Relationship |
 |---|---|
-| [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) | the `rollup` + `coverage` record SHAPES (v1.1.0); this doc owns the mapping ALGORITHM |
+| [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) | the `rollup` + `coverage` record SHAPES (v1.2.0); this doc owns the mapping ALGORITHM |
 | [`hub-session-continuity.md`](hub-session-continuity.md) | the session-lineage substrate reused by T1 (Surface-B payload composite) and T3 (Surface-C `worktree` join); the composite `<worktree>__<iso>__<sha>` format |
 | [`pipeline-event-log-schema.md`](../../release/references/standards/pipeline-event-log-schema.md) | the subject/version/actor identifier convention that the work-item-key format conforms to |
 | [`git-workflow.md`](../rules/git-workflow.md) | the branch-naming convention the branch tiers parse (`release/vX.Y-*`, `chore/vX.Y-*`, `fix/*`, `feat/*`, harness `claude/*` / `agent-*`) |
@@ -103,4 +103,5 @@ The skill's `SKILL.md` carries the full domain-specific failure-mode entries (5-
 
 | Version | Date | Change |
 |---|---|---|
+| 1.1.0 | 2026-07-27 | T1/T3 rule text restated against `session.worktree` (store schema v1.2.0 replaced `session.cwd` with its basename — a data-minimization control); join semantics unchanged. The restatement is a strict simplification: the join key is now literally the same token on both sides (`session.worktree` ↔ the hub-state Surface-C `worktree` column), which is what `basename()` was approximating. The resolved join set is identical. |
 | 1.0.0 | 2026-07-25 | Initial — the ordered LOCAL-ONLY resolver (issue-event key → branch-milestone → hub-state lineage → unattributed) with an opt-in network PR-resolve; work-item-key format; roll-up formula with the count-once precondition; multi-branch guard; ground-truth-fixture correctness contract (conservation secondary); coverage health threshold; milestone-grain-reliable / issue-grain-best-effort / deferred posture. |
