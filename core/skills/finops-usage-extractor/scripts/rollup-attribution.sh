@@ -435,6 +435,25 @@ do_emit() {
   overlap_map="$(build_count_once_overlap_map "$store_file")"
   [ -n "$overlap_map" ] || overlap_map='{}'
 
+  # ── Store-shape preflight (schema v1.2.0). A pre-v1.2.0 store carries `cwd`, not
+  #    `worktree`; the resolver's worktree join would then resolve to null, every session
+  #    would fall through to `unattributed`, and the roll-up over that set would emit an
+  #    EMPTY result that the coverage record certifies as health=OK / 100% attributed
+  #    (attr_frac short-circuits to 1 when the grand total is 0). Fail loudly instead of
+  #    silently zeroing an operator's roll-up. This is the STORE-skew guard; CODE skew
+  #    (resolver not updated with the schema) is caught by --self-test's ground-truth
+  #    oracle. Exit 3 is the existing "store unreadable" code — a store the resolver
+  #    cannot read is exactly that; no new exit code, no contract change. ──
+  local n_sess n_wt
+  n_sess="$(jq -s '[.[]|select(.record=="session")]|length' "$store_file" 2>/dev/null)"
+  n_wt="$(jq -s '[.[]|select(.record=="session" and has("worktree"))]|length' "$store_file" 2>/dev/null)"
+  if [ "${n_sess:-0}" -gt 0 ] && [ "${n_wt:-0}" -eq 0 ]; then
+    printf 'FATAL (exit 3): FinOps store predates schema v1.2.0 — session records carry no `worktree` field.\n' >&2
+    printf 'The store is a derived cache; rebuild it, then re-run the roll-up:\n' >&2
+    printf '  bash %s/extract-usage.sh --rebuild\n' "$SCRIPT_DIR" >&2
+    exit 3
+  fi
+
   local sessions resolutions rolled tmp
   sessions="$(mktemp "${TMPDIR:-/tmp}/finops-sess.XXXXXX")"
   resolutions="$(mktemp "${TMPDIR:-/tmp}/finops-res.XXXXXX")"
@@ -617,6 +636,27 @@ self_test() {
   else
     echo "FAIL: FM-2 count-once fixture missing ($co_store / $co_oracle)"; fail=1
   fi
+
+  # (J) STORE-SKEW preflight — a pre-v1.2.0 on-disk store (session records carrying `cwd`,
+  #     not `worktree`) must be REFUSED with exit 3, not silently rolled up. Without this
+  #     guard the worktree join resolves to null for every session, the roll-up emits an
+  #     empty result, and the coverage record reports health=OK / 100% attributed while all
+  #     spend vanishes — a fail-open in the honesty instrument. #4044 is what creates this
+  #     skew (upgraded code, operator's existing store), so the guard ships with it.
+  #     do_emit is run in a SUBSHELL: its `exit 3` must not terminate the self-test.
+  local lg_st lg_rc
+  lg_st="$(mktemp -d "${TMPDIR:-/tmp}/finops-roll-legacy.XXXXXX")"
+  jq -c 'if .record=="session" then (.cwd = "/synthetic/ws/" + .worktree | del(.worktree)) else . end' \
+     "$fx_store" > "$lg_st/usage.jsonl" 2>/dev/null
+  ( STORE="$lg_st" FINOPS_HUB_STATE_DIR="$lg_st/.no-hub" FINOPS_PIPELINE_EVENT_LOG="$lg_st/.no-log" \
+      do_emit "$lg_st" 0 >/dev/null 2>&1 )
+  lg_rc=$?
+  if [ "$lg_rc" -eq 3 ]; then
+    echo "  PASS: legacy-store preflight (pre-v1.2.0 store refused, exit 3)"
+  else
+    echo "FAIL: legacy-store preflight — pre-v1.2.0 store was NOT refused (exit $lg_rc, want 3)"; fail=1
+  fi
+  rm -rf "$lg_st"
 
   rm -f "$sessions" "$res"
   rm -rf "$st"
