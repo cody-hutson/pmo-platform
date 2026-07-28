@@ -146,7 +146,7 @@ parse_schema_enum() {
 # than shipping silently.
 _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
-  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored recommendation-choice-delta" \
+  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored delegation recommendation-choice-delta" \
   "escalation	tier-0 tier-1 tier-2 tier-3" \
   "self-repair	retry escalate rollback" \
   "iteration	" \
@@ -390,6 +390,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_ts_iso "$TS_TEST" || die "self-test: ts_iso format check failed"
   validate_subtype "decision" "scope-lock" || die "self-test: subtype validation failed"
   validate_subtype "decision" "cascade-sweep-block" || die "self-test: decision cascade-sweep-block subtype check failed"
+  validate_subtype "decision" "delegation" || die "self-test: decision delegation subtype check failed"
   validate_subtype "self-repair" "retry" || die "self-test: self-repair subtype check failed"
   validate_subtype "iteration" "dt-eng-pass-2" || die "self-test: iteration prefix check failed"
   validate_subtype "test-run" "suite-pass" || die "self-test: test-run suite-pass subtype check failed"
@@ -436,6 +437,11 @@ if [[ "$SELF_TEST" == "true" ]]; then
     || die "self-test: escaped multi-value payload rejected (§ 4.3a positive case)"
   _pi_ok 'projects_to:calibration-data.md; verdict:Approved' \
     || die "self-test: pipe-free payload rejected"
+  # Pins the delegation convention's RUNTIME form (single-valued, per § 3). The
+  # source issue proposed documenting it as `chose:{spoke|hub-direct}` — a form
+  # the bare-pipe guard below rejects. Emitting the documented example must work.
+  _pi_ok 'chose:spoke; why:x; quota:PROCEED' \
+    || die "self-test: delegation payload convention rejected"
   # ─── Payload row-integrity: negative (malformed) ───
   if _pi_ok 'triggers:[T1 | T2]';  then die "self-test: space-delimited pipe accepted (delimiter)"; fi
   if _pi_ok 'triggers:[T1] |';     then die "self-test: trailing ' |' accepted (row-junction split)"; fi
