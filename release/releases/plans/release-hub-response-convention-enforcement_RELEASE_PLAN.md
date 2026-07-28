@@ -26,7 +26,7 @@ This plan is the Stage-4 release plan (ratified at the Procedure-0 D-Gate on #40
 Two audit-derived **conformance** bugs against the `release-hub` skill runtime, both editing **the same two files**. There is no functional dependency between them, but there is a real **authoring-order** edge: #4020 rewrites the Output Contract scope clause that #4021's new requirement attaches to. Single branch, single PR, strict serial authoring **#4020 → #4021**.
 
 - **#4020** — decision-class emissions omit the mandated reversibility tier + confidence label (41/75 = 54.7% conformance). The Output Contract binds the obligation to **Mode R only**; the fix widens the scope clause to bind both modes and supplies an emission-time predicate for what counts as decision-class.
-- **#4021** — the render-before-`AskUserQuestion` briefing gate and the `Stage · gate · progress` anchor (89/117 = 76.1% conformance). The fix hardens gate 3 with a self-gate, names **declared deferral** as the legitimate consolidated-briefing form, reconciles `decision-briefing.md`'s declared mode scope, and adds a net-new anchor requirement (requirement 7) plus its matching Domain-Specific Failure Mode entry.
+- **#4021** — the render-before-`AskUserQuestion` briefing gate and the `Stage · gate · progress` anchor (89/117 = 76.1% conformance). The fix hardens gate 3 with a self-gate, names **declared deferral** as the legitimate consolidated-briefing form, reconciles `decision-briefing.md`'s declared mode scope, and adds a net-new anchor requirement (shipped as **requirement 8**) plus its matching Domain-Specific Failure Mode entry.
 - **Reflexive posture:** this release edits the skill orchestrating it. It is **introducing-release-exempt** from its own new emission rules (see § Reflexive-Release Declaration).
 
 ## Scope
@@ -47,7 +47,7 @@ Directional. **No hard functional dependency exists.** The single edge is a **so
    │
    │  SOFT EDGE (authoring order, not functional blocking)
    │  reason: #4020 rewrites the Output Contract SCOPE CLAUSE
-   │  (SKILL.md:121) that #4021's new requirement 7 attaches to.
+   │  (SKILL.md:121) that #4021's new requirement 8 attaches to.
    │  Reverse order ⇒ #4021 authors into a Mode-R-scoped frame
    │  that #4020 then rewrites ⇒ guaranteed rework on the same lines.
    ▼
@@ -97,7 +97,7 @@ release/releases/plans/release-hub-response-convention-enforcement_RELEASE_PLAN.
 
 | Path | Intent | Issue |
 |---|---|---|
-| `release/skills/release-hub/SKILL.md` | **edit** — Output Contract scope widening + requirement-5 retarget + decision-class predicate paragraph + `## Reversibility Discipline` artifact-inventory reconciliation + Guardrail alignment (#4020); requirement-count cascade + net-new requirement 7 + Mode R engagement-contract pointer + new Domain-Specific Failure Mode entry (#4021); `version:` frontmatter bump | both |
+| `release/skills/release-hub/SKILL.md` | **edit** — Output Contract scope widening + requirement-5 retarget + decision-class predicate paragraph + `## Reversibility Discipline` artifact-inventory reconciliation + Guardrail alignment (#4020); requirement-count cascade + net-new requirement 8 + Mode R engagement-contract pointer + new Domain-Specific Failure Mode entry (#4021); `version:` frontmatter bump | both |
 | `release/skills/release-hub/references/decision-briefing.md` | **edit** — reversibility + confidence field in the item-1 decision shape (#4020); H1 + intro mode-scope reconciliation and gate-3 self-gate / declared-deferral hardening (#4021) | both |
 | `packages/release-hub.skill` | **edit (rebuild)** — regenerate from source | both |
 | `packages/release-hub.skill.sha256` | **edit (rebuild)** — content-hash sidecar | both |
@@ -115,7 +115,7 @@ release/releases/plans/release-hub-response-convention-enforcement_RELEASE_PLAN.
 
 | File | Issues | Intent Mix | Severity | Recommendation |
 |---|---|---|---|---|
-| `release/skills/release-hub/SKILL.md` | #4020, #4021 | edit×2 | **BINARY** | Sequence #4020 → #4021. #4020 authors the scope clause at `:121`; #4021 substitutes its count/enumeration tokens and appends requirement 7. Same branch ⇒ no merge-conflict surface. |
+| `release/skills/release-hub/SKILL.md` | #4020, #4021 | edit×2 | **BINARY** | Sequence #4020 → #4021. #4020 authors the scope clause at `:121`; #4021 substitutes its count/enumeration tokens and appends requirement 8. Same branch ⇒ no merge-conflict surface. |
 | `release/skills/release-hub/references/decision-briefing.md` | #4020, #4021 | edit×2 | **BINARY** | Disjoint regions — #4020 edits item 1 (`:9`); #4021 edits the H1 (`:2`), the intro (`:4`), and gate 3 (`:23`). Low risk; the file is 34 lines, so relative edit density is high. |
 | `packages/release-hub.skill` + `.sha256` | rebuild only | edit×1 | **NONE** | Single claimant; must be the LAST content commit so the hash covers every source edit. |
 
@@ -311,7 +311,7 @@ Dependency-ordered, single release branch, one PR, one merge. **Serial order is 
 | 1 | **#4020** | `fix` | `SKILL.md` — widen the Output Contract scope clause (`:121`) to bind both modes with per-requirement mode qualifiers; retarget requirement 5 (`:126`) from "the milestone verdict" to every decision-class emission in either mode; insert the decision-class emission-time predicate paragraph; reconcile the `## Reversibility Discipline` artifact inventory (`:146`); align the `## Guardrails (Platform)` bullet (`:163`) by citing requirement 5 rather than restating scope. **Requirement count held at SIX.** |
 | 2 | **#4020** | `fix` | `references/decision-briefing.md` — add the reversibility tier + confidence field to the item-1 decision shape (`:9`), positioned after `final recommendation` and before `routing impact`. |
 | 3 | **#4021** | `fix` | `references/decision-briefing.md` — H1 + intro mode-scope reconciliation (CIAC-2); gate-3 render-before-prompt self-gate, declared-deferral form, and the deferral-vs-skip discriminator (`:23`). Gate count stays 5. |
-| 4 | **#4021** | `fix` | `SKILL.md` — requirement-count cascade `Six` → `Seven` and the both-mode enumeration `1 and 5` → `1, 5, and 7`; net-new requirement 7 (`Stage · gate · progress` anchor, with the short-mid-stream-turn non-waiver clause); Mode R engagement-contract pointer (`:94`); new Domain-Specific Failure Mode entry (5-field template, category **OUT**). |
+| 4 | **#4021** | `fix` | `SKILL.md` — requirement-count cascade, shipped as `Six` → **`Eight`** (authored as `Six` → `Seven`; reconciled at the pre-B1 merge — see the ownership note below), and the both-mode enumeration `1 and 5` → **`1, 5, and 8`**; net-new anchor **requirement 8** (`Stage · gate · progress` anchor, with the short-mid-stream-turn non-waiver clause); Mode R engagement-contract pointer (`:94`); new Domain-Specific Failure Mode entry (5-field template, category **OUT**). |
 | 5 | both | `chore` | Rebuild `packages/release-hub.skill` + `.sha256` via `core/deploy/tools/build-skill-packages.sh release-hub`. **Must be the LAST content commit** so the hash covers steps 1–4. |
 | 6 | both | `chore` | `SKILL.md` frontmatter `version:` bump. Per `version-field-semantics.md` § Definition the field is *"the platform release tag at which this skill was last materially edited"* and is explicitly **not** a skill-local semver — so the value is the **platform release tag this release claims**, not a skill increment. This resolves the Stage-4 `[ASSUMPTION – CONFIRM]` proposing a skill-local bump, which the governing standard rejects. **Corrected at Stage 6 by empirical test (the Stage-4 premise here was wrong).** Check 6 does **not** assert a format regex and **does** admit the `{{RELEASE_VERSION}}` placeholder — its predicate (`check-canonical-structure.sh:150-156`) asserts field **presence only** via `grep -qE "^version:"`, verified with a negative control (field present → `OK` at exit 0 across all 54 rostered skills; field removed → `FAIL … missing required frontmatter field 'version'` at exit 1). A literal is nonetheless written, forced by **different** tooling: the bare placeholder is invalid YAML and **hard-fails `build-skill-packages.sh`** (`found unhashable key`), and the package rebuild is a required step of this release. A quoted placeholder does build, but the `version:` field sits **inside the package-freshness hash** (verified by rewriting the source exactly as `claim-version.sh --stamp-file` would and re-running the freshness check without rebuilding → STALE), so a placeholder would leave Check 7 red on the mainline after every claim-time stamp — the stamp mechanism resolves file content but has no package-rebuild step. **Written value: `v3.98`**, the Stage-6/7 recomputed next-free (see § Version Determination). **Stage 12 re-versions on slot collision, and MUST rebuild the package in the same commit, verified by a direct `deploy.sh --check-package-freshness` run — never by CI green**, since the CI mirror ships the `warn` token and will pass a stale package. Re-versioning alone turns Check 7 red. Given R12, a collision is likely, not hypothetical. The literal is the single named exception to this release's placeholder discipline — see **D-VersionBinding** in § Version Determination. |
 
@@ -319,7 +319,9 @@ Dependency-ordered, single release branch, one PR, one merge. **Serial order is 
 
 **Serialization note:** steps 2 and 3 both touch `decision-briefing.md` but at different regions (item 1 at `:9` vs. the H1/intro/gate-3 block). Steps 1 and 4 both touch `SKILL.md`, with step 4 substituting two tokens inside the sentence step 1 authors. Serial authoring on one branch removes the contention entirely.
 
-**Requirement-count ownership (cross-issue coupling, resolved).** #4020 holds the count at **SIX** and #4021 owns the `Six` → `Seven` cascade plus its Cascade-Sweep row. A Stage-6 authoring that silently bumped the count under #4020's commits would strand #4021's sweep; a Stage-6 authoring that left it at six after #4021's requirement 7 landed would leave the contract internally inconsistent. Both failure modes are avoided by the ownership split recorded here.
+**Requirement-count ownership (cross-issue coupling, resolved).** #4020 holds the count at **SIX** and #4021 owns the `Six` → `Seven` cascade plus its Cascade-Sweep row. A Stage-6 authoring that silently bumped the count under #4020's commits would strand #4021's sweep; a Stage-6 authoring that left it at six after #4021's anchor requirement landed would leave the contract internally inconsistent. Both failure modes are avoided by the ownership split recorded here.
+
+**Post-merge reconciliation (recorded pre-B1).** The concurrent release **v3.98** (`release-hub-mode-r-depth`) independently added its *own* Output-Contract requirement 7 and made the same `Six` → `Seven` bump. At the pre-B1 merge, v3.98's requirement 7 (the readiness map) kept slot 7 — it self-references its own number in its body and carries two live citations in `references/readiness-map-template.md` — and this release's anchor requirement renumbered to **8**, with the count reconciled to **`Eight`** and the both-mode set to `{1, 5, 8}`. Every "requirement 7" reference in this plan is restated against **requirement 8** accordingly; the authoring-time ownership analysis above is retained unchanged as the Stage-6 record.
 
 ### Issue #4020 — reversibility tier + confidence on decision-class emissions
 
@@ -340,8 +342,8 @@ Dependency-ordered, single release branch, one PR, one merge. **Serial order is 
 
 **Change Specification:**
 
-- **Files modified:** `release/skills/release-hub/SKILL.md` (4 in-place edits — the `:121` count/enumeration cascade, requirement 7 inserted after `:127`, the Mode R output pointer at `:94`, a new Domain-Specific Failure Mode entry appended); `release/skills/release-hub/references/decision-briefing.md` (3 in-place edits at `:2`, `:4`, `:23`).
-- **Change description:** Per D-0 the briefing gate is at ceiling and needs a **regression guard**, not a fix — so gate 3 gains an emission-time self-gate that cites item-1 content by reference (rather than enumerating its fields, which would drift against #4020's new field), plus **declared deferral** named as the legitimate consolidated-briefing form and a falsifiable deferral-vs-skip discriminator. The file's declared Mode-O-only scope is reconciled at the H1 and intro so it stops carrying both-mode obligations under a single-mode title (CIAC-2). Separately, a net-new **requirement 7** adds the one-line `Stage · gate · progress` anchor obligation with an explicit non-waiver clause for short mid-stream turns (outage notes, retries, tool-failure diagnostics, post-write read-backs, terse acknowledgments, intent-to-gather micro-turns) — the exact turn shapes where the anchor is observably dropped — with a matching Domain-Specific Failure Mode entry authored to the 5-field template under category **OUT**.
+- **Files modified:** `release/skills/release-hub/SKILL.md` (4 in-place edits — the `:121` count/enumeration cascade, the anchor requirement (shipped as **requirement 8**) inserted after `:127`, the Mode R output pointer at `:94`, a new Domain-Specific Failure Mode entry appended); `release/skills/release-hub/references/decision-briefing.md` (3 in-place edits at `:2`, `:4`, `:23`).
+- **Change description:** Per D-0 the briefing gate is at ceiling and needs a **regression guard**, not a fix — so gate 3 gains an emission-time self-gate that cites item-1 content by reference (rather than enumerating its fields, which would drift against #4020's new field), plus **declared deferral** named as the legitimate consolidated-briefing form and a falsifiable deferral-vs-skip discriminator. The file's declared Mode-O-only scope is reconciled at the H1 and intro so it stops carrying both-mode obligations under a single-mode title (CIAC-2). Separately, a net-new anchor requirement — shipped as **requirement 8** — adds the one-line `Stage · gate · progress` anchor obligation with an explicit non-waiver clause for short mid-stream turns (outage notes, retries, tool-failure diagnostics, post-write read-backs, terse acknowledgments, intent-to-gather micro-turns) — the exact turn shapes where the anchor is observably dropped — with a matching Domain-Specific Failure Mode entry authored to the 5-field template under category **OUT**.
 - **Acceptance criteria (from the issue, split per D-ACGradeability):**
   - AC-1 — the 4-part briefing renders before the structured prompt, with legitimate deferrals preserved. *(structural, in-release)*
   - AC-2 — interrupt / outage / transitional turns carry a `Stage · gate · progress` anchor. *(structural, in-release)*
@@ -393,7 +395,7 @@ Dependency-ordered, single release branch, one PR, one merge. **Serial order is 
 | #4020 | AC-2 (≥95% labeling) | **behavioral — declared, verification deferred** | Round-2 `agent-response-governance-audit` re-run per the frozen methodology | graded in the Stage-13 30-day outcome window |
 | #4020 | AC-3 (enforcement point documented) | file-content assertion (in-release) | read the `## Output Contract` block; assert requirement 5 states the obligation and the predicate paragraph states what counts | requirement 5 + predicate paragraph both present under `## Output Contract` |
 | #4021 | AC-1 (render-before-prompt) | file-content assertion (in-release) | `grep` gate 3's self-gate + the explicit declared-deferral form in `decision-briefing.md` | self-gate and deferral clauses both present at gate 3 |
-| #4021 | AC-2 (anchor rule) | file-content assertion (in-release) | `grep` the named `Stage · gate · progress` requirement in `SKILL.md` | requirement 7 present under `## Output Contract`, with the short-mid-stream non-waiver clause |
+| #4021 | AC-2 (anchor rule) | file-content assertion (in-release) | `grep` the named `Stage · gate · progress` requirement in `SKILL.md` | requirement 8 present under `## Output Contract`, with the short-mid-stream non-waiver clause |
 | #4021 | AC-3 (≥90% briefing + no anchor-less interrupt turns) | **behavioral — declared, verification deferred** | Round-2 re-run; the anchor clause re-expressed over `stage_gate_legibility` with an interrupt-trigger predicate | graded in the Stage-13 30-day outcome window |
 
 ### Cross-Issue Acceptance Criteria
@@ -428,8 +430,8 @@ Per the verification checklist:
 
 | Issue | Rollback Method | Rollback Complexity |
 |-------|----------------|-------------------|
-| #4020 | `git revert` of its two commits, then a package rebuild | **Low** — isolated in-place prose edits. Caveat: reverting #4020 alone after #4021 lands leaves requirement 7 attached to a Mode-R-scoped opener; prefer whole-release revert |
-| #4021 | `git revert` of its two commits, then a package rebuild | **Low** — reverting #4021 alone is clean, since #4020's clause stands on its own at a count of six |
+| #4020 | `git revert` of its two commits, then a package rebuild | **Low** — isolated in-place prose edits. Caveat: reverting #4020 alone after #4021 lands leaves requirement 8 attached to a Mode-R-scoped opener; prefer whole-release revert |
+| #4021 | `git revert` of its two commits, then a package rebuild | **Low** — reverting #4021 alone is clean, since #4020's clause stands on its own at the residual count (six as authored; seven post-merge, v3.98's requirement 7 being unaffected) |
 
 ### Whole-Release Rollback
 
@@ -457,7 +459,7 @@ N/A — no schema migrations in this release. No file in `core/schemas/` is touc
 
 **This release edits the skill orchestrating it.** The run executes on the **pre-change** package; both the deployed artifact and the source predate every edit in this plan.
 
-> **Cutover (introducing-release-exempt):** requirement 5's decision-class emission obligation — and requirement 7's anchor obligation, and the strengthened gate 3 — apply to `release-hub` invocations occurring strictly **after** this release's merge SHA recorded in the release log. **The introducing release itself is exempt** — a release cannot fire its own new emission convention on its own turns without creating a reflexive-pipeline loop. Runs in flight at merge time are also exempt.
+> **Cutover (introducing-release-exempt):** requirement 5's decision-class emission obligation — and requirement 8's anchor obligation, and the strengthened gate 3 — apply to `release-hub` invocations occurring strictly **after** this release's merge SHA recorded in the release log. **The introducing release itself is exempt** — a release cannot fire its own new emission convention on its own turns without creating a reflexive-pipeline loop. Runs in flight at merge time are also exempt.
 
 Two consequences follow, and both are load-bearing:
 
