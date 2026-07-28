@@ -55,6 +55,87 @@ When spawning a per-issue stage spoke (5–13), the hub builds the prompt from t
 
 After a spoke (or batch) returns: read the return value + output comment; verify closure; assess sufficiency; **evaluate the spoke's recommendations adversarially** against release-wide context (verify, don't rubber-stamp — R1 in [`decision-briefing.md`](decision-briefing.md)); produce a **Decision Briefing**; route only after the operator renders every decision. The action-item scan composes here.
 
+## Procedure 4a — Emit on decision (MANDATORY)
+
+Every operator-rendered decision and every hub-rendered determination emits BOTH surfaces
+before routing continues. Neither alone is sufficient (`core/standards/hub-session-continuity.md` § 6).
+
+1. Post the "Decision Recorded" comment on the relevant sub-task.
+2. Invoke `release/tools/append-pipeline-event.sh` once per decision. Take
+   `event_type` / `event_subtype` from the mapping table in
+   `core/standards/hub-session-continuity.md` § 3.2 — that table is the ONLY
+   mapping source; this playbook does not restate it. For AI-NNN status
+   transitions the mapping source is `core/standards/hub-action-tracking.md` § 3.
+3. Set `--subject` to the decision's scope (`milestone:#N` / `issue:#N` / `sub-task:#N`)
+   and open `--payload` with the release-stable token `ms:#<milestone-number>;`
+   (see § 4a.2 Join-key note).
+4. Render the "Events emitted this routing point" block in the Decision Briefing.
+   Omission is a structural defect.
+5. When the hub or a spoke makes a durable commitment (a deferred edit, reminder,
+   cleanup, decision-to-post, cross-issue-merge wait, or post-action verification),
+   append an `AI-NNN` row to `action-items.md` per
+   `core/standards/hub-action-tracking.md` § 2 (13 fields; zero-padded id; not reused),
+   run § 4a.1 first if the file does not exist, and emit the matching
+   `decision`/`action-item-opened` row. Every subsequent status transition emits its
+   mapped `action-item-*` subtype per `core/standards/hub-action-tracking.md` § 3.
+
+A routing step that advances with a rendered decision and no emitted row is incomplete.
+
+### 4a.1 — Hub-state lazy creation (first write only)
+
+Before the FIRST write to any hub-state surface this release (`pending-approvals.md`,
+`action-items.md`, `sessions.md`), and never before: copy the tracked template from
+`release/releases/hub-state/<surface>.md.template` into the runtime directory and
+substitute the milestone slug into the frontmatter. The canonical template-copy
+protocol is `core/standards/hub-session-continuity.md` § 7.3 — run it verbatim; do
+not hand-roll the copy.
+
+The runtime directory is keyed on the MILESTONE SLUG, not the version: the version is
+provisional until the Stage-12 claim (ADR-092), and a release can be re-versioned
+mid-pipeline when a sibling claims the slot ahead of it. READERS resolve the directory
+slug-first, version-second (§ 4a.3) so releases created under the older version-keyed
+convention stay readable.
+
+Do NOT pre-create empty per-release directories (`core/standards/hub-session-continuity.md` § 2).
+
+### 4a.2 — Join-key note (release-stable key in `--payload`)
+
+The event log's `version` column is **not** a release identity. It is written pre-claim
+from a provisional value (ADR-092), so it is neither unique across releases nor stable
+within one — concurrent hubs rule-compute the same next-free slot, and a release that is
+re-versioned mid-pipeline emits rows under two or three different values.
+
+Therefore every hub-emitted row opens `--payload` with `ms:#<milestone-number>;`. The
+milestone number is immutable and unique, costs ~9 characters of the 300-character
+payload budget, contains no pipe, and needs no schema or validator change. Pass the
+milestone slug (not `vX.Y`) to `--version` for the same reason — the slug is bound
+pre-claim, the version is not.
+
+This token is **subordinate to whatever release key the join-key work canonicalizes**:
+when a dedicated key surface lands, step 3 re-points to it and the payload token is
+dropped. This playbook does not canonicalize the join key; it makes sure the write side
+carries enough to fix it.
+
+### 4a.3 — Resolving the runtime hub-state directory (readers)
+
+```bash
+HS="<OPERATOR_INSTANCE_HUB_STATE_PATH>"
+DIR="$HS/$MILESTONE_SLUG"                       # canonical (write target)
+[ -d "$DIR" ] || DIR="$HS/$RELEASE_VERSION"     # legacy fallback (read only)
+```
+
+Writers ALWAYS use the slug form. Readers probe slug then version so pre-cutover
+releases remain readable. The fallback is read-only — never create the version form.
+
+**Cutover (introducing-release-exempt).** Procedure 4a, the § 4a.1 lazy-creation
+discipline, and the revised Procedure 7a predicate apply to releases entering **Stage 4**
+strictly AFTER this release's deploy SHA recorded in `release/releases/RELEASE_LOG.md`.
+**The introducing release is itself exempt** — the playbook reaches the hub only via the
+Stage-12 deployed mirror, so it cannot fire on the release that ships it
+(reflexive-pipeline-loop discipline). Releases already in flight are grandfathered. Gate
+states `NOT-RECORDED` and `EMPTY-LEDGER` surface with operator attestation and do **not**
+block, per the shadow→warn→enforce posture.
+
 ## Procedure 5 — Gate handling (the two hard human gates)
 
 **Do NOT spawn a spoke — gates are operator decisions.** The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the 13-dimension Release Readiness Scan + the goal-conformance check, and presents:
@@ -91,3 +172,46 @@ When all sub-tasks are closed, the hub:
 | Post-deploy `--apply` (orphan cleanup) | 7 | Tier-1 recommend |
 
 Rule-determined values (e.g. D-Version next-free) are **recorded determinations, not gates** (SKILL.md FM "rule-determined call as an operator gate").
+
+### The emission contract
+
+Each gate above emits the named event per Procedure 4a. `MUST` rows fire in every completed
+release and are the ONLY rows a downstream gate may assert on. `CONDITIONAL` rows fire only
+when their gate fires.
+
+<!-- EMISSION-CONTRACT:BEGIN -->
+| gate | procedure | event_type | event_subtype | actor | obligation |
+|---|---|---|---|---|---|
+| plan-approval | 0 | decision | scope-lock | operator | MUST |
+| stage-9-go | 5 | gate-outcome | plan-review-go | operator | MUST |
+| stage-12-execute | 5 | decision | d-class | operator | MUST |
+| outcome-statement | 0 | decision | outcome-statement-authored | operator | CONDITIONAL |
+| d-version | 0 | decision | d-class | hub | CONDITIONAL |
+| scaffold-review | 1 | decision | d-class | operator | CONDITIONAL |
+| collective-review | 2 | decision | scope-lock | operator | CONDITIONAL |
+| quota-budget | 2 | decision | d-class | operator | CONDITIONAL |
+| inter-stage-escalation | 4 | escalation | tier-2 | hub | CONDITIONAL |
+| early-merge | 6 | decision | d-class | operator | CONDITIONAL |
+| action-item-open | 4 | decision | action-item-opened | hub | CONDITIONAL |
+| action-item-close | 7 | decision | action-item-resolved | operator | CONDITIONAL |
+| 7a-attestation | 7 | decision | empirical-verification-finding | operator | CONDITIONAL |
+| orphan-cleanup-apply | 7 | decision | d-class | operator | CONDITIONAL |
+<!-- EMISSION-CONTRACT:END -->
+
+**Why exactly three `MUST` rows.** The partition predicate is *structural guarantee in a
+completed release*, not observed frequency. Procedure 1 scaffolding is unreachable without
+Procedure 0 plan approval; Procedure 5 Stage-12 is unreachable without a Stage-9 GO;
+Procedure 7 close is unreachable without Stage-12 Execute. Those three are total over
+completed releases. Every other gate has a reachable path that skips it, so asserting on it
+would produce false failures.
+
+**Extension seam.** A downstream slice that adds an emitting gate adds its row *inside* the
+`EMISSION-CONTRACT` delimiters — tagged `CONDITIONAL` unless it is total over completed
+releases — and extends Procedure 4a step 2 rather than introducing a second emit procedure.
+It MUST NOT create a parallel table: exactly one delimited `EMISSION-CONTRACT` block exists
+in this file, and the subset lint below reads that block alone.
+
+**Mechanical enforcement.** `release/tools/check-emission-contract-subset.sh` asserts that
+the set of event classes a downstream gate *asserts on* is a subset of the `MUST` rows above
+— `comm -23 asserted instructed` must be empty. A gate asserting a class this playbook never
+instructs fails CI rather than review.
