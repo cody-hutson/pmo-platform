@@ -205,7 +205,7 @@ The window is **3–5 completed iterations**, adopted from §5's velocity window
 
 | | `B` (median R) | `S` (max ÷ min) | What is actually true | The correct lever | What a single collapsed "accuracy" number would do |
 |---|---|---|---|---|---|
-| **Team A** | **1.30** | 1.15 | Systematically under-estimates by ~30%; **highly predictable** | **A multiplier.** Apply ≈1.3 to the next estimate, or move the focus factor toward 0.60 inside §3's valid range as a governed change. One lever, high confidence. | Reports "poor accuracy" — the verdict is right, but it names no direction, so the team guesses the lever |
+| **Team A** | **1.30** | 1.15 | Systematically under-estimates by ~30%; **highly predictable** | **A multiplier.** Apply ≈1.3 to the next estimate, or move the focus factor toward the bottom of §3's valid range as a governed change. One lever, high confidence. | Reports "poor accuracy" — the verdict is right, but it names no direction, so the team guesses the lever |
 | **Team B** | **1.00** | 2.60 | **Zero systematic bias**; large item-to-item scatter | **Decompose smaller, advance the cone phase, or widen the emitted range (§5).** A multiplier is useless here | Reports "poor accuracy" — and the obvious remedy, a correction factor, **injects a bias where none existed**, making Team B strictly worse |
 
 **The purpose of this loop is to select a lever, and a single number cannot.** Bias is systematic and is correctable by a multiplier; spread is random and is **not**. Applying Team A's correction to Team B is not merely unhelpful — it is harmful. Therefore this section emits **two figures and never one**, only **bias** is banded, and any consumer acting on a §8 output must name **which of the two** drove its recommendation (§8.6).
