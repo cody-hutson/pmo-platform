@@ -118,6 +118,20 @@ def wc:
 # mirror of context-budget-auditor est_tokens_from_words (ceil(words/0.75)); fallback only.
 def est: ((4 * . + 2) / 3) | floor ;
 
+# ── Source-field seams (schema v1.2.0 analysis dimensions). ─────────────────────
+# ONE named line per dimension: the source RECORD LOCATION of the three v1.2.0
+# dimension fields is the only unverified assumption in this program, so it is
+# isolated here. Each probes the top-level record AND `.message` so the extractor
+# is correct under either placement; if a real store shows only one populates, the
+# redundant leg is trimmed here and nowhere else.
+def skill_of($r): ($r.attributionSkill // $r.message.attributionSkill // null) ;
+def mcp_of($r):   ($r.attributionMcpServer // $r.message.attributionMcpServer // null) ;
+def stop_of($r):  ($r.message.stop_reason // $r.stop_reason // null) ;
+
+# Normalize any dimension key to a string, folding null/empty onto the RESERVED
+# "unknown" bucket (the honesty mechanism — see schema § Analysis sub-aggregates).
+def dim_key: if (. == null or . == "") then "unknown" else tostring end ;
+
 def toksum($arr):
   ( [ $arr[] | select(.message.usage != null) ] ) as $ex
   | ( [ $arr[] | select(.message.usage == null) ] ) as $he
@@ -138,6 +152,35 @@ def tokens_obj($t): { input: $t.input, output: $t.output,
                       cache_read: $t.cread } ;
 def tooluse_obj($t): { web_search_requests: $t.ws, web_fetch_requests: $t.wf } ;
 def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic" else "mixed" end ;
+
+# ── v1.2.0 per-session sub-aggregates (session-grain projections of turn data). ──
+# dim_agg: partition $arr by `keyfn`, then reduce each group with the SAME toksum +
+# tokens_obj used for session.tokens, so the leaf shape is byte-identical to
+# session.tokens and the four leaves sum back to it. The reserved "unknown" key is
+# SEEDED, so it is present even when empty — that is what makes the conservation
+# invariant `sum(by_X.*.tokens) == session.tokens` hold for a partial dimension.
+# The entry value is the WRAPPER {turns, tokens}, never a bare tokens object.
+def dim_agg($arr; keyfn):
+  ( [ $arr[] | { k: ((keyfn) | dim_key), r: . } ] ) as $tagged
+  | ( reduce $tagged[] as $e ({ "unknown": [] }; . + { ($e.k): ((.[$e.k] // []) + [$e.r]) }) )
+  | with_entries( .value = ( toksum(.value) as $t | { turns: $t.turns, tokens: tokens_obj($t) } ) ) ;
+
+# count_agg: plain per-key integer counts. $seed pre-seeds reserved keys — {"unknown":0}
+# for stop_reason (so `sum(stop_reason.*) == turns` is total), {} for tool_calls (a tool
+# call is a count, not a partition of tokens, so it reserves nothing).
+def count_agg($vals; $seed): reduce $vals[] as $k ($seed; . + { ($k): ((.[$k] // 0) + 1) }) ;
+
+# The four cost-relevant leaves of a tokens object, per the schema summation invariant.
+def leaf_total($t): ($t.input + $t.output + $t.cache_creation.total + $t.cache_read) ;
+
+# dimension_coverage entry — a STORED PROJECTION of the map's "unknown" bucket
+# (1 - uncovered/total, token basis; 1 when the session carries no tokens). Stored, not
+# left derivable, because the label must be impossible to render without. The self-test
+# asserts it agrees with the bucket, so the projection cannot drift from its source.
+def dim_cov($map; $total):
+  ( leaf_total($map["unknown"].tokens) ) as $u
+  | { covered_token_fraction: ( if $total <= 0 then 1 else (($total - $u) / $total) end ),
+      basis: "best-effort" } ;
 
 . as $all
 | [ $all[] | select(.type=="assistant") ] as $asst
@@ -171,6 +214,17 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
       | { root: $root, rec: $rec } ] ) as $side
 | ( $side | group_by(.root) ) as $groups
 | toksum($asst) as $st
+# ── v1.2.0 analysis dimensions — session-grain sub-aggregates over the SAME $asst set
+#    the session total is computed from, so every map partitions session.tokens exactly.
+| dim_agg($asst; skill_of(.))         as $by_skill
+| dim_agg($asst; mcp_of(.))           as $by_mcp
+| dim_agg($asst; .message.model)      as $by_model
+| ( leaf_total(tokens_obj($st)) )     as $sess_total
+# tool_calls counts CLIENT-SIDE invocations by name from the turn content — distinct
+# from `tool_use`, which counts SERVER-SIDE requests from message.usage.server_tool_use.
+| count_agg([ $asst[] | .message.content[]? | select(.type == "tool_use") | .name // empty ]; {})
+    as $tool_calls
+| count_agg([ $asst[] | stop_of(.) | dim_key ]; { "unknown": 0 }) as $stop_reason
 # Only spend-bearing sessions (>=1 assistant record) yield a record. Files with zero
 # assistant turns (project summary/index files, empty transcripts) carry no token spend
 # and are skipped — this also excludes non-session `.jsonl` files under the projects root.
@@ -182,6 +236,12 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
       worktree: $worktree, git_branch: $branch, started_utc: $start, ended_utc: $end,
       model: $model, service_tier: $tier, turns: $st.turns,
       tokens: tokens_obj($st), tool_use: tooluse_obj($st),
+      by_skill: $by_skill, by_mcp: $by_mcp, by_model: $by_model,
+      tool_calls: $tool_calls, stop_reason: $stop_reason,
+      # Best-effort dimensions ONLY. by_model / tool_calls / stop_reason are exact by
+      # construction and get NO entry — a constant 1.0 trains consumers to ignore the field.
+      dimension_coverage: { by_skill: dim_cov($by_skill; $sess_total),
+                            by_mcp:   dim_cov($by_mcp;   $sess_total) },
       subagent_count: ($groups | length), token_source: tsrc($st),
       heuristic_turns: $st.ht, extracted_utc: $now } ),
   # subagent drill-down records (NOT summed on top of session.tokens)
