@@ -12,7 +12,7 @@ ADRs follow the canonical **[ADR schema](../schemas/adr-schema.md)** — the sin
 
 **Enforcement.** The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`), which fails any PR that introduces a duplicate ADR number or a gap in the global sequence.
 
-**Renumber log.** Core ADR-024 (`operations-consume-core-safety-controls-via-public-api`) → **ADR-028** on 2026-06-18, resolving a platform-wide collision with the earlier `release/ADRs/ADR-024-cross-release-impact-model.md` (which had correctly claimed 024). The renumbered ADR's Status section carries the full provenance.
+**Renumber log.** Core ADR-024 (`operations-consume-core-safety-controls-via-public-api`) → **ADR-028** on 2026-06-18, resolving a platform-wide collision with the earlier `release/ADRs/ADR-024-cross-release-impact-model.md` (which had correctly claimed 024). Release ADR-100 (`mode-r-disposition-set-fit-test`) → **ADR-099** on 2026-07-28, closing a gap rather than resolving a collision: 099 read as claimed by two sibling release branches when the record was authored, so the author stepped past it to 100 — but an unmerged claim does not bind the sequence. `main` topped out at ADR-098, making 099 the true next-free slot; merging at 100 would have landed the gap on `main`, where the gate would then fail every subsequent PR. First-to-merge takes the number and the other claimants renumber. Each renumbered ADR's Status section carries the full provenance.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
