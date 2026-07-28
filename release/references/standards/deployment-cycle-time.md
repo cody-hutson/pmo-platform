@@ -82,6 +82,14 @@ Releases that emit zero `deploy-skill` and zero `deploy-harness` events (content
 
 **Instrumentation-gap interaction:** Until the `gate-outcome/plan-review-go` and `deployment-status/deploy-skill` / `deploy-harness` events are consistently emitted to [`pipeline-event-log.md`](<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md), every post-cutover release will record `Cycle-Time: N/A` regardless of whether the release actually deployed skills or harnesses. This is graceful degradation (no false signal); the baseline trigger is deferred until the instrumentation gap closes.
 
+### 4.1 `Cycle-Time: N/A` is a known, documented state (not a data-quality defect)
+
+`Cycle-Time: N/A` in a Deployment Log block means the release's `T_DEPLOY` anchor could not be resolved because **no `deployment-status` event was emitted**. This is **structural, not intermittent**: the `deployment-status` event type and its five subtypes are defined in [`pipeline-event-log-schema.md`](pipeline-event-log-schema.md) § 3, and the per-target rows are declared in [`stage-12-execute.md`](../pipeline/stage-12-execute.md) § 11, but `core/deploy/deploy.sh` contains no emit call for them. The codification exists; the emitter does not. Until a deploy-event emitter ships, `N/A` is the CORRECT value for **every** release and MUST NOT be read as a missing measurement, backfilled, or estimated.
+
+The practical consequence: the § 5 baseline trigger cannot fire, because the count of non-`N/A` values is structurally zero rather than merely small. Reading a run of `N/A` values as a recent data-quality regression inverts cause and effect — there is no instrumented interval to have regressed from.
+
+**Scope note.** The decision-telemetry join key ([`pipeline-event-log-schema.md`](pipeline-event-log-schema.md) § 2a) and the minimum-emission gate (`deploy.sh --check-decision-emission`, Check 61) do **NOT** address this. They govern **decision** events; the deploy-event emitter is separately tracked. `--check-decision-emission` deliberately does not assert `deployment-status` — it is not a `MUST` row of the orchestration playbook's `EMISSION-CONTRACT` block, and asserting a class the playbook never instructs is precisely what CIAC-3 forbids (mechanically enforced by `release/tools/check-emission-contract-subset.sh`). A gate that asserted `deployment-status` today could only ever fail, which is a different defect from the one it would appear to be fixing.
+
 ## 5. Baseline mechanism
 
 Per the platform's calibration discipline ([`gate-evaluation-spec.md § Layer 3 Calibration`](../../../core/schemas/gate-evaluation-spec.md)):
