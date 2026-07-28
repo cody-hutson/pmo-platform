@@ -166,3 +166,10 @@ core/skills/finops-usage-extractor/scripts/rollup-attribution.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/report-usage.sh
 ./core/skills/finops-usage-extractor/scripts/report-usage.sh
 core/skills/finops-usage-extractor/scripts/report-usage.sh
+
+# finops-usage-extractor estimation CLI (the C3 estimation slice) —
+# new in-tree bash CLI. All four invocation forms.
+[PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/estimate-usage.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/estimate-usage.sh
+./core/skills/finops-usage-extractor/scripts/estimate-usage.sh
+core/skills/finops-usage-extractor/scripts/estimate-usage.sh
