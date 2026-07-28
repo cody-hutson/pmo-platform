@@ -431,6 +431,78 @@ self_test() {
   subin="$(jq -s '[.[] | select(.record=="subagent") | .tokens.input] | add // 0' "$st_store/usage.jsonl" 2>/dev/null)"
   [ "${subin:-0}" -eq 28 ] || { echo "FAIL: subagent input tokens != 28 (got ${subin:-0})"; fail=1; }
 
+  # K) v1.2.0 analysis dimensions — STRUCTURAL invariants, asserted independently of the
+  #    oracle (the oracle pins values; this pins the contract, so it still holds if the
+  #    fixtures change). Reports every violation by session + dimension, not just a count.
+  local dim_bad dim_rc
+  dim_bad="$(jq -s -r '
+    # Null-safe leaves: a malformed record must produce a REPORTED violation, never a jq
+    # hard error — an aborted check emits nothing, and nothing reads as PASS (fail-open).
+    def leaf($t): (($t.input // 0) + ($t.output // 0) + ($t.cache_creation.total // 0) + ($t.cache_read // 0));
+    def absf: if . < 0 then (0 - .) else . end;
+    def dsum($m): { i: ([ $m[].tokens.input ] | add // 0),
+                    o: ([ $m[].tokens.output ] | add // 0),
+                    c: ([ $m[].tokens.cache_creation.total ] | add // 0),
+                    h: ([ $m[].tokens.cache_creation.ephemeral_1h ] | add // 0),
+                    f: ([ $m[].tokens.cache_creation.ephemeral_5m ] | add // 0),
+                    r: ([ $m[].tokens.cache_read ] | add // 0),
+                    t: ([ $m[].turns ] | add // 0) };
+    [ .[] | select(.record=="session") | . as $s
+      | (
+          # (K1) every token-bearing map: reserved "unknown" present + leaf-by-leaf
+          #      conservation against session.tokens, and turns conservation too.
+          ( ["by_skill","by_mcp","by_model"][] as $d
+            | ($s[$d]) as $m
+            | if   ($m == null)                      then "\($s.session_id): \($d) absent"
+              elif ($m | has("unknown") | not)       then "\($s.session_id): \($d) missing reserved \"unknown\" key"
+              elif ([ $m[] | has("tokens") | not ] | any) then "\($s.session_id): \($d) entry is not the {turns,tokens} wrapper"
+              else ( dsum($m) as $g
+                     | if ($g.i != $s.tokens.input or $g.o != $s.tokens.output
+                           or $g.c != $s.tokens.cache_creation.total
+                           or $g.h != $s.tokens.cache_creation.ephemeral_1h
+                           or $g.f != $s.tokens.cache_creation.ephemeral_5m
+                           or $g.r != $s.tokens.cache_read)
+                       then "\($s.session_id): \($d) conservation broken (sum(\($d).*.tokens) != session.tokens)"
+                       elif ($g.t != $s.turns)
+                       then "\($s.session_id): \($d) turns conservation broken (\($g.t) != \($s.turns))"
+                       else empty end ) end ),
+          # (K2) stop_reason is a total partition of the assistant turns.
+          ( if   (($s.stop_reason // null) == null)              then "\($s.session_id): stop_reason absent"
+            elif ($s.stop_reason | has("unknown") | not)         then "\($s.session_id): stop_reason missing reserved \"unknown\" key"
+            elif (([ $s.stop_reason[] ] | add // 0) != $s.turns) then "\($s.session_id): sum(stop_reason.*) != turns"
+            else empty end ),
+          # (K3) tool_calls is always an object (never absent) and is NOT tool_use.
+          ( if (($s.tool_calls // null) | type) != "object" then "\($s.session_id): tool_calls absent or not an object" else empty end ),
+          # (K4) dimension_coverage is the stored projection of the "unknown" bucket.
+          ( ["by_skill","by_mcp"][] as $d
+            | ( leaf($s.tokens) ) as $tot
+            | ( leaf($s[$d]["unknown"].tokens) ) as $unk
+            | ( if $tot <= 0 then 1 else (($tot - $unk) / $tot) end ) as $want
+            | ( $s.dimension_coverage[$d] ) as $cv
+            | if   ($cv == null)                                                    then "\($s.session_id): dimension_coverage.\($d) missing"
+              elif ((($cv.covered_token_fraction - $want) | absf) > 0.000001)       then "\($s.session_id): dimension_coverage.\($d) != 1 - (unknown/total)"
+              elif ($cv.covered_token_fraction < 0 or $cv.covered_token_fraction > 1) then "\($s.session_id): dimension_coverage.\($d) outside [0,1]"
+              elif ((["best-effort","exact"] | index($cv.basis)) == null)           then "\($s.session_id): dimension_coverage.\($d).basis not in the enum"
+              else empty end ),
+          # (K5) the exact-by-construction dimensions get NO coverage entry — a constant
+          #      1.0 would train a renderer to ignore the field.
+          ( ["by_model","tool_calls","stop_reason"][] as $d
+            | if ($s.dimension_coverage | has($d))
+              then "\($s.session_id): dimension_coverage must NOT carry \($d) (exact by construction)"
+              else empty end )
+        ) ] | .[]' "$st_store/usage.jsonl" 2>&1)"; dim_rc=$?
+  # An honesty check that cannot run must FAIL, never pass silently: a jq abort yields no
+  # output, and "no violations reported" would otherwise be indistinguishable from "clean".
+  if [ "$dim_rc" -ne 0 ]; then
+    echo "FAIL: v1.2.0 analysis-dimension check could not run (jq exit $dim_rc) — not treated as clean:"
+    printf '%s\n' "$dim_bad" | sed 's/^/       /'
+    fail=1
+  elif [ -n "$dim_bad" ]; then
+    echo "FAIL: v1.2.0 analysis-dimension invariants:"
+    printf '%s\n' "$dim_bad" | sed 's/^/       /'
+    fail=1
+  fi
+
   # 8) Incremental idempotence: no source change -> session digest unchanged, no dup.
   local d1 d2
   d1="$(jq -s -S '[.[] | select(.record=="session") | {session_id, tokens}] | sort_by(.session_id)' "$st_store/usage.jsonl" 2>/dev/null)"
