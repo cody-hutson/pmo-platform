@@ -1,11 +1,11 @@
 ---
 title: FinOps Usage Store Schema — Agent Token-Spend Runtime Store
-purpose: The canonical data contract for the operator-local Agent-FinOps usage store — the JSONL record kinds, fields, versioning, write-discipline, and summation invariant for per-session and per-subagent token counts extracted from local Claude Code session data. v1.1.0 (the C2 attribution slice) adds the roll-up and coverage record kinds; the session→work-item mapping algorithm lives in the FinOps attribution-convention standard.
+purpose: The canonical data contract for the operator-local Agent-FinOps usage store — the JSONL record kinds, fields, versioning, write-discipline, and summation invariant for per-session and per-subagent token counts extracted from local Claude Code session data. v1.1.0 (the C2 attribution slice) adds the roll-up and coverage record kinds; the session→work-item mapping algorithm lives in the FinOps attribution-convention standard. v1.2.0 replaces `session.cwd` (a full absolute working-directory path) with `session.worktree` (its basename only) as a data-minimization control, under the conditioned frozen-kind exemption recorded in § Versioning.
 type: schema
 status: ACTIVE
-schema_version: "1.1.0"
-reversibility: MODERATE / HIGH confidence (consumed by the C2 attribution slice + the downstream agent-finops-intelligence milestone; additive extension is backward-compatible, a breaking field change is a major bump + a downstream coordination event)
-consumers: "finops-usage-extractor (producer); the C2 attribution/roll-up slice (extends v1.1.0 rollup record); the agent-finops-intelligence milestone — estimation, reporting, calibration (version-pin >= v1.1.0)"
+schema_version: "1.2.0"
+reversibility: MODERATE / HIGH confidence (consumed by the C2 attribution slice + the downstream agent-finops-intelligence milestone; additive extension is backward-compatible, a breaking field change is a major bump + a downstream coordination event **unless the § Versioning frozen-kind exemption's three conditions all hold**)
+consumers: "finops-usage-extractor (producer); the C2 attribution/roll-up slice (extends v1.1.0 rollup record); the agent-finops-intelligence milestone — estimation, reporting, calibration (version-pin >= v1.2.0)"
 ---
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->
@@ -13,7 +13,7 @@ consumers: "finops-usage-extractor (producer); the C2 attribution/roll-up slice 
 
 # FinOps Usage Store Schema
 
-> **v1.1.0** data contract for Agent token-spend FinOps. The frozen **v1.0.0** core (slice C1, the data foundation) defines the `meta` / `session` / `subagent` record kinds; **v1.1.0** (the C2 attribution slice) adds the `rollup` and `coverage` record kinds additively (the frozen v1.0.0 kinds are unchanged). This doc is the schema authority; the `finops-usage-extractor` skill is the producer.
+> **v1.2.0** data contract for Agent token-spend FinOps. The frozen **v1.0.0** core (slice C1, the data foundation) defines the `meta` / `session` / `subagent` record kinds; **v1.1.0** (the C2 attribution slice) adds the `rollup` and `coverage` record kinds additively (the frozen v1.0.0 kinds are unchanged); **v1.2.0** replaces `session.cwd` with `session.worktree` (its basename only — a data-minimization control) under the conditioned frozen-kind exemption in § Versioning, and stops encoding which phase has run in the version number. This doc is the schema authority; the `finops-usage-extractor` skill is the producer.
 
 ## Purpose + Scope
 
@@ -23,7 +23,7 @@ Defines the operator-local Agent-FinOps usage store: WHERE it lives, its FORMAT,
 
 Resolved from the `<OPERATOR_INSTANCE_FINOPS_STORE_PATH>` token per the depersonalization-spec token vocabulary: (a) the `operator.toml [paths].operator_instance_finops_store_path` override if set, else (b) the default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops`. Store file: `<resolved-path>/usage.jsonl`.
 
-The store is **git-ignored** operator-instance data — its records carry `git_branch`, `cwd` (an operator home path), and work-item identifiers, so on a PUBLIC repo it must never commit. This is enforced two ways: the static `.gitignore` patterns (the `personal/` + `pmo-instance/` homes plus defensive finops stems), AND a resolve-time `git check-ignore` guard in the extractor that refuses to write when the resolved store falls inside a git repository but is not ignored there (see the extractor's exit-code contract).
+The store is **git-ignored** operator-instance data — its records carry `git_branch`, `worktree` (a directory basename, not a home path — v1.2.0 data-minimization), and work-item identifiers, so on a PUBLIC repo it must never commit. This is enforced two ways: the static `.gitignore` patterns (the `personal/` + `pmo-instance/` homes plus defensive finops stems), AND a resolve-time `git check-ignore` guard in the extractor that refuses to write when the resolved store falls inside a git repository but is not ignored there (see the extractor's exit-code contract).
 
 ## Format
 
@@ -31,9 +31,19 @@ JSONL — one JSON object per line, discriminated by a top-level `record` field.
 
 ## Versioning
 
-`schema_version` travels in the `meta` record (semver). **v1.0.0 (C1, this doc) freezes** the `meta`, `session`, and `subagent` record kinds and their field sets, and reserves `provider` (optional). **v1.1.0 (the C2 attribution slice) adds** the `rollup` and `coverage` record kinds plus two optional `session` fields (`branch_switch` / `git_branches`) — all additive; the frozen v1.0.0 kinds are unchanged. An additive change is a minor bump; a breaking change to a frozen kind is a major bump plus a coordination event across the downstream `agent-finops-intelligence` consumers, which pin `schema_version >= 1.1.0`.
+`schema_version` travels in the `meta` record (semver). **v1.0.0 (C1, this doc) freezes** the `meta`, `session`, and `subagent` record kinds and their field sets, and reserves `provider` (optional). **v1.1.0 (the C2 attribution slice) adds** the `rollup` and `coverage` record kinds plus two optional `session` fields (`branch_switch` / `git_branches`) — all additive; the frozen v1.0.0 kinds are unchanged. An additive change is a minor bump; a breaking change to a frozen kind is a major bump plus a coordination event across the downstream `agent-finops-intelligence` consumers, which pin `schema_version >= 1.2.0`.
 
-The roll-up phase (the `rollup-attribution.sh` script) is what carries a store from v1.0.0 to v1.1.0: extraction alone (the `extract-usage.sh` producer) writes `meta.schema_version = "1.0.0"` and only the v1.0.0 kinds; a roll-up pass appends the `rollup` + `coverage` records and bumps `meta.schema_version` to `"1.1.0"`. An extraction-only store is therefore a valid v1.0.0 store, and a rolled-up store a valid v1.1.0 store — both conform to this doc.
+**Frozen-kind exemption (conditioned, per-change, never standing).** A **breaking** change to a frozen kind normally takes a **major** bump plus a coordination event across pinned consumers. It may instead take a **minor** bump when **all three** conditions hold at the time of the change:
+
+1. **Derived-cache condition** — the store is a derived cache, deterministically rebuildable from source by `extract-usage.sh --rebuild`, so the change is a **rebuild, not a data migration**, and no operator data can be lost by it.
+2. **No-external-consumer condition** — **no consumer outside this repository's tracked corpus reads the changed field.** The store is operator-local and unpublished, so there is no third-party reader to coordinate with. *If any external or unknown consumer reads the field, this condition fails.*
+3. **Same-PR condition** — **every in-repo consumer of the changed field is updated in the same pull request**, so the coordination event the major-bump rule exists to force is internal to that PR and has already occurred by the time the version ships.
+
+**If any condition fails — in particular if a live consumer reads the changed field outside the same PR — the change takes the major bump and the coordination event, unchanged.** The exemption is **claimed per change**: the Version-History row for that version must name it, and the rationale must be recorded in an ADR. A later frozen-kind change re-tests all three conditions from scratch; nothing here makes minor bumps the default for frozen-kind changes.
+
+**Applied once, at v1.2.0** (`session.cwd` → `session.worktree`; ADR-099): (i) held — the store is a derived cache and the change ships with `--rebuild` as the default mode; (ii) held — the store is git-ignored operator-local data with no published consumer; (iii) held — the sole in-repo reader, `rollup-attribution.sh`, is updated in the same PR, together with the attribution convention's T1/T3 rule text and every affected fixture. A **store-shape preflight** (exit 3) additionally makes a stale on-disk store fail loudly rather than silently, so condition (i)'s "rebuild, not migration" is enforced at runtime rather than assumed.
+
+**Phase progression — what the version number does and does not tell you.** Through v1.1.0 the version encoded *which phase had run*: extraction alone wrote `"1.0.0"`, and a roll-up pass bumped it to `"1.1.0"`, so a consumer pinning `>= 1.1.0` was implicitly guaranteed the store held `rollup` records. **v1.2.0 retires that guarantee**, because v1.2.0 changed the *extraction* phase's own record shape — an extraction-only store is no longer v1.0.0-conformant, so it must report `1.2.0` too, and there is no semver that says "v1.2.0 session shape, no rollup kinds". Both phases therefore emit `meta.schema_version = "1.2.0"`. **From v1.2.0 the version no longer encodes which phase has run.** The canonical "a roll-up has run" predicate is the presence of the mandatory run-level record — `any(.record == "coverage")` (exactly one per roll-up run, always emitted). **Consumers MUST gate on that predicate, never on `schema_version` alone.**
 
 ## Store write-discipline
 
@@ -50,7 +60,7 @@ Both modes yield the same terminal invariant: no duplicate `session_id`, and the
 |---|---|---|
 | `record` | `"meta"` | discriminator |
 | `schema` | string | `"finops-usage-store"` |
-| `schema_version` | semver | current `"1.1.0"`; an extraction-only store reports `"1.0.0"` until the roll-up phase bumps it |
+| `schema_version` | semver | current `"1.2.0"`. **Both phases emit it** — from v1.2.0 the version no longer encodes which phase has run (see § Versioning). To test whether a roll-up has run, gate on `any(.record == "coverage")`, never on `schema_version` alone |
 | `generated_by` | string | `"finops-usage-extractor"` |
 | `generator_version` | string | the skill's `version` frontmatter value |
 | `source_root` | string | resolved session-data root (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects`) |
@@ -66,7 +76,7 @@ One per `<session-uuid>.jsonl`. **`tokens` is the whole-file total (inclusive of
 | `record` | `"session"` | discriminator |
 | `session_id` | string | session UUID (filename stem / `.sessionId`) |
 | `project_dir` | string | `~/.claude/projects/<dir>` basename |
-| `cwd` | string\|null | working dir (operator-local; git-ignored) |
+| `worktree` | string\|null | worktree / working-directory **basename** (v1.2.0 — replaces `cwd`; the full absolute path is never persisted). The join key for attribution tiers T1 and T3 — identical to the hub-state Surface-C `worktree` column and the Surface-B composite's first component |
 | `git_branch` | string\|null | work-item attribution surface (C2 consumes); null on legacy sessions → C2 `unattributed` |
 | `branch_switch` | bool (optional, v1.1.0) | `true` when the session's source records span >1 distinct `gitBranch`; **absent or `false` ⇒ single-branch** (graceful default). A source-level property populated by the extraction phase where present; consumed by the roll-up multi-branch guard so a branch-switching session is never silently attributed to one collapsed branch |
 | `git_branches` | array[string] (optional, v1.1.0) | the distinct branch set observed when `branch_switch` is `true` (absent otherwise) |
@@ -175,3 +185,4 @@ Emitted ONLY when the OFF-by-default `provider-usage-connector.sh` runs. Declare
 |---|---|---|
 | 1.0.0 | 2026-07-25 | Initial freeze — `meta` / `session` / `subagent` record kinds; `provider` reserved; cache-write tier split (`cache_creation.{total, ephemeral_1h, ephemeral_5m}`) + `service_tier`; keyed-projection write-discipline; summation invariant. |
 | 1.1.0 | 2026-07-25 | Additive (the C2 attribution slice) — `rollup` record kind (with `attribution_tier` provenance + `reproducible` flag; no `by_role`); `coverage` run-level health record; optional `session.branch_switch` / `session.git_branches`; count-once precondition on the summation invariant. Frozen v1.0.0 kinds unchanged. |
+| 1.2.0 | 2026-07-27 | **Frozen-kind replacement under the § Versioning frozen-kind exemption** (conditions (i)–(iii) all verified; rationale in ADR-099) — `session.cwd` (full absolute working-directory path) is **replaced** by `session.worktree` (its basename only): a data-minimization control; no absolute path is persisted, and the T1/T3 join key becomes identical on both sides. A **store-shape preflight** (exit 3) refuses a pre-v1.2.0 on-disk store rather than silently emitting an empty roll-up. **From this version `schema_version` no longer encodes which phase has run** — both phases emit `1.2.0`; the "roll-up has run" predicate is the presence of the `coverage` record. The frozen v1.1.0 `rollup` and `coverage` record kinds and the `subagent` kind are unchanged. |
