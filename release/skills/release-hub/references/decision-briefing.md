@@ -10,6 +10,7 @@ At every human touchpoint the hub distills spoke outputs + release state into a 
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions.
 3. **Status summary** — what completed, quality assessment, blockers.
 4. **Action items surfaced at this routing point** — per [`hub-action-tracking.md`](../../../../core/standards/hub-action-tracking.md).
+5. **Events emitted this routing point** — the `pipeline-event-log.md` rows this routing point wrote, one line per emission. Subsection format: `| event_type | event_subtype | actor | subject | payload (leading token) |`. Emission is mandatory per [`orchestration-playbook.md`](orchestration-playbook.md) **Procedure 4a**; this subsection is its forcing function — it makes the write observable in the operator-facing artifact, exactly as item 4 does for the action-item scan. When the routing point genuinely rendered no decision, it reads *"No decision rendered at this routing point — no event emitted"*. **Omission is a structural defect**, and a subsection claiming rows the log does not contain is a worse one — the log is the evidence, the briefing is the claim. Event type/subtype mapping is canonical in [`hub-session-continuity.md`](../../../../core/standards/hub-session-continuity.md) § 3.2; this file does not duplicate it.
 
 ## Adversarial evaluation (R1)
 
