@@ -158,7 +158,8 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
 # each sidechain assistant record -> its sidechain-root uuid (walk parentUuid while parent is a sidechain)
 | ( [ $asst[] | select(.isSidechain == true) | . as $rec
       | ( {u: $rec.uuid, i: 0}
-          | until( ( ($sset[($pmap[.u] // " ")] // false) | not ) or (.i >= 1000)
+          # sentinel: never a real uuid -> terminates the walk at a parentless record
+          | until( ( ($sset[($pmap[.u] // "__no_parent__")] // false) | not ) or (.i >= 1000)
                  ; {u: ($pmap[.u] // .u), i: (.i + 1)} )
           | .u ) as $root
       | { root: $root, rec: $rec } ] ) as $side
