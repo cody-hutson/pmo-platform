@@ -127,7 +127,9 @@ DIR="$HS/$MILESTONE_SLUG"                       # canonical (write target)
 Writers ALWAYS use the slug form. Readers probe slug then version so pre-cutover
 releases remain readable. The fallback is read-only — never create the version form.
 
-**Cutover (introducing-release-exempt).** Procedure 4a, the § 4a.1 lazy-creation
+### 4a.4 — Cutover (introducing-release-exempt)
+
+Procedure 4a, the § 4a.1 lazy-creation
 discipline, and the revised Procedure 7a predicate apply to releases entering **Stage 4**
 strictly AFTER this release's deploy SHA recorded in `release/releases/RELEASE_LOG.md`.
 **The introducing release is itself exempt** — the playbook reaches the hub only via the
