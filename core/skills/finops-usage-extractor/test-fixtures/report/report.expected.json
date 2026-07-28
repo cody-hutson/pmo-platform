@@ -1,0 +1,576 @@
+{
+  "generated_utc": "2026-07-28T06:50:44Z",
+  "window": {
+    "since": "2026-06-02",
+    "until": "2026-06-29",
+    "since_iso": "2026-06-02T00:00:00Z",
+    "until_excl_iso": "2026-06-30T00:00:00Z",
+    "now": "2026-06-29",
+    "basis": "session.started_utc, UTC"
+  },
+  "store": {
+    "resolution_chain": "env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path > default ${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops",
+    "path_printed": false,
+    "schema_version": "1.2.0",
+    "generator_version": "v9.9-fixture"
+  },
+  "rolled_up": true,
+  "sessions_in_window": 8,
+  "grand_total": 37000,
+  "grand_total_figure": "~37,000",
+  "grand_token_source": "mixed",
+  "grand_provenance": "[MIXED: 9 heuristic turn(s) of 38]",
+  "dimensions": [
+    {
+      "dim": "work-item",
+      "label": "work item",
+      "grade": "exact",
+      "coverage": null,
+      "coverage_basis": null,
+      "header": "### work item",
+      "available": true,
+      "unavailable_reason": null,
+      "rows": [
+        {
+          "key": "milestone:v9.9",
+          "tokens": 16000,
+          "sessions": 2,
+          "turns": 16,
+          "heuristic_turns": 6,
+          "token_source": "mixed",
+          "tier": "branch-milestone",
+          "reproducible": true,
+          "figure": "~16,000",
+          "provenance": "[MIXED: 6 heuristic turn(s) of 16]",
+          "tier_note": "[tier: branch-milestone — deterministic, local]"
+        },
+        {
+          "key": "#9002",
+          "tokens": 8000,
+          "sessions": 1,
+          "turns": 8,
+          "heuristic_turns": 3,
+          "token_source": "mixed",
+          "tier": "pr-resolved",
+          "reproducible": false,
+          "figure": "~8,000",
+          "provenance": "[MIXED: 3 heuristic turn(s) of 8]",
+          "tier_note": "[tier: pr-resolved — NETWORK, reproducible:false]"
+        },
+        {
+          "key": "#9001",
+          "tokens": 4000,
+          "sessions": 1,
+          "turns": 4,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "tier": "issue-event-keyed",
+          "reproducible": true,
+          "figure": "4,000",
+          "provenance": "[SOURCE: exact message.usage]",
+          "tier_note": "[tier: issue-event-keyed — best-effort, fuzzy key]"
+        },
+        {
+          "key": "milestone:v9.8",
+          "tokens": 3000,
+          "sessions": 1,
+          "turns": 3,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "tier": "hub-state-lineage",
+          "reproducible": true,
+          "figure": "3,000",
+          "provenance": "[SOURCE: exact message.usage]",
+          "tier_note": "[tier: hub-state-lineage — deterministic join, local]"
+        },
+        {
+          "key": "unattributed",
+          "tokens": 2500,
+          "sessions": 1,
+          "turns": 3,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "tier": "unattributed",
+          "reproducible": true,
+          "figure": "2,500",
+          "provenance": "[SOURCE: exact message.usage]",
+          "tier_note": "[tier: unattributed — unresolved]"
+        },
+        {
+          "key": "multi-branch",
+          "tokens": 2000,
+          "sessions": 1,
+          "turns": 2,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "tier": "unattributed",
+          "reproducible": true,
+          "figure": "2,000",
+          "provenance": "[SOURCE: exact message.usage]",
+          "tier_note": "[tier: unattributed — unresolved]"
+        },
+        {
+          "key": "(not-rolled-up)",
+          "tokens": 1500,
+          "sessions": 1,
+          "turns": 2,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "tier": "not-rolled-up",
+          "reproducible": null,
+          "figure": "1,500",
+          "provenance": "[SOURCE: exact message.usage]",
+          "tier_note": "[tier: not-rolled-up — session absent from every rollup row]"
+        }
+      ],
+      "uncovered_remainder": null,
+      "total": 37000
+    },
+    {
+      "dim": "worktree",
+      "label": "worktree (session working-directory basename)",
+      "grade": "exact",
+      "coverage": null,
+      "coverage_basis": null,
+      "header": "### worktree (session working-directory basename)",
+      "available": true,
+      "unavailable_reason": null,
+      "rows": [
+        {
+          "key": "rel-wt",
+          "tokens": 14000,
+          "sessions": 3,
+          "turns": 15,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "14,000",
+          "provenance": "[SOURCE: exact message.usage]"
+        },
+        {
+          "key": "fix-wt",
+          "tokens": 8000,
+          "sessions": 1,
+          "turns": 8,
+          "heuristic_turns": 3,
+          "token_source": "mixed",
+          "figure": "~8,000",
+          "provenance": "[MIXED: 3 heuristic turn(s) of 8]"
+        },
+        {
+          "key": "heur-wt",
+          "tokens": 6000,
+          "sessions": 1,
+          "turns": 6,
+          "heuristic_turns": 6,
+          "token_source": "heuristic",
+          "figure": "~6,000",
+          "provenance": "[INFERRED: ceil(words/0.75) fallback]"
+        },
+        {
+          "key": "issue-wt",
+          "tokens": 4000,
+          "sessions": 1,
+          "turns": 4,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "4,000",
+          "provenance": "[SOURCE: exact message.usage]"
+        },
+        {
+          "key": "hub-wt",
+          "tokens": 3000,
+          "sessions": 1,
+          "turns": 3,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "3,000",
+          "provenance": "[SOURCE: exact message.usage]"
+        },
+        {
+          "key": "mb-wt",
+          "tokens": 2000,
+          "sessions": 1,
+          "turns": 2,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "2,000",
+          "provenance": "[SOURCE: exact message.usage]"
+        }
+      ],
+      "uncovered_remainder": null,
+      "total": 37000
+    },
+    {
+      "dim": "skill",
+      "label": "skill (best-effort — partial population)",
+      "grade": "best-effort",
+      "coverage": 0.31756756756756754,
+      "coverage_basis": "best-effort",
+      "header": "### skill (best-effort — partial population) — coverage: 32% (token-weighted over sessions in window)",
+      "available": true,
+      "unavailable_reason": null,
+      "rows": [
+        {
+          "key": "release-hub",
+          "tokens": 10750,
+          "turns": 29,
+          "heuristic_turns": 9,
+          "token_source": "mixed",
+          "figure": "~10,750",
+          "provenance": "[MIXED: 9 heuristic turn(s) of 29]"
+        },
+        {
+          "key": "intake-desk",
+          "tokens": 1000,
+          "turns": 4,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "1,000",
+          "provenance": "[SOURCE: exact message.usage]"
+        }
+      ],
+      "uncovered_remainder": {
+        "tokens": 25250,
+        "fraction": 0.6824324324324325,
+        "figure": "~25,250",
+        "token_source": "mixed",
+        "label": "(uncovered remainder — the source attributed no skill to these tokens; NOT a skill named \"unknown\")",
+        "provenance": "[UNCOVERED: reserved \"unknown\" bucket]"
+      },
+      "total": 11750
+    },
+    {
+      "dim": "mcp",
+      "label": "MCP server (best-effort — partial population)",
+      "grade": "best-effort",
+      "coverage": 0.13783783783783785,
+      "coverage_basis": "best-effort",
+      "header": "### MCP server (best-effort — partial population) — coverage: 14% (token-weighted over sessions in window)",
+      "available": true,
+      "unavailable_reason": null,
+      "rows": [
+        {
+          "key": "synthetic-tracker",
+          "tokens": 4500,
+          "turns": 26,
+          "heuristic_turns": 9,
+          "token_source": "mixed",
+          "figure": "~4,500",
+          "provenance": "[MIXED: 9 heuristic turn(s) of 26]"
+        },
+        {
+          "key": "synthetic-docs",
+          "tokens": 600,
+          "turns": 3,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "600",
+          "provenance": "[SOURCE: exact message.usage]"
+        }
+      ],
+      "uncovered_remainder": {
+        "tokens": 31900,
+        "fraction": 0.8621621621621621,
+        "figure": "~31,900",
+        "token_source": "mixed",
+        "label": "(uncovered remainder — the source attributed no MCP server to these tokens; NOT an MCP server named \"unknown\")",
+        "provenance": "[UNCOVERED: reserved \"unknown\" bucket]"
+      },
+      "total": 5100
+    },
+    {
+      "dim": "model",
+      "label": "model",
+      "grade": "exact",
+      "coverage": null,
+      "coverage_basis": null,
+      "header": "### model",
+      "available": true,
+      "unavailable_reason": null,
+      "rows": [
+        {
+          "key": "claude-synthetic-4-0",
+          "tokens": 34500,
+          "turns": 38,
+          "heuristic_turns": 9,
+          "token_source": "mixed",
+          "figure": "~34,500",
+          "provenance": "[MIXED: 9 heuristic turn(s) of 38]"
+        },
+        {
+          "key": "claude-synthetic-4-0-mini",
+          "tokens": 2500,
+          "turns": 10,
+          "heuristic_turns": 0,
+          "token_source": "exact",
+          "figure": "2,500",
+          "provenance": "[SOURCE: exact message.usage]"
+        }
+      ],
+      "uncovered_remainder": null,
+      "total": 37000
+    }
+  ],
+  "tool_calls": {
+    "Read": 38,
+    "Bash": 9,
+    "Edit": 3,
+    "Grep": 2
+  },
+  "stop_reason": {
+    "end_turn": 32,
+    "tool_use": 4,
+    "unknown": 1,
+    "max_tokens": 1
+  },
+  "tool_use": {
+    "web_search_requests": 0,
+    "web_fetch_requests": 0
+  },
+  "trend": {
+    "period": "week",
+    "bucket_definition": "Monday-start UTC weeks, labelled by start date",
+    "proration": "none — a boundary-spanning session is assigned wholly to its started_utc bucket",
+    "min_periods": "≥3 non-empty, complete periods are required to characterize a direction; empty and partial periods are shown but excluded",
+    "flat_band": "[RECOMMENDED] ±10% — a proposed value, not a measurement; no usage distribution exists to calibrate against",
+    "overall": {
+      "dim": "overall",
+      "label": "Overall spend",
+      "grade": "exact",
+      "header": "### Overall spend (exact — every session in window)",
+      "rows": [
+        {
+          "period": "2026-06-01",
+          "period_end": "2026-06-07",
+          "tokens": 14000,
+          "sessions": 2,
+          "token_source": "exact",
+          "figure": "14,000",
+          "provenance": "[SOURCE: exact message.usage]",
+          "empty": false,
+          "partial": false,
+          "note": ""
+        },
+        {
+          "period": "2026-06-08",
+          "period_end": "2026-06-14",
+          "tokens": 9000,
+          "sessions": 2,
+          "token_source": "mixed",
+          "figure": "~9,000",
+          "provenance": "[MIXED: 6 heuristic turn(s) of 9]",
+          "empty": false,
+          "partial": false,
+          "note": ""
+        },
+        {
+          "period": "2026-06-15",
+          "period_end": "2026-06-21",
+          "tokens": 0,
+          "sessions": 0,
+          "token_source": "exact",
+          "figure": "0",
+          "provenance": "—",
+          "empty": true,
+          "partial": false,
+          "note": "(empty — no sessions in this period)"
+        },
+        {
+          "period": "2026-06-22",
+          "period_end": "2026-06-28",
+          "tokens": 12500,
+          "sessions": 3,
+          "token_source": "mixed",
+          "figure": "~12,500",
+          "provenance": "[MIXED: 3 heuristic turn(s) of 13]",
+          "empty": false,
+          "partial": false,
+          "note": ""
+        },
+        {
+          "period": "2026-06-29",
+          "period_end": "2026-07-05",
+          "tokens": 1500,
+          "sessions": 1,
+          "token_source": "exact",
+          "figure": "1,500",
+          "provenance": "[SOURCE: exact message.usage]",
+          "empty": false,
+          "partial": true,
+          "note": "(partial — period ends 2026-07-05; excluded from trend direction)"
+        }
+      ],
+      "verdict": "TREND: FALLING -11% (mean of first 1 complete period(s) vs last 1)"
+    },
+    "dimensions": [
+      {
+        "dim": "skill",
+        "label": "skill (best-effort — partial population)",
+        "grade": "best-effort",
+        "coverage": 0.31756756756756754,
+        "header": "### skill (best-effort — partial population) — coverage: 32% (token-weighted over sessions in window)",
+        "rows": [
+          {
+            "period": "2026-06-01",
+            "period_end": "2026-06-07",
+            "tokens": 3000,
+            "sessions": 2,
+            "token_source": "exact",
+            "figure": "3,000",
+            "provenance": "[SOURCE: exact message.usage]",
+            "coverage": 0.21428571428571427,
+            "coverage_pct": "21%",
+            "empty": false,
+            "partial": false,
+            "note": ""
+          },
+          {
+            "period": "2026-06-08",
+            "period_end": "2026-06-14",
+            "tokens": 1500,
+            "sessions": 2,
+            "token_source": "mixed",
+            "figure": "~1,500",
+            "provenance": "[MIXED: 6 heuristic turn(s) of 9]",
+            "coverage": 0.16666666666666666,
+            "coverage_pct": "17%",
+            "empty": false,
+            "partial": false,
+            "note": ""
+          },
+          {
+            "period": "2026-06-15",
+            "period_end": "2026-06-21",
+            "tokens": 0,
+            "sessions": 0,
+            "token_source": "exact",
+            "figure": "0",
+            "provenance": "—",
+            "coverage": null,
+            "coverage_pct": "—",
+            "empty": true,
+            "partial": false,
+            "note": "(empty — no sessions in this period)"
+          },
+          {
+            "period": "2026-06-22",
+            "period_end": "2026-06-28",
+            "tokens": 5750,
+            "sessions": 3,
+            "token_source": "mixed",
+            "figure": "~5,750",
+            "provenance": "[MIXED: 3 heuristic turn(s) of 13]",
+            "coverage": 0.46,
+            "coverage_pct": "46%",
+            "empty": false,
+            "partial": false,
+            "note": ""
+          },
+          {
+            "period": "2026-06-29",
+            "period_end": "2026-07-05",
+            "tokens": 1500,
+            "sessions": 1,
+            "token_source": "exact",
+            "figure": "1,500",
+            "provenance": "[SOURCE: exact message.usage]",
+            "coverage": 1,
+            "coverage_pct": "100%",
+            "empty": false,
+            "partial": true,
+            "note": "(partial — period ends 2026-07-05; excluded from trend direction)"
+          }
+        ],
+        "verdict": "TREND: NOT CHARACTERIZED — `skill` is a best-effort dimension (partial population). Per-period volumes and per-period coverage are shown; a direction is not computable because a change in coverage is not separable from a change in spend.",
+        "coverage_drift": "COVERAGE-DRIFT: coverage ranges 17%–100% across periods. Volume changes on this dimension are not separable from capture-rate changes. [RECOMMENDED] threshold: 10 percentage points — a proposed value, not a measurement."
+      },
+      {
+        "dim": "mcp",
+        "label": "MCP server (best-effort — partial population)",
+        "grade": "best-effort",
+        "coverage": 0.13783783783783785,
+        "header": "### MCP server (best-effort — partial population) — coverage: 14% (token-weighted over sessions in window)",
+        "rows": [
+          {
+            "period": "2026-06-01",
+            "period_end": "2026-06-07",
+            "tokens": 1000,
+            "sessions": 2,
+            "token_source": "exact",
+            "figure": "1,000",
+            "provenance": "[SOURCE: exact message.usage]",
+            "coverage": 0.07142857142857142,
+            "coverage_pct": "7%",
+            "empty": false,
+            "partial": false,
+            "note": ""
+          },
+          {
+            "period": "2026-06-08",
+            "period_end": "2026-06-14",
+            "tokens": 1350,
+            "sessions": 2,
+            "token_source": "mixed",
+            "figure": "~1,350",
+            "provenance": "[MIXED: 6 heuristic turn(s) of 9]",
+            "coverage": 0.15,
+            "coverage_pct": "15%",
+            "empty": false,
+            "partial": false,
+            "note": ""
+          },
+          {
+            "period": "2026-06-15",
+            "period_end": "2026-06-21",
+            "tokens": 0,
+            "sessions": 0,
+            "token_source": "exact",
+            "figure": "0",
+            "provenance": "—",
+            "coverage": null,
+            "coverage_pct": "—",
+            "empty": true,
+            "partial": false,
+            "note": "(empty — no sessions in this period)"
+          },
+          {
+            "period": "2026-06-22",
+            "period_end": "2026-06-28",
+            "tokens": 2000,
+            "sessions": 3,
+            "token_source": "mixed",
+            "figure": "~2,000",
+            "provenance": "[MIXED: 3 heuristic turn(s) of 13]",
+            "coverage": 0.16,
+            "coverage_pct": "16%",
+            "empty": false,
+            "partial": false,
+            "note": ""
+          },
+          {
+            "period": "2026-06-29",
+            "period_end": "2026-07-05",
+            "tokens": 750,
+            "sessions": 1,
+            "token_source": "exact",
+            "figure": "750",
+            "provenance": "[SOURCE: exact message.usage]",
+            "coverage": 0.5,
+            "coverage_pct": "50%",
+            "empty": false,
+            "partial": true,
+            "note": "(partial — period ends 2026-07-05; excluded from trend direction)"
+          }
+        ],
+        "verdict": "TREND: NOT CHARACTERIZED — `MCP server` is a best-effort dimension (partial population). Per-period volumes and per-period coverage are shown; a direction is not computable because a change in coverage is not separable from a change in spend.",
+        "coverage_drift": "COVERAGE-DRIFT: coverage ranges 7%–50% across periods. Volume changes on this dimension are not separable from capture-rate changes. [RECOMMENDED] threshold: 10 percentage points — a proposed value, not a measurement."
+      }
+    ]
+  },
+  "legend": [
+    "`~` before a figure = NOT exact (heuristic or mixed provenance). A bare figure is exact.",
+    "`worktree` = the session's working-directory BASENAME (store field session.worktree). A filesystem directory name — NOT a PMO project. The FinOps store carries no PMO-project field.",
+    "`best-effort` dimensions are partially populated by construction; each renders its own coverage, and the uncovered remainder is an explicit row — never a dimension value named \"unknown\".",
+    "subagent records are an attribution drill-down already inside their session's total and are NEVER summed on top."
+  ]
+}
