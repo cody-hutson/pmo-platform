@@ -103,6 +103,7 @@ The hub is the operator's command center. At every human touchpoint, the hub's p
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions, discoveries outside the current issue's scope.
 3. **Status summary** — what completed, quality assessment, any blockers.
 4. **Action items surfaced this routing point** — hub-tracked AI-NNN rows from `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md` whose `trigger_type` predicate matches the current routing point per [`hub-action-tracking.md` § 4 Review Cadence](../../../core/standards/hub-action-tracking.md). Subsection format: `| AI-NNN | Category | Description | Trigger fired | Recommended disposition |`. When zero rows trigger, the subsection reads *"No action items triggered at this routing point"* — omission is a structural defect (forcing-function makes the scan observable). Schema + 6-value category enum + 4-value trigger-type enum + 5-state status lifecycle defined in `hub-action-tracking.md` — bridge doc does NOT duplicate normative content.
+5. **Events emitted this routing point** — the `pipeline-event-log.md` rows this routing point wrote, one line per emission. Subsection format: `| event_type | event_subtype | actor | subject | payload (leading token) |`. Emission is mandatory per the orchestration playbook's **Procedure 4a**; this subsection is its forcing function — it makes the write observable in the operator-facing artifact, exactly as item 4 does for the action-item scan. When a routing point genuinely renders no decision, the subsection reads *"No decision rendered at this routing point — no event emitted"*; **omission is a structural defect**, and a subsection claiming rows the log does not contain is a worse one (the log is the evidence, the briefing is the claim). Event_type/subtype mapping is canonical in `hub-session-continuity.md` § 3.2 and `hub-action-tracking.md` § 3 — bridge doc does NOT duplicate it.
 
 **Adversarial evaluation:** Spokes provide recommendations grounded in deep implementation context (every line of code, spec, and evidence). The hub interrogates each spoke recommendation adversarially against release-wide concerns and disconfirming evidence — cross-issue dependencies, pattern consistency across spokes, cumulative risk, and platform best practices. Concurrence requires empirical verification — the hub either (a) runs the verification itself (read the cited file, run the cited command, sample the cited data) and documents the result in the briefing's per-recommendation Empirical Verification subsection per [`evidence-grounding-standard.md`](../../../core/standards/evidence-grounding-standard.md) (R1), or (b) diverges from the spoke pending operator clarification. Concurrence-without-verification is a non-compliant Decision Briefing.
 
@@ -2017,15 +2018,45 @@ This mandate is consistent with — and bounded by — the **operator-agency car
 
 **Trigger:** Stage 13 Milestone close — fires as part of Procedure 7 Release Close, BEFORE the Milestone-close PATCH (current Procedure 7 Step 5).
 
-**Cross-reference:** Canonical specification lives at [`hub-action-tracking.md` § 4 routing point 5](../../../core/standards/hub-action-tracking.md). The standard specifies: scan `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md` for ALL `status:open` AND `status:in-flight` rows; HARD GATE — operator MUST resolve each remaining row (transition to `done`, `cancelled`, or `superseded`) BEFORE Milestone close; carry-forward to the next release is via `superseded` with explicit successor AI-NNN in the next release's `action-items.md` (implicit carry-forward prohibited). Hub does NOT duplicate that content here — read the canonical source.
+**Cross-reference:** Canonical specification lives at [`hub-action-tracking.md` § 4 routing point 5](../../../core/standards/hub-action-tracking.md). The standard specifies: scan the release's `action-items.md` for ALL `status:open` AND `status:in-flight` rows; HARD GATE — operator MUST resolve each remaining row (transition to `done`, `cancelled`, or `superseded`) BEFORE Milestone close; carry-forward to the next release is via `superseded` with explicit successor AI-NNN in the next release's `action-items.md` (implicit carry-forward prohibited). Hub does NOT duplicate that content here — read the canonical source.
 
-**Composition with Procedure 7 Step 4 completion-verification table:** When `action-items.md` exists for the release, Procedure 7 Step 4's Verification table per the gate-passage proof recording SHALL include an additional row covering the action-item resolution gate:
+**The gate is 3-valued over two counts, not boolean over one.** A gate that only counts unresolved rows cannot tell "every commitment was resolved" from "no commitment was ever recorded" — and a release that never emitted an action item is exactly the release whose emit step was skipped. Counting the whole AI-row population alongside the unresolved subset separates them.
 
-```markdown
-| Action items resolved | `grep -E '^\| AI-[0-9]+ \|.*\| (open|in-flight) \|' <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md \| wc -l` returns 0 | PASS/FAIL |
+**Probe — structured, whole-population, single pass.** `status` is field 11 of the 13-field schema, so with a leading pipe it is `$12` under `-F'|'`. Address the column; do not pattern-match the row. A positional probe such as `grep -E '^\| AI-[0-9]+ \|.*\| (open|in-flight) \|'` also matches any *other* cell whose content is exactly `open` or `in-flight` — a `trigger_detail` of `open` on a `done` row reports that row as unresolved. Verified: on a 4-row ledger with zero unresolved rows and one such `trigger_detail`, the positional probe returns 1 and the column probe returns 0.
+
+`$DIR` is resolved per the orchestration playbook § 4a.3 resolver — slug-keyed first, version-keyed as a read-only legacy fallback. The writer creates only the slug form (`hub-session-continuity.md` § 7.3).
+
+```bash
+AI="$DIR/action-items.md"
+if [ ! -f "$AI" ]; then STATE=NOT-RECORDED; else
+  read -r TOTAL UNRES <<<"$(awk -F'|' '
+      $2 ~ /^ *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$12);
+                               if ($12=="open" || $12=="in-flight") u++ }
+      END { print (t+0), (u+0) }' "$AI")"
+  if   [ "$TOTAL" -eq 0 ]; then STATE=EMPTY-LEDGER
+  elif [ "$UNRES" -gt 0 ]; then STATE=UNRESOLVED
+  else                          STATE=RESOLVED; fi
+fi
 ```
 
-When the row returns non-zero, BLOCK closure pending operator disposition of the remaining open/in-flight rows — same severity tier as the other Procedure 7 Step 4 verification commands (missing release notes, open release issues). When `action-items.md` does NOT exist for the release (no action items were ever emitted), the row resolves to N/A and the gate is vacuously satisfied.
+**Decision table — the gate's whole contract:**
+
+| # | Condition | `STATE` | Verdict | Operator surface |
+|---|---|---|---|---|
+| 1 | ledger file absent | `NOT-RECORDED` | **SURFACE** | "No action-item ledger exists for this release. Either no commitments were made, or the Procedure 4a emit step was skipped. Attest which." → requires explicit operator attestation to pass |
+| 2 | file present, 0 AI rows | `EMPTY-LEDGER` | **SURFACE** | same attestation; distinguishes "initialized, never appended" from (1) |
+| 3 | ≥1 row, 0 open/in-flight | `RESOLVED` | **PASS** | *the only silent pass* — report `N/N resolved` |
+| 4 | ≥1 open or in-flight | `UNRESOLVED` | **BLOCK** | enumerate each unresolved `AI-NNN` with owner + trigger |
+
+**Composition with Procedure 7 Step 4 completion-verification table:** Procedure 7 Step 4's Verification table SHALL include a row carrying the resolved `STATE`, not a bare PASS/FAIL:
+
+```markdown
+| Action items resolved | Procedure 7a predicate returns `STATE` | RESOLVED (N/N) / SURFACED (attested) / BLOCKED |
+```
+
+States 1 and 2 **SURFACE, they do not FAIL.** A release may legitimately make zero durable commitments, and a gate that fails a legitimate state gets disabled or routed around — which is how a gate becomes a no-op in the first place. The attestation is the discriminator: the operator states *which* of the two causes holds, and that attestation is itself emitted (`decision` / `empirical-verification-finding`, actor `operator`) per Procedure 4a, so a skipped emit step leaves an auditable trace rather than a silent pass. State 4 BLOCKs closure pending operator disposition — same severity tier as the other Procedure 7 Step 4 verification commands (missing release notes, open release issues).
+
+This is warn-mode by construction (only state 4 blocks), matching the shadow→warn→enforce posture.
 
 **Why this section exists at this surface:** Procedure 7a binds the hub-consumer entry point to the standard so the action-item HARD GATE fires at the right moment in hub workflow — pattern parallel to Procedure 0a's binding of audit-snapshot reconciliation and Procedure 0b's binding of session-resume. The HARD GATE enforces CLAUDE.md "Push-to-resolve" universal preference at release-close boundary: open action items at close are by definition a "to-do list without resolution," which the workspace-global preference prohibits.
 
