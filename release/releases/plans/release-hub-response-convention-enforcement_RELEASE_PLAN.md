@@ -457,7 +457,7 @@ N/A — no schema migrations in this release. No file in `core/schemas/` is touc
 
 **This release edits the skill orchestrating it.** The run executes on the **pre-change** package; both the deployed artifact and the source predate every edit in this plan.
 
-> **Cutover (introducing-release-exempt):** requirement 5's decision-class emission obligation — and requirement 7's anchor obligation — apply to `release-hub` invocations occurring strictly **after** this release's merge SHA recorded in the release log. **The introducing release itself is exempt** — a release cannot fire its own new emission convention on its own turns without creating a reflexive-pipeline loop. Runs in flight at merge time are also exempt.
+> **Cutover (introducing-release-exempt):** requirement 5's decision-class emission obligation — and requirement 7's anchor obligation, and the strengthened gate 3 — apply to `release-hub` invocations occurring strictly **after** this release's merge SHA recorded in the release log. **The introducing release itself is exempt** — a release cannot fire its own new emission convention on its own turns without creating a reflexive-pipeline loop. Runs in flight at merge time are also exempt.
 
 Two consequences follow, and both are load-bearing:
 
