@@ -129,14 +129,23 @@ releases remain readable. The fallback is read-only — never create the version
 
 ### 4a.4 — Cutover (introducing-release-exempt)
 
-Procedure 4a, the § 4a.1 lazy-creation
-discipline, and the revised Procedure 7a predicate apply to releases entering **Stage 4**
-strictly AFTER this release's deploy SHA recorded in `release/releases/RELEASE_LOG.md`.
-**The introducing release is itself exempt** — the playbook reaches the hub only via the
-Stage-12 deployed mirror, so it cannot fire on the release that ships it
-(reflexive-pipeline-loop discipline). Releases already in flight are grandfathered. Gate
-states `NOT-RECORDED` and `EMPTY-LEDGER` surface with operator attestation and do **not**
-block, per the shadow→warn→enforce posture.
+The cutover splits by **load path**, because this file and the Procedure 7a gate reach the
+hub differently.
+
+**This playbook (Procedure 4a and § 4a.1) — introducing-release-exempt.** It applies to
+releases entering **Stage 4** strictly AFTER the introducing release's deploy SHA recorded
+in `release/releases/RELEASE_LOG.md`. **The introducing release is itself exempt**: this
+file reaches the hub only through the Stage-12 deployed mirror, so it cannot fire on the
+release that ships it (reflexive-pipeline-loop discipline). Releases already in flight are
+grandfathered.
+
+**The Procedure 7a predicate — live on merge, no exemption.** `hub-spoke-bridge.md` is not
+deployed; it loads from the repo tree, so the revised gate is in force from the merge,
+including for the release that ships it. That is safe by construction rather than by
+exemption: the gate is warn-mode, so states `NOT-RECORDED` and `EMPTY-LEDGER` surface for
+operator attestation and do **not** block, and only an unresolved row blocks. A release
+whose emitter has not yet reached it therefore closes honestly through the attestation
+path, leaving an auditable trace instead of a silent pass.
 
 ## Procedure 5 — Gate handling (the two hard human gates)
 

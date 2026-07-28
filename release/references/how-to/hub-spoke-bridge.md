@@ -2062,7 +2062,7 @@ This is warn-mode by construction (only state 4 blocks), matching the shadow→w
 
 **Transitional posture (hub → skill):** This binding survives the eventual hub-to-skill replacement. When `release-planner`, `principal-engineer`, or any future decision-producing skill assumes hub responsibilities, the skill imports `hub-action-tracking.md` directly per the standard's `consumers` field. The cross-reference paragraph above remains as archival evidence of where the binding fired during the hub era.
 
-**Cutover discipline:** Applies to all releases going forward.
+**Cutover discipline:** Applies to all releases going forward, **including the release that ships this revision** — this file loads from the repo tree rather than the deployed skill mirror, so the gate is in force from the merge. No introducing-release exemption is needed because the gate is warn-mode: only an unresolved row blocks, and a release whose emitter has not yet reached it closes through the attestation path. The write side that populates the ledger (`orchestration-playbook.md` Procedure 4a) ships in the deployed mirror and therefore carries its own introducing-release exemption — the two halves cut over on different schedules by design, not by oversight.
 
 ---
 
