@@ -497,7 +497,10 @@ def trend_verdict($rows; $grade; $dim_label):
       web_fetch_requests:  ([$win[] | .tool_use.web_fetch_requests  // 0] | add // 0) } ) as $tool_use
 
 # ---- trend ----
-| ( if ($do_trend | not) then null
+# NOTE: compare explicitly. In jq only `null` and `false` are falsy — `0` is
+# TRUTHY, so `$do_trend | not` is false for both 0 and 1 and the trend would
+# render unconditionally, making --trend a no-op.
+| ( if ($do_trend != 1) then null
     else
       (dense_buckets($since; $until; $period)) as $buckets
       | ($now | bucket_of($period)) as $cur
@@ -1096,6 +1099,25 @@ self_test() {
     TREND:\ INSUFFICIENT*) ok "SM-7b trend: at n=2 the table renders and the direction is withheld — '$v2'" ;;
     *) bad "SM-7b trend: at n=2 expected TREND: INSUFFICIENT, got '$v2'" ;;
   esac
+
+  # ── SM-7c --trend is OPT-IN — the flag must actually gate the section. Both
+  #    legs asserted: absent -> no trend anywhere; present -> a trend. (In jq only
+  #    null and false are falsy, so a `$do_trend | not` test is false for 0 AND 1
+  #    and the trend renders unconditionally; only the negative leg catches that.) ──
+  local NOTREND="$wd/notrend.json" NOTREND_MD="$wd/notrend.txt" nt_json nt_md
+  run_report "$NOTREND" "$wd/main" --by all --since "$W1" --until "$W5" --json
+  run_report "$NOTREND_MD" "$wd/main" --by all --since "$W1" --until "$W5"
+  nt_json="$(jq -r '.trend | if . == null then "null" else "present" end' "$NOTREND")"
+  nt_md="$(grep -ac '^## Trend' "$NOTREND_MD" || true)"
+  if [ "$nt_json" = "null" ] && [ "${nt_md:-1}" -eq 0 ]; then
+    if jq -e '.trend != null' "$JS" >/dev/null 2>&1 && grep -aq '^## Trend' "$TR"; then
+      ok "SM-7c: --trend gates the trend section (absent -> no trend in either shape; present -> rendered)"
+    else
+      bad "SM-7c: --trend was passed but no trend section rendered"
+    fi
+  else
+    bad "SM-7c: the trend rendered WITHOUT --trend (json=$nt_json, markdown '## Trend' headings=$nt_md) — the flag is a no-op"
+  fi
 
   # ── SM-8 TC-gate — a rising best-effort signal still yields NO direction. ──
   local sk_first sk_last sk_verdict
