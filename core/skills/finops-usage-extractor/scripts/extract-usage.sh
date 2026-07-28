@@ -3,7 +3,7 @@
 #
 # Extracts per-session and per-in-transcript-subagent token spend from local Claude
 # Code session transcripts into the operator-local, git-ignored FinOps usage store
-# defined by core/schemas/finops-usage-store-schema.md (frozen v1.0.0). Exact
+# defined by core/schemas/finops-usage-store-schema.md (schema v1.2.0). Exact
 # message.usage counts are PRIMARY; the context-budget-auditor (#16) word->token
 # heuristic is the FALLBACK for usage-less records only. Read-only on the source
 # transcripts; writes only the resolved store (atomic tmp -> mv).
@@ -147,6 +147,12 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
 # cross-file linkage is C2's attribution scope, not a C1 key.
 | $sid_fallback as $sid
 | ( [ $all[] | .cwd // empty ] | last ) as $cwd
+# Data-minimization (schema v1.2.0): persist ONLY the working-directory BASENAME.
+# `.cwd` is the SOURCE transcript's own field name (not ours to change); the store
+# field is `worktree`, and the full absolute path is never written. `map(select(length>0))`
+# makes it trailing-slash-safe ("/a/b/" -> "b", where a bare split|last yields "").
+| ( if $cwd == null then null
+    else ($cwd | split("/") | map(select(length > 0)) | last) end ) as $worktree
 | ( [ $all[] | .gitBranch // empty ] | last ) as $branch
 | ( [ $asst[] | .message.model // empty ] | last ) as $model
 | ( [ $asst[] | .message.usage.service_tier? // empty ] | last ) as $tier
@@ -173,7 +179,7 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
   (
   # session record (tokens is the WHOLE-FILE total, inclusive of sidechains)
   ( { record: "session", session_id: $sid, project_dir: $project_dir,
-      cwd: $cwd, git_branch: $branch, started_utc: $start, ended_utc: $end,
+      worktree: $worktree, git_branch: $branch, started_utc: $start, ended_utc: $end,
       model: $model, service_tier: $tier, turns: $st.turns,
       tokens: tokens_obj($st), tool_use: tooluse_obj($st),
       subagent_count: ($groups | length), token_source: tsrc($st),
@@ -225,7 +231,7 @@ build_body() {
 write_store() {
   local store_dir="$1" src_root="$2" created="$3" last="$4" body="$5"
   local tmp="$store_dir/usage.jsonl.tmp"
-  jq -cn --arg sv "1.0.0" --arg gen "finops-usage-extractor" --arg genver "$(generator_version)" \
+  jq -cn --arg sv "1.2.0" --arg gen "finops-usage-extractor" --arg genver "$(generator_version)" \
      --arg root "$src_root" --arg created "$created" --arg last "$last" \
      '{record:"meta", schema:"finops-usage-store", schema_version:$sv, generated_by:$gen,
        generator_version:$genver, source_root:$root, created_utc:$created,
