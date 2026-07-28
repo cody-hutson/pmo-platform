@@ -5,7 +5,7 @@
 title: ADR-099 — FinOps store schema versioning — a conditioned frozen-kind exemption permits a minor bump for a derived-cache field replacement
 status: Proposed
 date: 2026-07-27
-release: agent-finops-intelligence (v3.99)
+release: agent-finops-intelligence ({{RELEASE_VERSION}})
 deciders: "Workspace owner (D-SchemaVersioning rendered at the Stage-4 D-Gate; carried through the Collective Review scope-lock). Design resolved at the joint Stage-5 Solutioning for the store data-minimization and store-dimensions slices."
 tags: [architecture, finops, token-spend, schema, versioning, semver, derived-cache, data-minimization, privacy, reversibility]
 source_observations:
