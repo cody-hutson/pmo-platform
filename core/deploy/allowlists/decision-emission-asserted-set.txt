@@ -1,0 +1,21 @@
+# Asserted set for deploy.sh Check 61 (--check-decision-emission).
+#
+# SINGLE SOURCE: read by BOTH Check 61's predicate AND
+# release/tools/check-emission-contract-subset.sh (CIAC-3, INT-2).
+# A second copy would be a shadow SSOT that could drift the gate out of
+# subset compliance silently.
+#
+# Every line MUST be a MUST row of the orchestration playbook's
+# EMISSION-CONTRACT block (`event_type/event_subtype`). A line that is not
+# instructed fails the CIAC-3 lint in CI — a gate asserting a class the
+# playbook never instructs can only ever fail.
+#
+# CONDITIONAL rows are deliberately EXCLUDED: they are inert by design
+# (a release may legitimately self-repair zero times and route every unit by
+# template), so asserting one would manufacture false failures — and the
+# lint's negative self-test asserts a CONDITIONAL-only class exits 1.
+#
+# Comments and blank lines are tolerated by both consumers.
+decision/scope-lock
+decision/d-class
+gate-outcome/plan-review-go

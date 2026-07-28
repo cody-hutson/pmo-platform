@@ -49,6 +49,49 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | 9 | `outcome` | enum: `resolved` / `pending` / `escalated` / `superseded` | terminal state of the event | `resolved` |
 | 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or `; `-separated key:value pairs (pipe grammar per § 4.3a); longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
 
+### 2a. Release join key (canonical)
+
+The `version` column is the release join key. It carries the release's GitHub
+Milestone SLUG, written at emission time. The slug is bound pre-claim, is 1:1
+with the release, and does not move when a release is re-versioned mid-pipeline
+(ADR-092). Writers ALWAYS pass the slug to `--version` (orchestration-playbook
+§ 4a.2). The `vX.Y` shipped version is NOT a key: it is assigned at the Stage-12
+ref-CAS, after emission has begun, and pre-cutover rows carry a provisional value
+that is neither unique across releases nor stable within one.
+
+**Resolving a row to a release (READ ladder — first match wins):**
+
+1. `version` matches a `RELEASE_LOG` `Milestone` cell → that release. **[canonical]**
+2. `subject` is `milestone:#N` → that milestone's release.
+3. `version` matches a `RELEASE_LOG` `Version` cell → that release. **[legacy, may be
+   ambiguous** — a legacy value can span releases; the row is release-INDETERMINATE
+   when the match is not unique, and MUST be reported as such, never silently bound.**]**
+4. otherwise → UNRESOLVED.
+
+**Resolving a release to its rows (WRITE-side inverse):** read the release's
+`RELEASE_LOG` row, take its `Milestone` cell → the slug → select rows whose
+`version` equals it. The shipped-version binding is additionally recorded in the
+log itself by the Stage-12 Phase B3.1 `d:version-claim` row (payload `claimed:` /
+`prov:`), so the log is self-describing without the repo.
+
+**Ambiguity is reported, never resolved by guessing.** Rung 3 exists so pre-cutover
+history stays readable; it is explicitly non-unique and a consumer that needs 1:1
+must treat a multi-match as INDETERMINATE. Rung 3 is deliberately EXCLUDED from any
+gate that asserts an emission obligation — an ambiguous legacy match must never
+count as satisfying an obligation.
+
+**Scope truth.** 1:1 resolution is achievable only forward. Rows written before the
+write-slug cutover carry a `vX.Y` value that genuinely spans multiple releases, and
+no reader can undo that without mutating an append-only log (§ 4.1). Legacy rows are
+best-effort-with-declared-ambiguity by design, not by defect.
+
+**Mixed-arity note for windowed reads.** `query-pipeline-event.sh --window N`
+restricts to the trailing N DISTINCT `version` values. Post-cutover the column holds
+slugs beside legacy versions, so a trailing-N window may span a different number of
+real releases than N. Use `--release` (which resolves through this ladder) when the
+question is "which rows belong to release X"; `--version` remains the raw-column
+filter.
+
 ## 3. Event-Type Enum (12 values) with Subtypes
 
 | `event_type` | Description | Allowed `event_subtype` values |

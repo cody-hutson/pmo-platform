@@ -118,10 +118,19 @@ payload budget, contains no pipe, and needs no schema or validator change. Pass 
 milestone slug (not `vX.Y`) to `--version` for the same reason — the slug is bound
 pre-claim, the version is not.
 
-This token is **subordinate to whatever release key the join-key work canonicalizes**:
-when a dedicated key surface lands, step 3 re-points to it and the payload token is
-dropped. This playbook does not canonicalize the join key; it makes sure the write side
-carries enough to fix it.
+**The key surface has landed, and the token is deliberately RETAINED.** The canonical
+release join key is now the `version` column carrying the milestone slug —
+`pipeline-event-log-schema.md` § 2a (the read ladder + the release→rows inverse). This
+step already writes that key, so no re-point is needed. The `ms:#N` payload token is
+NOT dropped: it is the only release anchor on rows whose `subject` is `issue:#N` /
+`sub-task:#N` / `suite:…` (measured: 29 of 152 live rows carry no milestone subject),
+and it costs ~9 of the 300-character budget. Read it as a **redundant secondary
+anchor**, not a competing key surface — § 2a rung 1 is canonical, and any conflict
+resolves to the `version` column.
+
+**Why `version-claim` is CONDITIONAL, not MUST.** Stage 13 documents version-less
+releases, so a version claim is not total over completed releases; tagging it MUST would
+make the class assertable by a downstream gate and produce false failures on that path.
 
 ### 4a.3 — Resolving the runtime hub-state directory (readers)
 
@@ -209,6 +218,7 @@ when their gate fires.
 | collective-review | 2 | decision | scope-lock | operator | CONDITIONAL |
 | quota-budget | 2 | decision | d-class | operator | CONDITIONAL |
 | inter-stage-escalation | 4 | escalation | tier-2 | hub | CONDITIONAL |
+| version-claim | 5 | decision | d-class | hub | CONDITIONAL |
 | early-merge | 6 | decision | d-class | operator | CONDITIONAL |
 | action-item-open | 4 | decision | action-item-opened | hub | CONDITIONAL |
 | action-item-close | 7 | decision | action-item-resolved | operator | CONDITIONAL |
