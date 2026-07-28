@@ -97,6 +97,18 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 | 2026-07-22T22:10:02Z | v3.80 | 13 | session-retro | no-learning | skill:session-retro | session:d4e5f6 | CHEAP | resolved | session:d4e5f6; reason:below-sampling-threshold-no-novel-signal |
 ```
 
+**`delegation` payload convention.** A `delegation` row reuses the standard 10 columns (no new fields); the fork lives in `payload`, keyed `chose:` (the elected execution path — one of `spoke` / `hub-direct`) / `unit:` (what was delegated — `stage-<N>` or `procedure-<N>`) / `merit:` (which merit condition fired — one of `context-boundary` / `budget-forced` / `recovery`, per `decision-discipline.md` § 3.1) / `quota:` (the Checkpoint-B verdict in force, per `quota-budget-protocol.md` § 4 — that enum is **cited, never restated here**; present only when `merit:budget-forced` fired, omitted rather than written as a noise value) / `why:` (a one-line kebab rationale). `actor` is always `hub` — the hub is the only spawner, per the recursion prohibition. `reversibility` is `CHEAP`: a delegation choice is undone by re-running the unit on the other path. `outcome` is `resolved`. Every row opens `payload` with the release-stable `ms:#<milestone-number>;` token per the orchestration playbook § 4a.2. PII per § 4.2 — `why:` states the structural reason, never operator text.
+
+**Emitted at a merit fork only.** Silence is the correct signal for routine template routing (the sub-task exists, its dependency is met, the quota verdict was `PROCEED`, and the spawn is the template's default). A consumer that cannot name which merit condition fired has not established a fork and must not emit. The test itself is owned by `decision-discipline.md` § 3.1; this block is the write-side contract, not a second copy of the criterion.
+
+**A `delegation` row at stage 4 MUST carry a `milestone:#N` subject.** The Stage-4 plan-survival denominator in `compute-front-cluster-telemetry.sh` counts distinct non-`milestone:` `decision` subjects at stage 4 and is **subtype-blind**, so a Stage-4 delegation row keyed `sub-task:#N` would silently inflate that denominator and depress a shipped metric with no error raised anywhere. The constraint costs nothing: the only Stage-4 delegation is the release-scoped planning spoke. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
+
+```markdown
+| 2026-07-28T06:38:10Z | decision-telemetry-emission | 6 | decision | delegation | hub | issue:#N | CHEAP | resolved | ms:#N; chose:spoke; unit:stage-6; merit:context-boundary; why:rename-is-a-graph-op-needs-branch-context |
+| 2026-07-28T06:41:02Z | decision-telemetry-emission | 5 | decision | delegation | hub | milestone:#N | CHEAP | resolved | ms:#N; chose:hub-direct; unit:stage-5; merit:budget-forced; quota:REDUCE-scope; why:window-cannot-absorb-a-third-parallel-spoke |
+| 2026-07-28T07:02:44Z | decision-telemetry-emission | 5 | decision | delegation | hub | sub-task:#N | CHEAP | resolved | ms:#N; chose:spoke; unit:stage-5; merit:recovery; why:prior-spoke-terminated-at-usage-cap-nothing-salvageable |
+```
+
 ## 4. Constraints
 
 ### 4.1 Append-only
