@@ -1,18 +1,18 @@
 ---
 name: finops-usage-extractor
 description: >
-  Extracts per-session and per-subagent agent token-spend from local Claude Code session data
-  into the operator-local, git-ignored FinOps usage store (schema authority:
-  core/schemas/finops-usage-store-schema.md). Exact message.usage counts are primary; the
-  context-budget-auditor skill's ceil(words/0.75) heuristic is the fallback for usage-less
-  records only. Read-only on the source transcripts — writes only the resolved store. It also
-  attributes and rolls per-session spend up to its owning work item (milestone-grain reliable;
-  unattributed fail-visible) with a coverage metric. Distinct
-  from context-budget-auditor, which measures STATIC corpus footprint; this measures RUNTIME
-  session spend. Use to populate or
-  refresh token-usage data, or to attribute and roll it up, for FinOps reporting. Triggers: "extract token usage", "refresh the
-  finops store", "how much token spend", "run the finops extractor",
-  "roll up token usage", "attribute token spend", "which work item spent the tokens".
+  Extracts per-session and per-subagent token-spend from local Claude Code sessions into the
+  operator-local, git-ignored FinOps usage store. Exact message.usage counts are primary; a
+  ceil(words/0.75) heuristic is the usage-less fallback. Read-only on the source transcripts.
+  It also rolls that spend up to its owning work item (milestone-grain reliable; unattributed
+  fail-visible), and renders windowed spend reports and trends sliced by work item, worktree
+  basename (NOT a PMO project), skill and MCP server (best-effort, coverage-labelled) and model;
+  every figure carries its provenance, and reports print to stdout, never a file. Distinct from
+  context-budget-auditor, which measures STATIC corpus footprint; this measures RUNTIME session
+  spend. Triggers: "extract token usage", "refresh the finops store", "how much token spend",
+  "run the finops extractor", "roll up token usage", "attribute token spend",
+  "report token spend", "finops report", "spend by work item", "token spend trend",
+  "where did the tokens go".
 version: v3.96
 license: BUSL-1.1
 delivery_approach: advisory
@@ -29,10 +29,11 @@ This skill measures **runtime session spend** — distinct from context-budget-a
 
 ## Scope
 
-Two phases over one source (the local session store), one skill:
+Three phases over one source (the local session store), one skill:
 
 - **Extraction + normalization (C1).** `extract-usage.sh` parses local Claude Code session transcripts into the **v1.2.0** store (`meta` / `session` / `subagent` record kinds; `provider` reserved-optional). Per the data-minimization control at v1.2.0, the `session` record persists `worktree` — the working-directory **basename** — and never the full absolute path. Exact `message.usage` counts are primary; the word→token heuristic is the usage-less fallback. v1.2.0 also adds five **session-grain analysis sub-aggregates** the intelligence layer slices on — `by_skill` / `by_mcp` / `by_model` / `tool_calls` / `stop_reason` — plus `dimension_coverage`. Each token-bearing map reuses the identical four-leaf `session.tokens` shape (so *"which skill's cache-reads?"* is answerable) and carries an **always-present reserved `"unknown"` bucket** holding the uncovered remainder, which is what makes `Σ by_X.*.tokens == session.tokens` hold even where the source population is partial. `by_skill` / `by_mcp` are **best-effort** and MUST be rendered with their `dimension_coverage` label; `by_model` / `tool_calls` / `stop_reason` are exact by construction and deliberately carry no coverage entry. `by_model` is a true per-turn partition that **supersedes** the dominant/last `session.model` for cost-splitting a mixed-model session; `tool_calls` (client-side invocations by name) is a distinct sibling of `tool_use` (server-side requests) and is never folded into it.
 - **Attribution + roll-up (C2).** `rollup-attribution.sh` reads that store and writes the additive `rollup` + `coverage` records (record kinds introduced at v1.1.0): it resolves each `session` to its owning work item, rolls per-session spend up to that work item (honoring the summation invariant), and emits a run-level attribution-health `coverage` record. The session→work-item mapping ALGORITHM — the ordered LOCAL-ONLY resolver (issue-event key → release/chore branch → hub-state lineage → `unattributed`, plus an opt-in network PR-resolve) — lives in `core/standards/finops-attribution-convention.md`; the record SHAPES live in the store schema. Milestone-grain is reliable from local data alone; issue-grain is best-effort (a decision-event key, or the opt-in `--resolve-prs` resolve); everything unresolved lands in an explicit `unattributed` bucket, fail-visible. Reliable issue-grain and a hub-vs-spoke role split need a hub-emitted spawn-ledger marker, which the store's **v1.2.0 analysis dimensions did NOT deliver** — it remains an open enhancement on the Agent-FinOps parent epic, and until it lands neither is available. The v1.2.0 `by_skill` dimension is a *weaker, best-effort* substitute for the skill question only; it does not separate hub from spoke.
+- **Reporting + trends (C4).** `report-usage.sh` reads that store and renders an operator-facing spend report over a date window — sliced by work item, worktree, skill, MCP server and model — plus a period-bucketed trend view. It **writes nothing at all**: the report prints to stdout, so no artifact exists that could be committed. Four rules are structural rather than conventional. (1) **The windowed join.** `rollup` rows are whole-store aggregates carrying no time bounds (`rolled_up_utc` is *computation* time), so a windowed figure is computed by inverting `rollup.session_ids[]` into a session→work-item map, filtering `session` records on `started_utc`, and re-summing; reading `rollup.tokens` under a window header would report whole-store totals as the window's. A windowed session in no `rollup` row lands in an explicit `(not-rolled-up)` bucket, distinct from `unattributed`. (2) **Coverage-label honesty.** The coverage clause is concatenated *into* the section-header string inside the one renderer both the markdown and JSON paths consume, so a `by_skill` / `by_mcp` slice without its `dimension_coverage` label is unrepresentable; an absent field renders `unknown (coverage field absent — treat as 0% verified)`, never `100%`. The reserved `"unknown"` bucket is rendered as an explicit **uncovered-remainder** row, never as a dimension value. (3) **Provenance.** The marker rides the numeral (`12,340` exact, `~12,340` not exact) so it survives a paste that drops the tag column, alongside a tag column and, on work-item rows, the `attribution_tier` weighting. (4) **The trend-characterization gate.** A direction is emitted only for an `exact`-grade dimension; on a best-effort one a coverage change is not separable from a spend change, so the report shows per-period volume and per-period coverage and withholds the arrow. Availability is detected **per field on the windowed records** — never from `meta.schema_version`, and the "a roll-up has run" predicate is the presence of the `coverage` record.
 
 ## Usage
 
@@ -56,6 +57,19 @@ bash core/skills/finops-usage-extractor/scripts/rollup-attribution.sh [--emit] [
 - **`--resolve-prs` (OPT-IN):** additionally resolve `fix/*` / `feat/*` branches via a read-only `gh` PR→closing-issue query (network; non-reproducible). Absent → those sessions degrade to `unattributed`. Every resulting row is stamped `attribution_tier: pr-resolved` + `reproducible: false`.
 - **`--self-test`:** run the ground-truth labeled-fixture attribution check (CIAC-1 primary), the conservation identity (secondary), coverage + health, multi-branch bucketing, idempotence, and the pre-v1.2.0 store-shape preflight (a legacy `cwd`-carrying store must be refused with exit 3) against the synthetic `test-fixtures/rollup/` set — no operator-store or network access.
 
+Reporting + trends (run after extraction, and after roll-up for the work-item slice):
+
+```
+bash core/skills/finops-usage-extractor/scripts/report-usage.sh [--window N[d] | --since YYYY-MM-DD --until YYYY-MM-DD] [--by work-item|worktree|skill|mcp|model|all] [--trend] [--period day|week|month] [--json] [--self-test]
+```
+
+- **`--window N[d]` (DEFAULT 30):** the last N calendar days, inclusive of today. **Mutually exclusive** with `--since` / `--until`.
+- **`--since` / `--until YYYY-MM-DD`:** the absolute window a retro or quarter close needs; **both bounds are inclusive of the named day**. Bucketed on `session.started_utc` (UTC).
+- **`--by` (DEFAULT `all`):** the slice dimension. `work-item` and `worktree` and `model` are **exact**; `skill` and `mcp` are **best-effort** and always render their coverage label. There is deliberately **no `project` dimension** — the store carries no PMO-project field, and `--by project` exits 2 saying so. `worktree` is the session's working-directory **basename**, a filesystem directory name and NOT a PMO project.
+- **`--trend` / `--period` (DEFAULT `week`):** the period-bucketed view. Weeks are **Monday-start UTC weeks labelled by start date** (not ISO week numbers — no week-53 ambiguity, and the label sorts chronologically as a string). The bucket set is **dense**, so an empty period renders as an explicit `(empty)` row rather than being omitted (an omitted bucket makes a gap read as continuity); the period containing today renders tagged `(partial …)`. Both are shown and both are **excluded from trend direction**. A session that spans a boundary is assigned **wholly** to its `started_utc` bucket — there is no proration, and the report says so. Direction requires **≥3 non-empty complete periods**; below that the table still renders and the characterization is withheld (`TREND: INSUFFICIENT`).
+- **`--json`:** the machine shape. Coverage, grade and provenance are **sibling required keys** on the same objects the markdown path renders — there is no second emit path that could drop them.
+- **`--self-test`:** run the built-in assertions (helper parity with `rollup-attribution.sh`, the fail-closed store guard, coverage-label honesty in both output shapes, the no-bare-numeral provenance invariant, the data-hygiene negative, conservation, window bounds, trend bucketing, the trend-characterization gate, graceful degradation on a pre-v1.2.0 store, the exit-code contract, and the `--json` oracle) against the synthetic `test-fixtures/report/` set — no operator-store or network access.
+
 ## Dependencies
 
 - **`jq`** (REQUIRED) — the extractor parses session JSONL with `jq` throughout. Missing `jq` is a hard preflight failure (**exit 5**). Note: context-budget-auditor is pure-bash; `jq` is a genuinely new runtime dependency here, hence the explicit declaration + preflight.
@@ -65,6 +79,8 @@ bash core/skills/finops-usage-extractor/scripts/rollup-attribution.sh [--emit] [
 ## Read-only posture
 
 The extractor **never writes to** `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects` (the source transcripts). It writes exactly one path: `<resolved-store>/usage.jsonl` (via an atomic `usage.jsonl.tmp` → `mv`). The store path resolves from config (`operator.toml [paths].operator_instance_finops_store_path`, default `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/finops`) — no hardcoded operator path.
+
+The reporting phase writes **nothing at all** — it reads the resolved store and prints to stdout. Read-only on the source transcripts **and** on the store. That is a deliberate data-hygiene posture, not an omission: with no output file there is no artifact that could be accidentally staged and committed. For the same reason the report never prints the **resolved store path value** (an operator home path) — only the resolution chain, which is what makes a figure reproducible.
 
 ## Exit codes
 
@@ -141,6 +157,38 @@ The extractor **never writes to** `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects`
 - **Root cause:** the names read as synonyms — both are "tools" — but they count different events from different sources: `tool_use` counts **server-side** requests the provider bills for; `tool_calls` counts **client-side** invocations by name from the turn content. Summing or nesting them produces a number that answers neither question.
 - **Mitigation:** `tool_calls` ships as a **new sibling field**, never an extension; the schema's field notes state the distinction adjacently so the next author meets it at the point of temptation; CIAC-1's byte-unchanged predicate over the frozen kinds is the gate that catches a fold at review time.
 - **Principal response vs. junior response:** a principal checks which record kinds are frozen and what the live exemption actually covers before touching an adjacent field, and pays one new field for it; a junior sees a `tool_use` object already present, nests the map inside it "to keep tools together", and silently breaks every pinned consumer plus the versioning claim.
+
+### Reading `rollup.tokens` for a date window — PROC
+
+- **Signature (observable signal):** every window reports the same total regardless of `--since` / `--until` — a one-week report and a one-year report agree to the token, and the figures match the store's lifetime spend.
+- **Conditional:** do NOT read `rollup.tokens` (or `rollup.session_count`) to answer a date-range question, because `rollup` rows are **whole-store aggregates carrying no time bounds** — their only timestamp, `rolled_up_utc`, is the roll-up *computation* time and is identical across every row of one run, so filtering on it is all-or-nothing rather than a window.
+- **Root cause:** the `rollup` record looks like the answer — it is already grouped by work item and already carries a `tokens` object — so the shape invites a `select(.record=="rollup")` + date filter that has nothing to filter on. The time anchor lives one record kind away, on `session.started_utc`.
+- **Mitigation:** invert `rollup.session_ids[]` into a `session_id → {work_item, work_item_kind, attribution_tier, reproducible}` map, filter `session` records on `started_utc`, and **re-sum** over the filtered set; the provenance travels through the join unchanged, and a windowed session absent from every rollup row lands in an explicit `(not-rolled-up)` bucket rather than being dropped. The self-test reconciles Σ rendered rows against Σ `session.tokens` over the window.
+- **Principal response vs. junior response:** a principal checks which record kind carries a *data* timestamp before designing the window and finds `rollup` has none; a junior groups by the record that is already grouped, ships a report whose window control does nothing, and the error is invisible because every number is individually correct.
+
+### Rendering a best-effort slice without its coverage label — OUT
+
+- **Signature (observable signal):** a by-skill or by-MCP table read as the complete skill breakdown — the rows sum to a plausible total, carry no caveat, and a planning or efficiency decision is made on a fraction of the spend believed to be all of it.
+- **Conditional:** do NOT emit a `by_skill` / `by_mcp` slice without its `dimension_coverage` indicator, because those dimensions are partially populated **by construction** and an unlabelled partial slice mis-attributes the whole window's spend to whichever skills happened to be captured.
+- **Root cause:** a best-effort sub-aggregate and an exact one are **byte-identical in shape**, so partiality is invisible to a renderer unless a separate field carries it — and a label emitted as a *second statement* after the header is one refactor away from being dropped, because nothing structurally binds the two.
+- **Mitigation:** the coverage clause is concatenated **into** the section-header string inside a single `section_header` function, called from a single `emit_dim_table` that **both** the markdown and the JSON path consume — so a best-effort header without `coverage:` is unrepresentable, not merely forbidden. An absent coverage field renders `unknown (coverage field absent — treat as 0% verified)`, never `100%` and never nothing; per-period trend rows carry **that period's** coverage, since a whole-window figure would hide period-to-period capture drift.
+- **Principal response vs. junior response:** a principal makes the label structurally inseparable from the figure and proves it with a test that counts best-effort headers and fails when the count of labelled ones differs; a junior adds a caveat line under the table, and the next person who reorders the emitter ships an unlabelled census.
+
+### Characterizing a trend over a partially-populated dimension — OUT
+
+- **Signature (observable signal):** a confident claim like "skill X's spend tripled" when what actually tripled was the **capture rate** — the underlying dimension was populated on 10% of sessions in the first period and 30% in the last.
+- **Conditional:** do NOT emit a direction, arrow or percentage delta for a **best-effort** dimension, because a change in coverage is not separable from a change in spend without a coverage-stable baseline that the source does not provide.
+- **Root cause:** a per-period series is arithmetically well-formed whether or not the population behind it is stable, so the trend math succeeds silently; the invalidity lives in the *sampling*, which the numbers do not expose.
+- **Mitigation:** the trend gate keys on the **same registry entry** that drives the coverage label — direction is emitted only where `grade == "exact"`, so a direction claim and a completeness claim share one enforcement point and there is no threshold to mis-tune. Best-effort dimensions render per-period volume **and** per-period coverage, plus an explicit `COVERAGE-DRIFT` note when the spread exceeds the `[RECOMMENDED]` 10-percentage-point band, so the coverage jump sits on the same line as the volume jump.
+- **Principal response vs. junior response:** a principal asks what the denominator did before reading the numerator and withholds the claim the data cannot support; a junior computes a delta because the series is there, and reports a capture-rate artifact as a spend trend.
+
+### Leaking an operator home path through the directory dimension — OUT
+
+- **Signature (observable signal):** a rendered report, pasted into a ticket or a chat message, contains an absolute home path — or a path-mangled one such as a `-Users-…`-style directory name that reconstructs to the same thing.
+- **Conditional:** do NOT render `session.project_dir` or `session.cwd` when slicing by directory, because `project_dir` is the `~/.claude/projects/<dir>` basename — which encodes the **full absolute working directory** as a slash-mangled name — and `cwd` (pre-v1.2.0 stores) is the raw absolute path; either one published on a public repo or in a ticket is a data-hygiene breach.
+- **Root cause:** three fields plausibly answer "which directory?", and the two wrong ones are the *more* obvious choices — `project_dir` is present on every record including legacy ones, and `cwd` reads as the literal answer. Only `worktree` is the data-minimized basename.
+- **Mitigation:** one accessor resolves `.worktree // basename(.cwd)`, so the rendered value is a **basename before and after** the v1.2.0 rename and no absolute path is emitted either way; `project_dir` is never read. The self-test asserts the negative against fixtures that **deliberately contain** a fabricated absolute path and a fabricated mangled one — a "contains no home path" assertion over a fixture with no home path in it proves nothing.
+- **Principal response vs. junior response:** a principal picks the field by what it will *print* and pairs the negative assertion with a positive control; a junior renders `project_dir` because it is always populated, and ships a report that cannot be pasted anywhere.
 
 ## Guardrails (Platform)
 
