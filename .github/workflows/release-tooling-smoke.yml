@@ -86,6 +86,12 @@ on:
       # residual path-filter gap, closed here rather than deferred.
       - 'release/skills/release-hub/references/orchestration-playbook.md'
       - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
+      # Procedure 7a gate-predicate inputs: the predicate itself is prose-embedded
+      # in the bridge doc and the fixtures are built from the ledger template's
+      # 13-field header. Without these two entries an edit to either could regress
+      # the HARD GATE without ever triggering its regression suite.
+      - 'release/references/how-to/hub-spoke-bridge.md'
+      - 'release/releases/hub-state/action-items.md.template'
       - '.github/workflows/release-tooling-smoke.yml'
   push:
     branches: [main]
@@ -99,6 +105,9 @@ on:
       # residual path-filter gap, closed here rather than deferred.
       - 'release/skills/release-hub/references/orchestration-playbook.md'
       - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
+      # Procedure 7a gate-predicate inputs — see the pull_request block above.
+      - 'release/references/how-to/hub-spoke-bridge.md'
+      - 'release/releases/hub-state/action-items.md.template'
 
 permissions:
   contents: read
@@ -149,6 +158,20 @@ jobs:
         # Without this step, ZERO CI reference blast-radius — the tool could rot
         # unexercised. Requires jq (present on the macOS runner via /usr/bin/jq).
         run: bash release/tools/tests/test_domain_blast_radius.sh
+
+      - name: Procedure 7a action-item gate predicate (escaped-pipe regression)
+        # The Stage-13 HARD GATE predicate is PROSE-EMBEDDED — it lives in a bash
+        # fence inside release/references/how-to/hub-spoke-bridge.md, so no runner
+        # reaches it by default and it can rot silently. This suite extracts the
+        # fence VERBATIM and exercises it, so the doc IS the unit under test.
+        # Guards the defect that shipped once already: splitting the ledger on a
+        # BARE pipe made a `status: open` row carrying a GFM-escaped `\|` in any
+        # earlier free-text column read as terminal — a SILENT PASS of the gate.
+        # Includes a negative control asserting the bare-pipe form still mis-reads
+        # the fixture, so the suite cannot drift into passing vacuously.
+        # Offline + deterministic (mktemp fixtures; no network, no gh, no writes
+        # to any operator-instance path). Gates on exit code.
+        run: bash release/tools/tests/test_action_item_gate_predicate.sh
 
       - name: CIAC-3 — emission-contract subset (asserted ⊆ instructed)
         # Wires the CIAC-3 lint that shipped with ZERO call sites. Without this step the

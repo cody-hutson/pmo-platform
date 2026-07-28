@@ -2022,16 +2022,21 @@ This mandate is consistent with — and bounded by — the **operator-agency car
 
 **The gate is 3-valued over two counts, not boolean over one.** A gate that only counts unresolved rows cannot tell "every commitment was resolved" from "no commitment was ever recorded" — and a release that never emitted an action item is exactly the release whose emit step was skipped. Counting the whole AI-row population alongside the unresolved subset separates them.
 
-**Probe — structured, whole-population, single pass.** `status` is field 11 of the 13-field schema, so with a leading pipe it is `$12` under `-F'|'`. Address the column; do not pattern-match the row. A positional probe such as `grep -E '^\| AI-[0-9]+ \|.*\| (open|in-flight) \|'` also matches any *other* cell whose content is exactly `open` or `in-flight` — a `trigger_detail` of `open` on a `done` row reports that row as unresolved. Verified: on a 4-row ledger with zero unresolved rows and one such `trigger_detail`, the positional probe returns 1 and the column probe returns 0.
+**Probe — structured, whole-population, single pass.** `status` is field 11 of the 13-field schema. Split on the canonical column delimiter `" | "` (space-pipe-space) per [ADR-099](../../ADRs/ADR-099-event-log-payload-pipe-grammar.md), which addresses `status` as `$11` and the `id` column as `$1` (the leading table pipe stays attached to `$1`, so no offset is introduced). Address the column; do not pattern-match the row. A positional probe such as `grep -E '^\| AI-[0-9]+ \|.*\| (open|in-flight) \|'` also matches any *other* cell whose content is exactly `open` or `in-flight` — a `trigger_detail` of `open` on a `done` row reports that row as unresolved. Verified: on a 4-row ledger with zero unresolved rows and one such `trigger_detail`, the positional probe returns 1 and the column probe returns 0.
+
+**Split on `" | "`, never on a bare `|`.** A bare-pipe split is a silent-PASS path, not a style preference. GFM requires a literal pipe inside a table cell to be written escaped as `\|`, and `description` / `owner` / `trigger_detail` / `target` are all free-text columns ahead of `status`. Under `-F'|'` an escaped pipe in any of them adds a field and shifts `status` off its index, so a `status: open` row reads as terminal and the HARD GATE returns `RESOLVED` on an unresolved ledger. Splitting on `" | "` is immune: the character before the pipe in `\|` is a backslash, not a space, so the escaped pipe never matches the delimiter and row arity holds at 13. This is the same bare-pipe hazard ADR-099 § Consequences (c) names — *"a future consumer that reintroduces a bare-pipe split silently reopens the same attribution-loss path."* Regression-guarded by [`test_action_item_gate_predicate.sh`](../../tools/tests/test_action_item_gate_predicate.sh), which extracts the block below verbatim and exercises it against escaped-pipe fixtures.
 
 `$DIR` is resolved per the orchestration playbook § 4a.3 resolver — slug-keyed first, version-keyed as a read-only legacy fallback. The writer creates only the slug form (`hub-session-continuity.md` § 7.3).
 
 ```bash
 AI="$DIR/action-items.md"
 if [ ! -f "$AI" ]; then STATE=NOT-RECORDED; else
-  read -r TOTAL UNRES <<<"$(awk -F'|' '
-      $2 ~ /^ *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$12);
-                               if ($12=="open" || $12=="in-flight") u++ }
+  # FS is ' [|] ' — space, BRACKETED pipe, space. Do NOT "simplify" to ' \| ':
+  # awk puts the -F value through string-escape processing first, which reduces
+  # \| to a bare | — ERE alternation — and the row then splits on every space.
+  read -r TOTAL UNRES <<<"$(awk -F' [|] ' '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
+                                 if ($11=="open" || $11=="in-flight") u++ }
       END { print (t+0), (u+0) }' "$AI")"
   if   [ "$TOTAL" -eq 0 ]; then STATE=EMPTY-LEDGER
   elif [ "$UNRES" -gt 0 ]; then STATE=UNRESOLVED
