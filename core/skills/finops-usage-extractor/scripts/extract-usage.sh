@@ -415,7 +415,8 @@ self_test() {
   if [ -f "$oracle" ]; then
     local got want
     got="$(jq -s -S '[.[] | select(.record=="session")
-                    | {session_id, tokens, tool_use, token_source, heuristic_turns, subagent_count}]
+                    | {session_id, tokens, tool_use, token_source, heuristic_turns, subagent_count,
+                       by_skill, by_mcp, by_model, tool_calls, stop_reason, dimension_coverage}]
                     | sort_by(.session_id)' "$st_store/usage.jsonl" 2>/dev/null)"
     want="$(jq -S '. | sort_by(.session_id)' "$oracle" 2>/dev/null)"
     if [ "$got" != "$want" ]; then
