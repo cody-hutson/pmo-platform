@@ -438,6 +438,10 @@ Six H2 sections; four carry the calibration path.
 | `## Capacity Planning` | person | one per team member | Existing. Outside the calibration path. |
 | `## Velocity Trend` | iteration | narrative | Existing. Outside the calibration path. |
 
+**Template parity (normative — fails closed, and its runner is named).** For each calibration-path section, the column headers of [`sprint-tracker-template.md`](../../operations/templates/sprint-tracker-template.md) MUST equal this section's field names, **in order**. Parity is what makes a row key *writable*: a template header missing a key component cannot express the key, so two records that the schema separates collide into one cell and the per-family denominator they feed is destroyed — the schema's rule holds while the surface that implements it silently cannot. **Unequal → FAIL; a header set that merely contains the field names in a different order is a FAIL, not a pass**, because a positional writer fills the wrong column.
+
+The predicate is an ordered set-equality, so it is mechanically checkable — extract the first `|`-row under each of `## Estimate-Actual Pairs` and `## Capture Exceptions` in the template, extract the `Field`-column values of the corresponding field table here, and compare the two lists. **Runner (named, because a predicate nobody executes is indistinguishable in the artifact from a clean check):** [`pmo-skill-editor`](../../release/skills/pmo-skill-editor/SKILL.md) **Mode C (Regression)**, whose trigger is an edit to a skill or its consumers, run on any change to **either** file; and re-verified at **Stage 7 Dev Testing** ([`pmo-qa-auditor`](../skills/pmo-qa-auditor/SKILL.md) Mode G) on the PR that carries the change. **No CI job executes this check today** — that is stated rather than implied, so a reader does not mistake a named agent-run predicate for an automated one.
+
 ### Sprint History — F3 (delivered-versus-planned, iteration grain)
 
 Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, `Completed`, `Velocity`, `Carryover`, `Notes`. Two columns are added:
