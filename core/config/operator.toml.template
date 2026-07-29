@@ -370,18 +370,35 @@ automation_level = "recommend"
 # on this instance, even though the hook is registered — turning it on is a
 # deliberate operator edit, not something a platform update does to you. You can
 # always run the retro by asking for it ("run the session retro"); that path
-# ignores every setting in this block except the sampling threshold, which it
-# also overrides.
+# ignores every setting in this block, INCLUDING the sampling threshold. Asking
+# for the retro runs it, full stop.
+#
+# WHEN IT FIRES: at the FIRST turn boundary at which the session clears the
+# threshold below — NOT necessarily the last turn of the session. A Stop hook
+# cannot tell which turn is the last one (every turn boundary looks identical;
+# the final one is only knowable afterwards), so the hook fires at the earliest
+# point it can actually observe. Want it later in the session? Raise the floors
+# below, or set sample = "significant_only".
 #
 # WHY SAMPLING MATTERS: the event log is append-only and permanent. A row emitted
 # for a session that taught nothing can never be deleted, only redacted, and it
 # permanently dilutes the cross-session pattern signal this surface exists to
 # produce. "Almost per session" is a ceiling with a floor under it, not "always".
 #
-# ACTIVATION IS TWO STEPS (the warn-then-enforce shakedown the platform uses for
+# ACTIVATION IS THREE STEPS (the warn-then-enforce shakedown the platform uses for
 # every new runtime hook):
 #   1. enabled = true   -> the hook starts evaluating, still does not interrupt
-#   2. mode = "enforce" -> after the warn window, the hook actually runs the retro
+#   2. observe          -> let real sessions accumulate until the hook has recorded
+#                          at least one would-fire verdict in its verdict log
+#                          (.session-retro-state/verdict-log.tsv, beside the other
+#                          hook state files). That row is the proof the whole path
+#                          works end to end on a real session.
+#   3. mode = "enforce" -> the hook actually runs the retro
+#
+# Step 2 is enforced, not advisory. Setting mode = "enforce" with an empty verdict
+# log does NOT interrupt anything: the hook degrades to warn for that invocation
+# and records `warn-window-unsatisfied`, so you can see it happen rather than
+# wondering why nothing fired.
 
 # Master switch for the AUTOMATIC trigger. false = the Stop hook is a no-op.
 # Valid: true | false          Default: false (inert — activation is your call)
