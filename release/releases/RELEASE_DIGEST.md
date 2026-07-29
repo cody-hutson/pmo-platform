@@ -5,6 +5,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v3.98 (2026-07-28) — Readiness checks now catch work another epic owns, and render a map
+
 ### v3.97 (2026-07-27) — Portability is now a first-class engineering value
 
 ### v3.96 (2026-07-26) — Measure and attribute agent token spend from local session data
