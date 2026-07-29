@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v4.0] - 2026-07-29
+
+You can now see where agent token spend goes, get an estimate for planned work when there is enough history to support one, and measure estimates against what actually happened.
+
+[Full notes](release/releases/notes/v4.0_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.0)
+
 ## [v3.100] - 2026-07-29
 
 The release pipeline can now record the decisions it makes, including the automatic ones, and trace each record back to the release it came from.
