@@ -824,6 +824,10 @@ render() {
   # BOTH legs are asserted: a non-zero jq status is fatal, and so is an empty render
   # on a zero status — a renderer that emits nothing is a bug, never an answer,
   # because the empty-WINDOW answer is a full report that says so.
+  # NOTE (byte-fidelity): $( ) strips ALL trailing newlines, so the sentinel `x` is
+  # appended inside the substitution and stripped back off — the rendered bytes are
+  # then identical to the un-captured `jq` call, and the substitution's exit status
+  # is jq's own, not the sentinel printf's.
   local out jrc
   out="$(jq -r -s \
     --arg since "$since" --arg until "$until" \
@@ -831,8 +835,9 @@ render() {
     --arg now "$now" --arg by "$BY" --arg period "$PERIOD" \
     --arg as_json "$AS_JSON" --argjson do_trend "$DO_TREND" \
     --arg gen_utc "$(NOW_UTC)" \
-    "$JQ_REPORT" "$store_file")"
+    "$JQ_REPORT" "$store_file"; jrc=$?; printf 'x'; exit "$jrc")"
   jrc=$?
+  out="${out%x}"
   if [ "$jrc" -ne 0 ]; then
     printf 'FATAL (exit 3): the report program aborted (jq exit %s) — NO report was produced.\n' "$jrc" >&2
     printf 'The store is not readable as JSONL, or a record is malformed (a truncated line, a\n' >&2
@@ -845,7 +850,7 @@ render() {
     printf 'empty render read as an empty window — an empty window renders a full report saying so.\n' >&2
     exit 3
   fi
-  printf '%s\n' "$out"
+  printf '%s' "$out"
 }
 
 # ── §8 Self-test — synthetic fixtures only; no operator store, no network.
@@ -1316,6 +1321,54 @@ self_test() {
     grep -aq 'No sessions fall in this window' "$EMPTYW" \
       && ok "SM-10d: an empty window exits 0 and says so — an empty result is an answer, not an error" \
       || bad "SM-10d: an empty window rendered without the explicit empty-window statement"
+  fi
+
+  # ── SM-10e FAIL-CLOSED RENDER — a jq abort must be DISTINGUISHABLE from a
+  #    successful run over an empty window. The script's terminal `exit 0` used to
+  #    mask every abort as rc=0 + empty stdout, which is exactly what a caller sees
+  #    on a legitimately empty window. Three abort causes are exercised, and each is
+  #    compared against the empty-window CONTROL rendered from the SAME good
+  #    fixture — so the assertion is "these two outcomes DIFFER", not merely "this
+  #    one failed". Every leg fails closed: an invalid control is a FAIL, not a skip. ──
+  local md rcm ok_kinds=0
+  mkdir -p "$wd/mal-trunc" "$wd/mal-ts" "$wd/mal-tok"
+  { cat "$fx"; printf '{"record":"session","session_id":"deliberately-truncated","tokens":{"input":1'; } \
+    > "$wd/mal-trunc/usage.jsonl"
+  jq -c 'if .record=="session" then .started_utc="NOT-A-TIMESTAMP" else . end' "$fx" > "$wd/mal-ts/usage.jsonl"
+  jq -c 'if .record=="session" then .tokens="not-an-object"      else . end' "$fx" > "$wd/mal-tok/usage.jsonl"
+  # Discriminating controls: the truncated store must NOT parse (syntax leg), while
+  # the bad-timestamp store MUST still parse (so its abort proves the semantic
+  # validator fired, not merely that jq choked on syntax).
+  local ctl_ok=1
+  if jq -e -s . "$wd/mal-trunc/usage.jsonl" >/dev/null 2>&1; then
+    bad "SM-10e control invalid: the truncated store still parses as JSONL — the syntax-abort leg is vacuous"; ctl_ok=0
+  fi
+  if ! jq -e -s . "$wd/mal-ts/usage.jsonl" >/dev/null 2>&1; then
+    bad "SM-10e control invalid: the malformed-timestamp store does not parse — its abort would prove nothing about the timestamp validator"; ctl_ok=0
+  fi
+  local CTL="$wd/ctl-empty.txt" ctlrc
+  ( STORE="$wd/main" bash "$SELF" --since 2019-01-01 --until 2019-01-31 >"$CTL" 2>/dev/null ); ctlrc=$?
+  if [ "$ctlrc" -ne 0 ] || ! grep -aq 'No sessions fall in this window' "$CTL"; then
+    bad "SM-10e control invalid: the empty-window control exited $ctlrc / rendered no explicit statement — without a working control, 'the abort differs from empty' proves nothing"; ctl_ok=0
+  fi
+  if [ "$ctl_ok" -eq 1 ]; then
+    for md in mal-trunc mal-ts mal-tok; do
+      ( STORE="$wd/$md" bash "$SELF" --window 3650 >"$wd/$md.out" 2>"$wd/$md.err" ); rcm=$?
+      if [ "$rcm" -eq 0 ]; then
+        bad "SM-10e: malformed store '$md' exited 0 — indistinguishable from a successful empty-window run"
+      elif ! grep -aq 'FATAL (exit 3)' "$wd/$md.err"; then
+        bad "SM-10e: malformed store '$md' exited $rcm but named no FATAL on stderr"
+      elif cmp -s "$wd/$md.out" "$CTL"; then
+        bad "SM-10e: malformed store '$md' rendered stdout byte-identical to the empty-window control"
+      else
+        ok_kinds=$((ok_kinds+1))
+      fi
+    done
+    if [ "$ok_kinds" -eq 3 ]; then
+      ok "SM-10e FAIL-CLOSED render: all 3 abort causes (truncated line / malformed timestamp / malformed tokens) exit non-zero with a named FATAL on stderr, and none renders the empty-window control's output"
+    else
+      bad "SM-10e FAIL-CLOSED render: only $ok_kinds of 3 abort causes fail closed"
+    fi
   fi
 
   # ── SM-11 Oracle — --json equals the committed oracle modulo generated_utc. ──
