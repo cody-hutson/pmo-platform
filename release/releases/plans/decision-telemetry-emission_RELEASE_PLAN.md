@@ -141,7 +141,7 @@ EDIT   | #3712 | release/tools/append-pipeline-event.sh                         
 EDIT   | #3712 | release/ADRs/ADR-086-event-log-schema-decision-subtype-extension.md | reconcile §2 + Consequences to the VERIFIABLE-MECHANISM strength (not "gate-held"); strike the "known to diverge today" iteration clause; flip status Proposed → Accepted per operator decision D-6
 EDIT   | #3704 | release/tools/append-pipeline-event.sh                              | widen the payload guard per D-1 fork A (admit the escaped multi-value separator); add positive multi-value + negative malformed cases to --self-test
 EDIT   | #3704 | release/references/standards/pipeline-event-log-schema.md           | §4.3 — state whether multi-value payload fields are supported, their separator, escaping, and what stays reserved
-ADD    | #3704 | release/ADRs/ADR-099-<payload-grammar-axis>.md                      | records D-1 (widen-grammar vs amend-the-stage-shard-row); ADR-099 is next-free (re-verified after the rebase onto main, which landed core/ADRs/ADR-098 from the sibling release; check-adr-numbers.py: 98 ADRs, contiguous 001..098)
+ADD    | #3704 | release/ADRs/ADR-100-<payload-grammar-axis>.md                      | records D-1 (widen-grammar vs amend-the-stage-shard-row); ADR-100 is next-free (re-verified after the Stage-7 rebase onto main, which landed release/ADRs/ADR-099 from the mode-r-depth sibling release; check-adr-numbers.py: 100 ADRs, contiguous 001..100)
 EDIT   | #4051 | core/deploy/deploy.sh                                               | Check 19 three-outcome trichotomy + a shared pmo_evals_results_path() resolver replacing three path literals; the `# ─── Check 19:` def-block and `log "Check 19:"` emitter MUST survive the reshape or Check 57 warns
 EDIT   | #4051 | core/deploy/tests/                                                  | one test asserting the trichotomy (instance log absent → SKIP; tracked schema unresolvable → fail-loud; both present → 19b/19c assert)
 EDIT   | #3723 | release/skills/release-hub/references/orchestration-playbook.md     | Procedure 4/5 — explicit emit step binding operator-decision resolution to append-pipeline-event.sh, citing the hub-session-continuity mapping table; Procedure 0b — hub-state lazy-creation step; Procedure 7a — distinguish empty action-item set from fully-resolved set
@@ -247,7 +247,7 @@ Graded at Stage 9 on the merged PR. Each predicate spans ≥2 issues and asserts
 - **D-ReleaseClass — `cross-cutting`.** Holds via triggers (a) + (c). Trigger **(b) does NOT fire** (1 of 7 governance surfaces, not ≥3) — the milestone description's rationale overstates this; correction tracked for Stage 13. Posture: Tight / Deep / ALL / 30-day.
 - **D-Version — next-free minor.** *Recorded determination, not a gate.* Re-verification rungs: Engineering Commit-0 detect-and-HALT → the Stage-9 divergence re-check → the Stage-12 atomic ref-CAS. **Commit-0 re-verify executed and PASSED** — the planned slot was unclaimed on all three `claimed_set()` surfaces (git tags ∪ published Releases ∪ VERIFIED `RELEASE_LOG` rows) and equalled the recomputed next-free.
 - **D-Concurrency — P0 fully-serial, D-C topology SINGLE.** The two release-hub sibling milestones are held until this release merges (neither has an open PR, so the hold is near-free).
-- **D-1 — #3704 payload grammar: WIDEN (fork A).** Operator selected widening over amending the stage-shard row. **The adopted mechanism is the #3704 Stage-5 spec's rule: admit the escaped `\|` form as canonical, keep a bare `|` reserved, and reject the raw delimiter and newlines.** Record as ADR-099.
+- **D-1 — #3704 payload grammar: WIDEN (fork A).** Operator selected widening over amending the stage-shard row. **The adopted mechanism is the #3704 Stage-5 spec's rule: admit the escaped `\|` form as canonical, keep a bare `|` reserved, and reject the raw delimiter and newlines.** Record as ADR-100.
 
   > **Erratum, corrected here.** An earlier candidate rule — *"reject the spaced delimiter, admit a bare `|`"* — was **falsified** at the Wave-1 Decision Briefing: two consumers (`rollup-attribution.sh` and `append-pipeline-event.sh` itself) split on a **bare** pipe, so admitting one would corrupt them. The adopted rule above is *stricter* than that candidate and makes the stage shard's literal source writable verbatim with **no §11 amendment**. The operator decision (WIDEN, fork A) is unchanged; only the mechanism is corrected.
 
@@ -287,7 +287,7 @@ Errata corrected in place while transcribing the Stage-4 comment into this file,
 ## Issue References
 
 - #3712 — the fallback enum mirror is not strict (`iteration` absent); Wave 1 slice 1.
-- #3704 — the payload guard rejects a codified multi-value emission; Wave 1 slice 2, carries ADR-099.
+- #3704 — the payload guard rejects a codified multi-value emission; Wave 1 slice 2, carries ADR-100.
 - #4051 — `deploy.sh` Check 19 resolves the event-log schema at a non-existent path, so 19b/19c never run; bundle-amended at the D-Gate (D-4).
 - #3723 — the hub playbook carries no emit step, so no decision event is ever written; Wave 2.
 - #4025 — the autonomous seams (delegation, self-repair) emit nothing; Wave 3 slice 1.

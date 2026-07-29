@@ -1,8 +1,8 @@
 ---
-title: "ADR-099 — Event-log payload pipe grammar (escaped `\\|` as the canonical multi-value separator)"
+title: "ADR-100 — Event-log payload pipe grammar (escaped `\\|` as the canonical multi-value separator)"
 status: Proposed
 date: 2026-07-27
-release: decision-telemetry-emission (#295) (v3.98 provisional; bound at Stage 12)
+release: decision-telemetry-emission (#295) (v3.100 provisional; bound at Stage 12)
 deciders: "Operator rendered D-1 (WIDEN, fork A) at the Wave-1 Decision Briefing; the Stage 5 Solutioning spoke (#4056) selected the mechanism (candidate A2) after falsifying the hub's original candidate rule against all 8 consumers; Stage 6 Engineering (#4057) authored it; operator ratifies at the Stage 9 plan-review gate"
 tags: [release-ops, telemetry, event-log, schema, payload-grammar, validation, guard, observability, ssot]
 source_observations:
@@ -13,11 +13,13 @@ source_observations:
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 
-# ADR-099 — Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator)
+# ADR-100 — Event-log payload pipe grammar (escaped `\|` as the canonical multi-value separator)
 
 ## Status
 
 Proposed — authored at Stage 6 Engineering; ratified at the operator's Stage 9 plan-review gate of the introducing release. The Accepted flip is verified against this file's `status:` field, never assumed from milestone closure.
+
+Renumbered ADR-098 → ADR-099 → **ADR-100**, both moves forced by a sibling release merging first. The second move landed at the rebase onto `main` that followed the `release-hub-mode-r-depth` release: that release's `ADR-099-mode-r-disposition-set-fit-test.md` merged while this one was in Stage 7, so 099 became a *claimed* number rather than a contended one. Per `core/ADRs/README.md` § Renumber log, first-to-merge takes the number and the other claimants renumber; `main` topped out at ADR-099 after that merge, making **100** the true next-free slot. `check-adr-numbers.py` fails a gap as readily as a duplicate, so the number is chosen to keep `main` contiguous at `001..100`, not to preserve this branch's original allocation.
 
 ## Context
 
