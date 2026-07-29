@@ -1,5 +1,5 @@
 ---
-title: "ADR-098 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist"
+title: "ADR-101 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist"
 status: Proposed — to be ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
 date: 2026-07-27
 release: decision-audit-and-learning (version bound at Stage 12)
@@ -13,11 +13,13 @@ source_observations:
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-098 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist
+# ADR-101 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist
 
 ## Status
 
 Proposed — to be ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+
+Renumbered from a branch-local ADR-098 → **ADR-101** while this branch was parked awaiting its dependency milestone. Four records were authored concurrently against the same next-free slot; per `core/ADRs/README.md` § Renumber log, first-to-merge takes the number and the other claimants renumber. `ADR-098-portability-seventh-first-class-value.md` merged first and kept **098**, then two further siblings claimed **099** and **100**, so `main` topped out at ADR-100 contiguous and **101** is the true next-free slot. `check-adr-numbers.py` fails a gap as readily as a duplicate, so the number is chosen to keep `main` contiguous at `001..101` rather than to preserve this branch's original allocation.
 
 ## Context
 

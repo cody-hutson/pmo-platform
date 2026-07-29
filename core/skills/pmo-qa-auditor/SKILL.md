@@ -2,7 +2,7 @@
 name: pmo-qa-auditor
 description: >
   Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit · Dev testing (Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts) · As-built architecture-conformance audit (delivered-work drift + cross-release fragmentation) · Decision-health audit (hub and spoke decision conduct vs corpus oracles). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "as-built architecture-conformance audit", "decision-health audit", "audit how we decided."
-version: v3.97
+version: v3.101
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -867,7 +867,7 @@ See `references/decision-audit-mode-spec.md` (machinery),
 `references/decision-audit-dimension-rubric.md` (seam set + grade vocabulary + index formula
 SSOT; authored by the capability build), and
 `../../../release/references/protocols/decision-audit-cadence.md` (when-to-run). Host decision
-of record: `../../ADRs/ADR-098-decision-audit-host-qa-auditor-mode-j.md`.
+of record: `../../ADRs/ADR-101-decision-audit-host-qa-auditor-mode-j.md`.
 
 ## Output format
 

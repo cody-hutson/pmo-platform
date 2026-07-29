@@ -23,7 +23,7 @@ differ in exactly one respect — which corpus oracle the run scores against. Mo
 delivered work against the architecture baseline; Mode J scores decision conduct against the
 hub's invariants and named failure modes.
 
-**Host decision of record:** [ADR-098](../../../ADRs/ADR-098-decision-audit-host-qa-auditor-mode-j.md).
+**Host decision of record:** [ADR-101](../../../ADRs/ADR-101-decision-audit-host-qa-auditor-mode-j.md).
 
 ## 0. Provisioning state (read this first)
 
