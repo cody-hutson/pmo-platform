@@ -159,13 +159,20 @@ build_worktree_milestone_map() {
 build_issue_event_list() {
   local log="$1"
   [ -r "$log" ] || { printf '[]'; return 0; }
-  awk -F'|' '
+  # FS is the SHARED column delimiter " \| " (space-pipe-space) — the same one every
+  # other event-log consumer uses. A bare -F'\|' truncates any payload carrying the
+  # escaped multi-value separator '\|' admitted by schema § 4.3a, silently dropping
+  # the session: join token and losing issue-grain attribution for that row.
+  # Under this FS the row's outer pipes ride $1 (leading) and $NF (trailing).
+  awk -F ' \\| ' '
     /^[[:space:]]*\|/ && $0 !~ /ts_iso/ && $0 !~ /-{3,}/ {
-      ts=$2;      gsub(/^[[:space:]]+|[[:space:]]+$/,"",ts);
-      etype=$5;   gsub(/^[[:space:]]+|[[:space:]]+$/,"",etype);
-      actor=$7;   gsub(/^[[:space:]]+|[[:space:]]+$/,"",actor);
-      subject=$8; gsub(/^[[:space:]]+|[[:space:]]+$/,"",subject);
-      payload=$11;gsub(/^[[:space:]]+|[[:space:]]+$/,"",payload);
+      ts=$1;      sub(/^[[:space:]]*\|[[:space:]]*/,"",ts);
+                  gsub(/^[[:space:]]+|[[:space:]]+$/,"",ts);
+      etype=$4;   gsub(/^[[:space:]]+|[[:space:]]+$/,"",etype);
+      actor=$6;   gsub(/^[[:space:]]+|[[:space:]]+$/,"",actor);
+      subject=$7; gsub(/^[[:space:]]+|[[:space:]]+$/,"",subject);
+      payload=$10;sub(/[[:space:]]*\|[[:space:]]*$/,"",payload);
+                  gsub(/^[[:space:]]+|[[:space:]]+$/,"",payload);
       if (etype !~ /^(decision|gate-outcome|escalation)$/) next;
       # issue number: prefer subject #N, else actor spoke:#N. Normalize to #<digits>.
       issue="";

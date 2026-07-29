@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib-instance-path.sh — single resolver for the operator-instance directory, the
-# localized-context needle file, and the people-roster file.
+# localized-context needle file, the people-roster file, and the evals-results
+# directory (home of the pipeline event log).
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
@@ -21,6 +22,11 @@
 #   pmo_instance_path()      → ${PMO_INSTANCE_PATH:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance}
 #   pmo_localized_needles()  → ${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}
 #   pmo_people_roster()      → ${PMO_PEOPLE_ROSTER:-$(pmo_instance_path)/people-roster.yaml}
+#   pmo_evals_results_path() → $EVALS_RESULTS_PATH, else the operator.toml key
+#                              operator_instance_evals_results_path, else
+#                              ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results
+#                              (3 tiers — deliberately NOT expressible as one
+#                              ${VAR:-default} expansion like the three above)
 #
 # All are pure stdout-echoing functions (no side effects, no mutation); safe to
 # call under `set -euo pipefail`. Sourceable AND idempotent: re-sourcing is a
@@ -72,4 +78,45 @@ pmo_people_roster() {
 pmo_people_roster_for() {
   local _base="$1"
   printf '%s\n' "${PMO_PEOPLE_ROSTER:-$(pmo_instance_path_for "${_base}")/people-roster.yaml}"
+}
+
+# Echo the absolute path to the operator-instance evals-results directory (no
+# trailing slash) — the home of the pipeline event log and its write-log.
+#
+# Three-tier resolution, mirroring release/tools/append-pipeline-event.sh — the
+# WRITER of those files — so a reader can never resolve somewhere the writer does
+# not write:
+#   1. $EVALS_RESULTS_PATH                                     (env / direct override)
+#   2. operator.toml  operator_instance_evals_results_path      (instance override)
+#   3. ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results
+#
+# The default, the override key, and the two-segment `evals/results` stem are all
+# already registered under <OPERATOR_INSTANCE_EVALS_RESULTS_PATH> in
+# core/standards/depersonalization-spec.md — this resolver adds no new surface, it
+# collapses an inconsistent literal onto the governed one (ADR-017 § operator-
+# instance surface convergence; ADR-032 canonicalization, no new variable).
+#
+# DELIBERATELY NOT composed on pmo_instance_path(). append-pipeline-event.sh does
+# not honor PMO_INSTANCE_PATH when it writes, so composing on it would make a
+# PMO_INSTANCE_PATH-relocated instance READ from a directory the writer never
+# writes to — reintroducing, one tier down, the exact reader/writer path
+# divergence this resolver exists to close (#4051).
+#
+# Tier 2 is intentionally built even though the key is absent on the canonical
+# instance today: "not load-bearing today" is precisely the reasoning that
+# produced #4051.
+pmo_evals_results_path() {
+  local _erp="${EVALS_RESULTS_PATH:-}"
+  local _toml _val
+  if [[ -z "$_erp" ]]; then
+    _toml="${HOME}/.config/pmo-platform/operator.toml"
+    if [[ -r "$_toml" ]]; then
+      # `|| true`: the key is absent on instances using the canonical default;
+      # tolerate grep's non-zero exit under `set -euo pipefail`.
+      _val=$( { grep -E '^operator_instance_evals_results_path' "$_toml" 2>/dev/null || true; } \
+                | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+      if [[ -n "$_val" ]]; then _erp="$_val"; fi
+    fi
+  fi
+  printf '%s\n' "${_erp:-${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/evals/results}"
 }

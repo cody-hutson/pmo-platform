@@ -1,0 +1,17 @@
+# decision-emission enforcement sentinel — read by deploy.sh
+# cmd_check_decision_emission (--check-decision-emission, Check 61).
+#
+# First non-comment token decides whether an INCOMPLETE verdict BLOCKS:
+#   enforce  -> INCOMPLETE exits 1 (blocking)
+#   warn     -> INCOMPLETE reports the true verdict, exits 0 (non-blocking)
+#
+# Ships `warn`. The `shadow` rung of the shadow -> warn -> enforce ladder
+# (progressive-rollout-convention.md) is NOT reachable in this codebase —
+# resolve_check_mode() accepts enforce|warn|off only — so this gate enters at
+# the lowest IMPLEMENTABLE rung and walks warn -> enforce -> removed. Recorded
+# explicitly rather than silently skipped.
+#
+# The flip to `enforce` is an OPERATOR DECISION, never auto-promoted by hit
+# count (progressive-rollout-convention.md, verbatim). The flip ledger lives in
+# core/standards/gate-efficacy-standard.md § Flip-decision status.
+warn

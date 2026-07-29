@@ -8,18 +8,25 @@ name: Release tooling smoke
 #              check check-release-body-drift.sh --self-test, AND the blast-radius tool
 #              family (doc-tracer default-path regression under a normalized diff + the
 #              domain-fan-out software import-graph scanner) in the closeout-smoke job;
-#              AND (2) each of the three core/deploy/tools node-graph tools runs its
+#              (2) each of the three core/deploy/tools node-graph tools runs its
 #              committed --self-test when any core/deploy/tools file changes, in the
-#              node-graph-tools-selftest job — all asserted behaviorally by executing
-#              the scripts' checks and gating on exit code.
+#              node-graph-tools-selftest job; AND (3) the CIAC-3 relation holds — the
+#              class set a downstream gate ASSERTS on is a subset of the MUST rows the
+#              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
+#              the committed asserted set), with the lint's own --self-test run in the
+#              same step so the lint cannot drift into always-passing — all asserted
+#              behaviorally by executing the scripts' checks and gating on exit code.
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
 #                  script asserts -> the closeout-smoke job fails; regress a
 #                  claim-version.sh or check-release-body-drift.sh self-test fixture ->
 #                  the closeout-smoke job fails; break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
 #                  test fails; regress a node-graph tool's --self-test -> the
-#                  node-graph-tools-selftest job fails; on an unrelated PR both are
-#                  skipped and absence is treated as pass.
+#                  node-graph-tools-selftest job fails; add a class to
+#                  core/deploy/allowlists/decision-emission-asserted-set.txt that is not
+#                  a MUST row of the playbook's EMISSION-CONTRACT block -> the CIAC-3
+#                  step fails; on an unrelated PR both jobs are skipped and absence is
+#                  treated as pass.
 # Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
 
 # Smoke-tests the Stage 13 close-out automation on any PR that touches release
@@ -73,6 +80,18 @@ on:
       - 'release/tools/**'
       - 'release/releases/RELEASE_LOG.md'
       - 'core/deploy/tools/**'
+      # CIAC-3 inputs: the playbook owns the INSTRUCTED set, the allowlist file owns
+      # the ASSERTED set. Without these two entries a PR that edits only the contract
+      # block (or only the asserted set) would not trigger the subset check — the
+      # residual path-filter gap, closed here rather than deferred.
+      - 'release/skills/release-hub/references/orchestration-playbook.md'
+      - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
+      # Procedure 7a gate-predicate inputs: the predicate itself is prose-embedded
+      # in the bridge doc and the fixtures are built from the ledger template's
+      # 13-field header. Without these two entries an edit to either could regress
+      # the HARD GATE without ever triggering its regression suite.
+      - 'release/references/how-to/hub-spoke-bridge.md'
+      - 'release/releases/hub-state/action-items.md.template'
       - '.github/workflows/release-tooling-smoke.yml'
   push:
     branches: [main]
@@ -80,6 +99,15 @@ on:
       - 'release/tools/**'
       - 'release/releases/RELEASE_LOG.md'
       - 'core/deploy/tools/**'
+      # CIAC-3 inputs: the playbook owns the INSTRUCTED set, the allowlist file owns
+      # the ASSERTED set. Without these two entries a PR that edits only the contract
+      # block (or only the asserted set) would not trigger the subset check — the
+      # residual path-filter gap, closed here rather than deferred.
+      - 'release/skills/release-hub/references/orchestration-playbook.md'
+      - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
+      # Procedure 7a gate-predicate inputs — see the pull_request block above.
+      - 'release/references/how-to/hub-spoke-bridge.md'
+      - 'release/releases/hub-state/action-items.md.template'
 
 permissions:
   contents: read
@@ -130,6 +158,41 @@ jobs:
         # Without this step, ZERO CI reference blast-radius — the tool could rot
         # unexercised. Requires jq (present on the macOS runner via /usr/bin/jq).
         run: bash release/tools/tests/test_domain_blast_radius.sh
+
+      - name: Procedure 7a action-item gate predicate (escaped-pipe regression)
+        # The Stage-13 HARD GATE predicate is PROSE-EMBEDDED — it lives in a bash
+        # fence inside release/references/how-to/hub-spoke-bridge.md, so no runner
+        # reaches it by default and it can rot silently. This suite extracts the
+        # fence VERBATIM and exercises it, so the doc IS the unit under test.
+        # Guards the defect that shipped once already: splitting the ledger on a
+        # BARE pipe made a `status: open` row carrying a GFM-escaped `\|` in any
+        # earlier free-text column read as terminal — a SILENT PASS of the gate.
+        # Includes a negative control asserting the bare-pipe form still mis-reads
+        # the fixture, so the suite cannot drift into passing vacuously.
+        # Also exercises the § 4a.3 hub-state resolver (extracted verbatim from
+        # orchestration-playbook.md) so the routing-point read sites keep finding
+        # the ledger the canonical writer actually creates.
+        # Offline + deterministic (mktemp fixtures; no network, no gh, no writes
+        # to any operator-instance path). Gates on exit code.
+        run: bash release/tools/tests/test_action_item_gate_predicate.sh
+
+      - name: CIAC-3 — emission-contract subset (asserted ⊆ instructed)
+        # Wires the CIAC-3 lint that shipped with ZERO call sites. Without this step the
+        # script is decorative: with no asserted-set file it takes a `SKIP: … return 0`
+        # branch, so the mechanism built to make CIAC-3 mechanical would assert nothing.
+        # Both lines matter and neither substitutes for the other:
+        #   1. the LIVE relation — the committed asserted set MUST be a subset of the
+        #      playbook's MUST rows (a gate asserting a class the playbook never
+        #      instructs can only ever fail);
+        #   2. --self-test — asserts BOTH directions against fixtures, so the lint
+        #      cannot drift into always-passing (its negative cases: an uninstructed
+        #      class exits 1, and a CONDITIONAL-only class exits 1).
+        # Offline, credential-free, no network — gates on exit code like its peers.
+        run: |
+          set -euo pipefail
+          release/tools/check-emission-contract-subset.sh \
+            core/deploy/allowlists/decision-emission-asserted-set.txt
+          release/tools/check-emission-contract-subset.sh --self-test
 
       - name: Corpus path-resolution check (offline; hard-fail)
         # HARD-FAILS (exit 1) if any of the four corpus paths do not resolve in

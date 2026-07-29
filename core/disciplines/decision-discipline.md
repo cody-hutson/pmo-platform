@@ -309,7 +309,7 @@ Full taxonomy of which decision classes require which mechanisms. Consumer-agnos
 | Cascade approval scope judgment | ✅ | ✅ | ✅ | Governance boundary |
 | Iteration vs escalate (Tier 1/2/3 feedback) | ✅ | ✅ | ⚠️ optional | Protocol-driven but judgment in tier assignment |
 | Downstream-output evaluation (consumer concurs/diverges on spoke or skill output) | ✅ | ✅ | ⚠️ optional | Consumer's value-add, sometimes routine |
-| **Exempt: Chip spawning** from existing template | ❌ | ❌ | ❌ | Deterministic routing |
+| **Exempt: Chip spawning** from existing template | ❌ | ❌ | ❌ | Deterministic routing — mechanisms only; emission obligation per § 3.1 when the delegation merit test fires |
 | **Exempt: Status reads** (`gh issue view`, RELEASE_LOG append) | ❌ | ❌ | ❌ | Not a decision |
 | **Exempt: Stage-gate applicability** from pre-approved matrix | ❌ | ❌ | ❌ | Plan-driven application |
 | **Exempt: Deterministic routing** (Stage N+1 after N closes) | ❌ | ❌ | ❌ | Procedure-driven |
@@ -319,6 +319,20 @@ Full taxonomy of which decision classes require which mechanisms. Consumer-agnos
 **Rule of thumb:** If the consumer is **recommending to operator** AND operator is **expected to act on it**, all 3 mechanisms apply (or are explicitly exempt per this table, not per consumer whim). If the consumer is **relaying information** or **executing a determined procedure**, mechanisms are exempt.
 
 **Determinate classification is decided tool-blind.** When a governance rule fully resolves a classification (the intake type→template fork per [`intake-style-guide.md` § 1b](../../release/references/how-to/intake-style-guide.md) is the worked case), applying it is procedure execution, not decision-class work: the consumer decides the classification tool-blind and proceeds — it does not escalate the classification to the operator as a clarifying question (`AskUserQuestion`, a Decision Briefing, or free-text). Rendering an operator gate for a rule-resolved classification is an unauthorized gate (§ 6 metric 5 — the FM-2 governance-theater pattern). The prior judgment of whether ANY question is warranted belongs to the AskUserQuestion-is-a-mechanism-not-a-trigger rule (CLAUDE.md § Universal Preferences) — cross-referenced, not restated here; skill-level mode disambiguation stays with the OPERATIONS.md Mode Selection Protocol. A classification rises to decision-class only when the governing rule's discriminators genuinely do not resolve it — then it enters the table above as a normal decision, and per G4 the honest escalation names the conflicting readings, never a template menu.
+
+### 3.1 Exemption is from mechanisms, not from emission
+
+A row marked Exempt in the § 3 table is exempt from **M1/M2/M3 interrogation**. It is **not** thereby exempt from **event emission**: the two are independent obligations, and a class can correctly skip the Decision Briefing while still owing an audit row. The table's columns are mechanisms; it has never carried an emission column, so nothing in it has ever said that an exempt class emits nothing.
+
+**The delegation merit test.** A spawn-vs-hub-direct choice is a **merit fork** — and therefore emits `decision` / `delegation` per the orchestration playbook Procedure 4a, on the write-side contract in [`pipeline-event-log-schema.md` § 3](../../release/references/standards/pipeline-event-log-schema.md) — when **at least one** condition holds:
+
+- **(M-a) Context-boundary.** The choice turns on **where** the work must run: the unit needs branch, worktree, or repo context the consumer does not hold, or holds context it must not (a rename or other graph operation; a build requiring a worktree).
+- **(M-b) Budget-forced.** The quota-budget Checkpoint-B verdict was **non-`PROCEED`** (per [`quota-budget-protocol.md` § 4](../../release/references/standards/quota-budget-protocol.md)). The choice turned on the envelope, not on procedure.
+- **(M-c) Recovery.** The spawn is a **re-spawn** after a prior spoke terminated abnormally. Composes with the self-repair emission in [`autonomous-execution-model.md` § Emission](autonomous-execution-model.md) — a recovery fork emits **both** rows: the `self-repair` row records the recovery decision, the `delegation` row records the execution-path choice.
+
+**Otherwise it is template routing and emits nothing** — the sub-task exists, its dependency is met, the verdict was `PROCEED`, and the spawn is the template's default. This is the case the § 3 Exempt row preserves, and silence here is the correct non-ceremony signal per G2.
+
+**Reviewability.** The test is a positive 3-condition disjunction, so a reviewer can falsify a row (did the named condition actually hold?) *and* falsify a silence (did any condition hold that the consumer did not name?). A consumer that cannot name which condition fired has not established a merit fork and must not emit. The alternative — emit on every spawn and filter at read time — is rejected: it moves the judgment into a read-model that does not exist and buries the forks worth auditing under routine routing.
 
 ---
 
