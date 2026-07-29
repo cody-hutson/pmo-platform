@@ -469,8 +469,20 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
     excluded: (if $verbose == 1 then $excluded else null end),
     excluded_count: ($excluded | length),
     actual_tokens: $actual,
-    delta_tokens: $delta_tokens,
-    pct_error: $pct_error,
+    # A DERIVED field of a suppressed estimate is the estimate. `actual + delta`
+    # recovers the withheld point figure in one subtraction, and `actual * (1 +
+    # pct_error)` recovers it in one multiplication — so rendering either one beside
+    # a "(suppressed)" estimate discloses exactly the figure the N_min floor (or the
+    # rMAD ceiling) declined to emit. Both are suppressed with the point figure, on
+    # the SAME $show_point predicate, so they cannot come apart from it.
+    delta_tokens: (if $show_point then $delta_tokens else null end),
+    pct_error:    (if $show_point then $pct_error    else null end),
+    delta_suppression:
+      (if ($target_wi != "" and ($show_point | not) and $actual != null and $estimate != null)
+       then ("derived fields withheld with the point estimate (suppression: " + $suppression
+             + ") — signed delta and % error each recover the suppressed figure from `actual` "
+             + "in one arithmetic step")
+       else null end),
     leave_one_out: ($target_wi != "") } as $M
 
 | if $as_json == "1" then $M
@@ -538,7 +550,12 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
                   else "| estimate | actual | signed delta | % error |" end),
                  (if $actual == null then null else "|---|---|---|---|" end),
                  (if ($actual == null or $estimate == null) then null
-                  else "| \(if $show_point then ($estimate | commafy) else "(suppressed)" end) | \($actual | commafy) | \(if $delta_tokens < 0 then "-" else "+" end)\(($delta_tokens | absn) | commafy) | \(if $pct_error > 0 then "+" else "" end)\($pct_error)% |" end),
+                  elif ($show_point | not)
+                  then "| (suppressed) | \($actual | commafy) | (suppressed) | (suppressed) |"
+                  else "| \($estimate | commafy) | \($actual | commafy) | \(if $delta_tokens < 0 then "-" else "+" end)\(($delta_tokens | absn) | commafy) | \(if $pct_error > 0 then "+" else "" end)\($pct_error)% |" end),
+                 (if ($actual != null and $estimate != null and ($show_point | not))
+                  then "\n**Signed delta and % error are SUPPRESSED with the point figure, not merely blanked.** Either one recovers the withheld estimate from `actual` in a single arithmetic step (estimate = actual + delta; estimate = actual x (1 + % error)). A figure the estimator explicitly declined to emit must not be recoverable by arithmetic from the same output. Suppression class: \($suppression) (rule \($base.rule), n=\($n), N_min=\($nmin))."
+                  else null end),
                  "",
                  "The comparable set above was rebuilt for \($target_wi)'s OWN matching key with \($target_wi) excluded (P6), then the identical estimator was run over it — so this is the estimate a planner would have seen BEFORE the work started. Basis and confidence as stated above (\($conf_label), rule \($base.rule)). Zero writes, zero new records, zero schema surface." ]
           else [] end )
@@ -1166,6 +1183,56 @@ self_test() {
     grep -aq '## Leave-one-out delta' "$wd/delta.txt" && grep -aq '| estimate | actual | signed delta | % error |' "$wd/delta.txt" \
       && ok "SE-11 DELTA: the markdown surface renders the estimate/actual/delta/%-error table" \
       || bad "SE-11 DELTA: the markdown delta table is missing"
+  fi
+
+  # ── SE-11c NO-ARITHMETIC-RECOVERY — a --delta whose estimate is SUPPRESSED must
+  #    not leak that estimate through a derived field. `actual + delta` recovers the
+  #    withheld point figure in one subtraction and `actual x (1 + pct_error)`
+  #    recovers it in one multiplication, so both are suppressed with the figure.
+  #    Fails CLOSED: the run must actually BE in a suppressed-with-a-real-actual
+  #    state or the check is vacuous, and the paired positive leg (SE-11 above, plus
+  #    the explicit control here) proves the fields are not blanket-nulled. ──
+  local DS="$wd/delta-suppressed.json" DSM="$wd/delta-suppressed.txt"
+  if run_est "$DS" "$wd/thin" --delta 'milestone:v9.41' --json \
+     && run_est "$DSM" "$wd/thin" --delta 'milestone:v9.41'; then
+    local ds_sup ds_est ds_act ds_del ds_pct
+    ds_sup="$(jq -r '.suppression // "null"' "$DS")"
+    ds_est="$(jq -r '.estimate_tokens // "null"' "$DS")"
+    ds_act="$(jq -r '.actual_tokens // "null"' "$DS")"
+    ds_del="$(jq -r '.delta_tokens // "null"' "$DS")"
+    ds_pct="$(jq -r '.pct_error // "null"' "$DS")"
+    if [ "$ds_sup" = "null" ] || [ "$ds_est" != "null" ] || [ "$ds_act" = "null" ]; then
+      bad "SE-11c control invalid: this run is not a suppressed-estimate-with-a-real-actual case (suppression=$ds_sup, estimate=$ds_est, actual=$ds_act) — 'the derived fields are withheld' proves nothing here"
+    elif [ "$ds_del" != "null" ] || [ "$ds_pct" != "null" ]; then
+      bad "SE-11c json: the estimate is suppressed but delta=$ds_del / pct_error=$ds_pct still render — actual($ds_act) + delta recovers the withheld figure in one subtraction"
+    elif ! jq -e '.delta_suppression != null' "$DS" >/dev/null 2>&1; then
+      bad "SE-11c json: the derived fields are null but nothing names WHY — a silent null is indistinguishable from 'not computed'"
+    else
+      #    Rendered leg: all three derived cells say (suppressed), and the delta
+      #    SECTION carries no numeral that reconstructs the figure.
+      local dsec dcells
+      dsec="$(sed -n '/## Leave-one-out delta/,$p' "$DSM")"
+      dcells="$(printf '%s\n' "$dsec" | grep -ac '^| (suppressed) | .* | (suppressed) | (suppressed) |' || true)"
+      if [ "${dcells:-0}" -ne 1 ]; then
+        bad "SE-11c rendered: expected exactly 1 fully-suppressed delta row, found ${dcells:-0}"
+      elif printf '%s\n' "$dsec" | grep -aqE '\| [-+][0-9]'; then
+        bad "SE-11c rendered: the delta section still renders a signed numeral — the withheld figure is recoverable"
+      elif printf '%s\n' "$dsec" | grep -aq 'SUPPRESSED with the point figure'; then
+        ok "SE-11c NO-ARITHMETIC-RECOVERY: suppressed estimate (class $ds_sup) withholds delta AND % error in both shapes; the delta section renders actual=$ds_act and no signed numeral, so the figure is not recoverable"
+      else
+        bad "SE-11c rendered: the delta row is suppressed but the render does not say why"
+      fi
+    fi
+  fi
+  #    Paired POSITIVE control — on an un-suppressed delta the SAME fields must
+  #    still render, or the fix is blanket nulling rather than a suppression gate.
+  local pc_del pc_pct
+  pc_del="$(jq -r '.delta_tokens // "null"' "$wd/delta.json" 2>/dev/null || echo null)"
+  pc_pct="$(jq -r '.pct_error // "null"' "$wd/delta.json" 2>/dev/null || echo null)"
+  if [ "$pc_del" != "null" ] && [ "$pc_pct" != "null" ]; then
+    ok "SE-11c control: an UN-suppressed delta still emits delta=$pc_del and pct_error=$pc_pct — the gate is tied to \$show_point, not blanket nulling"
+  else
+    bad "SE-11c control: an un-suppressed delta lost its derived fields (delta=$pc_del, pct_error=$pc_pct) — over-suppression"
   fi
 
   # ── SE-12 SIZE-SCALE — --size M resolves to 4 pts; an out-of-set size -> exit 2. ──
