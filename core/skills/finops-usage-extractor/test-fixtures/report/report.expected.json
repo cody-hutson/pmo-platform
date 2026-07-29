@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-07-28T06:50:44Z",
+  "generated_utc": "2026-07-29T02:18:27Z",
   "window": {
     "since": "2026-06-02",
     "until": "2026-06-29",
@@ -338,6 +338,8 @@
       "label": "Overall spend",
       "grade": "exact",
       "header": "### Overall spend (exact — every session in window)",
+      "available": true,
+      "unavailable_reason": null,
       "rows": [
         {
           "period": "2026-06-01",
@@ -409,10 +411,13 @@
         "grade": "best-effort",
         "coverage": 0.31756756756756754,
         "header": "### skill (best-effort — partial population) — coverage: 32% (token-weighted over sessions in window)",
+        "available": true,
+        "unavailable_reason": null,
         "rows": [
           {
             "period": "2026-06-01",
             "period_end": "2026-06-07",
+            "measurable": true,
             "tokens": 3000,
             "sessions": 2,
             "token_source": "exact",
@@ -427,6 +432,7 @@
           {
             "period": "2026-06-08",
             "period_end": "2026-06-14",
+            "measurable": true,
             "tokens": 1500,
             "sessions": 2,
             "token_source": "mixed",
@@ -441,6 +447,7 @@
           {
             "period": "2026-06-15",
             "period_end": "2026-06-21",
+            "measurable": true,
             "tokens": 0,
             "sessions": 0,
             "token_source": "exact",
@@ -455,6 +462,7 @@
           {
             "period": "2026-06-22",
             "period_end": "2026-06-28",
+            "measurable": true,
             "tokens": 5750,
             "sessions": 3,
             "token_source": "mixed",
@@ -469,6 +477,7 @@
           {
             "period": "2026-06-29",
             "period_end": "2026-07-05",
+            "measurable": true,
             "tokens": 1500,
             "sessions": 1,
             "token_source": "exact",
@@ -490,10 +499,13 @@
         "grade": "best-effort",
         "coverage": 0.13783783783783785,
         "header": "### MCP server (best-effort — partial population) — coverage: 14% (token-weighted over sessions in window)",
+        "available": true,
+        "unavailable_reason": null,
         "rows": [
           {
             "period": "2026-06-01",
             "period_end": "2026-06-07",
+            "measurable": true,
             "tokens": 1000,
             "sessions": 2,
             "token_source": "exact",
@@ -508,6 +520,7 @@
           {
             "period": "2026-06-08",
             "period_end": "2026-06-14",
+            "measurable": true,
             "tokens": 1350,
             "sessions": 2,
             "token_source": "mixed",
@@ -522,6 +535,7 @@
           {
             "period": "2026-06-15",
             "period_end": "2026-06-21",
+            "measurable": true,
             "tokens": 0,
             "sessions": 0,
             "token_source": "exact",
@@ -536,6 +550,7 @@
           {
             "period": "2026-06-22",
             "period_end": "2026-06-28",
+            "measurable": true,
             "tokens": 2000,
             "sessions": 3,
             "token_source": "mixed",
@@ -550,6 +565,7 @@
           {
             "period": "2026-06-29",
             "period_end": "2026-07-05",
+            "measurable": true,
             "tokens": 750,
             "sessions": 1,
             "token_source": "exact",

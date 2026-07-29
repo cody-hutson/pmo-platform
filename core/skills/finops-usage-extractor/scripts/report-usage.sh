@@ -567,9 +567,8 @@ def trend_verdict($rows; $grade; $dim_label):
               rows: $rows,
               verdict: (if $dim_unavail != null
                         then ("TREND: UNAVAILABLE — no per-period figure exists for `" + $d.noun
-                              + "`. " + $dim_unavail
-                              + " Nothing is trended, and no period is reported as zero: an absent "
-                              + "dimension is NOT a measured zero.")
+                              + "`, so nothing is trended and no period is reported as zero: an "
+                              + "absent dimension is NOT a measured zero. Reason: " + $dim_unavail)
                         else trend_verdict($rows; $d.grade; $d.noun) end),
               coverage_drift:
                 (if $dim_unavail != null then null else
