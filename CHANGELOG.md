@@ -10,7 +10,7 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [v3.99] - 2026-07-29
 
-<one-sentence ≤140 chars; plain language; agent-search target>
+Release runs now state how reversible each decision is, brief you before every prompt, and open every turn with where they stand.
 
 [Full notes](release/releases/notes/v3.99_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.99)
 
