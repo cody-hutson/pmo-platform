@@ -4,7 +4,7 @@ Every record, version, point count, class, path, and figure in this directory is
 **fabricated** for `estimate-usage.sh --self-test`. No operator-local store was read
 to produce them and none is read to run them (CIAC-3 data hygiene). Session UUIDs use
 the reserved `00000000-…` / `aaaaaaaa-…` shapes; work items use non-existent
-`milestone:v9.xx` / `#99xxx` forms so no real release or issue is implied. The
+`milestone:v9.xx` and an `issue-9NNNN` placeholder (deliberately NOT the `#N` form: a `#`-prefixed digit run matches a real issue number even when the suffix does not, which is exactly the confusion these fixtures exist to avoid). The
 `/Users/synthetic-operator/…` paths are deliberate: SE-10 asserts that no render
 leaks them.
 

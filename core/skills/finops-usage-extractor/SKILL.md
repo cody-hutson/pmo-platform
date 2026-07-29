@@ -16,6 +16,7 @@ version: v3.96
 license: BUSL-1.1
 delivery_approach: advisory
 ---
+<!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 
 # finops-usage-extractor
