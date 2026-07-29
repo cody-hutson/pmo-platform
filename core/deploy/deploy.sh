@@ -786,6 +786,197 @@ _cc_compute_verdict() {
   return 0
 }
 
+# ─── Decision-emission minimum set (Check 61 / --check-decision-emission) — #4026 ──
+# Check 61 — decision-emission-minimum-set (advisory; deploy-time-only)
+# gate-efficacy: posture=advisory  enforcement=deploy-time-only  skip-semantics=pre-cutover-is-skip
+#   invariant: every VERIFIED RELEASE_LOG row at/after the emission cutover has >=1 event row
+#              for each MUST class in the playbook's EMISSION-CONTRACT block, resolved via the
+#              schema § 2a release join key.
+#   falsification: seed a VERIFIED post-cutover release whose event log carries zero rows for it
+#                  -> verdict INCOMPLETE (deploy.sh --self-test assertion group DE).
+#
+# The shared predicate, factored to TOP LEVEL so it is served by ONE body across two
+# surfaces (the DD1 pattern of _vf_/_cc_/_c38_/_c32_compute_verdict): the lifecycle
+# Check 61 inside cmd_check (routing the verdict through its own decision-emission.mode
+# with a COMMITTED warn default) and the --check-decision-emission probe
+# (cmd_check_decision_emission, mapping the verdict to an exit code). No predicate is
+# re-encoded on either surface.
+#
+# WHAT IT ASSERTS, AND WHAT IT DOES NOT. It asserts EXISTENCE: >=1 event row per asserted
+# class per in-scope release. It cannot detect a wrong payload, a mis-keyed subject, or an
+# event emitted for a decision never actually rendered. Naming that bound is the difference
+# between a gate and gate theatre — a control that reads as enforcement while functioning as
+# a no-op is worse than no control at all, which is this release's whole thesis.
+#
+# POSTURE, STATED HONESTLY. advisory / deploy-time-only / warn. There is NO pre-merge
+# surface, so a release can close with zero decision events and a green pipeline. The flip
+# to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's flip ledger —
+# NEVER auto-promoted by hit count (progressive-rollout-convention.md, which owns the
+# shadow -> warn -> enforce ladder). The `shadow` rung is NOT reachable here:
+# resolve_check_mode() accepts enforce|warn|off only, so the gate enters at the lowest
+# IMPLEMENTABLE rung and walks warn -> enforce -> removed. Recorded, not silently skipped.
+#
+# SELF-ARMING CUTOVER. The anchor is a milestone SLUG (DECISION_EMISSION_CUTOVER_SLUG,
+# committed default `decision-telemetry-emission`), resolved to a RELEASE_LOG position;
+# in-scope releases are the VERIFIED rows STRICTLY AFTER it. A version literal would have
+# needed stamping by a later spoke — a step that can be forgotten, leaving the gate
+# permanently dormant (the exact vacuity this gate exists to eliminate). The slug is known
+# at authoring time, so the gate ships armed and begins asserting at the next release's
+# close with no second operator action. At merge it verdicts SKIP (zero in-scope releases),
+# and it CANNOT fire on its own introducing release — orchestration-playbook.md § 4a.4
+# exempts it, so #4026's release has no emission obligation to assert.
+
+# _de_release_rows <data-rows> <slug>
+#   Resolves one release's event rows through the schema § 2a READ ladder:
+#     rung 1 — `version` cell == the milestone slug                       [canonical]
+#     rung 2 — `subject` == `milestone:#N`, where N is discovered from the rung-1
+#              rows' `ms:#N` payload token (the log is self-describing per § 2a;
+#              RELEASE_LOG carries the slug, never the number). Rung 2 is therefore
+#              reachable only when at least one rung-1 row carries the token —
+#              a documented bound, not a silent partial.
+#     rung 3 — DELIBERATELY EXCLUDED. A legacy `vX.Y` match can span four releases
+#              (measured), and an ambiguous match must never count as satisfying an
+#              emission obligation.
+#   Echoes the matched rows (possibly empty) on stdout.
+_de_release_rows() {
+  local _rows="$1" _slug="$2"
+  local _r1 _r2="" _msnum
+  _r1="$(printf '%s\n' "$_rows" | /usr/bin/awk -F ' \\| ' -v s="$_slug" '$2==s' 2>/dev/null)"
+  _msnum="$(printf '%s\n' "$_r1" | /usr/bin/grep -oE 'ms:#[0-9]+' 2>/dev/null | /usr/bin/head -1 | /usr/bin/sed 's/.*ms:#//')"
+  if [[ -n "$_msnum" ]]; then
+    _r2="$(printf '%s\n' "$_rows" | /usr/bin/awk -F ' \\| ' -v m="milestone:#${_msnum}" '$7==m' 2>/dev/null)"
+  fi
+  printf '%s\n%s\n' "$_r1" "$_r2" | /usr/bin/sed '/^$/d' | /usr/bin/sort -u
+}
+
+# _de_compute_verdict <surface>
+#   THE SHARED ORCHESTRATOR. Echoes ONE protocol line on stdout (the CALLER maps it to a
+#   warn-emit OR an exit code); per-release detail goes to stderr:
+#     SKIP <reason>            dormant / corpus absent / ZERO in-scope releases (the
+#                              state at ship) — nothing to assert
+#     NOSET <reason>           the asserted-set file is absent or empty. Distinct from
+#                              SKIP on purpose: this is a REPO defect (the gate asserts
+#                              nothing), not a benign absence, so the caller flags it.
+#     CLEAN <n>                n in-scope release(s), every asserted class present
+#     INCOMPLETE <f> <n>       f finding(s) across n checked release(s)
+#   $1 = surface: accepted for signature parity with the other _cNN_compute_verdict
+#   bodies. There is no network anchor here (the whole predicate is corpus + operator-
+#   instance file reads), so the verdict is surface-invariant.
+#   Fixture overrides mirror the CC_* convention: DE_LOG / DE_RELEASE_LOG / DE_ASSERTED /
+#   DECISION_EMISSION_CUTOVER_SLUG. --self-test drives them at a sandbox; the live
+#   operator log is NEVER written by this gate (it is read-only).
+_de_compute_verdict() {
+  local surface="${1:-lifecycle}"   # signature parity; verdict is surface-invariant
+  local de_rlog="${DE_RELEASE_LOG:-release/releases/RELEASE_LOG.md}"
+  local de_asserted="${DE_ASSERTED:-core/deploy/allowlists/decision-emission-asserted-set.txt}"
+  local de_cutover="${DECISION_EMISSION_CUTOVER_SLUG:-decision-telemetry-emission}"
+  local de_log="${DE_LOG:-}"
+  [[ -n "$de_log" ]] || de_log="$(pmo_evals_results_path)/pipeline-event-log.md"
+
+  # Dormant sentinel — asserted FIRST (the safe default), mirroring _cc_compute_verdict.
+  if [[ "$de_cutover" == "__none__" ]]; then
+    printf 'SKIP decision-emission gate dormant (DECISION_EMISSION_CUTOVER_SLUG=__none__)\n'
+    return 0
+  fi
+
+  # Asserted-set absence is a REPO defect, not benign absence: a minimum-emission gate
+  # with no asserted set is a control that cannot fail. Reported as its own token so the
+  # caller flags it rather than silently reading it as "nothing to check".
+  if [[ ! -f "$de_asserted" ]]; then
+    printf 'NOSET asserted-set file not found at %s — the gate would assert nothing (repo defect)\n' "$de_asserted"
+    return 0
+  fi
+  local de_classes
+  de_classes="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$de_asserted" 2>/dev/null \
+    | /usr/bin/sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | /usr/bin/sort -u)"
+  if [[ -z "$de_classes" ]]; then
+    printf 'NOSET asserted-set file %s declares zero classes — the gate would assert nothing (repo defect)\n' "$de_asserted"
+    return 0
+  fi
+
+  # Corpus / operator-instance absences are benign SKIPs. The RESOLVED path is printed on
+  # every SKIP so a mis-resolution is visible — the Check 19a lesson (a stale literal read
+  # as a benign warning for 175 runs).
+  if [[ ! -f "$de_rlog" ]]; then
+    printf 'SKIP %s not found; cannot enumerate releases\n' "$de_rlog"
+    return 0
+  fi
+  if [[ ! -f "$de_log" ]]; then
+    printf 'SKIP no event log at %s (operator-instance state — fresh install / CI; nothing to assert)\n' "$de_log"
+    return 0
+  fi
+
+  # Event-log data rows only (header + separator excluded). Field map under FS=" | " with
+  # the row's leading "| " retained in $1: $2=version $3=stage $4=event_type
+  # $5=event_subtype $6=actor $7=subject $8=reversibility $9=outcome $10=payload.
+  local de_data
+  de_data="$(/usr/bin/grep -E '^\| [0-9]{4}-[0-9]{2}-' "$de_log" 2>/dev/null || true)"
+
+  # RELEASE_LOG rows in file order → "version|milestone|state" (8-col schema:
+  # Version(1) Milestone(2) Issues(3) ReleasePR(4) MergeSHA(5) Tag(6) State(7) Date(8)).
+  local de_rows
+  de_rows=$(/usr/bin/grep -E '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$de_rlog" 2>/dev/null \
+    | /usr/bin/awk -F ' \\| ' '{
+        v=$1; sub(/^\|[[:space:]]*/,"",v); sub(/[[:space:]]*$/,"",v);
+        ms=$2; gsub(/`/,"",ms); sub(/^[[:space:]]*/,"",ms); sub(/[[:space:]]*$/,"",ms);
+        st=$7; gsub(/`/,"",st); sub(/^[[:space:]]*/,"",st); sub(/[[:space:]]*$/,"",st);
+        print v "|" ms "|" st
+      }') || de_rows=""
+
+  local de_past=false de_targets=0 de_findings=0 de_detail=""
+  local _row _ver _ms _state _rrows _cls _t _s _n
+  while IFS= read -r _row; do
+    [[ -n "$_row" ]] || continue
+    _ver="${_row%%|*}"
+    _ms="${_row#*|}"; _ms="${_ms%%|*}"
+    _state="${_row##*|}"
+
+    # Cutover: arm ON the anchor row, then `continue` so the anchor itself is EXCLUDED —
+    # in scope means STRICTLY AFTER (the introducing release never gates its own close).
+    if [[ "$de_past" == "false" ]]; then
+      [[ "$_ms" == "$de_cutover" ]] && de_past=true
+      continue
+    fi
+
+    # VERIFIED-only: a DEPLOYED-not-VERIFIED row is mid-close and emission is not complete
+    # until close. Same state scoping as Check 48.
+    [[ "$_state" == "VERIFIED" ]] || continue
+
+    # No resolvable Milestone slug ⇒ the § 2a rung-1 key does not exist for this row.
+    # Recorded (never silently dropped) and not counted as a target.
+    if [[ -z "$_ms" || "$_ms" == "—" || "$_ms" == "-" ]]; then
+      printf 'decision-emission: %s SKIPPED — no resolvable Milestone slug in RELEASE_LOG (no § 2a rung-1 key)\n' "$_ver" >&2
+      continue
+    fi
+
+    de_targets=$((de_targets + 1))
+    _rrows="$(_de_release_rows "$de_data" "$_ms")"
+
+    while IFS= read -r _cls; do
+      [[ -n "$_cls" ]] || continue
+      _t="${_cls%%/*}"; _s="${_cls#*/}"
+      _n=$(printf '%s\n' "$_rrows" | /usr/bin/awk -F ' \\| ' -v t="$_t" -v s="$_s" '$4==t && $5==s' 2>/dev/null | /usr/bin/grep -c . || true)
+      _n=${_n:-0}
+      if [[ "$_n" -eq 0 ]]; then
+        de_detail+="${_ver} (${_ms}): no event row for asserted class ${_cls}"$'\n'
+        de_findings=$((de_findings + 1))
+      fi
+    done <<<"$de_classes"
+  done <<<"$de_rows"
+
+  if [[ $de_targets -eq 0 ]]; then
+    printf 'SKIP no VERIFIED RELEASE_LOG row strictly after the cutover anchor %s — nothing to assert yet (the gate arms at the next post-cutover close)\n' "$de_cutover"
+    return 0
+  fi
+  if [[ $de_findings -eq 0 ]]; then
+    printf 'CLEAN %s\n' "$de_targets"
+  else
+    printf '%s' "$de_detail" | /usr/bin/sed '/^$/d' >&2
+    printf 'INCOMPLETE %s %s\n' "$de_findings" "$de_targets"
+  fi
+  return 0
+}
+
 # ─── Hook-registry index freshness (Check 38 / --check-required-subset) — #1485 ──
 # The regenerate-and-diff freshness predicate, factored to TOP LEVEL so it is
 # shared by two surfaces with ONE body (mirroring the version-freeness DD1 and
@@ -4110,7 +4301,12 @@ cmd_check() {
   # (append-pipeline-event.sh) — drift indicates a direct edit that bypassed
   # schema validation.
   # Sub-checks:
-  # 19a presence — log file + write-log file + schema doc all exist
+  # 19a presence — THREE distinct outcomes, split by ownership class (#4051):
+  #     · tracked schema doc unresolvable → fail-loud as a PATH-RESOLUTION
+  #       FAILURE (asserted first + unconditionally; deterministic in CI)
+  #     · operator-instance log/write-log absent → SKIP, no flag, no drift claim
+  #       (legitimately absent on a fresh install and in CI)
+  #     · all three present → 19b + 19c assert
   # 19b row-count parity — data-row count in log file == data-line count in
   #     write-log (one write-log line per appended row; both grow together)
   # 19c header preserved — log file header row matches the schema header
@@ -4121,17 +4317,40 @@ cmd_check() {
   # the EXPECTED state, NOT drift.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 19: Pipeline-event-log integrity"
-    local c19_log="$(pmo_instance_path)/pipeline-event-log.md"
-    local c19_write_log="$(pmo_instance_path)/pipeline-event-log-write.log"
-    local c19_schema="release/standards/pipeline-event-log-schema.md"
+    # Class A — operator-instance runtime state. Resolved through the SHARED
+    # resolver in lib-instance-path.sh (sourced above), which is the same surface
+    # append-pipeline-event.sh writes through, so the reader and the writer of
+    # these two files can never disagree about where they live (#4051).
+    local c19_evals_dir="$(pmo_evals_results_path)"
+    local c19_log="$c19_evals_dir/pipeline-event-log.md"
+    local c19_write_log="$c19_evals_dir/pipeline-event-log-write.log"
+    # Class B — tracked repo doc. Committed, so it resolves in every checkout.
+    local c19_schema="release/references/standards/pipeline-event-log-schema.md"
 
-    # 19a — presence
+    # 19a — presence, split by OWNERSHIP CLASS into three distinct outcomes.
+    #
+    # Class B is asserted FIRST and UNCONDITIONALLY. The schema is a tracked
+    # file, so its absence is a repo defect or a stale literal — never a benign
+    # state — and it is deterministic in CI. Nesting it behind the Class A branch
+    # (as the pre-#4051 flat if/elif chain did) makes it unreachable wherever the
+    # operator instance is absent, which is exactly how a dead literal survived
+    # 175 runs while the check read as a benign warning.
+    if [[ ! -f "$c19_schema" ]]; then
+      flag_warn_or_issue "pipeline-event-log-integrity" \
+        "path-resolution failure: event-log schema did not resolve at $c19_schema — this is a BROKEN CONTROL (stale literal or relocated doc), not a missing artifact; 19c cannot be validated against its source (per #459 fail-loud, as at Checks 18/20)"
+    fi
+
+    # Class A absence is a SKIP with NO flag_* call and no drift claim: the event
+    # log is operator-instance state, legitimately absent on a fresh install and
+    # in CI, so hard-failing would break both. The emission is deliberately
+    # DISTINCT from the fail-loud above — collapsing the two into one warn is what
+    # made "this control is disabled" typographically identical to "there is
+    # nothing to check yet". The resolved path is printed so a mis-resolution is
+    # visible even on the SKIP path.
     if [[ ! -f "$c19_log" ]]; then
-      flag_warn_or_issue "pipeline-event-log-integrity" "log file missing: $c19_log"
+      log "  SKIP:  no event log at $c19_log (operator-instance state — fresh install / CI; nothing to assert)"
     elif [[ ! -f "$c19_write_log" ]]; then
-      flag_warn_or_issue "pipeline-event-log-integrity" "write-log missing: $c19_write_log"
-    elif [[ ! -f "$c19_schema" ]]; then
-      flag_warn_or_issue "pipeline-event-log-integrity" "schema doc missing: $c19_schema"
+      log "  SKIP:  no write-log at $c19_write_log (operator-instance state — fresh install / CI; nothing to assert)"
     else
       # 19b — row-count parity
       # Data rows start with '| YYYY-' (ISO timestamp begins with a digit).
@@ -7743,6 +7962,69 @@ cmd_check() {
     fi
   fi
 
+  # Check 61 — decision-emission minimum set (advisory; deploy-time-only) [#4026]
+  #
+  # The lifecycle surface of the shared _de_compute_verdict body factored to top level
+  # above (DD1 — one engine, two call sites; the --check-decision-emission probe is the
+  # other). Asserts that every VERIFIED RELEASE_LOG row STRICTLY AFTER the emission
+  # cutover carries >=1 event row for each MUST class in the orchestration playbook's
+  # EMISSION-CONTRACT block, resolved through pipeline-event-log-schema.md § 2a rung 1
+  # (slug) then rung 2 (milestone subject). Rung 3 (legacy version match) is excluded:
+  # an ambiguous match must never count as satisfying an obligation.
+  #
+  # COMMITTED warn DEFAULT — the second argument to resolve_check_mode, the Check 47
+  # `release-body-drift` precedent. It ships `warn` regardless of the shared cohort's
+  # deploy-check.mode, so the shipped posture is a property of the code, not of an
+  # operator-instance runtime file. The graduation to `enforce` is an OPERATOR DECISION
+  # recorded in gate-efficacy-standard.md's flip ledger, never auto-promoted by hit count
+  # (progressive-rollout-convention.md owns the ladder). `shadow` is unreachable —
+  # resolve_check_mode() takes enforce|warn|off — so the walked ladder is warn -> enforce.
+  #
+  # HONEST GUARANTEE: existence, not fidelity; deploy-time only, with NO pre-merge surface;
+  # SKIP at ship (zero in-scope releases) and structurally unable to fire on its own
+  # introducing release (playbook § 4a.4). Falsification is therefore fixture-only —
+  # `deploy.sh --self-test` assertion group DE.
+  DECISION_EMISSION_MODE="$(resolve_check_mode "decision-emission" "warn")"
+  if [[ "$DECISION_EMISSION_MODE" != "off" ]]; then
+    log "Check 61: Decision-emission minimum set (every VERIFIED post-cutover release emitted each MUST class; advisory / deploy-time-only; warn-mode initial)"
+    local c61_verdict c61_tok
+    c61_verdict="$(_de_compute_verdict "lifecycle")"
+    c61_tok="${c61_verdict%% *}"
+    case "$c61_tok" in
+      SKIP)
+        log "  N/A:   ${c61_verdict#SKIP }"
+        ;;
+      NOSET)
+        # A repo defect, NOT a benign absence: the gate would assert nothing. Flagged on
+        # every mode (this is the vacuous-control class the release exists to eliminate).
+        flag_warn_or_issue "decision-emission" "${c61_verdict#NOSET }"
+        ;;
+      CLEAN)
+        log "  OK:    all ${c61_verdict#CLEAN } post-cutover VERIFIED release(s) emitted every asserted MUST class"
+        ;;
+      INCOMPLETE)
+        local _c61_rest="${c61_verdict#INCOMPLETE }"
+        local _c61_n="${_c61_rest%% *}" _c61_m="${_c61_rest##* }"
+        case "$DECISION_EMISSION_MODE" in
+          enforce)
+            log "  FAIL:  decision-emission — $_c61_n missing class(es) across $_c61_m post-cutover VERIFIED release(s) (see stderr detail); the remedy is to emit the missing rows per orchestration-playbook.md Procedure 4a, never to waive the finding"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          warn)
+            log "  WARN:  decision-emission — $_c61_n missing class(es) across $_c61_m post-cutover VERIFIED release(s) (warn-mode; the flip to enforce is an operator decision recorded in gate-efficacy-standard.md, never auto-promoted by hit count)"
+            local _c61_ts
+            _c61_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '{"ts":"%s","check":"%s","detail":"%s missing class(es) across %s post-cutover VERIFIED release(s)"}\n' \
+              "$_c61_ts" "decision-emission" "$_c61_n" "$_c61_m" >> "$WARN_LOG" 2>/dev/null || true
+            ;;
+        esac
+        ;;
+      *)
+        log "  WARN:  decision-emission — unexpected verdict '$c61_verdict'"
+        ;;
+    esac
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
@@ -7920,6 +8202,130 @@ EOF
 
   /bin/rm -rf "$_t" 2>/dev/null || true
 
+  # ─── Assertion group DE — decision-emission minimum set (Check 61) [#4026] ────
+  #
+  # Offline, hermetic, sandbox-only. NEVER touches the operator's live event log:
+  # every path is re-pointed through DE_* overrides at a mktemp tree, and the gate
+  # itself is read-only in all modes. Extends this ONE self-test entry rather than
+  # adding a second, so the CI invocation stays single.
+  #
+  # DE-4 and DE-5 are the ANTI-VACUITY assertions. Without DE-4 the predicate could
+  # degenerate to "the release emitted something"; without DE-5 it could accept any
+  # key, including the legacy `vX.Y` value measured to span four releases. A gate that
+  # passes without them proves almost nothing — which is the failure class this whole
+  # release exists to close.
+  echo "self-test: starting assertion group DE (decision-emission minimum set, #4026)" >&2
+  local _d; _d="$(/usr/bin/mktemp -d -t decisionemission-selftest.XXXXXX)"
+  local _dlog="$_d/pipeline-event-log.md"
+  local _drlog="$_d/RELEASE_LOG.md"
+  local _dset="$_d/asserted-set.txt"
+  local _dmissing="$_d/no-such-asserted-set.txt"
+
+  /bin/cat > "$_dset" <<'EOF'
+# fixture asserted set (mirrors the committed one)
+decision/scope-lock
+decision/d-class
+gate-outcome/plan-review-go
+EOF
+
+  # RELEASE_LOG fixture: one PRE-cutover VERIFIED row, the cutover anchor itself, one
+  # POST-cutover VERIFIED row (the release under test), and one POST-cutover DEPLOYED
+  # (mid-close) row. 8-col schema matching the live RELEASE_LOG.
+  /bin/cat > "$_drlog" <<'EOF'
+# RELEASE_LOG (DE self-test fixture)
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.90 | de-precutover | #1 | #2 | `aaa` | `v9.90` | VERIFIED | 2026-06-28 |
+| v9.95 | de-cutover-anchor | #1 | #2 | `bbb` | `v9.95` | VERIFIED | 2026-06-28 |
+| v9.96 | de-postcutover | #1 | #2 | `ccc` | `v9.96` | VERIFIED | 2026-06-28 |
+| v9.97 | de-midclose | #1 | #2 | `ddd` | `v9.97` | DEPLOYED | 2026-06-28 |
+EOF
+
+  # _de_seed_log <version-cell> <subject-cell> <class...> — writes a fresh fixture event
+  # log whose rows carry the given version key + subject for each `type/subtype` class.
+  _de_seed_log() {
+    local _vcell="$1" _subj="$2"; shift 2
+    /usr/bin/printf '| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |\n' > "$_dlog"
+    /usr/bin/printf -- '|---|---|---|---|---|---|---|---|---|---|\n' >> "$_dlog"
+    local _c _t _s
+    for _c in "$@"; do
+      _t="${_c%%/*}"; _s="${_c#*/}"
+      /usr/bin/printf '| 2026-07-28T10:00:00Z | %s | 5 | %s | %s | operator | %s | MODERATE | resolved | ms:#900; d:de-selftest |\n' \
+        "$_vcell" "$_t" "$_s" "$_subj" >> "$_dlog"
+    done
+  }
+
+  _de_selftest_verdict() {
+    DE_LOG="$_dlog" DE_RELEASE_LOG="$_drlog" DE_ASSERTED="${1:-$_dset}" \
+    DECISION_EMISSION_CUTOVER_SLUG="${2:-de-cutover-anchor}" \
+    _de_compute_verdict "lifecycle" 2>/dev/null
+  }
+
+  # DE-1 — dormant sentinel ⇒ SKIP. Asserted FIRST: the safe default.
+  _de_seed_log "de-postcutover" "milestone:#900" decision/scope-lock decision/d-class gate-outcome/plan-review-go
+  _v="$(_de_selftest_verdict "$_dset" "__none__")"; _tok="${_v%% *}"
+  [[ "$_tok" == "SKIP" ]] || { echo "FAIL: DE-1 dormant cutover (__none__) must SKIP, got '$_v'"; failures=$((failures+1)); }
+
+  # DE-3 — all 3 MUST classes keyed on the slug ⇒ CLEAN 1.
+  # Doubles as DE-6 (the pre-cutover VERIFIED row v9.90 emits nothing and is NOT counted)
+  # and DE-7 (the post-cutover DEPLOYED row v9.97 emits nothing and is NOT counted):
+  # both are proved by the target count being exactly 1, not merely by the absence of a
+  # finding — a zero-finding CLEAN with the wrong target count would hide both.
+  _v="$(_de_selftest_verdict)"
+  [[ "$_v" == "CLEAN 1" ]] || { echo "FAIL: DE-3/DE-6/DE-7 complete emission set must verify 'CLEAN 1' (pre-cutover + DEPLOYED rows excluded), got '$_v'"; failures=$((failures+1)); }
+
+  # DE-2 — THE falsification test (AC-2): a VERIFIED post-cutover release whose event log
+  # carries ZERO rows for it ⇒ INCOMPLETE.
+  _de_seed_log "de-precutover" "milestone:#800" decision/scope-lock decision/d-class gate-outcome/plan-review-go
+  _v="$(_de_selftest_verdict)"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: DE-2 seeded zero-emission post-cutover release must be caught (INCOMPLETE), got '$_v'"; failures=$((failures+1)); }
+  [[ "$_v" == "INCOMPLETE 3 1" ]] || { echo "FAIL: DE-2 must report all 3 asserted classes missing across 1 release ('INCOMPLETE 3 1'), got '$_v'"; failures=$((failures+1)); }
+
+  # DE-4 — ANTI-VACUITY: 2 of 3 MUST classes present ⇒ INCOMPLETE. Defeats a predicate
+  # that degenerates into "the release emitted something".
+  _de_seed_log "de-postcutover" "milestone:#900" decision/scope-lock decision/d-class
+  _v="$(_de_selftest_verdict)"
+  [[ "$_v" == "INCOMPLETE 1 1" ]] || { echo "FAIL: DE-4 partial set (2 of 3 classes) must report exactly 1 missing class ('INCOMPLETE 1 1'), got '$_v'"; failures=$((failures+1)); }
+
+  # DE-5 — ANTI-VACUITY: rows keyed on the LEGACY version form with the slug absent ⇒
+  # INCOMPLETE. The gate asserts the § 2a canonical key (rung 1/2), never an ambiguous
+  # rung-3 legacy match. Subject is deliberately non-milestone so rung 2 cannot rescue it.
+  _de_seed_log "v9.96" "issue:#4026" decision/scope-lock decision/d-class gate-outcome/plan-review-go
+  _v="$(_de_selftest_verdict)"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: DE-5 legacy-version-keyed rows must NOT satisfy the canonical key (expected INCOMPLETE), got '$_v'"; failures=$((failures+1)); }
+
+  # DE-7b — state-scoping proved POSITIVELY: flip the DEPLOYED row to VERIFIED and it
+  # becomes an in-scope target. Without this, DE-7's exclusion could be an artifact of
+  # the row never being seen at all.
+  _de_seed_log "de-postcutover" "milestone:#900" decision/scope-lock decision/d-class gate-outcome/plan-review-go
+  /usr/bin/sed 's/| `v9.97` | DEPLOYED |/| `v9.97` | VERIFIED |/' "$_drlog" > "$_d/rlog2.md" && /bin/mv "$_d/rlog2.md" "$_drlog"
+  # The target count rises 1 -> 2 (v9.96 complete + v9.97 empty) and all 3 of v9.97's
+  # classes are findings, so the exact expectation is 'INCOMPLETE 3 2'. Asserting the
+  # exact pair — not just the token — is what proves the row was newly INCLUDED rather
+  # than merely that something was flagged.
+  _v="$(_de_selftest_verdict)"
+  [[ "$_v" == "INCOMPLETE 3 2" ]] || { echo "FAIL: DE-7b a now-VERIFIED post-cutover row with zero rows must be counted and flagged ('INCOMPLETE 3 2'), got '$_v'"; failures=$((failures+1)); }
+  /usr/bin/sed 's/| `v9.97` | VERIFIED |/| `v9.97` | DEPLOYED |/' "$_drlog" > "$_d/rlog2.md" && /bin/mv "$_d/rlog2.md" "$_drlog"
+
+  # DE-8 (added at Stage 6) — § 2a RUNG 2 is reachable and load-bearing. Two of the three
+  # classes are keyed on the slug (rung 1, and they carry the `ms:#900` token that makes
+  # the milestone NUMBER discoverable); the third is keyed on the legacy version but
+  # carries `subject: milestone:#900`. Rung 2 must pick it up ⇒ CLEAN 1. Added because an
+  # implemented branch with no falsification is exactly the vacuity this release closes.
+  _de_seed_log "de-postcutover" "milestone:#900" decision/scope-lock decision/d-class
+  /usr/bin/printf '| 2026-07-28T10:05:00Z | v9.96 | 5 | gate-outcome | plan-review-go | operator | milestone:#900 | MODERATE | resolved | d:rung2 |\n' >> "$_dlog"
+  _v="$(_de_selftest_verdict)"
+  [[ "$_v" == "CLEAN 1" ]] || { echo "FAIL: DE-8 rung-2 (milestone-subject) resolution must complete the set ('CLEAN 1'), got '$_v'"; failures=$((failures+1)); }
+
+  # DE-9 (added at Stage 6) — a missing asserted set is NOSET, never a silent pass. This
+  # is the CIAC-3 vacuity guard at the gate's own surface: an emission gate with nothing
+  # to assert must SAY so, distinctly from "there is nothing to check yet" (SKIP).
+  _de_seed_log "de-postcutover" "milestone:#900" decision/scope-lock decision/d-class gate-outcome/plan-review-go
+  _v="$(_de_selftest_verdict "$_dmissing")"; _tok="${_v%% *}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: DE-9 absent asserted-set file must verdict NOSET (not SKIP, not CLEAN), got '$_v'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_d" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -7927,6 +8333,8 @@ EOF
   echo "self-test: PASS" >&2
   echo "  close-completeness invariant validated (#1290 AC5):" >&2
   echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
+  echo "  decision-emission minimum set validated (#4026, group DE):" >&2
+  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
   return 0
 }
 
@@ -7995,6 +8403,73 @@ cmd_check_close_completeness() {
       log "close-completeness: unexpected verdict '$verdict' — fail-closed"
       # An unexpected verdict is a tooling failure, not a calibration finding — always
       # fail-closed regardless of the warn/enforce sentinel.
+      exit 1
+      ;;
+  esac
+}
+
+# ─── Mode: --check-decision-emission (the Stage-13 decision-emission probe) — #4026 ─
+#
+# Runs ONLY the decision-emission verdict (not the full --check suite) and maps the verdict
+# to an EXIT CODE. Invoked from stage-13-close.md Phase A8.2 at close-out; there is
+# deliberately NO CI caller, which is exactly why the gate declares
+# `posture: advisory` / `enforcement-surface: deploy-time-only` per gate-efficacy-standard.md
+# Requirement (b′) — a check with no pre-merge surface cannot honestly declare `required`.
+#
+# Sentinel-aware, mirroring cmd_check_close_completeness: the committed
+# .github/decision-emission.enforce marker's first non-comment token decides whether an
+# INCOMPLETE (or NOSET) verdict BLOCKS (enforce => exit 1) or is reported non-blocking
+# (warn / absent => exit 0, true verdict still printed). It ships `warn`.
+#
+# NOSET is treated like INCOMPLETE rather than like SKIP on purpose: an emission gate with
+# no asserted set is a control that cannot fail, which is the defect class this release
+# exists to close — surfacing it as a benign skip would reproduce it.
+#
+#   exit 0  — CLEAN, SKIP (dormant / no in-scope release / corpus absent), or a
+#             non-blocking INCOMPLETE/NOSET while the sentinel token is not `enforce`.
+#   exit 1  — INCOMPLETE / NOSET under `enforce`, or an unexpected verdict (fail-closed).
+cmd_check_decision_emission() {
+  validate_workspace
+  detect_install_path || true
+
+  local de_enforce_file="${DECISION_EMISSION_ENFORCE_FILE:-.github/decision-emission.enforce}"
+  local de_enforce="warn" _de_tok_line
+  if [[ -f "$de_enforce_file" ]]; then
+    _de_tok_line="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$de_enforce_file" 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d '[:space:]')"
+    [[ "$_de_tok_line" == "enforce" ]] && de_enforce="enforce"
+  fi
+
+  local verdict tok
+  verdict="$(_de_compute_verdict "gate")"
+  tok="${verdict%% *}"
+  case "$tok" in
+    CLEAN)
+      log "decision-emission: ${verdict#CLEAN } post-cutover VERIFIED release(s) emitted every asserted MUST class — OK"
+      log "  Scope note: this asserts EXISTENCE (>=1 row per asserted class), not fidelity. It cannot detect a wrong payload, a mis-keyed subject, or a row emitted for a decision never rendered."
+      exit 0
+      ;;
+    SKIP)
+      log "decision-emission: SKIP — ${verdict#SKIP }"
+      exit 0
+      ;;
+    NOSET)
+      log "decision-emission: NOSET — ${verdict#NOSET }"
+      log "  A minimum-emission gate with no asserted set asserts nothing. Restore core/deploy/allowlists/decision-emission-asserted-set.txt (its classes MUST be MUST rows of the playbook's EMISSION-CONTRACT block; release/tools/check-emission-contract-subset.sh enforces that relation in CI)."
+      [[ "$de_enforce" == "enforce" ]] && exit 1
+      log "  WARN-MODE (sentinel '$de_enforce_file' token != enforce): reporting the true verdict but NOT blocking."
+      exit 0
+      ;;
+    INCOMPLETE)
+      log "decision-emission: INCOMPLETE — ${verdict#INCOMPLETE } (missing-class count / checked-release count; see detail above)"
+      log "  A post-cutover release closed without emitting a MUST class. The remedy is to emit the missing row(s) per orchestration-playbook.md Procedure 4a — never to waive the finding."
+      if [[ "$de_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$de_enforce_file' token != enforce): reporting the true verdict but NOT blocking — the flip to 'enforce' is an operator decision recorded in core/standards/gate-efficacy-standard.md, never auto-promoted by hit count."
+      exit 0
+      ;;
+    *)
+      log "decision-emission: unexpected verdict '$verdict' — fail-closed"
       exit 1
       ;;
   esac
@@ -8661,6 +9136,16 @@ main() {
       # (_cc_compute_verdict), no copy. Used by .github/workflows/close-completeness.yml.
       cmd_check_close_completeness
       ;;
+    --check-decision-emission)
+      # Stage-13 decision-emission probe (#4026): runs ONLY Check 61's verdict and exits
+      # per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE/NOSET when the committed
+      # .github/decision-emission.enforce sentinel is `enforce`; fail-closed on an
+      # unexpected verdict). The same logic ALSO fires inside the full --check suite
+      # (Check 61, committed warn default) — one shared body (_de_compute_verdict), no
+      # copy. Invoked from stage-13-close.md Phase A8.2; NO CI caller by design, which is
+      # why the gate declares advisory / deploy-time-only.
+      cmd_check_decision_emission
+      ;;
     --check-required-subset)
       # CI runner (#1485): runs the enumerated load-bearing subset (network-free AND
       # install-independent AND posture:required AND no dedicated CI mirror) and exits
@@ -8710,6 +9195,7 @@ main() {
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
+      echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; exits 1 on a STALE package when enforce) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"

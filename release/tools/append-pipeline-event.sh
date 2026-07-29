@@ -135,15 +135,21 @@ parse_schema_enum() {
 #   EVENT_TYPES   — space-separated list of valid event types
 #   SUBTYPES_LINES — one "type<TAB>subtype subtype …" line per type (looked up by
 #                    validate_subtype via a tab-anchored grep)
-# `iteration` carries no literal subtype line — its subtypes are a PREFIX pattern.
+# `iteration` carries a line with an EMPTY subtype field: it contributes TYPE
+# membership only. Its subtypes stay PREFIX-validated (`dt-eng-pass-N` /
+# `qa-dt-pass-N`) by validate_subtype's short-circuit, which fires BEFORE the
+# table lookup — so the empty field is never read.
 
 # Static fallback (used only when the schema file is unreadable, e.g. invoked
-# outside the repo tree); kept in lockstep with § 3.
+# outside the repo tree). Its membership is asserted against § 3 BIDIRECTIONALLY
+# by --self-test, so a one-sided edit to either site fails the self-test rather
+# than shipping silently.
 _FALLBACK_SUBTYPES_LINES="$(printf '%s\n' \
   "gate-outcome	g1-g2 g3-release-readiness dt-pass dt-conditional-pass dt-return qa-acceptance qa-rejection plan-review-go plan-review-no-go plan-review-readiness-scan goal-conformance" \
-  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored recommendation-choice-delta" \
+  "decision	d-class adr-closed adr-opened scope-lock a6-new-track-rationale a7-bundle-amend a7-bundle-rebundle a7-bundle-defer cross-d-upstream-compat empirical-verification-finding action-item-opened action-item-started action-item-resolved action-item-cancelled action-item-superseded queued-pending-approval approval-deferred cascade-sweep-block outcome-statement-authored delegation recommendation-choice-delta" \
   "escalation	tier-0 tier-1 tier-2 tier-3" \
   "self-repair	retry escalate rollback" \
+  "iteration	" \
   "scope-change	tier-1-adjust tier-2-scope-change tier-3-plan-rejection redaction" \
   "re-review	phase-a0-row phase-0.5-row" \
   "deployment-status	deploy-skill deploy-harness deploy-package deploy-rules-mirror deploy-helper" \
@@ -229,6 +235,18 @@ starts_with_any() {
   return 1
 }
 
+# Flatten a "type<TAB>subtype subtype …" table into comparable enum tokens:
+# one bare `type` token per row (so a type-level divergence is visible even when
+# the type carries zero literal subtypes) plus one `type/subtype` token per member.
+# Sorted for comm(1). LC_ALL=C pins collation so sort and comm cannot disagree.
+enum_tokens() {
+  /usr/bin/awk -F'\t' 'NF {
+      print $1
+      n = split($2, a, " ")
+      for (i = 1; i <= n; i++) if (a[i] != "") print $1 "/" a[i]
+    }' | LC_ALL=C /usr/bin/sort -u
+}
+
 validate_subtype() {
   local event_type="$1"
   local subtype="$2"
@@ -304,6 +322,65 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "self-test: resolved LOG_FILE=$LOG_FILE"
   echo "self-test: enum source=$([[ -n "$_schema_rows" ]] && echo schema-§3-data-driven || echo static-fallback) ($(printf '%s\n' $EVENT_TYPES | grep -c . ) event types)"
 
+  # ── § 3 ↔ static-fallback lockstep, asserted in BOTH directions ──────────
+  # Direction 1 (§ 3 -> mirror): a member § 3 admits that the mirror does not.
+  # Direction 2 (mirror -> § 3): a member the mirror admits that § 3 does not.
+  # Evaluable ONLY when the schema is readable. When it is not, the assertion is
+  # reported SKIP and the self-test proceeds: the fallback exists for AVAILABILITY,
+  # so failing closed here would defeat the mechanism under test. The SKIP is an
+  # EXPLICIT zero-state, never a silent pass.
+  _mirror_tokens="$(printf '%s\n' "$_FALLBACK_SUBTYPES_LINES" | enum_tokens)"
+  if [[ -n "$_schema_rows" ]]; then
+    _schema_tokens="$(printf '%s\n' "$_schema_rows" | /usr/bin/sed 's/|/\t/' | enum_tokens)"
+    _lock_missing="$(LC_ALL=C /usr/bin/comm -23 <(printf '%s\n' "$_schema_tokens") <(printf '%s\n' "$_mirror_tokens"))"
+    _lock_extra="$(LC_ALL=C /usr/bin/comm -13 <(printf '%s\n' "$_schema_tokens") <(printf '%s\n' "$_mirror_tokens"))"
+    if [[ -n "$_lock_missing" || -n "$_lock_extra" ]]; then
+      echo "ERROR: self-test: § 3 <-> static-fallback lockstep BROKEN" >&2
+      if [[ -n "$_lock_missing" ]]; then
+        echo "  in § 3 but MISSING from _FALLBACK_SUBTYPES_LINES (add these):" >&2
+        printf '    %s\n' $_lock_missing >&2
+      fi
+      if [[ -n "$_lock_extra" ]]; then
+        echo "  in _FALLBACK_SUBTYPES_LINES but ABSENT from § 3 (remove, or add to § 3):" >&2
+        printf '    %s\n' $_lock_extra >&2
+      fi
+      echo "  § 3 and the mirror are a two-site obligation: both change in ONE commit." >&2
+      exit 1
+    fi
+    echo "self-test: § 3 <-> static-fallback lockstep OK ($(printf '%s\n' "$_schema_tokens" | /usr/bin/grep -c .) enum tokens, both directions)"
+  else
+    echo "self-test: § 3 <-> static-fallback lockstep SKIP (schema unreadable) — degraded-availability path; equality not evaluable"
+  fi
+
+  # ── Forced-fallback path: run the FULL self-test out-of-tree ─────────────
+  # Copying the script two levels deep in a throwaway tree makes its REPO_ROOT
+  # resolve there, so SCHEMA_FILE cannot be found and the static-fallback branch
+  # is genuinely TAKEN (not simulated). The child's log is redirected into the
+  # same temp tree, so the operator-instance log is never touched — and the
+  # redirect additionally exercises seed_if_absent on a fresh instance, which
+  # nothing else covers. _APE_SELFTEST_FALLBACK_CHILD bounds recursion at depth 1.
+  if [[ -z "${_APE_SELFTEST_FALLBACK_CHILD:-}" ]]; then
+    _ft_tmp="$(/usr/bin/mktemp -d)" || die "self-test: cannot create forced-fallback temp tree" 2
+    trap '/bin/rm -rf "$_ft_tmp"' EXIT
+    /bin/mkdir -p "$_ft_tmp/release/tools" || die "self-test: cannot populate forced-fallback temp tree" 2
+    /bin/cp "${BASH_SOURCE[0]}" "$_ft_tmp/release/tools/append-pipeline-event.sh" \
+      || die "self-test: cannot copy script into forced-fallback temp tree" 2
+    if ! _ft_out="$(_APE_SELFTEST_FALLBACK_CHILD=1 EVALS_RESULTS_PATH="$_ft_tmp/evals" \
+                    "$_ft_tmp/release/tools/append-pipeline-event.sh" --self-test 2>&1)"; then
+      echo "ERROR: self-test: forced-fallback run FAILED" >&2
+      printf '%s\n' "$_ft_out" >&2
+      exit 1
+    fi
+    # Liveness assertion: the child MUST have taken the fallback branch. Without
+    # this, a change to the REPO_ROOT resolution rule would silently turn the
+    # whole probe into a no-op that still passes.
+    case "$_ft_out" in
+      *"enum source=static-fallback"*) : ;;
+      *) die "self-test: forced-fallback run did NOT take the fallback branch — probe is a no-op" ;;
+    esac
+    echo "self-test: forced-fallback path PASS (out-of-tree child; enum source=static-fallback)"
+  fi
+
   # Snapshot
   PRE_LINES=$(/usr/bin/wc -l < "$LOG_FILE" | /usr/bin/tr -d ' ')
   PRE_WRITE_LINES=$(/usr/bin/wc -l < "$WRITE_LOG" | /usr/bin/tr -d ' ')
@@ -313,6 +390,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   validate_ts_iso "$TS_TEST" || die "self-test: ts_iso format check failed"
   validate_subtype "decision" "scope-lock" || die "self-test: subtype validation failed"
   validate_subtype "decision" "cascade-sweep-block" || die "self-test: decision cascade-sweep-block subtype check failed"
+  validate_subtype "decision" "delegation" || die "self-test: decision delegation subtype check failed"
   validate_subtype "self-repair" "retry" || die "self-test: self-repair subtype check failed"
   validate_subtype "iteration" "dt-eng-pass-2" || die "self-test: iteration prefix check failed"
   validate_subtype "test-run" "suite-pass" || die "self-test: test-run suite-pass subtype check failed"
@@ -350,6 +428,33 @@ if [[ "$SELF_TEST" == "true" ]]; then
   if validate_actor "bogus" 2>/dev/null; then
     die "self-test: actor rejection check failed (bogus accepted)"
   fi
+
+  # ─── Payload row-integrity: positive (multi-value) ───
+  _pi_ok() { case "$1" in *$'\n'*|*$'\r'*) return 1;; esac
+             case "$1 |" in *" | "*) return 1;; esac
+             case "${1//\\|/}" in *"|"*) return 1;; esac; return 0; }
+  _pi_ok 'triggers:[T1\|T2\|T3]; files_swept:4; verdict:UPDATE' \
+    || die "self-test: escaped multi-value payload rejected (§ 4.3a positive case)"
+  _pi_ok 'projects_to:calibration-data.md; verdict:Approved' \
+    || die "self-test: pipe-free payload rejected"
+  # Pins the delegation convention's RUNTIME form (single-valued, per § 3). The
+  # source issue proposed documenting it as `chose:{spoke|hub-direct}` — a form
+  # the bare-pipe guard below rejects. Emitting the documented example must work.
+  _pi_ok 'chose:spoke; why:x; quota:PROCEED' \
+    || die "self-test: delegation payload convention rejected"
+  # ─── Payload row-integrity: negative (malformed) ───
+  if _pi_ok 'triggers:[T1 | T2]';  then die "self-test: space-delimited pipe accepted (delimiter)"; fi
+  if _pi_ok 'triggers:[T1] |';     then die "self-test: trailing ' |' accepted (row-junction split)"; fi
+  if _pi_ok 'triggers:[T1|T2]';    then die "self-test: bare pipe accepted (reserved)"; fi
+  if _pi_ok "$(printf 'a\nb')";    then die "self-test: newline payload accepted"; fi
+  # ─── Arity invariant (the predicate's reason for existing) ───
+  # Asserts the INVARIANT, not merely the predicate: a future edit that drifts
+  # the predicate away from the delimiter contract fails here rather than
+  # shipping green.
+  _arity() { printf '%s\n' "| t | v | 5 | decision | scope-lock | hub | #1 | CHEAP | resolved | $1 |" \
+             | /usr/bin/awk -F ' \\| ' '{print NF}'; }
+  [[ "$(_arity 'triggers:[T1\|T2\|T3]')" -eq 10 ]] || die "self-test: escaped payload broke row arity"
+  [[ "$(_arity 'triggers:[T1 | T2]')"    -eq 11 ]] || die "self-test: arity oracle miscalibrated"
 
   # Append a sentinel row, then revert
   TEST_ROW="| ${TS_TEST} | v2.07a-selftest | 5 | decision | scope-lock | hub | sub-task:#1 | CHEAP | resolved | selftest-row;will-be-reverted |"
@@ -411,10 +516,28 @@ if [[ ${#PAYLOAD} -gt 300 ]]; then
   die "Payload exceeds 300 char limit (got ${#PAYLOAD}); use a pointer to existing surface instead"
 fi
 
-# Reject pipe character in payload (would corrupt markdown table)
-if [[ "$PAYLOAD" == *"|"* ]]; then
-  die "Payload contains '|' (pipe character) — reserved as column separator; escape or replace before append"
-fi
+# ─── Payload row-integrity guard (§ 4.3a) ────────────────────────────────────
+# Admissibility is defined by the ROW-INTEGRITY INVARIANT, not a character
+# blacklist: the assembled row must be exactly one physical line splitting into
+# exactly 10 fields under the canonical delimiter " | ". The payload MAY carry
+# the escaped multi-value separator '\|'. It may NOT introduce anything that
+# changes the assembled row's field arity or line count.
+case "$PAYLOAD" in
+  *$'\n'*|*$'\r'*)
+    die "Payload contains a newline or CR — a row must be exactly one physical line" ;;
+esac
+# Test the payload IN ITS ROW CONTEXT: the row appends a trailing ' |', so a
+# payload ending in ' |' forms the delimiter at the junction and splits the row.
+case "${PAYLOAD} |" in
+  *" | "*)
+    die "Payload contains the column delimiter ' | ' (or ends with ' |') — reserved as the column separator; use '\\|' for a multi-value separator (see pipeline-event-log-schema.md § 4.3a)" ;;
+esac
+# Bare '|' stays reserved. Strip escaped separators, then reject any survivor.
+_p_unescaped="${PAYLOAD//\\|/}"
+case "$_p_unescaped" in
+  *"|"*)
+    die "Payload contains an unescaped '|' — the bare pipe stays reserved; write the multi-value separator as '\\|' (see pipeline-event-log-schema.md § 4.3a)" ;;
+esac
 
 # ─── Build row ───────────────────────────────────────────────────────────────
 

@@ -58,7 +58,7 @@ The model is consumed by the 13 stages of `release-process.md` (Stage 1 Intake t
 1. **Capture** failure: ≤200 char stderr summary appended to retry log (per-call-site, ephemeral).
 2. **Wait** per backoff schedule (exponential with jitter — see below).
 3. **Re-execute** the failed call with same inputs.
-4. **On success**: log retry count + proceed. **On failure**: increment counter; if counter < cap, return to step 1 with next backoff interval.
+4. **On success**: log retry count + proceed. **On failure**: increment counter; if counter < cap, return to step 1 with next backoff interval. **Emit** `self-repair` / `retry` at the counter increment — one row per attempt, per § Emission.
 5. **On cap exhaustion**: emit Escalate Pattern with retry log attached.
 
 ### Backoff schedule
@@ -94,7 +94,7 @@ For production-impacting call sites — `core/deploy/deploy.sh --deploy`, `git p
 
 ### Mechanism (4 steps)
 
-1. **Compose** Decision Briefing per `decision-discipline.md` § 3 triage table.
+1. **Compose** Decision Briefing per `decision-discipline.md` § 3 triage table. **Emit** `self-repair` / `escalate` as the Briefing is composed — before the step-3 HALT, per § Emission.
 2. **Surface** to operator at the appropriate channel:
    - **In-spoke** for sub-task-scoped decisions (post on the active sub-task).
    - **Hub-level** for release-scoped decisions (post on the release Milestone or release-plan deviation log).
@@ -172,7 +172,7 @@ Agents do **NOT** initiate rollback autonomously. The Rollback Pattern is operat
 
 ### Mechanism (post-merge, agent-executed under operator authorization, 8 steps)
 
-1. **Operator authorizes rollback** — explicit confirmation in chat or sub-task comment ("approved", "rollback vX.Y", or equivalent).
+1. **Operator authorizes rollback** — explicit confirmation in chat or sub-task comment ("approved", "rollback vX.Y", or equivalent). **Emit** `self-repair` / `rollback` on authorization — before step 2, per § Emission.
 2. **Identify rollback target** — merge commit SHA introducing the regression (`git log --oneline main` to locate).
 3. **Execute** `git revert <merge-sha>` on `main` — single revert undoes the squash-merged release atomically.
 4. **Push** the revert via PR-merge per `gh` CLI; force-merge prohibited per `git-workflow.md`.
@@ -222,6 +222,32 @@ The three patterns compose as a directed cascade:
 - **Skip-Retry-to-Escalate IS permitted** for non-retryable failure types: auth, permission, malformed input, governance violation, hook block, 4xx-class HTTP. The agent skips the Retry Pattern and proceeds directly to Escalate when the failure signature is non-transient.
 - **Skip-Escalate-to-Rollback IS prohibited** — rollback always requires explicit operator-authorized Escalate path. Every rollback invocation traces back to an Escalation that the operator rendered with rollback as the chosen option.
 - **Skip-Pause-to-Escalate IS permitted (and required at IRREVERSIBLE)** — a low-confidence reading on an IRREVERSIBLE action skips the pause-to-learn loop and routes directly to Escalate, because no bounded learning loop can buy back an irreversible mistake; the operator owns that call. Likewise a gap that is plainly the operator's to adjudicate (not closable by the agent fetching signal) skips the pause and escalates directly.
+
+## Emission
+
+The three patterns are **decisions with no operator in the loop**, and the platform records decisions as events. Each mechanism therefore carries an emit point: at the moment the pattern elects its action, the executing agent invokes `release/tools/append-pipeline-event.sh` with `event_type` `self-repair`. The subtype enum, the payload grammar, and the multi-event composite rule are owned by `pipeline-event-log-schema.md` (§ 3, § 4.3a, § 4.4) — this section cites them and restates none of them.
+
+This section exists because the taxonomy shipped without an instruction to write it down. A retry loop was observable only as a `test-run` outcome, so the retry-cap discipline and the escalate rationale left no auditable trace, and a cross-release audit of autonomous behavior had nothing to read.
+
+| Pattern | Emit point (an existing mechanism step — no new step) | `event_subtype` | `outcome` | `reversibility` |
+|---|---|---|---|---|
+| **Retry** | § Retry Pattern → Mechanism step 4, at the moment the counter increments and re-execution is elected | `retry` | `pending` while under cap; `escalated` on the step-5 hand-off | `CHEAP` |
+| **Escalate** | § Escalate Pattern → Mechanism step 1, when the Decision Briefing is composed and **before** the step-3 HALT | `escalate` | `escalated` | `MODERATE` |
+| **Rollback** | § Rollback Pattern → Mechanism step 1, immediately on operator authorization and **before** step 2 | `rollback` | `resolved` | `IRREVERSIBLE` — the tier this pattern already declares under § Authorization requirement; echo it, do not re-derive it |
+
+**One row per attempt.** A retry sequence is a multi-event composite, and schema § 4.4 already governs it — one row per attempt, with the final row carrying the terminal `outcome`. That rule is the whole reason a retry loop can show cap state. Cite it; do not restate it.
+
+**Payload convention.** Keyed `trigger:` (the abstracted cause — e.g. `usage-window-cap` / `gh-api-429` / `git-lock` / `session-limit`) / `attempt:<n>/<cap>` (the cap state in force; `/` is an ordinary value character per schema § 4.3a and needs no escaping) / `signal:` (a ≤ 60-character abstracted failure class). A hub-emitted row opens `payload` with the release-stable `ms:#<milestone-number>;` token per the orchestration playbook § 4a.2.
+
+**The reversibility tier rides column 8, never the payload.** It is a first-class schema field; a payload copy is a second writable home for one fact, free to disagree with the column it duplicates. The payload carries trigger, cap state, and signal — the tier is the column.
+
+**PII — schema § 4.2 applies unchanged.** `signal:` states the failure *class*, never raw stderr, never operator text. The ≤200-char stderr summary captured at Retry step 1 stays in the ephemeral per-call-site retry log; it is not what gets emitted.
+
+Worked row (`--dry-run`-verified against the shipped validator):
+
+```markdown
+| 2026-07-28T06:12:04Z | <milestone-slug> | 12 | self-repair | retry | hub | sub-task:#N | CHEAP | pending | ms:#N; trigger:session-limit; attempt:2/3; signal:spoke-terminated-before-push |
+```
 
 ## Per-Stage Application
 

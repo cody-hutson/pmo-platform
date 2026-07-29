@@ -47,14 +47,57 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 | 7 | `subject` | string | reference to the entity acted upon | `#N`, `milestone:#N`, `release-level`, `sub-task:#N` |
 | 8 | `reversibility` | enum: `CHEAP` / `MODERATE` / `EXPENSIVE` / `IRREVERSIBLE` | reversibility tier per [reversibility-protocol.md](../../../core/specs/reversibility-protocol.md) | `EXPENSIVE` |
 | 9 | `outcome` | enum: `resolved` / `pending` / `escalated` / `superseded` | terminal state of the event | `resolved` |
-| 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or pipe-escaped key:value pairs; longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
+| 10 | `payload` | inline event-specific details (≤ 300 chars) OR pointer | compact JSON-in-markdown or `; `-separated key:value pairs (pipe grammar per § 4.3a); longer content → pointer to existing surface | `projects_to:calibration-data.md; verdict:Approved; structural_pass:1.0` |
+
+### 2a. Release join key (canonical)
+
+The `version` column is the release join key. It carries the release's GitHub
+Milestone SLUG, written at emission time. The slug is bound pre-claim, is 1:1
+with the release, and does not move when a release is re-versioned mid-pipeline
+(ADR-092). Writers ALWAYS pass the slug to `--version` (orchestration-playbook
+§ 4a.2). The `vX.Y` shipped version is NOT a key: it is assigned at the Stage-12
+ref-CAS, after emission has begun, and pre-cutover rows carry a provisional value
+that is neither unique across releases nor stable within one.
+
+**Resolving a row to a release (READ ladder — first match wins):**
+
+1. `version` matches a `RELEASE_LOG` `Milestone` cell → that release. **[canonical]**
+2. `subject` is `milestone:#N` → that milestone's release.
+3. `version` matches a `RELEASE_LOG` `Version` cell → that release. **[legacy, may be
+   ambiguous** — a legacy value can span releases; the row is release-INDETERMINATE
+   when the match is not unique, and MUST be reported as such, never silently bound.**]**
+4. otherwise → UNRESOLVED.
+
+**Resolving a release to its rows (WRITE-side inverse):** read the release's
+`RELEASE_LOG` row, take its `Milestone` cell → the slug → select rows whose
+`version` equals it. The shipped-version binding is additionally recorded in the
+log itself by the Stage-12 Phase B3.1 `d:version-claim` row (payload `claimed:` /
+`prov:`), so the log is self-describing without the repo.
+
+**Ambiguity is reported, never resolved by guessing.** Rung 3 exists so pre-cutover
+history stays readable; it is explicitly non-unique and a consumer that needs 1:1
+must treat a multi-match as INDETERMINATE. Rung 3 is deliberately EXCLUDED from any
+gate that asserts an emission obligation — an ambiguous legacy match must never
+count as satisfying an obligation.
+
+**Scope truth.** 1:1 resolution is achievable only forward. Rows written before the
+write-slug cutover carry a `vX.Y` value that genuinely spans multiple releases, and
+no reader can undo that without mutating an append-only log (§ 4.1). Legacy rows are
+best-effort-with-declared-ambiguity by design, not by defect.
+
+**Mixed-arity note for windowed reads.** `query-pipeline-event.sh --window N`
+restricts to the trailing N DISTINCT `version` values. Post-cutover the column holds
+slugs beside legacy versions, so a trailing-N window may span a different number of
+real releases than N. Use `--release` (which resolves through this ladder) when the
+question is "which rows belong to release X"; `--version` remains the raw-column
+filter.
 
 ## 3. Event-Type Enum (12 values) with Subtypes
 
 | `event_type` | Description | Allowed `event_subtype` values |
 |---|---|---|
 | `gate-outcome` | Stage-gate evaluation verdict | `g1-g2` / `g3-release-readiness` / `dt-pass` / `dt-conditional-pass` / `dt-return` / `qa-acceptance` / `qa-rejection` / `plan-review-go` / `plan-review-no-go` / `plan-review-readiness-scan` (applies to releases entering Stage 9 going forward) / `goal-conformance` (Stage 9 G-PR7 verdict ALIGNED/DIVERGED-WITH-RATIONALE/MISALIGNED; applies to releases entering Stage 9 going forward) |
-| `decision` | D-class or scope-locking decision rendered | `d-class` / `adr-closed` / `adr-opened` / `scope-lock` / `a6-new-track-rationale` / `a7-bundle-amend` / `a7-bundle-rebundle` / `a7-bundle-defer` / `cross-d-upstream-compat` / `empirical-verification-finding` / `action-item-opened` / `action-item-started` / `action-item-resolved` / `action-item-cancelled` / `action-item-superseded` / `queued-pending-approval` / `approval-deferred` / `cascade-sweep-block` / `outcome-statement-authored` (Stage 3 Phase B3 emits one row per Milestone created with the Outcome Statement payload) / `recommendation-choice-delta` (captures a prior agent recommendation against the rendered operator choice at any decision moment — D-Gate, pause-to-learn E3 escalation, Stage 4 bundle, Stage 5 design, or routing; payload convention below) |
+| `decision` | D-class or scope-locking decision rendered | `d-class` / `adr-closed` / `adr-opened` / `scope-lock` / `a6-new-track-rationale` / `a7-bundle-amend` / `a7-bundle-rebundle` / `a7-bundle-defer` / `cross-d-upstream-compat` / `empirical-verification-finding` / `action-item-opened` / `action-item-started` / `action-item-resolved` / `action-item-cancelled` / `action-item-superseded` / `queued-pending-approval` / `approval-deferred` / `cascade-sweep-block` / `outcome-statement-authored` (Stage 3 Phase B3 emits one row per Milestone created with the Outcome Statement payload) / `delegation` (the hub's spawn-vs-hub-direct execution-path fork, emitted only when the delegation merit test in decision-discipline.md § 3.1 fires — never for routine template routing; payload convention below) / `recommendation-choice-delta` (captures a prior agent recommendation against the rendered operator choice at any decision moment — D-Gate, pause-to-learn E3 escalation, Stage 4 bundle, Stage 5 design, or routing; payload convention below) |
 | `escalation` | Operator escalation per Inter-Stage Feedback Protocol | `tier-0` / `tier-1` / `tier-2` / `tier-3` |
 | `self-repair` | Autonomous retry / escalate / rollback per [autonomous-execution-model.md](../../../core/disciplines/autonomous-execution-model.md) | `retry` / `escalate` / `rollback` |
 | `iteration` | Inter-stage re-entry per [handoff-coordinator-spec.md](../../../core/schemas/handoff-coordinator-spec.md) | `dt-eng-pass-N` / `qa-dt-pass-N` (N is the post-increment pass count; Tier 1 fixes use pass-0) |
@@ -68,14 +111,14 @@ The `pipeline-event-log.md` body is a markdown table. Header:
 
 Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` rejects unknown subtypes with non-zero exit. Adding a subtype requires a governance change per `release/governance/release-process.md` § Inter-Stage Feedback Protocol Tier 2 / Tier 3.
 
-**`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing` / `session-retro`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. The `session-retro` provenance value marks a delta the per-session retro surfaced retrospectively rather than one captured live at the decision moment; the row is otherwise identical, so the existing look-back read-model needs no change to see it. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, pipe-free per § 4.3):
+**`recommendation-choice-delta` payload convention.** A `recommendation-choice-delta` row reuses the standard 10 columns (no new fields); the `version` + `stage` columns are the release/stage anchor, and the delta-tuple lives in `payload`, keyed `rec:` (the agent's prior recommendation) / `chose:` (the rendered operator choice; pair with the row's `outcome`) / `delta:` (one of `aligned` / `diverged` / `partial` / `operator-deferred` — `aligned` records the zero-delta state EXPLICITLY, never silently omitted) / `why:` (divergence rationale) / `via:` (provenance — one of `hub-d-gate` / `pause-to-learn-e3` / `stage4-bundle` / `stage5-design` / `routing` / `session-retro`). `actor` is `spoke:#N`, `hub`, or `operator` per the decision moment. The `session-retro` provenance value marks a delta the per-session retro surfaced retrospectively rather than one captured live at the decision moment; the row is otherwise identical, so the existing look-back read-model needs no change to see it. **Signal-only surface:** this subtype NEVER auto-mutates the toolkit; the look-back read-model (§ 11 `--event-subtype recommendation-choice-delta`) is detective-only, and an auto-promote of ≥3 same-pattern `diverged` rows yields an `improvement.yml` CANDIDATE via the governance gate (issue → plan → PR per "No ungoverned changes"), never an auto-change. PII per § 4.2; redaction reuses `event_type=scope-change, event_subtype=redaction`. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
 | 2026-06-29T14:00:00Z | v2.39 | 4 | decision | recommendation-choice-delta | hub | milestone:#N | CHEAP | resolved | rec:bundle-A+B; chose:bundle-A-only; delta:diverged; why:B-blocked-on-dep; via:stage4-bundle |
 | 2026-06-29T14:00:01Z | v2.39 | 5 | decision | recommendation-choice-delta | spoke:#N | #N | CHEAP | resolved | rec:new-subtype; chose:new-subtype; delta:aligned; via:stage5-design |
 ```
 
-**`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, pipe-free per § 4.3):
+**`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
 | 2026-06-13T14:00:00Z | v1.12 | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
@@ -89,12 +132,24 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 
 **Explicit zero-state.** A session that produced no learning emits a `no-learning` row rather than nothing, so "the retro ran and found nothing" is distinguishable from "the retro never ran" — the same discipline as `delta:aligned` above and the release-synthesis explicit-N/A markers (§ 11.3). A `no-learning` row carries `session:` + `reason:` and deliberately carries **no `theme:`**, so it contributes no cluster signal.
 
-**PII (§ 4.2 applies unchanged, and bites hardest here).** The retro reflects over session content, so every payload field is an ABSTRACTION, never a quotation: no verbatim operator text, no external-stakeholder names, no Cowork-owned Layer 2 content, no transcript excerpt. `learning:` states the pattern, not the utterance that revealed it. Examples (≤ 300 chars, pipe-free per § 4.3):
+**PII (§ 4.2 applies unchanged, and bites hardest here).** The retro reflects over session content, so every payload field is an ABSTRACTION, never a quotation: no verbatim operator text, no external-stakeholder names, no Cowork-owned Layer 2 content, no transcript excerpt. `learning:` states the pattern, not the utterance that revealed it. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
 | 2026-07-22T22:10:00Z | v3.80 | 6 | session-retro | operator-feedback | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:correction; theme:read-before-edit; domain:corpus-edit; learning:operator redirected a pattern-sweep toward per-file reading |
 | 2026-07-22T22:10:01Z | v3.80 | 6 | session-retro | learning | skill:session-retro | session:a1b2c3 | CHEAP | resolved | session:a1b2c3; source:friction; theme:worktree-cwd-guard; domain:release-ops; learning:git writes needed an explicit cwd guard to stay in the worktree |
 | 2026-07-22T22:10:02Z | v3.80 | 13 | session-retro | no-learning | skill:session-retro | session:d4e5f6 | CHEAP | resolved | session:d4e5f6; reason:below-sampling-threshold-no-novel-signal |
+```
+
+**`delegation` payload convention.** A `delegation` row reuses the standard 10 columns (no new fields); the fork lives in `payload`, keyed `chose:` (the elected execution path — one of `spoke` / `hub-direct`) / `unit:` (what was delegated — `stage-<N>` or `procedure-<N>`) / `merit:` (which merit condition fired — one of `context-boundary` / `budget-forced` / `recovery`, per `decision-discipline.md` § 3.1) / `quota:` (the Checkpoint-B verdict in force, per `quota-budget-protocol.md` § 4 — that enum is **cited, never restated here**; present only when `merit:budget-forced` fired, omitted rather than written as a noise value) / `why:` (a one-line kebab rationale). `actor` is always `hub` — the hub is the only spawner, per the recursion prohibition. `reversibility` is `CHEAP`: a delegation choice is undone by re-running the unit on the other path. `outcome` is `resolved`. Every row opens `payload` with the release-stable `ms:#<milestone-number>;` token per the orchestration playbook § 4a.2. PII per § 4.2 — `why:` states the structural reason, never operator text.
+
+**Emitted at a merit fork only.** Silence is the correct signal for routine template routing (the sub-task exists, its dependency is met, the quota verdict was `PROCEED`, and the spawn is the template's default). A consumer that cannot name which merit condition fired has not established a fork and must not emit. The test itself is owned by `decision-discipline.md` § 3.1; this block is the write-side contract, not a second copy of the criterion.
+
+**A `delegation` row at stage 4 MUST carry a `milestone:#N` subject.** The Stage-4 plan-survival denominator in `compute-front-cluster-telemetry.sh` counts distinct non-`milestone:` `decision` subjects at stage 4 and is **subtype-blind**, so a Stage-4 delegation row keyed `sub-task:#N` would silently enter that population as a phantom planned subject — and, carrying no scope-change of its own, it lands in the numerator as a survivor as well as the denominator, so it can only bias the shipped rate **upward**, never downward, with no error raised anywhere. The constraint costs nothing: the only Stage-4 delegation is the release-scoped planning spoke. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
+
+```markdown
+| 2026-07-28T06:38:10Z | decision-telemetry-emission | 6 | decision | delegation | hub | issue:#N | CHEAP | resolved | ms:#N; chose:spoke; unit:stage-6; merit:context-boundary; why:rename-is-a-graph-op-needs-branch-context |
+| 2026-07-28T06:41:02Z | decision-telemetry-emission | 5 | decision | delegation | hub | milestone:#N | CHEAP | resolved | ms:#N; chose:hub-direct; unit:stage-5; merit:budget-forced; quota:REDUCE-scope; why:window-cannot-absorb-a-third-parallel-spoke |
+| 2026-07-28T07:02:44Z | decision-telemetry-emission | 5 | decision | delegation | hub | sub-task:#N | CHEAP | resolved | ms:#N; chose:spoke; unit:stage-5; merit:recovery; why:prior-spoke-terminated-at-usage-cap-nothing-salvageable |
 ```
 
 ## 4. Constraints
@@ -126,8 +181,41 @@ Disallowed:
 ### 4.3 Payload format
 
 - ≤ 300 characters per row (single-row PIPE_BUF safety on POSIX append)
-- Compact JSON (`{"key":"value"}`) OR pipe-escaped key:value pairs (`key:value; key:value`)
+- Compact JSON (`{"key":"value"}`) OR `; `-separated key:value pairs (`key:value; key:value`); pipe grammar per § 4.3a
 - Longer content → pointer to existing surface (e.g., `comment:https://github.com/{REPO}/issues/<N>#issuecomment-N`)
+
+### 4.3a Payload pipe grammar (multi-value fields)
+
+The `payload` cell is the **last of the 10 columns**, so a stray delimiter inside it
+appends spurious trailing fields; it can never shift a pre-payload column. Readers
+split on the canonical delimiter `" | "` (space-pipe-space).
+
+**Row-integrity invariant.** A payload is admissible iff the assembled row is exactly
+one physical line and splits into exactly 10 fields under `" | "`.
+
+| Form | Status |
+|---|---|
+| `\\|` (backslash-escaped) | **Canonical multi-value separator.** Admitted. |
+| `\|` (bare, unescaped) | **Reserved.** Rejected. |
+| `" \| "` (space-delimited) | Rejected — it *is* the column delimiter. |
+| payload ending in `" \|"` | Rejected — forms the delimiter at the row-trailing junction. |
+| newline / carriage return | Rejected — a row is one physical line. |
+
+**Why escaped and not bare.** The log is a markdown table. A bare `|` renders a
+spurious cell break, and one consumer (`rollup-attribution.sh`) splits on a bare `|`
+rather than on `" | "`, truncating the payload. `\|` is safe on both the parsing and
+the rendering axis; bare `|` is safe on neither.
+
+**Separator selection.** Use `\|` for multi-value *lists* (`triggers:[T1\|T2\|T3]`).
+Do **not** repurpose `/`: it is already a value character inside payloads
+(`verdict: <UPDATE>/<PRESERVE>/<N/A>`), so a `/` list separator would be ambiguous.
+Key:value pairs remain `; `-separated.
+
+**Authoring a payload convention.** A convention block that renders enum alternatives
+in `{a|b}` notation MUST either escape them (`{a\|b}`) or state the runtime form
+(`chose:spoke`). Enforcement: `append-pipeline-event.sh` § 4.3a guard + `--self-test`.
+
+Rationale and alternatives: ADR-100.
 
 ### 4.4 One row per event
 
