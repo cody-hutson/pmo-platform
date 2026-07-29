@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.2.0",
+  "store_generator_version": "v9.9-fixture",
+  "generator_version": "v3.96",
+  "estimated_utc": "2026-07-29T02:24:36Z",
+  "mode": "estimate",
+  "rolled_up": true,
+  "unit_mode": "volume",
+  "usd_rate": null,
+  "matching": {
+    "tier": "E2",
+    "tier_name": "class + points",
+    "local": true,
+    "key": "(class=novel, points 8-24, tolerance ±8)",
+    "target": {
+      "class": "novel",
+      "points": 16,
+      "type": null,
+      "tolerance": 8,
+      "work_item": null
+    },
+    "attempted": null
+  },
+  "n_comparables": 5,
+  "n_min": 3,
+  "estimate_tokens": 120000,
+  "estimate_usd": null,
+  "range": {
+    "min": 100000,
+    "max": 900000
+  },
+  "mean_tokens_not_used": 274000,
+  "dispersion": {
+    "mad": 20000,
+    "rmad": 0.1667
+  },
+  "confidence": "MEDIUM",
+  "confidence_rule": "R4",
+  "confidence_caps": [],
+  "suppression": null,
+  "token_source": "mixed",
+  "best_effort_token_fraction": 0,
+  "reproducible": true,
+  "basis": [
+    {
+      "work_item": "milestone:v9.90",
+      "tokens": 100000,
+      "figure": "100,000",
+      "attribution_tier": "branch-milestone",
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "provenance": "[SOURCE: exact message.usage]",
+      "key": "12 pts / novel",
+      "rate": null,
+      "is_median": false
+    },
+    {
+      "work_item": "milestone:v9.91",
+      "tokens": 110000,
+      "figure": "110,000",
+      "attribution_tier": "branch-milestone",
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "provenance": "[SOURCE: exact message.usage]",
+      "key": "14 pts / novel",
+      "rate": null,
+      "is_median": false
+    },
+    {
+      "work_item": "milestone:v9.92",
+      "tokens": 120000,
+      "figure": "~120,000",
+      "attribution_tier": "hub-state-lineage",
+      "tier_label": "deterministic join, local",
+      "token_source": "heuristic",
+      "provenance": "[INFERRED: ceil(words/0.75) fallback]",
+      "key": "16 pts / novel",
+      "rate": null,
+      "is_median": false
+    },
+    {
+      "work_item": "milestone:v9.93",
+      "tokens": 140000,
+      "figure": "140,000",
+      "attribution_tier": "branch-milestone",
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "provenance": "[SOURCE: exact message.usage]",
+      "key": "20 pts / novel",
+      "rate": null,
+      "is_median": false
+    },
+    {
+      "work_item": "milestone:v9.94",
+      "tokens": 900000,
+      "figure": "900,000",
+      "attribution_tier": "branch-milestone",
+      "tier_label": "deterministic, local",
+      "token_source": "exact",
+      "provenance": "[SOURCE: exact message.usage]",
+      "key": "18 pts / novel",
+      "rate": null,
+      "is_median": false
+    }
+  ],
+  "excluded": null,
+  "excluded_count": 7,
+  "actual_tokens": null,
+  "delta_tokens": null,
+  "pct_error": null,
+  "delta_suppression": null,
+  "leave_one_out": false
+}

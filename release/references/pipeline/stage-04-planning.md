@@ -176,7 +176,7 @@ The `### Quota Budget` section records the Phase A6 Checkpoint A estimate. Scaff
 
 **Verdict:** PASS | WARN | FAIL (per `quota-budget-protocol.md` Checkpoint A)
 **Parallel-eligible spokes per parallel stage (from A2 Stage Applicability Matrix):** Stage 5: <N> · Stage 7: <N> · Stage 8: <N>
-**Per-spoke cost estimate:** <band/heuristic or telemetry median> (source: <heuristic | pipeline-event-log spoke-launch medians>)
+**Per-spoke cost estimate:** <band/heuristic or telemetry median> (source: <heuristic | finops estimate-usage.sh medians | pipeline-event-log spoke-launch medians>)
 **Assumed/stated remaining usage-window envelope:** <operator-stated state at hub start, or conservative default>
 **Estimated cumulative draw % (worst parallel batch):** <cumulative ÷ envelope>%
 **Routing:** <PASS: proceed | WARN: window-aware timing + quota-budget/split | FAIL: (a) split-batch / (b) reduce cost / (c) Tier-2 scope change>

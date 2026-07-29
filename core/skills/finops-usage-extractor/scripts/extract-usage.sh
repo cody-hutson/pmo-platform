@@ -3,7 +3,7 @@
 #
 # Extracts per-session and per-in-transcript-subagent token spend from local Claude
 # Code session transcripts into the operator-local, git-ignored FinOps usage store
-# defined by core/schemas/finops-usage-store-schema.md (frozen v1.0.0). Exact
+# defined by core/schemas/finops-usage-store-schema.md (schema v1.2.0). Exact
 # message.usage counts are PRIMARY; the context-budget-auditor (#16) word->token
 # heuristic is the FALLBACK for usage-less records only. Read-only on the source
 # transcripts; writes only the resolved store (atomic tmp -> mv).
@@ -118,6 +118,20 @@ def wc:
 # mirror of context-budget-auditor est_tokens_from_words (ceil(words/0.75)); fallback only.
 def est: ((4 * . + 2) / 3) | floor ;
 
+# ── Source-field seams (schema v1.2.0 analysis dimensions). ─────────────────────
+# ONE named line per dimension: the source RECORD LOCATION of the three v1.2.0
+# dimension fields is the only unverified assumption in this program, so it is
+# isolated here. Each probes the top-level record AND `.message` so the extractor
+# is correct under either placement; if a real store shows only one populates, the
+# redundant leg is trimmed here and nowhere else.
+def skill_of($r): ($r.attributionSkill // $r.message.attributionSkill // null) ;
+def mcp_of($r):   ($r.attributionMcpServer // $r.message.attributionMcpServer // null) ;
+def stop_of($r):  ($r.message.stop_reason // $r.stop_reason // null) ;
+
+# Normalize any dimension key to a string, folding null/empty onto the RESERVED
+# "unknown" bucket (the honesty mechanism — see schema § Analysis sub-aggregates).
+def dim_key: if (. == null or . == "") then "unknown" else tostring end ;
+
 def toksum($arr):
   ( [ $arr[] | select(.message.usage != null) ] ) as $ex
   | ( [ $arr[] | select(.message.usage == null) ] ) as $he
@@ -139,6 +153,35 @@ def tokens_obj($t): { input: $t.input, output: $t.output,
 def tooluse_obj($t): { web_search_requests: $t.ws, web_fetch_requests: $t.wf } ;
 def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic" else "mixed" end ;
 
+# ── v1.2.0 per-session sub-aggregates (session-grain projections of turn data). ──
+# dim_agg: partition $arr by `keyfn`, then reduce each group with the SAME toksum +
+# tokens_obj used for session.tokens, so the leaf shape is byte-identical to
+# session.tokens and the four leaves sum back to it. The reserved "unknown" key is
+# SEEDED, so it is present even when empty — that is what makes the conservation
+# invariant `sum(by_X.*.tokens) == session.tokens` hold for a partial dimension.
+# The entry value is the WRAPPER {turns, tokens}, never a bare tokens object.
+def dim_agg($arr; keyfn):
+  ( [ $arr[] | { k: ((keyfn) | dim_key), r: . } ] ) as $tagged
+  | ( reduce $tagged[] as $e ({ "unknown": [] }; . + { ($e.k): ((.[$e.k] // []) + [$e.r]) }) )
+  | with_entries( .value = ( toksum(.value) as $t | { turns: $t.turns, tokens: tokens_obj($t) } ) ) ;
+
+# count_agg: plain per-key integer counts. $seed pre-seeds reserved keys — {"unknown":0}
+# for stop_reason (so `sum(stop_reason.*) == turns` is total), {} for tool_calls (a tool
+# call is a count, not a partition of tokens, so it reserves nothing).
+def count_agg($vals; $seed): reduce $vals[] as $k ($seed; . + { ($k): ((.[$k] // 0) + 1) }) ;
+
+# The four cost-relevant leaves of a tokens object, per the schema summation invariant.
+def leaf_total($t): ($t.input + $t.output + $t.cache_creation.total + $t.cache_read) ;
+
+# dimension_coverage entry — a STORED PROJECTION of the map's "unknown" bucket
+# (1 - uncovered/total, token basis; 1 when the session carries no tokens). Stored, not
+# left derivable, because the label must be impossible to render without. The self-test
+# asserts it agrees with the bucket, so the projection cannot drift from its source.
+def dim_cov($map; $total):
+  ( leaf_total($map["unknown"].tokens) ) as $u
+  | { covered_token_fraction: ( if $total <= 0 then 1 else (($total - $u) / $total) end ),
+      basis: "best-effort" } ;
+
 . as $all
 | [ $all[] | select(.type=="assistant") ] as $asst
 | [ $all[] | .timestamp // empty ] as $ts
@@ -147,6 +190,12 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
 # cross-file linkage is C2's attribution scope, not a C1 key.
 | $sid_fallback as $sid
 | ( [ $all[] | .cwd // empty ] | last ) as $cwd
+# Data-minimization (schema v1.2.0): persist ONLY the working-directory BASENAME.
+# `.cwd` is the SOURCE transcript's own field name (not ours to change); the store
+# field is `worktree`, and the full absolute path is never written. `map(select(length>0))`
+# makes it trailing-slash-safe ("/a/b/" -> "b", where a bare split|last yields "").
+| ( if $cwd == null then null
+    else ($cwd | split("/") | map(select(length > 0)) | last) end ) as $worktree
 | ( [ $all[] | .gitBranch // empty ] | last ) as $branch
 | ( [ $asst[] | .message.model // empty ] | last ) as $model
 | ( [ $asst[] | .message.usage.service_tier? // empty ] | last ) as $tier
@@ -158,12 +207,24 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
 # each sidechain assistant record -> its sidechain-root uuid (walk parentUuid while parent is a sidechain)
 | ( [ $asst[] | select(.isSidechain == true) | . as $rec
       | ( {u: $rec.uuid, i: 0}
-          | until( ( ($sset[($pmap[.u] // " ")] // false) | not ) or (.i >= 1000)
+          # sentinel: never a real uuid -> terminates the walk at a parentless record
+          | until( ( ($sset[($pmap[.u] // "__no_parent__")] // false) | not ) or (.i >= 1000)
                  ; {u: ($pmap[.u] // .u), i: (.i + 1)} )
           | .u ) as $root
       | { root: $root, rec: $rec } ] ) as $side
 | ( $side | group_by(.root) ) as $groups
 | toksum($asst) as $st
+# ── v1.2.0 analysis dimensions — session-grain sub-aggregates over the SAME $asst set
+#    the session total is computed from, so every map partitions session.tokens exactly.
+| dim_agg($asst; skill_of(.))         as $by_skill
+| dim_agg($asst; mcp_of(.))           as $by_mcp
+| dim_agg($asst; .message.model)      as $by_model
+| ( leaf_total(tokens_obj($st)) )     as $sess_total
+# tool_calls counts CLIENT-SIDE invocations by name from the turn content — distinct
+# from `tool_use`, which counts SERVER-SIDE requests from message.usage.server_tool_use.
+| count_agg([ $asst[] | .message.content[]? | select(.type == "tool_use") | .name // empty ]; {})
+    as $tool_calls
+| count_agg([ $asst[] | stop_of(.) | dim_key ]; { "unknown": 0 }) as $stop_reason
 # Only spend-bearing sessions (>=1 assistant record) yield a record. Files with zero
 # assistant turns (project summary/index files, empty transcripts) carry no token spend
 # and are skipped — this also excludes non-session `.jsonl` files under the projects root.
@@ -172,9 +233,15 @@ def tsrc($t): if $t.ht == 0 then "exact" elif $t.ht >= $t.turns then "heuristic"
   (
   # session record (tokens is the WHOLE-FILE total, inclusive of sidechains)
   ( { record: "session", session_id: $sid, project_dir: $project_dir,
-      cwd: $cwd, git_branch: $branch, started_utc: $start, ended_utc: $end,
+      worktree: $worktree, git_branch: $branch, started_utc: $start, ended_utc: $end,
       model: $model, service_tier: $tier, turns: $st.turns,
       tokens: tokens_obj($st), tool_use: tooluse_obj($st),
+      by_skill: $by_skill, by_mcp: $by_mcp, by_model: $by_model,
+      tool_calls: $tool_calls, stop_reason: $stop_reason,
+      # Best-effort dimensions ONLY. by_model / tool_calls / stop_reason are exact by
+      # construction and get NO entry — a constant 1.0 trains consumers to ignore the field.
+      dimension_coverage: { by_skill: dim_cov($by_skill; $sess_total),
+                            by_mcp:   dim_cov($by_mcp;   $sess_total) },
       subagent_count: ($groups | length), token_source: tsrc($st),
       heuristic_turns: $st.ht, extracted_utc: $now } ),
   # subagent drill-down records (NOT summed on top of session.tokens)
@@ -224,7 +291,7 @@ build_body() {
 write_store() {
   local store_dir="$1" src_root="$2" created="$3" last="$4" body="$5"
   local tmp="$store_dir/usage.jsonl.tmp"
-  jq -cn --arg sv "1.0.0" --arg gen "finops-usage-extractor" --arg genver "$(generator_version)" \
+  jq -cn --arg sv "1.2.0" --arg gen "finops-usage-extractor" --arg genver "$(generator_version)" \
      --arg root "$src_root" --arg created "$created" --arg last "$last" \
      '{record:"meta", schema:"finops-usage-store", schema_version:$sv, generated_by:$gen,
        generator_version:$genver, source_root:$root, created_utc:$created,
@@ -348,7 +415,8 @@ self_test() {
   if [ -f "$oracle" ]; then
     local got want
     got="$(jq -s -S '[.[] | select(.record=="session")
-                    | {session_id, tokens, tool_use, token_source, heuristic_turns, subagent_count}]
+                    | {session_id, tokens, tool_use, token_source, heuristic_turns, subagent_count,
+                       by_skill, by_mcp, by_model, tool_calls, stop_reason, dimension_coverage}]
                     | sort_by(.session_id)' "$st_store/usage.jsonl" 2>/dev/null)"
     want="$(jq -S '. | sort_by(.session_id)' "$oracle" 2>/dev/null)"
     if [ "$got" != "$want" ]; then
@@ -362,6 +430,78 @@ self_test() {
   [ "${nsub:-0}" -eq 1 ] || { echo "FAIL: expected exactly 1 subagent record, got ${nsub:-0}"; fail=1; }
   subin="$(jq -s '[.[] | select(.record=="subagent") | .tokens.input] | add // 0' "$st_store/usage.jsonl" 2>/dev/null)"
   [ "${subin:-0}" -eq 28 ] || { echo "FAIL: subagent input tokens != 28 (got ${subin:-0})"; fail=1; }
+
+  # K) v1.2.0 analysis dimensions — STRUCTURAL invariants, asserted independently of the
+  #    oracle (the oracle pins values; this pins the contract, so it still holds if the
+  #    fixtures change). Reports every violation by session + dimension, not just a count.
+  local dim_bad dim_rc
+  dim_bad="$(jq -s -r '
+    # Null-safe leaves: a malformed record must produce a REPORTED violation, never a jq
+    # hard error — an aborted check emits nothing, and nothing reads as PASS (fail-open).
+    def leaf($t): (($t.input // 0) + ($t.output // 0) + ($t.cache_creation.total // 0) + ($t.cache_read // 0));
+    def absf: if . < 0 then (0 - .) else . end;
+    def dsum($m): { i: ([ $m[].tokens.input ] | add // 0),
+                    o: ([ $m[].tokens.output ] | add // 0),
+                    c: ([ $m[].tokens.cache_creation.total ] | add // 0),
+                    h: ([ $m[].tokens.cache_creation.ephemeral_1h ] | add // 0),
+                    f: ([ $m[].tokens.cache_creation.ephemeral_5m ] | add // 0),
+                    r: ([ $m[].tokens.cache_read ] | add // 0),
+                    t: ([ $m[].turns ] | add // 0) };
+    [ .[] | select(.record=="session") | . as $s
+      | (
+          # (K1) every token-bearing map: reserved "unknown" present + leaf-by-leaf
+          #      conservation against session.tokens, and turns conservation too.
+          ( ["by_skill","by_mcp","by_model"][] as $d
+            | ($s[$d]) as $m
+            | if   ($m == null)                      then "\($s.session_id): \($d) absent"
+              elif ($m | has("unknown") | not)       then "\($s.session_id): \($d) missing reserved \"unknown\" key"
+              elif ([ $m[] | has("tokens") | not ] | any) then "\($s.session_id): \($d) entry is not the {turns,tokens} wrapper"
+              else ( dsum($m) as $g
+                     | if ($g.i != $s.tokens.input or $g.o != $s.tokens.output
+                           or $g.c != $s.tokens.cache_creation.total
+                           or $g.h != $s.tokens.cache_creation.ephemeral_1h
+                           or $g.f != $s.tokens.cache_creation.ephemeral_5m
+                           or $g.r != $s.tokens.cache_read)
+                       then "\($s.session_id): \($d) conservation broken (sum(\($d).*.tokens) != session.tokens)"
+                       elif ($g.t != $s.turns)
+                       then "\($s.session_id): \($d) turns conservation broken (\($g.t) != \($s.turns))"
+                       else empty end ) end ),
+          # (K2) stop_reason is a total partition of the assistant turns.
+          ( if   (($s.stop_reason // null) == null)              then "\($s.session_id): stop_reason absent"
+            elif ($s.stop_reason | has("unknown") | not)         then "\($s.session_id): stop_reason missing reserved \"unknown\" key"
+            elif (([ $s.stop_reason[] ] | add // 0) != $s.turns) then "\($s.session_id): sum(stop_reason.*) != turns"
+            else empty end ),
+          # (K3) tool_calls is always an object (never absent) and is NOT tool_use.
+          ( if (($s.tool_calls // null) | type) != "object" then "\($s.session_id): tool_calls absent or not an object" else empty end ),
+          # (K4) dimension_coverage is the stored projection of the "unknown" bucket.
+          ( ["by_skill","by_mcp"][] as $d
+            | ( leaf($s.tokens) ) as $tot
+            | ( leaf($s[$d]["unknown"].tokens) ) as $unk
+            | ( if $tot <= 0 then 1 else (($tot - $unk) / $tot) end ) as $want
+            | ( $s.dimension_coverage[$d] ) as $cv
+            | if   ($cv == null)                                                    then "\($s.session_id): dimension_coverage.\($d) missing"
+              elif ((($cv.covered_token_fraction - $want) | absf) > 0.000001)       then "\($s.session_id): dimension_coverage.\($d) != 1 - (unknown/total)"
+              elif ($cv.covered_token_fraction < 0 or $cv.covered_token_fraction > 1) then "\($s.session_id): dimension_coverage.\($d) outside [0,1]"
+              elif ((["best-effort","exact"] | index($cv.basis)) == null)           then "\($s.session_id): dimension_coverage.\($d).basis not in the enum"
+              else empty end ),
+          # (K5) the exact-by-construction dimensions get NO coverage entry — a constant
+          #      1.0 would train a renderer to ignore the field.
+          ( ["by_model","tool_calls","stop_reason"][] as $d
+            | if ($s.dimension_coverage | has($d))
+              then "\($s.session_id): dimension_coverage must NOT carry \($d) (exact by construction)"
+              else empty end )
+        ) ] | .[]' "$st_store/usage.jsonl" 2>&1)"; dim_rc=$?
+  # An honesty check that cannot run must FAIL, never pass silently: a jq abort yields no
+  # output, and "no violations reported" would otherwise be indistinguishable from "clean".
+  if [ "$dim_rc" -ne 0 ]; then
+    echo "FAIL: v1.2.0 analysis-dimension check could not run (jq exit $dim_rc) — not treated as clean:"
+    printf '%s\n' "$dim_bad" | sed 's/^/       /'
+    fail=1
+  elif [ -n "$dim_bad" ]; then
+    echo "FAIL: v1.2.0 analysis-dimension invariants:"
+    printf '%s\n' "$dim_bad" | sed 's/^/       /'
+    fail=1
+  fi
 
   # 8) Incremental idempotence: no source change -> session digest unchanged, no dup.
   local d1 d2

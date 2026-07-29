@@ -5,7 +5,7 @@
 > synthetic issue numbers** (test oracle data), not references to real repository issues.
 
 These files are **fabricated** and used only by `rollup-attribution.sh --self-test`. They
-contain **no real extracted values** — every `session_id`, `git_branch`, `cwd`, worktree,
+contain **no real extracted values** — every `session_id`, `git_branch`, `worktree`,
 timestamp, issue number, milestone (the non-real `v9.9`), and token count is invented (per
 the CIAC-3 data-hygiene rule: the tooling's tests never read real `~/.claude/projects`
 transcripts or real hub-state, and no real session-data value appears in any committed
@@ -29,11 +29,11 @@ artifact on this public repo).
 
 Supporting synthetic surfaces:
 
-- `hub-state/v9.9/sessions.md` — Surface C; its `worktree` column joins `…004`'s `cwd`
-  basename to milestone `v9.9`.
+- `hub-state/v9.9/sessions.md` — Surface C; its `worktree` column joins `…004`'s
+  `session.worktree` to milestone `v9.9`.
 - `pipeline-event-log.md` — Surface B; its decision row carries a `session:<composite>`
-  payload whose worktree joins `…003`'s `cwd` basename to issue `#4242`. It also carries an
-  ignored-event-type row and a no-matching-session row to exercise filtering.
+  payload whose worktree joins `…003`'s `session.worktree` to issue `#4242`. It also carries
+  an ignored-event-type row and a no-matching-session row to exercise filtering.
 - `pr-stub.tsv` — a tab-separated `branch → #N` stub the self-test feeds via `FINOPS_PR_STUB`
   so the opt-in T-PR path resolves deterministically without a network `gh` call.
 

@@ -119,7 +119,12 @@ and validate:
 - `action` is one of: ADD, MODIFY, CLOSE, REACTIVATE
 - `entry_id` is provided for MODIFY/CLOSE/REACTIVATE actions
 - `entry_id` exists in the target tracker (for MODIFY/CLOSE/REACTIVATE)
-- Required fields are present per the tracker schema (see `references/tracker-schemas.md`)
+- Required fields are present per the tracker schema (see `references/tracker-schemas.md` /
+  `core/schemas/tracker-schemas.md` — the two copies are complementary, not duplicates: the
+  canonical copy carries the full Tracker 1–10 field sets, the skill-local copy carries the
+  § Tracker Integrity Rules. Resolve a tracker's required-field set against **whichever copy
+  defines that tracker**, and if neither defines it, **BLOCK the instruction** — never accept
+  a write whose field set could not be resolved)
 - Field values match valid values where constrained (enums, date formats, ID formats)
 - `evidence` is present and uses proper evidence quality labels ([SOURCE], [INFERRED], etc.)
 
@@ -519,6 +524,74 @@ the Baseline Rules in Tracker 6:
   row's Baseline Status → `superseded`, **append-only** (never delete the superseded
   row; it is the CI history the `projects/` gitignore otherwise loses).
 
+## Estimate/Actual Pair Row Maintenance
+
+The **Sprint Tracker** (`[Project]_Sprint_Tracker.md`,
+`core/schemas/tracker-schemas.md` § Tracker 10) is the per-project iteration
+tracker and the capture surface for the estimate/actual pairs feeding the
+estimation-calibration loop. **Read that section for the required-field set** of
+its four calibration-path sections — `## Sprint History`, `## Estimate-Actual
+Pairs`, `## Capture Exceptions`, and the § Cumulative Elapsed rule. The
+calculation half (the ratio, the bias/spread pair, the band, the window floor) is
+owned by `estimation-standards.md` § 8 and is **not** computed here: Tracker
+Manager writes rows, never derived figures.
+
+Like every tracker in `3-Operations/`, **Tracker Manager owns its ROW writes**.
+There are **two emitters at two gates**, per `estimation-standards.md` § 8.5's
+two-write contract: **Delivery Engine Mode C** emits the `ADD` at the **LG-4 DoR
+exit PASS** (item admission — the write that *creates* the row), and **Delivery
+Engine Mode F** emits the `MODIFY` at the **LG-5 Dev Complete (DoD) exit verdict**
+plus the end-of-sprint review (the write that *completes* it); this skill
+validates and writes both. These are **Document Tier 2 / Autonomy Tier 2**
+writes — auto-write within `cascade_scope`, no approval gate — and the Step-5
+**Lifecycle-State Precondition** still runs first: an `archived`/`superseded`
+target is **BLOCK + flag** exactly as for any other tracker.
+
+Seven write rules are specific to this tracker, each failing closed:
+
+- **The `ADD` precedes the `MODIFY`, and its absence is reported, not absorbed.**
+  A close `MODIFY` whose `entry_id` resolves to no existing row is a Step-1
+  validation failure (`entry_id` must exist) — **surface it as a missing
+  admission**, naming the `Item Ref` and `Signal Family`, and do **not**
+  manufacture the row from the close instruction. Synthesizing the missing half
+  would invent an `Estimate` nobody committed to and drive the ratio toward 1.00
+  by construction.
+- **Exactly one record per close.** Every LG-5 exit PASS lands **either** one
+  `## Estimate-Actual Pairs` row **per admitted signal family** **or** a
+  `## Capture Exceptions` row for the family that has none. Zero rows for an
+  admitted family, and two rows in the same family at the same `Close Ordinal`,
+  are both defects to surface — a silent no-capture is never a valid outcome.
+- **`Estimate` is frozen at `ADD`.** The close is a `MODIFY` whose `fields:` map
+  carries `Actual` and `Actual Date` only (plus the recomputed `Elapsed` on F2).
+  **Reject a close instruction that carries `Estimate`**, and never render the
+  `Estimate` column in a re-score elicitation — the re-score is blind by protocol.
+- **`Start Date` is write-once on EVERY path — the rule binds to the field, not
+  to the action.** It is writable **only** on the admitting `ADD` at
+  `Close Ordinal` 1. **Reject any later instruction that carries `Start Date`** —
+  `MODIFY`, `CLOSE`, or `REACTIVATE`, in any family, at any ordinal, for any
+  stated reason **including a corrective edit**. Binding this to `REACTIVATE`
+  alone leaves the plain corrective `MODIFY` — a required operation, used to set
+  `Excluded Reason` — free to move it.
+- **The `Start Date` checks that bind are the ones that are not row-relative.**
+  `Elapsed` is **recomputed here** from the **stored** `Start Date` and the row's
+  `Actual Date` — never accepted as an asserted value — and on an `F2` row the
+  emitter's `Actual` is checked against that recomputation. Then validate every
+  row's `Start Date` against the **LG-4 DoR exit-PASS date of record in the gate
+  verdict**, an anchor outside this tracker. The within-item checks (`Elapsed`
+  non-decreasing in `Close Ordinal` across `F2` rows; one `Start Date` per
+  `Item Ref` across all families) still run, but **a shift applied uniformly to
+  every ordinal satisfies both of them** while shrinking every elapsed figure —
+  only the external anchor catches that. Any mismatch is a validation failure:
+  surface it; do not silently accept it and do not drop the row.
+- **A genuine `Start Date` correction is an exclusion, not an edit.** Set
+  `Excluded Reason: start-date-corrected` on every row of that `Item Ref` in
+  every family and require a fresh admission `ADD` at the next ordinal with the
+  corrected date. Never apply the correction in place.
+- **`REACTIVATE` supersedes, never overwrites.** Set the prior row's
+  `Excluded Reason` and write a new row at `Close Ordinal` *n+1*. Excluded rows
+  are **append-only** — never deleted (the same posture as the Tracker 6
+  `superseded` rule); deleting one destroys the rework signal.
+
 ## Tracker Schemas
 
 Read `references/tracker-schemas.md` for the complete schema definitions of all tracked
@@ -596,7 +669,11 @@ If the evidence field is empty, vague, or uses only [ASSUMPTION] labels:
 
 When a new tracker needs to be added to the system:
 
-1. Define the schema in `references/tracker-schemas.md`:
+1. Define the schema in `core/schemas/tracker-schemas.md` — the canonical, entity-derived
+   schema of record, and the copy every tracker from Tracker 5 onward has been defined in.
+   Do **not** define a new tracker in the skill-local `references/tracker-schemas.md`: that
+   copy holds Trackers 1–4 plus the § Tracker Integrity Rules, and adding a later tracker to
+   it would assert by omission that the intervening trackers do not exist. Specify:
    - Column names, data types, valid values (if constrained)
    - Required vs. optional fields
    - ID format (prefix-###)

@@ -10,12 +10,16 @@ name: Release tooling smoke
 #              domain-fan-out software import-graph scanner) in the closeout-smoke job;
 #              (2) each of the three core/deploy/tools node-graph tools runs its
 #              committed --self-test when any core/deploy/tools file changes, in the
-#              node-graph-tools-selftest job; AND (3) the CIAC-3 relation holds — the
+#              node-graph-tools-selftest job; (3) the CIAC-3 relation holds — the
 #              class set a downstream gate ASSERTS on is a subset of the MUST rows the
 #              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
 #              the committed asserted set), with the lint's own --self-test run in the
-#              same step so the lint cannot drift into always-passing — all asserted
-#              behaviorally by executing the scripts' checks and gating on exit code.
+#              same step so the lint cannot drift into always-passing; AND (4) each of
+#              the four finops-usage-extractor scripts runs its committed --self-test —
+#              the executable home of the store's conservation invariants and of the
+#              CIAC / SM / SE fail-closed assertions — when that skill changes, in
+#              the finops-selftest job — all asserted behaviorally by executing
+#              the scripts' checks and gating on exit code.
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
 #                  script asserts -> the closeout-smoke job fails; regress a
 #                  claim-version.sh or check-release-body-drift.sh self-test fixture ->
@@ -25,8 +29,11 @@ name: Release tooling smoke
 #                  node-graph-tools-selftest job fails; add a class to
 #                  core/deploy/allowlists/decision-emission-asserted-set.txt that is not
 #                  a MUST row of the playbook's EMISSION-CONTRACT block -> the CIAC-3
-#                  step fails; on an unrelated PR both jobs are skipped and absence is
-#                  treated as pass.
+#                  step fails; drop the reserved "unknown" seed from extract-usage.sh's
+#                  dim_agg so sum(by_X.*.tokens) no longer reconciles to session.tokens
+#                  -> the finops-selftest job fails (its own precision probe asserts
+#                  exactly that, in a temp copy); on an unrelated PR all three jobs are
+#                  skipped and absence is treated as pass.
 # Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
 
 # Smoke-tests the Stage 13 close-out automation on any PR that touches release
@@ -92,6 +99,9 @@ on:
       # the HARD GATE without ever triggering its regression suite.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
+      # finops-selftest inputs: the four scripts and the store schema they encode.
+      - 'core/skills/finops-usage-extractor/**'
+      - 'core/schemas/finops-usage-store-schema.md'
       - '.github/workflows/release-tooling-smoke.yml'
   push:
     branches: [main]
@@ -108,6 +118,9 @@ on:
       # Procedure 7a gate-predicate inputs — see the pull_request block above.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
+      # finops-selftest inputs — see the pull_request block above.
+      - 'core/skills/finops-usage-extractor/**'
+      - 'core/schemas/finops-usage-store-schema.md'
 
 permissions:
   contents: read
@@ -259,3 +272,96 @@ jobs:
             echo "::endgroup::"
           done
           exit "$rc"
+
+  finops-selftest:
+    name: FinOps usage-extractor script self-tests (Ubuntu)
+    # The four finops-usage-extractor scripts carry the ONLY executable form of the
+    # store's conservation invariants (sum(by_X.*.tokens) == session.tokens leaf by
+    # leaf; sum(stop_reason.*) == turns) and of the CIAC-1/1b ground-truth + SM-*/SE-*
+    # fail-closed assertions. Before this job, NO workflow and NO deploy.sh check ran
+    # them: a fail-closed predicate that nothing executes cannot fire, so it cannot
+    # fail — the same class of defect the release itself was closing.
+    #
+    # Hermetic: every self-test builds its store in a mktemp dir OUTSIDE the checkout,
+    # reads only the committed synthetic test-fixtures, and makes no network or gh
+    # call. Dependencies are jq + git, both present on the runner image. Gate on exit
+    # code, exactly like the two sibling jobs above.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        # Default depth: each --self-test reads committed fixtures from the working
+        # tree, not git history — a shallow checkout is sufficient.
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          command -v bash
+          command -v jq
+          command -v git
+
+      - name: finops script --self-tests (offline, synthetic fixtures only)
+        # Runs all four (no fail-fast) so one run reports every regression; emits a
+        # ::error:: annotation per failing script and exits non-zero if any failed.
+        run: |
+          set -uo pipefail
+          rc=0
+          for s in extract-usage rollup-attribution report-usage estimate-usage; do
+            echo "::group::${s}.sh --self-test"
+            if bash "core/skills/finops-usage-extractor/scripts/${s}.sh" --self-test; then
+              echo "OK: ${s}"
+            else
+              echo "::error::${s}.sh --self-test FAILED"
+              rc=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$rc"
+
+      - name: Precision probe — the self-test actually FAILS on a broken invariant
+        # Without this, a self-test that silently degraded to zero assertions would
+        # green forever and this job would be the tenth fail-open, not the fix for the
+        # ninth. Breaks a real invariant the schema declares — the reserved "unknown"
+        # seed in dim_agg, which is what makes sum(by_X.*.tokens) == session.tokens
+        # hold for a partial dimension — in a THROWAWAY temp copy, never the checkout,
+        # and asserts a non-zero exit. A pass here would mean the gate is blind.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/extract-usage.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = '({ "unknown": [] }; . + { ($e.k): ((.[$e.k] // []) + [$e.r]) })'
+          new = '({}; . + { ($e.k): ((.[$e.k] // []) + [$e.r]) })'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in extract-usage.sh "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — extract-usage.sh --self-test returned 0 with the reserved \"unknown\" seed removed. The conservation assertions are not detecting a broken dimension partition; this gate is blind."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'analysis-dimension invariants' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the analysis-dimension invariant assertion — the self-test may be failing for an unrelated reason, which would mask a real conservation regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — a broken reserved-\"unknown\" seed correctly failed the conservation assertions (exit $probe_rc)."

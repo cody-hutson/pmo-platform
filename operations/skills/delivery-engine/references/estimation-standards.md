@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This document is the canonical source of **estimation discipline** for the delivery-engine skill — how an estimate's precision is bounded by lifecycle phase, how far out work may be committed versus forecast, the **canonical focus-factor table this doc owns**, the three-zone buffer model, the **buffer-consumption RAG banding** (§4.1), the rule that velocity and derived estimates are expressed as ranges rather than points, the contingency-versus-management-reserve distinction, and the **milestone-variance (SPI) RAG banding** (§7). It is read by the delivery-engine skill: **Mode D (Sprint Planning)** reads the Cone-of-Uncertainty band widths, planning-horizon commitment rules, the focus-factor table, the buffer model, the buffer-consumption banding, and the milestone-variance RAG when building a capacity model and sprint scope; **Mode E (Execution Control Tower)** reads the velocity-as-range enforcement rule (§5) when reporting velocity or capacity.
+This document is the canonical source of **estimation discipline** for the delivery-engine skill — how an estimate's precision is bounded by lifecycle phase, how far out work may be committed versus forecast, the **canonical focus-factor table this doc owns**, the three-zone buffer model, the **buffer-consumption RAG banding** (§4.1), the rule that velocity and derived estimates are expressed as ranges rather than points, the contingency-versus-management-reserve distinction, the **milestone-variance (SPI) RAG banding** (§7), and the **estimation-calibration loop** — the post-hoc estimate-versus-actual measurement, its bias band, and its consumer contracts (§8). It is read by the delivery-engine skill: **Mode D (Sprint Planning)** reads the Cone-of-Uncertainty band widths, planning-horizon commitment rules, the focus-factor table, the buffer model, the buffer-consumption banding, the milestone-variance RAG, and the estimation-calibration loop (§8) when building a capacity model and sprint scope; **Mode E (Execution Control Tower)** reads the velocity-as-range enforcement rule (§5) when reporting velocity or capacity.
 
 **Sibling relationship.** This doc is the topical home for **estimation** parameters. Its two siblings own adjacent axes: `sprint-defaults.md` owns sprint **cadence** parameters (sprint length, WIP limits, velocity-stabilization windows, ceremony time-boxes) and the iteration-vs-flow decision model; the capacity-model reference doc (this skill's `references/` set) owns the **supply** calculation (available-hours derivation, effective capacity). Where those docs need the focus factor, they reference the canonical table in §3 of this doc by its role and do not restate the value — see the Consumers note in §3.
 
@@ -149,3 +149,338 @@ An SPI of 1.00 is exactly on schedule; below 1.00 is behind; above 1.00 is ahead
 **Naming guard (normative).** Name this metric **"milestone variance (SPI)"** or **"milestone slip"** — **NEVER "Schedule Variance."** The "Schedule Variance" label is reserved against to avoid collision with the EVM Schedule Variance (SV = earned − planned, a *cost*-denominated figure), per the metric-registry naming rule. The milestone-variance signal here is the *index* (SPI ratio), not the EVM SV difference.
 
 **Application rule.** Compute and band milestone variance only when a **schedule baseline exists** (a planned milestone %-complete or earned/planned schedule value). When no baseline exists, the SPI **cannot be computed** — emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; never fabricate a RAG color on absent input.
+
+---
+
+## 8. Estimation-Calibration Loop
+
+§1–§7 set how an estimate is *bounded* before the work is done. This section closes the loop from the other side: it measures, after the work is done, **how far the estimates actually landed from the outcomes**, and defines the one governed way that measurement is expressed, banded, and fed forward.
+
+**Scope and altitude.** The unit of analysis is **one team · one signal family (§8.1) · one window of 3–5 completed iterations**. Per-item figures are inputs only and are never reported as a team signal. **Per-person attribution and cross-team comparison are prohibited** — `sprint-defaults.md` §3.2 rules 3 and 5 (velocity is team-specific and is never a performance metric) extend to this metric by identical reasoning, and are restated here rather than left implicit for a new measure. **Portfolio-altitude rollup is out of scope for this section** and belongs to a separate sibling item; a rollup would first have to solve cross-team unit incommensurability, which is a different problem from this one. This section builds no rollup hook.
+
+**Content provenance: in-corpus-grounded.** Every boundary, window, threshold, and controlled vocabulary in this section is **adopted from an existing in-corpus owner** — §1's Cone-of-Uncertainty rows, §5's velocity window, `sprint-defaults.md` §3.1/§3.2, and `core/schemas/gate-evaluation-spec.md` § Layer 3. **No value in this section is minted here.** Where a figure is derived rather than adopted, the derivation is shown (§8.4).
+
+**Validity threats are declared before any conclusion is drawn.** This is a measurement method, and its six known threats — **V1** small-sample instability · **V2** survivorship · **V3** re-scoring circularity · **V4** Goodhart pressure · **V5** unit drift · **V6** self-normalization — are stated in full, with mitigations and honest residuals, in **§8.7**. **§8.7 is read before a §8 output is treated as a finding**, not after. The evidence-quality bar in §8.7 is normative and binds every emission.
+
+---
+
+### 8.1 The estimation ratio (per item)
+
+```
+Estimation ratio    R = actual ÷ estimate        (same unit on both sides; estimate > 0)
+```
+
+**Sign convention (normative).** `R` is **always** `actual ÷ estimate` — the arithmetic never inverts. `R = 1.00` is exact, and the direction of the miss is carried by **which side of 1.00** the figure sits on, exactly as §7's SPI carries schedule direction. **A bare `|R − 1|`, a bare "accuracy %", or any other absolute-error form is prohibited**: collapsing direction destroys the only information that selects a corrective lever (§8.2).
+
+**The three signal families.** Each family pairs a different promise with a different outcome. They are computed and reported separately.
+
+| | Family | `estimate` (the promise) | `actual` (the outcome) | Unit | Grain | `R > 1.00` reads as | Concern side |
+|---|---|---|---|---|---|---|---|
+| **F1** | **Re-scored effort / size** | the committed story-point figure — the **midpoint of the committed range** (§5) | the story-point figure the team assigns at close, **blind** to the original | story points | **item** | the item was **bigger** than estimated → under-estimating | `R > 1` |
+| **F2** | **Elapsed / cycle time** | the **§2 committed-horizon budget** — the length of one iteration, in **business days**, for a committed item | elapsed **business days**, item start → DoD met | business days | **item** | the item took **longer** than the committed horizon allowed → horizon over-commitment | `R > 1` |
+| **F3** | **Delivered-vs-planned count** | points (or item count) **planned into** the iteration | points (or item count) that **met DoD** in that iteration | points or items | **iteration** | the team delivered **more** than it planned → under-committing | `R < 1` (over-committing) |
+
+**Three normative rules on the families:**
+
+1. **Never pool across families.** F1 and F2 are item-grain; F3 is iteration-grain. Each family carries its **own** `N`, bias, spread, and band. A single "overall" R population is prohibited — it would average an item-grain and an iteration-grain quantity.
+2. **The direction of concern flips at F3, so emit the word, not the number.** Because F3's estimate is a *commitment* rather than a *size*, its bad side is `R < 1`. Bias is therefore **always emitted with a direction word** drawn from the closed set `under-estimating | over-estimating | over-committing | under-committing` — never as a bare figure. (F1/F2: `R > 1` → `under-estimating`, `R < 1` → `over-estimating`. F3: `R < 1` → `over-committing`, `R > 1` → `under-committing`.)
+3. **Every pair carries its `Estimate Phase`** — the §1 lifecycle-phase row the estimate was made at. Without it the realized-versus-claimed comparison in §8.4 is not computable, and the pair is **incomplete rather than partially usable** (§8.5).
+
+---
+
+### 8.2 Calibration bias and calibration spread (per team-window)
+
+```
+Calibration bias      B = median(R)          over the window, after documented outlier exclusion
+Calibration spread    S = max(R) ÷ min(R)    over the same window, same exclusions
+```
+
+The window is **3–5 completed iterations**, adopted from §5's velocity window; outlier iterations are excluded **with documentation**, per `sprint-defaults.md` §3.2 rule 2.
+
+**Why the median, and why this deviation from §5 is named rather than silent.** §5 builds a velocity range from minimum / average / maximum. Bias uses the **median** instead, because `R` is a **ratio** — floored at 0, unbounded above, and right-skewed — where a single over-run dominates the arithmetic mean. In the §8.4 worked fixture, replacing its largest ratio with a single `R = 4.00` over-run moves the mean from 1.22 to 1.69 while leaving the median at 1.20, exactly unmoved. The deviation from §5's "average" is deliberate and is recorded here so a reader does not have to discover it.
+
+**Why max ÷ min, and why it introduces no new machinery.** Spread **is** §5's own minimum/maximum convention applied to `R`. It adds no new statistic, no percentile, and no threshold. It is also **coverage-comparable to a §1 cone band** — full range against full range. An interquartile form would systematically read narrower than a cone band and would silently overstate a team's precision, which is the opposite of what this section is for. The documented-exclusion discipline (`sprint-defaults.md` §3.2 rule 2) is what makes a min/max estimator safe, and that discipline is already mandatory.
+
+**Bias and spread never collapse into one figure (normative).** They are two different defects with **opposite** remedies, and only bias is banded. Consider two teams with identical mean absolute relative error:
+
+| | `B` (median R) | `S` (max ÷ min) | What is actually true | The correct lever | What a single collapsed "accuracy" number would do |
+|---|---|---|---|---|---|
+| **Team A** | **1.30** | 1.15 | Systematically under-estimates by ~30%; **highly predictable** | **A multiplier.** Apply ≈1.3 to the next estimate, or move the focus factor toward the bottom of §3's valid range as a governed change. One lever, high confidence. | Reports "poor accuracy" — the verdict is right, but it names no direction, so the team guesses the lever |
+| **Team B** | **1.00** | 2.60 | **Zero systematic bias**; large item-to-item scatter | **Decompose smaller, advance the cone phase, or widen the emitted range (§5).** A multiplier is useless here | Reports "poor accuracy" — and the obvious remedy, a correction factor, **injects a bias where none existed**, making Team B strictly worse |
+
+**The purpose of this loop is to select a lever, and a single number cannot.** Bias is systematic and is correctable by a multiplier; spread is random and is **not**. Applying Team A's correction to Team B is not merely unhelpful — it is harmful. Therefore this section emits **two figures and never one**, only **bias** is banded, and any consumer acting on a §8 output must name **which of the two** drove its recommendation (§8.6).
+
+---
+
+### 8.3 Estimation-bias band
+
+A 🟢/🟡/🔴 RAG on the **calibration bias `B`** for one team, one signal family, one window.
+
+| Band | Calibration bias `B` | Reading | `WHEN…THEN…` decision rule |
+|---|---|---|---|
+| **🟢 GREEN** | **0.90 ≤ B ≤ 1.10** | No actionable systematic bias — the central multiplier sits inside the tightest band the cone recognises | WHEN 0.90 ≤ B ≤ 1.10 THEN report calibrated — make **no** bias adjustment; spread, not bias, is the remaining lever |
+| **🟡 YELLOW** | **0.80 ≤ B < 0.90** or **1.10 < B ≤ 1.25** | Emerging systematic bias — outside Build-underway precision, still inside Design-complete precision | WHEN B is in the yellow band THEN surface `B`, its **direction word**, `N`, and the confidence word as a `[RECOMMENDED]` estimate adjustment; do **not** change the §3 focus factor |
+| **🔴 RED** | **B < 0.80** or **B > 1.25** | Material systematic bias — the central multiplier is looser than the credible range a Design-complete estimate is even permitted to claim | WHEN B is red THEN surface direction and magnitude; recommend re-baselining (re-anchor the reference stories, or propose a focus-factor move **inside §3's valid range as a governed change**); and widen every emitted range per §5 until the next window closes |
+
+**Boundary anchoring (normative — both boundaries adopt existing in-corpus values, neither is invented).** The **🟢/🟡 boundary at 0.90 / 1.10 directly adopts the §1 Build-underway variance band** (`0.9× – 1.1×`) — the tightest band the cone recognises, and the maturity every *closed* item has necessarily reached. The **🟡/🔴 boundary at 0.80 / 1.25 directly adopts the §1 Design-complete band** (`0.8× – 1.25×`). Both are existing §1 table cells read verbatim, so this doc carries **one** cone table rather than a cone table plus a competing bias table. Two properties are load-bearing rather than incidental:
+
+- **The cone rows are multiplicative and reciprocal-symmetric** (`1 ÷ 0.8 = 1.25` exactly; `1 ÷ 0.9 = 1.11` against the tabled `1.1`, symmetric to rounding), so over- and under-estimation are penalised **equally**. An additive ±% band would not have this property and would silently treat one direction as worse than the other.
+- **The band inherits the cone's own semantics.** "🔴 RED" is literally the statement *"this team's systematic multiplier is wider than the credible range §1's cone rule permits a Design-complete estimate to claim."* The band therefore measures conformance to a rule this doc already asserts, instead of importing an outside standard.
+
+*Anchor considered and rejected:* the canonical Schedule (SPI) band adopted by §7. It is **one-sided** — being ahead of schedule is good, so SPI carries no upper bound — whereas estimation deviation is bad in **both** directions. Mirroring its magnitudes symmetrically would be a derivation rather than an adoption, and would compete with §1's rows inside this same file.
+
+**Naming guard (normative).** Name the per-item metric **"estimation ratio"**, the window figures **"calibration bias"** and **"calibration spread"**, and the band the **"estimation-bias band"**. **NEVER "estimation variance"** — §1 already uses "estimate-variance band" for the cone, and §7's naming guard already reserves "variance" against the EVM Schedule Variance collision. **NEVER "velocity" or "velocity accuracy"** — §5 owns velocity at this altitude, and the release-pipeline velocity field is owned elsewhere (§8.5). **NEVER a single collapsed "accuracy score"** — bias and spread never collapse (§8.2).
+
+This band is **orthogonal to the four bands the delivery-engine reference set already carries**, and must not be conflated with any of them:
+
+| Band | Owner | What it bands |
+|---|---|---|
+| **Buffer-consumption** | §4.1 of this doc | buffer **burn** — consumed ÷ the iteration-buffer figure |
+| **Milestone-variance (SPI)** | §7 of this doc (values adopted by reference from the canonical Schedule-RAG home) | **schedule** earned versus planned |
+| **Floor-RAG** | `tech-debt-capacity.md` §1.1 | tech-debt **allocation** versus the floor |
+| **Demand-supply gap** | the capacity-model reference doc §9 | committed **demand** versus effective supply |
+| **Estimation-bias** *(this section)* | §8.3 | **forecast quality over a closed window** |
+
+Five orthogonal bands, each owned by its topical doc. **None of the other four measures forecast quality, and §8.3 measures nothing the other four measure** — a team can be schedule-🟢 while under-estimating by 40% (it padded the schedule) and schedule-🔴 while estimating perfectly (it was blocked). Neither predicts the other.
+
+**Band-ownership determination (normative — the [ADR-065](../../../../core/ADRs/ADR-065-health-rag-band-canonical-home.md) two-branch test).** ADR-065 scopes exactly four project-health indicators — **Schedule/SPI, Budget/CPI, Risk, and Scope** — to a single canonical shared home. It does **not** claim every RAG band on the platform, as the three sibling bands in the table above (which it leaves undisturbed) demonstrate. Its posture therefore resolves to a two-branch test that any new band must be routed through:
+
+| Branch | Predicate | Required posture | This doc's instance |
+|---|---|---|---|
+| **1** | The band is an **instance of one of the four canonical indicators** | **Adopt by reference; never restate the values** | **§7** — milestone variance adopts the canonical Schedule (SPI) band by reference |
+| **2** | The band measures something **no canonical indicator owns** | **Owned by its topical doc**, carrying (a) a distinct name, (b) an explicit orthogonality statement, and (c) boundary anchoring to existing in-corpus values | **§8.3** |
+
+**Verdict: Branch 2.** The falsification test is applied against the nearest incumbent, Schedule/SPI: it measures *schedule earned against schedule planned at a point in time* — a progress signal — whereas calibration bias measures *the systematic multiplier between an estimate and its realized outcome across a closed window* — a forecast-quality signal. They dissociate in **both** directions, as stated above. Budget/CPI is cost-denominated rather than sizing; Risk and Scope are not ratio metrics at all. **No canonical indicator owns this measurement**, so §8.3 owns it here and discharges all three Branch-2 obligations: (a) the naming guard above, (b) the orthogonality table above, and (c) the boundary anchoring above. Creating a **new shared band document** instead is the option ADR-065 itself already rejected under reuse-first — the bar for a new governance file is *necessary*, not *plausible* — and it is rejected here for that same recorded reason.
+
+**Window-size anchoring (normative).** The window floor and the confidence qualifier **adopt `sprint-defaults.md` §3.1's Velocity Stabilization Timeline verbatim**, and are consistent with the platform-wide calibration-availability rule in `core/schemas/gate-evaluation-spec.md` § Layer 3 ("< 3 records → *Insufficient calibration data*"). No private threshold is minted.
+
+| Window (completed iterations) | Confidence word (`sprint-defaults.md` §3.1, verbatim) | §8 posture |
+|---|---|---|
+| **1–2** | **Unreliable** | `not computable` — do not band, do not feed forward |
+| **3–5** | **Emerging pattern** | Band; a 🔴 warrants re-check at the next window before any governed focus-factor change |
+| **6–8** | **Reliable baseline** | Band; a 🔴 supports a governed focus-factor proposal |
+| **9+** | **High confidence** | Band; the cross-window trend is meaningful |
+
+**Confidence-qualifier rule (normative).** Every emitted `B` and `S` carries its window's confidence word. **A band emitted without its confidence word is incomplete** and is not a valid §8 output. This applies to the estimation ratio the same window-qualification discipline the delivery-engine skill already enforces for velocity.
+
+**Application / negative-path rule (normative — fails closed).** Compute and band the estimation bias **only when the window carries at least 3 completed iterations** of estimate/actual pairs for that family. Below that the band **cannot be computed** — emit
+
+```
+estimation bias: not computable — N iteration(s) of history (< 3); do not use for forecasting
+```
+
+and recommend accruing the window. **Never default the band to GREEN**, never band a 1–2-iteration window, and never approximate across the floor. Absent or partial input yields the not-computable string, never a colour — the same negative-path posture §4.1 ("never default the band to GREEN on absent input") and §7 ("never fabricate a RAG color on absent input") already carry.
+
+---
+
+### 8.4 Calibration spread → §1 cone-phase equivalence (no second band)
+
+**Spread is not banded and introduces no new boundary.** It is expressed as an equivalence against §1's own rows, read as `high ÷ low` widths:
+
+| §1 lifecycle phase | §1 variance band | Width (`high ÷ low`) |
+|---|---|---|
+| **Build underway** | 0.9× – 1.1× | **1.22** |
+| **Design complete** | 0.8× – 1.25× | **1.56** |
+| **Requirements defined** | 0.67× – 1.5× | **2.24** |
+| **Approved concept** | 0.5× – 2× | **4.00** |
+| **Initial concept** | 0.25× – 4× | **16.00** |
+
+Every value in the Width column is **§1's own two cells divided** — nothing is added to the corpus's stock of thresholds.
+
+**Realized-precision phase.** A team's realized precision is the **narrowest §1 row whose width is ≥ S** (inclusive). It is emitted as a **sentence, never a colour**:
+
+> *realized precision: Requirements-defined-equivalent (S = 1.9) — these items were estimated at Design-complete.*
+
+When `S` exceeds 16.00, emit `realized precision: wider than Initial-concept (S = <value>)`. **Never extrapolate a sixth row.**
+
+**Why this is the section's most useful output.** When the realized phase is **wider** than the phase the estimates were made at, the team is claiming a precision it does not have — which is exactly the condition §1's cone rule already forbids ("an estimate's stated range MUST be no tighter than the variance band for the item's current lifecycle phase"). §8.4 makes that rule **measurable** rather than merely asserted, and the remedy — widen the emitted §5 range to the realized band — **mutates nothing**.
+
+**Worked computation (synthetic fixture — 5 F1 pairs, one window).** Illustrative figures only, in the manner of §1's "point figure = 100" illustration.
+
+| Item | Estimate | Actual (blind re-score) | R |
+|---|---|---|---|
+| a | 3 | 5 | 1.67 |
+| b | 5 | 5 | 1.00 |
+| c | 8 | 10 | 1.25 |
+| d | 5 | 6 | 1.20 |
+| e | 13 | 13 | 1.00 |
+
+`R` sorted: 1.00, 1.00, **1.20**, 1.25, 1.67 → **`B` = 1.20** → direction **under-estimating** → band **🟡 YELLOW** (1.10 < B ≤ 1.25). **`S` = 1.67 ÷ 1.00 = 1.67** → the narrowest row with width ≥ 1.67 is **Requirements-defined (2.24)** → realized precision **Requirements-defined-equivalent**. If these items were estimated at Design-complete, §5's emitted range for this team widens to the 0.67× – 1.5× band until the next window closes. **Boundary cases:** a `B` sitting exactly on a boundary takes the **tighter** band (the bounds are inclusive as tabled); an `S` sitting exactly on a row width takes **that** row.
+
+---
+
+### 8.5 Inputs — the actuals-capture contract
+
+The capture surface that supplies §8 pairs MUST carry the following field set. Field names are **Title Case with spaces**, the convention the platform's tracker schemas use; if the capture surface derives the window from an entity, the entity-join-key form (`*_id`) is the correct variant for that one field and satisfies this contract equally.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| **Signal Family** | enum `F1` \| `F2` \| `F3` | Yes | Pairs from different families are **never pooled** (§8.1 rule 1) |
+| **Estimate** | number > 0 | Yes | F1: the committed point figure (the §5 range **midpoint**). F2: the §2 committed-horizon budget in **business days**. F3: points or items planned into the iteration |
+| **Actual** | number ≥ 0 | Yes | F1: the **blind** re-score at close. F2: elapsed **business days**, start → DoD met. F3: points or items delivered |
+| **Estimate Phase** | enum — the five §1 lifecycle-phase names | Yes | The cone row the estimate was made at. **Required** — §8.4's realized-versus-claimed comparison is not computable without it |
+| **Window Key** | string | Yes | The iteration or period identifier that groups pairs into a window, and against which documented outlier exclusion is applied |
+| **Evidence Grade** | enum `[SOURCE]` \| `[INFERRED]` \| `[ASSUMPTION – CONFIRM]` | Yes | **F1 is capped at `[INFERRED]`** — a re-score is itself an estimate (§8.7 V3) |
+| **Excluded Reason** | string | No | Present **if and only if** the pair is excluded from the window, carrying the documented reason per `sprint-defaults.md` §3.2 rule 2 |
+
+**Two writes at two gates, never one (normative — fails closed).** A pair is **not** written by a single instruction at close. The promise half and the outcome half are written at **different gates**, by **different mode invocations**, and the contract names both:
+
+| Write | Gate | Emitted by | Fields written | Posture |
+|---|---|---|---|---|
+| **W1 — admission** | **LG-4 DoR exit PASS / CONDITIONAL PASS** (item admitted to execution) | delivery-engine **Mode C** | `Signal Family`, `Estimate`, `Estimate Phase`, `Start Date`, `Window Key`, `Evidence Grade` | Creates the record. `Estimate` and `Estimate Phase` are **frozen** here and never rewritten at close |
+| **W2 — close** | **LG-5 Dev Complete (DoD) exit PASS / CONDITIONAL PASS** | delivery-engine **Mode F** | `Actual`, `Actual Date`, and (F2) the derived elapsed figure | Completes the record against the frozen promise. Carries **no** `Estimate` — that is what keeps the F1 re-score blind — and **no** `Start Date`, on this or any later path |
+
+**W1's fields are frozen against every path, not just against W2 (normative).** `Estimate`, `Estimate Phase`, and `Start Date` are writable **only** on W1. The freeze binds to the **field**, not to the action that would move it: a corrective edit, an exclusion write, or a reopen is as prohibited as a close. `Start Date` carries the strongest form of this because it is **derived from, not merely compared against** — the elapsed figure of every close of that item is computed from it, so a single shift moves them all at once while leaving each of them internally consistent. A capture surface implementing this contract states the enforcement in terms of the field and supplies an anchor **outside** its own rows; comparing an item's rows only to each other cannot detect a shift applied to all of them.
+
+**One record per (item × family × close), never one per close (normative).** An item close owes a pair to **every family it was admitted under** — an F1 pair *and* an F2 pair, not a choice between them. The two are structurally incompatible in a single record: F1's `Actual` is a blind re-score with **no elapsed figure**, F2's `Actual` **is** the elapsed figure. A capture surface that keys its records on the close alone can hold one or the other, which puts F1 and F2 on **disjoint item sets** — and the F1↔F2 corroboration §8.7 V3 requires before an F1-only 🔴 may drive an action then compares two populations **sharing no items**, reading as performed while corroborating nothing. **`Signal Family` is therefore part of the record's identity, not an attribute of it.**
+
+**W1 is not optional and its absence is not recoverable at close.** A close instruction is a **modification of an existing record**; a close fired against an item that was never admitted has **no record to modify**, so the pair is unwritable and the close must record a capture exception (`no-estimate-of-record`) instead. **A capture contract that names only the close is not a capture path** — it describes half a write and reads as complete. Any surface implementing this contract states, per field, **which of the two writes owns it**; a field owned by neither is a defect in the surface, not a value to improvise at close.
+
+**Explicit-N/A discipline (normative — fails closed).** A pair either carries the **full** required field set or is **absent**. **Never a partial row, and never a zero-filled `Actual`.** A zero-filled actual is indistinguishable from a genuinely zero-effort item and would drag `B` toward 0 — a synthesized figure silently biasing the baseline is exactly the failure this discipline forecloses.
+
+**Forward-only (normative).** **Never backfill historical pairs.** A reconstructed estimate is not the estimate that was made, and a backfilled population is precisely the survivorship-biased one §8.7 V2 warns about. Capture is grandfathered forward from the point the surface lands.
+
+**No per-person attribution (normative).** A pair carries no individual attribution. `sprint-defaults.md` §3.2 rule 5 binds here (§8.7 V4).
+
+**Boundary — the release-pipeline velocity instrument is neither read nor written (normative).** F3 has the same *shape* as the release-pipeline delivered-versus-planned ratio recorded in the release log, and **must never share a value with it.** That instrument measures the release pipeline's own throughput and explicitly declares that it is not a managed-delivery-team capacity model, naming this doc and the capacity-model doc as the owners of the team-altitude figure. **Different concept, same digits** — the same disambiguation form that standard already uses for the two 60/20/20 allocations. What is reusable is the **pattern** (explicit-N/A, forward-only grandfathering, the N=3 trigger, parser safety), never the field. **Cite the convention; share no value.**
+
+---
+
+### 8.6 Consumption — the feedback and reporting contracts
+
+Two consumers read §8 outputs. **Both are read-only against §8, and neither writes any value into this document.**
+
+#### The grant — enumerated, and checked rather than asserted (normative — fails closed)
+
+An earlier form of this section asserted its own completeness ("a consumer needs nothing from §8 that is not listed here"). **That claim has no observable predicate** — nothing can be run against it, so a consumer that grew a new read simply falsified it silently, and did so: Lever 2 below requires the item's declared `Estimate Phase`, which the original seven-element grant did not carry. The assertion is therefore replaced by an **enumerated grant** plus a **diff a reviewer can run**.
+
+**The grant.** Each row names one element, its defining home, and which consumer may read it. **A consumer may read the elements marked for it and nothing else.**
+
+| # | Element | Defined in | Mode D (§8.6.1) | Mode E (§8.6.2) | Why the consumer cannot do without it |
+|---|---|---|---|---|---|
+| **G1** | `B` — calibration bias | §8.2 | ✔ | ✔ | The figure Lever 1 proposes and the report bands |
+| **G2** | The **direction word** (closed 4-set) | §8.1 rule 2 | ✔ | ✔ | A bare `B` names no lever; F3's concern side is inverted |
+| **G3** | The **estimation-bias band** 🟢/🟡/🔴, **cited by role — no boundary value restated** | §8.3 | ✔ | ✔ | Selects whether a lever fires at all |
+| **G4** | `S` — calibration spread | §8.2 | ✔ | ✔ | The spread half; never collapsed with `B` (§8.2) |
+| **G5** | The **realized-precision phase** (sentence form, never a colour) | §8.4 | ✔ | ✔ | Lever 2's left-hand side |
+| **G6** | The **§1 phase↔width rows** — each phase's `low×–high×` pair and the width **ordering** over them | §8.4 table | ✔ | ✔ | "Wider than" is an ordering claim, and widening §5's range needs the target band's actual bounds |
+| **G7** | The pair's **declared `Estimate Phase`** | §8.5 field set | ✔ | ✔ | Lever 2's right-hand side — **the element whose omission made the original grant unexecutable** |
+| **G8** | `N` — completed iterations in the window | §8.3 | ✔ | ✔ | Selects the confidence row; sizes the accrue-recommendation |
+| **G9** | The **confidence word** (verbatim 4-set) | §8.3 window table | ✔ | ✔ | A band without it is not a valid §8 output (§8.3) |
+| **G10** | The **window floor** and §8.3's **`not computable` string, verbatim** | §8.3 | ✔ | ✔ | The negative path; the quantified `floor − N` accrue figure |
+| **G11** | The **`Signal Family`** every figure belongs to | §8.1 | ✔ | ✔ | Families are never pooled; the F1-only-🔴 corroboration test and the discordance rule are both family-indexed |
+| **G12** | The window's **identity and recency** (`Window Key`; whether it is the most recent closed window) | §8.5 field set | ✔ | ✔ | Distinguishes a current advisory from a stale one; the trend needs window ordering |
+| **G13** | **Coverage** — the window's pair count, the iteration's **planned-item denominator**, and the **capture-exception count for that family with its closed-set reason breakdown** | §8.6.2 / the capture surface (`tracker-schemas.md` § Tracker 10 § Capture Exceptions) | ✔ | ✔ | §8.7 V2's survivorship control; renders at any `N`. The exception count is the **only** read of the exception population — without it, that population is written at every close and consumed by nobody |
+| **G14** | The **cross-window trend word** — `improving` \| `stable` \| `degrading` — **with its `≥ 2 banded windows` domain and its §8.3-bounded strength** | §8.6.2 (the word adopted from `gate-evaluation-spec.md` § Layer 3; the domain and the strength bound defined in §8.6.2 § Trend) | ✔ | ✔ | Required to state that `B` is *trending* toward 1.00 — and the domain travels with the word, because a consumer that gets the word without its domain mints a window count of its own |
+| **G15** | The **points-per-item throughput trend** (the inflation cross-check's second input) | `sprint-defaults.md` §3.2 rule 4, read through §8.6.2's inflation flag | ✔ | ✔ | `B` → 1.00 is what success and what gaming both look like; only the throughput trend separates them |
+| **G16** | The **`Evidence Grade`** of the window's pairs | §8.5 field set, bound by §8.7's evidence bar | ✔ | ✔ | An `[ASSUMPTION – CONFIRM]` pair may not alone drive a 🔴; F1 is capped at `[INFERRED]` |
+
+**The completeness check (normative — fails closed).** Completeness is a **diff**, run whenever this section or either consumer's instruction text changes:
+
+1. For each consumer, extract every §8 element its instruction text **reads or applies**.
+2. Diff that set against this table's column for that consumer.
+3. **Used-but-not-granted → FAIL.** Resolve by widening the grant **or** removing the use — never by leaving the use uncited. A consumer reading an element this table does not grant it is operating outside the contract even when the read is reasonable.
+4. **Granted-but-unused → FAIL.** Remove the row. A grant nobody exercises is an unfalsifiable claim of coverage.
+5. **An unrun diff is a FAIL, not a pass.** The absence of the check is indistinguishable in the artifact from a clean check — which is exactly the failure mode this replaces.
+6. **The diff covers rendering, not only reading.** An element a consumer reads **as a condition** but renders nowhere is `used-but-unobservable` and is a **FAIL** on the same footing as `used-but-not-granted` — see §8.6.2 § Conditioned-on state is rendered.
+
+**Runner (normative — a fail-closed predicate that names nothing to run it is a specification, not a check).** This diff is executed by [`pmo-skill-editor`](../../../../release/skills/pmo-skill-editor/SKILL.md) **Mode C (Regression)**, whose trigger — an edit to a skill or to its consumers — is exactly this check's stated trigger condition, and it is re-verified at **Stage 7 Dev Testing** ([`pmo-qa-auditor`](../../../../core/skills/pmo-qa-auditor/SKILL.md) Mode G) on the PR carrying the change. **No CI job executes it**, and that is stated rather than implied: a reader must not mistake a named agent-run predicate for an automated one. Rule 5 binds the runner as much as the author — a diff neither of them ran is an unrun diff.
+
+**The grant is one-directional.** Widening it adds **reads**, never writes: every element above is read-only, and no consumer edit may convert a grant row into a write path. `estimation-standards.md` has **one** author; a consumer that needs an element it lacks requests a grant row, it does not acquire authorship.
+
+#### 8.6.1 The estimate-feedback consumer (delivery-engine Mode D)
+
+**MAY read**, and only these: the elements marked **Mode D** in the grant table above. The set is **not restated here** — a second copy would be a second home, and the drift between a restated list and the grant is precisely the defect that made Lever 2 unexecutable.
+
+**Emission requirements (normative — fails closed).** The advisory is not optional and its absence is not silence:
+
+- **Exactly one calibration block per signal family**, each opened with the literal token **`estimation calibration`**. Families are never pooled (§8.1 rule 1), so one merged block for two families is a defect, not a summary.
+- **The block renders on the negative path too** — with §8.3's `not computable` string verbatim (G10) plus the quantified accrue-recommendation. Coverage (G13) renders at **any** `N`.
+- **The conditioned-on elements render here as well** — the **window** and whether it is the most recent closed one (G12), the **points-per-item throughput direction** whether or not the inflation flag fires (G15), and the window's **weakest evidence grade** with its `[ASSUMPTION – CONFIRM]` count (G16). Mode D's own MUST-NOTs rest on all three: it may not fire a lever off a stale window, its inflation flag is unreadable without its second input, and its F1-only-🔴 corroboration test is an evidence-bar judgement. **Rendered → the MUST-NOT is falsifiable; unrendered → its non-firing is unobservable** (§8.6.2 § Conditioned-on state is rendered, which carries the check and its runner).
+- **The absence of the `estimation calibration` token is the detectable failure signature.** A check over the emission **fails closed**: token present → the block is graded; **token absent → FAIL, never a pass**. An emission carrying no block is indistinguishable from a working loop that had nothing to say, which is why absence is graded rather than excused.
+
+**Runner (normative — the sibling checks in §8.6.2 each name one; this one is not exempt).** The predicate above runs over an **emission**, not over a file in this repository, so — unlike the completeness diff, which compares two committed artifacts — **no CI job can execute it, and none is deferred**: a Mode E report is produced inside an agent turn and is never committed. Its runner is therefore the reviewer of that turn: the emission is checked at **Stage 8 Acceptance** ([`pmo-qa-auditor`](../../../../core/skills/pmo-qa-auditor/SKILL.md) Mode H, per-criterion AC verdicts) whenever a calibration block is part of the accepted scope, and at **Stage 7 Dev Testing** (Mode G) on any PR that changes §8 or a consumer's instruction text, by running Mode E against the fixture window and asserting the literal token is present once per signal family. Absent either review, the check is unrun — which is a gap in the review, not a pass for the emission. The `estimation calibration` token exists precisely so this predicate is a **grep, not a judgement call**: it is why the token is a fixed literal (§8.6.2 § One literal, checked by equality) rather than a paraphrase the reviewer has to recognise.
+
+**At most one BIAS lever per emission (normative — the double-correction closure).** §8.2 establishes that bias and spread have **opposite** remedies; §8.6 is where that separation is enforced at the point of action, because a contract that hands a consumer two levers and no arbitration rule invites both to fire on one signal:
+
+| Signal | Lever that may fire | Lever that MUST NOT |
+|---|---|---|
+| 🟢 band | none | Lever 1 — applying a multiplier to a calibrated team **injects** a bias (§8.2, Team B) |
+| 🟡 band | Lever 1's multiplier proposal | a §3 focus-factor move — not at this band |
+| 🔴 band | Lever 1's re-baseline proposal, which **supersedes** the multiplier | the multiplier **in addition to** the re-baseline — one signal corrected twice biases the plan in the **opposite** direction |
+| `not computable` | none | any bias lever |
+
+**Lever 2 is not a second bias lever and may fire alongside the bias lever**, because it changes the emitted range's **width** and never its **centre**. **`S` MUST NOT be fed through a multiplier** — it is a ratio of extremes with no centre and no direction, so multiplying by it is the one move that makes this loop actively harmful (§8.2, Team B). Two *bias* levers on one emission is a **defect**, never a stronger correction.
+
+Two levers, **both non-mutating**:
+
+- **Lever 1 — bias → a multiplier proposal.** When the band is 🟡 or 🔴, surface `[RECOMMENDED] apply ×B to the next <family> estimate`, rendering **the prior value, `B`, the direction word, the band, `N`, and the confidence word**. It is **offered, never applied**. A focus-factor move is surfaced as a `[RECOMMENDED]` proposal **inside §3's valid range** and requires a governed edit — §3's Consumers note makes the focus factor a value two other docs inherit by role without restating it, so an automated write there would propagate with no diff trail.
+- **Lever 2 — spread → a range-width floor.** When the realized-precision phase (**G5**) is **wider** than the item's declared `Estimate Phase` (**G7**) — an ordering read off §8.4's width column (**G6**) — §5's emitted range widens to the realized band, whose bounds are that same table's `low×–high×` pair. **Name both phases in the emission**: the phase the estimates claimed and the phase they realized. Withholding either leaves the reader a widened range with no stated cause. **This mutates nothing** — it makes §5's existing normative rule bind at the team's *measured* precision rather than its *claimed* precision. This is the substantive feedback path, and it is a demonstrable change to a future estimate.
+
+  **Where it binds (normative — fails closed).** Lever 2 fires at **estimate composition** — the Mode D path this section governs, at the point §5's range width is set — because *a measured-precision floor that binds only at reflection time never reaches the estimate it was measured to correct*, and the loop's stated value proposition goes unrealized while every document reads as though it were satisfied. It binds again at **any** later §5 range emission, including the §8.6.2 report's own velocity and capacity ranges: that is the **same** lever applied at a second emission point — **never a second lever, and never a second widening of an already-widened range**. **Check:** the consumer this section assigns Lever 2 to must implement it; an assignment carried here while only the reporting consumer implements it is a **FAIL**, caught by the completeness diff above (an assigned-but-unimplemented lever is `granted-but-unused` in its assigned column). **Runner:** as for that diff — `pmo-skill-editor` Mode C on any edit to §8 or a consumer's instruction text, re-verified at **Stage 7 Dev Testing**.
+
+**MUST NOT:**
+
+- **MUST NOT write to §3**, or to any other stored value in this document. The feedback posture is advisory for this release; an enforcing path is an explicit non-goal.
+- **MUST NOT emit a point figure.** §5 binds unconditionally; a bias-adjusted estimate is still returned as a range.
+- **MUST NOT apply a bias when the band is 🟢 or when the figure is `not computable`.**
+- **MUST NOT apply a bias derived from a family whose pairs it did not read** (§8.1 rule 1).
+- **MUST NOT act on an F1-only 🔴** without corroboration from F2 or F3 (§8.7 V3).
+
+#### 8.6.2 The team calibration report (delivery-engine Mode E)
+
+Renders, per **team**, per **window**, per **signal family**:
+
+| Element | Rendering |
+|---|---|
+| **Coverage** | `N` iterations, the pair count **against the iteration's planned item count**, the **capture-exception count for that family with its closed-set reason breakdown**, and the confidence word. The figures **reconcile**: `pairs + exceptions` is the family's **closed** population in the window, and `planned − (pairs + exceptions)` is the **unclosed remainder** — the survivorship gap §8.7 V2 names. Render the remainder as a number, never as an absence |
+| **Window** | the `Window Key` read, and **whether it is the most recent closed window** (**G12**) — a report off a stale window is otherwise indistinguishable from a current one, and the trend's ordering is unreadable without it |
+| **Bias** | `B` with its **direction word** and its 🟢/🟡/🔴 band, citing §8.3 **by role** — the boundary values are not restated in the report |
+| **Spread** | `S` with its realized-precision phase, and whether that phase is wider than the declared `Estimate Phase` |
+| **Trend** | across consecutive windows, using **`improving` / `stable` / `degrading`** — adopted verbatim from `core/schemas/gate-evaluation-spec.md` § Layer 3, not a new enum |
+| **Throughput** | the **points-per-item trend direction** (**G15**), rendered **whether or not the inflation flag fires** — it is the flag's second input, and while only the flag renders, a non-firing flag is indistinguishable from a cross-check that was never run |
+| **Inflation flag** | when `B` trends toward 1.00 **while points-per-item trends up**, flag it as **inflation, not calibration** — the throughput cross-check `sprint-defaults.md` §3.2 rule 4 already mandates |
+| **Evidence grade** | the **weakest** `Evidence Grade` present in the window's pairs, plus the count of `[ASSUMPTION – CONFIRM]` pairs (**G16**) — the input to §8.7's bar that such a pair may not *alone* drive a 🔴, and to F1's `[INFERRED]` cap |
+
+**Grant binding (normative).** Every element in the table above is drawn from the **Mode E** column of the grant: coverage → **G8/G9/G13**; window → **G12**; bias → **G1/G2/G3**; spread → **G4/G5/G6/G7**; trend → **G12/G14**; throughput → **G15**; inflation flag → **G14/G15**; evidence grade → **G16**; the discordance read across families → **G11**. **The report reads nothing outside that column**, and a new rendering element requires a grant row before it may be added here — the completeness diff is run against this mapping, not against the prose.
+
+**Conditioned-on state is rendered, not merely read (normative — fails closed, and its runner is named).** *A rule that conditions on state the artifact does not carry cannot be shown to have been disobeyed* — its non-firing is indistinguishable, in the emission, from its never having been evaluated. **G12**, **G15**, and **G16** were each granted and read as a condition while nothing rendered them, so the rules resting on them (a stale-window advisory, the inflation cross-check, and §8.7's evidence bar) produced normative statements whose violation no reader could observe. They are therefore **rendered** — the disposition chosen over the two alternatives, because dropping the conditions would delete live protections (V4's Goodhart cross-check and V2's survivorship control among them) and narrowing the grant would leave the same rules reading state they were no longer permitted to read.
+
+**The check:** for every grant element a MUST or MUST-NOT conditions on, the emission the rule governs **renders it** — rendered → the rule is falsifiable; **read-as-a-condition but rendered nowhere → FAIL**, resolved by rendering it or by removing both the condition and the grant row (§8.6 completeness diff rules 3–4). **Runner:** the §8.6 completeness diff — same runner, one column added: `pmo-skill-editor` Mode C on any edit to §8 or a consumer's instruction text, re-verified at **Stage 7 Dev Testing** (`pmo-qa-auditor` Mode G) on the PR carrying the change. **No CI job executes it**, which is why the runner is named here rather than left to be assumed.
+
+**The exception population is read, not merely written (normative — fails closed, and its runner is named).** `## Capture Exceptions` (`tracker-schemas.md` § Tracker 10) is written at **every** close that produces no pair — and nothing read it. A **write-only audit surface is worse than an absent one**: it reads to a future maintainer as evidence that the gap is being tracked, while the gap it records reaches no report. Its entire purpose is the **per-family coverage denominator**, so **coverage is where it is consumed** — G13 renders the pair count, the exception count **with its closed-set reason breakdown**, and the unclosed remainder, all against `Planned Items`, **per family**.
+
+**The check:** a coverage line carrying a pair count and a denominator but **no exception count is a FAIL**. Omitting it makes a window with three uncaptured closes indistinguishable from a window with none — which is the exact invisibility the exception section was created to foreclose, reintroduced one layer downstream. The reason breakdown renders with the count because the four closed-set reasons imply different remedies: `no-estimate-of-record` is an admission gap (Mode C), `estimate-not-in-window` is a window-boundary effect, `item-descoped-at-close` is genuine attrition, and `unit-change-pending-re-anchor` is a V5 exclusion. **Runner:** as for the completeness diff above — `pmo-skill-editor` Mode C on any edit to §8 or a consumer's instruction text, re-verified at **Stage 7 Dev Testing**; and at capture time the reconciliation is Mode F's, which already surfaces a `(close × family)` cell holding neither record. **No CI job executes it.**
+
+**Trend — its domain, its strength, and its three negative-path strings (normative — fails closed).** The consumer had been minting both of these; they are homed here, where the trend element is defined, because a consumer inventing a value the contract does not define is the exact class the grant table exists to prevent.
+
+- **Domain — `≥ 2 banded windows`, a definitional minimum rather than a threshold.** A trend is a *comparison between banded windows*, so it needs two operands: with one banded window the words `improving` / `stable` / `degrading` have no referent to be relative to. Nothing is minted — the figure falls out of what a comparison is, and each window in the comparison must **itself** be banded, so §8.3's `N ≥ 3` floor binds transitively rather than a second floor being coined beside it.
+- **Strength — bounded by §8.3's own confidence row, which is what resolves the tension.** §8.3's window table already states where a cross-window trend becomes *meaningful*: its **`9+` / High confidence** row. A trend rendered at the domain minimum is therefore **reportable but not yet meaningful by §8.3**, and is emitted as an **observation carrying its confidence word — never as a finding** — until that row is reached. **The second minted threshold is removed, not re-homed:** the consumer rule that fired an acted-on *judgement* off `stable` across two consecutive windows asserted a meaningfulness §8.3 reserves for `9+`. It collapses into the domain minimum above plus §8.3's existing confidence qualifier, so §8 gains **no new number** and the two documents stop disagreeing about when a trend may be relied on.
+- **The not-acted-on read survives, with its strength corrected.** When the band is 🟡 or 🔴 and the trend is `stable` across the windows compared, state that **the signal is being produced and not acted on** — an advisory nobody acts on is observationally identical to a working loop, and this is the only place that difference becomes visible. It renders with its confidence word, as an **observation** below §8.3's `9+` row and as a **finding** at or above it. **Never suppress it for want of the higher row** — suppression would restore the invisibility it exists to remove.
+- **The three negative-path strings are corpus literals, homed here.** `estimation bias:` → §8.3's fenced literal, rendered verbatim (**G10**). `calibration spread: not computable — requires the same ≥ 3-iteration window` — the reason restates §8.3's floor **by role**, since `S` is computed over the same window as `B` and mints nothing. `trend: not computable — requires ≥ 2 banded windows` — the domain minimum above. Each is subject to the per-element equality check below.
+
+**Negative path (normative — fails closed).** With `N < 3`, render §8.3's `not computable` string **verbatim** — `estimation bias: not computable — N iteration(s) of history (< 3); do not use for forecasting` (**G10**) — plus the missing-input recommendation. **Never a defaulted colour.**
+
+**One literal, checked by equality (normative — fails closed, and its runner is named).** §8.3 requires the string rendered **verbatim**, and that requirement is checkable only while **one** literal exists corpus-wide. Three near-variants — an abbreviation here, an element-relabel there — make "renders it verbatim" unfalsifiable, because a reader comparing an emission against the corpus finds *some* candidate it matches, and equality stops being the test. **The literal is §8.3's fenced block and nothing else.** A consumer that needs an element label uses the string's **own** leading token (`estimation bias:`) rather than substituting one of its own; an abbreviated, relabelled, or reflowed copy is a **FAIL, not a stylistic choice**. **Runner:** `pmo-skill-editor` Mode C on any edit to §8 or to a consumer's instruction text, re-verified at **Stage 7 Dev Testing** (`pmo-qa-auditor` Mode G) on the PR carrying the change, executing the probe — enumerate every occurrence of the token `not computable` across §8 and its consumers' instruction text, keep the ones rendering the **bias** element's window-floor reason, and assert each is character-identical to §8.3's fenced literal; **more than one distinct value for that element → FAIL**. The predicate is *one literal per element*, not one literal overall — the spread and trend elements carry their own strings for their own binding reasons (below), and each of those is subject to the same equality. The probe states no truncated copy of the literal, because a partial copy written into the check would itself become the fourth variant. No CI job executes this probe today.
+
+**MUST NOT render:** a cross-team comparison; a per-person figure; a portfolio rollup; or a **single collapsed accuracy number** (§8.2).
+
+---
+
+### 8.7 Validity threats and the evidence-quality bar
+
+*Declared before any §8 output is read as a finding. Each threat carries a mitigation and an honest residual.*
+
+**V1 — Small-sample instability.** `B` and `S` computed over 1–2 iterations are dominated by a single item. *Mitigation:* the hard not-computable floor at **N ≥ 3** (§8.3), adopted from `sprint-defaults.md` §3.1; **median and min/max order statistics** rather than mean and standard deviation, which are robust to a single outlier; and the confidence word on every emission. *Residual:* at N = 3–5 the window is only an `Emerging pattern`, so a 🔴 at N = 3 warrants re-check at the next window before any governed focus-factor change. **This residual is why the confidence word must travel with the figure.**
+
+**V2 — Survivorship: only closed items have actuals.** An abandoned, descoped, or still-open item contributes no pair — and abandoned items are systematically the *badly-estimated* ones, so the observed population is biased **toward** looking calibrated. *Mitigation:* two-part. (a) The report renders **pair count against the iteration's planned item count** (§8.6.2), so the coverage gap is visible rather than silent. (b) **F3 is structurally immune** — its denominator is the *plan*, not the closed set — so **F3 is the coverage control on F1 and F2**. When F1/F2 read 🟢 while F3 reads 🔴, survivorship is the first hypothesis, and the report says so. *Residual:* F1/F2 optimism is labelled, not eliminated.
+
+**V3 — Re-scoring circularity (F1 only).** F1's "actual" is a re-score — an estimate measured against an estimate. *Mitigation:* the re-score is **blind** (assigned before the original figure is read); F1's `Evidence Grade` is **capped at `[INFERRED]`** and never `[SOURCE]`; and **an F1-only 🔴 may not drive an action** without corroboration from F2 or F3. *Residual:* F1 is the weakest of the three families and is a **proxy actual**, not a measured one. It is retained because it is the only family that measures *sizing* directly.
+
+**V4 — Goodhart pressure once accuracy is measured.** The cheapest way to score well is to inflate estimates, which drives `B` → 1.00 while destroying the estimate's information content. This is not speculative — `sprint-defaults.md` §6 already names velocity gaming, with the detection signal "average story points per item trends upward while items per sprint stays flat," and §3.2 rule 5 records that a substantial share of practitioners admit to point manipulation when velocity is tied to reviews. *Mitigation:* the per-person and cross-team prohibitions are **restated for this metric** rather than left implicit (§8 preamble); the throughput cross-check §3.2 rule 4 already mandates becomes an **emission rule** (§8.6.2's inflation flag); and the advisory-only posture keeps the output a proposal a human weighs, which is a materially weaker incentive than an automated adjustment. *Residual:* the loop cannot make gaming impossible. It can make it **visible**, which is the honest claim.
+
+**V5 — Unit drift across the window (F1, F3).** Story points are team-relative and drift as reference stories change; an `R` computed across a window spanning a re-anchoring compares two different units. *Mitigation:* the `Window Key` field plus `sprint-defaults.md` §3.2 rule 2's documented-exclusion mechanism — a re-anchoring event excludes the prior windows, with the exclusion documented. *Residual:* detection of a re-anchoring is manual; this section supplies the exclusion mechanism, not the detector.
+
+**V6 — Self-normalization (F2).** If F2's `estimate` were derived from the same window's own throughput, then `median(R)` would be ≈ 1.00 **by construction** and the metric would measure nothing. *Mitigation:* **F2's estimate is the §2 committed-horizon budget** — an externally-set promise, in business days, for one iteration — and is **never** a window-derived figure. *Residual:* none for the specified form; this is an implementation hazard, which is why it is stated normatively here rather than only as a caution.
+
+**Evidence-quality bar (normative).** A §8 finding is **load-bearing only at `[SOURCE]` or `[INFERRED]`**. An `[ASSUMPTION – CONFIRM]`-graded pair **may** be counted in `N` and reported, but **may not alone drive a 🔴 verdict or a focus-factor recommendation**. Combined with V3's cap on F1, the operative rule is: **an F1-only 🔴 requires F2 or F3 corroboration before any action.**

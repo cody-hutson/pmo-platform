@@ -6127,6 +6127,7 @@ cmd_check() {
   # Shakedown→Enforce checklist + the runtime deploy-check.mode file.
   local -a TEMPLATE_SCHEMA_MAP=(
     "operations/templates/open-meetings-tracker-template.md|||core/schemas/tracker-schemas.md|||Tracker 3: Open Meetings Tracker|||Upcoming Meetings|Recently Completed|Recurring Cadences"
+    "operations/templates/sprint-tracker-template.md|||core/schemas/tracker-schemas.md|||Tracker 10: Sprint Tracker|||Current Sprint|Sprint History|Estimate-Actual Pairs|Capture Exceptions"
   )
 
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
