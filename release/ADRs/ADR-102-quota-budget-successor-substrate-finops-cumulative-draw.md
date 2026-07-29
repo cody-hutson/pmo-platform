@@ -2,7 +2,7 @@
 <!-- reference-durability: allow-version-ref -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-100 — The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation
+title: ADR-102 — The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation
 status: Proposed
 date: 2026-07-28
 release: agent-finops-intelligence ({{RELEASE_VERSION}})
@@ -17,15 +17,17 @@ source_observations:
   - "Changing the declared successor substrate without a record would be a silent contradiction of an Accepted ADR — the drift the platform's Stability value exists to guard."
 ---
 
-# ADR-100 — The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation
+# ADR-102 — The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent (ADR-096 / ADR-097 / ADR-099). The decision was rendered by the workspace owner as **D-Substrate**, **ADOPTED at Collective Review** for this release. It flips to **Accepted** at this release's Stage-9 plan-review gate; per ADR-098's precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent (ADR-096 / ADR-097 / ADR-101). The decision was rendered by the workspace owner as **D-Substrate**, **ADOPTED at Collective Review** for this release. It flips to **Accepted** at this release's Stage-9 plan-review gate; per ADR-098's precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
-**Numbering — and a live contention, recorded rather than hidden.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` + `release/ADRs/`). Recomputed immediately before authoring against `origin/main` (highest: ADR-098), this working branch (ADR-099, this release), and the files of **every open pull request** — not inherited from a plan.
+**Numbering — a contention that materialized, and was resolved by renumbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` + `release/ADRs/`), and the claimed set includes **in-flight pull-request claims**, not just what is on `origin/main`.
 
-That recomputation surfaced a genuine collision: the concurrently-open Mode-R-depth release pull request **also claims `ADR-100`**. `ADR-100` is nevertheless the number used here, because the alternative — skipping to `ADR-101` — leaves a **gap**, and the CI gate (`release/tools/check-adr-numbers.py`, wired in `repo-integrity.yml`) enforces the sequence as **unique *and* gap-free**; a gap fails the build on this branch immediately, whereas the duplicate is caught by the same gate at merge time. This follows the convention ADR-026 itself records: **the later claimant renumbers at merge time.** Whichever of the two pull requests merges second must renumber to the next free slot and update its own cross-references; the numbering gate is the mechanism that forces it, so the collision cannot ship silently.
+Authored provisionally as **ADR-100** against a recomputation that read `origin/main` at highest ADR-098. Both provisional numbers were then invalidated: `origin/main` took **ADR-099** (`release/ADRs/ADR-099-mode-r-disposition-set-fit-test.md`), colliding with this release's sibling ADR, and an open release pull request holds a live claim on **ADR-100**, colliding with this one. Recomputed at the Stage-9 GO gate across `origin/main` + both ADR homes + the changed files of every open pull request, the next free slots are **101** and **102**; this release's two ADRs took them in authoring order — the sibling to **[ADR-101](../../core/ADRs/ADR-101-finops-store-frozen-kind-versioning-exemption.md)**, this one to **ADR-102**.
+
+This is exactly the convention ADR-026 records: **the later claimant renumbers.** The renumber was applied here as a full reference cascade (file rename plus every referring line in the schema, the release plan, the skill, and the quota-budget standard), not a bare `git mv`. One consequence is worth stating plainly rather than discovering at merge: on this branch in isolation the sequence now skips **099** and **100**, both of which are held elsewhere — `099` on `main` and `100` by the open pull request. The CI gate (`release/tools/check-adr-numbers.py`, wired in `repo-integrity.yml`) evaluates the **merge** of this branch into `main`, so the sequence closes as the two holders land; the `ADR-100` holder merging first is the pre-merge condition this release verifies at Stage 12, and the gate is the mechanism that refuses to let a real gap ship silently.
 
 ## Context
 
@@ -101,7 +103,7 @@ All five thresholds are `[CALIBRATE-AFTER-3]`: no usage distribution exists to c
 ## Related
 
 - **[ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md)** — creates the `spoke-launch` / `quota-reservation` event. **Superseded in its substrate choice for § 5 only**; its writer-contract reasoning and its schema row stand.
-- **[ADR-099](../../core/ADRs/ADR-099-finops-store-frozen-kind-versioning-exemption.md)** — the FinOps store's schema-versioning exemption; the same release, the same store.
+- **[ADR-101](../../core/ADRs/ADR-101-finops-store-frozen-kind-versioning-exemption.md)** — the FinOps store's schema-versioning exemption; the same release, the same store.
 - **[ADR-094](ADR-094-extend-before-create.md)** — extend-before-create; the reason the estimation capability extends `finops-usage-extractor` rather than shipping a sibling skill.
 - `release/references/standards/quota-budget-protocol.md` § 4.1 / § 5 / § 7 — the amended surfaces.
 - `release/references/pipeline/stage-04-planning.md` — the `### Quota Budget` plan scaffold whose source enum this decision extends.

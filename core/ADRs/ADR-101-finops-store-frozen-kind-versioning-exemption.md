@@ -2,7 +2,7 @@
 <!-- reference-durability: allow-version-ref -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: ADR-099 — FinOps store schema versioning — a conditioned frozen-kind exemption permits a minor bump for a derived-cache field replacement
+title: ADR-101 — FinOps store schema versioning — a conditioned frozen-kind exemption permits a minor bump for a derived-cache field replacement
 status: Proposed
 date: 2026-07-27
 release: agent-finops-intelligence ({{RELEASE_VERSION}})
@@ -15,11 +15,13 @@ source_observations:
   - "The schema's Versioning section as written records NO exemption, so applying one silently would be undocumented divergence from a published contract — the drift the platform's Stability value exists to guard."
 ---
 
-# ADR-099 — FinOps store schema versioning: a conditioned frozen-kind exemption permits a minor bump for a derived-cache field replacement
+# ADR-101 — FinOps store schema versioning: a conditioned frozen-kind exemption permits a minor bump for a derived-cache field replacement
 
 ## Status
 
 **Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent (ADR-096 / ADR-097 / ADR-031). The decision was rendered by the workspace owner as **D-SchemaVersioning** at the Stage-4 D-Gate and carried through the Collective Review scope-lock. It flips to **Accepted** at this release's Stage-9 plan-review gate; per ADR-098's precedent, the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+
+**Numbering.** Authored provisionally as **ADR-099** and renumbered to **ADR-101** at the Stage-9 GO gate, after the number space was recomputed globally across **both** homes (`core/ADRs/` + `release/ADRs/`) **plus in-flight pull-request claims**: `origin/main` had meanwhile taken `ADR-099` (`release/ADRs/ADR-099-mode-r-disposition-set-fit-test.md`) and an open release pull request claims `ADR-100`. `ADR-101` is the next free slot above both. The sibling decision authored in this same release renumbered in lockstep to **[ADR-102](../../release/ADRs/ADR-102-quota-budget-successor-substrate-finops-cumulative-draw.md)**. This is the platform's standing **later-claimant-renumbers** convention, forced by the gap-free CI gate (`release/tools/check-adr-numbers.py`); the renumber is recorded here rather than silently applied.
 
 ## Context
 

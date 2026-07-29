@@ -12,7 +12,7 @@ An intelligence layer on top of the FinOps foundation shipped in `agent-finops-f
 
 - **Sequence:** #4044 → #4043 → { #3912, #3911 } → { #3610 → #3611 → #3612 → #3613 }. The milestone's original `{ #4044, #4043 }` parallel pair is refuted — they collide on five shared files plus the schema version line and must serialize (#4044 first: it mutates a frozen field while #4043 is purely additive, so rename-then-add yields one coherent field set and one Version-History row).
 - **Release Class: novel** — multiple novel capabilities consuming the foundation; Stage 5 bias ALL, Stage 9 Deep, Stage 13 30-day window. **No stage skipped.**
-- **Schema posture:** one **minor** bump to **v1.2.0** carrying a written, conditioned exemption to the frozen-kind major-bump rule (ADR-099). Both phases emit `1.2.0`; the version stops encoding which phase has run.
+- **Schema posture:** one **minor** bump to **v1.2.0** carrying a written, conditioned exemption to the frozen-kind major-bump rule (ADR-101). Both phases emit `1.2.0`; the version stops encoding which phase has run.
 - **Data hygiene (CIAC-3, standing, inherited from v3.96):** no real session-data value — branch names, token counts, session UUIDs, `cwd`/absolute home paths — appears in any committed or published artifact. All fixtures are synthetic. **The `grep -a` flag is load-bearing** until the NUL repair lands (R2).
 - **Over-band exception RECORDED** — 32 effective pts against a 15–25 band ceiling; dispositioned by the operator as one release with the consequences stated at the gate (quota, blast radius, EXPENSIVE rollback).
 
@@ -82,7 +82,7 @@ Release Class `novel` → **no stage skipped**. Stages 5–8 run per buildable i
 
 **R2 — A NUL byte makes plain `grep` silently blind on `extract-usage.sh`.** Exactly one `0x00` at byte offset **8559** (line 161), inside the jq sidechain-walk where a printable sentinel was intended. Plain `grep 'cwd'` returns **no output, exit 1** even when the pattern is present; `grep -a` returns the real matches. Every grep-verified AC on this file therefore passes **vacuously**. Functionally benign in jq — a *verification* hazard, not a runtime bug. **Owner:** Stage 6 engineer (replace the sentinel); Stage 7 DT (use `-a`). **Mitigation:** every method in this plan uses `grep -a`; the one-byte repair is in scope. *CHEAP / **HIGH** — reproduced by byte-offset probe with a control.*
 
-**R3 — #4044 is a breaking change to a frozen v1.0.0 kind.** The schema's own rule makes a frozen-kind break a **major** bump plus a coordination event across consumers pinned at `>= 1.1.0`. Read literally that forces v2.0.0, invalidating the pin across three sites for zero safety gain. **Owner:** operator at **D-SchemaVersioning** (rendered). **Mitigation:** one minor bump to v1.2.0 with the `## Versioning` section **amended** to name three conjunctive, individually-falsifiable exemption conditions, so the next frozen-kind break *with a live consumer* still takes the major bump. **ADR-099.** *MODERATE / MEDIUM.*
+**R3 — #4044 is a breaking change to a frozen v1.0.0 kind.** The schema's own rule makes a frozen-kind break a **major** bump plus a coordination event across consumers pinned at `>= 1.1.0`. Read literally that forces v2.0.0, invalidating the pin across three sites for zero safety gain. **Owner:** operator at **D-SchemaVersioning** (rendered). **Mitigation:** one minor bump to v1.2.0 with the `## Versioning` section **amended** to name three conjunctive, individually-falsifiable exemption conditions, so the next frozen-kind break *with a live consumer* still takes the major bump. **ADR-101.** *MODERATE / MEDIUM.*
 
 **R4 — Bundle is over-band.** 28 raw × `novel` weight → **32 effective** against a 15–25 ceiling. **Owner:** operator at the Stage-4 D-Gate (**dispositioned: one release, over-band, recorded exception**). **Mitigation:** Checkpoint B re-validated before **every** parallel wave; may route SERIALIZE / DEFER / REDUCE-scope mid-release. *Accepted.*
 
@@ -112,7 +112,7 @@ Release Class `novel` → **no stage skipped**. Stages 5–8 run per buildable i
 |---|---|
 | **D-ReleaseClass** | `novel` |
 | **D-EpicSlicing** | All four of #3329's child slices **ADMITTED**; #3329 remains as the parent tracker (0 pts), marked as closed at Stage 13 once its children are done |
-| **D-SchemaVersioning** | One minor bump to **v1.2.0** with a written, conditioned frozen-kind exemption (three conjunctive conditions) — rationale in **ADR-099** |
+| **D-SchemaVersioning** | One minor bump to **v1.2.0** with a written, conditioned frozen-kind exemption (three conjunctive conditions) — rationale in **ADR-101** |
 | **D-CapabilitySurface** | **Extend** `finops-usage-extractor` rather than author a sibling skill |
 | **D-C Branch Topology** | **SINGLE** — one branch, one PR, one merge gate |
 | **D-Version** | **Bump-class MAJOR** (operator-raised 2026-07-28; floor **v4.0**, hub-verified free). The concrete number is **`{{RELEASE_VERSION}}`** and binds ONLY at the Stage-12 atomic claim per ADR-092 — branch, plan-file name and in-file references are slug-primary while in flight. **Rationale for the major bump is operator-authored and pending** (see milestone description). History: provisional v3.97 → v3.98 → v3.99 under the prior minor bump-class, two forced re-versions from concurrent claims — the churn ADR-092 exists to prevent, and which this release was non-compliant with until now. |
@@ -156,7 +156,7 @@ EDIT  core/skills/finops-usage-extractor/SKILL.md                      — v1.2.
 EDIT  core/skills/finops-usage-extractor/test-fixtures/rollup/usage.jsonl            — 8 store session lines: cwd -> worktree basename; meta schema_version -> 1.2.0 (T1/T3 oracle inputs)
 EDIT  core/skills/finops-usage-extractor/test-fixtures/rollup/count-once/usage.jsonl — 2 store session lines: cwd -> worktree basename; meta schema_version -> 1.2.0
 EDIT  core/skills/finops-usage-extractor/test-fixtures/rollup/README.md              — describes the STORE fixtures; cwd -> worktree
-ADD   core/ADRs/ADR-099-finops-store-frozen-kind-versioning-exemption.md  — D-SchemaVersioning rationale; number re-verified globally + against in-flight PR claims at authoring time (R11)
+ADD   core/ADRs/ADR-101-finops-store-frozen-kind-versioning-exemption.md  — D-SchemaVersioning rationale; authored provisionally as ADR-099, renumbered to ADR-101 at the Stage-9 GO gate after main claimed 099 and an open PR claimed 100 (R11)
 # ── #4044 — DO NOT TOUCH (DR-3: these are SOURCE transcripts, not store fixtures) ──
 KEEP  core/skills/finops-usage-extractor/test-fixtures/proj-alpha/00000000-0000-4000-8000-000000000001.jsonl  — source transcript; extract-usage.sh reads .cwd FROM SOURCE
 KEEP  core/skills/finops-usage-extractor/test-fixtures/proj-beta/00000000-0000-4000-8000-000000000002.jsonl   — source transcript
@@ -183,7 +183,7 @@ ADD   core/skills/finops-usage-extractor/scripts/estimate-usage.sh     — compa
 EDIT  core/skills/finops-usage-extractor/SKILL.md                      — estimation usage + triggers + failure modes
 EDIT  release/references/standards/quota-budget-protocol.md            — §5 ordinal-band heuristic cites the telemetry-backed successor
 ADD   core/skills/finops-usage-extractor/test-fixtures/estimate/       — synthetic comparables fixtures + oracle
-ADD   core/ADRs/ADR-100-finops-store-supersedes-quota-reservation-event.md  — D-Substrate supersession of ADR-026; number re-verified at authoring time
+ADD   release/ADRs/ADR-102-quota-budget-successor-substrate-finops-cumulative-draw.md  — D-Substrate supersession of ADR-026; authored provisionally as ADR-100, renumbered to ADR-102 at the Stage-9 GO gate in lockstep with its sibling (R11)
 # ── #3610–#3613 — calibration half ──
 EDIT  operations/skills/delivery-engine/references/estimation-standards.md  — calibration method + accuracy metric + bias + RAG bands (#3610, SOLE writer)
 EDIT  operations/templates/sprint-tracker-template.md                       — iteration-grain actuals capture (#3611); TEMPLATE_SYNC_MAP-registered, Check 13 guards it
@@ -268,7 +268,7 @@ EDIT  .version                                                          — -> {
 
 ### Key decisions
 
-Schema **v1.2.0** under a conditioned frozen-kind exemption (ADR-099) · extend `finops-usage-extractor` rather than fork a sibling skill · session-grain sub-aggregates with an always-present reserved `"unknown"` bucket and a stored `dimension_coverage` label · ADVISORY calibration feedback · the FinOps store adopted as the quota substrate with a successor ADR.
+Schema **v1.2.0** under a conditioned frozen-kind exemption (ADR-101) · extend `finops-usage-extractor` rather than fork a sibling skill · session-grain sub-aggregates with an always-present reserved `"unknown"` bucket and a stored `dimension_coverage` label · ADVISORY calibration feedback · the FinOps store adopted as the quota substrate with a successor ADR.
 
 ### Reversibility
 
@@ -280,4 +280,4 @@ Consumers re-pin `schema_version >= 1.2.0` and must gate "a roll-up has run" on 
 
 ### Cross-references
 
-Parent epic #1494 · milestone `agent-finops-intelligence` · predecessor release v3.96 (`agent-finops-foundation`, store schema v1.1.0) · ADR-096 (store + data home) · ADR-097 (attribution convention) · ADR-099 (frozen-kind versioning exemption) · ADR-100 (quota-substrate supersession) · ADR-062 (substrate-vs-canonical).
+Parent epic #1494 · milestone `agent-finops-intelligence` · predecessor release v3.96 (`agent-finops-foundation`, store schema v1.1.0) · ADR-096 (store + data home) · ADR-097 (attribution convention) · ADR-101 (frozen-kind versioning exemption) · ADR-102 (quota-substrate supersession) · ADR-062 (substrate-vs-canonical).
