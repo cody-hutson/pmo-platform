@@ -433,8 +433,8 @@ Six H2 sections; four carry the calibration path.
 |---|---|---|---|
 | `## Current Sprint` | iteration | single | Existing. Outside the calibration path. |
 | `## Sprint History` | iteration | one per closed iteration | **F3** — delivered-versus-planned. |
-| `## Estimate-Actual Pairs` | item | one per (item × close ordinal) | **F1 + F2** — re-scored size and elapsed time. |
-| `## Capture Exceptions` | item | one per item close that produced no pair | The **positive negative-record** that makes a no-capture countable. |
+| `## Estimate-Actual Pairs` | item | one per (item × signal family × close ordinal) | **F1 + F2** — re-scored size and elapsed time. |
+| `## Capture Exceptions` | item | one per (item × signal family) close that produced no pair | The **positive negative-record** that makes a no-capture countable. |
 | `## Capacity Planning` | person | one per team member | Existing. Outside the calibration path. |
 | `## Velocity Trend` | iteration | narrative | Existing. Outside the calibration path. |
 
@@ -451,11 +451,11 @@ Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, 
 
 ### Estimate-Actual Pairs — F1 + F2 (item grain)
 
-**Format:** Markdown table — one row per **(item × close ordinal)**.
+**Format:** Markdown table — one row per **(item × signal family × close ordinal)**. That triple is the row key; see § Row Key below for why the family is in it.
 
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
-| Item Ref | String | Yes | Free text — the work item's stable reference (ticket / item id) | Identity, never reassigned. The key `Estimate` and `Actual` are joined on at report time. |
+| Item Ref | String | Yes | Free text — the work item's stable reference (ticket / item id) | Identity, never reassigned. **One of three key components** (see § Row Key) — `Estimate` and `Actual` are joined on the full key at report time, never on `Item Ref` alone. |
 | Signal Family | Enum | Yes | `F1` \| `F2` \| `F3` — **only `F1` and `F2` are valid in this section** | The § 8.1 family. The enum domain is § 8.5's verbatim, so the two documents carry one vocabulary; `F3` is iteration-grain and is carried by `## Sprint History`, never by a row here. Families are never pooled (§ 8.1 rule 1). |
 | Estimate | Number | Yes | `> 0` | **Frozen at `ADD`** — written by **Delivery Engine Mode C** when the item is admitted to execution at the LG-4 DoR exit PASS (see § Admission below) — and **never rewritten at close**. F1: the committed story-point figure (the § 5 range **midpoint**). F2: the § 2 committed-horizon budget, in **business days**. `Estimate = 0` is invalid: the ratio is undefined, so the row is rejected rather than stored. |
 | Estimate Phase | Enum | Yes | `Initial concept` \| `Approved concept` \| `Requirements defined` \| `Design complete` \| `Build underway` | The § 1 cone row the estimate was made at. Required — § 8.4's realized-versus-claimed comparison is not computable without it, so a row missing it is incomplete rather than partially usable. |
@@ -464,7 +464,7 @@ Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, 
 | Actual Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The **LG-5 Dev Complete (DoD) exit PASS** date for this close ordinal. Same field semantics as Tracker 7's `Actual Date` (achieved date, populated on completion) — adopted, not re-coined. |
 | Elapsed | Integer | Yes for `F2`; No for `F1` | ≥ 0, **business days** | Business days from the **first** `Start Date` to this row's `Actual Date`. **Cumulative across every reopen pass** — see § Cumulative Elapsed below. On an F2 row `Actual` MUST equal `Elapsed`; a disagreement is a validation failure, not a value to reconcile silently. |
 | Window Key | String | Yes | Free text — the iteration identifier | The iteration this close lands in. Joins to `## Sprint History` → `Window Key`. |
-| Close Ordinal | Integer | Yes | ≥ 1 | `1` on the first close; **incremented by 1 on each `REACTIVATE` → reclose**. With `Item Ref` it forms the row key, and it is what makes a reopen a **visible second row** rather than an overwrite. Only the **last non-excluded** ordinal counts toward the window's `N`. |
+| Close Ordinal | Integer | Yes | ≥ 1 | `1` at admission and on the first close; **incremented by 1 on each `REACTIVATE` → reclose**, in **lockstep across every family** for that `Item Ref`. With `Item Ref` **and `Signal Family`** it forms the row key (§ Row Key), and it is what makes a reopen a **visible second row** rather than an overwrite. Only the **last non-excluded** ordinal counts toward the window's `N`. |
 | Evidence Grade | Enum | Yes | `[SOURCE]` \| `[INFERRED]` \| `[ASSUMPTION – CONFIRM]` | Adopted verbatim from § 8.5. **F1 is capped at `[INFERRED]`** — a re-score is itself an estimate. **F2 is `[SOURCE]`** — it is derived from two recorded gate verdicts rather than asserted. |
 | Excluded Reason | String | No | Present **if and only if** the row is excluded: `superseded-by-reclose` \| `superseded-by-re-estimate` \| `unit-change-pending-re-anchor` \| a documented outlier reason | Why this row does not count toward the window's `N`. An excluded row is **retained, never deleted** — append-only, the same posture as Tracker 6's `superseded` rule and the Tracker 5 archive rule. Deleting it would destroy the rework signal, which is the most informative thing a reopen carries. |
 
@@ -488,6 +488,34 @@ Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, 
 
 **End-to-end executability (the property this section exists to hold).** *admit → row exists → close → `MODIFY` resolves → the actual is captured keyed to its frozen estimate.* Each arrow has a named emitter, a named gate, and a fail-closed negative path. **If any arrow has no emitter, the loop has no input and every downstream figure is `not computable` for a reason no consumer can see** — so the emitter is named here rather than assumed.
 
+### Row Key — `Item Ref` × `Signal Family` × `Close Ordinal` (normative)
+
+**The row key is a triple.** All three components are load-bearing, and dropping any one of them collapses two distinct records into one.
+
+| Component | What it separates | What its absence collapses |
+|---|---|---|
+| `Item Ref` | one work item from another | two items' pairs into one population |
+| **`Signal Family`** | **the size promise (F1) from the horizon promise (F2)** | **the two families of the same close into one row that cannot hold both** |
+| `Close Ordinal` | one close pass from a later reclose | a reopen into a silent overwrite of the first close |
+
+**Why `Signal Family` is in the key — one close owes two pairs.** § 8 requires an F1 pair **and** an F2 pair from the same item close, and the two are structurally incompatible in one row: **F1**'s `Estimate` is a story-point figure and its `Actual` is a blind re-score carrying **no `Elapsed` at all**; **F2**'s `Estimate` is a business-day budget and its `Actual` **MUST equal `Elapsed`**. One row holds one `Estimate` and one `Actual`, so it can carry one family or the other — never both.
+
+Without the family in the key, the schema forces a choice between two defects, and **both are worse than the fix**:
+
+| Option | What happens | Why it fails |
+|---|---|---|
+| One row per close | The close writes F1 **or** F2, never both | **F1 and F2 are then computed over disjoint item sets** — no item appears in both — so § 8.7 V2's F1/F2/F3 corroboration and the § 8.6 discordance rule compare populations that **share no items**. The corroboration reads as performed and corroborates nothing. |
+| Two rows per close, family outside the key | Two rows collide on one key | The close `MODIFY`'s `entry_id` resolves to **two** rows; the write is ambiguous. Under the pre-fix Capture Rule 3 it also reads as the **two-rows defect** — the specified outcome scored as a violation. |
+
+**Consequences (normative — each fails closed).**
+
+1. **Uniqueness.** At most **one** row per `(Item Ref × Signal Family × Close Ordinal)`. Two rows sharing the full triple is a defect Mode F surfaces — never a silently accepted duplicate.
+2. **`entry_id` resolves the full triple.** A close `MODIFY` whose `entry_id` does not identify all three components is **ambiguous and is rejected**, not resolved by guessing the family from the presence of an `Elapsed` field.
+3. **Two families at one close is the specification, not a double-write.** An F1 row and an F2 row written from the same LG-5 exit PASS are **one record each in two different cells**. See Capture Rule 3.
+4. **`Close Ordinal` advances in lockstep.** A `REACTIVATE` supersedes **every** non-excluded row for that `Item Ref` across **all** families, and the reclose writes a new row per admitted family at ordinal *n+1*. Bumping one family's ordinal without the other would let the two families' windows drift apart on the same item.
+5. **`Start Date` is one value per `Item Ref`, spanning families and ordinals.** It is not part of the key and it never varies within an item — see § Start-Date Immutability.
+6. **`## Capture Exceptions` keys on `(Item Ref × Signal Family × Close Date)`** for the same reason: a per-family coverage denominator cannot be filled by an exception that does not name its family.
+
 ### Cumulative Elapsed — the reopen-then-reclose closure (normative)
 
 **`Elapsed` accumulates across every pass — first `Start Date` → the final DoD — and is NEVER reset on `REACTIVATE`.**
@@ -498,7 +526,7 @@ Three column semantics enforce it, so the rule is structural rather than an impl
 
 1. **`Start Date` is write-once.** It is set at the first LG-4 DoR exit PASS. `REACTIVATE` is a `MODIFY` that does **not** include `Start Date` in its `fields:` map; a `REACTIVATE` or reclose instruction that carries `Start Date` is **rejected**, not applied.
 2. **`Elapsed` is derived, never asserted.** It is computed as business days from the item's first `Start Date` to the current row's `Actual Date`. Because `Start Date` cannot move, `Elapsed` at ordinal *n+1* is necessarily **greater than or equal to** `Elapsed` at ordinal *n*.
-3. **`Close Ordinal` makes the accumulation checkable.** A monotonicity check falls out of the two rules above and **fails closed**: for any `Item Ref`, `Elapsed` must be non-decreasing in `Close Ordinal`, and every ordinal must share one `Start Date`. A decrease, or two different `Start Date` values on one `Item Ref`, is a **defect Mode F surfaces** — never a value that is silently accepted, and never a row that is silently dropped.
+3. **`Close Ordinal` makes the accumulation checkable.** A monotonicity check falls out of the two rules above and **fails closed**: for any `Item Ref`, `Elapsed` must be non-decreasing in `Close Ordinal` **across that item's `F2` rows** (`F1` rows carry no `Elapsed`, so they are outside this check by construction, not by exemption), and **every row for that `Item Ref` — in every family, at every ordinal — must carry the same `Start Date`**. A decrease, or two different `Start Date` values on one `Item Ref`, is a **defect Mode F surfaces** — never a value that is silently accepted, and never a row that is silently dropped. **This check alone is not sufficient**: it compares rows to each other, so a shift applied uniformly to all of them satisfies it. § Start-Date Immutability supplies the external anchor that closes that gap.
 
 ### Capture Exceptions
 
@@ -507,6 +535,7 @@ The **positive record of a close that produced no pair.** Silence is the failure
 | Field | Type | Required | Valid Values | Description |
 |-------|------|----------|-------------|-------------|
 | Item Ref | String | Yes | Free text | The item that closed without producing a pair. |
+| Signal Family | Enum | Yes | `F1` \| `F2` | **The family this close produced no pair for.** Required, and part of the exception's key (§ Row Key): coverage is rendered **per family**, so an exception that does not name its family cannot be counted against a per-family denominator and the gap silently vanishes from the very population it exists to make visible. One close can produce a pair in one family and an exception in the other. |
 | Window Key | String | Yes | Free text — the iteration identifier | The iteration the close landed in. Joins to `## Sprint History` → `Window Key`. |
 | Close Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The LG-5 exit-PASS date of the close that produced no pair. |
 | Exception Reason | Enum | Yes | `no-estimate-of-record` \| `estimate-not-in-window` \| `item-descoped-at-close` \| `unit-change-pending-re-anchor` | **Closed set.** A closed set is what makes the exception population countable and lets coverage be rendered as a fraction; free text would not. A close fitting none of the four is a **defect Mode F surfaces**, never a silent skip and never a coerced fifth meaning. |
@@ -515,10 +544,10 @@ The **positive record of a close that produced no pair.** Silence is the failure
 
 1. **Item trigger.** Capture fires when Delivery Engine Mode F renders an **LG-5 exit verdict** at `T(8→9)`. `PASS` → capture; `CONDITIONAL PASS` → capture (the increment is accepted); **`FAIL` or `NO-EVIDENCE` → no capture and no exception** — the item is still open and the gate will fire again. Capture binds to the **verdict**, never to a "done" claim.
 2. **Iteration trigger.** The `## Sprint History` row is written at Mode F's **end-of-sprint review**, and **after** every item capture for that `Window Key` has landed. Writing it first would let `Completed` and the pair count disagree with no way to tell which is stale.
-3. **Exactly-one rule (fails closed).** Every LG-5 exit PASS produces **exactly one of**: a row in `## Estimate-Actual Pairs`, **or** a row in `## Capture Exceptions`. Zero rows is a defect Mode F surfaces; two rows is a defect Mode F surfaces. **A silent no-capture is never a valid outcome.**
+3. **Exactly-one-per-family rule (fails closed).** The unit this rule quantifies over is the **`(close × signal family)` cell**, not the close. For **each** of `F1` and `F2`, every LG-5 exit PASS produces **exactly one of**: one `## Estimate-Actual Pairs` row in that family, **or** one `## Capture Exceptions` row naming that family. A family the item was never admitted under (rule 12) takes the exception branch with `no-estimate-of-record`. **Zero records in a cell is a defect Mode F surfaces; two records in the SAME cell is a defect Mode F surfaces.** **Two records in DIFFERENT families at one close is the specified outcome, not a violation** — the F1 pair and the F2 pair are one record each in two different cells, which is precisely what the row key exists to keep apart (§ Row Key). Reading the specified two-family write as a double-write is the error this rule was previously stated loosely enough to cause. **A silent no-capture is never a valid outcome.**
 4. **Never partial, never zero-filled.** A pair row carries the **full** required field set or is **not written at all** (a `Capture Exception` is written instead). `Estimate = 0` is invalid. A missing `Actual` is never filled with `0`.
 5. **Blind re-score (F1).** The close instruction's `fields:` map carries **`Actual` and `Actual Date` only — it does not carry `Estimate`**, so the write path has no reason to load the original figure. The re-score elicitation **MUST NOT render the `Estimate` column**. `Estimate` and `Actual` are joined at **read** time on `Item Ref`. The honest limit: this tracker is a flat markdown table, so a determined reader can still look — these rules make anchoring a deliberate act off the specified path, not the default, and the § 8.7 `[INFERRED]` cap plus the F2/F3 corroboration rule are the compensating controls.
-6. **`REACTIVATE`.** Retain the prior row and set its `Excluded Reason` to `superseded-by-reclose`; the next LG-5 exit PASS writes a **new row** at `Close Ordinal` *n+1*. Only the last non-excluded row counts toward `N` — counting every close would measure one estimate against two actuals.
+6. **`REACTIVATE`.** Retain the prior rows and set the `Excluded Reason` of **every** non-excluded row for that `Item Ref`, **in every family**, to `superseded-by-reclose`; the next LG-5 exit PASS writes a **new row per admitted family** at `Close Ordinal` *n+1*. Superseding one family and not the other would leave the two families' ordinals out of lockstep on the same item (§ Row Key consequence 4). Only the last non-excluded row **in each family** counts toward that family's `N` — counting every close would measure one estimate against two actuals.
 7. **Elapsed is cumulative.** Per § Cumulative Elapsed above. This rule is not negotiable at implementation time: it is the one lever no downstream consumer can detect.
 8. **Re-estimate on reopen.** A re-estimate **never overwrites** the frozen `Estimate`. Write a new row at ordinal *n+1* carrying the new figure and exclude the prior with `superseded-by-re-estimate`. Overwriting would drive the ratio toward 1.00 by construction.
 9. **Window immutability.** A reclose after its window has closed lands in the **new** window; the prior window is **never recomputed**. The prior window records a `Capture Exception` with `estimate-not-in-window`, so the coverage loss is visible rather than silent.
