@@ -70,14 +70,22 @@
 #     --delta WI     leave-one-out re-derivation: rebuild WI's own comparable set
 #                    with WI excluded, then report estimate -> actual, signed
 #                    delta, percentage error, basis and confidence. Writes nothing.
+#                    REQUIRES WI to carry a rollup row in the store (its measured
+#                    actual). A target with no rollup row — the default for any work
+#                    item predating the store's coverage window — is REFUSED with
+#                    exit 3, never answered with an unrequested forward estimate.
+#                    When the point estimate is suppressed (below N_min, or above the
+#                    rMAD ceiling) the signed delta and % error are suppressed with
+#                    it: either one recovers the withheld figure from `actual` in one
+#                    arithmetic step.
 #     --json         emit the machine shape instead of markdown.
 #     --verbose      additionally list every excluded row with its named reason.
 #     --self-test    run built-in assertions against the synthetic estimate
 #                    fixtures; no operator-store or network access.
 #
-# Exit codes: 0 ok · 2 usage error · 3 store unreadable / not rolled up
-#             · 4 store-not-git-ignored (fail-closed public-repo exfil guard)
-#             · 5 missing dependency (jq/git).
+# Exit codes: 0 ok · 2 usage error · 3 store unreadable / not rolled up / render
+#             aborted / --delta target has no rollup row · 4 store-not-git-ignored
+#             (fail-closed public-repo exfil guard) · 5 missing dependency (jq/git).
 
 set -uo pipefail
 
@@ -546,7 +554,12 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
           then [ "",
                  "## Leave-one-out delta — \($target_wi)",
                  "",
-                 (if $actual == null then "FATAL: target work item not present in the store as a rollup row."
+                 # Never the word FATAL on STDOUT: a fatal condition is a stderr +
+                 # non-zero-exit event, and the CLI refuses this case (P6b) before
+                 # anything renders. Reaching this line means the jq program was
+                 # invoked directly, so it states the absence without claiming a
+                 # back-test ran.
+                 (if $actual == null then "NO DELTA COMPUTED — \($target_wi) has no rollup row in this store, so no measured actual exists to compare against. Nothing below was back-tested."
                   else "| estimate | actual | signed delta | % error |" end),
                  (if $actual == null then null else "|---|---|---|---|" end),
                  (if ($actual == null or $estimate == null) then null
@@ -557,7 +570,10 @@ def four_leaf: (.tokens.input + .tokens.output + .tokens.cache_creation.total + 
                   then "\n**Signed delta and % error are SUPPRESSED with the point figure, not merely blanked.** Either one recovers the withheld estimate from `actual` in a single arithmetic step (estimate = actual + delta; estimate = actual x (1 + % error)). A figure the estimator explicitly declined to emit must not be recoverable by arithmetic from the same output. Suppression class: \($suppression) (rule \($base.rule), n=\($n), N_min=\($nmin))."
                   else null end),
                  "",
-                 "The comparable set above was rebuilt for \($target_wi)'s OWN matching key with \($target_wi) excluded (P6), then the identical estimator was run over it — so this is the estimate a planner would have seen BEFORE the work started. Basis and confidence as stated above (\($conf_label), rule \($base.rule)). Zero writes, zero new records, zero schema surface." ]
+                 # Gated on $actual: with no measured actual nothing was back-tested,
+                 # and this sentence would assert a comparison that did not happen.
+                 (if $actual == null then null
+                  else "The comparable set above was rebuilt for \($target_wi)'s OWN matching key with \($target_wi) excluded (P6), then the identical estimator was run over it — so this is the estimate a planner would have seen BEFORE the work started. Basis and confidence as stated above (\($conf_label), rule \($base.rule)). Zero writes, zero new records, zero schema surface." end) ]
           else [] end )
       | map(select(. != null)) | join("\n") )
   end
@@ -652,6 +668,25 @@ render() {
   if ! jq -e -s 'any(.[]; .record == "coverage")' "$store_file" >/dev/null 2>&1; then
     printf 'FATAL (exit 3): store carries no coverage record — the roll-up phase has not run (run rollup-attribution.sh first).\n' >&2
     exit 3
+  fi
+
+  # P6b — a --delta target with NO rollup row has no measured actual, so there is
+  # nothing to back-test against. This is the DEFAULT case for every work item that
+  # predates the store's coverage window, not an edge case. Before this gate the run
+  # exited 0, rendered an UNREQUESTED forward estimate, and printed the word FATAL to
+  # STDOUT under prose asserting the back-test had run. FAILS CLOSED — refuse before
+  # anything is rendered, name the reason on STDERR, exit non-zero. A jq abort here
+  # is also non-zero, so an unreadable store refuses rather than falling through.
+  if [ -n "$DELTA_WI" ]; then
+    if ! jq -e -s --arg wi "$DELTA_WI" \
+         'any(.[]; .record == "rollup" and .work_item == $wi)' "$store_file" >/dev/null 2>&1; then
+      printf 'FATAL (exit 3): --delta %s has no rollup row in this store, so there is no measured\n' "$DELTA_WI" >&2
+      printf 'actual to back-test against and no leave-one-out delta can be computed.\n' >&2
+      printf 'Expected for any work item predating the store coverage window. Refusing to render a\n' >&2
+      printf 'forward estimate that was not asked for — re-run rollup-attribution.sh over a store\n' >&2
+      printf 'whose window covers %s, or drop --delta and ask for a forward estimate explicitly.\n' "$DELTA_WI" >&2
+      exit 3
+    fi
   fi
 
   # The velocity map is the LOCAL size/class bridge. An unreadable or unparsable
@@ -1224,6 +1259,43 @@ self_test() {
       fi
     fi
   fi
+  # ── SE-11d NO-ROLLUP-ROW TARGET — a --delta whose target carries no rollup row has
+  #    no measured actual, so no back-test is possible. This is the DEFAULT case for
+  #    every work item predating the store's coverage window. It used to exit 0,
+  #    render an UNREQUESTED forward estimate, and print the word FATAL to STDOUT
+  #    under prose asserting the back-test had run. Must now: exit non-zero, name the
+  #    FATAL on STDERR, and render NO estimate at all.
+  #    Fails CLOSED with two discriminating controls: the target must be derivable
+  #    (a velocity row exists) so the refusal is about the MISSING ROW and not an
+  #    underivable key, and it must genuinely have no rollup row. ──
+  local NRT="milestone:v9.41" nrt_rows nrt_vel nrtrc
+  nrt_rows="$(jq -r -s --arg wi "$NRT" '[.[]|select(.record=="rollup")|select(.work_item==$wi)]|length' "$fx")"
+  nrt_vel="$(grep -ac "^#### Deployment Log ${NRT#milestone:}\$" "$rlog" || true)"
+  if [ "${nrt_rows:-1}" -ne 0 ] || [ "${nrt_vel:-0}" -lt 1 ]; then
+    bad "SE-11d control invalid: $NRT must have 0 rollup rows in the fixture (got ${nrt_rows:-?}) AND a velocity row in the fixture log (got ${nrt_vel:-0}) — otherwise the refusal proves nothing about the missing-row gate"
+  else
+    ( STORE="$wd/main" bash "$SELF" --delta "$NRT" >"$wd/nrt.out" 2>"$wd/nrt.err" ); nrtrc=$?
+    if [ "$nrtrc" -eq 0 ]; then
+      bad "SE-11d: --delta on a target with no rollup row exited 0 — a failed back-test read as a successful one"
+    elif ! grep -aq 'FATAL (exit 3): --delta' "$wd/nrt.err"; then
+      bad "SE-11d: --delta on a rowless target exited $nrtrc but named no FATAL on STDERR — $(head -1 "$wd/nrt.err" 2>/dev/null)"
+    elif grep -aq 'FATAL' "$wd/nrt.out"; then
+      bad "SE-11d: 'FATAL' was printed to STDOUT — a fatal condition is a stderr + non-zero-exit event, not a line inside the report body"
+    elif grep -aqE '^Estimate: |^\*\*Point estimate SUPPRESSED|^## Leave-one-out delta' "$wd/nrt.out"; then
+      bad "SE-11d: an UNREQUESTED estimate / delta section rendered for a target that cannot be back-tested"
+    elif [ -s "$wd/nrt.out" ]; then
+      bad "SE-11d: the refused run still wrote $(wc -c <"$wd/nrt.out" | tr -d ' ') byte(s) to stdout — a refusal renders nothing"
+    else
+      ok "SE-11d NO-ROLLUP-ROW: --delta $NRT (derivable key, no rollup row) exits $nrtrc with FATAL on STDERR, empty stdout, and no unrequested estimate"
+    fi
+    #    Paired POSITIVE control — a target that DOES carry a rollup row still runs,
+    #    or the gate is refusing every --delta rather than the rowless case.
+    ( STORE="$wd/main" bash "$SELF" --delta 'milestone:v9.94' >/dev/null 2>&1 ); nrtrc=$?
+    [ "$nrtrc" -eq 0 ] \
+      && ok "SE-11d control: a --delta target that DOES carry a rollup row still runs (exit 0) — the gate is not refusing every --delta" \
+      || bad "SE-11d control: a --delta target WITH a rollup row was refused (exit $nrtrc) — over-rejection"
+  fi
+
   #    Paired POSITIVE control — on an un-suppressed delta the SAME fields must
   #    still render, or the fix is blanket nulling rather than a suppression gate.
   local pc_del pc_pct
