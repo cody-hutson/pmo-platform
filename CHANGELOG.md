@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.100] - 2026-07-29
+
+The release pipeline can now record the decisions it makes, including the automatic ones, and trace each record back to the release it came from.
+
+[Full notes](release/releases/notes/v3.100_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.100)
+
 ## [v3.99] - 2026-07-29
 
 Release runs now state how reversible each decision is, brief you before every prompt, and open every turn with where they stand.
