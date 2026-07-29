@@ -4,6 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v3.100 | decision-telemetry-emission | 2026-07-29 | — | #4187 | [notes/v3.100_RELEASE_NOTES.md](notes/v3.100_RELEASE_NOTES.md) |
 | v3.99 | release-hub-response-convention-enforcement | 2026-07-29 | — | #4171 | [notes/v3.99_RELEASE_NOTES.md](notes/v3.99_RELEASE_NOTES.md) |
 | v3.98 | release-hub-mode-r-depth | 2026-07-28 | — | #4180 | [notes/v3.98_RELEASE_NOTES.md](notes/v3.98_RELEASE_NOTES.md) |
 | v3.97 | build-philosophy-corpus | 2026-07-27 | — | #4133 | [notes/v3.97_RELEASE_NOTES.md](notes/v3.97_RELEASE_NOTES.md) |
