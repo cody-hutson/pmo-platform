@@ -4,7 +4,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
-| v3.98 | release-hub-mode-r-depth | 2026-07-29 | — | #4180 | [notes/v3.98_RELEASE_NOTES.md](notes/v3.98_RELEASE_NOTES.md) |
+| v3.98 | release-hub-mode-r-depth | 2026-07-28 | — | #4180 | [notes/v3.98_RELEASE_NOTES.md](notes/v3.98_RELEASE_NOTES.md) |
 | v3.97 | build-philosophy-corpus | 2026-07-27 | — | #4133 | [notes/v3.97_RELEASE_NOTES.md](notes/v3.97_RELEASE_NOTES.md) |
 | v3.96 | agent-finops-foundation | 2026-07-26 | — | #4032 | [notes/v3.96_RELEASE_NOTES.md](notes/v3.96_RELEASE_NOTES.md) |
 | v3.95 | 56-runtime-config-and-posture | 2026-07-26 | — | #4037 | [notes/v3.95_RELEASE_NOTES.md](notes/v3.95_RELEASE_NOTES.md) |
