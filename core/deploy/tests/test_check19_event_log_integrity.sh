@@ -46,9 +46,16 @@
 # Run from repo root:
 #   bash core/deploy/tests/test_check19_event_log_integrity.sh
 #
-# RUNTIME: ~25 MINUTES. This suite drives 5 full `deploy.sh --check` invocations
-# and one full run measured 4m38s on the reference instance. Budget accordingly;
-# this is not a fast pre-commit test.
+# RUNTIME: ~25 MINUTES for the FULL suite. It drives 5 full `deploy.sh --check`
+# invocations; one full run measured 4m38s on the reference instance. Budget
+# accordingly; the full suite is not a fast pre-commit test.
+#
+# That cost is real, but it is NOT the reason the standing guard is absent from CI,
+# and it does not cover it: T5 runs no deploy at all (a grep plus a file test), and
+# the sibling `append-pipeline-event.sh --self-test` measures under a second. The
+# reason is SCOPE — #3702 owns CI self-test enforcement and requires the tool set be
+# DISCOVERED, not hardcoded, so a step hardcoded here is one that issue would delete.
+# Deferred on scope discipline, not on runtime cost.
 # Per the Stage-5 design (R8), a standalone --check-event-log-integrity dispatch
 # arm was deliberately DEFERRED — it would collide with the dispatch region
 # another slice edits in this same release — so the region-scoped full run is the
