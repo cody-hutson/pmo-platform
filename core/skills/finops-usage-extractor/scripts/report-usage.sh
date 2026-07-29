@@ -518,10 +518,22 @@ def trend_verdict($rows; $grade; $dim_label):
               note: (if ($bs | length) == 0 then "(empty — no sessions in this period)"
                      elif ($b == $cur) then ("(partial — period ends " + ($b | bucket_end($period))
                           + "; excluded from trend direction)") else "" end) } ) ) as $orows
+      # ---- CIAC-4 AVAILABILITY GATE on the trend renderer ----
+      # A dimension that does NOT EXIST in the store is not a dimension measured
+      # at zero. Without this gate every period renders `0` under
+      # `[SOURCE: exact message.usage]` — the tool's STRONGEST provenance claim —
+      # so "we cannot measure this" is indistinguishable from "we measured zero".
+      # The gate reuses unavail(), the SAME predicate the slice sections use, so
+      # the two surfaces cannot drift apart; when it fires the row set is EMPTY,
+      # which makes an exactness tag structurally unrepresentable rather than
+      # merely forbidden. Applied at BOTH grains — whole dimension, and a single
+      # non-empty period none of whose sessions carry the field.
       | def dim_trend($dim):
           dim_registry[$dim] as $d
+          | (if $d.field == null then null else unavail($d.field) end) as $dim_unavail
           | ($buckets | map( . as $b
               | [ $win[] | select((.started_utc | bucket_of($period)) == $b) ] as $bs
+              | ( ($d.field == null) or (($bs | length) == 0) or ($bs | any(has($d.field))) ) as $meas
               | ( if $d.field == null then ([$bs[] | sess_total] | add // 0)
                   else ([ $bs[] | (.[$d.field] // {}) | to_entries[] | select(.key != "unknown")
                           | .value | leaf_total ] | add // 0) end ) as $tok
@@ -530,28 +542,43 @@ def trend_verdict($rows; $grade; $dim_label):
               | (tsrc($t; $h)) as $src
               | (agg_coverage($bs; $dim)) as $cov
               | { period: $b, period_end: ($b | bucket_end($period)),
-                  tokens: $tok, sessions: ($bs | length), token_source: $src,
-                  figure: (if ($bs | length) == 0 then "0" else ($tok | fig($src)) end),
-                  provenance: (if ($bs | length) == 0 then "—" else src_label($src; $h; $t) end),
+                  measurable: $meas,
+                  tokens: (if $meas then $tok else null end),
+                  sessions: ($bs | length),
+                  token_source: (if $meas then $src else null end),
+                  figure: (if ($meas | not) then "—"
+                           elif ($bs | length) == 0 then "0" else ($tok | fig($src)) end),
+                  provenance: (if ($meas | not) then "(NOT MEASURABLE — dimension absent from every session in this period; not a measured zero)"
+                               elif ($bs | length) == 0 then "—" else src_label($src; $h; $t) end),
                   coverage: $cov,
                   coverage_pct: (if $cov == null then "—" else ((($cov * 100) | round | tostring) + "%") end),
                   empty: (($bs | length) == 0), partial: ($b == $cur),
-                  note: (if ($bs | length) == 0 then "(empty — no sessions in this period)"
+                  note: (if ($meas | not) then "(unavailable — nothing to trend for this period)"
+                         elif ($bs | length) == 0 then "(empty — no sessions in this period)"
                          elif ($b == $cur) then ("(partial — period ends " + ($b | bucket_end($period))
-                              + "; excluded from trend direction)") else "" end) } )) as $rows
+                              + "; excluded from trend direction)") else "" end) } )) as $all_rows
+          | (if $dim_unavail == null then $all_rows else [] end) as $rows
           | ([ $rows[] | select(.coverage != null) | .coverage ]) as $covs
           | { dim: $dim, label: $d.label, grade: $d.grade,
               coverage: (agg_coverage($win; $dim)),
               header: section_header($dim; agg_coverage($win; $dim)),
+              available: ($dim_unavail == null),
+              unavailable_reason: $dim_unavail,
               rows: $rows,
-              verdict: trend_verdict($rows; $d.grade; $d.noun),
+              verdict: (if $dim_unavail != null
+                        then ("TREND: UNAVAILABLE — no per-period figure exists for `" + $d.noun
+                              + "`. " + $dim_unavail
+                              + " Nothing is trended, and no period is reported as zero: an absent "
+                              + "dimension is NOT a measured zero.")
+                        else trend_verdict($rows; $d.grade; $d.noun) end),
               coverage_drift:
+                if $dim_unavail != null then null else
                 (if (($covs | length) >= 2 and (($covs | max) - ($covs | min)) > 0.10)
                  then ("COVERAGE-DRIFT: coverage ranges " + ((($covs | min) * 100 | round) | tostring) + "%–"
                        + ((($covs | max) * 100 | round) | tostring) + "% across periods. Volume changes on this "
                        + "dimension are not separable from capture-rate changes. "
                        + "[RECOMMENDED] threshold: 10 percentage points — a proposed value, not a measurement.")
-                 else null end) };
+                 else null end) end };
         { period: $period,
           bucket_definition: (if $period == "week" then "Monday-start UTC weeks, labelled by start date"
                               elif $period == "month" then "calendar months, labelled by first day"
@@ -561,6 +588,7 @@ def trend_verdict($rows; $grade; $dim_label):
           flat_band: "[RECOMMENDED] ±10% — a proposed value, not a measurement; no usage distribution exists to calibrate against",
           overall: { dim: "overall", label: "Overall spend", grade: "exact",
                      header: "### Overall spend (exact — every session in window)",
+                     available: true, unavailable_reason: null,
                      rows: $orows,
                      verdict: trend_verdict($orows; "exact"; "overall") },
           dimensions: [ $dims[] | select(.grade == "best-effort") | dim_trend(.dim) ] }
@@ -635,11 +663,16 @@ def trend_verdict($rows; $grade; $dim_label):
     + [ $t.overall.rows[] | "| " + .period + " | " + .figure + " | " + .provenance + " | " + (.sessions | tostring) + " | " + .note + " |" ]
     + [ "", $t.overall.verdict, "" ]
     + ( [ $t.dimensions[] | . as $d
-          | [ $d.header, "",
-              "| period | tokens attributed | provenance | coverage | notes |", "|---|---:|---|---:|---|" ]
-            + [ $d.rows[] | "| " + .period + " | " + .figure + " | " + .provenance + " | " + .coverage_pct + " | " + .note + " |" ]
-            + [ "", $d.verdict ]
-            + ( if $d.coverage_drift == null then [] else [ "", $d.coverage_drift ] end )
+          | [ $d.header, "" ]
+            # CIAC-4: an UNAVAILABLE trend dimension renders its reason INSTEAD of
+            # a table. No row set, therefore no figure, therefore no exactness tag.
+            + ( if ($d.available | not) then [ $d.unavailable_reason, "", $d.verdict ]
+                else
+                  [ "| period | tokens attributed | provenance | coverage | notes |", "|---|---:|---|---:|---|" ]
+                  + [ $d.rows[] | "| " + .period + " | " + .figure + " | " + .provenance + " | " + .coverage_pct + " | " + .note + " |" ]
+                  + [ "", $d.verdict ]
+                  + ( if $d.coverage_drift == null then [] else [ "", $d.coverage_drift ] end )
+                end )
             + [ "" ] ] | flatten );
   def md_counts($title; $m; $unit):
     [ ("### " + $title), "", ("| " + $unit + " | count |"), "|---|---:|" ]
