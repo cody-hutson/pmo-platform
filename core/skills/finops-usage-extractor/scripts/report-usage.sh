@@ -572,13 +572,13 @@ def trend_verdict($rows; $grade; $dim_label):
                               + "dimension is NOT a measured zero.")
                         else trend_verdict($rows; $d.grade; $d.noun) end),
               coverage_drift:
-                if $dim_unavail != null then null else
+                (if $dim_unavail != null then null else
                 (if (($covs | length) >= 2 and (($covs | max) - ($covs | min)) > 0.10)
                  then ("COVERAGE-DRIFT: coverage ranges " + ((($covs | min) * 100 | round) | tostring) + "%–"
                        + ((($covs | max) * 100 | round) | tostring) + "% across periods. Volume changes on this "
                        + "dimension are not separable from capture-rate changes. "
                        + "[RECOMMENDED] threshold: 10 percentage points — a proposed value, not a measurement.")
-                 else null end) end };
+                 else null end) end) };
         { period: $period,
           bucket_definition: (if $period == "week" then "Monday-start UTC weeks, labelled by start date"
                               elif $period == "month" then "calendar months, labelled by first day"
@@ -959,12 +959,22 @@ self_test() {
   local jscan jviol
   jscan="$(jq '[ (.dimensions[]|.rows[]), (.dimensions[]|.uncovered_remainder|select(.!=null)),
                  (.trend.overall.rows[]), (.trend.dimensions[]|.rows[]) ] | length' "$JS")"
+  #    TOTAL two-branch predicate, not an exemption list: a NOT-MEASURABLE row
+  #    (measurable:false) must carry NO numeral at all (tokens null, figure "—")
+  #    AND name why; every other row must carry '~' or an exact-source tag. A row
+  #    that satisfies neither branch is a violation, so neither branch can be used
+  #    to launder an unprovenanced figure.
   jviol="$(jq '[ (.dimensions[]|.rows[]), (.dimensions[]|.uncovered_remainder|select(.!=null)),
                  (.trend.overall.rows[]), (.trend.dimensions[]|.rows[]) ]
-               | map(select((.figure|startswith("~")|not)
-                            and (.provenance != "[SOURCE: exact message.usage]")
-                            and ((.provenance // "")|startswith("[UNCOVERED")|not)
-                            and (.figure != "0"))) | length' "$JS")"
+               | map(select(
+                   if (has("measurable") and (.measurable | not))
+                   then ((.tokens != null) or (.figure != "—")
+                         or (((.provenance // "") | startswith("(NOT MEASURABLE")) | not))
+                   else ((.figure|startswith("~")|not)
+                         and (.provenance != "[SOURCE: exact message.usage]")
+                         and ((.provenance // "")|startswith("[UNCOVERED")|not)
+                         and (.figure != "0"))
+                   end)) | length' "$JS")"
   if [ "${jscan:-0}" -lt 10 ]; then
     bad "SM-3 CIAC-4 (model): only ${jscan:-0} figure(s) in the model — too few to be a meaningful check (fail closed)"
   elif [ "${jviol:-1}" -eq 0 ]; then
@@ -1184,6 +1194,59 @@ self_test() {
     fi
   else
     bad "SM-9 degradation: v1.1.0 store did not render the explicit UNAVAILABLE line"
+  fi
+
+  # ── SM-9c CIAC-4 TREND AVAILABILITY GATE — a dimension ABSENT from the store must
+  #    render as UNAVAILABLE in the trend too, and must NEVER carry an exactness tag.
+  #    Before this gate the trend rendered a table of per-period zeros tagged
+  #    [SOURCE: exact message.usage] — "we cannot measure" was byte-indistinguishable
+  #    from "we measured zero" on the tool's strongest provenance claim.
+  #    Fails CLOSED: the control legs below make an empty/vacuous search space a FAIL,
+  #    and the paired positive leg proves the gate is not suppressing everything. ──
+  local V110TR="$wd/v110-trend.txt" V110TJ="$wd/v110-trend.json"
+  local v110_sess v110_skill
+  v110_sess="$(jq -r -s '[.[]|select(.record=="session")]|length' "$fx110")"
+  v110_skill="$(jq -r -s '[.[]|select(.record=="session")|select(has("by_skill"))]|length' "$fx110")"
+  if [ "${v110_sess:-0}" -lt 1 ] || [ "${v110_skill:-1}" -ne 0 ]; then
+    bad "SM-9c control invalid: the v1.1.0 fixture must hold >=1 session and 0 of them may carry by_skill (sessions=$v110_sess, with-by_skill=$v110_skill) — without that, 'no zero-table rendered' proves nothing"
+  elif run_report "$V110TJ" "$wd/v110" --by all --since "$W1" --until "$W5" --trend --json \
+    && run_report "$V110TR" "$wd/v110" --by all --since "$W1" --until "$W5" --trend; then
+    local tg_n tg_gated tg_rows tg_verdict
+    tg_n="$(jq '[.trend.dimensions[]]|length' "$V110TJ")"
+    tg_gated="$(jq '[.trend.dimensions[]|select(.available == false)|select(.unavailable_reason != null)]|length' "$V110TJ")"
+    tg_rows="$(jq '[.trend.dimensions[]|.rows[]]|length' "$V110TJ")"
+    tg_verdict="$(jq -r '[.trend.dimensions[]|select((.verdict|startswith("TREND: UNAVAILABLE"))|not)]|length' "$V110TJ")"
+    if [ "${tg_n:-0}" -lt 2 ]; then
+      bad "SM-9c: only ${tg_n:-0} trend dimension(s) rendered on the v1.1.0 store, expected >=2 — an empty search space is not a pass"
+    elif [ "$tg_gated" != "$tg_n" ] || [ "${tg_rows:-1}" -ne 0 ] || [ "${tg_verdict:-1}" -ne 0 ]; then
+      bad "SM-9c json: $tg_gated of $tg_n absent trend dimension(s) gated, $tg_rows row(s) still emitted, $tg_verdict verdict(s) not UNAVAILABLE — an absent dimension is still being trended"
+    else
+      ok "SM-9c CIAC-4 json: all $tg_n absent trend dimension(s) render available:false + a named reason, emit ZERO rows, and verdict TREND: UNAVAILABLE"
+    fi
+    # Rendered leg: from the first best-effort trend heading to EOF there must be no
+    # exactness tag and no table row at all — the tag is unrepresentable, not absent.
+    local seg seg_head seg_tag seg_row
+    seg="$(awk '/^## Trend/{t=1} t && /^### .*best-effort/{p=1} p' "$V110TR")"
+    seg_head="$(printf '%s\n' "$seg" | grep -ac '^### .*best-effort' || true)"
+    seg_tag="$(printf '%s\n' "$seg" | grep -ac '\[SOURCE: exact message.usage\]' || true)"
+    seg_row="$(printf '%s\n' "$seg" | grep -ac '^| ' || true)"
+    if [ "${seg_head:-0}" -lt 2 ]; then
+      bad "SM-9c rendered: extracted ${seg_head:-0} best-effort trend heading(s) from the v1.1.0 render, expected >=2 — the extraction is empty, so the negative assertion is vacuous"
+    elif [ "${seg_tag:-1}" -ne 0 ] || [ "${seg_row:-1}" -ne 0 ]; then
+      bad "SM-9c rendered: the absent-dimension trend sections still carry $seg_tag exactness tag(s) and $seg_row table row(s)"
+    else
+      ok "SM-9c CIAC-4 rendered: $seg_head absent-dimension trend section(s) render the UNAVAILABLE reason with 0 table rows and 0 exactness tags"
+    fi
+  fi
+  # Paired POSITIVE leg — on a store that DOES carry the dimension the same gate
+  # must let the trend through, or the fix is just blanket suppression.
+  local tg_ok_avail tg_ok_rows
+  tg_ok_avail="$(jq '[.trend.dimensions[]|select(.available == true)]|length' "$JS")"
+  tg_ok_rows="$(jq '[.trend.dimensions[]|.rows[]]|length' "$JS")"
+  if [ "${tg_ok_avail:-0}" -ge 2 ] && [ "${tg_ok_rows:-0}" -ge 2 ]; then
+    ok "SM-9c control: on a store that CARRIES the dimensions the gate passes them through ($tg_ok_avail available, $tg_ok_rows trend row(s)) — not blanket suppression"
+  else
+    bad "SM-9c control: the gate suppressed a PRESENT dimension (available=$tg_ok_avail, rows=$tg_ok_rows) — over-rejection"
   fi
 
   # ── SM-9b Roll-up gate — the predicate is `any(.record=="coverage")`, never the
