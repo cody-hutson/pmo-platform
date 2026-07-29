@@ -138,6 +138,14 @@ sits on a row tagged `[SOURCE: exact message.usage]` or carries a leading `~`.
 | Bucket set | **Dense.** Every bucket from window start to end is generated, then left-joined. An omitted empty bucket makes a gap read as continuity, so density makes "empty renders explicitly" structural rather than incidental. |
 | Empty period | An explicit `0 ... (empty — no sessions in this period)` row, **excluded from direction**: a zero-spend week is usually an absence of work, not a spend trend, and including it lets a vacation read as a decline. |
 | Partial period | The bucket containing today is tagged `(partial — period ends D; excluded from trend direction)`. Shown, because the operator wants today's number — but never a trend's last point, which is the classic false decline. |
+| Absent dimension | **Gated, not zeroed.** A dimension absent from every session in the window renders `available: false` plus its reason and an **empty** row set — no table, no figure, therefore no exactness tag. A non-empty period whose sessions all lack the field renders `measurable: false` / `tokens: null` / `figure: "—"`. Rendering `0 [SOURCE: exact message.usage]` would make "we cannot measure this" indistinguishable from "we measured zero" on the tool's strongest provenance claim. |
+
+**The availability gate.** The trend view and the slice sections share **one**
+availability predicate (`unavail()`), so the two surfaces cannot drift apart on what
+"present" means. When it fires the row set is emptied rather than zero-filled, which
+makes an exactness tag *unrepresentable* on an absent dimension rather than merely
+forbidden — the same structural technique §3 uses for the coverage clause. It is
+applied at both grains: the whole dimension, and a single period.
 
 **Direction requires at least 3 non-empty, complete periods.** Two points define a
 line, not a trend. At n=2 the trend view still renders — per-period table, bucket
@@ -183,9 +191,16 @@ Neither is load-bearing; the gate does the honesty work structurally.
   written**, a deliberate data-hygiene posture: no artifact exists that could be
   accidentally staged.
 - Exit codes match the sibling scripts exactly: `0` ok, `2` usage, `3` store
-  unreadable, `4` store-not-git-ignored (the fail-closed public-repo exfil guard),
-  `5` missing dependency. An **empty window exits 0** and says so — an empty result
-  is an answer, not an error.
+  unreadable **or unparseable / render aborted**, `4` store-not-git-ignored (the
+  fail-closed public-repo exfil guard), `5` missing dependency. An **empty window
+  exits 0** and says so — an empty result is an answer, not an error.
+- **An aborted render is never a clean exit.** The renderer's status is captured, so
+  a `jq` abort (truncated store line, malformed `tokens` value) exits 3 with a named
+  `FATAL` on stderr, and a zero status with empty stdout is fatal too. Both legs
+  exist because rc=0 + empty stdout is byte-identical to the empty-window answer,
+  and the empty-window answer is a *full report that says so*. A malformed
+  `session.started_utc` aborts as well rather than being silently dropped from every
+  window comparison — that drop reached the same fail-open by a different path.
 - Test-only clock override: `FINOPS_REPORT_NOW=YYYY-MM-DD`.
 
 **Portability note (load-bearing).** On BSD `date` the `-v` adjustment must precede
@@ -225,5 +240,7 @@ positive control so an empty search space can never read as "no violations".
 | SM-7 | Empty period explicit, current period partial and excluded, a direction at n>=3, `INSUFFICIENT` at n=2. |
 | SM-8 | **The gate.** A rising by-skill signal still yields `NOT CHARACTERIZED`; the coverage-drift note fires. |
 | SM-9 / SM-9b | A pre-v1.2.0 store degrades to explicit `UNAVAILABLE` and still exits 0; a store with no `coverage` record renders the work-item dimension unavailable **despite** declaring a current `schema_version`. |
+| SM-9c | **The availability gate on the trend.** An absent dimension renders `available:false` + a reason, **zero** rows and `TREND: UNAVAILABLE` in JSON, and in markdown its section carries 0 table rows and 0 exactness tags. Three controls: the fixture must hold sessions and zero carriers of the field, the markdown extraction must be non-empty, and a paired positive leg proves a **present** dimension still trends. |
 | SM-10 | The exit-code contract, including the `--by project` message and the empty-window exit 0. |
+| SM-10e | **Fail-closed render.** Three abort causes (truncated line / malformed timestamp / malformed `tokens`) each exit non-zero with a named `FATAL` on stderr and stdout that is **not** byte-identical to the empty-window control rendered from the same good fixture. Discriminating controls: the truncated store must not parse; the bad-timestamp store must parse (so its abort proves the semantic validator fired); the empty-window control must exit 0 with its explicit statement. |
 | SM-11 | `--json` matches `report.expected.json` modulo `generated_utc`. |
