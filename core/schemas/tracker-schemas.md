@@ -417,7 +417,7 @@ PMBOK/RACI discipline requires exactly one Accountable per workstream row. This 
 ## Tracker 10: Sprint Tracker
 **File pattern:** `[Project]_Sprint_Tracker.md`
 **Update tier:** Tier 2 (operational — auto-write within `cascade_scope`)
-**Update sources:** Delivery Engine Mode F — **LG-5 Dev Complete (DoD) exit PASS** at `T(8→9)` (item close); **end-of-sprint review** (team close)
+**Update sources:** Delivery Engine Mode C — **LG-4 DoR exit PASS** at `T(6→7)` (item **admission**: the `ADD` that creates the pair row); Delivery Engine Mode F — **LG-5 Dev Complete (DoD) exit PASS** at `T(8→9)` (item close: the `MODIFY` that completes it); **end-of-sprint review** (team close)
 
 The per-project **sprint / iteration tracker** for Scrum, XP, and Hybrid-iterative projects (the iteration-cadence tracker named in the § Methodology Variation matrix below), and the **capture surface for the estimate/actual pairs** that feed the estimation-calibration loop. [`estimation-standards.md`](../../operations/skills/delivery-engine/references/estimation-standards.md) **§ 8 owns the method** — the estimation ratio, the calibration-bias / calibration-spread pair, the bias band, the window floor, and every threshold. **This schema is § 8's INPUT contract and mints no threshold, no band, and no derived figure**; it defines only what is written down, by whom, and when. Its template is [`sprint-tracker-template.md`](../../operations/templates/sprint-tracker-template.md).
 
@@ -457,9 +457,9 @@ Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, 
 |-------|------|----------|-------------|-------------|
 | Item Ref | String | Yes | Free text — the work item's stable reference (ticket / item id) | Identity, never reassigned. The key `Estimate` and `Actual` are joined on at report time. |
 | Signal Family | Enum | Yes | `F1` \| `F2` \| `F3` — **only `F1` and `F2` are valid in this section** | The § 8.1 family. The enum domain is § 8.5's verbatim, so the two documents carry one vocabulary; `F3` is iteration-grain and is carried by `## Sprint History`, never by a row here. Families are never pooled (§ 8.1 rule 1). |
-| Estimate | Number | Yes | `> 0` | **Frozen at `ADD`** — written when the item is admitted to execution at the LG-4 DoR exit PASS — and **never rewritten at close**. F1: the committed story-point figure (the § 5 range **midpoint**). F2: the § 2 committed-horizon budget, in **business days**. `Estimate = 0` is invalid: the ratio is undefined, so the row is rejected rather than stored. |
+| Estimate | Number | Yes | `> 0` | **Frozen at `ADD`** — written by **Delivery Engine Mode C** when the item is admitted to execution at the LG-4 DoR exit PASS (see § Admission below) — and **never rewritten at close**. F1: the committed story-point figure (the § 5 range **midpoint**). F2: the § 2 committed-horizon budget, in **business days**. `Estimate = 0` is invalid: the ratio is undefined, so the row is rejected rather than stored. |
 | Estimate Phase | Enum | Yes | `Initial concept` \| `Approved concept` \| `Requirements defined` \| `Design complete` \| `Build underway` | The § 1 cone row the estimate was made at. Required — § 8.4's realized-versus-claimed comparison is not computable without it, so a row missing it is incomplete rather than partially usable. |
-| Start Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The item's **LG-4 DoR exit PASS** date. **Written once, at the first admission. `REACTIVATE` does not reset it** — see § Cumulative Elapsed below. |
+| Start Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The item's **LG-4 DoR exit PASS** date, written by **Mode C** at admission. **Written once, at the first admission, and immutable on every path thereafter** — see § Start-Date Immutability below. |
 | Actual | Number | Yes | `≥ 0` | F1: the **blind** re-score assigned at close (see Capture Rule 5). F2: equal to `Elapsed`. **Never zero-filled to stand in for a missing value** — a synthesized zero is indistinguishable from a genuinely zero-effort item and would drag the window's bias toward 0. |
 | Actual Date | Date | Yes | `YYYY-MM-DD` (not in the future) | The **LG-5 Dev Complete (DoD) exit PASS** date for this close ordinal. Same field semantics as Tracker 7's `Actual Date` (achieved date, populated on completion) — adopted, not re-coined. |
 | Elapsed | Integer | Yes for `F2`; No for `F1` | ≥ 0, **business days** | Business days from the **first** `Start Date` to this row's `Actual Date`. **Cumulative across every reopen pass** — see § Cumulative Elapsed below. On an F2 row `Actual` MUST equal `Elapsed`; a disagreement is a validation failure, not a value to reconcile silently. |
@@ -469,6 +469,24 @@ Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, 
 | Excluded Reason | String | No | Present **if and only if** the row is excluded: `superseded-by-reclose` \| `superseded-by-re-estimate` \| `unit-change-pending-re-anchor` \| a documented outlier reason | Why this row does not count toward the window's `N`. An excluded row is **retained, never deleted** — append-only, the same posture as Tracker 6's `superseded` rule and the Tracker 5 archive rule. Deleting it would destroy the rework signal, which is the most informative thing a reopen carries. |
 
 **No per-person attribution — by construction.** This table carries no person, assignee, or owner column, and none may be added. Per-person estimate-accuracy analysis is therefore **unrepresentable in the schema**, not merely discouraged.
+
+### Admission — the `ADD` that creates the row (normative)
+
+**A row is created at admission, not at close.** `estimation-standards.md` § 8.5's two-write contract binds here: the promise half (`Estimate`, `Estimate Phase`, `Start Date`) is written when the item is admitted to execution, and the close only completes it. **A `MODIFY` has no target until this `ADD` has run** — so an admission that emits nothing does not produce a late pair, it produces a permanently unwritable one.
+
+| | Admission (`ADD`) | Close (`MODIFY`) |
+|---|---|---|
+| **Gate** | **LG-4 DoR exit PASS or CONDITIONAL PASS** at `T(6→7)` | **LG-5 DoD exit PASS or CONDITIONAL PASS** at `T(8→9)` |
+| **Emitter** | Delivery Engine **Mode C** | Delivery Engine **Mode F** |
+| **`fields:` map** | `Item Ref`, `Signal Family`, `Estimate`, `Estimate Phase`, `Start Date`, `Window Key`, `Close Ordinal`, `Evidence Grade` | `Actual`, `Actual Date`, and — on `F2` — `Elapsed` as recomputed by this skill |
+| **`entry_id`** | blank (creating) | the row key of the row this close completes |
+| **Never carries** | `Actual`, `Actual Date`, `Elapsed` | `Estimate`, `Estimate Phase`, `Start Date` |
+
+**One `ADD` per signal family (normative).** An admitted item carries up to **two** promises — an F1 size figure and an F2 horizon budget — and they are **separate rows**, because one row cannot hold two `Estimate` values or two `Actual` values (see § Row Key below). Mode C emits **one `ADD` per family for which the item has an estimate of record at admission**, and **none** for a family that has none.
+
+**Admission fails closed, and its failure is countable at close.** Mode C emits an `ADD` **only** when it can populate the full required field set for that family. It **never** zero-fills `Estimate`, never defaults `Estimate Phase`, and never emits a partial row — an item admitted without a size figure gets no F1 row, and the F1 gap surfaces at close as a `## Capture Exceptions` row with `no-estimate-of-record`. **A missing admission is therefore visible in the exception population rather than silent in the pair population** — which is the only reason a no-capture is countable at all. On an LG-4 **FAIL** or **NO-EVIDENCE**, no row is created and no exception is recorded: the item was not admitted, so nothing is owed.
+
+**End-to-end executability (the property this section exists to hold).** *admit → row exists → close → `MODIFY` resolves → the actual is captured keyed to its frozen estimate.* Each arrow has a named emitter, a named gate, and a fail-closed negative path. **If any arrow has no emitter, the loop has no input and every downstream figure is `not computable` for a reason no consumer can see** — so the emitter is named here rather than assumed.
 
 ### Cumulative Elapsed — the reopen-then-reclose closure (normative)
 
@@ -506,6 +524,7 @@ The **positive record of a close that produced no pair.** Silence is the failure
 9. **Window immutability.** A reclose after its window has closed lands in the **new** window; the prior window is **never recomputed**. The prior window records a `Capture Exception` with `estimate-not-in-window`, so the coverage loss is visible rather than silent.
 10. **Unit re-anchoring.** A pair spanning a story-point re-anchoring is excluded (`unit-change-pending-re-anchor`) — comparing a pre- and post-anchor figure compares two different units.
 11. **Forward-only.** **Never backfill a historical pair.** A reconstructed estimate is not the estimate that was made, and a backfilled population is exactly the survivorship-biased one § 8.7 V2 warns about. Capture is grandfathered forward from the point this surface lands, per `release-velocity-tracking.md` § 10's convention.
+12. **Admission trigger — the rule that runs BEFORE rule 1.** Row creation fires when Delivery Engine **Mode C** renders an **LG-4 DoR exit verdict** at `T(6→7)`. `PASS` → `ADD`; `CONDITIONAL PASS` → `ADD` (the item is admitted to execution); **`FAIL` or `NO-EVIDENCE` → no `ADD` and no exception** — the item was not admitted, so no pair is owed. Admission binds to the **verdict**, never to a "refined" claim. **A close (rule 1) with no prior admission cannot write a pair** — it writes the `no-estimate-of-record` exception per rule 3 instead, and the coverage loss is visible rather than silent. See § Admission above for the per-family fan-out and the field split.
 
 ---
 

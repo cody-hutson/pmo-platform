@@ -537,23 +537,34 @@ owned by `estimation-standards.md` § 8 and is **not** computed here: Tracker
 Manager writes rows, never derived figures.
 
 Like every tracker in `3-Operations/`, **Tracker Manager owns its ROW writes**.
-Delivery Engine Mode F is the emitter — it renders the LG-5 Dev Complete (DoD)
-exit verdict and the end-of-sprint review, and emits the `TRACKER_UPDATE`; this
-skill validates and writes it. These are **Document Tier 2 / Autonomy Tier 2**
+There are **two emitters at two gates**, per `estimation-standards.md` § 8.5's
+two-write contract: **Delivery Engine Mode C** emits the `ADD` at the **LG-4 DoR
+exit PASS** (item admission — the write that *creates* the row), and **Delivery
+Engine Mode F** emits the `MODIFY` at the **LG-5 Dev Complete (DoD) exit verdict**
+plus the end-of-sprint review (the write that *completes* it); this skill
+validates and writes both. These are **Document Tier 2 / Autonomy Tier 2**
 writes — auto-write within `cascade_scope`, no approval gate — and the Step-5
 **Lifecycle-State Precondition** still runs first: an `archived`/`superseded`
 target is **BLOCK + flag** exactly as for any other tracker.
 
-Four write rules are specific to this tracker, each failing closed:
+Six write rules are specific to this tracker, each failing closed:
 
-- **Exactly one record per close.** Every LG-5 exit PASS lands **either** a
-  `## Estimate-Actual Pairs` row **or** a `## Capture Exceptions` row. Zero rows
-  and two rows are both defects to surface — a silent no-capture is never a valid
-  outcome.
+- **The `ADD` precedes the `MODIFY`, and its absence is reported, not absorbed.**
+  A close `MODIFY` whose `entry_id` resolves to no existing row is a Step-1
+  validation failure (`entry_id` must exist) — **surface it as a missing
+  admission**, naming the `Item Ref` and `Signal Family`, and do **not**
+  manufacture the row from the close instruction. Synthesizing the missing half
+  would invent an `Estimate` nobody committed to and drive the ratio toward 1.00
+  by construction.
+- **Exactly one record per close.** Every LG-5 exit PASS lands **either** one
+  `## Estimate-Actual Pairs` row **per admitted signal family** **or** a
+  `## Capture Exceptions` row for the family that has none. Zero rows for an
+  admitted family, and two rows in the same family at the same `Close Ordinal`,
+  are both defects to surface — a silent no-capture is never a valid outcome.
 - **`Estimate` is frozen at `ADD`.** The close is a `MODIFY` whose `fields:` map
-  carries `Actual` and `Actual Date` only. **Reject a close instruction that
-  carries `Estimate`**, and never render the `Estimate` column in a re-score
-  elicitation — the re-score is blind by protocol.
+  carries `Actual` and `Actual Date` only (plus the recomputed `Elapsed` on F2).
+  **Reject a close instruction that carries `Estimate`**, and never render the
+  `Estimate` column in a re-score elicitation — the re-score is blind by protocol.
 - **`Start Date` is write-once.** `REACTIVATE` must not carry `Start Date`;
   reject the instruction if it does. `Elapsed` is business days from the item's
   **first** `Start Date`, so it is cumulative across reopen passes and must be

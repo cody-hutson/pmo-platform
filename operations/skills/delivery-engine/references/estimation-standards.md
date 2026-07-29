@@ -323,6 +323,15 @@ The capture surface that supplies §8 pairs MUST carry the following field set. 
 | **Evidence Grade** | enum `[SOURCE]` \| `[INFERRED]` \| `[ASSUMPTION – CONFIRM]` | Yes | **F1 is capped at `[INFERRED]`** — a re-score is itself an estimate (§8.7 V3) |
 | **Excluded Reason** | string | No | Present **if and only if** the pair is excluded from the window, carrying the documented reason per `sprint-defaults.md` §3.2 rule 2 |
 
+**Two writes at two gates, never one (normative — fails closed).** A pair is **not** written by a single instruction at close. The promise half and the outcome half are written at **different gates**, by **different mode invocations**, and the contract names both:
+
+| Write | Gate | Emitted by | Fields written | Posture |
+|---|---|---|---|---|
+| **W1 — admission** | **LG-4 DoR exit PASS / CONDITIONAL PASS** (item admitted to execution) | delivery-engine **Mode C** | `Signal Family`, `Estimate`, `Estimate Phase`, `Start Date`, `Window Key`, `Evidence Grade` | Creates the record. `Estimate` and `Estimate Phase` are **frozen** here and never rewritten at close |
+| **W2 — close** | **LG-5 Dev Complete (DoD) exit PASS / CONDITIONAL PASS** | delivery-engine **Mode F** | `Actual`, `Actual Date`, and (F2) the derived elapsed figure | Completes the record against the frozen promise. Carries **no** `Estimate` — that is what keeps the F1 re-score blind |
+
+**W1 is not optional and its absence is not recoverable at close.** A close instruction is a **modification of an existing record**; a close fired against an item that was never admitted has **no record to modify**, so the pair is unwritable and the close must record a capture exception (`no-estimate-of-record`) instead. **A capture contract that names only the close is not a capture path** — it describes half a write and reads as complete. Any surface implementing this contract states, per field, **which of the two writes owns it**; a field owned by neither is a defect in the surface, not a value to improvise at close.
+
 **Explicit-N/A discipline (normative — fails closed).** A pair either carries the **full** required field set or is **absent**. **Never a partial row, and never a zero-filled `Actual`.** A zero-filled actual is indistinguishable from a genuinely zero-effort item and would drag `B` toward 0 — a synthesized figure silently biasing the baseline is exactly the failure this discipline forecloses.
 
 **Forward-only (normative).** **Never backfill historical pairs.** A reconstructed estimate is not the estimate that was made, and a backfilled population is precisely the survivorship-biased one §8.7 V2 warns about. Capture is grandfathered forward from the point the surface lands.

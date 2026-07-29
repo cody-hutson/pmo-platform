@@ -174,9 +174,17 @@ tag referencing DoR or readiness.
    - Label the fix as DRAFT for the product manager/tech lead to confirm
 4. Produce a gate summary: PASS / CONDITIONAL PASS / FAIL per ticket and overall
 5. If slicing is needed (story too large), suggest the decomposition with rationale
+6. **Estimate admission at DoR exit (the calibration loop's row-creating write).** This gate is where an item's estimate becomes a **promise of record**, so it is where the calibration row is created — schema: [`../../../core/schemas/tracker-schemas.md`](../../../core/schemas/tracker-schemas.md) **§ Tracker 10: Sprint Tracker § Admission**, under [`references/estimation-standards.md`](references/estimation-standards.md) **§ 8.5's two-write contract**. Emit a `TRACKER_UPDATE` against `[Project]_Sprint_Tracker.md`; Tracker Manager validates and writes the row. **Emit rows, never figures** — the ratio, the bias/spread pair, the band, and the window floor are owned by §8 and are read back by **Mode D** and **Mode E**, never computed here.
+   - **On an LG-4 DoR exit `PASS` or `CONDITIONAL PASS`** at `T(6→7)`, emit `action: ADD` with `entry_id` **blank** and a `fields:` map carrying `Item Ref`, `Signal Family`, `Estimate`, `Estimate Phase`, `Start Date` (this gate's exit-PASS date), `Window Key`, `Close Ordinal: 1`, and `Evidence Grade`. **Never send `Actual`, `Actual Date`, or `Elapsed`** — the outcome half does not exist yet, and a placeholder here would be indistinguishable at read time from a measured zero. On **`FAIL` or `NO-EVIDENCE`, emit nothing** — the item was not admitted, so no pair is owed and no exception is recorded.
+   - **One `ADD` per signal family, and only for a family with an estimate of record.** `F1` carries the committed story-point figure (the §5 range **midpoint**); `F2` carries the §2 committed-horizon budget in **business days**. Emit both when both exist, one when one exists, **and none for a family that has neither** — never a zero-filled `Estimate`, never a defaulted `Estimate Phase`, never a partial row. A family admitted without a figure is not lost: its absence surfaces at close as a Mode F `## Capture Exceptions` row with `no-estimate-of-record`, which is what makes the gap **countable instead of silent**.
+   - **This step is what makes the close executable.** Mode F's close is a `MODIFY` against a row this step created; without the `ADD` there is no `entry_id` to modify, Tracker Manager rejects the instruction, and the loop's input is empty for a reason no downstream consumer can see. **A DoR exit PASS that emits no admission instruction and no stated reason is a defect this mode surfaces**, not a quiet skip — report the item, the family, and which required field could not be populated.
 
 **Output**: Gate results table, per-ticket findings, drafted remediations, overall
-gate verdict, recommended actions for any FAIL items.
+gate verdict, recommended actions for any FAIL items, and — on every PASS /
+CONDITIONAL PASS — the **estimate-admission `TRACKER_UPDATE` block** (one `ADD` per
+signal family with an estimate of record, or the named reason none was emitted).
+The admission block is a **declared deliverable of this mode**: a PASS verdict
+rendered with neither an `ADD` nor a stated reason is incomplete.
 
 ### Mode D — Sprint Planning
 
