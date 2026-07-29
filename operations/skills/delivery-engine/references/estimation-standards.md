@@ -346,16 +346,68 @@ The capture surface that supplies §8 pairs MUST carry the following field set. 
 
 ### 8.6 Consumption — the feedback and reporting contracts
 
-Two consumers read §8 outputs. **Both are read-only against §8, and neither writes any value into this document.** These contracts are complete as written: a consumer needs nothing from §8 that is not listed here.
+Two consumers read §8 outputs. **Both are read-only against §8, and neither writes any value into this document.**
+
+#### The grant — enumerated, and checked rather than asserted (normative — fails closed)
+
+An earlier form of this section asserted its own completeness ("a consumer needs nothing from §8 that is not listed here"). **That claim has no observable predicate** — nothing can be run against it, so a consumer that grew a new read simply falsified it silently, and did so: Lever 2 below requires the item's declared `Estimate Phase`, which the original seven-element grant did not carry. The assertion is therefore replaced by an **enumerated grant** plus a **diff a reviewer can run**.
+
+**The grant.** Each row names one element, its defining home, and which consumer may read it. **A consumer may read the elements marked for it and nothing else.**
+
+| # | Element | Defined in | Mode D (§8.6.1) | Mode E (§8.6.2) | Why the consumer cannot do without it |
+|---|---|---|---|---|---|
+| **G1** | `B` — calibration bias | §8.2 | ✔ | ✔ | The figure Lever 1 proposes and the report bands |
+| **G2** | The **direction word** (closed 4-set) | §8.1 rule 2 | ✔ | ✔ | A bare `B` names no lever; F3's concern side is inverted |
+| **G3** | The **estimation-bias band** 🟢/🟡/🔴, **cited by role — no boundary value restated** | §8.3 | ✔ | ✔ | Selects whether a lever fires at all |
+| **G4** | `S` — calibration spread | §8.2 | ✔ | ✔ | The spread half; never collapsed with `B` (§8.2) |
+| **G5** | The **realized-precision phase** (sentence form, never a colour) | §8.4 | ✔ | ✔ | Lever 2's left-hand side |
+| **G6** | The **§1 phase↔width rows** — each phase's `low×–high×` pair and the width **ordering** over them | §8.4 table | ✔ | ✔ | "Wider than" is an ordering claim, and widening §5's range needs the target band's actual bounds |
+| **G7** | The pair's **declared `Estimate Phase`** | §8.5 field set | ✔ | ✔ | Lever 2's right-hand side — **the element whose omission made the original grant unexecutable** |
+| **G8** | `N` — completed iterations in the window | §8.3 | ✔ | ✔ | Selects the confidence row; sizes the accrue-recommendation |
+| **G9** | The **confidence word** (verbatim 4-set) | §8.3 window table | ✔ | ✔ | A band without it is not a valid §8 output (§8.3) |
+| **G10** | The **window floor** and §8.3's **`not computable` string, verbatim** | §8.3 | ✔ | ✔ | The negative path; the quantified `floor − N` accrue figure |
+| **G11** | The **`Signal Family`** every figure belongs to | §8.1 | ✔ | ✔ | Families are never pooled; the F1-only-🔴 corroboration test and the discordance rule are both family-indexed |
+| **G12** | The window's **identity and recency** (`Window Key`; whether it is the most recent closed window) | §8.5 field set | ✔ | ✔ | Distinguishes a current advisory from a stale one; the trend needs window ordering |
+| **G13** | **Coverage** — the window's pair count and the iteration's **planned-item denominator** | §8.6.2 / the capture surface | ✔ | ✔ | §8.7 V2's survivorship control; renders at any `N` |
+| **G14** | The **cross-window trend word** — `improving` \| `stable` \| `degrading` | §8.6.2 (adopted from `gate-evaluation-spec.md` § Layer 3) | ✔ | ✔ | Required to state that `B` is *trending* toward 1.00 |
+| **G15** | The **points-per-item throughput trend** (the inflation cross-check's second input) | `sprint-defaults.md` §3.2 rule 4, read through §8.6.2's inflation flag | ✔ | ✔ | `B` → 1.00 is what success and what gaming both look like; only the throughput trend separates them |
+| **G16** | The **`Evidence Grade`** of the window's pairs | §8.5 field set, bound by §8.7's evidence bar | ✔ | ✔ | An `[ASSUMPTION – CONFIRM]` pair may not alone drive a 🔴; F1 is capped at `[INFERRED]` |
+
+**The completeness check (normative — fails closed).** Completeness is a **diff**, run whenever this section or either consumer's instruction text changes:
+
+1. For each consumer, extract every §8 element its instruction text **reads or applies**.
+2. Diff that set against this table's column for that consumer.
+3. **Used-but-not-granted → FAIL.** Resolve by widening the grant **or** removing the use — never by leaving the use uncited. A consumer reading an element this table does not grant it is operating outside the contract even when the read is reasonable.
+4. **Granted-but-unused → FAIL.** Remove the row. A grant nobody exercises is an unfalsifiable claim of coverage.
+5. **An unrun diff is a FAIL, not a pass.** The absence of the check is indistinguishable in the artifact from a clean check — which is exactly the failure mode this replaces.
+
+**The grant is one-directional.** Widening it adds **reads**, never writes: every element above is read-only, and no consumer edit may convert a grant row into a write path. `estimation-standards.md` has **one** author; a consumer that needs an element it lacks requests a grant row, it does not acquire authorship.
 
 #### 8.6.1 The estimate-feedback consumer (delivery-engine Mode D)
 
-**MAY read**, and only these: `B`, its **direction word**, its **band**, `S`, the **realized-precision phase**, `N`, and the **confidence word**.
+**MAY read**, and only these: the elements marked **Mode D** in the grant table above. The set is **not restated here** — a second copy would be a second home, and the drift between a restated list and the grant is precisely the defect that made Lever 2 unexecutable.
+
+**Emission requirements (normative — fails closed).** The advisory is not optional and its absence is not silence:
+
+- **Exactly one calibration block per signal family**, each opened with the literal token **`estimation calibration`**. Families are never pooled (§8.1 rule 1), so one merged block for two families is a defect, not a summary.
+- **The block renders on the negative path too** — with §8.3's `not computable` string verbatim (G10) plus the quantified accrue-recommendation. Coverage (G13) renders at **any** `N`.
+- **The absence of the `estimation calibration` token is the detectable failure signature.** A check over the emission **fails closed**: token present → the block is graded; **token absent → FAIL, never a pass**. An emission carrying no block is indistinguishable from a working loop that had nothing to say, which is why absence is graded rather than excused.
+
+**At most one BIAS lever per emission (normative — the double-correction closure).** §8.2 establishes that bias and spread have **opposite** remedies; §8.6 is where that separation is enforced at the point of action, because a contract that hands a consumer two levers and no arbitration rule invites both to fire on one signal:
+
+| Signal | Lever that may fire | Lever that MUST NOT |
+|---|---|---|
+| 🟢 band | none | Lever 1 — applying a multiplier to a calibrated team **injects** a bias (§8.2, Team B) |
+| 🟡 band | Lever 1's multiplier proposal | a §3 focus-factor move — not at this band |
+| 🔴 band | Lever 1's re-baseline proposal, which **supersedes** the multiplier | the multiplier **in addition to** the re-baseline — one signal corrected twice biases the plan in the **opposite** direction |
+| `not computable` | none | any bias lever |
+
+**Lever 2 is not a second bias lever and may fire alongside the bias lever**, because it changes the emitted range's **width** and never its **centre**. **`S` MUST NOT be fed through a multiplier** — it is a ratio of extremes with no centre and no direction, so multiplying by it is the one move that makes this loop actively harmful (§8.2, Team B). Two *bias* levers on one emission is a **defect**, never a stronger correction.
 
 Two levers, **both non-mutating**:
 
 - **Lever 1 — bias → a multiplier proposal.** When the band is 🟡 or 🔴, surface `[RECOMMENDED] apply ×B to the next <family> estimate`, rendering **the prior value, `B`, the direction word, the band, `N`, and the confidence word**. It is **offered, never applied**. A focus-factor move is surfaced as a `[RECOMMENDED]` proposal **inside §3's valid range** and requires a governed edit — §3's Consumers note makes the focus factor a value two other docs inherit by role without restating it, so an automated write there would propagate with no diff trail.
-- **Lever 2 — spread → a range-width floor.** When the realized-precision phase (§8.4) is **wider** than the item's declared `Estimate Phase`, §5's emitted range widens to the realized band. **This mutates nothing** — it makes §5's existing normative rule bind at the team's *measured* precision rather than its *claimed* precision. This is the substantive feedback path, and it is a demonstrable change to a future estimate.
+- **Lever 2 — spread → a range-width floor.** When the realized-precision phase (**G5**) is **wider** than the item's declared `Estimate Phase` (**G7**) — an ordering read off §8.4's width column (**G6**) — §5's emitted range widens to the realized band, whose bounds are that same table's `low×–high×` pair. **Name both phases in the emission**: the phase the estimates claimed and the phase they realized. Withholding either leaves the reader a widened range with no stated cause. **This mutates nothing** — it makes §5's existing normative rule bind at the team's *measured* precision rather than its *claimed* precision. This is the substantive feedback path, and it is a demonstrable change to a future estimate.
 
 **MUST NOT:**
 
@@ -377,7 +429,9 @@ Renders, per **team**, per **window**, per **signal family**:
 | **Trend** | across consecutive windows, using **`improving` / `stable` / `degrading`** — adopted verbatim from `core/schemas/gate-evaluation-spec.md` § Layer 3, not a new enum |
 | **Inflation flag** | when `B` trends toward 1.00 **while points-per-item trends up**, flag it as **inflation, not calibration** — the throughput cross-check `sprint-defaults.md` §3.2 rule 4 already mandates |
 
-**Negative path (normative — fails closed).** With `N < 3`, render `not computable — N iteration(s) (< 3)` plus the missing-input recommendation. **Never a defaulted colour.**
+**Grant binding (normative).** Every element in the table above is drawn from the **Mode E** column of the grant: coverage → **G8/G9/G13**; bias → **G1/G2/G3**; spread → **G4/G5/G6/G7**; trend → **G12/G14**; inflation flag → **G14/G15**; the discordance read across families → **G11**; the evidence bar on every emission → **G16**. **The report reads nothing outside that column**, and a new rendering element requires a grant row before it may be added here — the completeness diff is run against this mapping, not against the prose.
+
+**Negative path (normative — fails closed).** With `N < 3`, render `not computable — N iteration(s) (< 3)` plus the missing-input recommendation (**G10**). **Never a defaulted colour.**
 
 **MUST NOT render:** a cross-team comparison; a per-person figure; a portfolio rollup; or a **single collapsed accuracy number** (§8.2).
 
