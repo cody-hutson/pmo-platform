@@ -191,7 +191,7 @@ This cadence is one axis of a five-axis audit-cadence set; all five mutually cro
 - **Machinery (how-to-run):** [`decision-audit-mode-spec.md`](../../../core/skills/pmo-qa-auditor/references/decision-audit-mode-spec.md) — the run mechanics this cadence schedules.
 - **Content SSOT (what-is-scored):** `decision-audit-dimension-rubric.md`, in the same skill `references/` directory — the coverage-seam set, per-seam grade vocabulary, and coverage-index formula. Authored by the capability build; cited here by path rather than by link until it lands.
 - **Output convention:** [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) — the analysis-folder home, frontmatter, and sunset rule.
-- **Host decision of record:** [ADR-101](../../../core/ADRs/ADR-101-decision-audit-host-qa-auditor-mode-j.md) — why this axis hosts as a mode of the existing QA-auditor skill rather than as a standalone skill.
+- **Host decision of record:** [ADR-103](../../../core/ADRs/ADR-103-decision-audit-host-qa-auditor-mode-j.md) — why this axis hosts as a mode of the existing QA-auditor skill rather than as a standalone skill.
 
 **Relationship to the forward gates.** This axis is the **retrospective** complement to the
 forward, per-decision gates the pipeline already runs — the stage gates, the plan-review GO

@@ -1,5 +1,5 @@
 ---
-title: "ADR-101 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist"
+title: "ADR-103 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist"
 status: Proposed — to be ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
 date: 2026-07-27
 release: decision-audit-and-learning (version bound at Stage 12)
@@ -13,13 +13,19 @@ source_observations:
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-101 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist
+# ADR-103 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist
 
 ## Status
 
 Proposed — to be ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
 
-Renumbered from a branch-local ADR-098 → **ADR-101** while this branch was parked awaiting its dependency milestone. Four records were authored concurrently against the same next-free slot; per `core/ADRs/README.md` § Renumber log, first-to-merge takes the number and the other claimants renumber. `ADR-098-portability-seventh-first-class-value.md` merged first and kept **098**, then two further siblings claimed **099** and **100**, so `main` topped out at ADR-100 contiguous and **101** is the true next-free slot. `check-adr-numbers.py` fails a gap as readily as a duplicate, so the number is chosen to keep `main` contiguous at `001..101` rather than to preserve this branch's original allocation.
+**Numbering provenance — lineage `098 → 101 → 103`.** This record has renumbered twice; both moves have the same cause and neither reflects any change to the decision itself.
+
+*First move, `098 → 101`.* Authored as a branch-local ADR-098 and renumbered while this branch was parked awaiting its dependency milestone. Four records were authored concurrently against the same next-free slot; per `core/ADRs/README.md` § Renumber log, first-to-merge takes the number and the other claimants renumber. `ADR-098-portability-seventh-first-class-value.md` merged first and kept **098**, then two further siblings claimed **099** and **100**, so `main` topped out at ADR-100 contiguous and **101** was the true next-free slot at that recomputation.
+
+*Second move, `101 → 103`.* While this branch remained unmerged, the `agent-finops-intelligence` release merged and its own records took **101** (`core/ADRs/ADR-101-finops-store-frozen-kind-versioning-exemption.md`) and **102** (`release/ADRs/ADR-102-quota-budget-successor-substrate-finops-cumulative-draw.md`). Under merge-first-keeps-the-number the merged record keeps **101**, so this one moves again. Recomputed globally across **both** ADR homes and every remote ref, the sequence is contiguous at `001..102` with no gaps, making **103** the true next-free slot.
+
+*Why this keeps happening — the mechanism, stated plainly.* The ADR sequence is a **single globally monotonic namespace spanning `core/ADRs/` and `release/ADRs/`**, but a number is *allocated at authorship* while the claim only *binds at merge*. A record authored on a long-lived branch is therefore exposed to every sibling release that merges ahead of it, and each such merge consumes the slot the branch is holding. This is a property of concurrent releases sharing one sequence, not a defect in any individual record — and it recurs for as long as the branch stays unmerged. Pre-reserving a higher number is not a remedy: `check-adr-numbers.py` fails a **gap** as readily as a duplicate, so the number is always chosen to keep `main` contiguous rather than to preserve this branch's earlier allocation.
 
 ## Context
 

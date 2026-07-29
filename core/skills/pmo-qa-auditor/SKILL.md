@@ -867,7 +867,7 @@ See `references/decision-audit-mode-spec.md` (machinery),
 `references/decision-audit-dimension-rubric.md` (seam set + grade vocabulary + index formula
 SSOT; authored by the capability build), and
 `../../../release/references/protocols/decision-audit-cadence.md` (when-to-run). Host decision
-of record: `../../ADRs/ADR-101-decision-audit-host-qa-auditor-mode-j.md`.
+of record: `../../ADRs/ADR-103-decision-audit-host-qa-auditor-mode-j.md`.
 
 ## Output format
 
