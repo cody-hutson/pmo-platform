@@ -205,11 +205,11 @@ _push_failure_is_collision() {
   # an "already exists" / locked-ref phrasing. We require the rejection token AND
   # an existence/lock token so a generic "rejected" in an unrelated transport
   # message cannot masquerade as a CAS loss.
-  if printf '%s' "$out" | grep -qiE '\[rejected\]' \
-     && printf '%s' "$out" | grep -qiE 'already exists'; then
+  if grep -qiE '\[rejected\]' <<< "$out" \
+     && grep -qiE 'already exists' <<< "$out"; then
     return 0
   fi
-  if printf '%s' "$out" | grep -qiE 'cannot lock ref|failed to update ref'; then
+  if grep -qiE 'cannot lock ref|failed to update ref' <<< "$out"; then
     return 0
   fi
   return 1
@@ -770,8 +770,8 @@ _claim_self_test() {
       '| v9.02 | m-deployed | #3 | #4 | bbb | v9.02 | DEPLOYED | 2026-07-19 |' \
       > "$_u0d/release/releases/RELEASE_LOG.md"
     local _u0out; _u0out="$(CLAIM_REPO_ROOT="$_u0d" _host_release_log_deployed 2>/dev/null)"
-    printf '%s\n' "$_u0out" | grep -qx 'v9.02' || { echo "FAIL [$_t_label]: must extract the DEPLOYED row v9.02 (State=\$8)"; failures=$((failures+1)); }
-    printf '%s\n' "$_u0out" | grep -qx 'v9.01' && { echo "FAIL [$_t_label]: must NOT extract the VERIFIED row v9.01"; failures=$((failures+1)); }
+    grep -qx 'v9.02' <<< "$_u0out" || { echo "FAIL [$_t_label]: must extract the DEPLOYED row v9.02 (State=\$8)"; failures=$((failures+1)); }
+    grep -qx 'v9.01' <<< "$_u0out" && { echo "FAIL [$_t_label]: must NOT extract the VERIFIED row v9.01"; failures=$((failures+1)); }
     rm -rf "$_u0d"
   }
 
@@ -951,7 +951,7 @@ _claim_self_test() {
   MAX_ATTEMPTS=""
   [[ "$rc" -ne 0 ]] || _ct_fail "U-4 expected non-zero exit, got 0"
   _ct_eq "$(_ct_push_idx)" "5" "U-4 exactly 5 attempts (bounded)"
-  printf '%s' "$err" | grep -qiE 'contended.*loss|HALT' || _ct_fail "U-4 stderr should name contended-loss HALT"
+  grep -qiE 'contended.*loss|HALT' <<< "$err" || _ct_fail "U-4 stderr should name contended-loss HALT"
   _ct_eq "$(_ct_pushed_n)" "0" "U-4 no tag pushed to origin"
   _ct_eq "$(_ct_local_n)" "0" "U-4 no orphan local tags"
 
@@ -963,31 +963,96 @@ _claim_self_test() {
   _ct_eq "$out" "v2.16" "U-5 returns v2.16 (orphan v3.20 not the anchor)"
   # prove claimed_set() itself drops the orphan tag (FMF-2 symmetric exclusion):
   local cs; cs="$(claimed_set)"
-  printf '%s' "$cs" | grep -qx 'v3.20' && _ct_fail "U-5 claimed_set must EXCLUDE orphan v3.20"
-  printf '%s' "$cs" | grep -qx 'v2.15' || _ct_fail "U-5 claimed_set must INCLUDE mainline v2.15"
+  grep -qx 'v3.20' <<< "$cs" && _ct_fail "U-5 claimed_set must EXCLUDE orphan v3.20"
+  grep -qx 'v2.15' <<< "$cs" || _ct_fail "U-5 claimed_set must INCLUDE mainline v2.15"
 
   # ---- U-6: never-bypass signing — push uses -a, no bypass flag, no --force ----
   _t_label="U-6 never-bypass signing (no -s/-c bypass/--force)"
   # Assert against the REAL _host_push_tag (the production seam), not the stub:
   # extract its definition from the source between its def and the next function.
+  # The awk self-terminates at the seam's closing brace, so no output bound is
+  # needed; the `| head -N` this once carried was itself a SIGPIPE hazard under
+  # `set -o pipefail` (see the plumbing note below) for no benefit.
   local real_push
-  real_push="$(awk '/^_host_push_tag\(\) \{/{f=1} f{print} f&&/^}/{exit}' "${BASH_SOURCE[0]}" | head -40)"
-  printf '%s' "$real_push" | grep -qE 'git tag -a -m' || _ct_fail "U-6 real push must use 'git tag -a -m' (signed-annotated)"
-  printf '%s' "$real_push" | grep -qE -- '--no-gpg-sign|tag\.gpgsign=false|GIT_CONFIG_PARAMETERS|git tag -s' \
-    && _ct_fail "U-6 real push must NOT contain a signing-bypass flag"
-  # No EXECUTABLE (non-comment) line may invoke `git push` with --force/-f. Strip
-  # comment lines first so the prose ("never git push --force") and this check's
-  # own pattern text are not counted — only real invocations are asserted.
-  # (Failure messages below deliberately avoid the literal forbidden token so the
-  # grep over this very file cannot match its own assertion text.)
+  real_push="$(awk '/^_host_push_tag\(\) \{/{f=1} f{print} f&&/^}/{exit}' "${BASH_SOURCE[0]}")"
   local exec_lines force_re
   exec_lines="$(sed -E 's/[[:space:]]*#.*$//' "${BASH_SOURCE[0]}" | sed -E '/^[[:space:]]*$/d')"
-  force_re='git push[^|]*(--'"force"'|[[:space:]]-f([[:space:]]|$))'
-  printf '%s\n' "$exec_lines" | grep -qE "$force_re" \
-    && _ct_fail "U-6 no executable line may force-push the tag"
-  # And the one real push must be the create-only refspec form (no --delete).
-  printf '%s\n' "$exec_lines" | grep -qE 'git push origin "refs/tags/' \
+
+  # ANTI-VACUITY: every assertion below is a grep for a REQUIRED or FORBIDDEN
+  # string. If a subject were empty — the awk anchor drifts, or BASH_SOURCE does
+  # not resolve — the "required" greps would find nothing (fail loudly) but the
+  # "forbidden" greps would find nothing too and pass while testing NOTHING. Bind
+  # both subjects to non-empty first, so a broken extraction reports itself instead
+  # of half-silently disarming the guard.
+  [[ -n "$real_push"  ]] || _ct_fail "U-6 could not extract the real _host_push_tag seam — assertions would be vacuous"
+  [[ -n "$exec_lines" ]] || _ct_fail "U-6 could not read this script's executable lines — assertions would be vacuous"
+
+  # PLUMBING (#4224): each probe reads its subject from a HERESTRING, never from
+  # `printf ... | grep -q`. Under this script's `set -o pipefail` a `grep -q` that
+  # matches EARLY exits before printf has finished writing; printf then takes EPIPE
+  # and pipefail promotes printf's non-zero status to the pipeline's — so a
+  # SUCCESSFUL match reported FAILURE and `|| _ct_fail` fired. exec_lines is ~28 KB,
+  # past the pipe capacity, so the write blocks and the race was live: this block
+  # was the source of both the intermittent macOS-runner red and the stray
+  # `printf: write error: Broken pipe`. A herestring gives grep a pre-filled input,
+  # so there is no writer left to signal.
+  grep -qE 'git tag -a -m' <<< "$real_push" \
+    || _ct_fail "U-6 real push must use 'git tag -a -m' (signed-annotated)"
+  grep -qE -- '--no-gpg-sign|tag\.gpgsign=false|GIT_CONFIG_PARAMETERS|git tag -s' <<< "$real_push" \
+    && _ct_fail "U-6 real push must NOT contain a signing-bypass flag"
+  # No EXECUTABLE (non-comment) line may push with --force/-f or --delete. Strip
+  # comment lines first so the header prose and this check's own pattern text are
+  # not counted — only real invocations are asserted. The optional `-C <dir>`
+  # segment matters: the stamp seam invokes `git -C <root> push`, so a regex
+  # anchored on a bare `git push` was BLIND to a forced push introduced in that
+  # form. --delete is asserted too — the header states the claim is create-only,
+  # and a deleted tag is as destructive as an overwritten one.
+  # (Failure messages below deliberately avoid the literal forbidden tokens so the
+  # grep over this very file cannot match its own assertion text.)
+  force_re='git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+push[^|]*(--'"force"'|--'"delete"'|[[:space:]]-f([[:space:]]|$))'
+  grep -qE "$force_re" <<< "$exec_lines" \
+    && _ct_fail "U-6 no executable line may force-push or remove the tag"
+  # And the one real push must be the create-only <src>:<dst> refspec form. This
+  # reads the SEAM, not exec_lines: exec_lines is this whole file, which contains
+  # this assertion's own pattern text, so the check matched itself and could never
+  # fail — a tautology, green even with the real push replaced by an overwrite-
+  # capable bare-tag push (mutation M6, #4224). Scoping to $real_push both removes
+  # the self-match and states the real contract, and the src:dst pair is asserted
+  # rather than just the "refs/tags/" prefix, because it is the fully-qualified
+  # destination that makes the push create-only.
+  grep -qE 'git push origin "refs/tags/[^"]*:refs/tags/' <<< "$real_push" \
     || _ct_fail "U-6 the real push must be the create-only refspec form"
+
+  # ---- U-6b: detector negative control — U-6's probes must still be able to say NO --
+  # A fixture that cannot fail is not a guard. U-6 is four pattern probes over this
+  # file's own text; if one silently stopped matching a violation it would read green forever
+  # while proving nothing — the same fail-open class release-tooling-smoke.yml
+  # already defends its peer gates against with precision probes. Run the SAME
+  # patterns against deliberately-violating subjects held in memory (nothing on
+  # disk is touched, no git command runs) and assert each reaches the OPPOSITE
+  # verdict. Subjects are assembled by CONCATENATION so no forbidden literal ever
+  # lands on an executable line of this file — U-6 greps this file, and a literal
+  # here would make the guard trip over its own control.
+  _t_label="U-6b detector negative control (U-6 can still fail)"
+  local _bypass='--no-gpg'"-sign" _forced='--'"force" _removed='--'"delete"
+  local bad_seam bad_force bad_force_dashc
+  bad_seam="$(printf '%s\n' '_host_push_tag() {' "  git tag -s ${_bypass} -m \"m\" t sha" '}')"
+  bad_force="git push origin ${_forced} \"refs/tags/x:refs/tags/x\""
+  bad_force_dashc="git -C /some/root push origin ${_removed} \"refs/tags/x\""
+  grep -qE 'git tag -a -m' <<< "$bad_seam" \
+    && _ct_fail "U-6b signed-annotated probe matched a seam that never annotates — probe is disarmed"
+  grep -qE -- '--no-gpg-sign|tag\.gpgsign=false|GIT_CONFIG_PARAMETERS|git tag -s' <<< "$bad_seam" \
+    || _ct_fail "U-6b bypass probe failed to flag a signing-bypass seam — probe is disarmed"
+  grep -qE "$force_re" <<< "$bad_force" \
+    || _ct_fail "U-6b force probe failed to flag a forced tag push — probe is disarmed"
+  grep -qE "$force_re" <<< "$bad_force_dashc" \
+    || _ct_fail "U-6b force probe failed to flag the 'git -C <dir>' push form — probe is disarmed"
+  grep -qE 'git push origin "refs/tags/[^"]*:refs/tags/' <<< "$bad_seam" \
+    && _ct_fail "U-6b create-only-refspec probe matched a subject with no tag push — probe is disarmed"
+  # The probe must also reject an overwrite-capable bare-tag push (mutation M6):
+  # matching only the "refs/tags/" prefix would let that through.
+  grep -qE 'git push origin "refs/tags/[^"]*:refs/tags/' <<< 'git push origin "${tag}"' \
+    && _ct_fail "U-6b create-only-refspec probe accepted a bare-tag push — probe is disarmed"
 
   # ---- U-7: NON-collision push failure (network) -> immediate HARD HALT ----
   _t_label="U-7 network failure -> immediate HALT (no recompute)"
@@ -996,9 +1061,9 @@ _claim_self_test() {
   _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
   [[ "$rc" -ne 0 ]] || _ct_fail "U-7 expected non-zero exit"
   _ct_eq "$(_ct_push_idx)" "1" "U-7 exactly 1 attempt (NOT retried as contention)"
-  printf '%s' "$err" | grep -qi 'Could not resolve host' || _ct_fail "U-7 must surface the raw host error"
-  printf '%s' "$err" | grep -qiE 'not a CAS collision|no recompute' || _ct_fail "U-7 must say it is not a collision"
-  printf '%s' "$err" | grep -qiE 'contended.*loss' && _ct_fail "U-7 must NOT report contended-loss (false diagnosis)"
+  grep -qi 'Could not resolve host' <<< "$err" || _ct_fail "U-7 must surface the raw host error"
+  grep -qiE 'not a CAS collision|no recompute' <<< "$err" || _ct_fail "U-7 must say it is not a collision"
+  grep -qiE 'contended.*loss' <<< "$err" && _ct_fail "U-7 must NOT report contended-loss (false diagnosis)"
   _ct_eq "$(_ct_local_n)" "0" "U-7 no orphan local tag after HALT"
 
   # ---- U-8: SIGNING failure -> immediate HALT, no recompute, no orphan tags ----
@@ -1008,8 +1073,8 @@ _claim_self_test() {
   _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
   [[ "$rc" -ne 0 ]] || _ct_fail "U-8 expected non-zero exit"
   _ct_eq "$(_ct_push_idx)" "1" "U-8 exactly 1 attempt (signing failure NOT retried)"
-  printf '%s' "$err" | grep -qi 'gpg failed to sign' || _ct_fail "U-8 must surface the raw signing error"
-  printf '%s' "$err" | grep -qiE 'contended.*loss' && _ct_fail "U-8 must NOT report contended-loss"
+  grep -qi 'gpg failed to sign' <<< "$err" || _ct_fail "U-8 must surface the raw signing error"
+  grep -qiE 'contended.*loss' <<< "$err" && _ct_fail "U-8 must NOT report contended-loss"
   _ct_eq "$(_ct_pushed_n)" "0" "U-8 nothing pushed to origin"
   _ct_eq "$(_ct_local_n)" "0" "U-8 no orphan local tags (cleaned up)"
 
@@ -1019,7 +1084,7 @@ _claim_self_test() {
   _ct_run_err claim_version "deadbeefcafe" "minor" "" ""; err="$REPLY"; rc="$REPLY_RC"
   [[ "$rc" -ne 0 ]] || _ct_fail "U-9 expected non-zero exit on fetch failure"
   _ct_eq "$(_ct_push_idx)" "0" "U-9 zero push attempts (HALT before push)"
-  printf '%s' "$err" | grep -qi 'fetch failed' || _ct_fail "U-9 must name the fetch failure"
+  grep -qi 'fetch failed' <<< "$err" || _ct_fail "U-9 must name the fetch failure"
 
   # ---- U-10: pushed-but-unpublished MAINLINE tag is a claim (publication-gap regression) ----
   # The v2.40-release collision: origin carries v2.39 (signed tag pushed at Stage 12
@@ -1036,7 +1101,7 @@ _claim_self_test() {
   _ct_eq "$(_ct_push_idx)" "1" "U-10 exactly 1 push attempt (no false-collision HALT, no retry)"
   # claimed_set() must INCLUDE the pushed-but-unpublished mainline tag v2.39 ...
   local cs10; cs10="$(claimed_set)"
-  printf '%s' "$cs10" | grep -qx 'v2.39' || _ct_fail "U-10 claimed_set must INCLUDE pushed mainline tag v2.39"
+  grep -qx 'v2.39' <<< "$cs10" || _ct_fail "U-10 claimed_set must INCLUDE pushed mainline tag v2.39"
   # ... and anchor() must report the pushed frontier v2.39, not the lagging
   # published-latest v2.38 (the contract: highest CLAIMED version in the lineage).
   _ct_eq "$(anchor)" "v2.39" "U-10 anchor() = pushed frontier v2.39, not published-latest v2.38"
@@ -1044,8 +1109,8 @@ _claim_self_test() {
   # fix is a RE-KEY of the orphan filter, not its removal — v3.20 must not return):
   _ct_setup latest="v2.38" published="v2.37 v2.38" origin="v2.37 v2.38 v2.39 v3.20" plan="ok"
   local cs10b; cs10b="$(claimed_set)"
-  printf '%s' "$cs10b" | grep -qx 'v2.39' || _ct_fail "U-10 claimed_set must INCLUDE v2.39 (stray present)"
-  printf '%s' "$cs10b" | grep -qx 'v3.20' && _ct_fail "U-10 claimed_set must EXCLUDE genuine stray v3.20"
+  grep -qx 'v2.39' <<< "$cs10b" || _ct_fail "U-10 claimed_set must INCLUDE v2.39 (stray present)"
+  grep -qx 'v3.20' <<< "$cs10b" && _ct_fail "U-10 claimed_set must EXCLUDE genuine stray v3.20"
 
   # ---- U-11: claim-time stamp resolves {{RELEASE_VERSION}} + renames the plan ----
   # Unit-exercise the REAL _stamp_release_identity on a sandbox git tree (only the
@@ -1107,7 +1172,7 @@ _claim_self_test() {
   }
 
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-13 incl. real-RELEASE_LOG-parser(State=\$8), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-13 incl. real-RELEASE_LOG-parser(State=\$8), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
