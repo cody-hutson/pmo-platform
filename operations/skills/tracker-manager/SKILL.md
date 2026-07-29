@@ -547,7 +547,7 @@ writes — auto-write within `cascade_scope`, no approval gate — and the Step-
 **Lifecycle-State Precondition** still runs first: an `archived`/`superseded`
 target is **BLOCK + flag** exactly as for any other tracker.
 
-Six write rules are specific to this tracker, each failing closed:
+Seven write rules are specific to this tracker, each failing closed:
 
 - **The `ADD` precedes the `MODIFY`, and its absence is reported, not absorbed.**
   A close `MODIFY` whose `entry_id` resolves to no existing row is a Step-1
@@ -565,12 +565,28 @@ Six write rules are specific to this tracker, each failing closed:
   carries `Actual` and `Actual Date` only (plus the recomputed `Elapsed` on F2).
   **Reject a close instruction that carries `Estimate`**, and never render the
   `Estimate` column in a re-score elicitation — the re-score is blind by protocol.
-- **`Start Date` is write-once.** `REACTIVATE` must not carry `Start Date`;
-  reject the instruction if it does. `Elapsed` is business days from the item's
-  **first** `Start Date`, so it is cumulative across reopen passes and must be
-  non-decreasing in `Close Ordinal` for a given `Item Ref`. A decrease, or two
-  different `Start Date` values on one `Item Ref`, is a validation failure —
+- **`Start Date` is write-once on EVERY path — the rule binds to the field, not
+  to the action.** It is writable **only** on the admitting `ADD` at
+  `Close Ordinal` 1. **Reject any later instruction that carries `Start Date`** —
+  `MODIFY`, `CLOSE`, or `REACTIVATE`, in any family, at any ordinal, for any
+  stated reason **including a corrective edit**. Binding this to `REACTIVATE`
+  alone leaves the plain corrective `MODIFY` — a required operation, used to set
+  `Excluded Reason` — free to move it.
+- **The `Start Date` checks that bind are the ones that are not row-relative.**
+  `Elapsed` is **recomputed here** from the **stored** `Start Date` and the row's
+  `Actual Date` — never accepted as an asserted value — and on an `F2` row the
+  emitter's `Actual` is checked against that recomputation. Then validate every
+  row's `Start Date` against the **LG-4 DoR exit-PASS date of record in the gate
+  verdict**, an anchor outside this tracker. The within-item checks (`Elapsed`
+  non-decreasing in `Close Ordinal` across `F2` rows; one `Start Date` per
+  `Item Ref` across all families) still run, but **a shift applied uniformly to
+  every ordinal satisfies both of them** while shrinking every elapsed figure —
+  only the external anchor catches that. Any mismatch is a validation failure:
   surface it; do not silently accept it and do not drop the row.
+- **A genuine `Start Date` correction is an exclusion, not an edit.** Set
+  `Excluded Reason: start-date-corrected` on every row of that `Item Ref` in
+  every family and require a fresh admission `ADD` at the next ordinal with the
+  corrected date. Never apply the correction in place.
 - **`REACTIVATE` supersedes, never overwrites.** Set the prior row's
   `Excluded Reason` and write a new row at `Close Ordinal` *n+1*. Excluded rows
   are **append-only** — never deleted (the same posture as the Tracker 6

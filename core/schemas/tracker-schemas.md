@@ -466,7 +466,7 @@ Existing columns are retained verbatim: `Sprint`, `Dates`, `Goal`, `Committed`, 
 | Window Key | String | Yes | Free text — the iteration identifier | The iteration this close lands in. Joins to `## Sprint History` → `Window Key`. |
 | Close Ordinal | Integer | Yes | ≥ 1 | `1` at admission and on the first close; **incremented by 1 on each `REACTIVATE` → reclose**, in **lockstep across every family** for that `Item Ref`. With `Item Ref` **and `Signal Family`** it forms the row key (§ Row Key), and it is what makes a reopen a **visible second row** rather than an overwrite. Only the **last non-excluded** ordinal counts toward the window's `N`. |
 | Evidence Grade | Enum | Yes | `[SOURCE]` \| `[INFERRED]` \| `[ASSUMPTION – CONFIRM]` | Adopted verbatim from § 8.5. **F1 is capped at `[INFERRED]`** — a re-score is itself an estimate. **F2 is `[SOURCE]`** — it is derived from two recorded gate verdicts rather than asserted. |
-| Excluded Reason | String | No | Present **if and only if** the row is excluded: `superseded-by-reclose` \| `superseded-by-re-estimate` \| `unit-change-pending-re-anchor` \| a documented outlier reason | Why this row does not count toward the window's `N`. An excluded row is **retained, never deleted** — append-only, the same posture as Tracker 6's `superseded` rule and the Tracker 5 archive rule. Deleting it would destroy the rework signal, which is the most informative thing a reopen carries. |
+| Excluded Reason | String | No | Present **if and only if** the row is excluded: `superseded-by-reclose` \| `superseded-by-re-estimate` \| `start-date-corrected` \| `unit-change-pending-re-anchor` \| a documented outlier reason | Why this row does not count toward the window's `N`. An excluded row is **retained, never deleted** — append-only, the same posture as Tracker 6's `superseded` rule and the Tracker 5 archive rule. Deleting it would destroy the rework signal, which is the most informative thing a reopen carries. |
 
 **No per-person attribution — by construction.** This table carries no person, assignee, or owner column, and none may be added. Per-person estimate-accuracy analysis is therefore **unrepresentable in the schema**, not merely discouraged.
 
@@ -524,9 +524,39 @@ This is the rule the schema exists to enforce. If the clock restarted on reopen,
 
 Three column semantics enforce it, so the rule is structural rather than an implementer's instinct:
 
-1. **`Start Date` is write-once.** It is set at the first LG-4 DoR exit PASS. `REACTIVATE` is a `MODIFY` that does **not** include `Start Date` in its `fields:` map; a `REACTIVATE` or reclose instruction that carries `Start Date` is **rejected**, not applied.
+1. **`Start Date` is write-once — on every path, not just `REACTIVATE`.** It is set at the first LG-4 DoR exit PASS and is unwritable thereafter by **any** action for **any** reason; an instruction carrying it after admission is **rejected**, not applied. Binding this to `REACTIVATE` alone left a plain corrective `MODIFY` unconstrained — see § Start-Date Immutability, which is where this rule is enforced in full.
 2. **`Elapsed` is derived, never asserted.** It is computed as business days from the item's first `Start Date` to the current row's `Actual Date`. Because `Start Date` cannot move, `Elapsed` at ordinal *n+1* is necessarily **greater than or equal to** `Elapsed` at ordinal *n*.
 3. **`Close Ordinal` makes the accumulation checkable.** A monotonicity check falls out of the two rules above and **fails closed**: for any `Item Ref`, `Elapsed` must be non-decreasing in `Close Ordinal` **across that item's `F2` rows** (`F1` rows carry no `Elapsed`, so they are outside this check by construction, not by exemption), and **every row for that `Item Ref` — in every family, at every ordinal — must carry the same `Start Date`**. A decrease, or two different `Start Date` values on one `Item Ref`, is a **defect Mode F surfaces** — never a value that is silently accepted, and never a row that is silently dropped. **This check alone is not sufficient**: it compares rows to each other, so a shift applied uniformly to all of them satisfies it. § Start-Date Immutability supplies the external anchor that closes that gap.
+
+### Start-Date Immutability — closing the lever against every mutation path (normative)
+
+**`Start Date` is the only field that moves every elapsed figure at once.** `Elapsed` is derived from it, so shifting it **later** shrinks the elapsed figure on every row of that item without touching a single `Actual`, `Actual Date`, or `Elapsed` value. It is the highest-leverage Goodhart target in this schema, and it is closed **here or nowhere** — no downstream consumer, reading only the numbers, can tell a genuinely fast item from a re-anchored slow one.
+
+**What the § Cumulative Elapsed rules do not reach.** Those three rules are necessary and **not sufficient**, in two distinct ways:
+
+| Gap | Why it was open |
+|---|---|
+| **Enforcement bound to the ACTION, not the FIELD** | The write-once rule named `REACTIVATE` and reclose. Every other action was unconstrained — and a plain corrective `MODIFY` is a **documented, required** operation (Capture Rule 6 uses one to set `Excluded Reason`). A corrective `MODIFY` that also carried `Start Date` violated no stated rule. |
+| **Both checks are ROW-RELATIVE** | "Every ordinal must share one `Start Date`" and "`Elapsed` non-decreasing in `Close Ordinal`" compare an item's rows **to each other**. A shift applied **uniformly across every ordinal** leaves them agreeing with each other perfectly: all rows still share one value, and every `Elapsed` shrinks by the same amount, so the ordering is preserved. **The attack passes both stated checks while shrinking total elapsed on every item in the tracker.** |
+
+Three closures, each failing closed:
+
+**I1 — `Start Date` is writable on exactly one instruction, and the rule binds to the FIELD.** It may appear in a `fields:` map **only** on the admitting `ADD` at `Close Ordinal` 1. **Every** subsequent instruction — `MODIFY`, `CLOSE`, or `REACTIVATE`, in any family, at any ordinal, **for any stated reason including a corrective edit** — that carries `Start Date` is **rejected, not applied**, and the rejection is surfaced naming the `Item Ref`. There is no action, and no reason, that admits a second write.
+
+**I2 — `Elapsed` is derived by the writing skill and never accepted as an asserted value.** It is recomputed at write time from the **stored** `Start Date` and the row's `Actual Date`. An instruction asserting `Elapsed` is rejected. On an `F2` row the emitter's `Actual` is then **checked against** the recomputed figure, and a disagreement is a validation failure — which makes the emitter's arithmetic and the stored anchor mutually checking rather than mutually trusting.
+
+**I3 — the binding anchor is EXTERNAL to this tracker.** Because a uniform shift defeats every row-relative check, the check that closes it must compare against a value **outside the file a tracker edit can reach**: for every row, `Start Date` MUST equal the **LG-4 DoR exit-PASS date of record** for that `Item Ref`, as rendered in the gate verdict. A mismatch is a **defect Mode F surfaces** — **whether it affects one row or every row of the item**. This is the only one of the checks the uniform-shift attack cannot satisfy, because satisfying it would require editing the gate verdict, which is not this tracker's to edit.
+
+**The uniform-shift attack, walked (the case the previous form passed).**
+
+| Step | Old rules | With I1–I3 |
+|---|---|---|
+| A corrective `MODIFY` sets `Excluded Reason` **and** `Start Date`, applied to **every** ordinal of the item | Permitted — the write-once rule named only `REACTIVATE` | **Rejected at I1** — the field is unwritable after admission regardless of action or reason |
+| Check: "every ordinal shares one `Start Date`" | **PASSES** — they all share the new value | Never reached; and **I3 FAILS** it against the gate verdict |
+| Check: `Elapsed` non-decreasing in `Close Ordinal` | **PASSES** — every value shrank by the same *k*, ordering preserved | Never reached; `Elapsed` is recomputed from the stored anchor (**I2**) |
+| Net effect | Total elapsed shrinks by *k* on every item, with both stated checks green | **No effect, and the attempt is surfaced** |
+
+**The legal correction path — visible, never silent.** A `Start Date` genuinely recorded wrong is corrected by **exclusion and re-admission**, never by editing the field: set `Excluded Reason` to `start-date-corrected` on **every** row of that `Item Ref` in **every** family, then emit a fresh admission `ADD` at the next `Close Ordinal` carrying the corrected date. The correction costs the item its accumulated ordinals and leaves an append-only trail, so an item whose start date moved is **distinguishable from one whose never did** — which a field edit makes permanently impossible. Withholding any correction path at all is not the safer option: it does not stop the edit, it only stops the edit from being recorded.
 
 ### Capture Exceptions
 
@@ -554,6 +584,7 @@ The **positive record of a close that produced no pair.** Silence is the failure
 10. **Unit re-anchoring.** A pair spanning a story-point re-anchoring is excluded (`unit-change-pending-re-anchor`) — comparing a pre- and post-anchor figure compares two different units.
 11. **Forward-only.** **Never backfill a historical pair.** A reconstructed estimate is not the estimate that was made, and a backfilled population is exactly the survivorship-biased one § 8.7 V2 warns about. Capture is grandfathered forward from the point this surface lands, per `release-velocity-tracking.md` § 10's convention.
 12. **Admission trigger — the rule that runs BEFORE rule 1.** Row creation fires when Delivery Engine **Mode C** renders an **LG-4 DoR exit verdict** at `T(6→7)`. `PASS` → `ADD`; `CONDITIONAL PASS` → `ADD` (the item is admitted to execution); **`FAIL` or `NO-EVIDENCE` → no `ADD` and no exception** — the item was not admitted, so no pair is owed. Admission binds to the **verdict**, never to a "refined" claim. **A close (rule 1) with no prior admission cannot write a pair** — it writes the `no-estimate-of-record` exception per rule 3 instead, and the coverage loss is visible rather than silent. See § Admission above for the per-family fan-out and the field split.
+13. **`Start Date` never moves after admission.** Per § Start-Date Immutability: writable **only** on the admitting `ADD` (I1), `Elapsed` derived and never asserted (I2), and every row checked against the **external** LG-4 exit-PASS date of record (I3) — because the row-relative checks in § Cumulative Elapsed are all satisfied by a **uniform shift across every ordinal**, which shrinks total elapsed on every item. A genuine correction goes through exclusion (`start-date-corrected`) and re-admission, never a field edit.
 
 ---
 
