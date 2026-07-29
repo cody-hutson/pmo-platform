@@ -57,8 +57,10 @@
 #     --self-test    run built-in assertions against the synthetic report
 #                    fixtures; no operator-store or network access.
 #
-# Exit codes: 0 ok · 2 usage error · 3 store unreadable · 4 store-not-git-ignored
-#             (fail-closed public-repo exfil guard) · 5 missing dependency (jq/git).
+# Exit codes: 0 ok · 2 usage error · 3 store unreadable OR unparseable / render
+#             aborted (fail-closed — an aborted render never exits 0 behind empty
+#             stdout) · 4 store-not-git-ignored (fail-closed public-repo exfil
+#             guard) · 5 missing dependency (jq/git).
 
 set -uo pipefail
 
@@ -366,6 +368,21 @@ def trend_verdict($rows; $grade; $dim_label):
 # v1.2.0 both phases emit the same version, and rollup-attribution.sh rewrites it
 # unconditionally, so the version string cannot answer this question.
 | ($all | any(.record == "coverage")) as $rolled_up
+# A session whose started_utc is not a well-formed UTC instant cannot be compared
+# against the window bounds, so it is SILENTLY dropped from EVERY window and the
+# report then renders "No sessions fall in this window" — byte-identical to a
+# legitimately empty window over a store that holds real spend. Abort instead; the
+# fail-closed guard in render() turns the abort into a named FATAL and exit 3.
+| ( [ $all[] | select(.record == "session")
+      | select((((.started_utc // "") | tostring)
+                | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) | not)
+      | ((.session_id // "(record with no session_id)") | tostring) ] ) as $bad_ts
+| ( if ($bad_ts | length) > 0 then
+      error("malformed session.started_utc on " + ($bad_ts | length | tostring)
+            + " session record(s) (first: " + $bad_ts[0] + "). A timestamp that cannot be compared "
+            + "against the window bounds is dropped from EVERY window, and the report would then "
+            + "read as an empty window over a store that holds real spend. Refusing to render.")
+    else . end )
 | (if $rolled_up
    then reduce ($all[] | select(.record == "rollup")) as $r ({};
           reduce ($r.session_ids // [])[] as $sid (.;
@@ -800,13 +817,35 @@ render() {
   since_iso="${since}T00:00:00Z"
   until_excl_iso="$(date_plus_1d "$until")T00:00:00Z"
 
-  jq -r -s \
+  # FAIL CLOSED. Without this the script's terminal `exit 0` masks EVERY jq abort —
+  # a truncated store line, a malformed timestamp, a malformed `tokens` value — as
+  # rc=0 with empty stdout, which is byte-indistinguishable from a successful run
+  # over an empty window. An empty report and a crashed report must not look alike.
+  # BOTH legs are asserted: a non-zero jq status is fatal, and so is an empty render
+  # on a zero status — a renderer that emits nothing is a bug, never an answer,
+  # because the empty-WINDOW answer is a full report that says so.
+  local out jrc
+  out="$(jq -r -s \
     --arg since "$since" --arg until "$until" \
     --arg since_iso "$since_iso" --arg until_excl_iso "$until_excl_iso" \
     --arg now "$now" --arg by "$BY" --arg period "$PERIOD" \
     --arg as_json "$AS_JSON" --argjson do_trend "$DO_TREND" \
     --arg gen_utc "$(NOW_UTC)" \
-    "$JQ_REPORT" "$store_file"
+    "$JQ_REPORT" "$store_file")"
+  jrc=$?
+  if [ "$jrc" -ne 0 ]; then
+    printf 'FATAL (exit 3): the report program aborted (jq exit %s) — NO report was produced.\n' "$jrc" >&2
+    printf 'The store is not readable as JSONL, or a record is malformed (a truncated line, a\n' >&2
+    printf 'malformed session.started_utc, a malformed tokens value). This is NOT an empty window.\n' >&2
+    printf 'Re-run extract-usage.sh over a clean store, then re-run this report.\n' >&2
+    exit 3
+  fi
+  if [ -z "$out" ]; then
+    printf 'FATAL (exit 3): the report program exited 0 but produced NO output. Refusing to let an\n' >&2
+    printf 'empty render read as an empty window — an empty window renders a full report saying so.\n' >&2
+    exit 3
+  fi
+  printf '%s\n' "$out"
 }
 
 # ── §8 Self-test — synthetic fixtures only; no operator store, no network.
@@ -1307,4 +1346,6 @@ fi
 STORE_DIR="$(resolve_store)"
 guard_store_git_ignored "$STORE_DIR"
 render "$STORE_DIR"
-exit 0
+# NOT `exit 0`. A hardcoded success status is what let every jq abort inside
+# render() surface as a clean exit; propagate render's own status instead.
+exit $?
