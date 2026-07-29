@@ -5,7 +5,7 @@
 title: ADR-102 — The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation
 status: Proposed
 date: 2026-07-28
-release: agent-finops-intelligence ({{RELEASE_VERSION}})
+release: agent-finops-intelligence (v4.0)
 deciders: "Workspace owner — D-Substrate ADOPTED at Collective Review. Framed (not rendered) by the Stage-5 Solutioning design for the estimation-engine slice; authored at Stage 6."
 tags: [architecture, quota-budget, telemetry, finops, token-spend, pipeline-event-log, supersession, estimation]
 supersedes: ADR-026 (substrate choice only — the event definition stands)

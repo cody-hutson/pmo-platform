@@ -12,7 +12,7 @@ description: >
   "attribute token spend", "report token spend", "finops report", "spend by work item", "token
   spend trend", "where did the tokens go", "estimate token cost", "how many tokens will this
   take", "finops estimate", "token budget for this work item", "estimate vs actual token spend".
-version: v3.96
+version: v4.0
 license: BUSL-1.1
 delivery_approach: advisory
 ---
