@@ -149,10 +149,18 @@ payload = sys.argv[1]
 fields = {"surprise": "", "would-change": "", "watch-for": ""}
 # Build a regex that captures each labeled field's content up to the next label.
 labels = list(fields.keys())
-# Pattern: <label>:<content> where content is anything up to (?=<next label>) or end.
+# Pattern: <label>:<content> where content runs up to the next label or end.
+# A field terminates at a RECOGNIZED label, or at any SEGMENT-OPENING label token
+# (one that follows a ';'), recognized or not. Without that second alternative an
+# unrecognized label is swallowed into the preceding field and rendered as part of
+# it — the same containment defect fixed in the pattern-detect parser below.
+# Prose colons do not open a segment and so are not treated as labels, which keeps
+# multi-clause payloads (embedded ';' inside a clause) rendering unchanged.
 label_alt = "|".join(re.escape(l) for l in labels)
+GENERIC_LABEL = r"[A-Za-z][A-Za-z0-9_-]*"
 pattern = re.compile(
-    r"(?P<label>" + label_alt + r"):\s*(?P<content>.*?)(?=\s*(?:" + label_alt + r"):|$)",
+    r"(?P<label>" + label_alt + r"):\s*(?P<content>.*?)"
+    r"(?=\s*(?:" + label_alt + r"):|\s*;\s*" + GENERIC_LABEL + r":|$)",
     re.DOTALL,
 )
 for m in pattern.finditer(payload):
@@ -317,9 +325,10 @@ emit_pattern_detect_report() {
         | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
       ;;
     session-retro)
-      # All three subtypes are read; `no-learning` rows carry no `theme:` and so
-      # contribute no cluster signal BY CONSTRUCTION (§ 11.8) — they are not
-      # filtered out, they simply tokenize to nothing.
+      # All three subtypes are read here; `no-learning` rows are then excluded
+      # BY ENFORCEMENT before clustering (skipped on event_subtype, § 11.8) —
+      # not left to tokenize to nothing on the assumption they carry no `theme:`.
+      # That assumption was emitter discipline, and a mis-emitted row broke it.
       src_label="session-retro"
       rows="$("$QUERY_TOOL" --event-type session-retro 2>/dev/null \
         | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
@@ -398,20 +407,48 @@ DEFAULT_STOPWORDS = {
 }
 
 # Field map per query-pipeline-event.sh actual layout (FS=" | "; $1 retains leading "| ")
+# Column order: ts | version | stage | event_type | event_subtype | actor |
+#               subject | reversibility | outcome | payload
+# event_subtype is index 4 and is returned so the zero-state can be excluded
+# STRUCTURALLY rather than by trusting the emitter to omit `theme:`.
 def parse_row(row):
     parts = row.split(" | ")
     ts = parts[0][2:]  # strip leading "| "
     version = parts[1]
+    subtype = parts[4] if len(parts) > 4 else ""
     payload = parts[9].rstrip(" |") if len(parts) > 9 else ""
-    return ts, version, payload
+    return ts, version, subtype, payload
+
+# Subtypes excluded from clustering by ENFORCEMENT (not by convention). A
+# `no-learning` row means "reflected, found nothing"; it must contribute no
+# cluster signal even if it was mis-emitted carrying a `theme:`.
+EXCLUDED_SUBTYPES = {"no-learning"}
+
+# A label token is one that OPENS a payload segment: at the string start, or
+# immediately after a ';'. This is the grammar the writer emits and the gate in
+# append-pipeline-event.sh enforces. A colon inside free prose does NOT open a
+# segment and is therefore not a label boundary.
+GENERIC_LABEL = r"[A-Za-z][A-Za-z0-9_-]*"
 
 def parse_triple(payload):
     labels = LABELS
     # Longest-first so a label that prefixes another (none today, but the
     # session-retro set is open to growth) cannot shadow the longer one.
     label_alt = "|".join(re.escape(l) for l in sorted(labels, key=len, reverse=True))
+    # A field ends at the next RECOGNIZED label (as before) OR at any
+    # segment-opening label token, recognized or not. That second alternative is
+    # the fix: previously an UNRECOGNIZED label did not terminate the field, so
+    # its content was swallowed into the preceding field and tokenized as signal
+    # — one stray label after `theme:` inflated one real cluster into three.
+    # Because only recognized labels can open a match, the swallowed content is
+    # now DISCARDED rather than re-attributed to a neighbour.
+    terminator = (
+        r"(?=\s*(?:" + label_alt + r"):"
+        r"|\s*;\s*" + GENERIC_LABEL + r":"
+        r"|$)"
+    )
     pattern = re.compile(
-        r"(?P<label>" + label_alt + r"):\s*(?P<content>.*?)(?=\s*(?:" + label_alt + r"):|$)",
+        r"(?P<label>" + label_alt + r"):\s*(?P<content>.*?)" + terminator,
         re.DOTALL,
     )
     out = {l: "" for l in labels}
@@ -435,8 +472,8 @@ for line in sys.stdin:
     line = line.rstrip("\n")
     if not line.strip():
         continue
-    ts, version, payload = parse_row(line)
-    all_rows.append({"ts": ts, "version": version, "payload": payload})
+    ts, version, subtype, payload = parse_row(line)
+    all_rows.append({"ts": ts, "version": version, "subtype": subtype, "payload": payload})
 
 # Sort chronologically (ts ISO8601 sorts lexically)
 all_rows.sort(key=lambda r: r["ts"])
@@ -458,6 +495,13 @@ else:
 fields = CLUSTER_ON
 clusters = {}  # (field, token) -> list of dicts
 for r in windowed:
+    # Zero-state exclusion by ENFORCEMENT. Previously `no-learning` rows were
+    # relied on to carry no `theme:` — i.e. on emitter discipline alone. A
+    # mis-emitted or label-leaked row then contributed cluster signal. Skipping
+    # by subtype makes the exclusion structural: the row cannot contribute
+    # regardless of what its payload happens to contain.
+    if r.get("subtype", "") in EXCLUDED_SUBTYPES:
+        continue
     triple = parse_triple(r["payload"])
     for f in fields:
         v = triple.get(f, "")
@@ -639,7 +683,7 @@ run_self_test() {
     # unaffected. Shaped to yield EXACTLY ONE qualifying cluster:
     #   theme:over-building   x3 across v2.10 + v2.11 -> qualifies (>=3, >=2 versions)
     #   theme:one-off-noise   x2 in v2.11 only        -> below cluster-min, excluded
-    #   no-learning row       carries NO theme:       -> contributes nothing by construction
+    #   no-learning row       carries NO theme:       -> excluded by subtype (enforced)
     echo "| 2026-03-02T09:00:00Z | v2.10 | 6 | session-retro | learning | skill:session-retro | session:s1 | CHEAP | resolved | session:s1; source:friction; theme:over-building; domain:corpus-edit; learning:scope grew past the ask |"
     echo "| 2026-03-02T09:00:01Z | v2.10 | 6 | session-retro | operator-feedback | skill:session-retro | session:s2 | CHEAP | resolved | session:s2; source:correction; theme:over-building; domain:release-ops; learning:operator trimmed unrequested scope |"
     echo "| 2026-03-03T09:00:02Z | v2.11 | 5 | session-retro | learning | skill:session-retro | session:s3 | CHEAP | resolved | session:s3; source:friction; theme:over-building; domain:planning; learning:design outran the acceptance criteria |"
@@ -733,6 +777,54 @@ run_self_test() {
     die "self-test: unknown --source must be rejected (bogus-source accepted)"
   fi
 
+  # ── Test 12 (PA-4 REGRESSION): one unrecognized label must not inflate the
+  # cluster count. The AC verbatim. Injects `mood:excited` immediately after
+  # `theme:` on ONE row of the same fixture used by Test 10. Before the
+  # containment fix this yielded 3 qualifying clusters instead of 1, because the
+  # unrecognized label was swallowed into `theme:` and tokenized as signal.
+  local dt2_dir dt2_report dt2_count
+  dt2_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed (DT-2)"
+  {
+    echo "| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+    echo "|---|---|---|---|---|---|---|---|---|---|"
+    echo "| 2026-03-02T09:00:00Z | v2.10 | 6 | session-retro | learning | skill:session-retro | session:s1 | CHEAP | resolved | session:s1; source:friction; theme:over-building; mood:excited; domain:corpus-edit; learning:scope grew past the ask |"
+    echo "| 2026-03-02T09:00:01Z | v2.10 | 6 | session-retro | operator-feedback | skill:session-retro | session:s2 | CHEAP | resolved | session:s2; source:correction; theme:over-building; domain:release-ops; learning:operator trimmed unrequested scope |"
+    echo "| 2026-03-03T09:00:02Z | v2.11 | 5 | session-retro | learning | skill:session-retro | session:s3 | CHEAP | resolved | session:s3; source:friction; theme:over-building; domain:planning; learning:design outran the acceptance criteria |"
+  } > "$dt2_dir/pipeline-event-log.md" || die "self-test: could not write DT-2 fixture"
+  dt2_report="$(EVALS_RESULTS_PATH="$dt2_dir" emit_pattern_detect_report 5 3 false false report session-retro)" \
+    || die "self-test: DT-2 pattern-detect emit failed"
+  dt2_count="$(echo "$dt2_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  [[ "$dt2_count" == "1" ]] \
+    || die "self-test: an unrecognized label inflated the cluster count (expected 1, got '$dt2_count') — parse_triple containment regressed"
+  if echo "$dt2_report" | /usr/bin/grep -q 'excited'; then
+    die "self-test: unrecognized-label content leaked into a cluster token"
+  fi
+  /bin/rm -rf "$dt2_dir"
+
+  # ── Test 13 (PA-5 REGRESSION): a MIS-EMITTED no-learning row — one that does
+  # carry a `theme:` matching a qualifying cluster — must still contribute
+  # nothing. The shipped fixture could never catch this: its no-learning row is
+  # well-formed, so it never exercised the case the exclusion exists for. The
+  # exclusion is now structural (by subtype), not a matter of emitter discipline.
+  local pa5_dir pa5_report pa5_count
+  pa5_dir="$(/usr/bin/mktemp -d)" || die "self-test: mktemp -d failed (PA-5)"
+  {
+    echo "| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |"
+    echo "|---|---|---|---|---|---|---|---|---|---|"
+    echo "| 2026-03-02T09:00:00Z | v2.10 | 6 | session-retro | learning | skill:session-retro | session:s1 | CHEAP | resolved | session:s1; source:friction; theme:over-building; domain:corpus-edit; learning:a |"
+    echo "| 2026-03-02T09:00:01Z | v2.10 | 6 | session-retro | learning | skill:session-retro | session:s2 | CHEAP | resolved | session:s2; source:friction; theme:over-building; domain:release-ops; learning:b |"
+    # MIS-EMITTED zero-state: carries a theme: it should never have. Structurally excluded.
+    echo "| 2026-03-03T09:00:02Z | v2.11 | 5 | session-retro | no-learning | skill:session-retro | session:s3 | CHEAP | resolved | session:s3; reason:trivial; theme:over-building |"
+  } > "$pa5_dir/pipeline-event-log.md" || die "self-test: could not write PA-5 fixture"
+  pa5_report="$(EVALS_RESULTS_PATH="$pa5_dir" emit_pattern_detect_report 5 3 false false report session-retro)" \
+    || die "self-test: PA-5 pattern-detect emit failed"
+  pa5_count="$(echo "$pa5_report" | /usr/bin/awk -F ':\\*\\* ' '/Qualifying clusters/ { print $2; exit }')"
+  # Two real rows + one excluded zero-state = 2 < cluster-min 3 -> NO qualifying cluster.
+  # If the no-learning row were counted it would reach 3 and qualify.
+  [[ "$pa5_count" == "0" ]] \
+    || die "self-test: a mis-emitted no-learning row contributed cluster signal (expected 0 clusters, got '$pa5_count') — the exclusion is not enforced"
+  /bin/rm -rf "$pa5_dir"
+
   echo "self-test: PASS"
   echo "  parse_triple validated (synthetic + real payload)"
   echo "  N/A sentinel exact-match validated"
@@ -742,6 +834,8 @@ run_self_test() {
   echo "  --emit rate (cross_release_pattern_emergence_rate) validated"
   echo "  --source session-retro: exactly 1 qualifying cluster on the seeded fixture"
   echo "  no-learning zero-state + unknown-source rejection validated"
+  echo "  PA-4 regression: one unrecognized label does NOT inflate the cluster count (1, not 3)"
+  echo "  PA-5 regression: a MIS-EMITTED no-learning row carrying theme: contributes nothing (enforced by subtype)"
   exit 0
 }
 
