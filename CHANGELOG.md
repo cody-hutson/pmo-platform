@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v3.99] - 2026-07-29
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+[Full notes](release/releases/notes/v3.99_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v3.99)
+
 ## [v3.98] - 2026-07-28
 
 Milestone readiness checks now catch work another epic already owns and problems that do not hold up, and render the result as a map.
