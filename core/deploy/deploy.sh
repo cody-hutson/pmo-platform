@@ -8632,9 +8632,23 @@ cmd_check_release_corpus() {
 # Warn-vs-enforce at the CI surface is decided by the committed
 # .github/skill-package-freshness.enforce sentinel. Mirrors cmd_check_close_completeness.
 #
-#   exit 0  — FRESH (every rostered skill package content-current), OR STALE but the
-#             sentinel is warn (true verdict reported, not blocking).
-#   exit 1  — STALE AND the sentinel is enforce, OR an unexpected verdict (fail-closed).
+# VERDICT -> EXIT CONTRACT (the authoring home; every other surface CITES this table).
+# A STALE verdict NEVER maps to exit 0 — a probe that says STALE in prose and OK in $?
+# invites a caller to conclude the opposite of the truth.
+#
+#   verdict   sentinel token   exit   caller reads it as
+#   -------   --------------   ----   ----------------------------------------------
+#   FRESH     any              0      pass — every rostered package is content-current
+#   STALE     != enforce       2      ADVISORY finding: not fresh, not blocking. Non-
+#                                     zero (so `-eq 0` cannot mis-read it) and not 1
+#                                     (so a caller can still tell advisory from block).
+#   STALE     enforce          1      BLOCKING finding — the gate must fail closed
+#   <other>   any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#
+# The advisory value 2 follows the in-tree precedent of core/deploy/tools/cross-module-audit.sh
+# (2 = "violations detected (advisory)" vs 1 = BLOCKER). Enforcement POLICY stays in the
+# sentinel, which this probe remains the single reader of; the CI caller dispatches on the
+# integer and never re-parses the sentinel file.
 cmd_check_package_freshness() {
   validate_workspace
   detect_install_path || true
@@ -8661,8 +8675,8 @@ cmd_check_package_freshness() {
       if [[ "$pf_enforce" == "enforce" ]]; then
         exit 1
       fi
-      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
-      exit 0
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read a STALE package as fresh, and distinct from the blocking exit 1. Flip the token to 'enforce' after shakedown."
+      exit 2
       ;;
     *)
       log "package-freshness: unexpected verdict '$verdict' — fail-closed"
@@ -9165,9 +9179,11 @@ main() {
       ;;
     --check-package-freshness)
       # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
-      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH, 1 STALE
-      # when the .github/skill-package-freshness.enforce sentinel is enforce; fail-closed
-      # on an unexpected verdict). The Check 7 logic ALSO fires inside the full --check
+      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH; 2 STALE
+      # advisory when the .github/skill-package-freshness.enforce sentinel is not enforce;
+      # 1 STALE when it IS enforce; 1 fail-closed on an unexpected verdict — never 0 on
+      # STALE, see the contract table on cmd_check_package_freshness). The Check 7 logic
+      # ALSO fires inside the full --check
       # suite — one shared body (_c7_compute_verdict), no copy. Used by
       # .github/workflows/skill-package-freshness.yml.
       cmd_check_package_freshness
@@ -9196,7 +9212,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
-      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; exits 1 on a STALE package when enforce) (#2656)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""
