@@ -8,6 +8,12 @@ adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 ## [Unreleased]
 
+## [v4.01] - 2026-07-30
+
+The end-of-session learning retro can now actually run, and the decision health-check has a settled home.
+
+[Full notes](release/releases/notes/v4.01_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.01)
+
 ## [v4.0] - 2026-07-29
 
 You can now see where agent token spend goes, get an estimate for planned work when there is enough history to support one, and measure estimates against what actually happened.
