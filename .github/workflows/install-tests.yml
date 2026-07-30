@@ -31,6 +31,11 @@ name: Install tests
 #                                  conformance) scan logic: ≥2 findings on a bad
 #                                  agents-dir fixture (missing tools: + recursion
 #                                  surface), 0 on a good fixture (#189)
+#   - test_package_freshness_exit_codes.sh  the --check-package-freshness verdict
+#                                  -> exit contract, asserted in a subprocess
+#                                  (FRESH=0, STALE+warn=2 advisory, STALE+enforce=1,
+#                                  unexpected=1) against a normalized git-archive
+#                                  sandbox with HOME redirected (#4183)
 #   - test_resolve_canonical_source.sh  single-sourced template-sync resolver
 #                                  (#2158): sources lib-template-sync-source.sh +
 #                                  pins the 3-arm fixture table (incl. the #94
@@ -167,6 +172,17 @@ jobs:
         # drift-guards them against the live deploy.sh predicate. Never touches a
         # real operator memory store (none exists in CI; the test self-contains).
         run: bash core/deploy/tests/test_check36_drift_classes.sh
+
+      - name: Run package-freshness exit-code regression (test_package_freshness_exit_codes.sh)
+        # #4183: the --check-package-freshness probe used to map a warn-mode STALE
+        # verdict to exit 0, so a caller reading the exit status got a false PASS.
+        # This test asserts the verdict -> exit contract DIRECTLY in a subprocess
+        # (FRESH=0, STALE+warn=2 advisory, STALE+enforce=1, unexpected=1) against a
+        # throwaway `git archive HEAD` sandbox with HOME redirected. It normalizes
+        # that sandbox to FRESH before injecting its own staleness, so it tests the
+        # MAPPING and never double-gates committed-tree freshness (which Check 7 and
+        # the skill-package-freshness CI gate already own).
+        run: bash core/deploy/tests/test_package_freshness_exit_codes.sh
 
       - name: Run template-sync resolver regression (test_resolve_canonical_source.sh)
         # #2158: the canonical-source resolver is single-sourced in
