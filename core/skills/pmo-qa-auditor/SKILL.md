@@ -1,8 +1,8 @@
 ---
 name: pmo-qa-auditor
 description: >
-  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit (dated process-audit artifact) · Dev testing (PR + release plan → Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts) · As-built architecture-conformance audit (delivered-work drift + cross-release fragmentation). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run dev testing on PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "fitness-audit the release pipeline", "as-built architecture-conformance audit."
-version: v3.68
+  Reviews skill outputs against the principal contributor standard. Modes: Single-output review · Cross-output coherence · Evidence audit · Guardrail compliance · Platform health audit · Release-process fitness audit · Dev testing (Stage-7 quality report as PR comment) · Acceptance review (Stage-8 per-criterion AC verdicts) · As-built architecture-conformance audit (delivered-work drift + cross-release fragmentation) · Decision-health audit (hub and spoke decision conduct vs corpus oracles). Evaluates rigor, accuracy, judgment, and operational value — not formatting. Triggers: "review this output", "audit this", "QA this", "check this against the standard", "is this ready to act on", "quality check this", "is this principal-contributor quality", "dev-test this PR", "run the DT ladder", "acceptance review this PR", "grade this against the issue AC", "run the release-process fitness audit", "as-built architecture-conformance audit", "decision-health audit", "audit how we decided."
+version: v4.01
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -39,7 +39,10 @@ Stage-8 six-value per-criterion enum (PARTIAL carries the mandatory unmet-remain
 Mode I's observational conformance-drift / cross-release-fragmentation / conformant /
 no-governing-baseline classification (no verdicts) with recorded 1–5 dimension scores and an
 orthogonal severity-axis × confidence-tag model (severity is never diluted by low baseline
-confidence). A PARTIAL-family value outside those defined vocabularies remains the cop-out this
+confidence); Mode J's observational per-seam grade vocabulary plus the `no-evidence`
+classification, which is **never** rendered as a passing grade — an unemitted seam produces no
+rows, and no rows is indistinguishable from no failures unless the distinction is stated.
+A PARTIAL-family value outside those defined vocabularies remains the cop-out this
 principle forbids.
 
 **Specific, located findings.** Every finding includes: (1) the exact location in the output
@@ -91,6 +94,11 @@ This skill's modes are enumerated in the Mode Selection table below. **Trigger-m
 >   audit-class observational discipline) **plus** a committed overwrite of the
 >   `release/releases/architecture-conformance-summary.md` hand-off surface (the tracked
 >   headline health-check consumes off-instance). Auto-files nothing.
+> - **Mode J — Decision-Health Audit**: the release record + the pipeline event log go
+>   in, scored against the hub's decision invariants and the platform's named decision
+>   failure modes; a dated on-disk audit folder comes out (Mode E's audit-class
+>   observational discipline) **plus** a committed overwrite of the
+>   `release/releases/decision-health-summary.md` hand-off surface. Auto-files nothing.
 >
 > All other modes emit within the invoking surface (in-chat; when pipeline-dispatched,
 > the spoke's sub-task comment).
@@ -118,6 +126,7 @@ Map the user's request to a mode using the trigger-match table below. Exact or c
 | "dev-test this PR", "run dev testing on PR #N", "run the DT ladder", "Stage 7 quality review", a PR reference + release plan path provided | Mode G — Dev Testing |
 | "acceptance review this PR", "acceptance-review #N against its AC", "grade the acceptance criteria", "per-criterion acceptance verdicts", Stage-8 QA invocation | Mode H — Acceptance Review |
 | "as-built architecture-conformance audit", "architecture-conformance audit", "audit delivered work against the architecture", "cross-release fragmentation check", "conformance-drift audit", or the architecture-conformance cadence invocation (a §2 event or the 90-day staleness sentinel) | Mode I — As-Built Architecture-Conformance Audit |
+| "decision-health audit", "decision audit", "audit how we decided", "audit the hub's decision-making", "decision coverage scorecard", "are our autonomous decisions healthy", or the decision-audit cadence invocation (a §2 event or the 90-day staleness sentinel) | Mode J — Decision-Health Audit |
 
 ### Step 3 — Invoke AskUserQuestion (fallback)
 
@@ -784,6 +793,82 @@ See `references/architecture-conformance-mode-spec.md` (machinery),
 `references/architecture-conformance-dimension-rubric.md` (dimensions + banding SSOT), and
 `../../../release/references/protocols/architecture-conformance-cadence.md` (when-to-run).
 
+### Mode J — Decision-Health Audit
+
+**Trigger**: "decision-health audit", "decision audit", "audit how we decided", "audit the
+hub's decision-making", "decision coverage scorecard", "are our autonomous decisions healthy",
+or the decision-audit cadence invocation (a §2 event or the 90-day staleness sentinel) per
+`../../../release/references/protocols/decision-audit-cadence.md` — the when-to-run authority;
+this mode is the how-to-run. Disambiguate on the **evidence axis**, which is what separates the
+four observational audit modes: "platform health audit" (registry corpus) → Mode E;
+"release-process fitness audit" (pipeline vs external frames) → Mode F; "architecture-conformance
+audit" (delivered work vs the architecture baseline) → Mode I; **this mode audits DECISION
+CONDUCT against the hub's decision invariants and the platform's named decision failure modes.**
+
+**Scope**: the retrospective, cross-release complement to the pipeline's forward per-decision
+gates. It reads a release window and asks whether decisions were rendered where the governance
+says they are rendered, whether the evidence for them was recorded, and whether the platform's
+own named decision failure modes were detected when their signatures occurred. The forward
+gates hold one decision at a time; this mode catches the cross-release recurrence a
+per-decision gate is structurally blind to — a failure mode that fires once in each of several
+releases trips no single gate.
+
+**Input**: a release window bounded by release-record anchors (`release/releases/RELEASE_LOG.md`
+rows resolved to merge anchors, **never ordered by version number** — a version is a slot
+identifier, not a sequence ordinal), plus the pipeline event log queried over that window, the
+ADR corpus entries in the window, and the deviation logs in the window's release plans. Not a
+pasted skill output.
+
+**Mutation posture — OBSERVE-only** (Mode E's discipline): writes the git-ignored dated audit
+folder + a committed overwrite of `release/releases/decision-health-summary.md` (the hand-off
+surface, §7b of the mode-spec) + the in-chat echo. It **never** creates a work item, mutates
+the backlog or registry, or edits any other tracked file. Findings are observations until
+operator triage — the mode auto-files nothing.
+
+**Provisioning state — check this first.** This mode ships ahead of its content SSOT: the host
+decision registers the mode, its spec, and its cadence protocol; the capability build authors
+`references/decision-audit-dimension-rubric.md` (the coverage-seam set, per-seam grade
+vocabulary, and coverage-index formula). **While that rubric is absent, a Mode J invocation
+reports its unprovisioned state naming the missing file and stops.** It does not improvise a
+seam set and does not emit a partial scorecard — a fabricated baseline is worse than an absent
+one, because a later run would silently measure drift against noise.
+
+**Process** (schemas + detail in `references/decision-audit-mode-spec.md` — cited, not
+restated):
+1. Resolve the rubric path; on absence, emit the unprovisioned notice and terminate.
+2. Resolve the release window to `(from_release, to_release]` and pin **both bounds to merge
+   anchors** (mode-spec §2). An unresolvable bound reports INDETERMINATE naming it — the window
+   never silently widens to everything or narrows to the latest release.
+3. **Derive and pin the oracle set at run time** (mode-spec §3). Resolve the oracle-source
+   roster from the corpus rather than an inline list, count each source with a section-scoped
+   probe, and **run the bounding control** — assert the section-scoped count is strictly less
+   than the whole-file count for at least one source, or report INDETERMINATE. Record the
+   per-source content hashes, the derivation date, and the derived counts. **No hardcoded
+   oracle cardinality appears in this skill, the mode-spec, the rubric, or the cadence
+   protocol.**
+4. Collect the decision surface from the four sources in priority order (mode-spec §4).
+5. Score each seam against the rubric; a seam with zero evidence rows reports `no-evidence`
+   with its emitting surface named — **never a passing grade**.
+6. Validate evidence citations against the four-form bar (mode-spec §5); fix failures before
+   emitting; record the aggregate rate.
+7. Emit the dated audit folder at
+   `<OPERATOR_INSTANCE_ANALYSIS_PATH>/decision-audit-${AUDIT_DATE_UTC}/` (operator-instance,
+   git-ignored; `${AUDIT_DATE_UTC}` = `date -u +%Y-%m-%d` at run time) — `SUMMARY.md`,
+   `findings-register.md` (+ the `## Systemic Patterns` table + the single `## Coverage Gap`
+   aggregate row), `issue-drafts/NNN-kebab-name.md` in observation format (mode-spec §7a) — AND
+   overwrite the committed `release/releases/decision-health-summary.md` (mode-spec §7b).
+8. Observational-discipline self-check — scan for prescriptive verbs (`recommend`, `migrate`,
+   `consolidate`, `should`); rewrite before emitting (Mode E/F/I step parallel).
+
+**Does NOT auto-file.** A run on a decision-defect fixture creates **zero** work items —
+findings are report-only, surfaced for human routing.
+
+See `references/decision-audit-mode-spec.md` (machinery),
+`references/decision-audit-dimension-rubric.md` (seam set + grade vocabulary + index formula
+SSOT; authored by the capability build), and
+`../../../release/references/protocols/decision-audit-cadence.md` (when-to-run). Host decision
+of record: `../../ADRs/ADR-103-decision-audit-host-qa-auditor-mode-j.md`.
+
 ## Output format
 
 Every QA auditor response follows this structure:
@@ -990,6 +1075,31 @@ Mode I does NOT emit a gate table, a PASS/FAIL verdict, or the QA Audit Report h
    conformance posture, classification counts (conformant / drift / fragmentation-candidate /
    no-baseline), the fragmentation-group count + its candidate-grade confidence bound, the
    coverage-gap count, the evidence-bar rate, and a pointer to the folder + the committed
+   surface. No prescriptive verbs; observation drafts carry reversibility tiers; there is no
+   gate verdict to tier.
+
+### Mode J — Decision-Health Audit Output
+
+Mode J does NOT emit a gate table, a PASS/FAIL verdict, or the QA Audit Report header
+(observational audit-class, like Modes E/F/I). When the dimension rubric is absent it emits a
+single **unprovisioned notice** naming the missing file and nothing else. Once provisioned it
+produces **three** surfaces:
+
+1. the **dated audit folder** at
+   `<OPERATOR_INSTANCE_ANALYSIS_PATH>/decision-audit-${AUDIT_DATE_UTC}/` (operator-instance,
+   git-ignored) — `SUMMARY.md` (the resolved window with **both merge anchors**, the oracle pin
+   (per-source content hashes + derivation date + derived counts), the coverage scorecard, the
+   classification counts, the `no-evidence` seam count with the blind-versus-clean distinction
+   stated, and the evidence-bar rate), `findings-register.md` (the `{finding-id, release, seam,
+   oracle, classification, severity, confidence, evidence, root-cause}` rows + the
+   `## Systemic Patterns` table + the single `## Coverage Gap` aggregate row), and
+   `issue-drafts/NNN-kebab-name.md` in observation format; schemas: mode-spec §7a;
+2. a committed overwrite of **`release/releases/decision-health-summary.md`** — the tracked
+   headline hand-off surface that gives a tracked acceptance criterion a tracked oracle and lets
+   a run on a fresh clone resolve where the previous window ended (mode-spec §7b);
+3. the **in-chat SUMMARY echo**: the resolved window + oracle pin, the coverage index, the
+   per-seam grades, the `no-evidence` seam count stated as blind rather than clean, the
+   systemic-pattern count, the evidence-bar rate, and a pointer to the folder + the committed
    surface. No prescriptive verbs; observation drafts carry reversibility tiers; there is no
    gate verdict to tier.
 

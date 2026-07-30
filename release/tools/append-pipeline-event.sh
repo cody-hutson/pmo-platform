@@ -171,6 +171,72 @@ EVENT_TYPES="$(printf '%s\n' "$SUBTYPES_LINES" | awk -F'\t' 'NF{print $1}' | tr 
 # `iteration` subtypes are a PREFIX pattern, not literal members (validated below).
 SUBTYPES_iteration_prefixes="dt-eng-pass- qa-dt-pass-"
 
+# ─── Recognized payload labels (parsed from schema § 11.8) ───────────────────
+#
+# WHY THIS GATE EXISTS. The synthesizer terminates each payload field at the next
+# RECOGNIZED label. An unrecognized label is therefore swallowed into the
+# PRECEDING field's content and tokenized as if it were signal — one stray label
+# after `theme:` inflated a single real cluster into three. The event log is
+# append-only, so a bad row can never be deleted, only redacted. The read side is
+# hardened too, but only a write-side gate stops the bad row existing.
+#
+# SCOPE — deliberately narrow, and empirically grounded. Only event types that
+# DECLARE a label set in § 11.8 are validated: `release-synthesis` and
+# `session-retro`, the two grains the synthesizer parses. A census of the live
+# event log found the other event types (`decision`, `gate-outcome`, `escalation`,
+# `test-run`) using open free-form payload keys across the great majority of rows;
+# validating those would reject nearly every existing caller for no read-side
+# benefit. An event type absent from § 11.8 is NOT validated — that is the design,
+# not an omission.
+#
+# § 11.8 is the SINGLE AUTHORITY for the label set (schema over tool). Parsing it
+# here rather than restating it is what keeps the two from drifting — the drift
+# that shipped a 5-label schema against a 6-label tool.
+
+# Parse the schema § 11.8 table → "source|label label …" lines on stdout.
+# Row shape: | `source` … | `--event-type …` | `l1` / `l2` / … | clustered | zero-state |
+# FS="|" on a leading-pipe row: $2=col1(source) $3=col2(filter) $4=col3(labels).
+parse_schema_labels() {
+  [[ -r "$SCHEMA_FILE" ]] || return 1
+  awk -F'|' '
+    /^### 11\.8/       { in_s = 1; next }
+    in_s && /^#{1,3} / { in_s = 0 }
+    # col-1 must START with a backtick token (the source name); trailing prose in
+    # the same cell — e.g. "(default — …)" — is ignored.
+    in_s && $2 ~ /^ *`[a-z0-9-]+`/ {
+      s = $2
+      sub(/^ *`/, "", s); sub(/`.*$/, "", s)          # source from col-1
+      rest = $4; labels = ""                            # labels from col-3 ONLY
+      while (match(rest, /`[a-z0-9-]+`/)) {
+        tok = substr(rest, RSTART+1, RLENGTH-2)
+        labels = (labels == "" ? tok : labels " " tok)
+        rest = substr(rest, RSTART+RLENGTH)
+      }
+      if (labels != "") print s "|" labels
+    }
+  ' "$SCHEMA_FILE"
+}
+
+# Static fallback (schema unreadable, e.g. invoked outside the repo tree).
+# Asserted against § 11.8 by --self-test, so a one-sided edit fails the test
+# rather than shipping silently.
+_FALLBACK_LABEL_SETS="$(printf '%s\n' \
+  "release-synthesis	surprise would-change watch-for" \
+  "session-retro	session source theme domain learning reason")"
+
+_schema_labels="$(parse_schema_labels 2>/dev/null || true)"
+if [[ -n "$_schema_labels" ]]; then
+  LABEL_SETS_LINES="$(printf '%s\n' "$_schema_labels" | sed 's/|/\t/')"
+else
+  LABEL_SETS_LINES="$_FALLBACK_LABEL_SETS"
+fi
+
+# Per-subtype FORBIDDEN labels. A `no-learning` row means "reflected, found
+# nothing" and the emission contract requires it to carry no `theme:` — that is
+# what makes it contribute no cluster signal. Enforcing it here means the
+# zero-state holds by enforcement rather than by emitter discipline.
+FORBIDDEN_LABELS_session_retro_no_learning="theme"
+
 REVERSIBILITY_VALUES="CHEAP MODERATE EXPENSIVE IRREVERSIBLE"
 OUTCOME_VALUES="resolved pending escalated superseded"
 
@@ -262,6 +328,46 @@ validate_subtype() {
   _subs="$(printf '%s\n' "$SUBTYPES_LINES" | awk -F'\t' -v t="$event_type" '$1==t{print $2; exit}')"
   [[ -n "$_subs" ]] || return 1
   is_in_list "$subtype" "$_subs"
+}
+
+# labels_for <event_type> — the recognized label set, or empty when the type
+# declares none in § 11.8 (in which case no label validation applies).
+labels_for() {
+  printf '%s\n' "$LABEL_SETS_LINES" | awk -F'\t' -v t="$1" '$1==t{print $2; exit}'
+}
+
+# payload_labels <payload> — every label token that OPENS a segment, one per line.
+# Segments split on ';'. A segment whose first token is not `name:` yields nothing
+# (free-text continuation is legitimate and is not a label).
+payload_labels() {
+  printf '%s' "$1" | tr ';' '\n' \
+    | sed -n -E 's/^[[:space:]]*([A-Za-z][A-Za-z0-9_-]*):.*$/\1/p'
+}
+
+# validate_payload_labels <event_type> <subtype> <payload>
+# Rejects an unrecognized label for a type that declares a set, and a label the
+# subtype explicitly forbids. Dies with the recognized set named, so the caller is
+# told what IS allowed rather than only what failed.
+validate_payload_labels() {
+  local event_type="$1" subtype="$2" payload="$3"
+  local allowed lbl forbidden key
+  allowed="$(labels_for "$event_type")"
+  [[ -n "$allowed" ]] || return 0        # type declares no set → not validated
+
+  # Per-subtype forbidden set (variable-name-safe key: non-alphanumerics → _).
+  key="$(printf '%s_%s' "$event_type" "$subtype" | tr -c 'A-Za-z0-9' '_')"
+  eval "forbidden=\"\${FORBIDDEN_LABELS_${key}:-}\""
+
+  while IFS= read -r lbl; do
+    [[ -n "$lbl" ]] || continue
+    if [[ -n "$forbidden" ]] && is_in_list "$lbl" "$forbidden"; then
+      die "Payload label '${lbl}:' is forbidden on ${event_type}/${subtype} — a ${subtype} row must not carry it (see pipeline-event-log-schema.md § 11.8 and the session-retro emission contract)"
+    fi
+    is_in_list "$lbl" "$allowed" || die "Unrecognized payload label '${lbl}:' for event_type '${event_type}' (recognized: ${allowed}). An unrecognized label is swallowed into the preceding field by the synthesizer and tokenized as signal — see pipeline-event-log-schema.md § 11.8"
+  done <<EOF
+$(payload_labels "$payload")
+EOF
+  return 0
 }
 
 # Validate actor: hub | spoke:#N | operator | skill:NAME
@@ -409,7 +515,66 @@ if [[ "$SELF_TEST" == "true" ]]; then
   is_in_list "EXPENSIVE" "$REVERSIBILITY_VALUES" || die "self-test: reversibility enum check failed"
   is_in_list "resolved" "$OUTCOME_VALUES" || die "self-test: outcome enum check failed"
 
+  # ── § 11.8 payload-label registry ────────────────────────────────────────
+  # Report the SOURCE before asserting on it. The lockstep assertion below is
+  # conditional on a successful schema parse, so an empty parse would silently
+  # skip it and read as green — the false-negative this line exists to expose.
+  echo "self-test: label source=$([[ -n "$_schema_labels" ]] && echo "schema-§11.8-data-driven" || echo static-fallback) ($(printf '%s\n' "$LABEL_SETS_LINES" | grep -c .) label sets)"
+  # A READABLE schema that parses to nothing is the false-green case: the lockstep
+  # assertion below would be skipped and the run would still report PASS. An
+  # UNREADABLE schema is the legitimate degraded-availability path (the forced-
+  # fallback child run exercises exactly that), so it is not an error.
+  if [[ -r "$SCHEMA_FILE" && -z "$_schema_labels" ]]; then
+    die "self-test: § 11.8 label parse returned nothing against a READABLE schema — the registry silently fell back, so the schema↔fallback lockstep would not have run"
+  fi
+  # BIDIRECTIONAL schema↔fallback assertion: a one-sided edit to either surface
+  # fails here rather than shipping. This is the check that would have caught the
+  # 5-label schema / 6-label tool drift.
+  if [[ -n "$_schema_labels" ]]; then
+    _st_sr_schema="$(labels_for session-retro)"
+    _st_sr_fallback="$(printf '%s\n' "$_FALLBACK_LABEL_SETS" | awk -F'\t' '$1=="session-retro"{print $2; exit}')"
+    [[ "$_st_sr_schema" == "$_st_sr_fallback" ]] \
+      || die "self-test: § 11.8 session-retro labels ('$_st_sr_schema') differ from the static fallback ('$_st_sr_fallback') — reconcile both sites"
+    _st_rs_schema="$(labels_for release-synthesis)"
+    _st_rs_fallback="$(printf '%s\n' "$_FALLBACK_LABEL_SETS" | awk -F'\t' '$1=="release-synthesis"{print $2; exit}')"
+    [[ "$_st_rs_schema" == "$_st_rs_fallback" ]] \
+      || die "self-test: § 11.8 release-synthesis labels ('$_st_rs_schema') differ from the static fallback ('$_st_rs_fallback') — reconcile both sites"
+  fi
+  # `reason` must be recognized — it is emitted on every no-learning row.
+  is_in_list "reason" "$(labels_for session-retro)" \
+    || die "self-test: 'reason' missing from the session-retro label set (no-learning rows carry it)"
+  # Positive: a well-formed row of each grain validates.
+  validate_payload_labels "session-retro" "learning" \
+    "session:s1; source:friction; theme:over-building; domain:corpus-edit; learning:scope grew past the ask" \
+    || die "self-test: well-formed session-retro payload rejected"
+  validate_payload_labels "session-retro" "no-learning" "session:s6; reason:trivial-session" \
+    || die "self-test: well-formed no-learning payload rejected"
+  validate_payload_labels "release-synthesis" "learnings-triple" \
+    "surprise: a; would-change: b; watch-for: c" \
+    || die "self-test: well-formed release-synthesis payload rejected"
+  # An event type that declares NO label set stays unvalidated (free-form keys).
+  validate_payload_labels "decision" "scope-lock" "verdict:approved; ctx:anything-goes" \
+    || die "self-test: undeclared-label-set event type must not be validated"
+  # Free prose containing a colon is NOT a label (it does not open a segment).
+  validate_payload_labels "session-retro" "learning" "theme:over-building; learning:the fix: do less" \
+    || die "self-test: a colon inside free prose must not be read as a label"
+
   # Negative tests
+  # THE DT-2 GUARD: an unrecognized label must be rejected at emit time.
+  if ( validate_payload_labels "session-retro" "learning" \
+       "session:s1; theme:over-building; mood:excited; domain:corpus-edit" ) 2>/dev/null; then
+    die "self-test: unrecognized payload label 'mood:' must be rejected"
+  fi
+  # THE PA-5 GUARD: theme: on a no-learning row is forbidden by enforcement.
+  if ( validate_payload_labels "session-retro" "no-learning" \
+       "session:s6; reason:trivial; theme:over-building" ) 2>/dev/null; then
+    die "self-test: 'theme:' on a no-learning row must be rejected"
+  fi
+  if ( validate_payload_labels "release-synthesis" "learnings-triple" \
+       "surprise: a; mood: b" ) 2>/dev/null; then
+    die "self-test: unrecognized label on release-synthesis must be rejected"
+  fi
+
   if validate_subtype "decision" "bogus-subtype" 2>/dev/null; then
     die "self-test: subtype rejection check failed (bogus accepted)"
   fi
@@ -483,6 +648,8 @@ if [[ "$SELF_TEST" == "true" ]]; then
 
   echo "self-test: PASS"
   echo "  schema enums validated (event_type, event_subtype, actor, reversibility, outcome)"
+  echo "  § 11.8 payload labels validated (schema<->fallback lockstep; unrecognized label rejected)"
+  echo "  no-learning rows reject 'theme:' by enforcement; undeclared-label-set types stay free-form"
   echo "  positive + negative tests passed"
   echo "  append + revert cycle confirmed (log + write-log)"
   exit 0
@@ -538,6 +705,13 @@ case "$_p_unescaped" in
   *"|"*)
     die "Payload contains an unescaped '|' — the bare pipe stays reserved; write the multi-value separator as '\\|' (see pipeline-event-log-schema.md § 4.3a)" ;;
 esac
+
+# ─── Payload label validation (§ 11.8) ───────────────────────────────────────
+# Only for event types that DECLARE a recognized-label set. A label token is one
+# that OPENS a payload segment (string start, or immediately after a ';') — the
+# same grammar the read side terminates fields on. A colon inside free prose is
+# not a label and is left alone.
+validate_payload_labels "$EVENT_TYPE" "$EVENT_SUBTYPE" "$PAYLOAD"
 
 # ─── Build row ───────────────────────────────────────────────────────────────
 
