@@ -383,16 +383,48 @@ _vf_build_claimed_set() {
     git -C "${_audit_src_root:-.}" ls-remote --tags origin 2>/dev/null \
       | sed -e 's#.*refs/tags/##' -e 's/\^{}$//' || true
     # (3) RELEASE_LOG rows in DEPLOYED (tag-pushed-but-Release-unpublished) state.
+    #
+    # COLUMNS ARE PINNED BY HEADER NAME, NEVER BY ORDINAL. This arm previously read
+    # `st=$7` and called it State. It is not: under `awk -F'|'` the leading table pipe
+    # makes $1 empty, so the 8-column schema
+    #   | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+    # maps Version=$2, Tag=$7, State=$8. A Tag cell holds a backticked version, never
+    # the literal DEPLOYED, so `st == "DEPLOYED"` could never be true for a well-formed
+    # row and this whole arm was structurally dead — deploy.sh could not see an
+    # in-flight claim at all. claim-version.sh::_host_release_log_deployed fixed the
+    # identical off-by-one and the correction never reached this parallel copy.
+    # Resolving by NAME removes the failure mode rather than correcting one instance
+    # of it: a future column insertion shifts the ordinals and this arm keeps working.
     local _log="${_audit_src_root:-.}/release/releases/RELEASE_LOG.md"
     if [[ -f "$_log" ]]; then
       awk -F'|' '
+        function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
         /^\|/ {
-          ver=$2; st=$7
-          gsub(/^[ \t]+|[ \t]+$/, "", ver)
-          gsub(/^[ \t]+|[ \t]+$/, "", st)
+          if (!have) {
+            # Header row = the first pipe-row carrying BOTH column names. Prose pipes
+            # and stray tables above the schema are skipped rather than misread.
+            v = 0; s = 0
+            for (i = 1; i <= NF; i++) {
+              c = trim($i)
+              if (c == "Version") v = i
+              if (c == "State")   s = i
+            }
+            if (v && s) { vcol = v; scol = s; have = 1 }
+            next
+          }
+          ver = trim($vcol); st = trim($scol)
           if (st == "DEPLOYED" && ver ~ /^v[0-9]/) print ver
         }
-      ' "$_log" 2>/dev/null || true
+        END {
+          # Fail LOUD, not silently-empty: an unreadable schema is the condition that
+          # produced this defect, so it is reported rather than inferred from emptiness.
+          if (!have) { print "deploy.sh: _vf_build_claimed_set — RELEASE_LOG header row has no Version+State columns; the DEPLOYED arm was not evaluated" > "/dev/stderr"; exit 3 }
+        }
+      ' "$_log" || true
+      # NB: awk stderr is deliberately NOT sent to /dev/null here. The END-block
+      # diagnostic above is the whole point — an unreadable schema must be visible,
+      # not inferred from an empty arm. The program is fixed and the file existence
+      # is guarded, so there is no other stderr this could surface.
     fi
   } | sed '/^$/d' | sort -u
 }
@@ -8326,11 +8358,88 @@ EOF
 
   /bin/rm -rf "$_d" 2>/dev/null || true
 
+  # ─── Assertion group VF — version-freeness claimed-set column pinning [#3724] ──
+  #
+  # Offline, hermetic, sandbox-only. Guards the DEPLOYED arm of _vf_build_claimed_set
+  # against the ordinal off-by-one that made it structurally dead (it read $7, the Tag
+  # column, while treating it as State — State is $8).
+  #
+  # VF-3 and VF-4 are the ANTI-VACUITY assertions. VF-1 alone would pass on a Tag cell
+  # that happens to read DEPLOYED, and VF-1+VF-2 alone would pass on a hardcoded $8.
+  # VF-3 pins that the value read is the STATE cell and not the tag; VF-4 shifts the
+  # column order and asserts the arm still works, which only a NAME-pinned parser can
+  # do. Without VF-4 this group would re-admit the exact defect one column insertion
+  # later — the failure mode being closed is the ordinal, not this one instance of it.
+  echo "self-test: starting assertion group VF (version-freeness claimed-set column pinning, #3724)" >&2
+  local _vft; _vft="$(/usr/bin/mktemp -d -t vfclaimedset-selftest.XXXXXX)"
+  /bin/mkdir -p "$_vft/release/releases"
+  local _vflog="$_vft/release/releases/RELEASE_LOG.md"
+  local _vfout _vferr
+
+  # Canonical 8-column schema, matching the live RELEASE_LOG in shape. Synthetic v9.x
+  # versions carry no real-lineage semantics. The `repo` arg is passed EMPTY so the
+  # published-Releases arm is skipped — this group isolates arm (3).
+  /bin/cat > "$_vflog" <<'EOF'
+# RELEASE_LOG (self-test fixture)
+
+Prose that | contains | pipes | before the table, proving the header scan skips
+non-schema pipe rows rather than misreading the first one it meets.
+
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.90 | m-verified | #1 | #2 | `aaa` | `v9.90` | VERIFIED | 2026-07-30 |
+| v9.91 | m-deployed | #3 | #4 | `bbb` | `v9.91` | DEPLOYED | 2026-07-30 |
+EOF
+
+  # VF-1 / VF-2: the DEPLOYED row is extracted; the VERIFIED row is not.
+  _vfout="$(_audit_src_root="$_vft" _vf_build_claimed_set "" 2>/dev/null || true)"
+  /usr/bin/grep -qx 'v9.91' <<< "$_vfout" || { echo "FAIL: VF-1 the DEPLOYED row v9.91 must be extracted (State column)"; failures=$((failures+1)); }
+  /usr/bin/grep -qx 'v9.90' <<< "$_vfout" && { echo "FAIL: VF-2 the VERIFIED row v9.90 must NOT be extracted"; failures=$((failures+1)); }
+
+  # VF-3 anti-vacuity: the parser must read the STATE cell, not the Tag cell. The
+  # literal DEPLOYED sits in the Tag column of an otherwise-VERIFIED row — an ordinal
+  # $7 read matches it and wrongly claims v9.92; a name-pinned read does not.
+  /bin/cat > "$_vflog" <<'EOF'
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.92 | m-tagtrap | #5 | #6 | `ccc` | DEPLOYED | VERIFIED | 2026-07-30 |
+EOF
+  _vfout="$(_audit_src_root="$_vft" _vf_build_claimed_set "" 2>/dev/null || true)"
+  /usr/bin/grep -qx 'v9.92' <<< "$_vfout" && { echo "FAIL: VF-3 a DEPLOYED-valued TAG cell on a VERIFIED row must not be read as State (ordinal \$7 regression)"; failures=$((failures+1)); }
+
+  # VF-4 anti-vacuity: shift the column order. A parser pinned to ANY ordinal breaks
+  # here; a header-name-pinned parser keeps working. This is what makes the fix durable
+  # rather than a one-time correction of one instance.
+  /bin/cat > "$_vflog" <<'EOF'
+| Version | State | Milestone | Issues | Release PR | Merge SHA | Tag | Date |
+|---|---|---|---|---|---|---|---|
+| v9.93 | DEPLOYED | m-shifted | #7 | #8 | `ddd` | `v9.93` | 2026-07-30 |
+| v9.94 | VERIFIED | m-shifted | #9 | #10 | `eee` | `v9.94` | 2026-07-30 |
+EOF
+  _vfout="$(_audit_src_root="$_vft" _vf_build_claimed_set "" 2>/dev/null || true)"
+  /usr/bin/grep -qx 'v9.93' <<< "$_vfout" || { echo "FAIL: VF-4 a re-ordered header must still resolve State by NAME (v9.93 DEPLOYED missing)"; failures=$((failures+1)); }
+  /usr/bin/grep -qx 'v9.94' <<< "$_vfout" && { echo "FAIL: VF-4 a re-ordered header must still exclude VERIFIED (v9.94 wrongly included)"; failures=$((failures+1)); }
+
+  # VF-5: a table with no resolvable Version+State header is REPORTED, not silently
+  # treated as an empty arm — an unreadable schema is the condition that produced the
+  # defect, so it must not present as "nothing is DEPLOYED".
+  /bin/cat > "$_vflog" <<'EOF'
+| Release | Milestone | Status |
+|---|---|---|
+| v9.95 | m-noheader | DEPLOYED |
+EOF
+  _vferr="$(_audit_src_root="$_vft" _vf_build_claimed_set "" 2>&1 1>/dev/null || true)"
+  /usr/bin/grep -q 'Version+State' <<< "$_vferr" || { echo "FAIL: VF-5 an unresolvable header must be reported on stderr, not read as an empty arm"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_vft" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
   fi
   echo "self-test: PASS" >&2
+  echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
+  echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported" >&2
   echo "  close-completeness invariant validated (#1290 AC5):" >&2
   echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
