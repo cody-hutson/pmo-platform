@@ -19,26 +19,40 @@ Separated from OPERATIONS.md because the release process governs the entire work
 ## File Structure
 
 ```
-projects/_config/
-├── OPERATIONS.md                ← Operational protocols and cross-project rules
-├── RELEASE_PROTOCOL.md          ← This file. How changes are managed.
-├── Releases/
-│   ├── RELEASE_LOG.md           ← Version history (Recent 5 + full history)
-│   ├── _snapshots/              ← Pre-change file backups (rolling 15-release window)
-│   │   └── [version]/           ← One folder per release
-│   ├── _archive/                ← Release plan files pruned beyond 15-release window
-│   ├── v5.0_RELEASE_PLAN.md    ← One flat file per release (also contains
-│   ├── v5.1_RELEASE_PLAN.md       archived IMP entries from Close step)
-│   └── ...
+core/governance/
+└── OPERATIONS.md                ← Operational protocols and cross-project rules
 
-projects/
-├── _Skill-Packages/             ← Skill file lifecycle (see Skill Build Protocol)
-│   ├── [skill].skill            ← Production .skill packages (one per skill)
-│   ├── _working/[version]/      ← Release build staging (transient)
-│   └── _previous/[skill]/       ← One-deep previous version (overwrite model)
+release/governance/
+├── RELEASE_PROTOCOL.md          ← This file. How changes are managed.
+└── release-process.md           ← The 13-stage pipeline definition
+
+release/releases/
+├── RELEASE_LOG.md               ← Version history (engineering audit trail)
+├── RELEASE_INDEX.md             ← One row per release (navigation surface)
+├── RELEASE_DIGEST.md            ← One H3 entry per release, foldered by major-version H2
+├── RELEASE_REVERSIONS.md        ← Re-version ledger (abandoned-version recovery record)
+├── plans/                       ← Release plans, foldered by major version
+│   ├── _unversioned/            ← Plans for version-less releases (slug-keyed)
+│   ├── v1/  v2/  v3/            ← One folder per major version
+├── notes/                       ← User-facing release notes, same foldering as plans/
+│   ├── _unversioned/
+│   ├── v1/  v2/  v3/
+└── hub-state/                   ← release-hub orchestration state
+
+packages/
+└── [skill].skill                ← Production .skill packages (one per deployed skill)
 ```
 
-**Naming convention:** `[version]_RELEASE_PLAN.md` — no subfolders per release.
+**Naming convention:** `[version]_RELEASE_PLAN.md` / `[version]_RELEASE_NOTES.md` — foldered by
+major version (`plans/v3/`, `notes/v3/`), with `_unversioned/` holding the slug-keyed artifacts for
+version-less releases. Flat files at the `plans/` and `notes/` roots are the in-flight and
+recent-release working set; foldering happens as major versions close out.
+
+**Snapshots:** the `_snapshots/` and `_archive/` directories described by earlier revisions of this
+protocol do not exist in the repository. Pre-change snapshots are the **Cowork-path** mechanism (see
+§ Pre-Change Snapshot Protocol); on the **Claude Code path** git history *is* the snapshot and the PR
+diff *is* the dry-run review gate, per CLAUDE.md § No ungoverned changes. Nothing writes a snapshot
+directory into this repo.
 
 ---
 
