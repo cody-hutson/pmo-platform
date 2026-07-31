@@ -166,6 +166,14 @@ jobs:
               || true
           fi
           /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__, "via", __import__("sys").executable)'
+          # A --user install lives under $HOME. Tests that sandbox HOME lose sight
+          # of it — test_package_freshness_exit_codes.sh redirects HOME per probe
+          # (SBX_HOME), so the packager inside the probe could not import yaml even
+          # though this step's own check passes under the real HOME. That split is
+          # what made PF-4 fail while this step reported success. Pin the user-site
+          # on PYTHONPATH, which survives HOME redirection, and export it to
+          # subsequent steps.
+          echo "PYTHONPATH=$(/usr/bin/python3 -m site --user-site)${PYTHONPATH:+:${PYTHONPATH}}" >> "$GITHUB_ENV"
 
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
         run: bash core/deploy/tests/test_sandbox_roots.sh
