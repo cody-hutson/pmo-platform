@@ -18,9 +18,13 @@
 # SCHEMA — 5 fields, '|||'-delimited (the separator is '|||' and not ':' because
 # the section-anchor fields legitimately contain a ': ', e.g.
 # "Tracker 6: Artifact Register" — the same forcing constraint deploy.sh records
-# for TEMPLATE_SCHEMA_MAP). Split with `awk -F'\|\|\|'`, NEVER
+# for TEMPLATE_SCHEMA_MAP). Split with `awk -F'\\|\\|\\|'`, NEVER
 # `IFS='|||' read` (bash collapses it to a single '|' and silently empties
-# fields). Section lists inside fields 3/4/5 are '|'-delimited.
+# fields). Write the separator DOUBLED — `\\|\\|\\|`, not `\|\|\|`: BSD awk
+# rejects the single-backslash form ("illegal primary in regular expression"),
+# and inside a command substitution that error yields an EMPTY field count
+# rather than a visible failure, so a correct record reads as malformed.
+# Section lists inside fields 3/4/5 are '|'-delimited.
 #   1 <canonical-path>
 #   2 <skill-local-path>
 #   3 <sections the CANONICAL owns exclusively>

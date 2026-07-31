@@ -92,6 +92,55 @@ fi
 # shellcheck source=../lib-template-sync-source.sh disable=SC1091
 source "$LIB_TEMPLATE_SYNC_SOURCE"
 
+# Registered complementary reference pairs (#4178) — read DIRECTLY from the shared
+# registry, the SAME file deploy.sh Check 13b reads. Not awk-extracted out of
+# deploy.sh and not re-declared here: a second copy would be a shadow SSOT that
+# could drift the gate out of agreement with the shipped package.
+#
+# FAIL CLOSED, deliberately. The injection loops in this builder iterate a record
+# set, and an empty iteration returns 0 — so an absent or truncated registry would
+# otherwise be a silent no-op that still produces a green build and a written
+# .sha256 sidecar, while Check 13b reading the same file fails closed. One deleted
+# file would disable the fix AND its detector in the same stroke, which is the
+# defect class this release exists to close. Absence, emptiness, and malformation
+# are all errors here.
+#
+# (A registry that is legitimately empty in some future state is a deliberate
+# change that must also retire the pair-consuming code path below — not a
+# condition this builder should silently tolerate today, when it ships with a
+# record both consumers depend on.)
+COMPLEMENTARY_PAIRS_FILE="core/deploy/allowlists/complementary-reference-pairs.txt"
+if [[ ! -r "$COMPLEMENTARY_PAIRS_FILE" ]]; then
+  echo "ERROR: complementary-pair registry missing or unreadable: $COMPLEMENTARY_PAIRS_FILE" >&2
+  echo "       deploy.sh Check 13b fails closed on the same absence; this builder must not fail open." >&2
+  exit 1
+fi
+declare -a COMPLEMENTARY_PAIRS=()
+while IFS= read -r line; do
+  COMPLEMENTARY_PAIRS+=("$line")
+done < <(grep -v '^[[:space:]]*#' "$COMPLEMENTARY_PAIRS_FILE" 2>/dev/null | grep -v '^[[:space:]]*$' || true)
+
+if [[ ${#COMPLEMENTARY_PAIRS[@]} -eq 0 ]]; then
+  echo "ERROR: complementary-pair registry carries zero records: $COMPLEMENTARY_PAIRS_FILE" >&2
+  echo "       an empty or truncated registry is indistinguishable from a deleted one at build time." >&2
+  exit 1
+fi
+
+for entry in "${COMPLEMENTARY_PAIRS[@]}"; do
+  # 5 fields: canonical ||| skill-local ||| canonical-owned ||| skill-local-owned ||| shared.
+  # Split with awk on the literal '|||' (never `IFS='|||' read`, which bash
+  # collapses to a single '|' and silently empties fields). The separator is
+  # written '\\|\\|\\|' and NOT '\|\|\|': BSD awk rejects the single-backslash
+  # form outright ("illegal primary in regular expression"), which inside a
+  # command substitution yields an EMPTY field count and a false MALFORMED
+  # verdict rather than a visible error. Same doubling deploy.sh uses.
+  if [[ "$(awk -F'\\|\\|\\|' '{print NF}' <<< "$entry")" != "5" ]]; then
+    echo "ERROR: malformed complementary-pair record in $COMPLEMENTARY_PAIRS_FILE" >&2
+    echo "       expected 5 '|||'-delimited fields, got: $entry" >&2
+    exit 1
+  fi
+done
+
 # Skill → module resolver — iterates the per-module arrays extracted from deploy.sh
 # above (mirrors deploy.sh resolve_skill_module). CANARY_SKILLS classifies to
 # release/. Bash 3.2 portable: explicit per-array loops + `${#ARR[@]} -gt 0`

@@ -1285,6 +1285,226 @@ remove_mirror_subtree() {
   return 0
 }
 
+# ─── Complementary-pair ownership (Check 13b passes 2/3/4) — #4178 ───────────
+# The registered-complementary-pair predicate, factored to TOP LEVEL so the
+# lifecycle Check 13b (inside cmd_check, routing each finding through
+# flag_warn_or_issue) and `--self-test` group CP drive ONE body (the DD1 pattern
+# of _vf_/_cc_/_de_/_c32_/_c7_compute_verdict). No predicate is re-encoded on
+# either surface.
+#
+# The registry it reads is core/deploy/allowlists/complementary-reference-pairs.txt,
+# whose header carries the record schema and the asserted predicates. It is read
+# DIRECTLY here and DIRECTLY by core/deploy/tools/build-skill-packages.sh — never
+# awk-extracted out of this script, which is the drift class recorded in
+# core/deploy/lib-template-sync-source.sh.
+#
+# THREE PASSES, one body:
+#   pass 2  ownership — P1/P2/P3/P4 per record (exclusive sections present in
+#           their owner and ABSENT from the peer; shared sections present in
+#           BOTH), plus P5, the shared-section CONTENT comparison. P1-P4 breaches
+#           are ownership drift (a declaration the files contradict); a P5 breach
+#           is content divergence inside a correct declaration. They are
+#           deliberately distinct signals, not one blended verdict.
+#   pass 3  discovery — a same-basename file present BOTH under a skill
+#           references/ tree AND in core|release|operations outside */skills/*,
+#           with no registry record, is a possible ACCIDENTAL fork. This is what
+#           makes a deliberate split and an accidental fork distinguishable.
+#   pass 4  packaging — for each record, if the owning skill's SKILL.md cites the
+#           canonical path, that path must resolve from the built package root
+#           and from the deployed skill root. This is the assertion whose absence
+#           IS the shipped-package defect.
+#
+# FAIL-CLOSED ON ABSENCE. A missing or unreadable registry verdicts NOSET, never
+# a silent pass (the Check 61 DE-9 precedent) — and the packager mirrors that
+# posture, so one deleted file cannot disable the fix and its detector together.
+#
+# CIAC-3: every predicate reads a file directly (`grep -qxF … "$file"`) or uses a
+# here-string (`awk … <<< "$rec"`). No writer is piped into a quiet grep.
+#
+# Env overrides (the self-test seam; committed defaults are the live paths):
+#   CP_PAIRS_FILE   registry path
+#   CP_ROOT         directory the relative paths resolve against
+#   CP_PACKAGES     built-package directory
+#   CP_USER_SKILLS  deployed skill root
+#
+# Echoes ONE LINE PER FINDING on stdout, each `<TOKEN>|<detail>`, in a
+# deterministic token order so the first line is a stable assertion target:
+#   NOSET|<path>                    registry absent/unreadable  (terminal, alone)
+#   MALFORMED|<detail>              a record without exactly 5 '|||' fields
+#   OWNERSHIP-DRIFT|<detail>        P1/P2/P3/P4 breach
+#   SHARED-DIVERGENCE|<detail>      P5 breach (ownership correct, content drifted)
+#   UNREGISTERED-PAIR|<detail>      pass-3 discovery
+#   CITATION-UNRESOLVABLE|<detail>  pass-4 breach
+#   PASS|<n>                        zero findings across n record(s)
+#
+# Index-convention exclusion for pass 3 — NAMED, never a silent skip. README.md
+# is a per-directory index carried by dozens of directories by convention; it is
+# not a canonical/skill-local pair and would flood the pass.
+C13B_INDEX_BASENAMES=(README.md)
+
+_cp_compute_verdict() {
+  (
+    cd "${CP_ROOT:-.}" 2>/dev/null || { echo "NOSET|CP_ROOT unreadable: ${CP_ROOT:-.}"; exit 0; }
+
+    _cp_reg="${CP_PAIRS_FILE:-core/deploy/allowlists/complementary-reference-pairs.txt}"
+    if [[ ! -r "$_cp_reg" ]]; then
+      echo "NOSET|complementary-pair registry absent or unreadable: $_cp_reg"
+      exit 0
+    fi
+
+    # Record set: comment + blank lines are tolerated (both consumers agree).
+    _cp_records="$(grep -v '^[[:space:]]*#' "$_cp_reg" 2>/dev/null | grep -v '^[[:space:]]*$' || true)"
+
+    _cp_malformed=""
+    _cp_ownership=""
+    _cp_divergence=""
+    _cp_citation=""
+    _cp_count=0
+    # Registered (canonical, skill-local) path pairs, newline-delimited, for pass 3.
+    _cp_registered=""
+
+    while IFS= read -r _cp_rec; do
+      [[ -z "$_cp_rec" ]] && continue
+      _cp_count=$((_cp_count + 1))
+
+      _cp_nf="$(awk -F'\\|\\|\\|' '{print NF}' <<< "$_cp_rec")"
+      if [[ "$_cp_nf" != "5" ]]; then
+        _cp_malformed="${_cp_malformed}MALFORMED|record ${_cp_count} has ${_cp_nf} '|||'-delimited field(s), expected 5 (canonical|||skill-local|||canonical-owned|||skill-local-owned|||shared) — see the registry header
+"
+        continue
+      fi
+
+      _cp_canon="$(awk -F'\\|\\|\\|' '{print $1}' <<< "$_cp_rec")"
+      _cp_mirror="$(awk -F'\\|\\|\\|' '{print $2}' <<< "$_cp_rec")"
+      _cp_own_c="$(awk -F'\\|\\|\\|' '{print $3}' <<< "$_cp_rec")"
+      _cp_own_m="$(awk -F'\\|\\|\\|' '{print $4}' <<< "$_cp_rec")"
+      _cp_shared="$(awk -F'\\|\\|\\|' '{print $5}' <<< "$_cp_rec")"
+      _cp_registered="${_cp_registered}${_cp_canon}|${_cp_mirror}
+"
+
+      # ── P3: both halves exist ────────────────────────────────────────────────
+      if [[ ! -f "$_cp_canon" || ! -f "$_cp_mirror" ]]; then
+        _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|registered pair is not resolvable on disk: canonical '$_cp_canon' $([[ -f "$_cp_canon" ]] && echo present || echo MISSING), skill-local '$_cp_mirror' $([[ -f "$_cp_mirror" ]] && echo present || echo MISSING)
+"
+        continue
+      fi
+
+      # ── P1: canonical-owned sections — in the canonical, ABSENT from the mirror ─
+      IFS='|' read -r -a _cp_secs <<< "$_cp_own_c"
+      for _cp_s in "${_cp_secs[@]}"; do
+        [[ -z "$_cp_s" ]] && continue
+        if ! grep -qxF "## $_cp_s" "$_cp_canon"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared canonical-owned but is NOT an H2 in $_cp_canon
+"
+        fi
+        if grep -qxF "## $_cp_s" "$_cp_mirror"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared canonical-owned but ALSO appears in $_cp_mirror — the section moved or was copied across the pair without updating $_cp_reg
+"
+        fi
+      done
+
+      # ── P2: skill-local-owned sections — in the mirror, ABSENT from the canonical ─
+      IFS='|' read -r -a _cp_secs <<< "$_cp_own_m"
+      for _cp_s in "${_cp_secs[@]}"; do
+        [[ -z "$_cp_s" ]] && continue
+        if ! grep -qxF "## $_cp_s" "$_cp_mirror"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared skill-local-owned but is NOT an H2 in $_cp_mirror
+"
+        fi
+        if grep -qxF "## $_cp_s" "$_cp_canon"; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared skill-local-owned but ALSO appears in $_cp_canon — the section moved or was copied across the pair without updating $_cp_reg
+"
+        fi
+      done
+
+      # ── P4 + P5: shared sections — in BOTH, and their blocks compared ─────────
+      IFS='|' read -r -a _cp_secs <<< "$_cp_shared"
+      for _cp_s in "${_cp_secs[@]}"; do
+        [[ -z "$_cp_s" ]] && continue
+        _cp_in_c=false; _cp_in_m=false
+        grep -qxF "## $_cp_s" "$_cp_canon" && _cp_in_c=true
+        grep -qxF "## $_cp_s" "$_cp_mirror" && _cp_in_m=true
+        if [[ "$_cp_in_c" != "true" || "$_cp_in_m" != "true" ]]; then
+          _cp_ownership="${_cp_ownership}OWNERSHIP-DRIFT|'## $_cp_s' is declared SHARED but is missing from $([[ "$_cp_in_c" == "true" ]] || printf '%s ' "$_cp_canon")$([[ "$_cp_in_m" == "true" ]] || printf '%s' "$_cp_mirror")
+"
+          continue
+        fi
+        # P5 — the content comparison. Block = lines from "## <section>" to the
+        # next "## " (or EOF), the same extractor Check 34 uses.
+        if ! diff -q \
+             <(awk -v anchor="## $_cp_s" '$0 == anchor {g=1; next} g && /^## / {exit} g {print}' "$_cp_canon") \
+             <(awk -v anchor="## $_cp_s" '$0 == anchor {g=1; next} g && /^## / {exit} g {print}' "$_cp_mirror") \
+             >/dev/null 2>&1; then
+          _cp_divergence="${_cp_divergence}SHARED-DIVERGENCE|'## $_cp_s' is declared SHARED by $_cp_reg but its content differs between $_cp_canon and $_cp_mirror — reconcile the two, or move the section into an exclusive-ownership field if the difference is deliberate
+"
+        fi
+      done
+
+      # ── pass 4: the canonical resolves where the SKILL.md cites it ───────────
+      # Owning skill = the path segment after 'skills/' in the skill-local path.
+      _cp_skill="${_cp_mirror#*/skills/}"; _cp_skill="${_cp_skill%%/*}"
+      _cp_skillmd="${_cp_mirror%%/skills/*}/skills/${_cp_skill}/SKILL.md"
+      if [[ -n "$_cp_skill" && -f "$_cp_skillmd" ]] && grep -qF "$_cp_canon" "$_cp_skillmd"; then
+        # Built package: the archive root is the skill dir, so the cited
+        # repo-relative path must appear as <skill>/<canonical-path>.
+        _cp_pkg="${CP_PACKAGES:-packages}/${_cp_skill}.skill"
+        if [[ -f "$_cp_pkg" ]]; then
+          # Listing captured to a variable, then matched with a HERE-STRING —
+          # never `unzip … | grep -q`, whose early exit SIGPIPEs the writer under
+          # `set -o pipefail` (the #3833 EPIPE class).
+          _cp_pkglist="$(unzip -l "$_cp_pkg" 2>/dev/null || true)"
+          if ! grep -qF " ${_cp_skill}/${_cp_canon}" <<< "$_cp_pkglist"; then
+            _cp_citation="${_cp_citation}CITATION-UNRESOLVABLE|${_cp_skill}/SKILL.md cites '$_cp_canon' but $_cp_pkg does not carry it — a deployed $_cp_skill cannot resolve that citation
+"
+          fi
+        fi
+        # Deployed skill root.
+        _cp_deployed="${CP_USER_SKILLS:-${USER_LOCAL_SKILLS_PATH:-}}"
+        if [[ -n "$_cp_deployed" && -d "$_cp_deployed/$_cp_skill" && ! -f "$_cp_deployed/$_cp_skill/$_cp_canon" ]]; then
+          _cp_citation="${_cp_citation}CITATION-UNRESOLVABLE|${_cp_skill}/SKILL.md cites '$_cp_canon' but it is absent from the deployed skill root $_cp_deployed/$_cp_skill — run ./deploy.sh --deploy $_cp_skill
+"
+        fi
+      fi
+    done <<< "$_cp_records"
+
+    # ── pass 3: unregistered canonical<->skill-local discovery ────────────────
+    # Intersect the skill-references basename set with the canonical-tree basename
+    # set (two finds, not one per basename), then subtract the named index
+    # convention and every registered pair.
+    _cp_unregistered=""
+    if [[ -d core || -d release || -d operations ]]; then
+      _cp_skill_names="$(find core release operations -path '*/skills/*/references/*' -type f -name '*.md' 2>/dev/null | sed 's|.*/||' | sort -u || true)"
+      _cp_canon_names="$(find core release operations -type f -name '*.md' -not -path '*/skills/*' -not -path 'release/releases/*' 2>/dev/null | sed 's|.*/||' | sort -u || true)"
+      _cp_both="$(comm -12 <(printf '%s\n' "$_cp_canon_names") <(printf '%s\n' "$_cp_skill_names") 2>/dev/null || true)"
+      while IFS= read -r _cp_b; do
+        [[ -z "$_cp_b" ]] && continue
+        _cp_skip=false
+        for _cp_idx in "${C13B_INDEX_BASENAMES[@]}"; do
+          [[ "$_cp_b" == "$_cp_idx" ]] && _cp_skip=true
+        done
+        [[ "$_cp_skip" == "true" ]] && continue
+        while IFS= read -r _cp_cp; do
+          [[ -z "$_cp_cp" ]] && continue
+          while IFS= read -r _cp_mp; do
+            [[ -z "$_cp_mp" ]] && continue
+            if ! grep -qxF "${_cp_cp}|${_cp_mp}" <<< "$_cp_registered"; then
+              _cp_unregistered="${_cp_unregistered}UNREGISTERED-PAIR|'$_cp_cp' and '$_cp_mp' share a basename across the canonical corpus and a skill references/ tree but are NOT registered in $_cp_reg — register them as complementary (declaring what each owns) or consolidate them; an unregistered same-basename pair is indistinguishable from an accidental fork
+"
+            fi
+          done <<< "$(find core release operations -path '*/skills/*/references/*' -type f -name "$_cp_b" 2>/dev/null | sort || true)"
+        done <<< "$(find core release operations -type f -name "$_cp_b" -not -path '*/skills/*' -not -path 'release/releases/*' 2>/dev/null | sort || true)"
+      done <<< "$_cp_both"
+    fi
+
+    _cp_all="${_cp_malformed}${_cp_ownership}${_cp_divergence}${_cp_unregistered}${_cp_citation}"
+    if [[ -z "$_cp_all" ]]; then
+      echo "PASS|${_cp_count} registered complementary pair(s), ownership and packaging intact"
+    else
+      printf '%s' "$_cp_all"
+    fi
+  )
+}
+
 validate_workspace() {
   # E-05: Confirm script is running from pmo-platform repo root.
   # Checks for the 3-module skeleton (operations/, release/, core/) plus
@@ -3870,6 +4090,68 @@ cmd_check() {
   done <<< "$c13b_basenames"
 
   [[ "$c13b_collision" == "false" ]] && log "  OK:    no unregistered shared-reference collisions (all multi-skill basenames are registered or single-copy)"
+
+  # ─── Check 13b passes 2/3/4: registered complementary pairs ───────────────
+  # Pass 1 above sees only same-basename copies that BOTH live under a skill
+  # references/ tree. A canonical<->skill-local pair — the canonical in the shared
+  # corpus, the mirror beside its skill — is structurally OUTSIDE that population,
+  # so `uniq -d` can never emit it and the pair is invisible to every check. These
+  # passes close that gap without widening pass 1 (which would drag in dozens of
+  # per-directory README.md copies and false-positive on a pair the corpus declares
+  # deliberate).
+  #
+  #   pass 2  ownership assertion over the registry's declared sections
+  #   pass 3  discovery of an UNREGISTERED cross-tree same-basename pair
+  #   pass 4  the cited canonical resolves in the built package + deployed root
+  #
+  # The predicate body is _cp_compute_verdict() at top level — ONE engine shared
+  # with `--self-test` group CP (DD1), reading
+  # core/deploy/allowlists/complementary-reference-pairs.txt directly. It is the
+  # SAME file core/deploy/tools/build-skill-packages.sh reads; neither consumer
+  # holds a second copy.
+  #
+  # Posture: warn-mode, via the same flag_warn_or_issue emitter pass 1 uses —
+  # Check 13b is a named member of the shared warn-mode cohort
+  # (gate-efficacy-standard.md), so an enforce-mode prong here would make shipped
+  # behavior diverge from declared posture.
+  #
+  # A missing registry verdicts NOSET and is FLAGGED, never a silent pass (the
+  # Check 61 DE-9 precedent); build-skill-packages.sh mirrors that posture by
+  # failing the build, so one deleted file cannot disable the fix and its
+  # detector together.
+  local c13b_cp_line c13b_cp_tok c13b_cp_detail
+  while IFS= read -r c13b_cp_line; do
+    [[ -z "$c13b_cp_line" ]] && continue
+    c13b_cp_tok="${c13b_cp_line%%|*}"
+    c13b_cp_detail="${c13b_cp_line#*|}"
+    case "$c13b_cp_tok" in
+      PASS)
+        log "  OK:    complementary-pair registry — $c13b_cp_detail"
+        ;;
+      NOSET)
+        flag_warn_or_issue "complementary-pair-registry-missing" "$c13b_cp_detail"
+        ;;
+      MALFORMED)
+        flag_warn_or_issue "complementary-pair-registry-malformed" "$c13b_cp_detail"
+        ;;
+      OWNERSHIP-DRIFT)
+        flag_warn_or_issue "complementary-pair-ownership-drift" "$c13b_cp_detail"
+        ;;
+      SHARED-DIVERGENCE)
+        flag_warn_or_issue "complementary-pair-shared-section-divergence" "$c13b_cp_detail"
+        ;;
+      UNREGISTERED-PAIR)
+        flag_warn_or_issue "unregistered-canonical-skill-local-pair" "$c13b_cp_detail"
+        ;;
+      CITATION-UNRESOLVABLE)
+        flag_warn_or_issue "canonical-citation-unresolvable-in-package" "$c13b_cp_detail"
+        ;;
+      *)
+        flag_warn_or_issue "complementary-pair-unknown-verdict" \
+          "unrecognised verdict token '$c13b_cp_tok' from _cp_compute_verdict — fail-closed: an unreadable verdict is never a pass"
+        ;;
+    esac
+  done <<< "$(_cp_compute_verdict)"
 
   # ─── Check 14: Doc-link maintenance — governance + skill SKILL.md scope ───
   # Per Collective Review CR-D1 / CR-D2.
@@ -8390,6 +8672,128 @@ EOF
 
   /bin/rm -rf "$_d" 2>/dev/null || true
 
+  # ─── Assertion group CP — complementary-pair ownership (Check 13b) [#4178] ────
+  #
+  # Offline, hermetic, sandbox-only. Every path is re-pointed through CP_* overrides
+  # at a mktemp tree, so this never reads the live corpus, the live registry, the
+  # built packages, or the operator's deployed skills. Extends this ONE self-test
+  # entry rather than adding a second, so the CI invocation stays single.
+  #
+  # CP-1 vs CP-2/CP-3 IS the parent's opposite-verdict requirement: a DELIBERATE
+  # complementary pair must PASS while an ACCIDENTAL fork must be flagged. A check
+  # that passed both, or flagged both, would not satisfy it — this one does neither.
+  # CP-4 is the anti-vacuity assertion: a check whose own config is missing must SAY
+  # so. A registry-driven check that silently passes with no registry is the exact
+  # "instrument that cannot fire" class this release exists to close.
+  # CP-5/CP-6 are the shared-field assertions: a declared-shared section MISSING from
+  # one copy is an ownership breach, while one whose CONTENT differs is a distinct
+  # divergence signal — collapsing the two would make the live pair unrepresentable.
+  echo "self-test: starting assertion group CP (complementary-pair ownership, #4178)" >&2
+  local _p; _p="$(/usr/bin/mktemp -d -t complementarypair-selftest.XXXXXX)"
+  /bin/mkdir -p "$_p/core/schemas" "$_p/operations/skills/fixture-skill/references" "$_p/packages"
+  local _preg="$_p/pairs.txt"
+  local _pmissing="$_p/no-such-registry.txt"
+  local _pcanon="$_p/core/schemas/fixture-schema.md"
+  local _pmirror="$_p/operations/skills/fixture-skill/references/fixture-schema.md"
+
+  # _cp_seed <canonical-extra-h2...> — rewrite both fixture halves from scratch.
+  # Base shape: canonical owns "Owned By Canonical", mirror owns "Owned By Mirror",
+  # and "Shared Section" is carried by BOTH with identical bodies.
+  _cp_seed_base() {
+    /bin/cat > "$_pcanon" <<'EOF'
+# Fixture Schema (canonical half)
+
+## Shared Section
+shared body line one
+shared body line two
+
+## Owned By Canonical
+canonical-only body
+EOF
+    /bin/cat > "$_pmirror" <<'EOF'
+# Fixture Schema (skill-local half)
+
+## Shared Section
+shared body line one
+shared body line two
+
+## Owned By Mirror
+mirror-only body
+EOF
+  }
+  _cp_seed_registry() {
+    /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical|||Owned By Mirror|||Shared Section\n' > "$_preg"
+  }
+  _cp_selftest_verdict() {
+    CP_ROOT="$_p" CP_PAIRS_FILE="${1:-$_preg}" CP_PACKAGES="$_p/packages" CP_USER_SKILLS="$_p/nonexistent-skills" \
+      _cp_compute_verdict 2>/dev/null
+  }
+
+  # CP-4 — registry ABSENT ⇒ NOSET. Asserted FIRST: the anti-vacuity default.
+  _cp_seed_base; _cp_seed_registry
+  _v="$(_cp_selftest_verdict "$_pmissing")"; _tok="${_v%%|*}"
+  [[ "$_tok" == "NOSET" ]] || { echo "FAIL: CP-4 absent complementary-pair registry must verdict NOSET (not PASS), got '$_v'"; failures=$((failures+1)); }
+
+  # CP-1 — registered pair, ownership intact ⇒ PASS.
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "PASS" ]] || { echo "FAIL: CP-1 an intact registered complementary pair must PASS, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-2 — a canonical-owned section LEAKED into the skill-local copy ⇒ OWNERSHIP-DRIFT.
+  # This is the falsification test: move a declared-owned section across the pair
+  # without updating the registry and the gate MUST flip.
+  /usr/bin/printf '\n## Owned By Canonical\nleaked copy\n' >> "$_pmirror"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "OWNERSHIP-DRIFT" ]] || { echo "FAIL: CP-2 a canonical-owned section leaked into the skill-local copy must verdict OWNERSHIP-DRIFT, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-5 — a declared-SHARED section MISSING from one copy ⇒ OWNERSHIP-DRIFT.
+  # Proves the shared field is asserted, not decorative.
+  _cp_seed_base
+  /usr/bin/sed 's|^## Shared Section$|## Renamed Away|' "$_pmirror" > "$_p/m2" && /bin/mv "$_p/m2" "$_pmirror"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "OWNERSHIP-DRIFT" ]] || { echo "FAIL: CP-5 a declared-shared section missing from one copy must verdict OWNERSHIP-DRIFT, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-6 — a declared-SHARED section present in BOTH but with DIFFERENT content ⇒
+  # SHARED-DIVERGENCE, distinctly from OWNERSHIP-DRIFT. Without this assertion the
+  # shared field could declare a region and assert nothing about it — which is the
+  # live pair's only real drift surface.
+  _cp_seed_base
+  /usr/bin/sed 's|^shared body line two$|shared body line two (mirror variant)|' "$_pmirror" > "$_p/m3" && /bin/mv "$_p/m3" "$_pmirror"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "SHARED-DIVERGENCE" ]] || { echo "FAIL: CP-6 a declared-shared section whose content differs must verdict SHARED-DIVERGENCE (not OWNERSHIP-DRIFT, not PASS), got '$_v'"; failures=$((failures+1)); }
+  # …and the divergence must NOT be reported as an ownership breach: the ownership
+  # declaration is correct, only the content drifted. Collapsing the two signals is
+  # what would make the live pair's shared-but-drifted region unrepresentable.
+  grep -qF 'OWNERSHIP-DRIFT|' <<< "$(_cp_selftest_verdict)" && { echo "FAIL: CP-6 content divergence in a shared section must NOT also emit OWNERSHIP-DRIFT"; failures=$((failures+1)); } || true
+
+  # CP-3 — a DIVERGENT same-basename canonical<->skill-local pair that is NOT
+  # registered ⇒ UNREGISTERED-PAIR. Seeded as a SECOND basename so the registered
+  # pair stays intact: the assertion is that registration is what distinguishes the
+  # two, not the mere existence of a cross-tree duplicate.
+  _cp_seed_base
+  /usr/bin/printf '# Forked doc (canonical side)\n\n## Some Section\nalpha\n' > "$_p/core/schemas/forked-doc.md"
+  /usr/bin/printf '# Forked doc (skill side)\n\n## Some Section\nbeta\n' > "$_p/operations/skills/fixture-skill/references/forked-doc.md"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "UNREGISTERED-PAIR" ]] || { echo "FAIL: CP-3 an unregistered cross-tree same-basename pair must verdict UNREGISTERED-PAIR, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-3b — the NAMED index-convention exclusion holds: README.md is a
+  # per-directory index carried across dozens of directories, and excluding it is a
+  # named decision (C13B_INDEX_BASENAMES), never a silent skip. Same shape as CP-3,
+  # different basename ⇒ back to PASS.
+  /bin/rm -f "$_p/core/schemas/forked-doc.md" "$_p/operations/skills/fixture-skill/references/forked-doc.md"
+  /usr/bin/printf '# index (canonical side)\n' > "$_p/core/schemas/README.md"
+  /usr/bin/printf '# index (skill side)\n' > "$_p/operations/skills/fixture-skill/references/README.md"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "PASS" ]] || { echo "FAIL: CP-3b the named README.md index-convention exclusion must keep an intact registry at PASS, got '$_v'"; failures=$((failures+1)); }
+
+  # CP-7 — a MALFORMED record (wrong field count) ⇒ MALFORMED, never a silent pass.
+  # Guards the second half of the fail-closed posture: absence is CP-4, corruption
+  # is this.
+  /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical\n' > "$_preg"
+  _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
+  [[ "$_tok" == "MALFORMED" ]] || { echo "FAIL: CP-7 a registry record without 5 fields must verdict MALFORMED, got '$_v'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_p" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -8399,6 +8803,8 @@ EOF
   echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
+  echo "  complementary-pair ownership validated (#4178, group CP):" >&2
+  echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
   return 0
 }
 
