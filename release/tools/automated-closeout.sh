@@ -26,6 +26,7 @@
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
+#   12.2 sync_primary_checkout  fast-forward the primary checkout to origin/main (git -C only; ff-only; non-fatal)
 #   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
@@ -2247,6 +2248,79 @@ phase_await_merge_chore_pr() {
   return 3
 }
 
+# ─── Phase 12.2: sync_primary_checkout (AC7) ─────────────────────────────────
+#
+# "The primary checkout sits at origin/main" is a STANDING invariant
+# (core/rules/git-workflow.md § Primary Checkout Discipline), and that file
+# explicitly forbids leaving it as a "want me to sync it?" handoff. Close-out
+# previously neither executed nor emitted the sync — the only mention of the primary
+# anywhere in this script is preflight (c), which REJECTS running from it. This phase
+# executes the sync, once, at the earliest point origin/main actually carries the
+# merge.
+#
+# HARD CONSTRAINTS (git-workflow.md § Primary Checkout Discipline):
+#   - `git -C <primary>` ONLY. Never `cd` into the primary.
+#   - Fast-forward ONLY. Never reset, never stash, never checkout, never force.
+#   - Only when the primary is actually ON main — fast-forwarding some other branch
+#     to origin/main would silently move work the operator did not ask to move.
+#
+# NON-FATAL BY DESIGN — every path returns 0. The chore PR has already merged by the
+# time this runs; a primary-sync problem must never fail a close that already
+# succeeded. It must also stay hermetic: in CI there is no primary checkout at all,
+# so "absent" is a clean SKIP, not an error.
+#
+# Runs under --no-merge too: the invariant is "primary tracks origin/main", which is
+# worth holding regardless of whether this release's chore PR landed.
+phase_sync_primary_checkout() {
+  # Resolution order: explicit override (the self-test seam) → git's own record of the
+  # main working tree. Asking git is exact and, unlike a ${WORKSPACE_ROOT}/<name>
+  # convention, assumes nothing about what the clone directory is called.
+  local _primary="${PRIMARY_CHECKOUT:-}"
+  if [[ -z "$_primary" ]]; then
+    _primary="$($GIT -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null \
+                | /usr/bin/awk 'NR==1 && $1=="worktree" {print $2; exit}')"
+  fi
+
+  if [[ -z "$_primary" || ! -d "${_primary}/.git" ]]; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "primary checkout not resolvable${_primary:+ at $_primary} — nothing to sync (expected in CI and in a clean clone; hermetic no-op)"
+    return 0
+  fi
+
+  # A linked worktree's .git is a FILE, not a directory, so the check above already
+  # excludes them; this guards the degenerate "primary is me" case.
+  if [[ "$_primary" == "$REPO_ROOT" ]]; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "resolved primary is this checkout — close-out is not running in a linked worktree; no sync to perform"
+    return 0
+  fi
+
+  local _pbranch
+  _pbranch="$($GIT -C "$_primary" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  if [[ "$_pbranch" != "main" ]]; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "primary at ${_primary} is on '${_pbranch:-<detached>}', not main — fast-forwarding a non-main branch to origin/main would move work that was not asked to move; reporting, not forcing"
+    return 0
+  fi
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "sync_primary_checkout" "DRY-RUN" "would fetch origin main and fast-forward the primary checkout at ${_primary} (currently on main)"
+    return 0
+  fi
+
+  if ! git_net -C "$_primary" fetch origin main --quiet 2>/dev/null; then
+    mark_phase "sync_primary_checkout" "SKIPPED" "fetch origin main failed at ${_primary} (offline or credential-less) — primary left untouched"
+    return 0
+  fi
+
+  # --ff-only is the whole safety contract: it refuses on a diverged primary, on a
+  # dirty tree whose changes would be overwritten, and on conflicting local commits.
+  # A refusal is a SKIP, never an escalation to a force.
+  if $GIT -C "$_primary" merge --ff-only origin/main --quiet 2>/dev/null; then
+    mark_phase "sync_primary_checkout" "PASS" "primary checkout at ${_primary} fast-forwarded to origin/main ($($GIT -C "$_primary" rev-parse --short HEAD 2>/dev/null || echo '?'))"
+  else
+    mark_phase "sync_primary_checkout" "SKIPPED" "primary at ${_primary} is not fast-forwardable (diverged, or a local change would be overwritten) — reporting, not forcing; sync it by hand per git-workflow.md § Primary Checkout Discipline"
+  fi
+  return 0
+}
+
 # ─── Phase 12.5: reparse_ledgers (#1680 — post-merge structural re-parse) ─────
 #
 # DETECTIVE-ONLY post-merge validation that the 3-way auto-merge landed a
@@ -2820,7 +2894,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr sync_primary_checkout reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -4325,6 +4399,100 @@ DG2
   PR_NUMBER="$_sr_saved_pr"; STATE_MILESTONE_SLUG="$_sr_saved_slug"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 13: phase_sync_primary_checkout (AC7) — offline, hermetic, no network and no
+  # credential. Builds REAL local git repos (a bare "origin", a "primary" clone) and
+  # drives the phase via the PRIMARY_CHECKOUT seam, so the assertions are about
+  # observable repo state (did the primary's HEAD actually move?) rather than exit 0.
+  local _sp_saved_mode="$MODE" _sp_saved_primary="${PRIMARY_CHECKOUT:-}"
+  if [[ -x "$GIT" ]]; then
+    local _sp_tmp; _sp_tmp="$(/usr/bin/mktemp -d -t syncprimary-selftest.XXXXXX)"
+    (
+      set +e
+      $GIT init -q --bare "$_sp_tmp/origin.git" 2>/dev/null
+      $GIT clone -q "$_sp_tmp/origin.git" "$_sp_tmp/seed" 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t checkout -q -b main 2>/dev/null
+      /usr/bin/printf 'one\n' > "$_sp_tmp/seed/f.txt"
+      $GIT -C "$_sp_tmp/seed" add f.txt 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t commit -q -m c1 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" push -q origin main 2>/dev/null
+    ) >/dev/null 2>&1
+    if [[ -d "$_sp_tmp/origin.git" ]]; then
+      $GIT clone -q "$_sp_tmp/origin.git" "$_sp_tmp/primary" >/dev/null 2>&1
+      # Advance origin one commit so the primary is genuinely BEHIND.
+      (
+        set +e
+        /usr/bin/printf 'two\n' >> "$_sp_tmp/seed/f.txt"
+        $GIT -C "$_sp_tmp/seed" add f.txt
+        $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t commit -q -m c2
+        $GIT -C "$_sp_tmp/seed" push -q origin main
+      ) >/dev/null 2>&1
+      local _sp_before _sp_after _sp_target
+      _sp_before="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo x)"
+      _sp_target="$($GIT -C "$_sp_tmp/seed" rev-parse HEAD 2>/dev/null || echo y)"
+
+      # (a) primary on main and behind → PASS, and HEAD actually moves to origin/main.
+      MODE="apply"; PRIMARY_CHECKOUT="$_sp_tmp/primary"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1
+      _sp_after="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo z)"
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC7-a — a behind-but-fast-forwardable primary on main must PASS, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+      [[ "$_sp_after" == "$_sp_target" ]] || { echo "FAIL: AC7-a — the primary must actually be fast-forwarded to origin/main (before=$_sp_before after=$_sp_after target=$_sp_target)"; failures=$((failures+1)); }
+      [[ "$_sp_after" != "$_sp_before" ]] || { echo "FAIL: AC7-a — the primary HEAD did not move; a no-op cannot evidence a sync"; failures=$((failures+1)); }
+
+      # (b) primary NOT on main → SKIPPED, and HEAD must NOT move. Without this the
+      # phase would happily fast-forward an unrelated branch to origin/main.
+      $GIT -C "$_sp_tmp/primary" checkout -q -b sidebranch "$_sp_before" >/dev/null 2>&1
+      local _sp_side_before; _sp_side_before="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo x)"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: AC7-b — a primary on a non-main branch must SKIP, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+      [[ "$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null)" == "$_sp_side_before" ]] || { echo "FAIL: AC7-b — a non-main primary must NOT be moved"; failures=$((failures+1)); }
+
+      # (c) primary absent → SKIPPED, exit 0 (hermeticity; this is the CI path).
+      PRIMARY_CHECKOUT="$_sp_tmp/does-not-exist"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1 || { echo "FAIL: AC7-c — an absent primary must be a clean no-op (exit 0), not an error"; failures=$((failures+1)); }
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: AC7-c — an absent primary must mark SKIPPED, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+
+      # (d) dry-run → no mutation.
+      $GIT -C "$_sp_tmp/primary" checkout -q main >/dev/null 2>&1
+      $GIT -C "$_sp_tmp/primary" reset -q --hard "$_sp_before" >/dev/null 2>&1
+      MODE="dry-run"; PRIMARY_CHECKOUT="$_sp_tmp/primary"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_sync_primary_checkout >/dev/null 2>&1
+      [[ "$(get_phase sync_primary_checkout | /usr/bin/cut -d'|' -f1)" == "DRY-RUN" ]] || { echo "FAIL: AC7-d — dry-run must preview, got '$(get_phase sync_primary_checkout)'"; failures=$((failures+1)); }
+      [[ "$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null)" == "$_sp_before" ]] || { echo "FAIL: AC7-d — dry-run must NOT move the primary"; failures=$((failures+1)); }
+
+      # (e) STRUCTURAL guard on the phase source: an ALLOWLIST of the git subcommands
+      # it may invoke, not a denylist of forbidden words (a denylist false-fires on the
+      # phase's own name and on its prose). Every `-C` git call must be one of
+      # {worktree, rev-parse, fetch, merge}; anything else — reset, stash, checkout,
+      # push — fails here. This is the assertion that keeps a future edit from quietly
+      # escalating a refused fast-forward into a force.
+      local _sp_verbs _sp_bad
+      _sp_verbs="$(/usr/bin/sed -n '/^phase_sync_primary_checkout() {/,/^}/p' "$SCRIPT_DIR/$(/usr/bin/basename "${BASH_SOURCE[0]}")" \
+                   | /usr/bin/grep -oE '(\$GIT|git_net) -C "[^"]+" [a-z-]+' \
+                   | /usr/bin/awk '{print $NF}' | /usr/bin/sort -u)"
+      if [[ -z "$_sp_verbs" ]]; then
+        echo "FAIL: AC7-e — could not extract any git subcommand from phase_sync_primary_checkout; the structural guard would pass vacuously"; failures=$((failures+1))
+      fi
+      _sp_bad="$(/usr/bin/printf '%s\n' "$_sp_verbs" | /usr/bin/grep -vE '^(worktree|rev-parse|fetch|merge)$' || true)"
+      [[ -z "$_sp_bad" ]] || { echo "FAIL: AC7-e — phase_sync_primary_checkout may only run {worktree, rev-parse, fetch, merge} against a checkout; found: $(echo "$_sp_bad" | /usr/bin/tr '\n' ' ') (git-workflow.md § Primary Checkout Discipline forbids reset/stash/checkout/push on the primary)"; failures=$((failures+1)); }
+      # And it must address the primary with `git -C`, never by changing directory.
+      if /usr/bin/sed -n '/^phase_sync_primary_checkout() {/,/^}/p' "$SCRIPT_DIR/$(/usr/bin/basename "${BASH_SOURCE[0]}")" \
+         | /usr/bin/grep -vE '^[[:space:]]*#' | /usr/bin/grep -qE '(^|[;&|[:space:]])cd[[:space:]]'; then
+        echo "FAIL: AC7-e — phase_sync_primary_checkout must never cd; address the primary with git -C"; failures=$((failures+1))
+      fi
+    else
+      echo "  (skipped AC7 sync-primary self-test — could not build the local git fixture)" >&2
+    fi
+    /bin/rm -rf "$_sp_tmp" 2>/dev/null || true
+  else
+    echo "  (skipped AC7 sync-primary self-test — git not executable at $GIT)" >&2
+  fi
+  MODE="$_sp_saved_mode"; PRIMARY_CHECKOUT="$_sp_saved_primary"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -4344,6 +4512,7 @@ DG2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
+  echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
@@ -4461,6 +4630,7 @@ phase_rebuild_skill_packages || { generate_report; exit 3; }          # Phase 9.
 phase_commit_chore_pr || { generate_report; exit 3; }
 phase_create_chore_pr || { generate_report; exit 3; }
 phase_await_merge_chore_pr || { generate_report; exit 3; }
+phase_sync_primary_checkout || { generate_report; exit 3; }           # Phase 12.2 — AC7: fast-forward the primary checkout to origin/main (non-fatal; git -C only)
 phase_reparse_ledgers || { generate_report; exit 3; }                 # Phase 12.5 — post-merge structural re-parse (#1680; detective-only)
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
