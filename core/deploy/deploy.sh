@@ -304,8 +304,13 @@ die() {
   exit 1
 }
 
+# Timestamp carries its UTC offset (%z) so a log line can be resolved to an
+# instant after the fact (#3718). A bare local wall-clock cannot: read back a day
+# later, or by anyone at a different offset, "[14:03:22]" names no moment. Per
+# core/standards/date-variable-convention.md § Emission-Time Anchors — an
+# emission instant MUST be resolvable to one.
 log() {
-  echo "[$(date +%H:%M:%S)] $1"
+  echo "[$(date +%H:%M:%S%z)] $1"
 }
 
 # ─── Version-freeness (Check 41 / --check-version-freeness) — #1677 ───────────
@@ -8794,7 +8799,9 @@ cmd_report() {
   local FAIL=0
 
   echo "=== deploy.sh Platform Report ==="
-  echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
+  # Offset-bearing (%z) — --report output is Stage-13 evidence, and an evidence
+  # artifact stamped with an unresolvable instant is the defect (#3718).
+  echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S%z')"
   echo "Git Commit: $(git rev-parse --short HEAD)"
   echo "Git Tag: $(git describe --tags --abbrev=0 2>/dev/null || echo 'none')"
   echo ""
