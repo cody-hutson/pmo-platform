@@ -7143,7 +7143,7 @@ cmd_check() {
       flag_warn_or_issue "design-principle-conformance" "register missing: $c45_reg"
       c45_ok=0
     fi
-    [[ "$c45_ok" -eq 1 ]] && log "  OK:    conformance subsection present; all register governing_doc targets resolve; all DP-id references defined"
+    [[ "$c45_ok" -eq 1 ]] && log "  OK:    conformance subsection present; all register governing_doc targets resolve AND name their own principle; all DP-id references defined"
   fi
 
 
