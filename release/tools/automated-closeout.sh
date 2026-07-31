@@ -9,7 +9,7 @@
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row, tag exists
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
-#   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask title-regex auto-exclude)
+#   4  detect_open_issues auto-close anomaly enumeration (#38: --exclude-issue + Stage-13-subtask sub-task-label+title-regex auto-exclude, #3665)
 #   5  create_chore_branch chore/v<X.Y>-stage-13-corpus-update
 #   6  transition_release_log  DEPLOYED → VERIFIED
 #   6.5 inject_outcome_field  **Outcome:** field on the visible-H4 Deployment Log block (#37; default SUCCESS, --outcome overrides)
@@ -236,6 +236,12 @@ CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
 MERGE_POLL_STEP=10       # await-merge poll interval (seconds). Not a CLI flag —
                          # internal; the self-test overrides it to keep hermetic
                          # runs fast.
+VERIFY_RECHECK_DELAY=2   # check-5 post-close re-read replication-lag delay, in
+                         # seconds (#3587 D-4). `gh issue close` writes via REST
+                         # while `gh issue list` reads via GraphQL, so a
+                         # milestone-filtered read is not guaranteed
+                         # read-after-write. Not a CLI flag — internal; the
+                         # self-test overrides it to 0 to stay hermetic.
 
 # State populated by phases (used by generate_report)
 RUN_TS=""
@@ -245,8 +251,23 @@ STATE_MILESTONE_STATE=""
 STATE_MILESTONE_SLUG=""
 STATE_CYCLE_TIME=""
 STATE_TAG_EXISTS=0
-OPEN_ISSUE_LIST=""        # newline-separated list of issue numbers
-OPEN_ISSUE_COUNT=0
+OPEN_ISSUE_LIST=""        # newline-separated list of issue numbers. PRE-CLOSE
+                         # SNAPSHOT, taken once at Phase 4 (#3587): 6 of its 7
+                         # consumers document the population as it stood BEFORE
+                         # the D-1 manual close (chore-PR "Deferred items" body,
+                         # the `closed N/M` denominator, the D-1 Manual-Close
+                         # Candidates report section, the JSON payload). Only
+                         # verification check 5 wants post-close truth, and it
+                         # re-derives into LOCALS rather than refreshing these.
+OPEN_ISSUE_COUNT=0        # pre-close snapshot — see OPEN_ISSUE_LIST above
+COLLECTED_OPEN_ISSUES=""  # collect_open_release_issues output channel (#3587):
+                         # newline-separated surviving issue numbers from the most
+                         # recent call. Write-then-immediately-read; no phase holds
+                         # it across a later call.
+EXCLUDED_DETAIL=""        # collect_open_release_issues side channel (#3587): the
+                         # "#N (<reason>) " fragments for the caller's mark_phase
+                         # detail string. phase_detect_open_issues reads it;
+                         # phase_run_verification ignores it.
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
@@ -621,21 +642,36 @@ phase_read_state() {
   return 0
 }
 
-# ─── Phase 4: detect_open_release_issues (D6 — auto-close anomaly) ───────────
+# ─── Shared: collect_open_release_issues (#3665 matcher · #3587 single home) ──
+#
+# Enumerate the milestone's OPEN release issues minus the Stage-13 orchestration
+# exclusions. This is the SINGLE home of the exclusion predicate, called by both
+# the PRE-close detect (Phase 4) and the POST-close verification re-read (Phase 15
+# check 5), so the count the close-out reports and the count it verifies cannot
+# disagree with themselves (#3587 x #3665). A second copy of the matcher would make
+# that agreement a discipline promise instead of a structural invariant.
+#
+# Projection `--json number,title,labels`; line format "<number>\t<labels-csv>\t<title>".
+# The TITLE IS LAST deliberately: `${_rest#*$'\t'}` is non-greedy, so a title
+# containing a literal tab still parses intact.
+#
+# Outputs (globals, NOT stdout — bash runs `$( … )` in a subshell, which would
+# discard the EXCLUDED_DETAIL side channel and silently empty the "(excluded: …)"
+# fragment of the Phase-4 report line):
+#   COLLECTED_OPEN_ISSUES — surviving issue numbers, newline-separated, trimmed
+#   EXCLUDED_DETAIL       — "#N (<reason>) " fragments for the caller's mark_phase
+# Returns 0 = query succeeded (empty output legitimately means zero open)
+#         1 = `gh issue list` failed — output undefined. The caller MUST NOT read
+#             empty as zero: Phase 4 deliberately keeps today's tolerant behaviour
+#             (pre-existing fail-open, routed separately), check 5 fails closed.
+collect_open_release_issues() {
+  local slug="$1"
+  local raw _rc=0
+  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number,title,labels --jq '.[] | "\(.number)\t\(.labels|map(.name)|join(","))\t\(.title)"' 2>/dev/null)" || _rc=1
 
-phase_detect_open_issues() {
-  local slug="$STATE_MILESTONE_SLUG"
-  [[ -z "$slug" ]] && slug="$VERSION"
-
-  # Fetch number+title so the Stage-13-subtask auto-exclude (title-regex fallback)
-  # can run. Format: "<number>\t<title>" per line (tab-separated).
-  local raw
-  raw="$($GH issue list --repo "$REPO_SLUG" --milestone "$slug" --state open --json number,title --jq '.[] | "\(.number)\t\(.title)"' 2>/dev/null || true)"
-
-  # Build the explicit-exclude set (#38 primary path). The Stage-13 orchestration
-  # sub-task is passed by NUMBER (--exclude-issue <N>) so it is deterministically
-  # filtered and cannot self-close mid-run (Risk R5).
-  local _excluded_detail=""
+  # Explicit-exclude set (#38 primary path). The Stage-13 orchestration sub-task is
+  # passed by NUMBER (--exclude-issue <N>) so it is deterministically filtered and
+  # cannot self-close mid-run (Risk R5).
   _is_excluded() {
     local n="$1" e
     for e in "${EXCLUDE_ISSUES[@]:-}"; do
@@ -644,28 +680,63 @@ phase_detect_open_issues() {
     return 1
   }
 
-  OPEN_ISSUE_LIST=""
-  local _n _title _line
+  COLLECTED_OPEN_ISSUES=""
+  EXCLUDED_DETAIL=""
+  # Declared here, not in the loop body: bash 3.2 does not scope loop-body
+  # assignments, and a leaked _is_subtask would make exclusion STICKY.
+  local _n _title _labels _rest _line _is_subtask
   while IFS= read -r _line; do
     [[ -z "$_line" ]] && continue
     _n="${_line%%$'\t'*}"
-    _title="${_line#*$'\t'}"
+    _rest="${_line#*$'\t'}"
+    _labels="${_rest%%$'\t'*}"
+    _title="${_rest#*$'\t'}"
     # (1) explicit --exclude-issue (deterministic, primary)
     if _is_excluded "$_n"; then
-      _excluded_detail="${_excluded_detail}#${_n} (explicit --exclude-issue) "
+      EXCLUDED_DETAIL="${EXCLUDED_DETAIL}#${_n} (explicit --exclude-issue) "
       continue
     fi
-    # (2) title-regex fallback: a Stage-13 close orchestration sub-task that the
-    # hub did NOT pass by number is still excluded so it cannot self-close.
-    # Pattern: title matches `stage.?13` AND `close` (case-insensitive).
-    if /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
-      _excluded_detail="${_excluded_detail}#${_n} (title-regex stage-13-close) "
+    # Structural discriminator (#3665): is this an ORCHESTRATION SUB-TASK, per its
+    # LABEL? `sub-task` is canonical (label-taxonomy.md § Concrete rows, stamped by
+    # the Stage-6 scaffolding at creation); `type:subtask` is a tolerated legacy
+    # alias. EXACT comma-wrapped membership, never a substring test, so a
+    # hypothetical `not-a-sub-task` label cannot satisfy it. Set unconditionally
+    # each iteration — never `[[ … ]] && _is_subtask=1` alone.
+    case ",${_labels}," in
+      *",sub-task,"*|*",type:subtask,"*) _is_subtask=1 ;;
+      *)                                 _is_subtask=0 ;;
+    esac
+    # (2) label+title fallback: a Stage-13 close ORCHESTRATION SUB-TASK that the hub
+    # did NOT pass by number is still excluded so it cannot self-close (R5). BOTH
+    # conjuncts are required. The label answers the structural question (orchestration
+    # artifact vs delivered work item); the title tokens narrow it to the STAGE-13
+    # sub-task — the label alone matches every stage sub-task in the milestone. Title
+    # text alone was the defect: it false-excluded 13 delivered work items across the
+    # repo's history whose SUBJECT MATTER is Stage-13 close-out (#3665).
+    if [[ "$_is_subtask" -eq 1 ]] \
+       && /usr/bin/printf '%s' "$_title" | /usr/bin/grep -qiE 'stage.?13.*close'; then
+      EXCLUDED_DETAIL="${EXCLUDED_DETAIL}#${_n} (sub-task label + title-regex stage-13-close) "
       continue
     fi
-    OPEN_ISSUE_LIST="${OPEN_ISSUE_LIST}${_n}"$'\n'
+    COLLECTED_OPEN_ISSUES="${COLLECTED_OPEN_ISSUES}${_n}"$'\n'
   done <<< "$raw"
   # Trim a trailing newline so grep -c counts correctly.
-  OPEN_ISSUE_LIST="$(/usr/bin/printf '%s' "$OPEN_ISSUE_LIST" | /usr/bin/sed '/^$/d')"
+  COLLECTED_OPEN_ISSUES="$(/usr/bin/printf '%s' "$COLLECTED_OPEN_ISSUES" | /usr/bin/sed '/^$/d')"
+  return "$_rc"
+}
+
+# ─── Phase 4: detect_open_release_issues (D6 — auto-close anomaly) ───────────
+
+phase_detect_open_issues() {
+  local slug="$STATE_MILESTONE_SLUG"
+  [[ -z "$slug" ]] && slug="$VERSION"
+
+  # Tolerant by design: a `gh` failure reads as "zero open" here, exactly as it did
+  # before the helper extraction. Preserved deliberately — tightening it changes
+  # Phase-4 semantics and is routed to its own ticket, not fixed in passing.
+  collect_open_release_issues "$slug" || true
+  OPEN_ISSUE_LIST="$COLLECTED_OPEN_ISSUES"
+  local _excluded_detail="$EXCLUDED_DETAIL"
 
   if [[ -z "$OPEN_ISSUE_LIST" ]]; then
     OPEN_ISSUE_COUNT=0
@@ -2265,7 +2336,62 @@ phase_run_verification() {
   else
     v_log="PENDING"
   fi
-  v_subs="$([[ "$OPEN_ISSUE_COUNT" -eq 0 ]] && echo PASS || echo "PARTIAL (${OPEN_ISSUE_COUNT} open)")"
+  # Check 5 (#3587): OPEN_ISSUE_COUNT is a PRE-CLOSE snapshot, written once in
+  # Phase 4 and never re-read — and Phase 14 (manual_close_release_issues) runs
+  # immediately before this phase. Reading it here made every successful close
+  # render `PARTIAL (N open)` for the very N issues the same run had just closed,
+  # and that text propagates into the durable Gate-Passage Proof comment. Re-derive
+  # at point of use, into LOCALS: 6 of the 7 OPEN_ISSUE_COUNT consumers legitimately
+  # want the pre-close population (chore-PR "Deferred items", the `closed N/M`
+  # denominator, the D-1 Manual-Close Candidates section, the JSON payload), so a
+  # blanket refresh would trade a display bug for an erased audit record. The
+  # re-read goes through collect_open_release_issues, NOT a raw query: stage
+  # sub-tasks carry the release milestone and the Stage-13 sub-task is open by
+  # construction at this moment, so an unfiltered read would render PARTIAL on every
+  # run. Dry-run keeps the cached read — it closes nothing, so cached == live
+  # (mirrors check 4 above).
+  if [[ "$MODE" == "dry-run" ]]; then
+    v_subs="$([[ "$OPEN_ISSUE_COUNT" -eq 0 ]] && echo PASS || echo "PARTIAL (${OPEN_ISSUE_COUNT} open)")"
+  else
+    # Declare first, assign second — `local x="$(cmd)"` masks cmd's exit status,
+    # and this branch's whole point is discriminating query-failure from empty.
+    local _v5_rc _v5_list _v5_count _v5_nums _v5_straggler _v5_all_ours
+    _v5_rc=0
+    collect_open_release_issues "$slug" || _v5_rc=1
+    _v5_list="$COLLECTED_OPEN_ISSUES"
+
+    # D-4 bounded replication-lag guard: `gh issue close` writes via REST while
+    # `gh issue list` reads via GraphQL, so the re-read is not guaranteed
+    # read-after-write and could reproduce a smaller instance of the very bug this
+    # fixes. Retry ONCE, and only when every straggler is an issue this run just
+    # attempted to close — a straggler outside that set is real news, report it now.
+    if [[ "$_v5_rc" -eq 0 && -n "$_v5_list" ]]; then
+      _v5_all_ours=1
+      while IFS= read -r _v5_straggler; do
+        [[ -z "$_v5_straggler" ]] && continue
+        /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx "$_v5_straggler" \
+          || { _v5_all_ours=0; break; }
+      done <<< "$_v5_list"
+      if [[ "$_v5_all_ours" -eq 1 ]]; then
+        /bin/sleep "${VERIFY_RECHECK_DELAY:-2}"
+        collect_open_release_issues "$slug" || _v5_rc=1
+        _v5_list="$COLLECTED_OPEN_ISSUES"
+      fi
+    fi
+
+    if [[ "$_v5_rc" -ne 0 ]]; then
+      # Fail closed. UNVERIFIED, not FAIL: a query that could not run establishes
+      # nothing about whether issues are open — but it must never read as PASS.
+      v_subs="UNVERIFIED (post-close re-query failed)"
+    elif [[ -z "$_v5_list" ]]; then
+      v_subs="PASS"
+    else
+      _v5_count="$(/usr/bin/printf '%s\n' "$_v5_list" | /usr/bin/grep -c .)"
+      _v5_nums="$(/usr/bin/printf '%s' "$_v5_list" | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//')"
+      # Enumerate the numbers so the operator can act without re-querying.
+      v_subs="PARTIAL (${_v5_count} open: #${_v5_nums//,/, #})"
+    fi
+  fi
 
   VERIFICATION_RESULTS=$(/bin/cat <<EOF
 | # | Check | Method | Result |
@@ -3207,32 +3333,40 @@ EOF
   RELEASE_LOG="$_oc_saved_log"; OUTCOME="$_oc_saved_outcome"; OUTCOME_RATIONALE="$_oc_saved_rat"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
-  # Test 4d: phase_detect_open_issues exclude filter (#38) — offline, hermetic.
-  # Stubs $GH so `gh issue list … --json number,title --jq …` returns a fixed
-  # `<number>\t<title>` fixture (gh applies --jq server-side, so the stub emits the
-  # already-jq'd lines), then drives phase_detect_open_issues and asserts the
-  # filter: explicit --exclude-issue removes a number; the Stage-13 sub-task is
-  # excluded by explicit number; the title-regex `(?i)stage.?13.*close` fallback
-  # excludes an un-numbered Stage-13-close sub-task; the AC-4 mixed fixture leaves
-  # ONLY the anomaly issue in OPEN_ISSUE_LIST.
+  # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
+  # Stubs $GH so `gh issue list … --json number,title,labels --jq …` returns a fixed
+  # `<number>\t<labels-csv>\t<title>` fixture (gh applies --jq server-side, so the
+  # stub emits the already-jq'd lines), then drives phase_detect_open_issues and
+  # asserts the filter: explicit --exclude-issue removes a number; the Stage-13
+  # sub-task is excluded by explicit number; the `sub-task`-label + title-regex
+  # `(?i)stage.?13.*close` fallback excludes an un-numbered Stage-13-close sub-task;
+  # a delivered work item whose TITLE matches but which carries no sub-task label
+  # SURVIVES (#3665 AC-4); and a sub-task labelled but NOT Stage-13 also survives —
+  # the guard proving the label alone is not the matcher.
   local _ex_saved_gh="$GH" _ex_saved_mode="$MODE" _ex_saved_slug="$STATE_MILESTONE_SLUG"
   local _ex_saved_list="$OPEN_ISSUE_LIST" _ex_saved_count="$OPEN_ISSUE_COUNT"
   local _ex_tmp; _ex_tmp="$(/usr/bin/mktemp -d -t excl-selftest.XXXXXX)"
   local _ex_stub="$_ex_tmp/gh-stub.sh"
   # Stub: fixture has a normal anomaly issue (#401), an explicit-exclude target
-  # (#999), the Stage-13 orchestration sub-task (#500, title matches the regex),
-  # and a decoy with "stage 13" but NOT "close" (#600, must NOT be excluded).
+  # (#999), the Stage-13 orchestration sub-task (#500, label + title match), a decoy
+  # with "stage 13" but NOT "close" (#600), the #3665 regression fixture (#2678 —
+  # delivered work item, Stage-13-close TITLE, NO sub-task label), the legacy-alias
+  # sub-task (#501, `type:subtask`), and the anti-over-exclude control (#502 —
+  # sub-task label but a Stage-5 title).
   /bin/cat > "$_ex_stub" <<'STUB'
 #!/usr/bin/env bash
-# Minimal gh stub for the #38 detect_open_issues self-test. Emits the jq'd
-# number<TAB>title lines for `issue list`; no-op (exit 0) for anything else.
+# Minimal gh stub for the #38 / #3665 detect_open_issues self-test. Emits the jq'd
+# number<TAB>labels<TAB>title lines for `issue list`; no-op (exit 0) otherwise.
 case "$1" in
   issue)
     if [[ "$2" == "list" ]]; then
-      printf '%s\t%s\n' 401 "Normal auto-close anomaly issue"
-      printf '%s\t%s\n' 999 "Some explicitly-excluded sub-task"
-      printf '%s\t%s\n' 500 "Stage 13 — Close: corpus update orchestration"
-      printf '%s\t%s\n' 600 "Stage 13 plan-review follow-up task"
+      printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue"
+      printf '%s\t%s\t%s\n' 999 "sub-task" "Some explicitly-excluded sub-task"
+      printf '%s\t%s\t%s\n' 500 "sub-task,status: bundled" "Stage 13 — Close: corpus update orchestration"
+      printf '%s\t%s\t%s\n' 600 "improvement,type:task" "Stage 13 plan-review follow-up task"
+      printf '%s\t%s\t%s\n' 2678 "bug,project:pipeline" "Stage-13 automated close-out publishes GitHub Release with placeholder notes"
+      printf '%s\t%s\t%s\n' 501 "type:subtask" "Stage 13 Close — legacy-alias-milestone"
+      printf '%s\t%s\t%s\n' 502 "sub-task" "Stage 5 Solutioning — matcher design (release-closeout-integrity)"
       exit 0
     fi
     ;;
@@ -3254,14 +3388,36 @@ STUB
   /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '999' && { echo "FAIL: #999 (explicit --exclude-issue) must be filtered out"; failures=$((failures+1)); }
   /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 (Stage-13 sub-task by number) must be filtered out — cannot self-close (R5)"; failures=$((failures+1)); }
 
-  # (b) title-regex fallback alone (no explicit number for #500): #500 is still
-  #     excluded by `(?i)stage.?13.*close`; #401 + #600 survive.
+  # (b) label+title fallback alone (no explicit numbers): #500 and #501 are still
+  #     excluded; #401, #600, #999, #2678 and #502 survive. Legs (b1)-(b6) below are
+  #     the #3665 contract — (b2) and (b4) FAIL against the pre-#3665 title-only
+  #     matcher, which is what makes this fixture a regression test rather than
+  #     decoration.
   EXCLUDE_ISSUES=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_detect_open_issues >/dev/null 2>&1
-  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 must be excluded by the title-regex fallback when not passed by number"; failures=$((failures+1)); }
-  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 must survive (title-regex fallback path)"; failures=$((failures+1)); }
-  [[ "$OPEN_ISSUE_COUNT" -eq 3 ]] || { echo "FAIL: title-regex-only path must leave 3 issues (401,600,999), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+  # (b1) R5 preserved: a real Stage-13 orchestration sub-task is still excluded.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '500' && { echo "FAIL: #500 must be excluded by the label+title fallback when not passed by number"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '401' || { echo "FAIL: #401 must survive (label+title fallback path)"; failures=$((failures+1)); }
+  # (b2) #3665 AC-4 regression: a DELIVERED work item whose title matches the
+  #      Stage-13-close regex but which carries no sub-task label must SURVIVE and be
+  #      closed. Title-only matching false-excluded 13 such issues.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '2678' || { echo "FAIL: #2678 (delivered work item, Stage-13-close title, NO sub-task label) must SURVIVE — this is the #3665 false-exclusion"; failures=$((failures+1)); }
+  # (b3) legacy alias `type:subtask` is accepted as a sub-task-family label.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '501' && { echo "FAIL: #501 (type:subtask legacy alias + Stage-13-close title) must be excluded"; failures=$((failures+1)); }
+  # (b4) anti-over-exclude control: the LABEL ALONE IS NOT THE MATCHER. A sub-task
+  #      with a non-Stage-13 title must survive — without this leg, a naive
+  #      label-only implementation would pass (b1)-(b3) while stranding every
+  #      Stage 5-8 sub-task open at close.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '502' || { echo "FAIL: #502 (sub-task label, Stage-5 title) must SURVIVE — the label alone must not exclude"; failures=$((failures+1)); }
+  # (b5) decoy preserved (unchanged behaviour): "stage 13" without "close".
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '600' || { echo "FAIL: #600 (decoy 'stage 13' but not 'close') must NOT be excluded"; failures=$((failures+1)); }
+  # (b6) count: 401, 600, 999, 2678, 502.
+  [[ "$OPEN_ISSUE_COUNT" -eq 5 ]] || { echo "FAIL: label+title fallback path must leave 5 issues (401,600,999,2678,502), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+  # (b7) the excluded-detail side channel survives the helper extraction (#3587):
+  #      the report's only window into WHY an issue was excluded must name BOTH
+  #      conjuncts, and must not be silently emptied by the extraction.
+  get_phase detect_open_issues | /usr/bin/grep -qF 'sub-task label + title-regex stage-13-close' || { echo "FAIL: detect detail must name both conjuncts of the fallback exclusion, got '$(get_phase detect_open_issues)'"; failures=$((failures+1)); }
 
   # (c) per-issue --close-comment override resolution (Defect 1): the override
   #     text is returned for the named issue; the anomaly default for others.
@@ -3275,6 +3431,100 @@ STUB
   /bin/rm -rf "$_ex_tmp" 2>/dev/null || true
   GH="$_ex_saved_gh"; MODE="$_ex_saved_mode"; STATE_MILESTONE_SLUG="$_ex_saved_slug"
   OPEN_ISSUE_LIST="$_ex_saved_list"; OPEN_ISSUE_COUNT="$_ex_saved_count"
+  EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4d.3: check 5 re-reads issue state AFTER the close phase (#3587) — offline,
+  # hermetic. Phase 14 (manual_close_release_issues) runs immediately before Phase 15
+  # (run_verification), and OPEN_ISSUE_COUNT is a pre-close snapshot written once in
+  # Phase 4, so every run that closed all N issues still rendered `PARTIAL (N open)`
+  # — text that propagates into the durable Gate-Passage Proof comment. Drives
+  # detect -> close -> verification against a CALL-COUNTER stub whose `issue list`
+  # returns the pre-close fixture on call 1 and a controllable post-close fixture on
+  # every later call, so the re-read is observed rather than assumed.
+  local _v5_saved_gh="$GH" _v5_saved_mode="$MODE" _v5_saved_slug="$STATE_MILESTONE_SLUG"
+  local _v5_saved_list="$OPEN_ISSUE_LIST" _v5_saved_count="$OPEN_ISSUE_COUNT"
+  local _v5_saved_rowstate="$STATE_LOG_ROW_STATE" _v5_saved_results="$VERIFICATION_RESULTS"
+  local _v5_saved_delay="$VERIFY_RECHECK_DELAY" _v5_saved_nomerge="$NO_MERGE"
+  local _v5_row
+  local _v5_tmp; _v5_tmp="$(/usr/bin/mktemp -d -t verify5-selftest.XXXXXX)"
+  local _v5_stub="$_v5_tmp/gh-stub.sh"
+  /bin/cat > "$_v5_stub" <<'STUB'
+#!/usr/bin/env bash
+# Call-counter gh stub for the #3587 check-5 re-read self-test. `issue list` returns
+# the PRE-close fixture on call 1 (Phase 4 detect) and the contents of ./post on
+# every later call (Phase 15 check-5 re-read). `issue close` is a no-op exit 0.
+_d="$(dirname "$0")"
+if [[ "$1" == "issue" && "$2" == "list" ]]; then
+  n=$(( $(cat "$_d/calls" 2>/dev/null || echo 0) + 1 ))
+  printf '%s' "$n" > "$_d/calls"
+  if [[ "$n" -eq 1 ]]; then
+    printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue"
+    printf '%s\t%s\t%s\n' 402 "bug" "Another auto-close anomaly issue"
+  else
+    cat "$_d/post" 2>/dev/null || true
+  fi
+  exit 0
+fi
+exit 0
+STUB
+  /bin/chmod +x "$_v5_stub"
+  GH="$_v5_stub"; MODE="apply"; STATE_MILESTONE_SLUG="88-some-milestone"
+  STATE_LOG_ROW_STATE=""; NO_MERGE=0; EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
+  VERIFY_RECHECK_DELAY=0   # keep the D-4 replication-lag retry hermetic + instant
+
+  # (a) post-close truth: the close drains the milestone, so the re-read finds it
+  #     empty and check 5 renders PASS — NOT the pre-close `PARTIAL (2 open)`.
+  : > "$_v5_tmp/post"; : > "$_v5_tmp/calls"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"| PASS |"* ]] || { echo "FAIL: check 5 must render PASS once the close phase drained the milestone, got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (d) blast-radius regression guard: the re-read writes LOCALS ONLY. The pre-close
+  #     globals must survive untouched — 6 of their 7 consumers (chore-PR body, the
+  #     closed N/M denominator, the D-1 Manual-Close Candidates section, the JSON
+  #     payload) document the population as it stood BEFORE the close.
+  [[ "$OPEN_ISSUE_COUNT" -eq 2 ]] || { echo "FAIL: check 5 must NOT clobber the pre-close OPEN_ISSUE_COUNT (expected 2), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+  [[ "$OPEN_ISSUE_LIST" == $'401\n402' ]] || { echo "FAIL: check 5 must NOT clobber the pre-close OPEN_ISSUE_LIST (expected 401,402), got '${OPEN_ISSUE_LIST//$'\n'/,}'"; failures=$((failures+1)); }
+
+  # (b) regression-direction control: #401 is STILL open at re-read time, so check 5
+  #     must render PARTIAL and enumerate it. Without this leg a hardcoded PASS would
+  #     satisfy legs (a) and (d) — this is what proves the read is live.
+  /usr/bin/printf '%s\t%s\t%s\n' 401 "bug" "Normal auto-close anomaly issue" > "$_v5_tmp/post"
+  : > "$_v5_tmp/calls"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  phase_manual_close_release_issues >/dev/null 2>&1
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PARTIAL (1 open: #401)"* ]] || { echo "FAIL: check 5 must render the LIVE post-close state 'PARTIAL (1 open: #401)', got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (c) fail closed: an unevaluable re-query reads UNVERIFIED, never PASS. UNVERIFIED
+  #     rather than FAIL because a query that could not run establishes nothing about
+  #     whether issues are open.
+  GH="/bin/false"; MODE="apply"; OPEN_ISSUE_LIST=$'401\n402'; OPEN_ISSUE_COUNT=2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"UNVERIFIED"* ]] || { echo "FAIL: check 5 must fail closed to UNVERIFIED when the post-close re-query fails, got '$_v5_row'"; failures=$((failures+1)); }
+  [[ "$_v5_row" == *"| PASS |"* ]] && { echo "FAIL: a failed re-query must NEVER read as PASS, got '$_v5_row'"; failures=$((failures+1)); }
+
+  # (e) dry-run non-regression: preview mode closes nothing, so cached == live and no
+  #     second query fires. $GH is /bin/false — a query here would render UNVERIFIED.
+  MODE="dry-run"; OPEN_ISSUE_LIST=$'401\n402'; OPEN_ISSUE_COUNT=2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_run_verification >/dev/null 2>&1
+  _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
+  [[ "$_v5_row" == *"PARTIAL (2 open)"* ]] || { echo "FAIL: dry-run check 5 must read the cached pre-close count and fire no query, got '$_v5_row'"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_v5_tmp" 2>/dev/null || true
+  GH="$_v5_saved_gh"; MODE="$_v5_saved_mode"; STATE_MILESTONE_SLUG="$_v5_saved_slug"
+  OPEN_ISSUE_LIST="$_v5_saved_list"; OPEN_ISSUE_COUNT="$_v5_saved_count"
+  STATE_LOG_ROW_STATE="$_v5_saved_rowstate"; VERIFICATION_RESULTS="$_v5_saved_results"
+  VERIFY_RECHECK_DELAY="$_v5_saved_delay"; NO_MERGE="$_v5_saved_nomerge"
   EXCLUDE_ISSUES=(); CLOSE_COMMENTS=()
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -3303,8 +3553,8 @@ if [[ "$1" == "issue" && "$2" == "list" ]]; then
     shift
   done
   if [[ "$ms" == "close-out-reliability-hardening" ]]; then
-    printf '%s\t%s\n' 2578 "Some open sub-task"
-    printf '%s\t%s\n' 1771 "Another open sub-task"
+    printf '%s\t%s\t%s\n' 2578 "sub-task" "Some open sub-task"
+    printf '%s\t%s\t%s\n' 1771 "sub-task" "Another open sub-task"
   fi
   exit 0
 fi
@@ -4007,7 +4257,7 @@ STUB
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
   echo "  phase_append_release_digest + phase_append_release_index validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped)" >&2
-  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0)" >&2
+  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache)" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
