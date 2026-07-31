@@ -1,39 +1,41 @@
 ---
 title: Duplicate-Source Discipline — Register or Remove
-purpose: "The register-or-remove discipline for content reused across files: duplicated content joins the enforced mirror set, consolidates to one canonical source, or is registered as an allowed exception."
+purpose: "The register-or-remove discipline for content reused across files: duplicated content joins the enforced mirror set, consolidates to one canonical source, is registered as an allowed exception, or is registered as a complementary pair with machine-checkable section ownership."
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries); authors of any content reused across files; CLAUDE.md §Prefer durable structures
+consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries) and Check 13b (complementary-pair ownership registry); authors of any content reused across files; CLAUDE.md §Prefer durable structures
 ---
 <!-- reference-durability: allow-link -->
 # Duplicate-Source Discipline — Register or Remove
 
 ## Purpose
 
-Defines the platform's discipline for content reused across multiple files: any duplicated content either (a) joins the registered mirror set and gains byte-identity enforcement, (b) is consolidated to a single canonical source with cross-references replacing former duplicate sites, or (c) is registered in a per-domain exemption list with rationale. Establishes the canonical home for the **register or remove** rule, consolidating three implicit anti-duplication guardrails in [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) into a single statement.
+Defines the platform's discipline for content reused across multiple files: any duplicated content either (a) joins the registered mirror set and gains byte-identity enforcement, (b) is consolidated to a single canonical source with cross-references replacing former duplicate sites, (c) is registered in a per-domain exemption list with rationale, or (d) is registered as a complementary pair whose division of labour is declared as machine-checkable section ownership. Establishes the canonical home for the **register or remove** rule, consolidating three implicit anti-duplication guardrails in [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) into a single statement.
 
 This is option (a) per the originating initiative's Stage 5 — documentation-only at current platform scale. Scan-based enforcement (future Check 14) is deferred per §6 escalation triggers; the **CONFLICT** with `anthropic-skills:skill-creator` convention that scan-based enforcement would introduce is preserved here for future re-evaluation, not resolved by enforcement today.
 
 ## §1 Principle — register or remove
 
-Content MUST NOT exist in two or more files within `core/` / `release/` or `.claude/` unless one of three conditions holds:
+Content MUST NOT exist in two or more files within `core/` / `release/` or `.claude/` unless one of four conditions holds:
 
 1. **Registered as a mirror.** Both copies are listed in the platform's mirror registry and gain byte-identity enforcement under `deploy.sh --check` Check 9 / Check 11 / Check 13 (see §2). The system enforces drift detection.
 2. **Consolidated to a canonical source.** Content lives in exactly one file; former duplicate sites are replaced with cross-references (markdown link to the canonical source).
 3. **Registered exemption.** A per-domain exemption is documented in the principle that owns the duplicated surface (e.g., legitimate parallel structures across SKILL.md files governed by [canonical-skill-structure.md](canonical-skill-structure.md); see §3).
+4. **Registered as a complementary pair.** The two copies share a basename but are **not** copies of each other: each exclusively owns a declared set of sections, and a third declared set is shared by both. The pair is registered in `core/deploy/allowlists/complementary-reference-pairs.txt` with its division of labour stated as machine-checkable section ownership, and `deploy.sh --check` Check 13b asserts that ownership on every run — each exclusively-owned section present in its owner and **absent** from its peer, each shared section present in both, and a shared section whose content has drifted reported as a distinct finding. This is distinct from condition 1: condition 1 registers **sameness** (byte-identity, Check 13); condition 4 registers **complementarity**. A pair that should be byte-identical does not belong here, and a complementary pair does not belong in `TEMPLATE_SYNC_MAP`. Unlike condition 3, the exemption is not prose — it is asserted mechanically, so a deliberate split and an accidental fork are distinguishable to the gate surface. See [ADR-104](../ADRs/ADR-104-complementary-reference-pair-registration.md).
 
 Unregistered duplicate content is governance debt. The longer it persists, the higher the drift risk: one copy is updated, the other becomes silently stale, and downstream consumers act on the stale read. The register-or-remove rule forecloses that path.
 
 ## §2 Registered enforcement layer
 
-Three `deploy.sh --check` checks today provide byte-identity enforcement on registered mirror surfaces:
+Three `deploy.sh --check` checks today provide byte-identity enforcement on registered mirror surfaces; a fourth asserts **section ownership** (not byte-identity) on registered complementary pairs, and is listed here because it is the enforcement layer condition 4 rests on:
 
 | Check | Surface | Enforcement | Source |
 |---|---|---|---|
 | **Check 9** — Rules-mirror sync | canonical source `core/rules/<name>.md` (for release-process.md the source is `release/governance/release-process.md`) ↔ deployed mirror `~/.claude/rules/<name>.md` | Byte-identity required; mismatch → DRIFT [SOURCE: `deploy.sh:1695`] | — |
 | **Check 11** — Harness-mirror sync | `harness/<name>/` ↔ `~/.claude/<name>/` for every entry in `HARNESS_LIST` (currently `account-switcher`) | Byte-identity required on canonical files; operator-state files (per `HARNESS_OPERATOR_STATE` allowlist) preserved [SOURCE: `deploy.sh:1798`] | Per D-1.B |
 | **Check 13** — Template-sync drift detection | `TEMPLATE_SYNC_MAP` byte-identity-enforced template pairs | Byte-identity required; matches Check 1 / Check 11 zero-FP posture [SOURCE: `deploy.sh:1929`] | — |
+| **Check 13b** — Complementary-pair ownership | registered pairs in `core/deploy/allowlists/complementary-reference-pairs.txt` | Section-ownership assertion, **not** byte-identity: each exclusively-owned section present in its owner and absent from its peer; each shared section present in both, with content divergence reported as a distinct finding. An unregistered cross-tree same-basename pair is surfaced as a possible accidental fork. Warn-mode (shared cohort) | Condition 4 |
 
 **Out of scope for these checks:**
 - Content-level near-duplicates outside the registered mirror set (the gap this principle addresses).

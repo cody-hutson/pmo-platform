@@ -1,0 +1,78 @@
+# complementary-reference-pairs.txt — registered canonical<->skill-local
+# COMPLEMENTARY pairs: the FOURTH disposition under
+# core/standards/duplicate-source-discipline.md §1.
+#
+# SINGLE SOURCE: read DIRECTLY by BOTH core/deploy/deploy.sh Check 13b
+# (passes 2/3/4) AND core/deploy/tools/build-skill-packages.sh. Neither consumer
+# holds a second copy and neither awk-extracts it out of another script — a
+# second copy would be a shadow SSOT that could drift the gate out of agreement
+# with the shipped package (the drift class recorded in
+# core/deploy/lib-template-sync-source.sh).
+#
+# MEANING: the two files share a basename and are NOT copies. Each side
+# exclusively OWNS a declared set of H2 sections, and a third declared set is
+# SHARED by both. This is the OPPOSITE of a TEMPLATE_SYNC_MAP registration
+# (byte-identity, Check 13). Never register a byte-identical pair here, nor a
+# complementary pair there.
+#
+# SCHEMA — 5 fields, '|||'-delimited (the separator is '|||' and not ':' because
+# the section-anchor fields legitimately contain a ': ', e.g.
+# "Tracker 6: Artifact Register" — the same forcing constraint deploy.sh records
+# for TEMPLATE_SCHEMA_MAP). Split with `awk -F'\|\|\|'`, NEVER
+# `IFS='|||' read` (bash collapses it to a single '|' and silently empties
+# fields). Section lists inside fields 3/4/5 are '|'-delimited.
+#   1 <canonical-path>
+#   2 <skill-local-path>
+#   3 <sections the CANONICAL owns exclusively>
+#   4 <sections the SKILL-LOCAL owns exclusively>
+#   5 <sections the two copies SHARE>
+#
+# WHY FIELD 5 EXISTS (it is not optional cleanliness). Two exclusive-ownership
+# fields model a PARTITION over a relation that is in fact an OVERLAP. The live
+# pair's Trackers 1 and 3 already diverge in field content, so listing Trackers
+# 1-4 as exclusively owned by either side would flip a currently-correct pair to
+# FAIL, and "which copy owns Trackers 1-4" would have no expressible answer. The
+# shared field answers it — BOTH — and is what makes the pair's only real drift
+# surface visible instead of unrepresentable.
+#
+# PREDICATES (Check 13b pass 2), per record:
+#   P3 both paths exist
+#   P1 every field-3 section is an H2 in the CANONICAL and ABSENT from the mirror
+#   P2 every field-4 section is an H2 in the MIRROR and ABSENT from the canonical
+#   P4 every field-5 section is an H2 in BOTH copies
+#   P5 for every field-5 section, the two extracted section blocks agree
+# Breach of P1/P2/P3/P4 -> `complementary-pair-ownership-drift` (an ownership
+# claim the files contradict). Breach of P5 -> `complementary-pair-shared-
+# section-divergence` (ownership is correct; the shared content has drifted).
+# The two are DELIBERATELY distinct signals: a missing section is a broken
+# declaration, a differing section is content drift inside a correct one.
+# Presence uses `grep -qxF "## <section>"` (exact whole-line, so "Tracker 1"
+# never satisfies "Tracker 10").
+#
+# KNOWN LIVE P5 FINDINGS at registration (2026-07-30): Trackers 1 and 3 diverge
+# across the pair — the canonical carries `source_inputs`, `Blocking`,
+# `Escalation state`, and the Tracker 3 `lifecycle_state` machine, which the
+# skill-local copy does not. These are REPORTED, not suppressed: the registry
+# declares the region shared and the check says, truthfully, that its content
+# has drifted. Reconciling them is a follow-up, not a precondition for
+# registration.
+#
+# DISCOVERY (pass 3): a same-basename file present BOTH under a skill
+# references/ tree AND anywhere in core/|release/|operations/ outside */skills/*
+# that is NOT registered here emits `unregistered-canonical-skill-local-pair`
+# (the accidental-fork case). EXCLUDED: README.md — a per-directory index
+# convention (38 copies), NAMED in deploy.sh as C13B_INDEX_BASENAMES, never a
+# silent skip.
+#
+# PACKAGING (pass 4 + build-skill-packages.sh): a registered pair's canonical
+# ships into the owning skill's .skill at its REPO-RELATIVE path, so the skill's
+# SKILL.md citations of that path resolve verbatim from the package root. The
+# injection itself is expressed as a TEMPLATE_SYNC_MAP entry — consumed by BOTH
+# staging paths from one source (ADR-104 decision 5) — and THIS registry is the
+# independent post-condition that asserts the injection landed. Both consumers
+# fail CLOSED when this file is absent or malformed: the fix and its detector
+# must not be disable-able by one deletion.
+#
+# Comments and blank lines are tolerated by every consumer.
+
+core/schemas/tracker-schemas.md|||operations/skills/tracker-manager/references/tracker-schemas.md|||Tracker 5: RAID Log|Tracker 6: Artifact Register|Tracker 7: Milestone Tracker|Tracker 8: Stakeholder Register|Tracker 9: RACI|Tracker 10: Sprint Tracker|||Tracker Integrity Rules|||Tracker 1: Daily Status Log|Tracker 2: Communications Tracker|Tracker 3: Open Meetings Tracker|Tracker 4: Transcript Register
