@@ -26,10 +26,19 @@ its #N-token "Scope" count are RETIRED — the live INDEX has no Scope column, s
 the #N-token miscount the generator was filed to fix is moot by construction.
 
 Usage:
-    python3 core/deploy/tools/generate_release_index.py
-    python3 core/deploy/tools/generate_release_index.py --output-stdout
-    python3 core/deploy/tools/generate_release_index.py --verify
-    python3 core/deploy/tools/generate_release_index.py --self-test
+    python3 core/deploy/tools/generate_release_index.py --verify        # read-only
+    python3 core/deploy/tools/generate_release_index.py --self-test     # read-only
+    python3 core/deploy/tools/generate_release_index.py --output-stdout # no write
+    python3 core/deploy/tools/generate_release_index.py                 # DESTRUCTIVE
+
+DESTRUCTIVE-DEFAULT WARNING. The bare no-flag invocation is a FULL REGENERATE: it
+rewrites every row of RELEASE_INDEX.md from RELEASE_LOG.md in one pass. The live
+INDEX carries GRANDFATHERED rows whose `Date` cells deliberately hold the close-out
+date rather than the merge anchor, and whose header § Grandfathering states they are
+not to be rewritten. A full regenerate restamps all of them silently — an audit-trail
+forgery, not a refresh. Stage 13 is APPEND-ONLY (release-process.md § D6 / CR-D6):
+append the single new row, then confirm with `--verify`. Reach for the bare form only
+on an explicit operator decision to accept the restamp of every grandfathered row.
 
 Exit codes: 0 = success (or --verify: full match), 1 = --verify drift,
 3 = path-resolution / parse failure (LOG or INDEX missing/unreadable, or a
