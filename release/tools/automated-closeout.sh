@@ -4784,6 +4784,13 @@ RELEQ
 # the CI smoke job is deterministic and credential-free. This is the hard-fail
 # path-resolution check the smoke gate runs to catch re-pathing drift (the
 # migration-drift failure mode) BEFORE the next release does.
+#
+# CONSTRAINT (corpus-home adapter seam): if you are making this resolution
+# instance-aware / adapter-driven, read
+# release/references/standards/corpus-home-adapter-constraints.md FIRST.
+# CH-1: instance-corpus root ABSENT -> record N/A and exit 0, never HARD-FAIL
+# (this probe is a REQUIRED CI gate; a HARD-FAIL reddens every PR from a fresh
+# clone). release/tools/tests/test_corpus_home_tolerance.sh enforces CH-1..CH-4.
 check_paths() {
   local rc=0
   local label path kind

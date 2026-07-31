@@ -9,7 +9,13 @@ name: Release tooling smoke
 #              learnings-register producer produce-learnings-register.sh --self-test
 #              (whose assertions pin the read-model contract it feeds: every canonical
 #              marker survives verbatim, and the L<n>/A<n> reflection rows stay
-#              placeholder-bearing), AND the blast-radius tool
+#              placeholder-bearing), the corpus-home tolerance conformance suite
+#              (test_corpus_home_tolerance.sh — CH-1..CH-4 of
+#              corpus-home-adapter-constraints.md, SELF-ARMING: it reports
+#              PENDING-SEAM and exits 0 until corpus-path resolution becomes
+#              instance-aware, and turns red on the very PR that makes it
+#              instance-aware with a HARD-FAIL-on-absence resolver), AND the
+#              blast-radius tool
 #              family (doc-tracer default-path regression under a normalized diff + the
 #              domain-fan-out software import-graph scanner) in the closeout-smoke job;
 #              (2) each of the three core/deploy/tools node-graph tools runs its
@@ -31,6 +37,13 @@ name: Release tooling smoke
 #                  a triple value into the register's L<n>/A<n> reflection rows (or drop
 #                  a canonical marker from the rendered register) -> its T2 / T1
 #                  assertions fail and the closeout-smoke job fails;
+#                  make --check-paths instance-aware with a HARD-FAIL when the
+#                  instance-corpus root is absent -> the corpus-home tolerance suite's
+#                  fixture A passes while fixture B fails, rule R3 fires and the
+#                  closeout-smoke job fails (falsifiable TODAY by running the suite
+#                  with CLOSEOUT_SH_UNDER_TEST pointed at a copy patched that way);
+#                  or regress the in-tree baseline / stop detecting a broken corpus
+#                  path -> its R1 / R2 rules fail today, with no seam required;
 #                  break the schema-v1 emit so the doc
 #                  tracer's normalized output changes -> the blast-radius tool-family
 #                  test fails; regress a node-graph tool's --self-test -> the
@@ -258,6 +271,34 @@ jobs:
             exit 1
           fi
           echo "Precision probe OK — broken corpus path correctly failed --check-paths (exit $rc)."
+
+      - name: Corpus-home tolerance conformance (offline; self-arming)
+        # Asserts CH-1..CH-4 of
+        # release/references/standards/corpus-home-adapter-constraints.md against the
+        # real --check-paths probe, using four hermetic mktemp fixtures.
+        #
+        # TODAY the corpus-home seam does not exist, so fixtures A and B are
+        # expected-red, the suite reports PENDING-SEAM and exits 0 — it CANNOT
+        # redden a PR before the seam lands.
+        #
+        # Its gating rules run from day one: a regressed in-tree baseline (R1), a
+        # --check-paths that stopped detecting a broken corpus path (R2), a
+        # degenerate resolver (R5), or a broken doc<->test binding (R6) all exit 1.
+        #
+        # The tolerance teeth ARM THEMSELVES. The moment --check-paths becomes
+        # instance-aware and HARD-FAILs when the instance-corpus root is absent,
+        # fixture A starts passing while fixture B still fails and this step turns
+        # that PR red — no cutoff date to set, no flag to flip, and no reviewer who
+        # has to remember the standard exists. That matters because --check-paths is
+        # a REQUIRED step of this job: a HARD-FAIL-on-absence resolver would redden
+        # every PR raised from a fresh clone or a CI runner, for a condition that is
+        # not a defect.
+        #
+        # Hermetic: mktemp fixtures only; no network, no gh, no git remote, no write
+        # to the checkout. HOME / CLAUDE_WORKSPACE_ROOT are pinned to an empty temp
+        # dir per fixture so an ambient operator instance cannot leak in and defeat
+        # the absence fixture.
+        run: bash release/tools/tests/test_corpus_home_tolerance.sh
 
   node-graph-tools-selftest:
     name: Node-graph stdlib tools self-test (Ubuntu)
