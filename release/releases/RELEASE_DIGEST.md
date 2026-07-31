@@ -7,6 +7,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.02 (2026-07-31) — Release close-out results can now be trusted as read
+
 ### v4.01 (2026-07-30) — The session learning retro can now actually run
 
 ### v4.0 (2026-07-29) — See where agent spend goes, and measure estimates against reality

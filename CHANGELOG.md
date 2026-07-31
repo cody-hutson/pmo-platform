@@ -19,6 +19,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.02] - 2026-07-31
+
+Release close-out now reports what is true after the work is done, stops skipping delivered work, and refuses to guess when it cannot see.
+
+[Full notes](release/releases/notes/v4.02_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.02)
+
 ## [v4.01] - 2026-07-30
 
 The end-of-session learning retro can now actually run, and the decision health-check has a settled home.
