@@ -4535,7 +4535,12 @@ DG2
     local _sp_tmp; _sp_tmp="$(/usr/bin/mktemp -d -t syncprimary-selftest.XXXXXX)"
     (
       set +e
-      $GIT init -q --bare "$_sp_tmp/origin.git" 2>/dev/null
+      # init.defaultBranch is pinned: macOS ships a system gitconfig setting it to
+      # "main", while git's built-in default (what a Linux CI runner uses) is
+      # "master". Left ambient, the bare repo's HEAD would point at an unborn branch
+      # in CI and the clone below would come up with no branch checked out — the
+      # fixture would silently test something different there than here.
+      $GIT -c init.defaultBranch=main init -q --bare "$_sp_tmp/origin.git" 2>/dev/null
       $GIT clone -q "$_sp_tmp/origin.git" "$_sp_tmp/seed" 2>/dev/null
       $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t checkout -q -b main 2>/dev/null
       /usr/bin/printf 'one\n' > "$_sp_tmp/seed/f.txt"
@@ -4686,7 +4691,7 @@ RELEQ
     local _ah_nosign=(-c tag.gpgsign=false -c commit.gpgsign=false)
     (
       set +e
-      $GIT init -q "$_ah_repo"
+      $GIT -c init.defaultBranch=main init -q "$_ah_repo"
       /usr/bin/printf 'x\n' > "$_ah_repo/f.txt"
       $GIT -C "$_ah_repo" add f.txt
       $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=a@users.noreply.github.com -c user.name=a commit -q -m c1
