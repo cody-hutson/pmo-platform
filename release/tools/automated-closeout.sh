@@ -19,6 +19,7 @@
 #   9  scaffold_release_notes  frontmatter + section H2 placeholders (SCAFFOLD-ONLY)
 #   9.2 lint_release_notes  §3.2 note-content close gate — a finding for THIS version BLOCKS close
 #   9.5 append_changelog   prepend ## [vX.Y] section to CHANGELOG.md (Layer-1 dual-write Surface 2)
+#   9.55 assert_derived_surfaces  version-scoped scaffold-residue assert on the CHANGELOG + DIGEST entries for THIS version (read-only)
 #   9.6 bump_version       write .version=$VERSION (versioned releases; SKIP version-less)
 #   9.9 ledger_guard       pre-commit §220 I1/I2 read-modify-write guard on the 4 append-only ledgers (#1680)
 #   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
@@ -182,6 +183,15 @@ RELEASE_PLANS_DIR="$REPO_ROOT/release/releases/plans"
 CLEANUP_TOOL="$SCRIPT_DIR/cleanup-orphan-state.sh"
 COMPUTE_CYCLE_TIME="$SCRIPT_DIR/compute-cycle-time.sh"
 SYNTHESIZE_LEARNINGS="$SCRIPT_DIR/synthesize-release-learnings.sh"
+# Scaffold-residue token source (AC1 single-source seam). The token set has exactly
+# ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
+# anchors read it from there via --print-scaffold-tokens. Retyping the literals in
+# bash would open a cross-language drift seam: the scaffold heredoc could gain a
+# placeholder the python anchor catches and the shell anchors silently miss.
+# Captured HERE at load time from the script-derived $REPO_ROOT, so a self-test that
+# sandboxes REPO_ROOT still reads the REAL token set — exercising the shipped tokens
+# is the entire value of the round-trip test.
+LINT_RELEASE_CORPUS="$REPO_ROOT/core/deploy/tools/lint_release_corpus.py"
 # Body-source-of-record drift check (release-notes-standard.md §5.1). The SINGLE
 # source of the published-body-vs-stripped-note equality logic; phase 15.6 below
 # invokes it as the post-emit assert. Genuine drift BLOCKS the close (cutoff-gated,
@@ -344,6 +354,23 @@ notes_rel_path() {
 # The INDEX Version-cell label: version-less rows carry the "(version-less)" marker.
 index_version_cell() {
   if is_version_less; then printf '%s (version-less)' "$VERSION"; else printf '%s' "$VERSION"; fi
+}
+
+# Scaffold-residue token set (AC1) — one token per line on stdout, read from the
+# single definition in lint_release_corpus.py (see LINT_RELEASE_CORPUS above).
+#
+# FAIL-LOUD CONTRACT (#459): returns 1 with NO output when the token source cannot
+# be read or yields an empty set. A caller MUST treat that as a gate failure — an
+# empty token set makes every residue check trivially pass, which is precisely the
+# green-for-the-wrong-reason vacuity these anchors exist to eliminate. Never treat
+# "no tokens" as "no residue".
+scaffold_residue_tokens() {
+  [[ -f "$LINT_RELEASE_CORPUS" ]] || return 1
+  [[ -x "/usr/bin/python3" ]] || return 1
+  local out
+  out="$(/usr/bin/python3 "$LINT_RELEASE_CORPUS" --print-scaffold-tokens 2>/dev/null)" || return 1
+  [[ -n "$out" ]] || return 1
+  printf '%s\n' "$out"
 }
 
 # Returns 0 if string starts with "v<MAJOR>" else 1
@@ -544,9 +571,24 @@ phase_preflight() {
     return 2
   fi
 
-  # (b) clean working tree
-  if [[ -n "$($GIT -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]]; then
-    mark_phase "preflight" "FAIL" "working tree not clean"
+  # (b) clean working tree — with ONE tolerated exception: an UNTRACKED release
+  # note for the version being closed. The operator-authored-ahead path is the
+  # supported authoring path (release-notes-standard.md), and step (f) below
+  # rejects that same note if it still carries scaffold residue. Without this
+  # tolerance the two gates deadlock: scaffold writes the note -> (f) fails ->
+  # the re-run is blocked HERE by the untracked scaffold it just wrote.
+  #
+  # Scoping is deliberately exact, not prefix-based:
+  #   - notes_rel_path() is RELATIVE TO release/releases/, git porcelain paths are
+  #     repo-root-relative, so the release/releases/ prefix is REQUIRED.
+  #   - grep -x forces a WHOLE-LINE match, so ' M <that path>' (modified-tracked)
+  #     and '?? <that path>.bak' still FAIL. Only '?? <that exact path>' passes.
+  local _allowed_note="release/releases/$(notes_rel_path)"
+  local _dirty
+  _dirty="$($GIT -C "$REPO_ROOT" status --porcelain 2>/dev/null \
+            | /usr/bin/grep -vxF "?? ${_allowed_note}" || true)"
+  if [[ -n "$_dirty" ]]; then
+    mark_phase "preflight" "FAIL" "working tree not clean: $(echo "$_dirty" | /usr/bin/head -3 | /usr/bin/tr '\n' ' ')"
     return 2
   fi
 
@@ -593,7 +635,34 @@ phase_preflight() {
     STATE_TAG_EXISTS=1
   fi
 
-  mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS"
+  # (f) scaffold-residue gate on a PRE-EXISTING note for this version (AC1 anchor A1).
+  # Composes with (b): (b) now ACCEPTS a pre-authored note; (f) REJECTS one that is
+  # still an unfilled scaffold. Fires BEFORE any mutation, which is why it lives in
+  # preflight rather than beside the §3.2 lint at 9.2.
+  #
+  # The token set is NOT retyped here — it is read from lint_release_corpus.py via
+  # --print-scaffold-tokens, so the producer (the scaffold heredoc), the python
+  # anchor (A2) and the two shell anchors (A1, A3) cannot drift apart.
+  local _note="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
+  is_version_less && _note="${RELEASE_NOTES_DIR}/_unversioned/${VERSION}_RELEASE_NOTES.md"
+  if [[ -f "$_note" ]]; then
+    local _tokens
+    if ! _tokens="$(scaffold_residue_tokens)"; then
+      mark_phase "preflight" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — the AC1 residue gate cannot be evaluated; failing loud rather than passing vacuously (#459)"
+      return 2
+    fi
+    local _tok _hit
+    while IFS= read -r _tok; do
+      [[ -z "$_tok" ]] && continue
+      _hit="$(/usr/bin/grep -nF -- "$_tok" "$_note" | /usr/bin/head -1 || true)"
+      if [[ -n "$_hit" ]]; then
+        mark_phase "preflight" "FAIL" "unfilled scaffold token in ${_note} at line ${_hit%%:*} — token '${_tok}'; author the release note before close-out (release-notes-standard.md §3.2)"
+        return 2
+      fi
+    done <<< "$_tokens"
+  fi
+
+  mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS; no scaffold residue in ${VERSION} note"
   return 0
 }
 
@@ -1526,6 +1595,91 @@ PY
   fi
 
   mark_phase "append_changelog" "PASS" "prepended ## [${VERSION}] section to CHANGELOG.md (Surface 2 of Layer-1 dual-write)"
+  return 0
+}
+
+# ─── Phase 9.55: assert_derived_surfaces (AC1 anchor A3) ─────────────────────
+#
+# The note is not the only surface a Stage-13 close writes. phase_append_changelog
+# copies the note's frontmatter `summary:` into CHANGELOG.md, and
+# phase_append_release_digest writes a DIGEST H3 whose headline falls back to a
+# placeholder when the note does not exist yet — it runs at 8.x, BEFORE the note is
+# scaffolded at 9.1, so on the unattended path it emits a placeholder every time.
+# Both surfaces therefore persist scaffold residue even when the note is authored
+# afterwards, which is precisely how the live corpus accumulated its placeholder rows.
+# The §3.2 note lint never looked at either surface.
+#
+# VERSION-SCOPED BY CONSTRUCTION — the single most important property of this phase.
+# It reads ONLY the closing version's CHANGELOG H2 block and DIGEST H3 line, never
+# either file whole. Pre-existing placeholder rows for already-shipped versions are
+# owned by a separate data-backfill work item; a corpus-wide scan here would block
+# every future close on legacy debt. This is the same audit-baseline discipline
+# phase_lint_release_notes applies when it greps its findings for THIS version's path.
+#
+# Read-only and idempotent — it asserts, never mutates, so a resumed close re-runs it
+# safely. Dry-run RUNS it (side-effect-free) so the operator sees findings at the
+# review gate rather than after the commit, mirroring phase_lint_release_notes.
+#
+# Version-less releases: CHANGELOG is SKIPPED (there is no `## [vX.Y]` key to slice —
+# mirrors phase_append_changelog step (0)); the DIGEST assertion still runs, because
+# phase_append_release_digest writes an H3 for a version-less release too.
+phase_assert_derived_surfaces() {
+  local changelog_path="$REPO_ROOT/CHANGELOG.md"
+
+  local _tokens
+  if ! _tokens="$(scaffold_residue_tokens)"; then
+    mark_phase "assert_derived_surfaces" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — derived-surface residue cannot be evaluated; failing loud rather than passing vacuously (#459)"
+    return 1
+  fi
+
+  # Slice extractors emit "<file-line-number><TAB><line>" so a finding can name the
+  # real line in the real file. Header matching is literal (index()==1), not regex,
+  # so a version containing '.' needs no escaping and cannot mis-anchor.
+  local _cl_slice="" _dg_slice=""
+  if is_version_less; then
+    :   # CHANGELOG has no version key for a version-less release — nothing to slice.
+  elif [[ -f "$changelog_path" ]]; then
+    _cl_slice="$(/usr/bin/awk -v v="$VERSION" '
+      /^## / {
+        if (started) { exit }
+        if (index($0, "## [" v "]") == 1 || index($0, "## " v " ") == 1) { started = 1; print NR "\t" $0; next }
+        next
+      }
+      started { print NR "\t" $0 }
+    ' "$changelog_path")"
+  fi
+  if [[ -f "$RELEASE_DIGEST" ]]; then
+    # The DIGEST entry is a single H3 line: `### vX.Y (date) — headline`.
+    _dg_slice="$(/usr/bin/awk -v v="$VERSION" '
+      index($0, "### " v " ") == 1 || index($0, "### " v "(") == 1 { print NR "\t" $0 }
+    ' "$RELEASE_DIGEST")"
+  fi
+
+  local _tok _hit _surface _line
+  while IFS= read -r _tok; do
+    [[ -z "$_tok" ]] && continue
+    for _surface in CHANGELOG DIGEST; do
+      local _slice _file
+      if [[ "$_surface" == "CHANGELOG" ]]; then _slice="$_cl_slice"; _file="CHANGELOG.md"
+      else _slice="$_dg_slice"; _file="release/releases/RELEASE_DIGEST.md"; fi
+      [[ -z "$_slice" ]] && continue
+      _hit="$(printf '%s\n' "$_slice" | /usr/bin/grep -F -- "$_tok" | /usr/bin/head -1 || true)"
+      if [[ -n "$_hit" ]]; then
+        _line="${_hit%%$'\t'*}"
+        mark_phase "assert_derived_surfaces" "FAIL" "unfilled scaffold residue on a derived surface: ${_file}:${_line} in the ${VERSION} entry carries token '${_tok}' — author the release note and re-derive the entry before close-out (release-notes-standard.md § Part 5 Layer-1 dual-write)"
+        return 1
+      fi
+    done
+  done <<< "$_tokens"
+
+  local _detail="${VERSION} entries clean"
+  if is_version_less; then
+    _detail="${_detail} (CHANGELOG SKIPPED — version-less release has no ## [vX.Y] key; DIGEST asserted)"
+  elif [[ -z "$_cl_slice" ]]; then
+    _detail="${_detail} (no CHANGELOG entry for ${VERSION} yet — nothing to assert)"
+  fi
+  [[ -z "$_dg_slice" ]] && _detail="${_detail} (no DIGEST entry for ${VERSION} yet)"
+  mark_phase "assert_derived_surfaces" "PASS" "$_detail"
   return 0
 }
 
@@ -2637,7 +2791,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -4122,6 +4276,7 @@ phase_append_reversions || { generate_report; exit 3; }                # Phase 8
 phase_scaffold_release_notes || { generate_report; exit 3; }
 phase_lint_release_notes || { generate_report; exit 3; }              # Phase 9.2 — §3.2 note-content close gate; a finding for THIS version BLOCKS close
 phase_append_changelog || { generate_report; exit 3; }                # Phase 9.5 — Layer-1 dual-write Surface 2
+phase_assert_derived_surfaces || { generate_report; exit 3; }         # Phase 9.55 — AC1 anchor A3: version-scoped scaffold-residue assert on CHANGELOG + DIGEST
 phase_bump_version || { generate_report; exit 3; }                    # Phase 9.6 — stamp .version (versioned releases; SKIP version-less)
 phase_ledger_guard || { generate_report; exit 3; }                    # Phase 9.9 — pre-commit §220 I1/I2 read-modify-write guard (#1680)
 phase_rebuild_skill_packages || { generate_report; exit 3; }          # Phase 9.95 — .skill package rebuild into the chore commit (#3322; content-sidecar-gated)

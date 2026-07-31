@@ -144,6 +144,44 @@ SECTION_6A_HEADER_RE = re.compile(r"^##\s+What changed for everyone", re.IGNOREC
 NEXT_H2_RE = re.compile(r"^##\s+")
 VERSION_KEY_RE = re.compile(r"^v(\d+)\.(\d+)([a-z])?(?:-(\d+))?")
 
+# ─── Scaffold-residue detection (release-notes-standard.md §3.2; check 9b) ────
+#
+# THE SINGLE DEFINITION of the scaffold-residue token set for the whole platform.
+# Every token below is a literal emitted by a Stage-13 close-out PRODUCER:
+#
+#   automated-closeout.sh phase_scaffold_release_notes  -> the note scaffold heredoc
+#     "<one-sentence <=140"        frontmatter `summary:` placeholder (also reaches
+#                                  CHANGELOG.md, which sources its blurb from `summary:`)
+#     "<Headline - user-visible"   the H1 headline placeholder
+#     "<!-- agent:"                every authoring-instruction comment
+#     "AUTHOR_SUMMARY_HERE"        the summary-authoring marker
+#   automated-closeout.sh phase_append_release_digest  -> the DIGEST H3 fallback
+#     "<headline - populated by operator"
+#
+# A note carrying any of these is UNAUTHORED BY CONSTRUCTION: the close-out wrote it
+# and nobody filled it in. That is a stronger signal than any Section-6a heuristic,
+# and it is the one the §3.2 checks previously missed entirely — the scaffold's own
+# guidance comment contains the literal "No user-visible behavior changes", which IS
+# check 9's escape hatch, so an untouched scaffold graded CLEAN.
+#
+# Shell callers read this set via `--print-scaffold-tokens` rather than retyping the
+# literals, so the python anchor and the automated-closeout.sh anchors cannot drift.
+# The exact byte forms (em dash, U+2264) matter: files are read as UTF-8, keep them so.
+SCAFFOLD_RESIDUE_TOKENS = [
+    "<!-- agent:",
+    "AUTHOR_SUMMARY_HERE",
+    "<Headline — user-visible",
+    "<one-sentence ≤140",
+    "<headline — populated by operator",
+]
+SCAFFOLD_RESIDUE_RE = re.compile("|".join(re.escape(t) for t in SCAFFOLD_RESIDUE_TOKENS))
+
+# Comment-stripper for the check-9 predicate. Section 6a's scaffold comment quotes
+# check 9's own escape-hatch string, so evaluating check 9 on the raw span lets a
+# scaffold satisfy the check it is supposed to fail. Check 9 is evaluated on the
+# comment-stripped span; checks 10-12 keep reading authored prose.
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
 # Check 13 (whole-body link purity) cutover floor. Forward-only at v2.37 — the
 # release that introduces the check. 42 of 64 historical version-keyed notes
 # carry the Section-6b `](../RELEASE_LOG.md)` / `](../plans/…)` template link
@@ -523,6 +561,21 @@ def check_note_content() -> list[str]:
         text = path.read_text(encoding="utf-8")
         rel = _rel(path)
 
+        # Check 9b: scaffold residue. A note still carrying a producer token was
+        # written by phase_scaffold_release_notes and never authored, so it is
+        # unauthored by construction — no downstream content check is meaningful
+        # on it. `continue` is deliberate: without it one unfilled note emits five
+        # findings and buries the only actionable one.
+        m_res = SCAFFOLD_RESIDUE_RE.search(text)
+        if m_res:
+            line_no = text[: m_res.start()].count("\n") + 1
+            findings.append(
+                f"NOTE-SCAFFOLD-RESIDUE: {rel}:{line_no} carries unfilled scaffold token "
+                f"{m_res.group(0)!r} — the note is unauthored by construction "
+                f"(release-notes-standard.md §3.2; automated-closeout.sh phase_scaffold_release_notes)"
+            )
+            continue
+
         # Check 13: whole-published-body link purity (release-notes-standard.md
         # §3.2 check 13). Independent forward-only floor at NOTE_LINK_CUTOVER —
         # runs on the frontmatter-stripped body (the Surface-1 published bytes),
@@ -541,9 +594,22 @@ def check_note_content() -> list[str]:
             findings.append(f"NOTE-6A-MISSING: {rel} lacks '## What changed for everyone' section (release-notes-standard.md §3.2 check 9)")
             continue
 
+        # CHECK 9 ONLY is evaluated on the COMMENT-STRIPPED span. The scaffold's own
+        # authoring comment quotes the escape-hatch string ("No user-visible behavior
+        # changes"), so evaluating the raw span lets an untouched scaffold satisfy the
+        # very check meant to reject it.
+        #
+        # The stripping is deliberately NOT shared with checks 11-12. Check 11's escape
+        # marker `<!-- impact:foundational -->` IS an HTML comment: stripping comments
+        # out of the bullet list deletes the marker and makes check 11 fire on 10
+        # already-conformant notes that legitimately use it. `bullets` therefore keeps
+        # reading the authored span; only the check-9 emptiness predicate reads the
+        # stripped one.
+        section_6a_eval = HTML_COMMENT_RE.sub("", section_6a)
         bullets = parse_bullets(section_6a)
-        placeholder_present = "No user-visible behavior changes" in section_6a
-        if not bullets and not placeholder_present:
+        bullets_eval = parse_bullets(section_6a_eval)
+        placeholder_present = "No user-visible behavior changes" in section_6a_eval
+        if not bullets_eval and not placeholder_present:
             findings.append(f"NOTE-6A-EMPTY: {rel} Section 6a has no bullets and no 'No user-visible behavior changes' placeholder (release-notes-standard.md §3.2 check 9)")
 
         # Check 10: banned-jargon scan
@@ -682,7 +748,24 @@ def main() -> int:
             "call site, so default behaviour is unchanged."
         ),
     )
+    p.add_argument(
+        "--print-scaffold-tokens",
+        action="store_true",
+        help=(
+            "Print the scaffold-residue token set (one per line) and exit 0. This is the "
+            "single-source seam the automated-closeout.sh shell anchors read instead of "
+            "retyping the literals, so the python and shell detectors cannot drift apart. "
+            "Runs no checks and touches no corpus path."
+        ),
+    )
     args = p.parse_args()
+
+    # Token-set query short-circuits before any corpus read: it must succeed even
+    # where the corpus does not resolve (the shell anchors call it from sandboxes).
+    if args.print_scaffold_tokens:
+        for token in SCAFFOLD_RESIDUE_TOKENS:
+            print(token)
+        return 0
 
     findings: list[str] = []
     if args.check in ("all", "filename"):
