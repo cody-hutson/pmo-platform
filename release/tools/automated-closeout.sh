@@ -304,6 +304,20 @@ die() { echo "ERROR: $*" >&2; exit "${2:-1}"; }
 ts_now() { /bin/date -u +%Y-%m-%dT%H:%M:%SZ; }
 date_today() { /bin/date -u +%Y-%m-%d; }
 
+# Run-scoped CLOSE-OUT anchor (#3718). Sampled ONCE at script load and reused by
+# every close-out-anchored write: RELEASE_DIGEST, the release-note frontmatter
+# `date:` (and thence CHANGELOG, which derives its date from that frontmatter),
+# and RELEASE_REVERSIONS. Before this, each phase called date_today() freshly, so
+# a close-out run spanning a UTC midnight could write TWO different dates into
+# ONE atomic Stage-13 chore PR — the same "sampled more than once" defect the
+# Stage-5 date variable exists to prevent, at a smaller unit of work. Per
+# core/standards/date-variable-convention.md § Emission-Time Anchors
+# (sample-once-per-unit-of-work; the unit here is one close-out run).
+#
+# NOT used for the RELEASE_INDEX Date cell — that column carries the MERGE
+# anchor and is read from the RELEASE_LOG row. See phase_append_release_index.
+CLOSEOUT_ANCHOR_UTC="$(date_today)"
+
 # Workspace-boundary safety per cleanup-orphan-state.sh pattern.
 workspace_boundary_check() {
   local cwd
@@ -472,6 +486,53 @@ extract_row_state() {
         print f; exit
       }
     }'
+}
+
+# Extract the MERGE-anchored Date column from a RELEASE_LOG row (#3718).
+#
+# Pinned by HEADER NAME, not by ordinal: the Date column's position has moved
+# before (the legacy 5-column schema had no Date at all), and an ordinal pin
+# reads the wrong cell silently the next time it moves. Resolves the column index
+# from the RELEASE_LOG header row, then returns that field iff it is a
+# well-formed YYYY-MM-DD. Emits EMPTY — never a guess — when the header, the
+# column, or a well-formed value cannot be resolved, so the caller can fail
+# loudly rather than substitute the close-out clock and re-open the divergence.
+extract_row_date() {
+  local row="$1"
+  [[ -z "$row" ]] && return 0
+  /usr/bin/python3 - "$RELEASE_LOG" "$row" <<'PY'
+import re, sys
+
+log_path, row = sys.argv[1], sys.argv[2]
+
+def cells(line):
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+col = None
+try:
+    with open(log_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.lstrip().startswith("|"):
+                continue
+            header = cells(line)
+            if "Version" in header and "Date" in header:
+                col = header.index("Date")
+                break
+except OSError:
+    pass
+
+if col is None:
+    sys.exit(0)
+
+fields = cells(row)
+if col < len(fields) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", fields[col]):
+    sys.stdout.write(fields[col])
+PY
 }
 
 # Unified RELEASE_LOG row-match predicate (#2539 AC-3 — dry-run/apply parity).
@@ -995,13 +1056,35 @@ phase_append_release_index() {
   ver_cell="$(index_version_cell)"   # "<version>" | "<slug> (version-less)"
   note_rel="$(notes_rel_path)"       # notes/… | notes/_unversioned/…
 
+  # Date cell — MERGE anchor (#3718). Read from the RELEASE_LOG row for this
+  # version, NOT sampled from the close-out clock. LOG and INDEX are the only
+  # ledger pair carrying an automated cross-assertion
+  # (generate_release_index.py --verify, invoked by deploy.sh Check 23, asserts
+  # the INDEX row equals the LOG row field-for-field). While this phase sampled
+  # the close-out clock, that check was red BY CONSTRUCTION on every close-out
+  # that crossed a UTC midnight — it reported the design working correctly and
+  # so could no longer report real drift. The close-out instant is not lost: it
+  # is carried by DIGEST, the release note, and CHANGELOG, each declaring so.
+  # Per core/standards/date-variable-convention.md § Emission-Time Anchors.
+  #
+  # Resolved BEFORE the dry-run branch so dry-run predicts exactly what --apply
+  # writes, including the failure (#2539 AC-3 dry-run/apply parity). Preflight
+  # already asserted the LOG row exists at DEPLOYED, so an unresolvable Date is
+  # a real schema anomaly — fail loudly rather than silently substituting the
+  # clock and re-opening the very divergence this phase now closes.
+  local date_str
+  date_str="$(extract_row_date "$(find_log_row "$VERSION")")"
+  if [[ -z "$date_str" ]]; then
+    mark_phase "append_release_index" "FAIL" "could not resolve the merge-anchored Date from the RELEASE_LOG row for $VERSION (expected a YYYY-MM-DD cell under the 'Date' header); refusing to substitute the close-out clock — see date-variable-convention.md § Emission-Time Anchors"
+    return 3
+  fi
+
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $ver_cell | $slug | $(date_today) | — | #${PR_NUMBER} | $note_rel |) at the top of RELEASE_INDEX.md"
+    mark_phase "append_release_index" "DRY-RUN" "would insert a 6-col row (| $ver_cell | $slug | $date_str | — | #${PR_NUMBER} | $note_rel |) at the top of RELEASE_INDEX.md (Date = merge anchor, read from the RELEASE_LOG row)"
     return 0
   fi
 
-  local date_str note_link pr_cell
-  date_str="$(date_today)"
+  local note_link pr_cell
   note_link="[${note_rel}](${note_rel})"
   pr_cell="#${PR_NUMBER}"
 
@@ -1077,7 +1160,8 @@ phase_append_release_digest() {
   # The date cell carries the "(<date>, version-less)" marker for a version-less
   # release, matching the shipped DIGEST convention (#2048).
   local date_cell
-  if is_version_less; then date_cell="$(date_today), version-less"; else date_cell="$(date_today)"; fi
+  # CLOSE-OUT anchor, run-scoped (#3718) — one sample per close-out run.
+  if is_version_less; then date_cell="${CLOSEOUT_ANCHOR_UTC}, version-less"; else date_cell="$CLOSEOUT_ANCHOR_UTC"; fi
 
   if [[ "$MODE" == "dry-run" ]]; then
     mark_phase "append_release_digest" "DRY-RUN" "would prepend '### $VERSION ($date_cell) — $headline' under the topmost working H2 in RELEASE_DIGEST.md"
@@ -1295,7 +1379,8 @@ PY
 
   # (5) Apply — write exactly the rows classified `record` above (no re-probe; the
   #     disposition/tag_pushed carried through from the shared classifier).
-  local date_str; date_str="$(date_today)"
+  # CLOSE-OUT anchor, run-scoped (#3718) — one sample per close-out run.
+  local date_str; date_str="$CLOSEOUT_ANCHOR_UTC"
   local appended=0 disp tag_pushed
   while IFS='|' read -r abv disp tag_pushed; do
     [[ -z "$abv" ]] && continue
@@ -1353,8 +1438,10 @@ phase_scaffold_release_notes() {
     return 0
   fi
 
+  # CLOSE-OUT anchor, run-scoped (#3718). This frontmatter `date:` is ALSO the
+  # source CHANGELOG derives its date from, so the two surfaces cannot disagree.
   local date_str
-  date_str="$(date_today)"
+  date_str="$CLOSEOUT_ANCHOR_UTC"
 
   /bin/cat > "$notes_path" <<EOF
 ---
@@ -1546,7 +1633,7 @@ phase_append_changelog() {
   # per K-a-C 1.1.0 convention).
 
   if ! /usr/bin/python3 - "$changelog_path" "$notes_path" "$VERSION" "$REPO_SLUG" <<'PY' 2>/dev/null
-import sys, re, datetime
+import sys, re
 changelog, notes, version, repo_slug = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
 # Parse notes frontmatter (existing convention: YAML between --- markers)
@@ -1556,7 +1643,19 @@ m = re.match(r'---\n(.*?)\n---\n', content, re.DOTALL)
 fm = m.group(1) if m else ""
 date_m = re.search(r'^date:\s*([0-9-]+)', fm, re.MULTILINE)
 summary_m = re.search(r'^summary:\s*"?([^"\n]+)"?', fm, re.MULTILINE)
-date = date_m.group(1) if date_m else datetime.date.today().isoformat()
+# CLOSE-OUT anchor, inherited from the release-note frontmatter (#3718). The
+# previous fallback here was `datetime.date.today()` — an OPERATOR-LOCAL date,
+# with no offset recorded, persisted into a durable CHANGELOG.md row that no
+# later reader could resolve to an instant. It also fired silently: a note
+# missing its `date:` produced a plausible-looking wrong row rather than an
+# error. Fail loudly instead. The frontmatter is written by
+# scaffold_release_notes from the run-scoped close-out anchor, so on every
+# normal path this field is present.
+if not date_m:
+    sys.stderr.write(
+        "release-note frontmatter has no `date:` field: %s\n" % notes)
+    sys.exit(1)
+date = date_m.group(1)
 summary = summary_m.group(1).strip() if summary_m else "(see release notes)"
 
 block = f"""## [{version}] - {date}
@@ -1592,7 +1691,7 @@ with open(changelog, 'w') as f:
     f.write(new)
 PY
   then
-    mark_phase "append_changelog" "FAIL" "python3 CHANGELOG synthesis failed (frontmatter malformed or file unreadable)"
+    mark_phase "append_changelog" "FAIL" "python3 CHANGELOG synthesis failed (frontmatter malformed, missing its \`date:\` field, or file unreadable)"
     return 3
   fi
 
@@ -3155,10 +3254,27 @@ EOF
   local _ai_saved_root="$REPO_ROOT" _ai_saved_mode="$MODE" _ai_saved_version="$VERSION"
   local _ai_saved_slug="$STATE_MILESTONE_SLUG" _ai_saved_idx="$RELEASE_INDEX" _ai_saved_dig="$RELEASE_DIGEST"
   local _ai_saved_pr="$PR_NUMBER" _ai_saved_notesdir="$RELEASE_NOTES_DIR"
+  local _ai_saved_log="$RELEASE_LOG" _ai_saved_anchor="$CLOSEOUT_ANCHOR_UTC"
   local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t appendidx-selftest.XXXXXX)"
   REPO_ROOT="$_ai_tmp"; MODE="apply"; VERSION="v9.97"; STATE_MILESTONE_SLUG="88-some-theme-named-milestone"; PR_NUMBER=9999
   RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX.md"; RELEASE_DIGEST="$_ai_tmp/RELEASE_DIGEST.md"
+  RELEASE_LOG="$_ai_tmp/RELEASE_LOG.md"
   RELEASE_NOTES_DIR="$_ai_tmp/notes"   # absent dir => headline placeholder path
+  # #3718 merge-anchor fixture. The LOG Date deliberately differs from BOTH the
+  # close-out anchor and any plausible "today", so an INDEX row carrying it
+  # proves the phase read the LOG rather than sampling the clock. The Date column
+  # sits at a NON-terminal position here (Notes trails it) so the header-name pin
+  # in extract_row_date is exercised rather than an incidental last-field guess.
+  local _ai_log_date="2026-03-04"
+  CLOSEOUT_ANCHOR_UTC="2026-09-09"   # deliberately != _ai_log_date
+  /bin/cat > "$RELEASE_LOG" <<EOF
+# RELEASE_LOG
+
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date | Notes |
+|---|---|---|---|---|---|---|---|---|
+| v9.97 | 88-some-theme-named-milestone | #1 | #9999 | \`abc\` | \`v9.97\` | DEPLOYED | ${_ai_log_date} | — |
+| 77-some-version-less-theme | 77-some-version-less-theme | #2 | #9998 | \`def\` | — | DEPLOYED | ${_ai_log_date} | — |
+EOF
   /bin/cat > "$RELEASE_INDEX" <<'EOF'
 # RELEASE_INDEX
 
@@ -3202,6 +3318,38 @@ EOF
   # 6-column schema ⇒ a well-formed row has exactly 7 pipes (| a | b | c | d | e | f |).
   local _ai_pipes; _ai_pipes="$(/usr/bin/printf '%s' "$_ai_row" | /usr/bin/tr -cd '|' | /usr/bin/wc -c | /usr/bin/tr -d ' ')"
   [[ "$_ai_pipes" -eq 7 ]] || { echo "FAIL: INDEX row must be 6-column (7 pipes), got $_ai_pipes pipes in: $_ai_row"; failures=$((failures+1)); }
+  # (b2) #3718 MERGE ANCHOR — the INDEX Date must equal the RELEASE_LOG Date, and
+  # must NOT be the close-out anchor. This is the regression surface for the
+  # writer/checker reconciliation: while this phase sampled the close-out clock,
+  # generate_release_index.py --verify (deploy.sh Check 23) was red by
+  # construction on every UTC-midnight-crossing close.
+  local _ai_date; _ai_date="$(/usr/bin/printf '%s' "$_ai_row" | /usr/bin/awk -F ' \\| ' '{print $3}')"
+  [[ "$_ai_date" == "$_ai_log_date" ]] || { echo "FAIL: INDEX Date must carry the MERGE anchor from the RELEASE_LOG row ($_ai_log_date), got '$_ai_date' in: $_ai_row"; failures=$((failures+1)); }
+  [[ "$_ai_date" != "$CLOSEOUT_ANCHOR_UTC" ]] || { echo "FAIL: INDEX Date must NOT be the close-out anchor ($CLOSEOUT_ANCHOR_UTC) — the merge anchor is canonical for the LOG/INDEX pair"; failures=$((failures+1)); }
+  # (b3) #3718 — DIGEST keeps the CLOSE-OUT anchor (the two anchors are distinct
+  # by design; collapsing them would destroy the close-out instant).
+  /usr/bin/grep -qE "^### v9\.97 \(${CLOSEOUT_ANCHOR_UTC}\)" "$RELEASE_DIGEST" \
+    || { echo "FAIL: DIGEST H3 must carry the run-scoped CLOSE-OUT anchor ($CLOSEOUT_ANCHOR_UTC)"; failures=$((failures+1)); }
+  # (b4) #3718 — unresolvable LOG Date must FAIL loudly, never fall back to the
+  # clock. Point RELEASE_LOG at a row whose Date cell is malformed.
+  local _ai_badlog="$_ai_tmp/RELEASE_LOG_bad.md" _ai_savedlog2="$RELEASE_LOG" _ai_savedidx2="$RELEASE_INDEX"
+  /bin/cat > "$_ai_badlog" <<'EOF'
+# RELEASE_LOG
+
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.95 | 86-bad | #3 | #9997 | `ghi` | `v9.95` | DEPLOYED | (unrecoverable) |
+EOF
+  RELEASE_LOG="$_ai_badlog"; RELEASE_INDEX="$_ai_tmp/RELEASE_INDEX_bad.md"
+  /usr/bin/printf '# RELEASE_INDEX\n\n| Version | Milestone | Date | Theme | Release PR | Release Notes |\n|---|---|---|---|---|---|\n' > "$RELEASE_INDEX"
+  local _ai_saved_v2="$VERSION"; VERSION="v9.95"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  # `|| true` per the existing self-test idiom — the phase now returns 3 on this
+  # path by design, and `set -e` would otherwise abort the whole self-test.
+  phase_append_release_index >/dev/null 2>&1 || true
+  [[ "$(get_phase append_release_index)" == FAIL\|* ]] || { echo "FAIL: unresolvable RELEASE_LOG Date must FAIL append_release_index (no clock fallback), got '$(get_phase append_release_index)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qE '^\| v9\.95 \|' "$RELEASE_INDEX" || { echo "FAIL: a FAILed append_release_index must write no INDEX row"; failures=$((failures+1)); }
+  VERSION="$_ai_saved_v2"; RELEASE_LOG="$_ai_savedlog2"; RELEASE_INDEX="$_ai_savedidx2"
 
   # (c) idempotency — re-run both phases → SKIPPED on the H3 / bare-version guards
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -3250,6 +3398,7 @@ EOF
   REPO_ROOT="$_ai_saved_root"; MODE="$_ai_saved_mode"; VERSION="$_ai_saved_version"
   STATE_MILESTONE_SLUG="$_ai_saved_slug"; RELEASE_INDEX="$_ai_saved_idx"; RELEASE_DIGEST="$_ai_saved_dig"
   PR_NUMBER="$_ai_saved_pr"; RELEASE_NOTES_DIR="$_ai_saved_notesdir"
+  RELEASE_LOG="$_ai_saved_log"; CLOSEOUT_ANCHOR_UTC="$_ai_saved_anchor"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4c: phase_inject_outcome_field (#37) — offline, hermetic. Drives the
