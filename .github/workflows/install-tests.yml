@@ -212,6 +212,20 @@ jobs:
         # stale.
         run: bash core/deploy/tests/test_check45_governing_doc_name_match.sh
 
+      - name: Run Check 31 override-marker probe determinism test (test_check31_marker_probe_determinism.sh)
+        # #3833: Check 31's two per-file override-marker probes piped the stripped
+        # file body into a quiet grep under deploy.sh's `set -euo pipefail`. The grep
+        # exits on its first match, the writer takes SIGPIPE, and pipefail promotes
+        # that 141 to the pipeline — so a SUCCESSFUL match reported failure and the
+        # file's override marker was silently ignored. The reported saturation count
+        # therefore varied run to run on a byte-identical corpus. A single-run count
+        # assertion cannot fail on that defect, so this test asserts run-to-run
+        # EQUALITY across 5 runs, plus completeness against an independent census.
+        # Its T3 negative control runs the pre-fix form on the same above-capacity
+        # fixture and requires it to FAIL, so a fixture that stopped reproducing the
+        # defect fails the test rather than passing it vacuously.
+        run: bash core/deploy/tests/test_check31_marker_probe_determinism.sh
+
   hook-tests:
     name: Hook test harness (macOS)
     # The core/hooks/tests/*.test.sh files + their test-runner.sh exercise the
