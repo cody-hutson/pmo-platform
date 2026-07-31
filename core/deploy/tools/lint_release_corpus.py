@@ -174,7 +174,14 @@ SCAFFOLD_RESIDUE_TOKENS = [
     "<one-sentence ≤140",
     "<headline — populated by operator",
 ]
-SCAFFOLD_RESIDUE_RE = re.compile("|".join(re.escape(t) for t in SCAFFOLD_RESIDUE_TOKENS))
+# The `or r"(?!)"` fallback matters: "|".join over an EMPTY list yields "", and an
+# empty pattern matches at every position — an emptied token list would silently flag
+# every note in the corpus. `(?!)` never matches, so the degenerate case fails closed
+# here and is caught loudly where it should be: the shell anchors return "token set
+# unreadable" and the --self-test round-trip goes red. (Found by mutation testing.)
+SCAFFOLD_RESIDUE_RE = re.compile(
+    "|".join(re.escape(t) for t in SCAFFOLD_RESIDUE_TOKENS) or r"(?!)"
+)
 
 # Comment-stripper for the check-9 predicate. Section 6a's scaffold comment quotes
 # check 9's own escape-hatch string, so evaluating check 9 on the raw span lets a

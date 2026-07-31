@@ -356,6 +356,21 @@ index_version_cell() {
   if is_version_less; then printf '%s (version-less)' "$VERSION"; else printf '%s' "$VERSION"; fi
 }
 
+# Working-tree tolerance for preflight step (b). Reads `git status --porcelain` text
+# on stdin and emits the records that BLOCK a close — i.e. everything except the one
+# tolerated record: an UNTRACKED release note for the version being closed.
+#
+# Whole-line matching (`grep -x`) is load-bearing. A substring match would also
+# tolerate ' M <that path>' (a modified TRACKED note — real uncommitted work) and
+# '?? <that path>.bak'. Only the exact untracked record passes.
+#
+# The `release/releases/` prefix is REQUIRED: notes_rel_path() is relative to
+# release/releases/, while porcelain paths are repo-root-relative. Dropping it makes
+# the filter match nothing and the tolerance silently stops working.
+filter_tolerated_worktree_state() {
+  /usr/bin/grep -vxF "?? release/releases/$(notes_rel_path)" || true
+}
+
 # Scaffold-residue token set (AC1) — one token per line on stdout, read from the
 # single definition in lint_release_corpus.py (see LINT_RELEASE_CORPUS above).
 #
@@ -371,6 +386,34 @@ scaffold_residue_tokens() {
   out="$(/usr/bin/python3 "$LINT_RELEASE_CORPUS" --print-scaffold-tokens 2>/dev/null)" || return 1
   [[ -n "$out" ]] || return 1
   printf '%s\n' "$out"
+}
+
+# The single residue scanner both shell anchors (A1 preflight, A3 derived surfaces)
+# call, so there is one implementation to test and one to keep correct.
+#
+# Input:  pre-numbered "<line-no><TAB><text>" records on stdin. Callers number their
+#         own input because A1 scans a whole file while A3 scans a version-scoped
+#         SLICE whose line numbers must still refer to the real file.
+# Output: "<token>|<line-no>" for the FIRST hit.
+# Return: 0 clean · 1 residue found · 2 token set unreadable.
+#
+# Return 2 is NOT clean. A caller that collapses it into 0 reintroduces exactly the
+# green-for-the-wrong-reason failure this gate exists to remove.
+scan_scaffold_residue() {
+  local tokens
+  tokens="$(scaffold_residue_tokens)" || return 2
+  local input; input="$(/bin/cat)"
+  [[ -z "$input" ]] && return 0
+  local tok hit
+  while IFS= read -r tok; do
+    [[ -z "$tok" ]] && continue
+    hit="$(printf '%s\n' "$input" | /usr/bin/grep -F -- "$tok" | /usr/bin/head -1 || true)"
+    if [[ -n "$hit" ]]; then
+      printf '%s|%s\n' "$tok" "${hit%%$'\t'*}"
+      return 1
+    fi
+  done <<< "$tokens"
+  return 0
 }
 
 # Returns 0 if string starts with "v<MAJOR>" else 1
@@ -583,10 +626,8 @@ phase_preflight() {
   #     repo-root-relative, so the release/releases/ prefix is REQUIRED.
   #   - grep -x forces a WHOLE-LINE match, so ' M <that path>' (modified-tracked)
   #     and '?? <that path>.bak' still FAIL. Only '?? <that exact path>' passes.
-  local _allowed_note="release/releases/$(notes_rel_path)"
   local _dirty
-  _dirty="$($GIT -C "$REPO_ROOT" status --porcelain 2>/dev/null \
-            | /usr/bin/grep -vxF "?? ${_allowed_note}" || true)"
+  _dirty="$($GIT -C "$REPO_ROOT" status --porcelain 2>/dev/null | filter_tolerated_worktree_state)"
   if [[ -n "$_dirty" ]]; then
     mark_phase "preflight" "FAIL" "working tree not clean: $(echo "$_dirty" | /usr/bin/head -3 | /usr/bin/tr '\n' ' ')"
     return 2
@@ -646,20 +687,15 @@ phase_preflight() {
   local _note="${RELEASE_NOTES_DIR}/${VERSION}_RELEASE_NOTES.md"
   is_version_less && _note="${RELEASE_NOTES_DIR}/_unversioned/${VERSION}_RELEASE_NOTES.md"
   if [[ -f "$_note" ]]; then
-    local _tokens
-    if ! _tokens="$(scaffold_residue_tokens)"; then
-      mark_phase "preflight" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — the AC1 residue gate cannot be evaluated; failing loud rather than passing vacuously (#459)"
+    local _res _rc=0
+    _res="$(/usr/bin/awk '{print NR "\t" $0}' "$_note" | scan_scaffold_residue)" || _rc=$?
+    if [[ $_rc -eq 2 ]]; then
+      mark_phase "preflight" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — the residue gate cannot be evaluated; failing loud rather than passing vacuously (#459)"
+      return 2
+    elif [[ $_rc -eq 1 ]]; then
+      mark_phase "preflight" "FAIL" "unfilled scaffold token in ${_note} at line ${_res#*|} — token '${_res%%|*}'; author the release note before close-out (release-notes-standard.md §3.2)"
       return 2
     fi
-    local _tok _hit
-    while IFS= read -r _tok; do
-      [[ -z "$_tok" ]] && continue
-      _hit="$(/usr/bin/grep -nF -- "$_tok" "$_note" | /usr/bin/head -1 || true)"
-      if [[ -n "$_hit" ]]; then
-        mark_phase "preflight" "FAIL" "unfilled scaffold token in ${_note} at line ${_hit%%:*} — token '${_tok}'; author the release note before close-out (release-notes-standard.md §3.2)"
-        return 2
-      fi
-    done <<< "$_tokens"
   fi
 
   mark_phase "preflight" "PASS" "gh auth OK; tree clean; cwd worktree; RELEASE_LOG row state=$STATE_LOG_ROW_STATE; tag_exists=$STATE_TAG_EXISTS; no scaffold residue in ${VERSION} note"
@@ -1626,12 +1662,6 @@ PY
 phase_assert_derived_surfaces() {
   local changelog_path="$REPO_ROOT/CHANGELOG.md"
 
-  local _tokens
-  if ! _tokens="$(scaffold_residue_tokens)"; then
-    mark_phase "assert_derived_surfaces" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — derived-surface residue cannot be evaluated; failing loud rather than passing vacuously (#459)"
-    return 1
-  fi
-
   # Slice extractors emit "<file-line-number><TAB><line>" so a finding can name the
   # real line in the real file. Header matching is literal (index()==1), not regex,
   # so a version containing '.' needs no escaping and cannot mis-anchor.
@@ -1655,22 +1685,21 @@ phase_assert_derived_surfaces() {
     ' "$RELEASE_DIGEST")"
   fi
 
-  local _tok _hit _surface _line
-  while IFS= read -r _tok; do
-    [[ -z "$_tok" ]] && continue
-    for _surface in CHANGELOG DIGEST; do
-      local _slice _file
-      if [[ "$_surface" == "CHANGELOG" ]]; then _slice="$_cl_slice"; _file="CHANGELOG.md"
-      else _slice="$_dg_slice"; _file="release/releases/RELEASE_DIGEST.md"; fi
-      [[ -z "$_slice" ]] && continue
-      _hit="$(printf '%s\n' "$_slice" | /usr/bin/grep -F -- "$_tok" | /usr/bin/head -1 || true)"
-      if [[ -n "$_hit" ]]; then
-        _line="${_hit%%$'\t'*}"
-        mark_phase "assert_derived_surfaces" "FAIL" "unfilled scaffold residue on a derived surface: ${_file}:${_line} in the ${VERSION} entry carries token '${_tok}' — author the release note and re-derive the entry before close-out (release-notes-standard.md § Part 5 Layer-1 dual-write)"
-        return 1
-      fi
-    done
-  done <<< "$_tokens"
+  local _surface _slice _file _res _rc
+  for _surface in CHANGELOG DIGEST; do
+    if [[ "$_surface" == "CHANGELOG" ]]; then _slice="$_cl_slice"; _file="CHANGELOG.md"
+    else _slice="$_dg_slice"; _file="release/releases/RELEASE_DIGEST.md"; fi
+    [[ -z "$_slice" ]] && continue
+    _rc=0
+    _res="$(printf '%s\n' "$_slice" | scan_scaffold_residue)" || _rc=$?
+    if [[ $_rc -eq 2 ]]; then
+      mark_phase "assert_derived_surfaces" "FAIL" "scaffold-residue token set unreadable from ${LINT_RELEASE_CORPUS} (--print-scaffold-tokens) — derived-surface residue cannot be evaluated; failing loud rather than passing vacuously (#459)"
+      return 1
+    elif [[ $_rc -eq 1 ]]; then
+      mark_phase "assert_derived_surfaces" "FAIL" "unfilled scaffold residue on a derived surface: ${_file}:${_res#*|} in the ${VERSION} entry carries token '${_res%%|*}' — author the release note and re-derive the entry before close-out (release-notes-standard.md § Part 5 Layer-1 dual-write)"
+      return 1
+    fi
+  done
 
   local _detail="${VERSION} entries clean"
   if is_version_less; then
@@ -4148,6 +4177,154 @@ STUB
     echo "FAIL: phase_commit_chore_pr files=() must expand \"\${REBUILT_PACKAGES[@]:-}\" (P1 staging-omission guard)"; failures=$((failures+1))
   fi
 
+  # Test 12: scaffold-residue detector (AC1) + pre-authored-note tolerance (AC2).
+  # Offline, hermetic, credential-free — the CI smoke job runs --self-test with no
+  # network and no gh token.
+  #
+  # T1 is the ANTI-DRIFT test and the reason this block exists: it runs the REAL
+  # phase_scaffold_release_notes into a sandbox notes dir and asserts the REAL token
+  # set trips on the REAL output. Add a placeholder to the scaffold heredoc without
+  # adding its token to SCAFFOLD_RESIDUE_TOKENS and this test goes red. A detector
+  # derived from its own producer cannot silently diverge from it.
+  local _sr_saved_root="$REPO_ROOT" _sr_saved_mode="$MODE" _sr_saved_version="$VERSION"
+  local _sr_saved_notesdir="$RELEASE_NOTES_DIR" _sr_saved_digest="$RELEASE_DIGEST"
+  local _sr_saved_pr="$PR_NUMBER" _sr_saved_slug="$STATE_MILESTONE_SLUG"
+  local _sr_tmp; _sr_tmp="$(/usr/bin/mktemp -d -t scaffoldresidue-selftest.XXXXXX)"
+  /bin/mkdir -p "$_sr_tmp/notes"
+  REPO_ROOT="$_sr_tmp"; MODE="apply"; VERSION="v9.99"
+  RELEASE_NOTES_DIR="$_sr_tmp/notes"; RELEASE_DIGEST="$_sr_tmp/RELEASE_DIGEST.md"
+  PR_NUMBER="9999"; STATE_MILESTONE_SLUG="selftest-slug"
+
+  # (a) AC1-T1 round-trip — the real scaffold must trip the real detector.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_scaffold_release_notes >/dev/null 2>&1
+  local _sr_note="$RELEASE_NOTES_DIR/${VERSION}_RELEASE_NOTES.md"
+  if [[ ! -f "$_sr_note" ]]; then
+    echo "FAIL: AC1-T1 setup — phase_scaffold_release_notes wrote no note at $_sr_note"; failures=$((failures+1))
+  else
+    local _sr_res _sr_rc=0
+    _sr_res="$(/usr/bin/awk '{print NR "\t" $0}' "$_sr_note" | scan_scaffold_residue)" || _sr_rc=$?
+    [[ "$_sr_rc" -eq 1 ]] || { echo "FAIL: AC1-T1 round-trip — the byte-exact scaffold MUST trip the residue detector (rc=$_sr_rc); the token set has drifted from phase_scaffold_release_notes"; failures=$((failures+1)); }
+    [[ -n "${_sr_res%%|*}" ]] || { echo "FAIL: AC1-T1 must NAME the offending token, got '$_sr_res'"; failures=$((failures+1)); }
+    [[ "${_sr_res#*|}" =~ ^[0-9]+$ ]] || { echo "FAIL: AC1-T1 must report a numeric line, got '$_sr_res'"; failures=$((failures+1)); }
+  fi
+
+  # (b) AC1-T2 — a fully-authored note trips nothing (no false positive). Written
+  # into the sandbox notes dir so (b1) below can use it as the negative control.
+  local _sr_authored="$RELEASE_NOTES_DIR/v9.98_RELEASE_NOTES.md"
+  /bin/cat > "$_sr_authored" <<'AUTHORED'
+---
+version: v9.98
+summary: "A real one-sentence summary written by a human."
+---
+# Close-out now refuses to ship an unauthored release note
+
+## What changed for everyone using the platform
+
+- **Unfilled release notes no longer reach the Releases page.** *Why it matters:* the
+  note you read is the note someone actually wrote.
+AUTHORED
+  local _sr_rc2=0
+  /usr/bin/awk '{print NR "\t" $0}' "$_sr_authored" | scan_scaffold_residue >/dev/null || _sr_rc2=$?
+  [[ "$_sr_rc2" -eq 0 ]] || { echo "FAIL: AC1-T2 — an authored note must produce NO residue finding (rc=$_sr_rc2)"; failures=$((failures+1)); }
+
+  # (b1) AC1-T5 — the PYTHON anchor (lint_release_corpus.py check_note_content).
+  # Drives the real check against a 2-note sandbox population: the scaffold from (a)
+  # and the authored note from (b). Asserts on a NON-EMPTY population with a control —
+  # exactly one NOTE-SCAFFOLD-RESIDUE, naming the scaffold and not the authored note.
+  # Hermetic: the module is imported and NOTES_DIR rebound, so the live corpus is
+  # never read and no network or credential is involved.
+  local _sr_lintout
+  _sr_lintout="$(/usr/bin/python3 - "$LINT_RELEASE_CORPUS" "$RELEASE_NOTES_DIR" <<'PY' 2>&1 || true
+import importlib.util, pathlib, sys
+lint_path, notes_dir = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("lint_rc_selftest", lint_path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+mod.NOTES_DIR = pathlib.Path(notes_dir)
+for finding in mod.check_note_content():
+    print(finding)
+PY
+)"
+  local _sr_resn
+  _sr_resn="$(printf '%s\n' "$_sr_lintout" | /usr/bin/grep -c 'NOTE-SCAFFOLD-RESIDUE' || true)"
+  [[ "$_sr_resn" -eq 1 ]] || { echo "FAIL: AC1-T5 — check_note_content() must emit EXACTLY 1 NOTE-SCAFFOLD-RESIDUE over the 2-note sandbox (scaffold + authored), got $_sr_resn"; failures=$((failures+1)); }
+  printf '%s\n' "$_sr_lintout" | /usr/bin/grep 'NOTE-SCAFFOLD-RESIDUE' | /usr/bin/grep -qF 'v9.99_RELEASE_NOTES.md' || { echo "FAIL: AC1-T5 — the residue finding must name the SCAFFOLD note (v9.99)"; failures=$((failures+1)); }
+  if printf '%s\n' "$_sr_lintout" | /usr/bin/grep 'NOTE-SCAFFOLD-RESIDUE' | /usr/bin/grep -qF 'v9.98_RELEASE_NOTES.md'; then
+    echo "FAIL: AC1-T5 — the AUTHORED note (v9.98) must NOT be flagged as residue"; failures=$((failures+1))
+  fi
+
+  # (c) AC1-T4 — residue in THIS version's CHANGELOG slice FAILs and names the token.
+  /bin/cat > "$_sr_tmp/CHANGELOG.md" <<'CL'
+# Changelog
+
+## [v9.99] - 2026-07-30
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+
+## [v9.98] - 2026-07-01
+
+A properly authored earlier entry.
+CL
+  /bin/cat > "$RELEASE_DIGEST" <<'DG'
+## v9.x
+
+### v9.99 (2026-07-30) — <headline — populated by operator at chore PR review>
+DG
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_assert_derived_surfaces >/dev/null 2>&1; then
+    echo "FAIL: AC1-T4 — phase_assert_derived_surfaces must return non-zero on residue in THIS version's entry"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: AC1-T4 must mark the phase FAIL, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+  get_phase assert_derived_surfaces | /usr/bin/grep -qF 'CHANGELOG.md:' || { echo "FAIL: AC1-T4 detail must name the surface and line, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
+  # (d) AC1-T3 audit-baseline control — residue for ANOTHER version must NOT block
+  # this version's close. This is the control that proves the phase is version-scoped;
+  # without it a corpus-wide scan would pass every other assertion in this block.
+  /bin/cat > "$_sr_tmp/CHANGELOG.md" <<'CL2'
+# Changelog
+
+## [v9.99] - 2026-07-30
+
+A properly authored current entry.
+
+## [v9.98] - 2026-07-01
+
+<one-sentence ≤140 chars; plain language; agent-search target>
+CL2
+  /bin/cat > "$RELEASE_DIGEST" <<'DG2'
+## v9.x
+
+### v9.99 (2026-07-30) — A properly authored current headline
+
+### v9.98 (2026-07-01) — <headline — populated by operator at chore PR review>
+DG2
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_assert_derived_surfaces >/dev/null 2>&1 || { echo "FAIL: AC1-T3 — another version's pre-existing residue must NOT block this close (audit-baseline discipline)"; failures=$((failures+1)); }
+  [[ "$(get_phase assert_derived_surfaces | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: AC1-T3 must mark PASS, got '$(get_phase assert_derived_surfaces)'"; failures=$((failures+1)); }
+
+  # (e) AC2 — preflight working-tree tolerance. Drives the shipped predicate with
+  # synthetic porcelain text (no git, no network).
+  local _sr_tol
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.99_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -z "$_sr_tol" ]] || { echo "FAIL: AC2-T1 — an untracked note for THIS version must be tolerated, got '$_sr_tol'"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.98_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T2 — an untracked note for ANOTHER version must still block"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' " M release/releases/notes/v9.99_RELEASE_NOTES.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T3 — a MODIFIED-tracked note must still block (tolerance is untracked-only)"; failures=$((failures+1)); }
+  _sr_tol="$(printf '%s\n' "?? CHANGELOG.md" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T4 — an unrelated untracked file must still block (tolerance must not generalize)"; failures=$((failures+1)); }
+  # T5 makes `grep -x` load-bearing: a same-prefix sibling must NOT inherit the
+  # tolerance. Without this case a substring match would pass every other AC2 test.
+  _sr_tol="$(printf '%s\n' "?? release/releases/notes/v9.99_RELEASE_NOTES.md.bak" | filter_tolerated_worktree_state)"
+  [[ -n "$_sr_tol" ]] || { echo "FAIL: AC2-T5 — a same-prefix sibling (.bak) must still block; the tolerance is a whole-line match, not a prefix"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_sr_tmp" 2>/dev/null || true
+  REPO_ROOT="$_sr_saved_root"; MODE="$_sr_saved_mode"; VERSION="$_sr_saved_version"
+  RELEASE_NOTES_DIR="$_sr_saved_notesdir"; RELEASE_DIGEST="$_sr_saved_digest"
+  PR_NUMBER="$_sr_saved_pr"; STATE_MILESTONE_SLUG="$_sr_saved_slug"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -4167,6 +4344,7 @@ STUB
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
+  echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
