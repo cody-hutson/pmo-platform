@@ -6446,8 +6446,10 @@ cmd_check() {
   #   field 2  <governing-schema-path>
   #   field 3  <schema H2 anchor>  (the "## <anchor>" heading bounding the schema block)
   #   field 4  <pipe-delimited expected H2 sections the template MUST carry>
-  # Fields are split with `awk -F'\|\|\|'` (NOT `IFS='|||' read`, which bash collapses
-  # to single-'|' separators and silently empties fields 2/3).
+  # Fields are split with `awk -F'\\|\\|\\|'` — the separator needs DOUBLE backslashes.
+  # A single-backslash `-F'\|\|\|'` yields an empty field count inside a command
+  # substitution under BSD awk, producing a FALSE MALFORMED verdict. Not `IFS='|||' read`
+  # either, which bash collapses to single-'|' separators and silently empties fields 2/3.
   #
   # Warn-mode initial via flag_warn_or_issue / deploy-check.mode (the Checks 8-10 /
   # 13b / 14 / 33 precedent): in warn-mode a breach logs WARN: + appends

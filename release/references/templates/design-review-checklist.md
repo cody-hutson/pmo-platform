@@ -128,6 +128,8 @@ Consolidates architecture alignment, pattern consistency, ADR quality, and withi
 
 ---
 
+- [ ] **4.7 Gate-efficacy runner resolution** — If this design ADDS or MODIFIES a **prose-declared normative predicate** (a passage stating a verdict — FAIL / MUST / blocks — where no code implements it), it MUST name a resolvable runner per [`core/standards/gate-efficacy-standard.md`](../../../core/standards/gate-efficacy-standard.md) Requirement (b) § "Runner resolution — class 3", and carry its row in that file's gate-coverage register. Two-limb trigger: **L1** the passage states a verdict, **L2** no code implements it. `L1 ∧ L2` is class 3 and owes a named runner; `L1 ∧ ¬L2` is class 2 and the implementing check carries the declaration. When no runner can be named, take one of the two dispositions the standard defines — **wire it** (implement as a `deploy.sh --check` gate, CI job, or `--self-test` case) or **downgrade it** (restate as non-normative description, dropping the verdict language). Verify the named runner *actually carries the check* — a declaration naming a surface that does not run the predicate is the defect this requirement exists to prevent, not a satisfaction of it.
+
 ## Section 5 — Risk register
 
 Captures contention, scope, rollback-complexity, and one-way-door risks discovered during solutioning. Reversibility tier + confidence labeling is mandatory per [`CLAUDE.md`](<OPERATOR_INSTANCE_CLAUDE_MD>) Reversibility discipline.

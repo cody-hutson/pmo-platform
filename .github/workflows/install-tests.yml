@@ -150,10 +150,15 @@ jobs:
         # --break-system-packages idiom as the pytest step above (PEP 668).
         # Idempotent: only install when yaml is not already importable.
         run: |
-          if ! python3 -c 'import yaml' >/dev/null 2>&1; then
-            python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2'
+          # Target /usr/bin/python3 EXPLICITLY: deploy.sh's build_skill_to_dir()
+          # invokes `/usr/bin/python3 -m scripts.package_skill` by absolute path.
+          # A PATH-resolved `python3` coincides on this image but is not guaranteed
+          # to — any setup-python/brew/venv step ahead of it would have us checking
+          # and installing into an interpreter the consumer never runs.
+          if ! /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1; then
+            /usr/bin/python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2'
           fi
-          python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+          /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
 
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
         run: bash core/deploy/tests/test_sandbox_roots.sh
