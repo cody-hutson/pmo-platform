@@ -319,7 +319,7 @@ These criteria apply when the Research-Methodology Design variant activates; a c
 **Cutover discipline (introducing-release-exempt):** Applies to releases entering Stage 5 strictly AFTER this criterion's introducing-release merge SHA recorded in the release log. The introducing release itself is exempt (reflexive-pipeline loop — it cannot fire its own new gate).
 
 ## 8. Automation Level
-Overall Tier 2. Today: agent runs A1-A5 in conversation. Target: Principal Engineer skill (Modes 1-4) auto-generates design analysis from release plan.
+Overall Tier 2. Today: the `pmo-principal-engineer` skill supplies the design-analysis persona and runs A1-A5 against the release plan as a hub-spoke driven by this spec (Mode 1 Architecture & NFR Governance; Mode 2 Build-vs-Buy & Design Review); the operator accepts/redirects/escalates at Phase B (Tier 3).
 
 ## 9. Gap Summary
 10 gaps identified. Key items: mixed per-issue routing future state (P3), the documentation best-practice review (P2).
