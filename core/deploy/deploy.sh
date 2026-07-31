@@ -365,6 +365,57 @@ _vf_freeness_core() {
   printf 'FREE\n'
 }
 
+# _vf_deployed_rows_from_log — echo the Version cell of every DEPLOYED-state row in a
+#   RELEASE_LOG, one per line. Returns 3 (with a stderr diagnostic) when the schema header
+#   cannot be resolved. Split out of _vf_build_claimed_set for ONE reason: as an inline arm
+#   of that function's `{ … } | sed | sort -u` pipeline its rc was structurally unobservable,
+#   so the exit 3 below could never reach any caller (DT-2). A standalone function has an rc
+#   the caller can read.
+_vf_deployed_rows_from_log() {
+  local _log="$1"
+  # (3) RELEASE_LOG rows in DEPLOYED (tag-pushed-but-Release-unpublished) state.
+  #
+  # COLUMNS ARE PINNED BY HEADER NAME, NEVER BY ORDINAL. This arm previously read
+  # `st=$7` and called it State. It is not: under `awk -F'|'` the leading table pipe
+  # makes $1 empty, so the 8-column schema
+  #   | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+  # maps Version=$2, Tag=$7, State=$8. A Tag cell holds a backticked version, never
+  # the literal DEPLOYED, so `st == "DEPLOYED"` could never be true for a well-formed
+  # row and this whole arm was structurally dead — deploy.sh could not see an
+  # in-flight claim at all. claim-version.sh::_host_release_log_deployed fixed the
+  # identical off-by-one and the correction never reached this parallel copy.
+  # Resolving by NAME removes the failure mode rather than correcting one instance
+  # of it: a future column insertion shifts the ordinals and this arm keeps working.
+    awk -F'|' '
+      function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+      /^\|/ {
+        if (!have) {
+          # Header row = the first pipe-row carrying BOTH column names. Prose pipes
+          # and stray tables above the schema are skipped rather than misread.
+          v = 0; s = 0
+          for (i = 1; i <= NF; i++) {
+            c = trim($i)
+            if (c == "Version") v = i
+            if (c == "State")   s = i
+          }
+          if (v && s) { vcol = v; scol = s; have = 1 }
+          next
+        }
+        ver = trim($vcol); st = trim($scol)
+        if (st == "DEPLOYED" && ver ~ /^v[0-9]/) print ver
+      }
+      END {
+        # Fail LOUD, not silently-empty: an unreadable schema is the condition that
+        # produced this defect, so it is reported rather than inferred from emptiness.
+        if (!have) { print "deploy.sh: _vf_build_claimed_set — RELEASE_LOG header row has no Version+State columns; the DEPLOYED arm was not evaluated" > "/dev/stderr"; exit 3 }
+      }
+    ' "$_log"
+    # NB: awk stderr is deliberately NOT sent to /dev/null here. The END-block
+    # diagnostic above is the whole point — an unreadable schema must be visible,
+    # not inferred from an empty arm. The program is fixed and the file existence
+    # is guarded, so there is no other stderr this could surface.
+}
+
 # _vf_build_claimed_set  — echo the claimed_set, one canonical version per line.
 #   The union (DD3): published GitHub Release tags U origin signed tags U RELEASE_LOG
 #   rows in DEPLOYED-not-VERIFIED state. This is deploy-local I/O (the SAME sources
@@ -377,8 +428,25 @@ _vf_freeness_core() {
 #   merge gate wants (an orphan v3.x tag that parses canonical is simply a member
 #   that will not tuple-collide with a v2.x candidate; a NON-canonical tag triggers
 #   the fail-closed path, by design).
+#   RC CONTRACT (load-bearing — DT-2). The DEPLOYED arm's `exit 3` on an unreadable
+#   RELEASE_LOG schema is the whole point of the END-block diagnostic, and it MUST
+#   reach the caller. It previously could not: the arm ran INSIDE the `{ … } | sed |
+#   sort -u` pipeline under a trailing `|| true`, so the function's rc was `sort`'s
+#   (always 0) and the arm degraded to a silently-empty one. From the caller's
+#   position an unreadable schema was then indistinguishable from "nothing is
+#   DEPLOYED" — the exact fail-open shape this function exists to close, recreated
+#   inside its own fix. The arm is therefore evaluated BEFORE the pipeline, its rc
+#   captured, and re-raised as the function's rc after the pipeline has emitted. The
+#   caller (_vf_compute_verdict) rc-checks and fails closed to UNDECIDABLE.
 _vf_build_claimed_set() {
   local repo="$1"
+  # (3) evaluated FIRST, outside the pipeline, so its rc survives (see RC CONTRACT).
+  # stderr is deliberately NOT redirected — the END-block diagnostic must stay visible.
+  local _deployed="" _deployed_rc=0
+  local _log="${_audit_src_root:-.}/release/releases/RELEASE_LOG.md"
+  if [[ -f "$_log" ]]; then
+    _deployed="$(_vf_deployed_rows_from_log "$_log")" || _deployed_rc=$?
+  fi
   {
     # (1) published Release tags (the authoritative anchor, same as Check 39).
     if [[ -n "$repo" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -387,51 +455,14 @@ _vf_build_claimed_set() {
     # (2) origin signed tags.
     git -C "${_audit_src_root:-.}" ls-remote --tags origin 2>/dev/null \
       | sed -e 's#.*refs/tags/##' -e 's/\^{}$//' || true
-    # (3) RELEASE_LOG rows in DEPLOYED (tag-pushed-but-Release-unpublished) state.
-    #
-    # COLUMNS ARE PINNED BY HEADER NAME, NEVER BY ORDINAL. This arm previously read
-    # `st=$7` and called it State. It is not: under `awk -F'|'` the leading table pipe
-    # makes $1 empty, so the 8-column schema
-    #   | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
-    # maps Version=$2, Tag=$7, State=$8. A Tag cell holds a backticked version, never
-    # the literal DEPLOYED, so `st == "DEPLOYED"` could never be true for a well-formed
-    # row and this whole arm was structurally dead — deploy.sh could not see an
-    # in-flight claim at all. claim-version.sh::_host_release_log_deployed fixed the
-    # identical off-by-one and the correction never reached this parallel copy.
-    # Resolving by NAME removes the failure mode rather than correcting one instance
-    # of it: a future column insertion shifts the ordinals and this arm keeps working.
-    local _log="${_audit_src_root:-.}/release/releases/RELEASE_LOG.md"
-    if [[ -f "$_log" ]]; then
-      awk -F'|' '
-        function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
-        /^\|/ {
-          if (!have) {
-            # Header row = the first pipe-row carrying BOTH column names. Prose pipes
-            # and stray tables above the schema are skipped rather than misread.
-            v = 0; s = 0
-            for (i = 1; i <= NF; i++) {
-              c = trim($i)
-              if (c == "Version") v = i
-              if (c == "State")   s = i
-            }
-            if (v && s) { vcol = v; scol = s; have = 1 }
-            next
-          }
-          ver = trim($vcol); st = trim($scol)
-          if (st == "DEPLOYED" && ver ~ /^v[0-9]/) print ver
-        }
-        END {
-          # Fail LOUD, not silently-empty: an unreadable schema is the condition that
-          # produced this defect, so it is reported rather than inferred from emptiness.
-          if (!have) { print "deploy.sh: _vf_build_claimed_set — RELEASE_LOG header row has no Version+State columns; the DEPLOYED arm was not evaluated" > "/dev/stderr"; exit 3 }
-        }
-      ' "$_log" || true
-      # NB: awk stderr is deliberately NOT sent to /dev/null here. The END-block
-      # diagnostic above is the whole point — an unreadable schema must be visible,
-      # not inferred from an empty arm. The program is fixed and the file existence
-      # is guarded, so there is no other stderr this could surface.
-    fi
+    # (3) RELEASE_LOG DEPLOYED rows. Computed ABOVE, outside this pipeline, so the
+    #     unreadable-schema exit 3 survives to the caller (see the RC CONTRACT).
+    #     Emitted here so the union's shape and the shared grammar filter are unchanged.
+    [[ -n "$_deployed" ]] && printf '%s\n' "$_deployed"
   } | sed '/^$/d' | sort -u
+  # Re-raise the DEPLOYED arm's rc AFTER the pipeline has emitted: a partial claimed_set is
+  # still worth returning, but the caller must be told it is partial-BY-FAILURE, not empty.
+  return "$_deployed_rc"
 }
 
 # _vf_resolve_candidate  — echo the claim-time candidate version, or empty if no
@@ -538,8 +569,22 @@ _vf_compute_verdict() {
   fi
 
   # Build claimed_set (deploy-local I/O) and decide freeness via the SSOT core.
-  local claimed claimed_arr=()
-  claimed="$(_vf_build_claimed_set "${AUDIT_REPO:-}")"
+  #
+  # RC-CHECKED, on BOTH surfaces (DT-2). A non-zero rc here means the RELEASE_LOG
+  # schema was unreadable, so the DEPLOYED arm was never evaluated and the claimed
+  # set is partial BY FAILURE. Branching on `[[ -n "$claimed" ]]` alone made that
+  # state indistinguishable from "nothing is DEPLOYED" — a partial set silently
+  # certifies a colliding candidate FREE, which is the fail-open shape this whole
+  # check exists to close. UNDECIDABLE on the lifecycle surface too (not NA): unlike
+  # an offline anchor, an unreadable corpus schema is a repo defect the operator can
+  # and must fix, not an environment condition to degrade around.
+  local claimed claimed_arr=() _cs_rc=0
+  claimed="$(_vf_build_claimed_set "${AUDIT_REPO:-}")" || _cs_rc=$?
+  if [[ "$_cs_rc" -ne 0 ]]; then
+    printf 'UNDECIDABLE %s claimed-set-partial-by-failure (rc=%s; RELEASE_LOG schema unreadable — the DEPLOYED arm was not evaluated, see stderr) — fail-closed\n' \
+      "$candidate" "$_cs_rc"
+    return 0
+  fi
   if [[ -n "$claimed" ]]; then
     local _l
     while IFS= read -r _l; do [[ -n "$_l" ]] && claimed_arr+=("$_l"); done <<<"$claimed"
@@ -8436,6 +8481,73 @@ EOF
   _vferr="$(_audit_src_root="$_vft" _vf_build_claimed_set "" 2>&1 1>/dev/null || true)"
   /usr/bin/grep -q 'Version+State' <<< "$_vferr" || { echo "FAIL: VF-5 an unresolvable header must be reported on stderr, not read as an empty arm"; failures=$((failures+1)); }
 
+  # VF-6 / VF-7 — DT-2: the loud failure must be OBSERVABLE, not merely EMITTED.
+  # VF-5 above proves the diagnostic is written to stderr. It does not prove anyone
+  # can act on it: the arm's `exit 3` used to die inside a `{ … } | sed | sort -u`
+  # pipeline under `|| true`, so the function's rc was `sort`'s and the sole caller
+  # branched on output-emptiness alone. Measured pre-fix: rc=0, stdout=[]. From the
+  # caller's position an unreadable schema was indistinguishable from "nothing is
+  # DEPLOYED" — a partial claimed_set silently certifying a colliding candidate FREE.
+  # VF-6 pins the rc; VF-7 pins the caller's VERDICT, which is the property that
+  # actually matters. Each carries a negative control (VF-6b / VF-7b) so neither can
+  # pass by the harness being uniformly broken.
+  local _vfrc
+
+  # VF-6: unreadable header -> the FUNCTION returns non-zero (the header is still the
+  # malformed one written for VF-5).
+  _vfrc=0; _audit_src_root="$_vft" _vf_build_claimed_set "" >/dev/null 2>&1 || _vfrc=$?
+  [[ "$_vfrc" -ne 0 ]] || { echo "FAIL: VF-6 an unreadable RELEASE_LOG schema must return non-zero to the caller (got rc=0 — the exit 3 is being swallowed again)"; failures=$((failures+1)); }
+
+  # VF-6b negative control: a WELL-FORMED log returns ZERO. Without this leg VF-6
+  # would also pass on a function hardwired to fail.
+  /bin/cat > "$_vflog" <<'EOF'
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.96 | m-ok | #11 | #12 | `fff` | `v9.96` | DEPLOYED | 2026-07-30 |
+EOF
+  _vfrc=0; _audit_src_root="$_vft" _vf_build_claimed_set "" >/dev/null 2>&1 || _vfrc=$?
+  [[ "$_vfrc" -eq 0 ]] || { echo "FAIL: VF-6b a well-formed RELEASE_LOG must return rc 0 (got $_vfrc — VF-6 would be vacuous)"; failures=$((failures+1)); }
+
+  # VF-7 / VF-7b exercise the REAL caller, _vf_compute_verdict, end-to-end. Hermetic:
+  # `gh` is shadowed by a shell function (satisfying the `command -v` + `auth status`
+  # probes without a network call and returning an empty releases list), the sandbox
+  # is not a git repo so the origin-tags arm is a silent no-op, and the candidate is
+  # injected. Only the RELEASE_LOG differs between the two legs.
+  /bin/mkdir -p "$_vft/release/tools"
+  /bin/cp "${_audit_src_root:-.}/release/tools/version-grammar.sh" "$_vft/release/tools/" 2>/dev/null || true
+  if [[ -f "$_vft/release/tools/version-grammar.sh" ]]; then
+    gh() { case "$1" in auth) return 0 ;; api) return 0 ;; *) return 0 ;; esac; }
+    local _vfv
+
+    # VF-7b (control, runs FIRST): well-formed log, non-colliding candidate -> FREE.
+    # Establishes that this harness CAN reach a decided verdict at all.
+    _vfv="$(_audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.99" \
+            _vf_compute_verdict lifecycle 2>/dev/null)"
+    [[ "${_vfv%% *}" == "FREE" ]] || { echo "FAIL: VF-7b control — a well-formed corpus must reach a decided verdict (expected FREE, got '$_vfv'); VF-7 would be vacuous"; failures=$((failures+1)); }
+
+    # VF-7: same candidate, UNREADABLE schema -> the caller must fail closed to
+    # UNDECIDABLE. Pre-fix this returned FREE: the arm was silently empty, so the
+    # candidate collided with nothing. This is the assertion the fix exists for.
+    /bin/cat > "$_vflog" <<'EOF'
+| Release | Milestone | Status |
+|---|---|---|
+| v9.99 | m-noheader | DEPLOYED |
+EOF
+    _vfv="$(_audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.99" \
+            _vf_compute_verdict lifecycle 2>/dev/null)"
+    [[ "${_vfv%% *}" == "UNDECIDABLE" ]] || { echo "FAIL: VF-7 an unreadable RELEASE_LOG schema must fail the CALLER closed to UNDECIDABLE, got '$_vfv' (FREE here is the DT-2 fail-open)"; failures=$((failures+1)); }
+    /usr/bin/grep -q 'partial-by-failure' <<< "$_vfv" || { echo "FAIL: VF-7 the UNDECIDABLE reason must name the partial-by-failure cause, got '$_vfv'"; failures=$((failures+1)); }
+
+    # VF-7c: the gate surface must not be MORE permissive than lifecycle.
+    _vfv="$(_audit_src_root="$_vft" AUDIT_REPO="acme/widget" PMO_VERSION_FREENESS_CANDIDATE="v9.99" \
+            _vf_compute_verdict gate 2>/dev/null)"
+    [[ "${_vfv%% *}" == "UNDECIDABLE" ]] || { echo "FAIL: VF-7c the merge gate must also fail closed on an unreadable schema, got '$_vfv'"; failures=$((failures+1)); }
+
+    unset -f gh
+  else
+    echo "FAIL: VF-7 could not stage version-grammar.sh into the sandbox — the caller-verdict assertions would be vacuous"; failures=$((failures+1))
+  fi
+
   /bin/rm -rf "$_vft" 2>/dev/null || true
 
   if [[ "$failures" -gt 0 ]]; then
@@ -8444,7 +8556,7 @@ EOF
   fi
   echo "self-test: PASS" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
-  echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported" >&2
+  echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5):" >&2
   echo "    dormant cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
