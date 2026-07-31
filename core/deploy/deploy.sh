@@ -5668,9 +5668,29 @@ cmd_check() {
         local _stripped
         _stripped=$(awk '/^[[:space:]]*```/ { f=!f; next } !f { print }' "$_f" 2>/dev/null)
         # per-file override markers
+        #
+        # PLUMBING (#3833 — same defect class as #4224, fixed the same way): each probe
+        # reads its subject from a HERESTRING, never by piping the stripped body into a
+        # quiet grep. (This note deliberately avoids spelling that pipeline literally, so
+        # the negative assertion that bounds this defect — zero such pipelines in this
+        # file — cannot match its own explanatory text and pass vacuously.)
+        # Under this script's `set -euo pipefail` (line 2) a `grep -q` that matches EARLY
+        # exits before echo has finished writing; echo then takes SIGPIPE and pipefail
+        # promotes its 141 to the pipeline's status — so a SUCCESSFUL match reported
+        # FAILURE, the `&&` never fired, and the file's override marker was silently
+        # ignored. Every in-scope file whose fence-stripped body exceeds the 64 KB pipe
+        # capacity lost its marker deterministically (7 of 164 for Class L, 3 of 26 for
+        # Class V); files near that boundary lost it as a race, which is what made the
+        # reported Class-L count vary run-to-run on a byte-identical corpus. A herestring
+        # gives grep a pre-filled input, so there is no writer left to signal.
+        #
+        # BOTH probes are converted. Class V was asymptomatic at the headline COUNT only
+        # because its 3 dropped files carry no Class-V matches — its skip tally was wrong
+        # on every run just the same. Converting one and not the other leaves the identical
+        # defect armed behind a number that happens not to move yet.
         local _allow_link=0 _allow_version=0
-        echo "$_stripped" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' && _allow_link=1
-        echo "$_stripped" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' && _allow_version=1
+        grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' <<< "$_stripped" && _allow_link=1
+        grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' <<< "$_stripped" && _allow_version=1
         if [[ $_allow_link -eq 0 ]]; then
           local _lc
           _lc=$(echo "$_stripped" | grep -cE "$c31_link_re" || true)
