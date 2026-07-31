@@ -923,7 +923,7 @@ The PMO role-Specialist suite is now GA — five Release-to-Sustain role agents 
 
 [Full notes](release/releases/notes/v2.15_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v2.15)
 
-## [v2.12] - 2026-06-20
+## [v2.12] - 2026-06-21
 
 Filing and grading a work item now checks more of its form at intake, keeps body-stated priority in sync with the tracker, and lets you tag an improvement's domain.
 
