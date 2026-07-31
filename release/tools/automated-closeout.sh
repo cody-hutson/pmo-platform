@@ -32,6 +32,7 @@
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift)
+#   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
 #   16.5 pattern_scan      optional synthesize-release-learnings.sh --mode pattern-detect (only with --with-pattern-scan)
@@ -2699,6 +2700,132 @@ _drift_block_in_scope() {
   return 1
 }
 
+# ─── Phase 15.55: assert_anchor_hygiene (AC4 + AC5) ──────────────────────────
+#
+# Every shipped release is anchored by three artifacts that must agree: an ANNOTATED
+# git tag, a published GitHub Release, and a row in each of RELEASE_INDEX/RELEASE_LOG.
+# Nothing asserted that they stay in step, and the drift that resulted is invisible to
+# a count: there are 143 annotated tags and 143 published Releases, and the sets are
+# NOT equal — two tags have no Release, and two Releases sit on lightweight tags. A
+# count comparison grades that PASS. This guard is therefore SET-based, and must stay
+# set-based; regressing it to `wc -l` reintroduces the exact false negative it exists
+# to remove.
+#
+# EXEMPTION SETS, NOT A BARE GUARD. Four parity divergences and one tagger-hygiene
+# violation exist today. A bare guard would fail on merge, and the platform does not
+# ship red CI. Each known divergence is listed below WITH its date and reason, so the
+# guard blocks every NEW divergence while the recorded ones stand. Remediating them is
+# separately owned: publishing the two missing Releases is a public-surface mutation,
+# and re-tagging v3.80 force-updates a published tag (EXPENSIVE, operator-gated).
+# Neither is performed here. The idiom follows the linter's existing
+# PRE_CUTOVER_EXEMPT_VERSIONS / NOTE_LINK_EXEMPT_VERSIONS sets rather than inventing a
+# new suppression mechanism.
+#
+# Recorded 2026-07-30. Removing an entry once its divergence is remediated is the
+# intended lifecycle — these are not permanent.
+ANCHOR_PARITY_EXEMPT_TAGS=(
+  v3.31    # annotated tag, no published GitHub Release; Release-publication routed out of this card
+  v3.65.1  # annotated tag, no published GitHub Release; Release-publication routed out of this card
+  v3.28    # published Release sitting on a LIGHTWEIGHT tag; re-tag is operator-gated
+  v3.29    # published Release sitting on a LIGHTWEIGHT tag; re-tag is operator-gated
+)
+TAGGER_HYGIENE_EXEMPT_TAGS=(
+  v3.80    # annotated tag whose tagger is the placeholder identity `t <t@t>`; the fix
+           # force-updates a tag that a published Release points at (EXPENSIVE) and is
+           # a discrete operator decision, deliberately not executed by close-out
+)
+
+# Emits the annotated tags (one per line, sorted) of the repo at $1.
+# `%(objecttype)` filtering is the load-bearing part: a LIGHTWEIGHT tag has
+# objecttype `commit` and carries no tagger at all, so an unfiltered probe mixes two
+# different defect classes and cannot be driven to empty.
+annotated_tags_of() {
+  $GIT -C "$1" for-each-ref refs/tags --format='%(objecttype) %(refname:short)' 2>/dev/null \
+    | /usr/bin/awk '$1=="tag"{print $2}' | /usr/bin/sort
+}
+
+# AC5 — emits annotated tags whose tagger identity is neither a GitHub noreply address
+# nor an accepted exemption. Reads the repo at $1.
+tagger_hygiene_violations() {
+  local exempt; exempt="$(/usr/bin/printf '%s\n' "${TAGGER_HYGIENE_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
+  local line name
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    name="$(/usr/bin/printf '%s' "$line" | /usr/bin/awk '{print $2}')"
+    if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$name"; then continue; fi
+    /usr/bin/printf 'TAGGER-IDENTITY %s\n' "$line"
+  done < <($GIT -C "$1" for-each-ref refs/tags --format='%(objecttype) %(refname:short) %(taggeremail)' 2>/dev/null \
+           | /usr/bin/awk '$1=="tag"' | /usr/bin/grep -v 'users.noreply.github.com' || true)
+}
+
+# AC4 — emits the two-way set difference between the annotated-tag list in file $1 and
+# the published-Release tag list in file $2, minus the recorded exemptions. Both files
+# must be sorted. Taking files (not live probes) is what makes this testable offline:
+# the self-test drives it with fixtures, no gh and no network.
+anchor_parity_violations() {
+  local ann_file="$1" rel_file="$2"
+  local exempt; exempt="$(/usr/bin/printf '%s\n' "${ANCHOR_PARITY_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
+  local t
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
+    /usr/bin/printf 'MISSING-RELEASE %s (annotated tag with no published GitHub Release)\n' "$t"
+  done < <(/usr/bin/comm -23 "$ann_file" "$rel_file")
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
+    /usr/bin/printf 'MISSING-ANNOTATED-TAG %s (published GitHub Release with no annotated tag)\n' "$t"
+  done < <(/usr/bin/comm -13 "$ann_file" "$rel_file")
+}
+
+phase_assert_anchor_hygiene() {
+  local findings="" tmp
+  tmp="$(/usr/bin/mktemp -d -t anchorhygiene.XXXXXX)"
+
+  # (1) AC5 — tagger identity on annotated tags. Offline; always runs.
+  local _tg; _tg="$(tagger_hygiene_violations "$REPO_ROOT")"
+  [[ -n "$_tg" ]] && findings="${findings}${_tg}"$'\n'
+
+  # (2) AC4a — INDEX/LOG row parity. Offline; always runs. COMPUTED, never hardcoded:
+  # a sibling card backfills ledger rows in this same release, so a pinned magnitude
+  # would go stale inside one merge.
+  local _idx _log
+  _idx="$(/usr/bin/grep -cE '^\|[[:space:]]*v[0-9]' "$RELEASE_INDEX" 2>/dev/null || echo 0)"
+  _log="$(/usr/bin/grep -cE '^\|[[:space:]]*v[0-9]+\.[0-9]+' "$RELEASE_LOG" 2>/dev/null || echo 0)"
+  if [[ "$_idx" -ne "$_log" ]]; then
+    findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
+  fi
+
+  # (3) AC4b — annotated-tag <-> published-Release set parity. NETWORK. A gh failure is
+  # SKIPPED-with-a-loud-reason, never a silent pass: "could not check" and "checked and
+  # clean" must never render the same.
+  local _net_note=""
+  annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
+  if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
+     && [[ -s "$tmp/rel" ]]; then
+    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel")"
+    [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
+  else
+    _net_note="; tag<->Release set parity NOT CHECKED (gh release list unavailable — offline or credential-less)"
+  fi
+
+  /bin/rm -rf "$tmp" 2>/dev/null || true
+
+  if [[ -n "${findings//[$'\n']/}" ]]; then
+    mark_phase "assert_anchor_hygiene" "FAIL" "release-anchor drift: $(/usr/bin/printf '%s' "$findings" | /usr/bin/tr '\n' ' ' | /usr/bin/sed 's/  */ /g')— a NEW divergence appeared outside the recorded exemption sets; reconcile the anchors before closing"
+    /usr/bin/printf '%s' "$findings" >&2
+    return 1
+  fi
+
+  local _annn; _annn="$(/usr/bin/grep -c . <<< "$(annotated_tags_of "$REPO_ROOT")" || echo 0)"
+  if [[ -n "$_net_note" ]]; then
+    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; INDEX ${_idx} == LOG ${_log} rows)${_net_note}"
+  else
+    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; INDEX ${_idx} == LOG ${_log} rows)"
+  fi
+  return 0
+}
+
 # ─── Phase 15.6: check_release_body_drift (post-emit §5.1 drift assert) ──────────
 #
 # DETECTIVE-ONLY post-emit verification that the just-published Release body
@@ -2894,7 +3021,7 @@ generate_markdown_report() {
 | Phase | Result | Detail |
 |-------|--------|--------|
 EOF
-  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr sync_primary_checkout reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release check_release_body_drift invoke_orphan_cleanup pattern_scan)
+  local phases=(preflight read_state detect_open_issues create_chore_branch transition_release_log inject_outcome_field append_release_index append_release_digest append_reversions scaffold_release_notes lint_release_notes append_changelog assert_derived_surfaces bump_version ledger_guard rebuild_skill_packages commit_chore_pr create_chore_pr await_merge_chore_pr sync_primary_checkout reparse_ledgers post_close_milestone manual_close_release_issues run_verification post_gate_passage_proof publish_github_release assert_anchor_hygiene check_release_body_drift invoke_orphan_cleanup pattern_scan)
   local p rd r d
   for p in "${phases[@]}"; do
     rd="$(get_phase "$p")"
@@ -4413,9 +4540,9 @@ DG2
       $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t checkout -q -b main 2>/dev/null
       /usr/bin/printf 'one\n' > "$_sp_tmp/seed/f.txt"
       $GIT -C "$_sp_tmp/seed" add f.txt 2>/dev/null
-      $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t commit -q -m c1 2>/dev/null
+      $GIT -C "$_sp_tmp/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c1 2>/dev/null
       $GIT -C "$_sp_tmp/seed" push -q origin main 2>/dev/null
-    ) >/dev/null 2>&1
+    ) >/dev/null 2>&1 || true
     if [[ -d "$_sp_tmp/origin.git" ]]; then
       $GIT clone -q "$_sp_tmp/origin.git" "$_sp_tmp/primary" >/dev/null 2>&1
       # Advance origin one commit so the primary is genuinely BEHIND.
@@ -4423,9 +4550,9 @@ DG2
         set +e
         /usr/bin/printf 'two\n' >> "$_sp_tmp/seed/f.txt"
         $GIT -C "$_sp_tmp/seed" add f.txt
-        $GIT -C "$_sp_tmp/seed" -c user.email=t@t -c user.name=t commit -q -m c2
+        $GIT -C "$_sp_tmp/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c2
         $GIT -C "$_sp_tmp/seed" push -q origin main
-      ) >/dev/null 2>&1
+      ) >/dev/null 2>&1 || true
       local _sp_before _sp_after _sp_target
       _sp_before="$($GIT -C "$_sp_tmp/primary" rev-parse HEAD 2>/dev/null || echo x)"
       _sp_target="$($GIT -C "$_sp_tmp/seed" rev-parse HEAD 2>/dev/null || echo y)"
@@ -4493,6 +4620,126 @@ DG2
   MODE="$_sp_saved_mode"; PRIMARY_CHECKOUT="$_sp_saved_primary"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 14: release-anchor hygiene (AC4 + AC5). Offline, hermetic, CREDENTIAL-FREE —
+  # the CI smoke job runs --self-test with no gh token and no network, so the AC4 half
+  # is driven with FIXTURE tag/release lists and the AC5 half against a real local git
+  # repo. Neither touches gh.
+  #
+  # The anti-vacuity controls are the point of this block: a guard that cannot fail is
+  # the exact defect this release exists to eliminate, and a count-based parity check
+  # is green today on a corpus that is genuinely divergent.
+  local _ah_tmp; _ah_tmp="$(/usr/bin/mktemp -d -t anchorhygiene-selftest.XXXXXX)"
+
+  # ---- AC4: set parity, fixture-driven ----
+  # Baseline: the only divergences are the four recorded exemptions -> clean.
+  /bin/cat > "$_ah_tmp/ann" <<'ANN'
+v3.31
+v3.65.1
+v9.01
+v9.02
+ANN
+  /bin/cat > "$_ah_tmp/rel" <<'REL'
+v3.28
+v3.29
+v9.01
+v9.02
+REL
+  local _ah_out
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
+  [[ -z "$_ah_out" ]] || { echo "FAIL: AC4-a — the four RECORDED divergences must be exempt, got: $_ah_out"; failures=$((failures+1)); }
+
+  # (b) ANTI-VACUITY CONTROL — inject a fifth, unrecorded divergence. Without this the
+  # whole AC4 assertion could be satisfied by a guard that never fires.
+  /usr/bin/printf 'v9.03\n' >> "$_ah_tmp/ann"; /usr/bin/sort -o "$_ah_tmp/ann" "$_ah_tmp/ann"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-b — a NEW annotated-tag-without-Release divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
+
+  # (c) the OTHER direction — a published Release with no annotated tag.
+  /usr/bin/printf 'v9.04\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-ANNOTATED-TAG v9.04' || { echo "FAIL: AC4-c — a Release-without-annotated-tag divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
+
+  # (d) COUNT-PARITY CONTROL — this is the false negative AC4 exists to kill. The two
+  # lists below have EQUAL LENGTH and UNEQUAL MEMBERSHIP, exactly like the live corpus
+  # (143 == 143, sets divergent). A count comparison grades this PASS; the set guard
+  # must not.
+  /bin/cat > "$_ah_tmp/ann_eq" <<'ANNEQ'
+v9.10
+v9.11
+ANNEQ
+  /bin/cat > "$_ah_tmp/rel_eq" <<'RELEQ'
+v9.10
+v9.12
+RELEQ
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann_eq" "$_ah_tmp/rel_eq")"
+  [[ -n "$_ah_out" ]] || { echo "FAIL: AC4-d — equal COUNTS with unequal SETS must still be reported; a count comparison is the exact false negative this guard replaces"; failures=$((failures+1)); }
+
+  # ---- AC5: tagger identity, real local git repo ----
+  if [[ -x "$GIT" ]]; then
+    local _ah_repo="$_ah_tmp/repo"
+    # Signing is disabled explicitly on every fixture command. An operator whose
+    # global config sets tag.gpgsign/commit.gpgsign turns a BARE `git tag` into a
+    # signed (therefore annotated) tag that then fails for want of a message — which
+    # silently destroys the lightweight-tag fixture and leaves the objecttype
+    # assertions passing against a tag that was never created. CI, with no global
+    # config, would build a different fixture than a developer machine.
+    local _ah_nosign=(-c tag.gpgsign=false -c commit.gpgsign=false)
+    (
+      set +e
+      $GIT init -q "$_ah_repo"
+      /usr/bin/printf 'x\n' > "$_ah_repo/f.txt"
+      $GIT -C "$_ah_repo" add f.txt
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=a@users.noreply.github.com -c user.name=a commit -q -m c1
+      # A conformant annotated tag (noreply tagger) — must NOT be flagged.
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=a@users.noreply.github.com -c user.name=a tag -a v9.50 -m t
+      # A NON-conformant annotated tag (placeholder identity) — MUST be flagged.
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=t@t -c user.name=t tag -a v9.51 -m t
+      # An EXEMPTED tag with the same defect — must NOT be flagged.
+      $GIT -C "$_ah_repo" "${_ah_nosign[@]}" -c user.email=t@t -c user.name=t tag -a v3.80 -m t
+      # A LIGHTWEIGHT tag. Written with update-ref, not `git tag`, so no signing or
+      # tagging config can turn it into an annotated one behind our back.
+      $GIT -C "$_ah_repo" update-ref refs/tags/v9.52 HEAD
+    ) >/dev/null 2>&1 || true
+    if [[ -d "$_ah_repo/.git" ]]; then
+      # FIXTURE PRECONDITIONS. Assert the fixture is actually shaped the way the
+      # assertions below assume — one annotated tag and one lightweight tag must both
+      # exist. Without this, a fixture that fails to build leaves every "must NOT be
+      # flagged" assertion passing for the wrong reason.
+      local _ah_kinds
+      _ah_kinds="$($GIT -C "$_ah_repo" for-each-ref refs/tags --format='%(objecttype) %(refname:short)' 2>/dev/null)"
+      /usr/bin/printf '%s\n' "$_ah_kinds" | /usr/bin/grep -qx 'tag v9.51' || { echo "FAIL: AC5 fixture — annotated tag v9.51 was not created; the tagger assertions would be vacuous"; failures=$((failures+1)); }
+      /usr/bin/printf '%s\n' "$_ah_kinds" | /usr/bin/grep -qx 'commit v9.52' || { echo "FAIL: AC5 fixture — LIGHTWEIGHT tag v9.52 was not created (objecttype must be 'commit'); the objecttype-filter assertions would be vacuous"; failures=$((failures+1)); }
+      local _ah_tg; _ah_tg="$(tagger_hygiene_violations "$_ah_repo")"
+      /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v9.51' || { echo "FAIL: AC5-a — an annotated tag with a non-noreply tagger MUST be flagged, got: $_ah_tg"; failures=$((failures+1)); }
+      if /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v9.50'; then
+        echo "FAIL: AC5-b — a conformant noreply-tagger tag must NOT be flagged"; failures=$((failures+1))
+      fi
+      if /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v3.80'; then
+        echo "FAIL: AC5-c — the RECORDED exemption must suppress its tag"; failures=$((failures+1))
+      fi
+      if /usr/bin/printf '%s' "$_ah_tg" | /usr/bin/grep -qF 'v9.52'; then
+        echo "FAIL: AC5-d — a LIGHTWEIGHT tag has no tagger and must be excluded by the objecttype filter, not reported as a tagger violation"; failures=$((failures+1))
+      fi
+      # annotated_tags_of must list annotated tags only (the lightweight one is out).
+      local _ah_at; _ah_at="$(annotated_tags_of "$_ah_repo")"
+      /usr/bin/printf '%s\n' "$_ah_at" | /usr/bin/grep -qx 'v9.50' || { echo "FAIL: AC5-e — annotated_tags_of must list annotated tags"; failures=$((failures+1)); }
+      if /usr/bin/printf '%s\n' "$_ah_at" | /usr/bin/grep -qx 'v9.52'; then
+        echo "FAIL: AC5-e — annotated_tags_of must EXCLUDE lightweight tags (objecttype filter)"; failures=$((failures+1))
+      fi
+    else
+      echo "  (skipped AC5 tagger self-test — could not build the local git fixture)" >&2
+    fi
+  else
+    echo "  (skipped AC5 tagger self-test — git not executable at $GIT)" >&2
+  fi
+
+  # (f) STRUCTURAL — the parity guard must stay SET-based. `comm` is the mechanism;
+  # a `wc -l` comparison of the two lists is the regression this guard replaces.
+  declare -f anchor_parity_violations | /usr/bin/grep -qF 'comm' || { echo "FAIL: AC4-f — anchor_parity_violations must be comm-based (set difference), not a count comparison"; failures=$((failures+1)); }
+
+  /bin/rm -rf "$_ah_tmp" 2>/dev/null || true
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -4512,6 +4759,7 @@ DG2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  changed_skills_from_paths + files=() composition validated (#3322 — rule a direct-source / rule b reverse-TEMPLATE_SYNC_MAP / non-skill negative / P1 staging-array guard)" >&2
+  echo "  release-anchor hygiene validated (AC4/AC5 — recorded divergences exempt / a NEW divergence reported in BOTH directions / EQUAL-COUNT-UNEQUAL-SET fixture still reported (the count-parity false negative) / non-noreply tagger flagged, noreply tagger not, recorded exemption suppressed, lightweight tag excluded by objecttype / guard is comm-based by construction)" >&2
   echo "  phase_sync_primary_checkout validated (AC7 — behind-primary-on-main fast-forwards and HEAD verifiably MOVES to origin/main / non-main primary SKIPPED and NOT moved / absent primary clean no-op (CI hermeticity) / dry-run no-write / source carries no reset-stash-checkout-push-force-cd)" >&2
   echo "  scaffold-residue detector + pre-authored-note tolerance validated (AC1/AC2 — T1 round-trip: the REAL scaffold trips the REAL token set (anti-drift) / T2 authored note clean / T4 this-version CHANGELOG+DIGEST residue FAILs naming surface:line / T3 audit-baseline control: another version's residue does NOT block / AC2 tolerance: this-version untracked note passes, other-version + modified-tracked + unrelated-untracked all still block)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
@@ -4636,6 +4884,7 @@ phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
+phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity (both anchors exist by now)
 phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
