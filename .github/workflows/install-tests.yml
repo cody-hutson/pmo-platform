@@ -150,15 +150,22 @@ jobs:
         # --break-system-packages idiom as the pytest step above (PEP 668).
         # Idempotent: only install when yaml is not already importable.
         run: |
-          # Target /usr/bin/python3 EXPLICITLY: deploy.sh's build_skill_to_dir()
+          # The CONSUMER is /usr/bin/python3: deploy.sh's build_skill_to_dir()
           # invokes `/usr/bin/python3 -m scripts.package_skill` by absolute path.
-          # A PATH-resolved `python3` coincides on this image but is not guaranteed
-          # to — any setup-python/brew/venv step ahead of it would have us checking
-          # and installing into an interpreter the consumer never runs.
+          # So the assertion that matters is that THAT interpreter can import yaml.
+          #
+          # The install path cannot simply target it, though: on macOS runners
+          # /usr/bin/python3 is the Xcode shim and its pip REJECTS
+          # --break-system-packages, while the PATH-resolved python3 is a different
+          # interpreter whose pip accepts it. Try the consumer first, fall back to
+          # the flagged form, then ASSERT against the consumer either way — a
+          # successful install into an interpreter nothing runs is not success.
           if ! /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1; then
-            /usr/bin/python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2'
+            /usr/bin/python3 -m pip install --user 'pyyaml==6.0.2' \
+              || python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2' \
+              || true
           fi
-          /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__)'
+          /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__, "via", __import__("sys").executable)'
 
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
         run: bash core/deploy/tests/test_sandbox_roots.sh
