@@ -3702,8 +3702,13 @@ if [[ "$1" == "issue" && "$2" == "list" ]]; then
     shift
   done
   if [[ "$ms" == "close-out-reliability-hardening" ]]; then
+    # 3-field format: number \t comma-joined LABELS \t title — the shape
+    # collect_open_release_issues parses (--jq emits labels as field 2). Row 3 is the
+    # exclusion probe: it is the ONLY row whose classification depends on field 2 being
+    # the LABEL set rather than the title. See leg (c).
     printf '%s\t%s\t%s\n' 2578 "sub-task" "Some open sub-task"
     printf '%s\t%s\t%s\n' 1771 "sub-task" "Another open sub-task"
+    printf '%s\t%s\t%s\n' 3990 "sub-task,release" "Stage 13 close-out orchestration"
   fi
   exit 0
 fi
@@ -3727,6 +3732,27 @@ STUB
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_detect_open_issues >/dev/null 2>&1
   [[ "$OPEN_ISSUE_COUNT" -eq 0 ]] || { echo "FAIL: mis-resolved Version key must reproduce the historical false-0 (gh empty+exit0), got $OPEN_ISSUE_COUNT"; failures=$((failures+1)); }
+
+  # (c) STUB-FORMAT regression guard (F-01). Legs (a) and (b) assert COUNTS only, and
+  #     the counts are identical under the pre-migration 2-field stub (number \t title)
+  #     — so reverting this stub to 2 fields left the whole suite green and the
+  #     migration had no covering test. This leg makes field 2 load-bearing: #3990 is a
+  #     `sub-task`-LABELLED Stage-13-close orchestration issue, which collect_open_
+  #     release_issues must EXCLUDE via the label+title conjunct so the close cannot
+  #     self-close its own orchestration sub-task (R5). Under a 2-field stub field 2
+  #     holds the TITLE, `,<title>,` cannot contain `,sub-task,`, the conjunct never
+  #     fires, and #3990 is counted — 3 instead of 2. The exclusion REASON is asserted
+  #     too, so a count that happens to be right for the wrong reason still reddens.
+  STATE_MILESTONE_SLUG="close-out-reliability-hardening"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_detect_open_issues >/dev/null 2>&1
+  [[ "$OPEN_ISSUE_COUNT" -eq 2 ]] || { echo "FAIL: the sub-task-labelled Stage-13-close issue #3990 must be EXCLUDED from the open count (expected 2, got $OPEN_ISSUE_COUNT) — field 2 of the stub must be the LABEL set, not the title"; failures=$((failures+1)); }
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '3990' && { echo "FAIL: #3990 must not appear in OPEN_ISSUE_LIST — a close that lists its own orchestration sub-task can self-close it (R5)"; failures=$((failures+1)); }
+  [[ "$(get_phase detect_open_issues)" == *"#3990 (sub-task label + title-regex stage-13-close)"* ]] || { echo "FAIL: the exclusion of #3990 must be reported with its structural reason, got '$(get_phase detect_open_issues)'"; failures=$((failures+1)); }
+  #     Anti-vacuity control: the OTHER two sub-task-labelled rows carry no stage-13-close
+  #     title, so the label alone must NOT exclude them — proving the conjunct is a
+  #     conjunct and leg (c) is not passing because everything labelled sub-task is dropped.
+  /usr/bin/printf '%s\n' "$OPEN_ISSUE_LIST" | /usr/bin/grep -qx '2578' || { echo "FAIL: control — a sub-task label WITHOUT a stage-13-close title must NOT be excluded (#2578 missing); the conjunct has degraded to a label-only test"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_ag_tmp" 2>/dev/null || true
   GH="$_ag_saved_gh"; MODE="$_ag_saved_mode"; STATE_MILESTONE_SLUG="$_ag_saved_slug"

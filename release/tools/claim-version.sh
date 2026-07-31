@@ -960,17 +960,27 @@ _claim_self_test() {
     fi
     printf '%s\n' "$(cat "$(_st_f resolve_repo)" 2>/dev/null || echo 'acme/widget')"
   }
+  # POST-EMIT rc knobs (published_rc / latest_rc), independent of the shared arm_rc.
+  # arm_rc models "the arm is unavailable" — it returns BEFORE emitting and gates BOTH
+  # seams together. The post-emit knobs model the other real shape: the host call
+  # produced output and THEN failed (a paginated `gh api` that dies mid-walk). That
+  # shape is what separates a caller's rc-CHECK from a downstream value guard — with
+  # empty-output-on-failure the two are indistinguishable, which is exactly why the
+  # anchor() rc-checks were removable with the suite staying green. Both default to 0,
+  # so every pre-existing fixture behaves byte-identically.
   _host_published_tags() {
     _host_resolve_repo >/dev/null || return 1
     local rc; rc="$(cat "$(_st_f arm_rc)" 2>/dev/null || echo 0)"
     [[ "$rc" -eq 0 ]] || return "$rc"
     cat "$(_st_f published)" 2>/dev/null || true
+    return "$(cat "$(_st_f published_rc)" 2>/dev/null || echo 0)"
   }
   _host_latest_release() {
     _host_resolve_repo >/dev/null || return 1
     local rc; rc="$(cat "$(_st_f arm_rc)" 2>/dev/null || echo 0)"
     [[ "$rc" -eq 0 ]] || return "$rc"
     cat "$(_st_f latest)" 2>/dev/null || true
+    return "$(cat "$(_st_f latest_rc)" 2>/dev/null || echo 0)"
   }
   _host_origin_tags()          { cat "$(_st_f origin_tags)"  2>/dev/null || true; }
   _host_release_log_deployed() { cat "$(_st_f log_deployed)" 2>/dev/null || true; }
@@ -1048,6 +1058,7 @@ _claim_self_test() {
     # Host-identity + arm-availability fixture state. Default = resolvable arm
     # that succeeds, so every pre-existing fixture behaves byte-identically.
     printf '0\n' > "$(_st_f resolve_rc)"; printf '0\n' > "$(_st_f arm_rc)"
+    printf '0\n' > "$(_st_f published_rc)"; printf '0\n' > "$(_st_f latest_rc)"
     printf 'acme/widget\n' > "$(_st_f resolve_repo)"
     local kv k v
     for kv in "$@"; do
@@ -1062,6 +1073,8 @@ _claim_self_test() {
         advance)    printf '%s\n' "$v" > "$(_st_f advance)";;
         resolve_rc) printf '%s\n' "$v" > "$(_st_f resolve_rc)";;     # !=0 -> repo identity unresolvable
         arm_rc)     printf '%s\n' "$v" > "$(_st_f arm_rc)";;         # !=0 -> published arm UNAVAILABLE (vs. empty)
+        published_rc) printf '%s\n' "$v" > "$(_st_f published_rc)";; # !=0 -> published arm emits, THEN fails (partial view)
+        latest_rc)  printf '%s\n' "$v" > "$(_st_f latest_rc)";;      # !=0 -> latest-release seam emits, THEN fails
       esac
     done
   }
@@ -1434,8 +1447,66 @@ _claim_self_test() {
   _ct_eq "$out" "v2.16" "U-15 greenfield claims v2.16 off the latest-release anchor"
   _ct_eq "$(_ct_push_idx)" "1" "U-15 greenfield exactly 1 push attempt"
 
+  # ---- U-16: anchor() rc-checks — a FAILED read is not a greenfield/valid one ----
+  # DEV-4 added two rc-checks to anchor(): one on claimed_set(), one on the greenfield
+  # _host_latest_release() fallback. Removing EITHER — or BOTH — left this suite fully
+  # green (rc=0, 0 failures). What looked like coverage was the pre-existing downstream
+  # `version_canonical ""` guard on a THIRD path that neither check owns: with the old
+  # fixtures every failing seam also emitted nothing, so a dropped rc-check funnelled
+  # into that guard and still exited non-zero. The distinction only becomes observable
+  # when a seam emits a plausible value AND fails — hence the post-emit knobs above.
+  # Both legs assert the OUTPUT, not just the rc: the harm is anchor() answering with a
+  # frontier it could not actually establish, and every consumer of that answer
+  # (claim_version's next-free computation) then allocates against a partial view.
+  #
+  # (a) claimed_set() FAILS having emitted a partial view; the greenfield fallback seam
+  #     is healthy and would happily answer. Without the rc-check anchor() silently
+  #     takes the fallback and returns a frontier BELOW the true one.
+  _t_label="U-16 anchor() rc-checks claimed_set (partial view -> HALT, never the fallback)"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=1 latest_rc=0
+  _ct_run claimed_set; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(a) precondition: claimed_set must fail when the published arm fails post-emit"
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(a) anchor() must return non-zero when claimed_set() failed (rc=0 means the rc-check is gone and the greenfield fallback answered)"
+  _ct_eq "$out" "" "U-16(a) anchor() must emit NO version on a failed claimed_set (a fallback answer here is the stale-frontier defect)"
+  _ct_run_err anchor; err="$REPLY"
+  grep -qi 'cannot read the claimed set' <<< "$err" || _ct_fail "U-16(a) anchor() must name the claimed-set read failure, not a downstream canonicality complaint"
+
+  # (b) TRUE greenfield (claimed_set available and legitimately empty), but the
+  #     latest-release seam emits a canonical-looking value AND fails. Without the
+  #     rc-check `version_canonical` passes on that value and anchor() answers rc 0
+  #     off a host call that did not succeed.
+  _t_label="U-16 anchor() rc-checks the greenfield fallback (emitted-then-failed -> HALT)"
+  _ct_setup latest="v2.15" published="" origin="" deployed="" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=1
+  _ct_run claimed_set; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(b) precondition: claimed_set is AVAILABLE and empty (true greenfield)"
+  _ct_eq "$out" "" "U-16(b) precondition: the greenfield claimed_set is empty"
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(b) anchor() must return non-zero when the greenfield fallback seam failed (rc=0 means the rc-check is gone and a failed read was answered as authoritative)"
+  _ct_eq "$out" "" "U-16(b) anchor() must emit NO version when the fallback seam failed"
+  _ct_run_err anchor; err="$REPLY"
+  grep -qi 'greenfield fallback' <<< "$err" || _ct_fail "U-16(b) anchor() must name the greenfield-fallback read failure"
+
+  # (c) + (d) NEGATIVE CONTROLS. Without these, (a) and (b) would both pass on an
+  #     anchor() hardwired to fail — the same vacuity this fixture exists to close.
+  _t_label="U-16 control — healthy claimed_set answers the true frontier"
+  _ct_setup latest="v2.10" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=0
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(c) control: a healthy claimed_set must answer rc 0"
+  _ct_eq "$out" "v2.15" "U-16(c) control: anchor() returns max(claimed_set), not the latest-release pointer"
+
+  _t_label="U-16 control — healthy greenfield answers off the latest-release pointer"
+  _ct_setup latest="v2.15" published="" origin="" deployed="" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=0
+  _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(d) control: healthy greenfield must answer rc 0"
+  _ct_eq "$out" "v2.15" "U-16(d) control: greenfield anchor() falls back to the latest published release"
+
   if [[ $failures -eq 0 ]]; then
-    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-15 incl. real-RELEASE_LOG-parser(State=\$8), real-seam-rc-contract-on-unresolvable-identity(U-14a), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
+    echo "claim-version.sh --self-test: PASS (all fixtures green: U-0..U-16 incl. real-RELEASE_LOG-parser(State=\$8), real-seam-rc-contract-on-unresolvable-identity(U-14a), net->HALT, signing->HALT, CAS-recompute-win, orphan-excluded both sides, pushed-unpublished-mainline-claimed, fetch-fail->HALT, bounded-HALT-no-force, never-bypass-signing + its detector-negative-control(U-6/U-6b), fail-closed-on-unresolvable-repo-identity + its detector-negative-control(U-14/U-14b), arm-unavailable-is-not-arm-empty(U-15), anchor-rc-checks-claimed-set-and-greenfield-fallback + their controls(U-16), claim-time-stamp(substitute+rename), no-stamp-slug-skips, collision-safe-stamp-binds-won-tag-once)"
     return 0
   else
     echo "claim-version.sh --self-test: FAIL ($failures failing fixture(s))"
